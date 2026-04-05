@@ -4,21 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CMS-0057-F Compliance Guide — Cloud Health Office Documentation</title>
-  <meta name="description" content="Complete CMS-0057-F compliance guide for healthcare payers. Patient Access API, Provider Access API, Payer-to-Payer API, Prior Authorization API — achieve compliance 18 months ahead of the January 2027 deadline." />
-  <meta name="keywords" content="CMS-0057-F compliance guide, CMS interoperability rule, healthcare payer FHIR API, prior authorization API compliance, January 2027 deadline, Patient Access API, Da Vinci implementation guide, FHIR R4 healthcare payer" />
+  <meta name="description" content="Complete CMS-0057-F compliance guide for healthcare payers. Patient Access API, Provider Access API, Payer-to-Payer API, Prior Authorization API, SNOMED-to-ICD terminology translation, and provider verification — achieve compliance ahead of the January 2027 deadline." />
+  <meta name="keywords" content="CMS-0057-F compliance guide, CMS interoperability rule, healthcare payer FHIR API, prior authorization API compliance, January 2027 deadline, Patient Access API, Da Vinci implementation guide, FHIR R4 healthcare payer, SNOMED CT ICD-10-CM translation, terminology crosswalk, provider verification, NPPES" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/compliance" />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/compliance" />
   <meta property="og:title" content="CMS-0057-F Compliance Guide — Cloud Health Office" />
-  <meta property="og:description" content="Achieve CMS-0057-F compliance 18 months ahead of the January 2027 deadline. Complete FHIR R4 API implementation for healthcare payers." />
+  <meta property="og:description" content="Achieve CMS-0057-F compliance ahead of the January 2027 deadline. Complete FHIR R4 API implementation with built-in terminology translation and provider verification for healthcare payers." />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org", "@type": "TechArticle",
     "headline": "CMS-0057-F Compliance Guide for Healthcare Payers",
-    "description": "Complete guide to CMS-0057-F (Advancing Interoperability and Improving Prior Authorization) compliance using Cloud Health Office FHIR R4 APIs.",
+    "description": "Complete guide to CMS-0057-F (Advancing Interoperability and Improving Prior Authorization) compliance using Cloud Health Office FHIR R4 APIs, terminology crosswalk, and provider verification.",
     "url": "https://cloudhealthoffice.com/docs/compliance",
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
     "datePublished": "2026-03-24",
+    "dateModified": "2026-04-05",
     "about": { "@type": "Thing", "name": "CMS-0057-F", "description": "CMS Interoperability and Prior Authorization Final Rule" },
     "breadcrumb": { "@type": "BreadcrumbList", "itemListElement": [
       { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
@@ -44,83 +45,247 @@
       <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance" class="active">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
-        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#what-is-cms-0057f">What is CMS-0057-F?</a></li><li><a href="#compliance-dashboard">Compliance Dashboard</a></li><li><a href="#required-apis">Required APIs</a></li><li><a href="#x12-to-fhir">X12 to FHIR Mapping</a></li><li><a href="#deadlines">Compliance Deadlines</a></li><li><a href="#verification">Verification</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">User Guides</div><ul><li><a href="/docs/finance-guide">Finance Modules</a></li><li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li><li><a href="/docs/provider-verification-guide">Provider Verification</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub">
+          <li><a href="#what-is-cms-0057f">What is CMS-0057-F?</a></li>
+          <li><a href="#compliance-dashboard">Compliance Dashboard</a></li>
+          <li><a href="#required-apis">Required APIs</a></li>
+          <li><a href="#x12-to-fhir">X12 to FHIR Mapping</a></li>
+          <li><a href="#terminology-translation">Terminology Translation</a></li>
+          <li><a href="#provider-verification">Provider Verification</a></li>
+          <li><a href="#why-cho">Why CHO</a></li>
+          <li><a href="#deadlines">Compliance Deadlines</a></li>
+          <li><a href="#verification">Verification</a></li>
+        </ul></div>
       </div></aside>
 
       <div class="docs-content">
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">CMS-0057-F Compliance</span></div>
 
         <h1>CMS-0057-F Compliance Guide</h1>
-        <p class="docs-subtitle">Cloud Health Office delivers 100% CMS-0057-F compliance with production-ready FHIR R4 APIs — 18 months ahead of the January 2027 deadline. Zero external dependencies. 1,740 tests passing.</p>
+        <p class="docs-subtitle">Cloud Health Office delivers end-to-end CMS-0057-F compliance &mdash; FHIR R4 APIs, X12 EDI transformation, SNOMED&ndash;CPT&ndash;ICD terminology translation, and multi-source provider verification. Production-ready ahead of the January 2027 deadline. 1,740 tests passing. Zero external dependencies.</p>
 
         <figure class="docs-diagram">
           <img src="/graphics/cms-0057f-compliance.svg" alt="CMS-0057-F compliance diagram showing Patient Access API, Provider Access API, Prior Authorization, Payer-to-Payer API, and Provider Directory API — all complete" />
-          <figcaption>All five CMS-0057-F required API categories — implemented and production-tested</figcaption>
+          <figcaption>All five CMS-0057-F required API categories &mdash; implemented and production-tested</figcaption>
         </figure>
 
+        <!-- ============================================================ -->
+        <!-- WHAT IS CMS-0057-F                                           -->
+        <!-- ============================================================ -->
         <h2 id="what-is-cms-0057f">What is CMS-0057-F?</h2>
-        <p><strong>CMS-0057-F</strong> (Advancing Interoperability and Improving Prior Authorization Processes) is a final rule requiring health plans to implement specific FHIR APIs to improve prior authorization workflows, reduce provider burden, and enhance patient care coordination.</p>
+        <p><strong>CMS-0057-F</strong> (Advancing Interoperability and Improving Prior Authorization Processes) is a final rule requiring health plans to implement specific FHIR R4 APIs to improve prior authorization workflows, reduce provider burden, and enhance patient care coordination.</p>
         <p>Non-compliance penalties can reach up to <strong>$1M per violation</strong>. The rule applies to Medicaid MCOs, Medicare Advantage plans, CHIP programs, and QHP issuers on the federal exchange.</p>
 
         <div class="callout callout-warning">
           <div class="callout-title">Deadline: January 1, 2027</div>
-          <p>All impacted payers must have Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs live in production by this date. Cloud Health Office was production-ready in November 2024.</p>
+          <p>All impacted payers must have Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs live in production by this date. Cloud Health Office was production-ready in November 2024 &mdash; more than two years ahead of the deadline.</p>
         </div>
 
+        <p>Achieving compliance requires more than standing up four FHIR endpoints. The rule depends on Da Vinci Implementation Guides (PAS, CRD, DTR, PDex) that exchange clinical data in <strong>SNOMED CT</strong> &mdash; a code system that payer core admin platforms do not natively speak. It also requires provider directory accuracy and real-time eligibility verification against validated provider records. CHO is the only platform that addresses the full compliance surface: APIs, EDI transformation, terminology translation, and provider data integrity &mdash; in a single deployable stack.</p>
+
+
+        <!-- ============================================================ -->
+        <!-- COMPLIANCE DASHBOARD                                         -->
+        <!-- ============================================================ -->
         <h2 id="compliance-dashboard">Compliance Dashboard</h2>
+        <p>Every CMS-0057-F requirement, tested and production-validated. The 1,740 total tests span FHIR API conformance, X12 EDI parsing, claims adjudication, benefit calculation, terminology translation, and provider verification.</p>
 
         <table>
           <thead><tr><th>Requirement</th><th>Status</th><th>Tests</th><th>Da Vinci IG</th></tr></thead>
           <tbody>
-            <tr><td>Patient Access API</td><td><span class="badge badge-complete">Complete</span></td><td>19 tests</td><td>PDex</td></tr>
-            <tr><td>Provider Access API</td><td><span class="badge badge-complete">Complete</span></td><td>8 tests</td><td>PDex</td></tr>
-            <tr><td>Payer-to-Payer API</td><td><span class="badge badge-complete">Complete</span></td><td>6 tests</td><td>PAS</td></tr>
-            <tr><td>Prior Authorization API</td><td><span class="badge badge-complete">Complete</span></td><td>12 tests</td><td>PAS + CRD + DTR</td></tr>
-            <tr><td>72-Hour Urgent Response</td><td><span class="badge badge-complete">Automated</span></td><td>Compliance Checker</td><td>—</td></tr>
-            <tr><td>7-Day Standard Response</td><td><span class="badge badge-complete">Automated</span></td><td>Compliance Checker</td><td>—</td></tr>
-            <tr><td>USCDI v1/v2 Coverage</td><td><span class="badge badge-complete">Complete</span></td><td>Data Class Mapping</td><td>US Core 3.1.1</td></tr>
+            <tr><td>Patient Access API</td><td><span class="badge badge-complete">Complete</span></td><td>19 FHIR tests</td><td>PDex 2.0+</td></tr>
+            <tr><td>Provider Access API</td><td><span class="badge badge-complete">Complete</span></td><td>8 FHIR tests</td><td>PDex 2.0+</td></tr>
+            <tr><td>Payer-to-Payer API</td><td><span class="badge badge-complete">Complete</span></td><td>6 FHIR tests</td><td>PDex (Bulk $export)</td></tr>
+            <tr><td>Prior Authorization API</td><td><span class="badge badge-complete">Complete</span></td><td>12 FHIR tests</td><td>PAS 2.0.1 + CRD + DTR</td></tr>
+            <tr><td>72-Hour Urgent Response</td><td><span class="badge badge-complete">Automated</span></td><td>Compliance Checker</td><td>&mdash;</td></tr>
+            <tr><td>7-Day Standard Response</td><td><span class="badge badge-complete">Automated</span></td><td>Compliance Checker</td><td>&mdash;</td></tr>
+            <tr><td>USCDI v1/v2 Data Classes</td><td><span class="badge badge-complete">Complete</span></td><td>Data Class Mapping</td><td>US Core 3.1.1+</td></tr>
+            <tr><td>Terminology Translation (SNOMED &#8596; CPT/ICD)</td><td><span class="badge badge-complete">Complete</span></td><td>ConceptMap/$translate</td><td>FHIR R4 ConceptMap</td></tr>
+            <tr><td>Provider Verification &amp; Directory</td><td><span class="badge badge-complete">Complete</span></td><td>Integrity Score Engine</td><td>Da Vinci PDex Plan-Net</td></tr>
+            <tr><td>OAuth 2.0 / SMART on FHIR</td><td><span class="badge badge-complete">Complete</span></td><td>Auth flow tests</td><td>SMART App Launch</td></tr>
+            <tr><td>X12 EDI &#8596; FHIR Bidirectional</td><td><span class="badge badge-production">Production</span></td><td>6 parsers, 0 deps</td><td>&mdash;</td></tr>
+            <tr><td>Claims Adjudication Pipeline</td><td><span class="badge badge-production">Production</span></td><td>10-step DAG</td><td>&mdash;</td></tr>
           </tbody>
         </table>
 
+
+        <!-- ============================================================ -->
+        <!-- REQUIRED APIs                                                -->
+        <!-- ============================================================ -->
         <h2 id="required-apis">Required APIs</h2>
 
         <h3>Patient Access API</h3>
-        <p>Empowers patients to access their complete health data electronically — claims history, Explanation of Benefits, clinical data, coverage, and eligibility. Transforms X12 837/835 transactions into FHIR Claim and ExplanationOfBenefit resources. Secured with OAuth 2.0 patient consent flow via SMART on FHIR.</p>
+        <p>Empowers patients to access their complete health data electronically &mdash; claims history, Explanation of Benefits, clinical data, coverage, and eligibility. Transforms X12 837/835 transactions into FHIR Claim and ExplanationOfBenefit resources conforming to Da Vinci PDex profiles. Secured with OAuth 2.0 patient consent flow via SMART on FHIR. Includes USCDI v1 and v2 data class coverage for clinical data exchange.</p>
 
         <h3>Provider Access API</h3>
-        <p>Gives in-network providers access to member clinical and claims data with appropriate consent. Implements Da Vinci PDex with $member-match for patient identification across payers without sharing raw identifiers.</p>
+        <p>Gives in-network providers access to member clinical and claims data with appropriate consent. Implements Da Vinci PDex with <code>$member-match</code> for patient identification across payers without sharing raw identifiers. Provider identity is validated against CHO's multi-source provider verification engine before data access is granted.</p>
 
         <h3>Payer-to-Payer API</h3>
-        <p>Enables data exchange when members switch health plans. Supports Bulk FHIR <code>$export</code> for efficient batch transfer of member records between payers while maintaining HIPAA compliance.</p>
+        <p>Enables data exchange when members switch health plans. Supports Bulk FHIR <code>$export</code> for efficient batch transfer of member records &mdash; including five years of historical data &mdash; between payers while maintaining HIPAA compliance. Enrollment-triggered workflows automate the initiation of data transfer on member plan changes.</p>
 
         <h3>Prior Authorization API</h3>
-        <p>Converts the prior auth workflow from phone/fax to real-time FHIR-based requests. Full X12 278 bidirectional mapping to FHIR ServiceRequest using Da Vinci PAS, CRD, and DTR implementation guides. Automates the 72-hour urgent and 7-day standard response timelines required by the rule.</p>
+        <p>Converts the prior auth workflow from phone/fax to real-time FHIR-based requests. Full X12 278 bidirectional mapping to FHIR ServiceRequest using Da Vinci PAS, CRD, and DTR implementation guides. Automates the 72-hour urgent and 7-day standard response timelines required by the rule. Decision rationale is captured and returned as structured data per CMS requirements.</p>
+        <p>The Prior Authorization API depends on three foundational capabilities that most competing implementations leave as &ldquo;customer responsibility&rdquo;:</p>
+        <ul style="margin-top:8px;">
+          <li><strong>Coverage Requirements Discovery (CRD)</strong> &mdash; Real-time coverage rules evaluated during the provider workflow via CDS Hooks. Requires SNOMED-to-CPT/ICD translation to match clinical codes against payer benefit configuration. CHO's <a href="#terminology-translation">Terminology Crosswalk</a> handles this natively.</li>
+          <li><strong>Documentation Templates &amp; Rules (DTR)</strong> &mdash; FHIR Questionnaire and QuestionnaireResponse for automated clinical documentation collection. Questionnaire answer codes are resolved across code systems by the crosswalk engine so pre-populated values are clinically accurate and machine-readable.</li>
+          <li><strong>Provider Identity Verification</strong> &mdash; Authorization requests must be validated against credentialed, non-excluded providers. CHO's <a href="#provider-verification">Provider Verification</a> engine screens against NPPES, OIG/LEIE, PECOS, and state licensing boards in real time.</li>
+        </ul>
 
+
+        <!-- ============================================================ -->
+        <!-- X12 TO FHIR                                                  -->
+        <!-- ============================================================ -->
         <h2 id="x12-to-fhir">X12 to FHIR R4 Transformation</h2>
+        <p>Every X12 transaction your core admin system produces is automatically transformed to FHIR R4 resources conforming to Da Vinci profiles. Bidirectional. Real-time. All six parsers are written in-house with zero external dependencies &mdash; no third-party libraries, no open-source tooling relabeled as proprietary.</p>
 
         <table>
           <thead><tr><th>X12 Transaction</th><th>FHIR Resource</th><th>Profile</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>X12 270 Eligibility</td><td>Patient, CoverageEligibilityRequest</td><td>US Core 3.1.1</td><td><span class="badge badge-production">Production</span></td></tr>
-            <tr><td>X12 837 Claims</td><td>Claim</td><td>Da Vinci PDex</td><td><span class="badge badge-production">Production</span></td></tr>
-            <tr><td>X12 278 Prior Auth</td><td>ServiceRequest</td><td>Da Vinci PAS</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 270/271 Eligibility</td><td>Patient, CoverageEligibilityRequest/Response</td><td>US Core 3.1.1</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 837 Claims (I/P/D)</td><td>Claim</td><td>Da Vinci PDex</td><td><span class="badge badge-production">Production</span></td></tr>
             <tr><td>X12 835 Remittance</td><td>ExplanationOfBenefit</td><td>Da Vinci PDex</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 278 Prior Auth</td><td>ServiceRequest, ClaimResponse</td><td>Da Vinci PAS</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 276/277 Claim Status</td><td>Claim (status query)</td><td>US Core</td><td><span class="badge badge-production">Production</span></td></tr>
             <tr><td>X12 275 Attachments</td><td>DocumentReference</td><td>US Core</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 834 Enrollment</td><td>Coverage, Patient</td><td>US Core</td><td><span class="badge badge-production">Production</span></td></tr>
           </tbody>
         </table>
 
+
+        <!-- ============================================================ -->
+        <!-- TERMINOLOGY TRANSLATION                                      -->
+        <!-- ============================================================ -->
+        <h2 id="terminology-translation">Terminology Translation</h2>
+        <p>CMS-0057-F's Da Vinci workflows (CRD, DTR, PAS) exchange clinical data in <strong>SNOMED CT</strong> &mdash; the terminology used by EHRs and clinical decision support systems. But payer core admin platforms (QNXT, Facets, HealthEdge, Amisys) store and adjudicate claims using <strong>CPT</strong> and <strong>ICD-10-CM</strong> codes. This terminology gap is the most commonly overlooked compliance obstacle.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">The problem no one else solves</div>
+          <p>Without built-in terminology translation, a prior authorization request containing SNOMED CT code <code>73211009</code> (Diabetes mellitus) cannot be matched to the payer's ICD-10-CM benefit configuration (<code>E11.9</code>, <code>E10.9</code>, etc.). Most implementation vendors treat this as &ldquo;out of scope&rdquo; or &ldquo;customer responsibility&rdquo; &mdash; leaving payers to build their own translation layer or purchase a separate product. CHO solves it natively.</p>
+        </div>
+
+        <p>CHO's Terminology Service implements the FHIR R4 <code>ConceptMap/$translate</code> operation with a multi-tier mapping architecture:</p>
+
+        <table>
+          <thead><tr><th>Data Source</th><th>Mapping Direction</th><th>Entries</th><th>License</th></tr></thead>
+          <tbody>
+            <tr><td>NLM / UMLS</td><td>SNOMED CT &#8594; ICD-10-CM</td><td>~119,000</td><td>Free (UMLS license)</td></tr>
+            <tr><td>AMA Cross Maps</td><td>CPT &#8596; SNOMED CT</td><td>Varies</td><td>Customer-provided (BYOL)</td></tr>
+            <tr><td>Plan-Specific Overrides</td><td>Any direction</td><td>Varies</td><td>Tenant-scoped</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Context-aware disambiguation</h3>
+        <p>Many SNOMED CT concepts map to multiple target codes. SNOMED <code>73211009</code> (Diabetes mellitus) can map to <code>E10.x</code> (Type 1), <code>E11.x</code> (Type 2), <code>E13.x</code> (Other specified), or <code>O24.x</code> (Gestational). CHO's context rule engine uses patient demographics, co-morbidities, and plan-specific coding policy to select the best match &mdash; not just the first match.</p>
+
+        <table>
+          <thead><tr><th>Context Signal</th><th>Effect</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td>Patient age</td><td>Selects age-appropriate codes</td><td>Juvenile diabetes (<code>E10.x</code>) for patients under 18</td></tr>
+            <tr><td>Patient gender</td><td>Excludes gender-impossible codes</td><td>Prostate conditions excluded for female patients</td></tr>
+            <tr><td>Patient state</td><td>Applies state-specific rules</td><td>Texas TMPPM coding conventions</td></tr>
+            <tr><td>Active conditions</td><td>Co-morbidity-aware selection</td><td>Diabetes + CKD selects <code>E11.22</code> over <code>E11.9</code></td></tr>
+            <tr><td>Plan overrides</td><td>Tenant-scoped coding policy</td><td>Plan maps <code>73211009</code> to <code>E11.65</code> for all members</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Where the crosswalk fits in CMS-0057-F</h3>
+        <p>The Terminology Service is consumed by three CHO microservices at runtime to fulfill CMS-0057-F requirements:</p>
+        <ul style="margin-top:8px;">
+          <li><strong>CRD Server</strong> &mdash; Translates SNOMED CT codes from EHR CDS Hook requests into the payer's CPT/ICD code space, then checks against benefit configuration to determine prior auth requirements.</li>
+          <li><strong>PAS Server</strong> &mdash; Translates procedure and diagnosis codes during X12 278 &#8596; FHIR conversion using <code>$batch-translate</code> for low-latency bulk translation in real-time prior auth decisions.</li>
+          <li><strong>DTR Engine</strong> &mdash; Resolves questionnaire answer codes across code systems so pre-populated FHIR QuestionnaireResponse values are clinically accurate and machine-readable.</li>
+        </ul>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Full documentation</div>
+          <p>For the complete API reference, map management, context rule engine, and portal integration details, see the <a href="/docs/terminology-guide">Terminology Crosswalk Guide</a>. Test live translations in the <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> under Terminology &gt; Crosswalk.</p>
+        </div>
+
+
+        <!-- ============================================================ -->
+        <!-- PROVIDER VERIFICATION                                        -->
+        <!-- ============================================================ -->
+        <h2 id="provider-verification">Provider Verification &amp; Integrity</h2>
+        <p>CMS-0057-F requires a Provider Directory API and provider data accuracy for the Provider Access API. Authorization requests, claims adjudication, and provider directory lookups all depend on verified, current provider records. CHO's Provider Verification Engine aggregates data from five authoritative federal and state sources into a composite <strong>Provider Integrity Score</strong> (0&ndash;100) per NPI.</p>
+
+        <table>
+          <thead><tr><th>Data Source</th><th>What It Checks</th><th>Update Frequency</th></tr></thead>
+          <tbody>
+            <tr><td>NPPES (NPI Registry)</td><td>NPI validity, practice address, taxonomy, enumeration status</td><td>Daily</td></tr>
+            <tr><td>OIG / LEIE</td><td>Federal exclusion screening &mdash; excluded providers cannot participate in federal programs</td><td>Monthly</td></tr>
+            <tr><td>PECOS</td><td>Medicare enrollment status and participation eligibility</td><td>Monthly</td></tr>
+            <tr><td>CMS Open Payments</td><td>Industry relationship disclosure for transparency and conflict-of-interest awareness</td><td>Annually</td></tr>
+            <tr><td>FSMB / State Licensing</td><td>Active medical license verification, disciplinary actions, multi-state compact status</td><td>Varies by state</td></tr>
+          </tbody>
+        </table>
+
+        <p>The composite score is computed using a weighted algorithm across all five sources. Providers below a configurable threshold (default: 60) are flagged for review. Excluded providers (OIG/LEIE match) are automatically blocked from authorization and claims processing. All verification results are audit-logged with timestamps and source data versions for compliance documentation.</p>
+
+        <h3>Where provider verification fits in CMS-0057-F</h3>
+        <ul style="margin-top:8px;">
+          <li><strong>Provider Access API</strong> &mdash; Provider identity is verified before granting access to member clinical and claims data. NPI is validated against NPPES, exclusion status is checked against OIG/LEIE, and license status is confirmed.</li>
+          <li><strong>Prior Authorization API</strong> &mdash; Requesting and servicing provider NPIs are verified during X12 278 processing. Excluded or unlicensed providers trigger an automatic deny with structured rationale.</li>
+          <li><strong>Provider Directory API</strong> &mdash; Directory entries are enriched with verification metadata, ensuring that provider information exposed through FHIR endpoints reflects current, validated data.</li>
+          <li><strong>Claims Adjudication</strong> &mdash; Step 4 of the 10-step adjudication pipeline validates the servicing provider before benefit calculation proceeds.</li>
+        </ul>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Full documentation</div>
+          <p>For the complete scoring algorithm, bulk sync infrastructure, API reference, and portal integration, see the <a href="/docs/provider-verification-guide">Provider Verification Guide</a>.</p>
+        </div>
+
+
+        <!-- ============================================================ -->
+        <!-- WHY CHO                                                      -->
+        <!-- ============================================================ -->
+        <h2 id="why-cho">Why Cloud Health Office</h2>
+        <p>CMS-0057-F compliance is not just an API problem &mdash; it is an integration, terminology, data quality, and adjudication problem. Most implementation approaches address only the FHIR API surface and leave the rest as &ldquo;customer responsibility.&rdquo; CHO addresses the full compliance surface in a single platform.</p>
+
+        <table>
+          <thead><tr><th>Capability</th><th>CHO</th><th>Typical Implementation</th></tr></thead>
+          <tbody>
+            <tr><td>FHIR R4 APIs (Patient, Provider, P2P, PA)</td><td><span class="badge badge-complete">Built-in</span></td><td>Varies &mdash; often assembled from open-source tooling</td></tr>
+            <tr><td>X12 EDI Parsers</td><td><span class="badge badge-complete">6 parsers, zero dependencies, in-house</span></td><td>Third-party libraries or manual mapping</td></tr>
+            <tr><td>SNOMED &#8596; CPT/ICD Terminology Translation</td><td><span class="badge badge-complete">Native ConceptMap/$translate</span></td><td>Not included &mdash; &ldquo;customer responsibility&rdquo;</td></tr>
+            <tr><td>Context-Aware Disambiguation</td><td><span class="badge badge-complete">Rule engine with plan overrides</span></td><td>Not available</td></tr>
+            <tr><td>Provider Verification (NPPES, OIG, PECOS, FSMB)</td><td><span class="badge badge-complete">Multi-source Integrity Score</span></td><td>Manual or separate product</td></tr>
+            <tr><td>Claims Adjudication Pipeline</td><td><span class="badge badge-complete">10-step DAG, &lt;500ms</span></td><td>Depends on legacy CAPS</td></tr>
+            <tr><td>Benefit Engine (HDHP, HSA, COB, NCCI, DRG)</td><td><span class="badge badge-complete">9 calculation engines</span></td><td>Depends on legacy CAPS</td></tr>
+            <tr><td>Core Admin Adapter Pattern</td><td><span class="badge badge-complete">Vendor-neutral ICoreAdminAdapter</span></td><td>Hard-coded to one CAPS</td></tr>
+            <tr><td>Multi-Tenant SaaS</td><td><span class="badge badge-complete">X-Tenant-ID isolation</span></td><td>Single-tenant or per-client deployment</td></tr>
+            <tr><td>Implementation Timeline</td><td><span class="badge badge-complete">&lt;1 hour to production</span></td><td>6&ndash;18 months</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Augment, don't replace</div>
+          <p>CHO deploys as a compliance layer alongside your existing core admin platform &mdash; QNXT, Facets, HealthEdge, Amisys, or any other system. No replatforming. No rip-and-replace. Your CAPS stays in place. CHO handles FHIR, EDI, terminology, provider verification, and CMS compliance. The <code>ICoreAdminAdapter</code> pattern means CHO can operate in <strong>Augment</strong> mode (compliance overlay on your CAPS) or <strong>Replace</strong> mode (standalone core admin) per tenant.</p>
+        </div>
+
+
+        <!-- ============================================================ -->
+        <!-- DEADLINES                                                    -->
+        <!-- ============================================================ -->
         <h2 id="deadlines">Compliance Deadlines</h2>
 
         <table>
-          <thead><tr><th>Requirement</th><th>Effective Date</th><th>CHO Status</th></tr></thead>
+          <thead><tr><th>Requirement</th><th>CMS Effective Date</th><th>CHO Status</th><th>CHO Ready Since</th></tr></thead>
           <tbody>
-            <tr><td>Patient Access API</td><td>January 1, 2026</td><td><span class="badge badge-complete">Live</span></td></tr>
-            <tr><td>Provider Access API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td></tr>
-            <tr><td>Payer-to-Payer API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td></tr>
-            <tr><td>Prior Authorization API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td></tr>
+            <tr><td>Patient Access API</td><td>January 1, 2026</td><td><span class="badge badge-complete">Live</span></td><td>November 2024</td></tr>
+            <tr><td>Provider Access API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td><td>November 2024</td></tr>
+            <tr><td>Payer-to-Payer API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td><td>November 2024</td></tr>
+            <tr><td>Prior Authorization API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td><td>November 2024</td></tr>
+            <tr><td>Terminology Translation</td><td>Required for CRD/DTR/PAS</td><td><span class="badge badge-complete">Ready</span></td><td>March 2025</td></tr>
+            <tr><td>Provider Directory Accuracy</td><td>Required for Provider Access</td><td><span class="badge badge-complete">Ready</span></td><td>April 2025</td></tr>
           </tbody>
         </table>
 
+
+        <!-- ============================================================ -->
+        <!-- VERIFICATION                                                 -->
+        <!-- ============================================================ -->
         <h2 id="verification">Quick Compliance Verification</h2>
         <p>After deploying Cloud Health Office (see <a href="/docs/quickstart">Quick Start</a>), you can verify compliance readiness in minutes:</p>
 
@@ -130,15 +295,39 @@ npm run start:fhir-server
 <span class="code-comment"># Verify FHIR CapabilityStatement</span>
 curl http://localhost:3000/fhir/r4/metadata | jq '.rest[0].resource | length'
 
-<span class="code-comment"># Run the compliance checker</span>
-npm run compliance:check</code></pre>
+<span class="code-comment"># Run the full compliance checker</span>
+npm run compliance:check
 
-        <p>The compliance checker validates all CMS-0057-F data classes, response timelines, USCDI coverage, and Da Vinci IG conformance automatically.</p>
+<span class="code-comment"># Test terminology translation</span>
+curl "http://localhost:5010/fhir/ConceptMap/\$translate?\
+system=http://snomed.info/sct&amp;\
+code=73211009&amp;\
+targetsystem=http://hl7.org/fhir/sid/icd-10-cm" | jq .
+
+<span class="code-comment"># Verify provider integrity score</span>
+curl http://localhost:5029/api/providers/1234567890/verify | jq '.integrityScore'</code></pre>
+
+        <p>The compliance checker validates all CMS-0057-F data classes, response timelines, USCDI coverage, Da Vinci IG conformance, terminology translation availability, and provider verification engine connectivity.</p>
 
         <div class="callout callout-info">
           <div class="callout-title">Detailed compliance page</div>
           <p>For the full commercial breakdown including cost comparisons and implementation timelines, see the <a href="/cms-0057f-compliance">CMS-0057-F Compliance</a> product page.</p>
         </div>
+
+
+        <!-- ============================================================ -->
+        <!-- RELATED GUIDES                                               -->
+        <!-- ============================================================ -->
+        <div style="margin-top:48px; padding:24px 28px; border:1px solid rgba(0,255,255,0.15); border-radius:8px; background:rgba(0,255,255,0.03);">
+          <h3 style="margin-top:0; color:#00ffff; font-size:1.1rem;">Related Compliance Guides</h3>
+          <ul style="margin:12px 0 0 0; padding-left:20px; line-height:2;">
+            <li><a href="/docs/terminology-guide">Terminology Crosswalk Guide</a> &mdash; Full API reference, map management, context rule engine, portal integration, and consumer service architecture</li>
+            <li><a href="/docs/provider-verification-guide">Provider Verification Guide</a> &mdash; Multi-source verification engine, integrity scoring algorithm, bulk sync, and claims integration</li>
+            <li><a href="/docs/finance-guide">Finance Modules Guide</a> &mdash; Premium billing, accounts receivable, capitation payments, X12 835 ERA generation, and NACHA ACH disbursement</li>
+            <li><a href="/docs/architecture">Architecture</a> &mdash; Platform overview, 10-step adjudication pipeline, multi-tenant design, infrastructure, and HIPAA security</li>
+          </ul>
+        </div>
+
 
         <div class="docs-pager">
           <a href="/docs/quickstart"><div class="pager-label">&larr; Previous</div><div class="pager-title">Quick Start</div></a>
