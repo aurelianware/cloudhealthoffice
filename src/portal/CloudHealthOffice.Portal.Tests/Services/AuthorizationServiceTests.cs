@@ -126,7 +126,7 @@ public class AuthorizationServiceTests
         await sut.GetAuthorizationsAsync();
 
         handler.CapturedUrls.Should().ContainSingle()
-            .Which.Should().EndWith("/authorizations");
+            .Which.Should().EndWith("/authorizations/search");
     }
 
     [Fact]

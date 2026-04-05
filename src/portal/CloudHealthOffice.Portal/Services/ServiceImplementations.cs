@@ -351,8 +351,8 @@ public class AuthorizationService : IAuthorizationService
         {
             await SetBearerTokenAsync();
             var url = string.IsNullOrEmpty(memberId)
-                ? $"{baseUrl}/authorizations"
-                : $"{baseUrl}/authorizations?memberId={memberId}";
+                ? $"{baseUrl}/authorizations/search"
+                : $"{baseUrl}/authorizations/search?memberId={memberId}";
             var auths = await _httpClient.GetFromJsonAsync<List<AuthorizationSummary>>(url);
             return auths ?? new List<AuthorizationSummary>();
         }

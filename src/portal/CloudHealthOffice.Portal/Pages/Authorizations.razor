@@ -253,7 +253,8 @@
 
         try
         {
-            _allAuthorizations = await AuthorizationService.GetAuthorizationsAsync();
+            var memberFilter = string.IsNullOrWhiteSpace(_memberIdSearch) ? null : _memberIdSearch.Trim();
+            _allAuthorizations = await AuthorizationService.GetAuthorizationsAsync(memberFilter);
             ApplyFilters();
             _hasSearched = true;
         }
