@@ -58,7 +58,7 @@ public class CrdServiceTests
     {
         _terminologyHandler.ResponseBody = JsonSerializer.Serialize(new[]
         {
-            new { result = true, match = new[] { new { system = "http://hl7.org/fhir/sid/icd-10-cm", code = "E11.9", display = "Type 2 diabetes mellitus" } } },
+            new { result = true, matches = new[] { new { system = "http://hl7.org/fhir/sid/icd-10-cm", code = "E11.9", display = "Type 2 diabetes mellitus" } } },
         });
 
         var request = CreateHookRequest("http://snomed.info/sct", "73211009", "Diabetes mellitus");
@@ -75,7 +75,7 @@ public class CrdServiceTests
     {
         _terminologyHandler.ResponseBody = JsonSerializer.Serialize(new[]
         {
-            new { result = true, match = new[] { new { system = "http://hl7.org/fhir/sid/icd-10-cm", code = "E11.9", display = "Type 2 diabetes" } } },
+            new { result = true, matches = new[] { new { system = "http://hl7.org/fhir/sid/icd-10-cm", code = "E11.9", display = "Type 2 diabetes" } } },
         });
 
         var request = CreateHookRequest("http://snomed.info/sct", "73211009", "Diabetes");
@@ -122,8 +122,8 @@ public class CrdServiceTests
     {
         _terminologyHandler.ResponseBody = JsonSerializer.Serialize(new[]
         {
-            new { result = true, match = new[] { new { system = "http://hl7.org/fhir/sid/icd-10-cm", code = "E11.9", display = "Type 2 diabetes" } } },
-            new { result = true, match = new[] { new { system = "http://hl7.org/fhir/sid/icd-10-cm", code = "M17.11", display = "Primary OA right knee" } } },
+            new { result = true, matches = new[] { new { system = "http://hl7.org/fhir/sid/icd-10-cm", code = "E11.9", display = "Type 2 diabetes" } } },
+            new { result = true, matches = new[] { new { system = "http://hl7.org/fhir/sid/icd-10-cm", code = "M17.11", display = "Primary OA right knee" } } },
         });
 
         var request = CreateMultiCodeHookRequest(

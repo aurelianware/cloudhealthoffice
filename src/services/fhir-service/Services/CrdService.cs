@@ -133,9 +133,9 @@ public class CrdService : ICrdService
                     for (var i = 0; i < snomedCodes.Count && i < translations.Count; i++)
                     {
                         var t = translations[i];
-                        if (t.Result && t.Match is { Count: > 0 })
+                        if (t.Result && t.Matches is { Count: > 0 })
                         {
-                            var match = t.Match[0];
+                            var match = t.Matches[0];
                             result.Add(new TranslatedCode(
                                 snomedCodes[i],
                                 new CrdCoding
@@ -263,7 +263,7 @@ public class CrdService : ICrdService
     private class TerminologyTranslationResult
     {
         public bool Result { get; set; }
-        public List<TerminologyMatch>? Match { get; set; }
+        public List<TerminologyMatch>? Matches { get; set; }
     }
 
     private class TerminologyMatch
