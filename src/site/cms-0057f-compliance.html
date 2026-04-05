@@ -201,7 +201,7 @@
     .stat-label{font-size:.72rem;color:var(--text-dim);margin-top:.4rem;line-height:1.4}
 
     /* ── ARCHITECTURE DIAGRAM ── */
-    .arch-diagram{width:100%;max-width:1080px;margin:0 auto;overflow-x:auto}
+    .arch-diagram{width:100%;max-width:1360px;margin:0 auto;overflow-x:auto}
     .arch-diagram svg{width:100%;height:auto}
 
     /* ── API GRID ── */
@@ -472,108 +472,192 @@
 
 ```
 <div class="arch-diagram" data-reveal>
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 740" width="1080" height="740" role="img" aria-label="Cloud Health Office platform architecture showing the integration flow from core admin systems through CHO microservices to clearinghouse partners">
-    <defs>
-      <linearGradient id="ag1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00ffff"/><stop offset="100%" stop-color="#00ff88"/></linearGradient>
-      <linearGradient id="ag2" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#00ffff"/><stop offset="100%" stop-color="rgba(0,255,255,0.2)"/></linearGradient>
-      <filter id="ag"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#00ffff" opacity=".5"/></marker>
-    </defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1280" viewBox="0 0 1360 1280">
+<style>
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+  .title { font-size: 28px; font-weight: 700; fill: #ffffff; }
+  .subtitle { font-size: 20px; font-weight: 400; fill: rgba(255,255,255,0.6); }
+  .section-label { font-size: 16px; font-weight: 500; fill: rgba(255,255,255,0.35); letter-spacing: 1px; text-transform: uppercase; }
+  .box-title { font-size: 18px; font-weight: 600; }
+  .box-sub { font-size: 14px; font-weight: 400; }
+  .label { font-size: 14px; fill: rgba(255,255,255,0.5); }
+  .legend { font-size: 13px; fill: rgba(255,255,255,0.4); }
+  .arr { stroke-width: 1.5; }
+  .leader { stroke-dasharray: 4 3; stroke-width: 1; }
+</style>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
 
-    <rect width="1080" height="740" fill="#080808" rx="8"/>
+<!-- Background -->
+<rect width="1360" height="1280" rx="16" fill="#0b1120"/>
 
-    <!-- Top: Core Admin -->
-    <g transform="translate(540,42)">
-      <rect x="-160" y="-26" width="320" height="52" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
-      <text x="0" y="-2" font-family="Outfit,sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">Your Core Admin System</text>
-      <text x="0" y="16" font-family="Outfit,sans-serif" font-size="10" fill="#606060" text-anchor="middle">QNXT · Facets · HealthEdge · Amisys</text>
-    </g>
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- EXTERNAL: Provider EHRs                                    -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<rect x="60" y="40" width="560" height="90" rx="12" fill="rgba(255,120,80,0.06)" stroke="rgba(255,120,80,0.25)" stroke-width="1"/>
+<text class="box-title" x="340" y="72" text-anchor="middle" fill="#ff9070">Provider EHRs</text>
+<text class="box-sub" x="340" y="96" text-anchor="middle" fill="rgba(255,144,112,0.6)">Epic · Meditech · Cerner · SMART on FHIR apps</text>
 
-    <!-- Arrow down -->
-    <line x1="540" y1="70" x2="540" y2="100" stroke="url(#ag2)" stroke-width="2" marker-end="url(#ah)"/>
+<!-- EXTERNAL: Members -->
+<rect x="740" y="40" width="560" height="90" rx="12" fill="rgba(255,120,80,0.06)" stroke="rgba(255,120,80,0.25)" stroke-width="1"/>
+<text class="box-title" x="1020" y="72" text-anchor="middle" fill="#ff9070">Members / patients</text>
+<text class="box-sub" x="1020" y="96" text-anchor="middle" fill="rgba(255,144,112,0.6)">Third-party SMART on FHIR patient apps</text>
 
-    <!-- CHO container -->
-    <rect x="40" y="105" width="1000" height="500" rx="12" fill="rgba(0,255,255,.015)" stroke="rgba(0,255,255,.1)" stroke-width="1"/>
-    <text x="540" y="136" font-family="Outfit,sans-serif" font-size="22" font-weight="900" fill="#fff" text-anchor="middle">Cloud Health Office</text>
-    <text x="540" y="156" font-family="Outfit,sans-serif" font-size="10" fill="#606060" text-anchor="middle">Kubernetes-Native · HIPAA Compliant · Vendor-Neutral CMS-0057-F Compliance Layer</text>
+<!-- Arrows: providers → CHO -->
+<line x1="340" y1="130" x2="340" y2="185" stroke="rgba(255,255,255,0.25)" class="arr" marker-end="url(#ah)"/>
+<text class="label" x="355" y="166">CDS Hooks</text>
 
-    <!-- API Gateway -->
-    <g transform="translate(540,188)">
-      <rect x="-440" y="-16" width="880" height="32" rx="5" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.18)" stroke-width="1"/>
-      <text x="0" y="4" font-family="Outfit,sans-serif" font-size="12" font-weight="700" fill="#00ffff" text-anchor="middle" filter="url(#ag)">API Gateway (YARP)</text>
-    </g>
+<!-- Arrow: members → CHO -->
+<line x1="1020" y1="130" x2="1020" y2="185" stroke="rgba(255,255,255,0.25)" class="arr" marker-end="url(#ah)"/>
+<text class="label" x="1035" y="166">FHIR R4</text>
 
-    <!-- Core Services Row -->
-    <g transform="translate(0,245)">
-      <g transform="translate(155,0)"><rect x="-75" y="-20" width="150" height="40" rx="5" fill="rgba(0,255,255,.04)" stroke="rgba(0,255,255,.15)" stroke-width="1"/><text x="0" y="-2" font-family="Outfit,sans-serif" font-size="11" font-weight="600" fill="#00ffff" text-anchor="middle">Claims Service</text><text x="0" y="12" font-family="Outfit,sans-serif" font-size="8" fill="#606060" text-anchor="middle">837 / 835</text></g>
-      <g transform="translate(340,0)"><rect x="-75" y="-20" width="150" height="40" rx="5" fill="rgba(0,255,255,.04)" stroke="rgba(0,255,255,.15)" stroke-width="1"/><text x="0" y="-2" font-family="Outfit,sans-serif" font-size="11" font-weight="600" fill="#00ffff" text-anchor="middle">Eligibility Service</text><text x="0" y="12" font-family="Outfit,sans-serif" font-size="8" fill="#606060" text-anchor="middle">270 / 271</text></g>
-      <g transform="translate(525,0)"><rect x="-75" y="-20" width="150" height="40" rx="5" fill="rgba(0,255,255,.04)" stroke="rgba(0,255,255,.15)" stroke-width="1"/><text x="0" y="-2" font-family="Outfit,sans-serif" font-size="11" font-weight="600" fill="#00ffff" text-anchor="middle">Auth Service</text><text x="0" y="12" font-family="Outfit,sans-serif" font-size="8" fill="#606060" text-anchor="middle">278</text></g>
-      <g transform="translate(720,0)"><rect x="-80" y="-20" width="160" height="40" rx="5" fill="rgba(0,255,136,.04)" stroke="rgba(0,255,136,.15)" stroke-width="1"/><text x="0" y="-2" font-family="Outfit,sans-serif" font-size="11" font-weight="600" fill="#00ff88" text-anchor="middle">Benefit Engine</text><text x="0" y="12" font-family="Outfit,sans-serif" font-size="8" fill="#606060" text-anchor="middle">HDHP · HSA · COB · NCCI</text></g>
-      <g transform="translate(925,0)"><rect x="-75" y="-20" width="150" height="40" rx="5" fill="rgba(0,255,136,.04)" stroke="rgba(0,255,136,.15)" stroke-width="1"/><text x="0" y="-2" font-family="Outfit,sans-serif" font-size="11" font-weight="600" fill="#00ff88" text-anchor="middle">Provider Service</text><text x="0" y="12" font-family="Outfit,sans-serif" font-size="8" fill="#606060" text-anchor="middle">NPI · Credentialing</text></g>
-    </g>
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- CHO CONTAINER                                              -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<rect x="30" y="190" width="1300" height="760" rx="20" fill="rgba(0,255,255,0.02)" stroke="rgba(0,255,255,0.12)" stroke-width="1" stroke-dasharray="8 4"/>
 
-    <!-- Divider -->
-    <line x1="80" y1="290" x2="1000" y2="290" stroke="rgba(0,255,255,.06)"/>
+<!-- Container title -->
+<text class="title" x="680" y="232" text-anchor="middle">Cloud Health Office</text>
+<text class="subtitle" x="680" y="262" text-anchor="middle">CMS-0057-F compliance layer — deploys alongside any core admin system</text>
 
-    <!-- Argo Workflows Label -->
-    <text x="540" y="315" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#808080" text-anchor="middle" letter-spacing="2">ARGO WORKFLOWS — ADJUDICATION DAG</text>
+<!-- ─────────────────────────────────────────────────────────── -->
+<!-- ROW 1: Da Vinci Burden Reduction                           -->
+<!-- ─────────────────────────────────────────────────────────── -->
+<text class="section-label" x="75" y="302">Da Vinci burden reduction</text>
 
-    <!-- DAG Steps -->
-    <g transform="translate(0,350)">
-      <g transform="translate(155,0)"><rect x="-62" y="-17" width="124" height="34" rx="5" fill="rgba(0,255,255,.03)" stroke="rgba(0,255,255,.2)" stroke-width="1"/><text x="0" y="2" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#00ffff" text-anchor="middle">Verify Coverage</text></g>
-      <line x1="219" y1="0" x2="268" y2="0" stroke="#00ffff" stroke-width="1.2" opacity=".35" marker-end="url(#ah)"/>
-      <g transform="translate(340,0)"><rect x="-62" y="-17" width="124" height="34" rx="5" fill="rgba(0,255,255,.03)" stroke="rgba(0,255,255,.2)" stroke-width="1"/><text x="0" y="2" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#00ffff" text-anchor="middle">Validate Provider</text></g>
-      <line x1="404" y1="0" x2="453" y2="0" stroke="#00ffff" stroke-width="1.2" opacity=".35" marker-end="url(#ah)"/>
-      <g transform="translate(525,0)"><rect x="-62" y="-17" width="124" height="34" rx="5" fill="rgba(0,255,255,.03)" stroke="rgba(0,255,255,.2)" stroke-width="1"/><text x="0" y="2" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#00ffff" text-anchor="middle">Get Benefits</text></g>
-      <line x1="589" y1="0" x2="638" y2="0" stroke="#00ff88" stroke-width="1.2" opacity=".35" marker-end="url(#ah)"/>
-      <g transform="translate(720,0)"><rect x="-62" y="-17" width="124" height="34" rx="5" fill="rgba(0,255,136,.03)" stroke="rgba(0,255,136,.2)" stroke-width="1"/><text x="0" y="2" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#00ff88" text-anchor="middle">Price Claim</text></g>
-      <line x1="784" y1="0" x2="833" y2="0" stroke="#00ff88" stroke-width="1.2" opacity=".35" marker-end="url(#ah)"/>
-      <g transform="translate(925,0)"><rect x="-62" y="-17" width="124" height="34" rx="5" fill="rgba(0,255,136,.03)" stroke="rgba(0,255,136,.2)" stroke-width="1"/><text x="0" y="2" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#00ff88" text-anchor="middle">Pay Claim</text></g>
-    </g>
+<!-- CRD Server -->
+<rect x="65" y="318" width="380" height="100" rx="10" fill="rgba(0,200,160,0.08)" stroke="rgba(0,200,160,0.3)" stroke-width="1"/>
+<text class="box-title" x="255" y="355" text-anchor="middle" fill="#00e8a0">CRD server</text>
+<text class="box-sub" x="255" y="380" text-anchor="middle" fill="rgba(0,232,160,0.55)">Coverage Requirements Discovery</text>
+<text class="box-sub" x="255" y="400" text-anchor="middle" fill="rgba(0,232,160,0.55)">order-select · order-sign · CDS Hooks</text>
 
-    <!-- Divider -->
-    <line x1="80" y1="390" x2="1000" y2="390" stroke="rgba(0,255,255,.06)"/>
+<!-- DTR Engine -->
+<rect x="490" y="318" width="380" height="100" rx="10" fill="rgba(0,200,160,0.08)" stroke="rgba(0,200,160,0.3)" stroke-width="1"/>
+<text class="box-title" x="680" y="355" text-anchor="middle" fill="#00e8a0">DTR engine</text>
+<text class="box-sub" x="680" y="380" text-anchor="middle" fill="rgba(0,232,160,0.55)">Documentation Templates &amp; Rules</text>
+<text class="box-sub" x="680" y="400" text-anchor="middle" fill="rgba(0,232,160,0.55)">FHIR Questionnaire · QuestionnaireResponse</text>
 
-    <!-- Argo Events -->
-    <g transform="translate(540,420)">
-      <rect x="-440" y="-15" width="880" height="30" rx="4" fill="rgba(255,255,255,.02)" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
-      <text x="0" y="4" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#808080" text-anchor="middle">Argo Events — SFTP Polling · Kafka Triggers · EDI Ingest</text>
-    </g>
+<!-- PAS Server -->
+<rect x="915" y="318" width="380" height="100" rx="10" fill="rgba(0,200,160,0.08)" stroke="rgba(0,200,160,0.3)" stroke-width="1"/>
+<text class="box-title" x="1105" y="355" text-anchor="middle" fill="#00e8a0">PAS server</text>
+<text class="box-sub" x="1105" y="380" text-anchor="middle" fill="rgba(0,232,160,0.55)">Prior Authorization Support</text>
+<text class="box-sub" x="1105" y="400" text-anchor="middle" fill="rgba(0,232,160,0.55)">Claim/$submit · 15-second SLA · auto-adjudication</text>
 
-    <!-- Parsers Row -->
-    <g transform="translate(0,472)">
-      <g transform="translate(210,0)"><rect x="-100" y="-15" width="200" height="30" rx="4" fill="rgba(0,0,0,.5)" stroke="rgba(0,255,255,.1)" stroke-width="1"/><text x="0" y="0" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#00ffff" text-anchor="middle">X12 Parsers</text><text x="0" y="12" font-family="Outfit,sans-serif" font-size="8" fill="#606060" text-anchor="middle">Python 3.11</text></g>
-      <g transform="translate(540,0)"><rect x="-100" y="-15" width="200" height="30" rx="4" fill="rgba(0,0,0,.5)" stroke="rgba(0,255,255,.1)" stroke-width="1"/><text x="0" y="0" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#00ffff" text-anchor="middle">FHIR R4 Mappers</text><text x="0" y="12" font-family="Outfit,sans-serif" font-size="8" fill="#606060" text-anchor="middle">TypeScript / Node.js 20</text></g>
-      <g transform="translate(870,0)"><rect x="-100" y="-15" width="200" height="30" rx="4" fill="rgba(0,0,0,.5)" stroke="rgba(0,255,136,.1)" stroke-width="1"/><text x="0" y="0" font-family="Outfit,sans-serif" font-size="10" font-weight="600" fill="#00ff88" text-anchor="middle">999 / 277CA Generator</text><text x="0" y="12" font-family="Outfit,sans-serif" font-size="8" fill="#606060" text-anchor="middle">.NET 8</text></g>
-    </g>
+<!-- Arrows: CRD → DTR → PAS -->
+<line x1="445" y1="368" x2="488" y2="368" stroke="#00ccaa" class="arr" marker-end="url(#ah)"/>
+<line x1="870" y1="368" x2="913" y2="368" stroke="#00ccaa" class="arr" marker-end="url(#ah)"/>
 
-    <!-- Divider -->
-    <line x1="80" y1="505" x2="1000" y2="505" stroke="rgba(0,255,255,.06)"/>
+<!-- ─────────────────────────────────────────────────────────── -->
+<!-- ROW 2: Compliance Intelligence                             -->
+<!-- ─────────────────────────────────────────────────────────── -->
+<text class="section-label" x="75" y="452">Compliance intelligence</text>
 
-    <!-- Data Layer -->
-    <g transform="translate(540,538)">
-      <rect x="-440" y="-20" width="880" height="40" rx="5" fill="rgba(0,255,136,.03)" stroke="rgba(0,255,136,.1)" stroke-width="1"/>
-      <text x="0" y="-2" font-family="Outfit,sans-serif" font-size="13" font-weight="700" fill="#00ff88" text-anchor="middle" filter="url(#ag)">MongoDB / Cosmos DB</text>
-      <text x="0" y="14" font-family="Outfit,sans-serif" font-size="9" fill="#606060" text-anchor="middle">Multi-Tenant · Encrypted at Rest · HIPAA BAA</text>
-    </g>
+<!-- Terminology Service -->
+<rect x="65" y="468" width="380" height="100" rx="10" fill="rgba(140,100,255,0.07)" stroke="rgba(140,100,255,0.25)" stroke-width="1"/>
+<text class="box-title" x="255" y="505" text-anchor="middle" fill="#b090ff">Terminology service</text>
+<text class="box-sub" x="255" y="530" text-anchor="middle" fill="rgba(176,144,255,0.55)">SNOMED CT ↔ CPT / ICD-10-CM crosswalk</text>
+<text class="box-sub" x="255" y="550" text-anchor="middle" fill="rgba(176,144,255,0.55)">ConceptMap/$translate · context disambiguation</text>
 
-    <!-- Deploy bar -->
-    <g transform="translate(540,582)">
-      <rect x="-440" y="-12" width="880" height="24" rx="3" fill="rgba(255,255,255,.015)" stroke="rgba(255,255,255,.04)" stroke-width="1"/>
-      <text x="0" y="3" font-family="Outfit,sans-serif" font-size="9" fill="#505050" text-anchor="middle">Helm · AKS / EKS / GKE · ACR · Argo CD · BSL 1.1 License</text>
-    </g>
+<!-- Provider Verification -->
+<rect x="490" y="468" width="380" height="100" rx="10" fill="rgba(140,100,255,0.07)" stroke="rgba(140,100,255,0.25)" stroke-width="1"/>
+<text class="box-title" x="680" y="505" text-anchor="middle" fill="#b090ff">Provider verification</text>
+<text class="box-sub" x="680" y="530" text-anchor="middle" fill="rgba(176,144,255,0.55)">NPPES · OIG/LEIE · PECOS · FSMB</text>
+<text class="box-sub" x="680" y="550" text-anchor="middle" fill="rgba(176,144,255,0.55)">Composite integrity score (0–100) per NPI</text>
 
-    <!-- Arrow down to clearinghouses -->
-    <line x1="540" y1="610" x2="540" y2="645" stroke="url(#ag2)" stroke-width="2" marker-end="url(#ah)"/>
+<!-- SMART Auth -->
+<rect x="915" y="468" width="380" height="100" rx="10" fill="rgba(140,100,255,0.07)" stroke="rgba(140,100,255,0.25)" stroke-width="1"/>
+<text class="box-title" x="1105" y="505" text-anchor="middle" fill="#b090ff">SMART auth service</text>
+<text class="box-sub" x="1105" y="530" text-anchor="middle" fill="rgba(176,144,255,0.55)">OAuth 2.0 · JWT · scope enforcement</text>
+<text class="box-sub" x="1105" y="550" text-anchor="middle" fill="rgba(176,144,255,0.55)">Patient consent · provider authorization</text>
 
-    <!-- Clearinghouse Partners -->
-    <g transform="translate(0,685)">
-      <g transform="translate(175,0)"><rect x="-90" y="-20" width="180" height="40" rx="7" fill="rgba(0,0,0,.5)" stroke="rgba(0,180,255,.25)" stroke-width="1"/><text x="0" y="4" font-family="Outfit,sans-serif" font-size="12" font-weight="600" fill="#00b4ff" text-anchor="middle">Availity</text></g>
-      <g transform="translate(400,0)"><rect x="-90" y="-20" width="180" height="40" rx="7" fill="rgba(0,0,0,.5)" stroke="rgba(255,153,0,.25)" stroke-width="1"/><text x="0" y="4" font-family="Outfit,sans-serif" font-size="12" font-weight="600" fill="#ff9900" text-anchor="middle">Change Healthcare</text></g>
-      <g transform="translate(630,0)"><rect x="-90" y="-20" width="180" height="40" rx="7" fill="rgba(0,0,0,.5)" stroke="rgba(66,133,244,.25)" stroke-width="1"/><text x="0" y="4" font-family="Outfit,sans-serif" font-size="12" font-weight="600" fill="#4285f4" text-anchor="middle">Optum</text></g>
-      <g transform="translate(860,0)"><rect x="-90" y="-20" width="180" height="40" rx="7" fill="rgba(0,0,0,.5)" stroke="rgba(0,255,136,.25)" stroke-width="1"/><text x="0" y="4" font-family="Outfit,sans-serif" font-size="12" font-weight="600" fill="#00ff88" text-anchor="middle">Inovalon</text></g>
-    </g>
-  </svg>
+<!-- Dashed arrows: CRD↓Terminology, PAS↓ProvVerif -->
+<line x1="255" y1="418" x2="255" y2="466" stroke="rgba(176,144,255,0.4)" class="leader" marker-end="url(#ah)"/>
+<line x1="1105" y1="418" x2="820" y2="466" stroke="rgba(176,144,255,0.4)" class="leader" marker-end="url(#ah)"/>
+
+<!-- ─────────────────────────────────────────────────────────── -->
+<!-- ROW 3: Platform                                            -->
+<!-- ─────────────────────────────────────────────────────────── -->
+<text class="section-label" x="75" y="602">Platform</text>
+
+<!-- FHIR APIs -->
+<rect x="65" y="618" width="380" height="100" rx="10" fill="rgba(0,160,255,0.06)" stroke="rgba(0,160,255,0.2)" stroke-width="1"/>
+<text class="box-title" x="255" y="655" text-anchor="middle" fill="#50b0ff">FHIR R4 APIs</text>
+<text class="box-sub" x="255" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">Patient Access · Provider Access</text>
+<text class="box-sub" x="255" y="700" text-anchor="middle" fill="rgba(80,176,255,0.55)">Payer-to-Payer · Provider Directory</text>
+
+<!-- X12 Parsers -->
+<rect x="490" y="618" width="380" height="100" rx="10" fill="rgba(0,160,255,0.06)" stroke="rgba(0,160,255,0.2)" stroke-width="1"/>
+<text class="box-title" x="680" y="655" text-anchor="middle" fill="#50b0ff">X12 EDI parsers</text>
+<text class="box-sub" x="680" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">278 · 837 · 835 · 834 · 276/277 · encoder</text>
+<text class="box-sub" x="680" y="700" text-anchor="middle" fill="rgba(80,176,255,0.55)">6 parsers · zero dependencies · bidirectional</text>
+
+<!-- Claims + Benefit -->
+<rect x="915" y="618" width="380" height="100" rx="10" fill="rgba(0,160,255,0.06)" stroke="rgba(0,160,255,0.2)" stroke-width="1"/>
+<text class="box-title" x="1105" y="655" text-anchor="middle" fill="#50b0ff">Claims + benefit engine</text>
+<text class="box-sub" x="1105" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">10-step adjudication pipeline · &lt;500ms</text>
+<text class="box-sub" x="1105" y="700" text-anchor="middle" fill="rgba(80,176,255,0.55)">9 engines · NCCI · COB · DRG · HDHP/HSA</text>
+
+<!-- ─── ICoreAdminAdapter bar ─── -->
+<rect x="65" y="745" width="1230" height="70" rx="10" fill="rgba(255,200,0,0.05)" stroke="rgba(255,200,0,0.2)" stroke-width="1"/>
+<text class="box-title" x="680" y="776" text-anchor="middle" fill="#ffcc40">ICoreAdminAdapter</text>
+<text class="box-sub" x="680" y="798" text-anchor="middle" fill="rgba(255,204,64,0.5)">Vendor-neutral CAPS integration · augment mode (read-only) or replace mode · QNXT · Facets · HealthEdge · Amisys</text>
+
+<!-- ─── Infrastructure bar ─── -->
+<rect x="65" y="835" width="1230" height="56" rx="10" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+<text class="box-sub" x="680" y="868" text-anchor="middle" fill="rgba(255,255,255,0.3)">Kubernetes (AKS / EKS / GKE) · Argo Workflows · MongoDB / Cosmos DB · Redis · Azure Key Vault · KEDA scale-to-zero</text>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- EXTERNAL: Your CAPS                                        -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<rect x="60" y="1040" width="560" height="100" rx="12" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+<text class="box-title" x="340" y="1078" text-anchor="middle" fill="rgba(255,255,255,0.7)">Your core admin system</text>
+<text class="box-sub" x="340" y="1104" text-anchor="middle" fill="rgba(255,255,255,0.35)">QNXT · Facets · HealthEdge · Amisys · custom</text>
+<text class="box-sub" x="340" y="1124" text-anchor="middle" fill="rgba(255,255,255,0.35)">Members · coverage · claims · benefits · provider contracts</text>
+
+<!-- EXTERNAL: Clearinghouse -->
+<rect x="740" y="1040" width="560" height="100" rx="12" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+<text class="box-title" x="1020" y="1078" text-anchor="middle" fill="rgba(255,255,255,0.7)">Clearinghouse</text>
+<text class="box-sub" x="1020" y="1104" text-anchor="middle" fill="rgba(255,255,255,0.35)">Availity · Change Healthcare · Optum · Inovalon</text>
+<text class="box-sub" x="1020" y="1124" text-anchor="middle" fill="rgba(255,255,255,0.35)">X12 278 prior auth · 837 claims · 835 remittance</text>
+
+<!-- Arrows: Adapter → CAPS -->
+<line x1="340" y1="815" x2="340" y2="1038" stroke="rgba(255,200,0,0.3)" class="arr" marker-end="url(#ah)"/>
+<text class="label" x="355" y="950">Members, coverage,</text>
+<text class="label" x="355" y="970">claims, benefits</text>
+<rect x="290" y="978" width="100" height="22" rx="4" fill="rgba(0,255,136,0.08)" stroke="rgba(0,255,136,0.2)" stroke-width="0.5"/>
+<text x="340" y="993" text-anchor="middle" font-size="11" font-weight="600" fill="#00ff88" font-family="-apple-system, sans-serif">READ ONLY</text>
+
+<!-- Arrow: X12 → Clearinghouse -->
+<line x1="1020" y1="815" x2="1020" y2="1038" stroke="rgba(255,255,255,0.2)" class="arr" marker-end="url(#ah)"/>
+<text class="label" x="1035" y="950">EDI transactions</text>
+<text class="label" x="1035" y="970">+ auth write-back</text>
+
+<!-- ═══ Metrics bar ═══ -->
+<rect x="60" y="1185" width="250" height="56" rx="8" fill="rgba(0,255,255,0.04)" stroke="rgba(0,255,255,0.12)" stroke-width="0.5"/>
+<text x="185" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#00ffff" font-family="-apple-system, sans-serif">1,740 tests</text>
+<text x="185" y="1228" text-anchor="middle" font-size="12" fill="rgba(0,255,255,0.5)" font-family="-apple-system, sans-serif">85.93% coverage</text>
+
+<rect x="340" y="1185" width="250" height="56" rx="8" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.12)" stroke-width="0.5"/>
+<text x="465" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#00ff88" font-family="-apple-system, sans-serif">29 microservices</text>
+<text x="465" y="1228" text-anchor="middle" font-size="12" fill="rgba(0,255,136,0.5)" font-family="-apple-system, sans-serif">9 engines · 6 parsers</text>
+
+<rect x="620" y="1185" width="250" height="56" rx="8" fill="rgba(0,255,255,0.04)" stroke="rgba(0,255,255,0.12)" stroke-width="0.5"/>
+<text x="745" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#00ffff" font-family="-apple-system, sans-serif">0 dependencies</text>
+<text x="745" y="1228" text-anchor="middle" font-size="12" fill="rgba(0,255,255,0.5)" font-family="-apple-system, sans-serif">Zero third-party runtime</text>
+
+<rect x="900" y="1185" width="250" height="56" rx="8" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.12)" stroke-width="0.5"/>
+<text x="1025" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#00ff88" font-family="-apple-system, sans-serif">&lt;1 hour deploy</text>
+<text x="1025" y="1228" text-anchor="middle" font-size="12" fill="rgba(0,255,136,0.5)" font-family="-apple-system, sans-serif">Helm + interactive wizard</text>
+
+<!-- Legend -->
+<text class="legend" x="60" y="1268">Teal = Da Vinci workflow · Purple = compliance intelligence · Blue = platform · Amber = CAPS bridge · Gray = external systems</text>
+<text class="legend" x="1130" y="1268">© 2026 Aurelianware, Inc.</text>
+
+</svg>
+
 </div>
 ```
 
