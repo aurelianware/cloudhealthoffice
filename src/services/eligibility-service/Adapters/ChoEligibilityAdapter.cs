@@ -62,7 +62,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             GroupNumber = coverage.GroupNumber,
             CoverageBeginDate = coverage.EffectiveDate,
             CoverageEndDate = coverage.TerminationDate,
-            LineOfBusiness = coverage.LineOfBusiness,
+            LineOfBusiness = (LineOfBusiness)Math.Max(0, coverage.LineOfBusiness - 1),
             Benefits = benefits,
             Deductible = accumulation.Deductible,
             OutOfPocket = accumulation.OutOfPocket,
@@ -85,7 +85,9 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             return null;
         }
 
-        return await response.Content.ReadFromJsonAsync<ChoCoverageDto>();
+        // The /active endpoint returns a List<Coverage> — take the first active entry
+        var coverages = await response.Content.ReadFromJsonAsync<List<ChoCoverageDto>>();
+        return coverages?.FirstOrDefault(c => c.IsActive);
     }
 
     private async Task<List<EligibilityBenefit>> GetBenefitsAsync(string tenantId, string benefitPlanId, string? serviceType)
@@ -192,17 +194,28 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 }
 
 /// <summary>
-/// Extended coverage DTO that includes LineOfBusiness from the coverage service.
+/// DTO matching the Coverage model returned by coverage-service.
+/// Status is an int enum (1=Active, 2=Pending, 3=Terminated, 4=Suspended, 5=COBRA).
+/// PlanId maps to BenefitPlanId in the eligibility context.
 /// </summary>
 internal class ChoCoverageDto
 {
     public string Id { get; set; } = string.Empty;
-    public bool IsActive { get; set; }
-    public string CoverageLevel { get; set; } = string.Empty;
-    public string PlanName { get; set; } = string.Empty;
+    public string? MemberId { get; set; }
+    public string? CoverageLevel { get; set; }
+    public string? PlanName { get; set; }
     public string GroupNumber { get; set; } = string.Empty;
-    public string BenefitPlanId { get; set; } = string.Empty;
+    public string PlanId { get; set; } = string.Empty;
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
-    public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
+    public int Status { get; set; }
+    public int LineOfBusiness { get; set; } = 1;
+
+    /// <summary>Coverage is active if Status == 1 (Active) or 5 (COBRA)</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsActive => Status is 1 or 5;
+
+    /// <summary>Maps PlanId to BenefitPlanId for eligibility adapter</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string BenefitPlanId => PlanId;
 }
