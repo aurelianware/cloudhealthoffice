@@ -97,14 +97,16 @@ public class AuthorizationServiceTests
     {
         var json = JsonSerializer.Serialize(new[]
         {
-            new { authorizationId = "AUTH-001", memberName = "Jane Doe",
-                  serviceType = "MRI", status = "Approved",
-                  requestDate = "2026-02-01", providerName = "Dr. Lee",
-                  processingTimeMs = 1500 },
-            new { authorizationId = "AUTH-002", memberName = "John Roe",
-                  serviceType = "Surgery", status = "Pending",
-                  requestDate = "2026-03-10", providerName = "Dr. Kim",
-                  processingTimeMs = 0 }
+            new { id = "id-1", authorizationNumber = "AUTH-001",
+                  memberId = "MBR-001", patientFirstName = "Jane", patientLastName = "Doe",
+                  serviceTypeCode = "MRI", status = 4, // Approved
+                  submittedDate = "2026-02-01", requestingProviderName = "Dr. Lee",
+                  reviewedDate = "2026-02-02" },
+            new { id = "id-2", authorizationNumber = "AUTH-002",
+                  memberId = "MBR-002", patientFirstName = "John", patientLastName = "Roe",
+                  serviceTypeCode = "Surgery", status = 3, // Pended
+                  submittedDate = "2026-03-10", requestingProviderName = "Dr. Kim",
+                  reviewedDate = (string?)null }
         }, JsonOpts);
 
         var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
@@ -113,7 +115,8 @@ public class AuthorizationServiceTests
 
         result.Should().HaveCount(2);
         result[0].AuthorizationId.Should().Be("AUTH-001");
-        result[0].Status.Should().Be("Approved");
+        result[0].StatusText.Should().Be("Approved");
+        result[0].MemberName.Should().Be("Jane Doe");
         result[1].ServiceType.Should().Be("Surgery");
     }
 
@@ -159,11 +162,12 @@ public class AuthorizationServiceTests
     {
         var json = JsonSerializer.Serialize(new
         {
-            authorizationId = "AUTH-100", memberName = "Alice Wonder",
-            serviceType = "Physical Therapy", status = "Approved",
-            requestDate = "2026-01-15", providerName = "Dr. House",
-            processingTimeMs = 800,
-            memberId = "MBR-42", providerId = "PRV-50",
+            id = "id-100", authorizationNumber = "AUTH-100",
+            memberId = "MBR-42", patientFirstName = "Alice", patientLastName = "Wonder",
+            serviceTypeCode = "Physical Therapy", status = 4, // Approved
+            submittedDate = "2026-01-15", requestingProviderName = "Dr. House",
+            reviewedDate = "2026-01-16",
+            providerId = "PRV-50",
             diagnosisCode = "M54.5", diagnosisDescription = "Low back pain",
             procedureCode = "97110", procedureDescription = "Therapeutic exercises",
             unitsRequested = 12, unitsApproved = 10,

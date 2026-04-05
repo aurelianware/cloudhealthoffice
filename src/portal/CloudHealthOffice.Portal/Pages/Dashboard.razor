@@ -203,8 +203,8 @@
                                     <MudTd DataLabel="Member">@context.MemberName</MudTd>
                                     <MudTd DataLabel="Service">@context.ServiceType</MudTd>
                                     <MudTd DataLabel="Status">
-                                        <MudChip Size="Size.Small" Color="@GetStatusColor(context.Status)">
-                                            @context.Status
+                                        <MudChip Size="Size.Small" Color="@GetStatusColor(context.StatusText)">
+                                            @context.StatusText
                                         </MudChip>
                                     </MudTd>
                                 </RowTemplate>
