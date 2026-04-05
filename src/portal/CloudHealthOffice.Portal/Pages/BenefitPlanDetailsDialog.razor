@@ -4,6 +4,11 @@
 
 <MudDialog>
     <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+        }
+
         @if (_plan == null)
         {
             <MudProgressCircular Indeterminate="true" />
@@ -279,10 +284,23 @@
     [Parameter] public string PlanId { get; set; } = string.Empty;
 
     private BenefitPlanDetails? _plan;
+    private string? _serviceError;
 
     protected override async Task OnInitializedAsync()
     {
-        _plan = await BenefitPlanService.GetBenefitPlanByIdAsync(PlanId);
+        try
+        {
+            _plan = await BenefitPlanService.GetBenefitPlanByIdAsync(PlanId);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _plan = null;
+        }
+        catch (Exception)
+        {
+            _plan = null;
+        }
     }
 
     private void Cancel()

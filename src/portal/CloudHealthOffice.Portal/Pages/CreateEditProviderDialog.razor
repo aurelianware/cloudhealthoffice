@@ -1,7 +1,13 @@
+@using CloudHealthOffice.Portal.Services
 @inject IProviderService ProviderService
 
 <MudDialog>
     <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+        }
+
         @if (_loading)
         {
             <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -243,6 +249,7 @@
     private bool _saving = false;
     private bool _isEditMode = false;
     private string? _providerId;
+    private string? _serviceError;
 
     private CreateProviderRequest _model = new();
     private UpdateProviderRequest? _updateModel;
@@ -316,6 +323,10 @@
 
             await OnProviderSaved.InvokeAsync();
             Close();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
         }
         catch (Exception)
         {

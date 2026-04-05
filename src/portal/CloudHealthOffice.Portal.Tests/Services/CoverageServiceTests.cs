@@ -66,9 +66,9 @@ public class CoverageServiceTests
         var json = JsonSerializer.Serialize(new[]
         {
             new { coverageId = "COV-1", planName = "Gold PPO", groupNumber = "GRP-100",
-                  effectiveDate = "2024-01-01", terminationDate = (string?)null, status = "Active" },
+                  effectiveDate = "2024-01-01", terminationDate = (string?)null, status = 1 },
             new { coverageId = "COV-2", planName = "Dental Basic", groupNumber = "GRP-100",
-                  effectiveDate = "2024-01-01", terminationDate = (string?)"2024-12-31", status = "Terminated" }
+                  effectiveDate = "2024-01-01", terminationDate = (string?)"2024-12-31", status = 3 }
         }, JsonOpts);
 
         var handler = new FakeHandler(HttpStatusCode.OK, json);
@@ -78,8 +78,8 @@ public class CoverageServiceTests
 
         result.Should().HaveCount(2);
         result[0].PlanName.Should().Be("Gold PPO");
-        result[0].Status.Should().Be("Active");
-        result[1].Status.Should().Be("Terminated");
+        result[0].StatusText.Should().Be("Active");
+        result[1].StatusText.Should().Be("Terminated");
         handler.CapturedUrls[0].Should().Contain("/v1/coverage/member/MBR-001");
     }
 

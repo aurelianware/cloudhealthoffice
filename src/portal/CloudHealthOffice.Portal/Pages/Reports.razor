@@ -18,6 +18,11 @@
     Operational reporting, payment analytics, eligibility statistics, and provider performance
 </MudText>
 
+@if (_serviceError != null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
 <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true">
 
     <!-- ═══════════════════════════════════════════════════════════ -->
@@ -497,6 +502,7 @@
 
     // Shared data
     private List<SponsorSummary> _sponsors = new();
+    private string? _serviceError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -518,6 +524,11 @@
         {
             _claimsSummary = await ReportingService.GetClaimsSummaryAsync(BuildRequest(_claimsFrom, _claimsTo, _claimsSponsorId));
             BuildClaimsDailyChart();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _claimsSummary = null;
         }
         catch (Exception ex)
         {
@@ -553,6 +564,11 @@
             _paymentSummary = await ReportingService.GetPaymentSummaryAsync(BuildRequest(_paymentFrom, _paymentTo));
             BuildPaymentMonthlyChart();
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _paymentSummary = null;
+        }
         catch (Exception ex)
         {
             Snackbar.Add($"Error running report: {ex.Message}", Severity.Error);
@@ -577,6 +593,11 @@
         {
             _eligStats = await ReportingService.GetEligibilityStatsAsync(BuildRequest(_eligFrom, _eligTo));
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _eligStats = null;
+        }
         catch (Exception ex)
         {
             Snackbar.Add($"Error running report: {ex.Message}", Severity.Error);
@@ -590,6 +611,11 @@
         try
         {
             _authReport = await ReportingService.GetAuthApprovalReportAsync(BuildRequest(_authFrom, _authTo));
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _authReport = null;
         }
         catch (Exception ex)
         {

@@ -34,6 +34,11 @@
     Real-time monitoring of Argo adjudication workflows and automated processing pipelines
 </MudText>
 
+@if (_serviceError != null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
 @if (_loading)
 {
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
@@ -236,6 +241,7 @@
     private List<WorkflowRun> _failedRuns = new();
     private bool _loading = true;
     private bool _hubConnected = false;
+    private string? _serviceError;
     private string? _expandedWorkflowId;
     private bool _loadingSteps = false;
     private List<WorkflowStep> _expandedSteps = new();
@@ -269,6 +275,13 @@
             _runs = await WorkflowService.GetWorkflowRunsAsync(50);
             _activeRuns = _runs.Where(r => r.Status == "Running").ToList();
             _failedRuns = _runs.Where(r => r.Status == "Failed").ToList();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _runs = new();
+            _activeRuns = new();
+            _failedRuns = new();
         }
         catch (Exception ex)
         {

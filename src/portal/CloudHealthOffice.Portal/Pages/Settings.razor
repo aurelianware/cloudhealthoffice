@@ -1,5 +1,6 @@
 @page "/settings"
 @using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject HttpClient Http
 @inject IConfiguration Configuration
@@ -15,6 +16,11 @@
         <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
         Tenant Settings
     </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mt-4">
         <!-- Billing & Subscription Tab -->
@@ -244,6 +250,7 @@
     private OperatingModeConfiguration? operatingModeConfig;
     private bool isLoadingOperatingMode = true;
     private bool isUsingDefaults;
+    private string? _serviceError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -273,6 +280,10 @@
                 CustomerId = "cus_test123",
                 SubscriptionId = "sub_test456"
             };
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
         }
         catch (Exception ex)
         {
@@ -351,6 +362,11 @@
             // The service sets UpdatedAt = null when returning defaults (service unreachable).
             // A real API response will always have a non-null UpdatedAt.
             isUsingDefaults = !operatingModeConfig.UpdatedAt.HasValue;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            isUsingDefaults = true;
         }
         catch (Exception ex)
         {

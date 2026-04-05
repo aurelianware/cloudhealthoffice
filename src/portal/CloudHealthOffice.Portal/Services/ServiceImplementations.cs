@@ -807,10 +807,10 @@ public class MetricsService : IMetricsService
                 PendingClaims = summary.PendedClaims
             };
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Error fetching dashboard metrics from claims service");
-            return GetDefaultMetrics();
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
         }
     }
 
@@ -835,12 +835,12 @@ public class MetricsService : IMetricsService
         try
         {
             var alerts = await _httpClient.GetFromJsonAsync<OperationalAlerts>($"{baseUrl}/metrics/operational-alerts");
-            return alerts ?? GetDefaultAlerts();
+            return alerts ?? new OperationalAlerts();
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Error fetching operational alerts, returning defaults");
-            return GetDefaultAlerts();
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
         }
     }
 
@@ -851,42 +851,15 @@ public class MetricsService : IMetricsService
         try
         {
             var volume = await _httpClient.GetFromJsonAsync<EdiVolumeSummary>($"{baseUrl}/metrics/edi-volume/today");
-            return volume ?? GetDefaultEdiVolume();
+            return volume ?? new EdiVolumeSummary();
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Error fetching EDI volume, returning defaults");
-            return GetDefaultEdiVolume();
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
         }
     }
 
-    private static DashboardMetrics GetDefaultMetrics() => new()
-    {
-        TotalClaims = 1247,
-        ApprovedClaims = 1200,
-        DeniedClaims = 34,
-        PendingClaims = 13,
-        ClaimsTrend = 0.042,
-        ApprovalRate = 0.962,
-        AvgProcessingTimeMs = 4320,
-        TotalPayerAmount = 2_847_000m
-    };
-
-    private static OperationalAlerts GetDefaultAlerts() => new()
-    {
-        WorkQueueCount = 47,
-        PendingRfais = 12,
-        AppealsDueThisWeek = 8,
-        ApproachingFilingLimit = 3
-    };
-
-    private static EdiVolumeSummary GetDefaultEdiVolume() => new()
-    {
-        Claims837Received = 342,
-        Era835Generated = 287,
-        Eligibility270271 = 156,
-        PriorAuth278 = 43
-    };
 }
 
 public class AttachmentService : IAttachmentService

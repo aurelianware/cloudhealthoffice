@@ -4,6 +4,11 @@
 
 <MudDialog>
     <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+        }
+
         @if (_sponsor == null)
         {
             <MudProgressCircular Indeterminate="true" />
@@ -225,10 +230,23 @@
     [Parameter] public string SponsorId { get; set; } = string.Empty;
 
     private SponsorDetails? _sponsor;
+    private string? _serviceError;
 
     protected override async Task OnInitializedAsync()
     {
-        _sponsor = await SponsorService.GetSponsorByIdAsync(SponsorId);
+        try
+        {
+            _sponsor = await SponsorService.GetSponsorByIdAsync(SponsorId);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _sponsor = null;
+        }
+        catch (Exception)
+        {
+            _sponsor = null;
+        }
     }
 
     private void Cancel()

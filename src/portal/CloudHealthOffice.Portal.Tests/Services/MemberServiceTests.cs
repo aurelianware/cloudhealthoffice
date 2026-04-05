@@ -186,8 +186,7 @@ public class MemberServiceTests
             memberId = "MBR-42", firstName = "Alice", lastName = "Wonder",
             dateOfBirth = "1988-03-22", coverageStatus = "Active",
             gender = "Female", email = "alice@example.com", phone = "555-0101",
-            address = new { street = "123 Main St", city = "Springfield",
-                           state = "IL", zipCode = "62701" }
+            address = "123 Main St, Springfield, IL 62701"
         }, JsonOpts);
 
         var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
@@ -198,8 +197,7 @@ public class MemberServiceTests
         result!.MemberId.Should().Be("MBR-42");
         result.Gender.Should().Be("Female");
         result.Email.Should().Be("alice@example.com");
-        result.Address.Should().NotBeNull();
-        result.Address!.City.Should().Be("Springfield");
+        result.Address.Should().Contain("Springfield");
     }
 
     [Fact]

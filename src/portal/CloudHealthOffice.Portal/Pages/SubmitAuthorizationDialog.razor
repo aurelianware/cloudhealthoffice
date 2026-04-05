@@ -1,10 +1,16 @@
 @using Microsoft.AspNetCore.Components.Forms
+@using CloudHealthOffice.Portal.Services
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject IAttachmentService AttachmentService
 @inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+        }
+
         <MudText Typo="Typo.body1" Class="mb-4">
             Submit a new prior authorization request. Most requests are auto-adjudicated within 2 minutes.
         </MudText>
@@ -183,6 +189,7 @@
     private MudForm _form = null!;
     private bool _formValid;
     private bool _submitting;
+    private string? _serviceError;
     private SubmitAuthorizationRequest _request = new() 
     { 
         ServiceType = "Surgery",
@@ -258,6 +265,10 @@
             
             Snackbar.Add($"Authorization request {authId} submitted successfully with {_uploadedFiles.Count} attachment(s)!", Severity.Success);
             MudDialog.Close(DialogResult.Ok(authId));
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
         }
         catch (Exception ex)
         {
