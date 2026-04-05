@@ -73,6 +73,11 @@ builder.Services.AddHttpClient("TerminologyService", client =>
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 
+// ── Da Vinci DTR (Documentation Templates & Rules) ──────────────────────────
+builder.Services.Configure<DtrConfig>(
+    builder.Configuration.GetSection("Cms0057:Dtr"));
+builder.Services.AddSingleton<IDtrService, DtrService>();
+
 // ── Provider Directory: typed HttpClient for NPPES API ────────────────────────
 builder.Services.AddHttpClient("NppesApi", client =>
 {

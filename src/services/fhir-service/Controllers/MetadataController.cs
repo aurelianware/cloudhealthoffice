@@ -107,6 +107,31 @@ public class MetadataController : FhirControllerBase
                             ("created",      SearchParamType.Date),
                             ("status",       SearchParamType.Token),
                             ("use",          SearchParamType.Token)
+                        ]),
+                        BuildResource("Questionnaire",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("name",         SearchParamType.String),
+                            ("title",        SearchParamType.String),
+                            ("status",       SearchParamType.Token)
+                        ],
+                        [
+                            CapabilityStatement.TypeRestfulInteraction.Read,
+                            CapabilityStatement.TypeRestfulInteraction.SearchType,
+                            CapabilityStatement.TypeRestfulInteraction.Create,
+                            CapabilityStatement.TypeRestfulInteraction.Update,
+                        ]),
+                        BuildResource("QuestionnaireResponse",
+                        [
+                            ("_id",            SearchParamType.Token),
+                            ("questionnaire",  SearchParamType.Reference),
+                            ("patient",        SearchParamType.Reference),
+                            ("status",         SearchParamType.Token)
+                        ],
+                        [
+                            CapabilityStatement.TypeRestfulInteraction.Read,
+                            CapabilityStatement.TypeRestfulInteraction.SearchType,
+                            CapabilityStatement.TypeRestfulInteraction.Create,
                         ])
                     ]
                 }
@@ -117,18 +142,21 @@ public class MetadataController : FhirControllerBase
     }
 
     private static CapabilityStatement.ResourceComponent BuildResource(
-        string type, (string Name, SearchParamType Type)[] searchParams)
+        string type,
+        (string Name, SearchParamType Type)[] searchParams,
+        CapabilityStatement.TypeRestfulInteraction[]? interactions = null)
     {
+        interactions ??= [
+            CapabilityStatement.TypeRestfulInteraction.Read,
+            CapabilityStatement.TypeRestfulInteraction.SearchType,
+        ];
+
         return new CapabilityStatement.ResourceComponent
         {
             Type = type,
-            Interaction =
-            [
-                new CapabilityStatement.ResourceInteractionComponent
-                    { Code = CapabilityStatement.TypeRestfulInteraction.Read },
-                new CapabilityStatement.ResourceInteractionComponent
-                    { Code = CapabilityStatement.TypeRestfulInteraction.SearchType }
-            ],
+            Interaction = interactions
+                .Select(i => new CapabilityStatement.ResourceInteractionComponent { Code = i })
+                .ToList(),
             SearchParam = searchParams
                 .Select(p => new CapabilityStatement.SearchParamComponent
                 {
