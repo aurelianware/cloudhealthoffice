@@ -34,14 +34,6 @@ public class CoverageController : ControllerBase
     /// <summary>
     /// Search coverage records by various criteria
     /// </summary>
-    /// <param name="memberId">Filter by member ID</param>
-    /// <param name="groupNumber">Filter by sponsor group number</param>
-    /// <param name="planId">Filter by benefit plan ID</param>
-    /// <param name="lineOfBusiness">Filter by line of business</param>
-    /// <param name="activeOnly">Return only active coverage</param>
-    /// <param name="asOfDate">Check coverage active as of specific date</param>
-    /// <param name="pageSize">Page size (max 100)</param>
-    /// <param name="continuationToken">Continuation token for pagination</param>
     [HttpGet]
     [ProducesResponseType(typeof(CoverageListResponse), 200)]
     public async Task<IActionResult> SearchCoverage(
@@ -54,64 +46,38 @@ public class CoverageController : ControllerBase
         [FromQuery][Range(1, 100)] int pageSize = 20,
         [FromQuery] string? continuationToken = null)
     {
-        // TODO: Implement with Cosmos DB query
+        _logger.LogInformation(
+            "Searching coverage: member={Member}, group={Group}, plan={Plan}, activeOnly={ActiveOnly}",
+            SanitizeForLog(memberId), SanitizeForLog(groupNumber), SanitizeForLog(planId), activeOnly);
 
-        // Mock response
-        var mockCoverage = new List<Coverage>
-        {
-            new Coverage
-            {
-                TenantId = TenantId,
-                Id = "cov-001",
-                MemberId = "MEM123456789",
-                GroupNumber = "GRP-12345",
-                PlanId = "PLAN-GOLD-HMO-001",
-                CoverageLevel = CoverageLevelCodes.Family,
-                InsuranceLineCode = InsuranceLineCodes.Health,
-                EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-                Status = CoverageStatus.Active,
-                MonthlyPremium = 500.00m,
-                EmployerContribution = 1200.00m
-            }
-        };
+        var (items, token) = await _coverageRepository.SearchAsync(
+            TenantId, memberId, groupNumber, planId, activeOnly, pageSize, continuationToken);
+
+        var coverageList = items.ToList();
 
         return Ok(new CoverageListResponse
         {
-            Coverage = mockCoverage,
-            ContinuationToken = null,
-            TotalCount = 1
+            Coverage = coverageList,
+            ContinuationToken = token,
+            TotalCount = coverageList.Count
         });
     }
 
     /// <summary>
     /// Get coverage details by ID
     /// </summary>
-    /// <param name="id">Coverage ID</param>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(Coverage), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetCoverage([FromRoute] string id)
     {
-        // TODO: Implement with Cosmos DB query
+        _logger.LogInformation("Fetching coverage by ID: {Id}", SanitizeForLog(id));
 
-        var coverage = new Coverage
+        var coverage = await _coverageRepository.GetByIdAsync(TenantId, id);
+        if (coverage == null)
         {
-            TenantId = TenantId,
-            Id = id,
-            MemberId = "MEM123456789",
-            GroupNumber = "GRP-12345",
-            PlanId = "PLAN-GOLD-HMO-001",
-            CoverageLevel = CoverageLevelCodes.Family,
-            InsuranceLineCode = InsuranceLineCodes.Health,
-            EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-            TerminationDate = null,
-            Status = CoverageStatus.Active,
-            IsCOBRA = false,
-            MonthlyPremium = 500.00m,
-            EmployerContribution = 1200.00m,
-            MaintenanceTypeCode = "021",  // Addition
-            MaintenanceReasonCode = "33"   // New enrollment
-        };
+            return NotFound(new { Id = id, Message = "Coverage not found" });
+        }
 
         return Ok(coverage);
     }
@@ -119,9 +85,6 @@ public class CoverageController : ControllerBase
     /// <summary>
     /// Get active coverage for a member (critical for eligibility checks)
     /// </summary>
-    /// <param name="memberId">Member ID</param>
-    /// <param name="serviceDate">Service date to check (defaults to today)</param>
-    /// <param name="insuranceLineCode">Filter by insurance line (HLT, DEN, VIS)</param>
     [HttpGet("member/{memberId}/active")]
     [ProducesResponseType(typeof(List<Coverage>), 200)]
     [ProducesResponseType(404)]
@@ -132,33 +95,12 @@ public class CoverageController : ControllerBase
     {
         var checkDate = serviceDate ?? DateTime.UtcNow.Date;
 
-        // TODO: Query coverage where:
-        // - MemberId = memberId
-        // - TenantId = TenantId
-        // - Status = Active (or check IsActiveOn(checkDate))
-        // - Optional: InsuranceLineCode filter
+        _logger.LogInformation(
+            "Fetching active coverage for member {MemberId} on {ServiceDate}",
+            SanitizeForLog(memberId), checkDate);
 
-        var activeCoverage = new List<Coverage>
-        {
-            new Coverage
-            {
-                TenantId = TenantId,
-                MemberId = memberId,
-                GroupNumber = "GRP-12345",
-                PlanId = "PLAN-GOLD-HMO-001",
-                CoverageLevel = CoverageLevelCodes.Family,
-                InsuranceLineCode = InsuranceLineCodes.Health,
-                EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-                Status = CoverageStatus.Active
-            }
-        };
-
-        if (!string.IsNullOrEmpty(insuranceLineCode))
-        {
-            activeCoverage = activeCoverage
-                .Where(c => c.InsuranceLineCode == insuranceLineCode)
-                .ToList();
-        }
+        var activeCoverage = await _coverageRepository.GetActiveCoverageByMemberIdAsync(
+            TenantId, memberId, checkDate, insuranceLineCode);
 
         if (!activeCoverage.Any())
         {
@@ -176,41 +118,16 @@ public class CoverageController : ControllerBase
     /// <summary>
     /// Get coverage history for a member
     /// </summary>
-    /// <param name="memberId">Member ID</param>
-    /// <param name="includeTerminated">Include terminated coverage</param>
     [HttpGet("member/{memberId}/history")]
     [ProducesResponseType(typeof(List<Coverage>), 200)]
     public async Task<IActionResult> GetCoverageHistory(
         [FromRoute] string memberId,
         [FromQuery] bool includeTerminated = true)
     {
-        // TODO: Query all coverage for member, ordered by EffectiveDate DESC
+        _logger.LogInformation("Fetching coverage history for member {MemberId}", SanitizeForLog(memberId));
 
-        var history = new List<Coverage>
-        {
-            new Coverage
-            {
-                MemberId = memberId,
-                GroupNumber = "GRP-12345",
-                PlanId = "PLAN-GOLD-HMO-001",
-                EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-                Status = CoverageStatus.Active
-            },
-            new Coverage
-            {
-                MemberId = memberId,
-                GroupNumber = "GRP-12345",
-                PlanId = "PLAN-SILVER-PPO-001",
-                EffectiveDate = DateTime.UtcNow.AddYears(-2),
-                TerminationDate = DateTime.UtcNow.AddMonths(-6).AddDays(-1),
-                Status = CoverageStatus.Terminated
-            }
-        };
-
-        if (!includeTerminated)
-        {
-            history = history.Where(c => c.Status != CoverageStatus.Terminated).ToList();
-        }
+        var history = await _coverageRepository.GetCoverageHistoryAsync(
+            TenantId, memberId, includeTerminated);
 
         return Ok(history);
     }
@@ -223,9 +140,6 @@ public class CoverageController : ControllerBase
     ///   - Eligibility service when building the 271 response (SB/OI loops)
     ///   - Claims intake to populate CobInfo on secondary/tertiary claims
     ///   - Portal to display "Other Insurance" for member management
-    ///
-    /// Source: Coverage.OtherInsurance and Coverage.MedicareCoverage fields,
-    /// populated via the 834 COB segment during enrollment.
     /// </summary>
     [HttpGet("member/{memberId}/cob")]
     [ProducesResponseType(typeof(List<CobEntryResponse>), 200)]
@@ -236,24 +150,42 @@ public class CoverageController : ControllerBase
     {
         var checkDate = asOfDate ?? DateTime.UtcNow;
 
-        // TODO: Query Cosmos/Mongo for active coverage records where MemberId = memberId
-        // and TenantId = TenantId, then project OtherInsurance and MedicareCoverage into
-        // CobEntryResponse objects.
+        _logger.LogInformation("Fetching COB entries for member {MemberId}", SanitizeForLog(memberId));
 
-        // Stub response — matches the shape the eligibility service expects
+        // Get all active coverage for the member, then extract COB info
+        var coverages = await _coverageRepository.GetActiveCoverageByMemberIdAsync(
+            TenantId, memberId, checkDate);
+
         var cobEntries = new List<CobEntryResponse>();
 
-        // Example: member has secondary Medicare
-        cobEntries.Add(new CobEntryResponse
+        foreach (var coverage in coverages)
         {
-            PayerName        = "Example Primary Payer",
-            PayerId          = "PAYER01",
-            CoverageSequence = "P",
-            GroupNumber      = "GRP-PRIMARY",
-            CoverageBeginDate = DateTime.UtcNow.AddYears(-2).Date,
-            CoverageEndDate  = null,
-            IsMedicare       = false
-        });
+            if (coverage.OtherInsurance != null)
+            {
+                cobEntries.Add(new CobEntryResponse
+                {
+                    PayerName = coverage.OtherInsurance.PayerName ?? "Unknown Payer",
+                    PayerId = coverage.OtherInsurance.PolicyNumber ?? "",
+                    CoverageSequence = coverage.OtherInsurance.IsPrimaryPayer ? "P" : "S",
+                    GroupNumber = coverage.OtherInsurance.GroupNumber,
+                    CoverageBeginDate = coverage.OtherInsurance.EffectiveDate ?? coverage.EffectiveDate,
+                    CoverageEndDate = null,
+                    IsMedicare = false
+                });
+            }
+
+            if (coverage.MedicareCoverage != null)
+            {
+                cobEntries.Add(new CobEntryResponse
+                {
+                    PayerName = "Medicare",
+                    PayerId = coverage.MedicareCoverage.MedicareBeneficiaryId ?? "MEDICARE",
+                    CoverageSequence = coverage.MedicareCoverage.IsPrimaryPayer ? "P" : "S",
+                    CoverageBeginDate = coverage.MedicareCoverage.PartAEffectiveDate ?? coverage.EffectiveDate,
+                    IsMedicare = true
+                });
+            }
+        }
 
         if (!cobEntries.Any())
             return NotFound(new { MemberId = memberId, Message = "No COB entries found" });
@@ -264,7 +196,6 @@ public class CoverageController : ControllerBase
     /// <summary>
     /// Create new coverage (typically from 834 transaction)
     /// </summary>
-    /// <param name="request">Coverage creation request</param>
     [HttpPost]
     [ProducesResponseType(typeof(Coverage), 201)]
     [ProducesResponseType(400)]
@@ -272,12 +203,6 @@ public class CoverageController : ControllerBase
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
-
-        // TODO: Validate business rules
-        // - Verify MemberId exists in Member Service
-        // - Verify GroupNumber exists in Sponsor Service
-        // - Verify PlanId exists in Benefit Plan Service
-        // - Check for overlapping coverage periods
 
         var coverage = new Coverage
         {
@@ -303,17 +228,13 @@ public class CoverageController : ControllerBase
             CreatedBy = User.Identity?.Name ?? "System"
         };
 
-        // TODO: Save to Cosmos DB
-        // await _coverageRepository.CreateAsync(coverage);
-
-        return CreatedAtAction(nameof(GetCoverage), new { id = coverage.Id }, coverage);
+        var created = await _coverageRepository.CreateAsync(coverage);
+        return CreatedAtAction(nameof(GetCoverage), new { id = created.Id }, created);
     }
 
     /// <summary>
     /// Update coverage information
     /// </summary>
-    /// <param name="id">Coverage ID</param>
-    /// <param name="request">Update request</param>
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(Coverage), 200)]
     [ProducesResponseType(404)]
@@ -324,10 +245,12 @@ public class CoverageController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        // TODO: Fetch existing coverage
-        var coverage = new Coverage { TenantId = TenantId, Id = id };
+        var coverage = await _coverageRepository.GetByIdAsync(TenantId, id);
+        if (coverage == null)
+        {
+            return NotFound(new { Id = id, Message = "Coverage not found" });
+        }
 
-        // Update fields
         if (request.PlanId != null) coverage.PlanId = request.PlanId;
         if (request.CoverageLevel != null) coverage.CoverageLevel = request.CoverageLevel;
         if (request.Status.HasValue) coverage.Status = request.Status.Value;
@@ -339,18 +262,13 @@ public class CoverageController : ControllerBase
         coverage.LastUpdatedDate = DateTime.UtcNow;
         coverage.LastUpdatedBy = User.Identity?.Name ?? "System";
 
-        // TODO: Save to Cosmos DB
-        // await _coverageRepository.UpdateAsync(coverage);
-
-        return Ok(coverage);
+        var updated = await _coverageRepository.UpdateAsync(coverage);
+        return Ok(updated);
     }
 
     /// <summary>
     /// Terminate coverage
     /// </summary>
-    /// <param name="id">Coverage ID</param>
-    /// <param name="terminationDate">Termination effective date</param>
-    /// <param name="reasonCode">Termination reason code</param>
     [HttpDelete("{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -359,39 +277,46 @@ public class CoverageController : ControllerBase
         [FromQuery] DateTime? terminationDate = null,
         [FromQuery] string? reasonCode = null)
     {
-        // TODO: Update coverage status and termination date
+        var coverage = await _coverageRepository.GetByIdAsync(TenantId, id);
+        if (coverage == null)
+        {
+            return NotFound(new { Id = id, Message = "Coverage not found" });
+        }
 
+        coverage.Status = CoverageStatus.Terminated;
+        coverage.TerminationDate = terminationDate ?? DateTime.UtcNow.Date;
+        coverage.MaintenanceReasonCode = reasonCode;
+        coverage.LastUpdatedDate = DateTime.UtcNow;
+        coverage.LastUpdatedBy = User.Identity?.Name ?? "System";
+
+        await _coverageRepository.UpdateAsync(coverage);
         return NoContent();
     }
 
     /// <summary>
     /// Get coverage summary by sponsor group (for reporting)
     /// </summary>
-    /// <param name="groupNumber">Sponsor group number</param>
     [HttpGet("group/{groupNumber}/summary")]
     [ProducesResponseType(typeof(GroupCoverageSummary), 200)]
     public async Task<IActionResult> GetGroupCoverageSummary([FromRoute] string groupNumber)
     {
-        // TODO: Aggregate coverage data by group
+        _logger.LogInformation("Fetching coverage summary for group {GroupNumber}", SanitizeForLog(groupNumber));
+
+        var coverages = await _coverageRepository.GetByGroupNumberAsync(TenantId, groupNumber);
 
         var summary = new GroupCoverageSummary
         {
             GroupNumber = groupNumber,
-            TotalCovered = 370,
-            ActiveCoverage = 365,
-            PendingCoverage = 5,
-            TerminatedCoverage = 12,
-            ByPlan = new Dictionary<string, int>
-            {
-                { "PLAN-GOLD-HMO-001", 150 },
-                { "PLAN-SILVER-PPO-001", 215 }
-            },
-            ByCoverageLevel = new Dictionary<string, int>
-            {
-                { CoverageLevelCodes.EmployeeOnly, 80 },
-                { CoverageLevelCodes.Family, 285 }
-            },
-            TotalMonthlyPremium = 182500.00m
+            TotalCovered = coverages.Count,
+            ActiveCoverage = coverages.Count(c => c.Status == CoverageStatus.Active),
+            PendingCoverage = coverages.Count(c => c.Status == CoverageStatus.Pending),
+            TerminatedCoverage = coverages.Count(c => c.Status == CoverageStatus.Terminated),
+            ByPlan = coverages.GroupBy(c => c.PlanId).ToDictionary(g => g.Key, g => g.Count()),
+            ByCoverageLevel = coverages
+                .Where(c => c.CoverageLevel != null)
+                .GroupBy(c => c.CoverageLevel!)
+                .ToDictionary(g => g.Key, g => g.Count()),
+            TotalMonthlyPremium = coverages.Sum(c => c.MonthlyPremium ?? 0)
         };
 
         return Ok(summary);
@@ -401,9 +326,6 @@ public class CoverageController : ControllerBase
     /// Get coverage records assigned to a specific PCP by NPI.
     /// Used by the capitation-service to build member panel rosters.
     /// </summary>
-    /// <param name="npi">10-digit NPI of the Primary Care Provider</param>
-    /// <param name="status">Filter by coverage status (defaults to Active)</param>
-    /// <param name="lineOfBusiness">Optional line-of-business filter</param>
     [HttpGet("by-pcp/{npi}")]
     [ProducesResponseType(typeof(List<Coverage>), 200)]
     [ProducesResponseType(400)]
@@ -418,17 +340,11 @@ public class CoverageController : ControllerBase
         }
 
         _logger.LogInformation(
-            "Fetching coverage by PCP NPI {Npi} with status {Status} and LOB {Lob} for tenant {TenantId}",
-            SanitizeForLog(npi),
-            status,
-            lineOfBusiness,
-            SanitizeForLog(TenantId));
+            "Fetching coverage by PCP NPI {Npi} with status {Status} and LOB {Lob}",
+            SanitizeForLog(npi), status, lineOfBusiness);
 
         var coverages = await _coverageRepository.GetByPcpNpiAsync(
-            TenantId,
-            npi,
-            status,
-            lineOfBusiness);
+            TenantId, npi, status, lineOfBusiness);
 
         return Ok(coverages);
     }
