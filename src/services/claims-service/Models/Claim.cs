@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace ClaimsService.Models;
 
@@ -8,6 +9,7 @@ namespace ClaimsService.Models;
 /// Represents a healthcare claim (837 transaction)
 /// Links to Provider, Member, Coverage, and BenefitPlan services for adjudication
 /// </summary>
+[BsonIgnoreExtraElements]
 public class Claim
 {
     /// <summary>
@@ -286,6 +288,7 @@ public class Claim
 /// Diagnosis code (ICD-10)
 /// 837: HI segment
 /// </summary>
+[BsonIgnoreExtraElements]
 public class DiagnosisCode
 {
     /// <summary>
@@ -319,6 +322,7 @@ public class DiagnosisCode
 /// Claim service line (procedure)
 /// 837: 2400 loop
 /// </summary>
+[BsonIgnoreExtraElements]
 public class ClaimLine
 {
     /// <summary>
@@ -407,6 +411,7 @@ public class ClaimLine
 /// Adjudication result (claim-level)
 /// Populated by claims adjudication workflow and 835 remittance
 /// </summary>
+[BsonIgnoreExtraElements]
 public class AdjudicationResult
 {
     /// <summary>

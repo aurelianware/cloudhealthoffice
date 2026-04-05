@@ -38,14 +38,14 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 - Hero: "Practice Management, Modernized" - $99/month starting price
 - Pain points grid (6 cards): Transaction fees, payment cycles, support, vendor lock-in, no API, opaque reporting
 - Value props: Direct payer connections, real-time eligibility, prior auth automation, mobile apps, FHIR API, transparent pricing
-- Testimonial: "78% overhead reduction" (anonymized case study)
+
 - FAQ accordion: EHR integration, payer support, contracts, onboarding timeline, HIPAA, data export
 - Founding Practices Program CTA (17/50 enrolled placeholder)
 
 **Messaging:**
 - "Stop paying 3-5% per transaction to clearinghouses"
-- "$30k+/year savings for typical 3-provider practice"
-- "Real-time submission & eligibility checks"
+
+
 - "Open-source core, export anytime"
 
 ---
@@ -58,7 +58,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 - CMS-0057-F deadline banner (January 1, 2027) with urgency messaging
 - Pain points grid (6 cards): Upgrade costs, 18-month timelines, vendor lock-in, no multi-payer, manual prior auth, security gaps
 - Value props: FHIR compliance, real-time prior auth, multi-clearinghouse, X12 automation, zero-code deployment, Azure-native
-- Case study: Regional MA plan (250k members) - $85k vs $2.3M quoted, 45 min vs 14 months
+
 - Technical architecture diagram (Core Admin Systems → Cloud Health Office → Clearinghouses/FHIR API)
 - ROI calculator table: 3-year TCO comparison ($50k-250k vs $3.2M-7.2M)
 
