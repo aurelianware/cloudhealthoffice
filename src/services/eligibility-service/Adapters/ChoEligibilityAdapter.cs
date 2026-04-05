@@ -100,7 +100,10 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             url += $"&serviceType={serviceType}";
         }
 
-        var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(url);
+        var client = _httpClientFactory.CreateClient("EligibilityDefault");
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("X-Tenant-ID", tenantId);
+        var response = await client.SendAsync(request);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -133,8 +136,11 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
         try
         {
             var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api/v1";
-            var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(
+            var client = _httpClientFactory.CreateClient("EligibilityDefault");
+            var request = new HttpRequestMessage(HttpMethod.Get,
                 $"{benefitUrl}/plans/{benefitPlanId}/accumulation/{subscriberId}?tenantId={tenantId}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await client.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
             {
