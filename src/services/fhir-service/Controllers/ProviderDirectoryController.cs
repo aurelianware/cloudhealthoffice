@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.Json;
 using FhirService.Mappers;
 using FhirService.Models;
@@ -16,6 +17,7 @@ namespace FhirService.Controllers;
 public class ProviderDirectoryController : FhirControllerBase
 {
     private readonly HttpClient _httpClient;
+    private readonly HttpClient _verificationClient;
     private readonly ILogger<ProviderDirectoryController> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -28,6 +30,7 @@ public class ProviderDirectoryController : FhirControllerBase
         ILogger<ProviderDirectoryController> logger)
     {
         _httpClient = httpClientFactory.CreateClient("NppesApi");
+        _verificationClient = httpClientFactory.CreateClient("ProviderVerificationService");
         _logger = logger;
     }
 
@@ -43,6 +46,11 @@ public class ProviderDirectoryController : FhirControllerBase
             return FhirNotFound("Practitioner", id);
 
         var practitioner = ProviderDirectoryMapper.MapNppesToPractitioner(nppes);
+
+        var verification = await GetVerificationSummaryAsync(id, ct);
+        if (verification != null)
+            ProviderDirectoryMapper.EnrichWithVerification(practitioner, verification);
+
         return Ok(practitioner);
     }
 
@@ -169,6 +177,8 @@ public class ProviderDirectoryController : FhirControllerBase
             return FhirNotFound("PractitionerRole", id);
 
         var role = ProviderDirectoryMapper.MapNppesToPractitionerRole(nppes);
+        // Note: PractitionerRole does not get verification enrichment directly —
+        // the linked Practitioner resource carries the verification metadata.
         return Ok(role);
     }
 
@@ -305,6 +315,49 @@ public class ProviderDirectoryController : FhirControllerBase
             _logger.LogError(ex, "NPPES lookup failed for NPI {Npi}", SanitizeForLog(npi));
             throw;
         }
+    }
+
+    // ── Provider Verification Integration ──────────────────────────────────────
+
+    private async Task<ProviderVerificationSummary?> GetVerificationSummaryAsync(
+        string npi, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _verificationClient.GetAsync(
+                $"api/v1/providers/{Uri.EscapeDataString(npi)}/integrity-score?tier=Basic", ct);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ProviderIntegrityResponse>(
+                    cancellationToken: ct);
+
+                if (result != null)
+                {
+                    return new ProviderVerificationSummary
+                    {
+                        IntegrityScore = result.CompositeScore,
+                        Rating = result.Rating,
+                        IsExcluded = string.Equals(result.Status, "Excluded", StringComparison.OrdinalIgnoreCase),
+                        ExclusionSource = result.Flags?
+                            .FirstOrDefault(f => f.Code == "EXCLUDED")?.Source,
+                        Status = result.Status,
+                    };
+                }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Provider Verification Service unavailable for NPI {Npi} — returning without enrichment",
+                SanitizeForLog(npi));
+        }
+
+        return null;
     }
 
     private async Task<IReadOnlyList<NppesResult>> SearchNppesAsync(

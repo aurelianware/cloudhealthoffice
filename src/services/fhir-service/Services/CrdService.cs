@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using FhirService.Models;
@@ -8,7 +9,8 @@ namespace FhirService.Services;
 public class CrdService : ICrdService
 {
     private readonly HttpClient _terminologyClient;
-    private readonly CrdConfig _config;
+    private readonly CrdCodeClassification _defaultClassification;
+    private readonly ConcurrentDictionary<string, CrdCodeClassification> _classificationCache = new();
     private readonly ILogger<CrdService> _logger;
 
     public CrdService(
@@ -17,7 +19,8 @@ public class CrdService : ICrdService
         ILogger<CrdService> logger)
     {
         _terminologyClient = httpClientFactory.CreateClient("TerminologyService");
-        _config = config.Value;
+        _defaultClassification = LoadFromConfig(config.Value);
+        _classificationCache["default"] = _defaultClassification;
         _logger = logger;
     }
 
@@ -32,22 +35,23 @@ public class CrdService : ICrdService
         // 2. Translate SNOMED codes if needed
         var translated = await TranslateCodesAsync(codes, tenantId, ct);
 
-        // 3. Evaluate each code against benefit configuration
+        // 3. Evaluate each code against benefit configuration (O(1) HashSet lookup)
+        var classification = GetClassification(tenantId);
         var cards = new List<CrdCard>();
         foreach (var tc in translated)
         {
             var effectiveCode = tc.EffectiveCode;
             var display = tc.TranslatedCoding?.Display ?? tc.OriginalCode.Display ?? effectiveCode;
 
-            if (_config.AuthRequiredCodes.Contains(effectiveCode))
+            if (classification.AuthRequiredCodes.Contains(effectiveCode))
             {
                 cards.Add(BuildAuthRequiredCard(display));
             }
-            else if (_config.DocumentationRequiredCodes.Contains(effectiveCode))
+            else if (classification.DocumentationRequiredCodes.Contains(effectiveCode))
             {
                 cards.Add(BuildDocumentationRequiredCard(display));
             }
-            else if (_config.AutoApprovedCodes.Contains(effectiveCode))
+            else if (classification.AutoApprovedCodes.Contains(effectiveCode))
             {
                 cards.Add(BuildAutoApprovedCard(display));
             }
@@ -66,6 +70,34 @@ public class CrdService : ICrdService
             ElapsedMs = sw.ElapsedMilliseconds,
         };
     }
+
+    // ── Classification cache ─────────────────────────────────────────────────
+
+    public CrdCodeClassification GetClassification(string tenantId)
+    {
+        if (_classificationCache.TryGetValue(tenantId, out var tenantClassification))
+            return tenantClassification;
+        return _defaultClassification;
+    }
+
+    public void SetClassification(string tenantId, CrdCodeClassification classification)
+    {
+        classification.LoadedAt = DateTimeOffset.UtcNow;
+        _classificationCache[tenantId] = classification;
+    }
+
+    public CrdCodeClassification? GetClassificationOrNull(string tenantId)
+    {
+        _classificationCache.TryGetValue(tenantId, out var c);
+        return c;
+    }
+
+    private static CrdCodeClassification LoadFromConfig(CrdConfig config) => new()
+    {
+        AuthRequiredCodes = new HashSet<string>(config.AuthRequiredCodes, StringComparer.Ordinal),
+        AutoApprovedCodes = new HashSet<string>(config.AutoApprovedCodes, StringComparer.Ordinal),
+        DocumentationRequiredCodes = new HashSet<string>(config.DocumentationRequiredCodes, StringComparer.Ordinal),
+    };
 
     // ── Code extraction ──────────────────────────────────────────────────────
 

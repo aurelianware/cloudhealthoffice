@@ -25,7 +25,10 @@ public class DtrControllerTests
         var fhirConfig = new Mock<IConfiguration>();
         fhirConfig.Setup(c => c["Fhir:ServerBaseUrl"]).Returns("https://test.example.com/fhir/r4");
 
-        _dtrService = new DtrService(config, loggerService.Object);
+        var appConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["MongoDb:ConnectionString"] = "" })
+            .Build();
+        _dtrService = new DtrService(config, loggerService.Object, appConfig);
         _bundleBuilder = new FhirBundleBuilder(fhirConfig.Object);
 
         _controller = new DtrController(

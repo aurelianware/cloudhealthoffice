@@ -491,4 +491,33 @@ public static partial class ProviderDirectoryMapper
         if (!string.IsNullOrEmpty(basic.Credential)) parts.Add(basic.Credential);
         return string.Join(' ', parts);
     }
+
+    // ── Provider Verification Enrichment ─────────────────────────────────────
+
+    /// <summary>
+    /// Enriches a Practitioner resource with verification metadata from the
+    /// Provider Verification Service. Adds an extension with integrity score,
+    /// rating, and exclusion status. Sets active=false for excluded providers.
+    /// </summary>
+    public static void EnrichWithVerification(
+        FhirPractitioner practitioner, ProviderVerificationSummary verification)
+    {
+        practitioner.Extension ??= new List<FhirExtension>();
+        practitioner.Extension.Add(new FhirExtension
+        {
+            Url = "https://cloudhealthoffice.com/fhir/StructureDefinition/provider-verification",
+            Extension = new List<FhirExtension>
+            {
+                new() { Url = "integrityScore", ValueInteger = verification.IntegrityScore },
+                new() { Url = "rating", ValueString = verification.Rating },
+                new() { Url = "status", ValueString = verification.Status },
+                new() { Url = "isExcluded", ValueBoolean = verification.IsExcluded },
+            },
+        });
+
+        if (verification.IsExcluded)
+        {
+            practitioner.Active = false;
+        }
+    }
 }
