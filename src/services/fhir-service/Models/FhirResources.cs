@@ -220,6 +220,31 @@ public record FhirMoney
 }
 
 /// <summary>
+/// FHIR R4 Extension element.
+/// </summary>
+public record FhirExtension
+{
+    [JsonPropertyName("url")]
+    public string? Url { get; init; }
+
+    [JsonPropertyName("valueInteger")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ValueInteger { get; init; }
+
+    [JsonPropertyName("valueString")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ValueString { get; init; }
+
+    [JsonPropertyName("valueBoolean")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ValueBoolean { get; init; }
+
+    [JsonPropertyName("extension")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<FhirExtension>? Extension { get; init; }
+}
+
+/// <summary>
 /// FHIR R4 Period.
 /// </summary>
 public record FhirPeriod
@@ -246,6 +271,10 @@ public abstract record FhirResource
 
     [JsonPropertyName("meta")]
     public FhirMeta? Meta { get; init; }
+
+    [JsonPropertyName("extension")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<FhirExtension>? Extension { get; set; }
 }
 
 /// <summary>
@@ -541,7 +570,7 @@ public record FhirPractitioner : FhirResource
     public IReadOnlyList<FhirIdentifier>? Identifier { get; init; }
 
     [JsonPropertyName("active")]
-    public bool? Active { get; init; }
+    public bool? Active { get; set; }
 
     [JsonPropertyName("name")]
     public IReadOnlyList<FhirHumanName>? Name { get; init; }

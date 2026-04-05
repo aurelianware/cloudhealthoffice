@@ -2,6 +2,7 @@ using FhirService.Models;
 using FhirService.Services;
 using Hl7.Fhir.Model;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -15,7 +16,10 @@ public class DtrServiceTests
     {
         var config = Options.Create(new DtrConfig { Enabled = true });
         var logger = new Mock<ILogger<DtrService>>();
-        _service = new DtrService(config, logger.Object);
+        var appConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["MongoDb:ConnectionString"] = "" })
+            .Build();
+        _service = new DtrService(config, logger.Object, appConfig);
     }
 
     // ── Seed data ────────────────────────────────────────────────────────────
