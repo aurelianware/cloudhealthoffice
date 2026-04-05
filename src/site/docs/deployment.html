@@ -103,7 +103,7 @@ curl -s http://localhost:5001/health</code></pre>
         <table>
           <thead><tr><th>Stage</th><th>Trigger</th><th>What Happens</th></tr></thead>
           <tbody>
-            <tr><td><strong>CI</strong></td><td>Push to <code>main</code></td><td>Build, test (1,018 tests), security scan, Docker image build</td></tr>
+            <tr><td><strong>CI</strong></td><td>Push to <code>main</code></td><td>Build, test (1,740 tests), security scan, Docker image build</td></tr>
             <tr><td><strong>DEV</strong></td><td>CI pass</td><td>Auto-deploy to DEV AKS, run E2E tests</td></tr>
             <tr><td><strong>UAT</strong></td><td>DEV pass + approval</td><td>Deploy to UAT, run integration tests, security validation</td></tr>
             <tr><td><strong>PROD</strong></td><td>UAT pass + approval</td><td>Blue-green deploy to PROD AKS, smoke tests, rollback-ready</td></tr>
