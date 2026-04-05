@@ -23,7 +23,7 @@
     }
 
     <MudGrid>
-        <MudItem xs="12" md="6">
+        <MudItem xs="12" md="5">
             <MudCard Elevation="2">
                 <MudCardHeader>
                     <CardHeaderContent>
@@ -32,19 +32,19 @@
                 </MudCardHeader>
                 <MudCardContent>
                     <MudForm @ref="_form">
-                        <MudTextField @bind-Value="_request.SubscriberId" Label="Member ID" Required="true" 
+                        <MudTextField @bind-Value="_request.SubscriberId" Label="Member ID" Required="true"
                                       Immediate="true" Variant="Variant.Outlined" Class="mb-3" />
-                        
-                        <MudTextField @bind-Value="_request.FirstName" Label="First Name" 
+
+                        <MudTextField @bind-Value="_request.FirstName" Label="First Name"
                                       Variant="Variant.Outlined" Class="mb-3" />
-                        
-                        <MudTextField @bind-Value="_request.LastName" Label="Last Name" 
+
+                        <MudTextField @bind-Value="_request.LastName" Label="Last Name"
                                       Variant="Variant.Outlined" Class="mb-3" />
-                        
-                        <MudDatePicker @bind-Date="_serviceDate" Label="Service Date" 
+
+                        <MudDatePicker @bind-Date="_serviceDate" Label="Service Date"
                                        Variant="Variant.Outlined" Class="mb-3" />
-                        
-                        <MudSelect @bind-Value="_request.ServiceType" Label="Service Type" 
+
+                        <MudSelect @bind-Value="_request.ServiceType" Label="Service Type"
                                    Variant="Variant.Outlined" Class="mb-3">
                             <MudSelectItem Value="@("30")">Health Benefit Coverage</MudSelectItem>
                             <MudSelectItem Value="@("33")">Chiropractic</MudSelectItem>
@@ -54,7 +54,7 @@
                             <MudSelectItem Value="@("88")">Pharmacy</MudSelectItem>
                         </MudSelect>
 
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
                                    DisableElevation="true" FullWidth="true"
                                    OnClick="CheckEligibility" Disabled="@_checking">
                             @if (_checking)
@@ -73,17 +73,26 @@
             </MudCard>
         </MudItem>
 
-        <MudItem xs="12" md="6">
+        <MudItem xs="12" md="7">
             @if (_response != null)
             {
                 <MudCard Elevation="2">
                     <MudCardHeader>
                         <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Eligibility Response (271)</MudText>
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.h6">Eligibility Response (271)</MudText>
+                                @if (!string.IsNullOrEmpty(_response.LineOfBusiness))
+                                {
+                                    <MudChip Size="Size.Small" Variant="Variant.Outlined"
+                                             Color="@GetLobColor(_response.LineOfBusiness)">
+                                        @_response.LineOfBusiness
+                                    </MudChip>
+                                }
+                            </MudStack>
                         </CardHeaderContent>
                     </MudCardHeader>
                     <MudCardContent>
-                        <!-- Coverage Status -->
+                        @* ── Coverage Status ── *@
                         <MudAlert Severity="@(_response.IsCovered ? Severity.Success : Severity.Error)" Class="mb-4">
                             <MudText Typo="Typo.h6">
                                 @if (_response.IsCovered)
@@ -105,7 +114,7 @@
 
                         @if (_response.IsCovered)
                         {
-                            <!-- Plan Information -->
+                            @* ── Plan Information ── *@
                             <MudText Typo="Typo.h6" Class="mb-2">Plan Information</MudText>
                             <MudSimpleTable Dense="true" Class="mb-4">
                                 <tbody>
@@ -119,82 +128,141 @@
                                     </tr>
                                     <tr>
                                         <td><strong>Coverage Level:</strong></td>
-                                        <td>@_response.CoverageLevel</td>
+                                        <td>@FormatCoverageLevel(_response.CoverageLevel)</td>
                                     </tr>
+                                    @if (!string.IsNullOrEmpty(_response.InsuranceType))
+                                    {
+                                        <tr>
+                                            <td><strong>Insurance Type:</strong></td>
+                                            <td>@FormatInsuranceType(_response.InsuranceType)</td>
+                                        </tr>
+                                    }
                                     <tr>
                                         <td><strong>Effective Date:</strong></td>
                                         <td>@_response.CoverageBeginDate?.ToString("MM/dd/yyyy")</td>
                                     </tr>
+                                    @if (_response.CoverageEndDate.HasValue)
+                                    {
+                                        <tr>
+                                            <td><strong>Termination Date:</strong></td>
+                                            <td>@_response.CoverageEndDate.Value.ToString("MM/dd/yyyy")</td>
+                                        </tr>
+                                    }
                                 </tbody>
                             </MudSimpleTable>
 
-                            <!-- Deductible & OOP -->
+                            @* ── Deductible ── *@
                             @if (_response.Deductible != null)
                             {
-                                <MudText Typo="Typo.h6" Class="mb-2">Deductible</MudText>
+                                <MudText Typo="Typo.h6" Class="mb-2">
+                                    Deductible
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2" Style="display:inline;">
+                                        @_response.Deductible.TimePeriod
+                                    </MudText>
+                                </MudText>
                                 <MudGrid Class="mb-4">
                                     <MudItem xs="6">
                                         <MudText Typo="Typo.body2" Color="Color.Secondary">Individual</MudText>
-                                        <MudProgressLinear Color="Color.Primary" 
-                                                           Value="@((double)_response.Deductible.IndividualMet / (double)_response.Deductible.IndividualAmount * 100)" 
+                                        <MudProgressLinear Color="Color.Primary"
+                                                           Value="@GetProgress(_response.Deductible.IndividualMet, _response.Deductible.IndividualAmount)"
                                                            Class="mb-1" />
                                         <MudText Typo="Typo.caption">
-                                            @_response.Deductible.IndividualMet.ToString("C") / @_response.Deductible.IndividualAmount.ToString("C")
+                                            @_response.Deductible.IndividualMet.ToString("C") met of @_response.Deductible.IndividualAmount.ToString("C")
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @_response.Deductible.IndividualRemaining.ToString("C") remaining
                                         </MudText>
                                     </MudItem>
                                     <MudItem xs="6">
                                         <MudText Typo="Typo.body2" Color="Color.Secondary">Family</MudText>
-                                        <MudProgressLinear Color="Color.Primary" 
-                                                           Value="@((double)_response.Deductible.FamilyMet / (double)_response.Deductible.FamilyAmount * 100)" 
+                                        <MudProgressLinear Color="Color.Primary"
+                                                           Value="@GetProgress(_response.Deductible.FamilyMet, _response.Deductible.FamilyAmount)"
                                                            Class="mb-1" />
                                         <MudText Typo="Typo.caption">
-                                            @_response.Deductible.FamilyMet.ToString("C") / @_response.Deductible.FamilyAmount.ToString("C")
+                                            @_response.Deductible.FamilyMet.ToString("C") met of @_response.Deductible.FamilyAmount.ToString("C")
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @_response.Deductible.FamilyRemaining.ToString("C") remaining
                                         </MudText>
                                     </MudItem>
                                 </MudGrid>
                             }
 
+                            @* ── Out-of-Pocket Maximum ── *@
                             @if (_response.OutOfPocket != null)
                             {
-                                <MudText Typo="Typo.h6" Class="mb-2">Out-of-Pocket Maximum</MudText>
+                                <MudText Typo="Typo.h6" Class="mb-2">
+                                    Out-of-Pocket Maximum
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2" Style="display:inline;">
+                                        @_response.OutOfPocket.TimePeriod
+                                    </MudText>
+                                </MudText>
                                 <MudGrid Class="mb-4">
                                     <MudItem xs="6">
                                         <MudText Typo="Typo.body2" Color="Color.Secondary">Individual</MudText>
-                                        <MudProgressLinear Color="Color.Success" 
-                                                           Value="@((double)_response.OutOfPocket.IndividualMet / (double)_response.OutOfPocket.IndividualAmount * 100)" 
+                                        <MudProgressLinear Color="Color.Success"
+                                                           Value="@GetProgress(_response.OutOfPocket.IndividualMet, _response.OutOfPocket.IndividualAmount)"
                                                            Class="mb-1" />
                                         <MudText Typo="Typo.caption">
-                                            @_response.OutOfPocket.IndividualMet.ToString("C") / @_response.OutOfPocket.IndividualAmount.ToString("C")
+                                            @_response.OutOfPocket.IndividualMet.ToString("C") met of @_response.OutOfPocket.IndividualAmount.ToString("C")
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @_response.OutOfPocket.IndividualRemaining.ToString("C") remaining
                                         </MudText>
                                     </MudItem>
                                     <MudItem xs="6">
                                         <MudText Typo="Typo.body2" Color="Color.Secondary">Family</MudText>
-                                        <MudProgressLinear Color="Color.Success" 
-                                                           Value="@((double)_response.OutOfPocket.FamilyMet / (double)_response.OutOfPocket.FamilyAmount * 100)" 
+                                        <MudProgressLinear Color="Color.Success"
+                                                           Value="@GetProgress(_response.OutOfPocket.FamilyMet, _response.OutOfPocket.FamilyAmount)"
                                                            Class="mb-1" />
                                         <MudText Typo="Typo.caption">
-                                            @_response.OutOfPocket.FamilyMet.ToString("C") / @_response.OutOfPocket.FamilyAmount.ToString("C")
+                                            @_response.OutOfPocket.FamilyMet.ToString("C") met of @_response.OutOfPocket.FamilyAmount.ToString("C")
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @_response.OutOfPocket.FamilyRemaining.ToString("C") remaining
                                         </MudText>
                                     </MudItem>
                                 </MudGrid>
                             }
 
-                            <!-- Benefits -->
+                            @* ── Benefits ── *@
                             @if (_response.Benefits?.Any() == true)
                             {
                                 <MudText Typo="Typo.h6" Class="mb-2">Benefits</MudText>
-                                <MudTable Items="@_response.Benefits" Dense="true" Hover="true">
+                                <MudTable Items="@_response.Benefits" Dense="true" Hover="true" Class="mb-4">
                                     <HeaderContent>
                                         <MudTh>Service</MudTh>
-                                        <MudTh>Copay</MudTh>
-                                        <MudTh>Coinsurance</MudTh>
-                                        <MudTh>Auth Required</MudTh>
+                                        <MudTh>Network</MudTh>
+                                        <MudTh Style="text-align:right">Copay</MudTh>
+                                        <MudTh Style="text-align:right">Coinsurance</MudTh>
+                                        <MudTh Style="text-align:right">Limit</MudTh>
+                                        <MudTh>Auth</MudTh>
                                     </HeaderContent>
                                     <RowTemplate>
                                         <MudTd DataLabel="Service">@context.ServiceTypeName</MudTd>
-                                        <MudTd DataLabel="Copay">@context.MonetaryAmount?.ToString("C")</MudTd>
-                                        <MudTd DataLabel="Coinsurance">@context.Percentage?.ToString("P0")</MudTd>
-                                        <MudTd DataLabel="Auth Required">
+                                        <MudTd DataLabel="Network">
+                                            @if (context.NetworkIndicator == "Y")
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Success" Variant="Variant.Text">In-Network</MudChip>
+                                            }
+                                            else if (context.NetworkIndicator == "N")
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Warning" Variant="Variant.Text">Out-of-Network</MudChip>
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Copay" Style="text-align:right">@(context.MonetaryAmount?.ToString("C") ?? "—")</MudTd>
+                                        <MudTd DataLabel="Coinsurance" Style="text-align:right">@(context.Percentage?.ToString("P0") ?? "—")</MudTd>
+                                        <MudTd DataLabel="Limit" Style="text-align:right">
+                                            @if (context.Quantity.HasValue)
+                                            {
+                                                @($"{context.Quantity:F0} {FormatQuantityQualifier(context.QuantityQualifier)}/{FormatTimePeriod(context.TimePeriod)}")
+                                            }
+                                            else
+                                            {
+                                                <span>—</span>
+                                            }
+                                        </MudTd>
+                                        <MudTd DataLabel="Auth">
                                             @if (context.AuthorizationRequired)
                                             {
                                                 <MudChip Size="Size.Small" Color="Color.Warning">Required</MudChip>
@@ -202,6 +270,42 @@
                                             else
                                             {
                                                 <MudChip Size="Size.Small" Color="Color.Success">Not Required</MudChip>
+                                            }
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+
+                            @* ── Coordination of Benefits ── *@
+                            @if (_response.AdditionalInsurances?.Any() == true)
+                            {
+                                <MudText Typo="Typo.h6" Class="mb-2">Coordination of Benefits (COB)</MudText>
+                                <MudTable Items="@_response.AdditionalInsurances" Dense="true" Hover="true" Class="mb-4">
+                                    <HeaderContent>
+                                        <MudTh>Payer</MudTh>
+                                        <MudTh>Sequence</MudTh>
+                                        <MudTh>Group</MudTh>
+                                        <MudTh>Effective</MudTh>
+                                        <MudTh>Type</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Payer">@context.PayerName</MudTd>
+                                        <MudTd DataLabel="Sequence">
+                                            <MudChip Size="Size.Small" Variant="Variant.Outlined"
+                                                     Color="@(context.CoverageSequence == "P" ? Color.Primary : Color.Default)">
+                                                @FormatCoverageSequence(context.CoverageSequence)
+                                            </MudChip>
+                                        </MudTd>
+                                        <MudTd DataLabel="Group">@(context.GroupNumber ?? "—")</MudTd>
+                                        <MudTd DataLabel="Effective">@context.CoverageBeginDate?.ToString("MM/dd/yyyy")</MudTd>
+                                        <MudTd DataLabel="Type">
+                                            @if (context.IsMedicare)
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Medicare</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.body2">Commercial</MudText>
                                             }
                                         </MudTd>
                                     </RowTemplate>
@@ -265,6 +369,65 @@
         }
     }
 
+    private static double GetProgress(decimal met, decimal total) =>
+        total > 0 ? (double)(met / total * 100) : 0;
+
+    private static string FormatCoverageLevel(string? level) => level switch
+    {
+        "EMP" => "Employee Only",
+        "ESP" => "Employee + Spouse",
+        "ECH" => "Employee + Children",
+        "FAM" => "Family",
+        "IND" => "Individual",
+        "E1" => "Employee + One",
+        _ => level ?? ""
+    };
+
+    private static string FormatInsuranceType(string? type) => type switch
+    {
+        "HLT" => "Health",
+        "DEN" => "Dental",
+        "VIS" => "Vision",
+        "LIF" => "Life",
+        _ => type ?? ""
+    };
+
+    private static string FormatQuantityQualifier(string? qualifier) => qualifier switch
+    {
+        "VS" => "visits",
+        "DA" => "days",
+        "UN" => "units",
+        "MN" => "months",
+        _ => qualifier ?? "units"
+    };
+
+    private static string FormatTimePeriod(string? period) => period switch
+    {
+        "26" => "visit",
+        "27" => "day",
+        "29" => "year",
+        "30" => "month",
+        "23" => "episode",
+        _ => period ?? "year"
+    };
+
+    private static string FormatCoverageSequence(string? seq) => seq switch
+    {
+        "P" => "Primary",
+        "S" => "Secondary",
+        "T" => "Tertiary",
+        _ => seq ?? ""
+    };
+
+    private static Color GetLobColor(string? lob) => lob?.ToLowerInvariant() switch
+    {
+        "commercial" => Color.Primary,
+        "medicare" => Color.Info,
+        "medicaid" => Color.Success,
+        "exchange" => Color.Warning,
+        _ => Color.Default
+    };
+
     public class EligibilityRequest
     {
         public string SubscriberId { get; set; } = string.Empty;
@@ -273,4 +436,3 @@
         public string ServiceType { get; set; } = "30";
     }
 }
-

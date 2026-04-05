@@ -705,39 +705,77 @@ public class DashboardMetrics
 
 public class EligibilityResponse
 {
+    // Coverage status (EB*1 / AAA)
     public bool IsCovered { get; set; }
-    public string? RejectionReason { get; set; }
+    public string? StatusCode { get; set; }  // EB06: 1=Active, 6=Inactive
+    public string? RejectionReason { get; set; }  // AAA03-4 / MSG
+
+    // Plan info (EB / REF / DTP)
     public string InsurancePlanName { get; set; } = string.Empty;
-    public string GroupNumber { get; set; } = string.Empty;
-    public string CoverageLevel { get; set; } = string.Empty;
-    public DateTime? CoverageBeginDate { get; set; }
+    public string GroupNumber { get; set; } = string.Empty;  // REF*1L
+    public string CoverageLevel { get; set; } = string.Empty;  // EB03: EMP/FAM/IND
+    public string? InsuranceType { get; set; }  // EB02: HLT/DEN/VIS
+    public string? LineOfBusiness { get; set; }  // Commercial/Medicare/Medicaid
+    public DateTime? CoverageBeginDate { get; set; }  // DTP*348
+    public DateTime? CoverageEndDate { get; set; }  // DTP*349
+
+    // Deductible & OOP (EB*C / EB*G / EB*D)
     public DeductibleInfo? Deductible { get; set; }
     public OutOfPocketInfo? OutOfPocket { get; set; }
+
+    // Benefits (EB segments per service type)
     public List<Benefit>? Benefits { get; set; }
+
+    // COB / Other Insurance (SB/OI loops)
+    public List<AdditionalInsuranceInfo>? AdditionalInsurances { get; set; }
 }
 
 public class DeductibleInfo
 {
-    public decimal IndividualAmount { get; set; }
-    public decimal IndividualMet { get; set; }
-    public decimal FamilyAmount { get; set; }
+    public decimal IndividualAmount { get; set; }  // EB*C*30*HLT*IND
+    public decimal IndividualMet { get; set; }  // EB*C accumulated
+    public decimal IndividualRemaining { get; set; }  // EB*D remaining
+    public decimal FamilyAmount { get; set; }  // EB*C*30*HLT*FAM
     public decimal FamilyMet { get; set; }
+    public decimal FamilyRemaining { get; set; }
+    public string TimePeriod { get; set; } = "Calendar Year";  // EB06: 29=Year
 }
 
 public class OutOfPocketInfo
 {
-    public decimal IndividualAmount { get; set; }
+    public decimal IndividualAmount { get; set; }  // EB*G*30*HLT*IND
     public decimal IndividualMet { get; set; }
-    public decimal FamilyAmount { get; set; }
+    public decimal IndividualRemaining { get; set; }
+    public decimal FamilyAmount { get; set; }  // EB*G*30*HLT*FAM
     public decimal FamilyMet { get; set; }
+    public decimal FamilyRemaining { get; set; }
+    public string TimePeriod { get; set; } = "Calendar Year";
 }
 
 public class Benefit
 {
-    public string ServiceTypeName { get; set; } = string.Empty;
-    public decimal? MonetaryAmount { get; set; }
-    public decimal? Percentage { get; set; }
-    public bool AuthorizationRequired { get; set; }
+    public string ServiceTypeName { get; set; } = string.Empty;  // EB01 description
+    public string? ServiceTypeCode { get; set; }  // EB01: 30, 33, 42, etc.
+    public decimal? MonetaryAmount { get; set; }  // EB07: Copay amount
+    public decimal? Percentage { get; set; }  // EB08: Coinsurance %
+    public decimal? Quantity { get; set; }  // EB10: Visit/unit limit
+    public string? QuantityQualifier { get; set; }  // EB09: VS=Visits, DA=Days
+    public string? TimePeriod { get; set; }  // EB06: 26=Visit, 29=Year
+    public string? NetworkIndicator { get; set; }  // EB12: Y=In, N=Out
+    public bool AuthorizationRequired { get; set; }  // MSG segment
+    public DateTime? BenefitBeginDate { get; set; }
+    public DateTime? BenefitEndDate { get; set; }
+}
+
+public class AdditionalInsuranceInfo
+{
+    public string PayerName { get; set; } = string.Empty;
+    public string? PayerId { get; set; }
+    public string CoverageSequence { get; set; } = string.Empty;  // P/S/T
+    public string? GroupNumber { get; set; }
+    public DateTime? CoverageBeginDate { get; set; }
+    public DateTime? CoverageEndDate { get; set; }
+    public bool IsMedicare { get; set; }
 }
 public class AttachmentInfo
 {
