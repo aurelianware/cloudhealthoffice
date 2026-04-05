@@ -133,7 +133,7 @@
     <g transform="translate(750, 0)">
       <rect x="-100" y="-15" width="200" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
       <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="900"
-            fill="#00ff88" text-anchor="middle">1,018</text>
+            fill="#00ff88" text-anchor="middle">1,740</text>
       <text x="0" y="32" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
             fill="#ffffff" text-anchor="middle">Tests Passed</text>
       <text x="0" y="50" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">85.93% Coverage</text>
