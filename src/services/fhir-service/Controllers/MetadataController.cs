@@ -112,6 +112,7 @@ public class MetadataController : FhirControllerBase
                         [
                             ("_id",          SearchParamType.Token),
                             ("name",         SearchParamType.String),
+                            ("title",        SearchParamType.String),
                             ("status",       SearchParamType.Token)
                         ],
                         [

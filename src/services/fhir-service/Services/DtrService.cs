@@ -121,12 +121,7 @@ public class DtrService : IDtrService
     public Task<(IReadOnlyList<QuestionnaireResponse> Items, int Total)> SearchResponsesAsync(
         QuestionnaireResponseSearchParams search, string tenantId, CancellationToken ct = default)
     {
-        var query = _responses.Values
-            .Where(r => GetTenantFromKey(r.Id) == tenantId ||
-                        _responses.ContainsKey($"{tenantId}:{r.Id}"));
-
-        // Re-filter using actual keyed responses for this tenant
-        query = _responses
+        var query = _responses
             .Where(kv => kv.Key.StartsWith($"{tenantId}:", StringComparison.Ordinal))
             .Select(kv => kv.Value);
 
@@ -215,8 +210,6 @@ public class DtrService : IDtrService
         return _questionnaires.ContainsKey($"{tenantId}:{id}") ||
                _questionnaires.ContainsKey($"default:{id}");
     }
-
-    private static string GetTenantFromKey(string? id) => string.Empty;
 
     // ── Seed Data ────────────────────────────────────────────────────────────
 

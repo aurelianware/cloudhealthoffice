@@ -152,17 +152,17 @@ public class DtrController : FhirControllerBase
     public async Task<IActionResult> SubmitQuestionnaireResponse(
         [FromBody] QuestionnaireResponse response, CancellationToken ct)
     {
-        // Validate status
-        if (response.Status == null ||
-            response.Status == QuestionnaireResponse.QuestionnaireResponseStatus.InProgress)
+        // Validate status — only completed or amended submissions are accepted
+        if (response.Status is not (QuestionnaireResponse.QuestionnaireResponseStatus.Completed
+            or QuestionnaireResponse.QuestionnaireResponseStatus.Amended))
             return FhirBadRequest(
-                "QuestionnaireResponse.status must be 'completed' or 'amended' (cannot submit in-progress)");
+                "QuestionnaireResponse.status must be 'completed' or 'amended'");
 
         // Validate questionnaire reference
         if (string.IsNullOrEmpty(response.Questionnaire))
             return FhirBadRequest("QuestionnaireResponse.questionnaire reference is required");
 
-        if (_dtrService is DtrService dtr && !dtr.QuestionnaireExists(response.Questionnaire, TenantId))
+        if (!_dtrService.QuestionnaireExists(response.Questionnaire, TenantId))
             return FhirBadRequest(
                 $"Referenced Questionnaire '{response.Questionnaire}' does not exist");
 
@@ -227,6 +227,11 @@ public class DtrController : FhirControllerBase
                 return FhirBadRequest("Each Questionnaire.item must have a linkId");
             if (item.Type == null)
                 return FhirBadRequest($"Questionnaire.item '{item.LinkId}' must have a type");
+            if (item.Item is { Count: > 0 })
+            {
+                var nested = ValidateItems(item.Item);
+                if (nested != null) return nested;
+            }
         }
         return null;
     }
