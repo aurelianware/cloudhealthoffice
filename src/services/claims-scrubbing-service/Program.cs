@@ -49,6 +49,7 @@ if (!string.IsNullOrEmpty(storageConnection) || !string.IsNullOrEmpty(storageAcc
 var app = builder.Build();
 
 app.UseChoInfrastructure(builder.Configuration);
+app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();
 
 // ── Load custom rules from MongoDB on startup ─────────────────────────────────

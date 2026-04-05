@@ -76,6 +76,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
 app.UseTenantMiddleware();

@@ -103,6 +103,7 @@ app.Use(async (context, next) =>
     await next();
 });
 
+app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();
 
 app.Run();

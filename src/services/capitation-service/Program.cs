@@ -132,6 +132,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
 // Multi-tenant middleware (extract TenantId from JWT or headers)

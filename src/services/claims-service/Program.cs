@@ -44,6 +44,7 @@ var app = builder.Build();
 // Shared middleware pipeline: exception handling, Swagger (dev), tenant middleware, CORS, health checks
 app.UseChoInfrastructure(builder.Configuration);
 
+app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();
 
 app.Run();
