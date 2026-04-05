@@ -105,7 +105,7 @@ public class AppealsController : ControllerBase
     /// <summary>
     /// Search appeals with filters
     /// </summary>
-    [HttpGet]
+    [HttpGet("search")]
     [ProducesResponseType(typeof(IEnumerable<Appeal>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Appeal>>> SearchAppeals(
         [FromQuery] string? memberId,
