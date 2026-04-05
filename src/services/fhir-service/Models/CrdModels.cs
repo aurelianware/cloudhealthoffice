@@ -172,6 +172,16 @@ public class CrdCardLink
     public string Type { get; set; } = "absolute";
 }
 
+// ── Code Classification (dynamic benefit lookup) ────────────────────────────
+
+public class CrdCodeClassification
+{
+    public HashSet<string> AuthRequiredCodes { get; set; } = new(StringComparer.Ordinal);
+    public HashSet<string> AutoApprovedCodes { get; set; } = new(StringComparer.Ordinal);
+    public HashSet<string> DocumentationRequiredCodes { get; set; } = new(StringComparer.Ordinal);
+    public DateTimeOffset LoadedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 // ── Evaluation Result ────────────────────────────────────────────────────────
 
 public class CrdEvaluationResult

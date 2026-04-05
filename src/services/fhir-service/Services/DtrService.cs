@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
 using FhirService.Models;
 using Hl7.Fhir.Model;
+using Hl7.Fhir.Serialization;
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
+using MongoDB.Driver;
 using Task = System.Threading.Tasks.Task;
 
 namespace FhirService.Services;
@@ -10,30 +13,77 @@ public class DtrService : IDtrService
 {
     private readonly ConcurrentDictionary<string, Questionnaire> _questionnaires = new();
     private readonly ConcurrentDictionary<string, QuestionnaireResponse> _responses = new();
+    private readonly IMongoCollection<BsonDocument>? _questionnaireCollection;
+    private readonly IMongoCollection<BsonDocument>? _responseCollection;
+    private readonly bool _useMongoDb;
     private readonly DtrConfig _config;
     private readonly ILogger<DtrService> _logger;
 
     private const string DtrProfile =
         "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire";
 
-    public DtrService(IOptions<DtrConfig> config, ILogger<DtrService> logger)
+    private static readonly FhirJsonSerializer _serializer = new(new SerializerSettings { Pretty = false });
+    private static readonly FhirJsonParser _parser = new(new ParserSettings { PermissiveParsing = true });
+
+    public DtrService(IOptions<DtrConfig> config, ILogger<DtrService> logger, IConfiguration appConfig)
     {
         _config = config.Value;
         _logger = logger;
+
+        var mongoConnectionString = appConfig["MongoDB:ConnectionString"];
+        if (!string.IsNullOrEmpty(mongoConnectionString))
+        {
+            var client = new MongoClient(mongoConnectionString);
+            var database = client.GetDatabase(appConfig["MongoDB:DatabaseName"] ?? "cloudhealthoffice");
+            _questionnaireCollection = database.GetCollection<BsonDocument>("dtr_questionnaires");
+            _responseCollection = database.GetCollection<BsonDocument>("dtr_responses");
+            _useMongoDb = true;
+            EnsureIndexes();
+            _logger.LogInformation("DTR service using MongoDB persistence");
+        }
+        else
+        {
+            _useMongoDb = false;
+            _logger.LogInformation("DTR service using in-memory storage (MongoDB not configured)");
+        }
+
         LoadSeedData();
+    }
+
+    private void EnsureIndexes()
+    {
+        _questionnaireCollection!.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
+            Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("resourceId"),
+            new CreateIndexOptions { Unique = true }));
+
+        _responseCollection!.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
+            Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("resourceId")));
+
+        _responseCollection.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
+            Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("questionnaireRef")));
     }
 
     // ── Questionnaire CRUD ───────────────────────────────────────────────────
 
-    public Task<Questionnaire?> GetQuestionnaireAsync(
+    public async Task<Questionnaire?> GetQuestionnaireAsync(
         string id, string tenantId, CancellationToken ct = default)
     {
-        // Try tenant-specific key first, then default tenant (seed data)
+        if (_useMongoDb)
+        {
+            var filter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.In("tenantId", new[] { tenantId, "default" }),
+                Builders<BsonDocument>.Filter.Eq("resourceId", id));
+            var sort = Builders<BsonDocument>.Sort.Descending("tenantId"); // tenant-specific first
+            var doc = await _questionnaireCollection!.Find(filter).Sort(sort).FirstOrDefaultAsync(ct);
+            return doc != null ? DeserializeQuestionnaire(doc) : null;
+        }
+
+        // In-memory fallback
         if (_questionnaires.TryGetValue($"{tenantId}:{id}", out var q))
-            return Task.FromResult<Questionnaire?>(q);
+            return q;
         if (_questionnaires.TryGetValue($"default:{id}", out q))
-            return Task.FromResult<Questionnaire?>(q);
-        return Task.FromResult<Questionnaire?>(null);
+            return q;
+        return null;
     }
 
     public Task<(IReadOnlyList<Questionnaire> Items, int Total)> SearchQuestionnairesAsync(
@@ -64,7 +114,7 @@ public class DtrService : IDtrService
         return Task.FromResult<(IReadOnlyList<Questionnaire>, int)>((items, total));
     }
 
-    public Task<Questionnaire> CreateQuestionnaireAsync(
+    public async Task<Questionnaire> CreateQuestionnaireAsync(
         Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
     {
         var id = questionnaire.Id;
@@ -79,9 +129,15 @@ public class DtrService : IDtrService
             Profile = new[] { DtrProfile },
         };
 
+        if (_useMongoDb)
+        {
+            await _questionnaireCollection!.InsertOneAsync(
+                SerializeQuestionnaire(questionnaire, tenantId), cancellationToken: ct);
+        }
+
         _questionnaires[$"{tenantId}:{id}"] = questionnaire;
         _logger.LogInformation("Created Questionnaire {Id} for tenant {TenantId}", id, tenantId);
-        return Task.FromResult(questionnaire);
+        return questionnaire;
     }
 
     public Task<Questionnaire?> UpdateQuestionnaireAsync(
@@ -145,7 +201,7 @@ public class DtrService : IDtrService
         return Task.FromResult<(IReadOnlyList<QuestionnaireResponse>, int)>((items, total));
     }
 
-    public Task<QuestionnaireResponse> SubmitResponseAsync(
+    public async Task<QuestionnaireResponse> SubmitResponseAsync(
         QuestionnaireResponse response, string tenantId, CancellationToken ct = default)
     {
         var id = $"qr-{Guid.NewGuid().ToString("N")[..8]}";
@@ -157,9 +213,22 @@ public class DtrService : IDtrService
         };
         response.Authored ??= DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
+        if (_useMongoDb)
+        {
+            var doc = new BsonDocument
+            {
+                { "tenantId", tenantId },
+                { "resourceId", id },
+                { "questionnaireRef", response.Questionnaire ?? "" },
+                { "fhirJson", _serializer.SerializeToString(response) },
+                { "createdAt", DateTimeOffset.UtcNow.ToString("o") },
+            };
+            await _responseCollection!.InsertOneAsync(doc, cancellationToken: ct);
+        }
+
         _responses[$"{tenantId}:{id}"] = response;
         _logger.LogInformation("Submitted QuestionnaireResponse {Id} for tenant {TenantId}", id, tenantId);
-        return Task.FromResult(response);
+        return response;
     }
 
     // ── $questionnaire-package ───────────────────────────────────────────────
@@ -205,10 +274,28 @@ public class DtrService : IDtrService
 
     private bool IsAccessible(Questionnaire q, string tenantId)
     {
-        // Questionnaire is accessible if stored under this tenant or under "default"
         var id = q.Id;
         return _questionnaires.ContainsKey($"{tenantId}:{id}") ||
                _questionnaires.ContainsKey($"default:{id}");
+    }
+
+    // ── MongoDB serialization helpers ────────────────────────────────────────
+
+    private static BsonDocument SerializeQuestionnaire(Questionnaire q, string tenantId)
+    {
+        return new BsonDocument
+        {
+            { "tenantId", tenantId },
+            { "resourceId", q.Id },
+            { "fhirJson", _serializer.SerializeToString(q) },
+            { "createdAt", DateTimeOffset.UtcNow.ToString("o") },
+        };
+    }
+
+    private static Questionnaire DeserializeQuestionnaire(BsonDocument doc)
+    {
+        var json = doc["fhirJson"].AsString;
+        return _parser.Parse<Questionnaire>(json);
     }
 
     // ── Seed Data ────────────────────────────────────────────────────────────
@@ -225,7 +312,26 @@ public class DtrService : IDtrService
         };
 
         foreach (var q in seeds)
+        {
             _questionnaires[$"default:{q.Id}"] = q;
+
+            if (_useMongoDb)
+            {
+                try
+                {
+                    var filter = Builders<BsonDocument>.Filter.And(
+                        Builders<BsonDocument>.Filter.Eq("tenantId", "default"),
+                        Builders<BsonDocument>.Filter.Eq("resourceId", q.Id));
+                    var exists = _questionnaireCollection!.Find(filter).Any();
+                    if (!exists)
+                        _questionnaireCollection!.InsertOne(SerializeQuestionnaire(q, "default"));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to seed Questionnaire {Id} to MongoDB", q.Id);
+                }
+            }
+        }
 
         _logger.LogInformation("Loaded {Count} seed questionnaires", seeds.Length);
     }
