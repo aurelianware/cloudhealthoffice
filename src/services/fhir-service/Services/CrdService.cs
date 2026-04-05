@@ -151,6 +151,10 @@ public class CrdService : ICrdService
                         }
                     }
 
+                    // Add any remaining SNOMED codes that weren't covered by the response
+                    for (var i = translations.Count; i < snomedCodes.Count; i++)
+                        result.Add(new TranslatedCode(snomedCodes[i]));
+
                     return result;
                 }
             }
@@ -159,7 +163,11 @@ public class CrdService : ICrdService
                 "Terminology Service returned {StatusCode} — falling back to raw SNOMED codes",
                 response.StatusCode);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             _logger.LogWarning(ex,
                 "Terminology Service unavailable — falling back to raw SNOMED codes");
