@@ -17,7 +17,7 @@ public class DtrServiceTests
         var config = Options.Create(new DtrConfig { Enabled = true });
         var logger = new Mock<ILogger<DtrService>>();
         var appConfig = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["MongoDB:ConnectionString"] = "" })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["MongoDb:ConnectionString"] = "" })
             .Build();
         _service = new DtrService(config, logger.Object, appConfig);
     }

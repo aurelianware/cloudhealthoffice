@@ -30,11 +30,11 @@ public class DtrService : IDtrService
         _config = config.Value;
         _logger = logger;
 
-        var mongoConnectionString = appConfig["MongoDB:ConnectionString"];
+        var mongoConnectionString = appConfig["MongoDb:ConnectionString"];
         if (!string.IsNullOrEmpty(mongoConnectionString))
         {
             var client = new MongoClient(mongoConnectionString);
-            var database = client.GetDatabase(appConfig["MongoDB:DatabaseName"] ?? "cloudhealthoffice");
+            var database = client.GetDatabase(appConfig["MongoDb:DatabaseName"] ?? "cloudhealthoffice");
             _questionnaireCollection = database.GetCollection<BsonDocument>("dtr_questionnaires");
             _responseCollection = database.GetCollection<BsonDocument>("dtr_responses");
             _useMongoDb = true;
@@ -70,12 +70,18 @@ public class DtrService : IDtrService
     {
         if (_useMongoDb)
         {
-            var filter = Builders<BsonDocument>.Filter.And(
-                Builders<BsonDocument>.Filter.In("tenantId", new[] { tenantId, "default" }),
+            // Tenant-specific first, then fall back to default seed data
+            var tenantFilter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.Eq("tenantId", tenantId),
                 Builders<BsonDocument>.Filter.Eq("resourceId", id));
-            var sort = Builders<BsonDocument>.Sort.Descending("tenantId"); // tenant-specific first
-            var doc = await _questionnaireCollection!.Find(filter).Sort(sort).FirstOrDefaultAsync(ct);
-            return doc != null ? DeserializeQuestionnaire(doc) : null;
+            var tenantDoc = await _questionnaireCollection!.Find(tenantFilter).FirstOrDefaultAsync(ct);
+            if (tenantDoc != null) return DeserializeQuestionnaire(tenantDoc);
+
+            var defaultFilter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.Eq("tenantId", "default"),
+                Builders<BsonDocument>.Filter.Eq("resourceId", id));
+            var defaultDoc = await _questionnaireCollection.Find(defaultFilter).FirstOrDefaultAsync(ct);
+            return defaultDoc != null ? DeserializeQuestionnaire(defaultDoc) : null;
         }
 
         // In-memory fallback
@@ -131,8 +137,12 @@ public class DtrService : IDtrService
 
         if (_useMongoDb)
         {
-            await _questionnaireCollection!.InsertOneAsync(
-                SerializeQuestionnaire(questionnaire, tenantId), cancellationToken: ct);
+            var filter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.Eq("tenantId", tenantId),
+                Builders<BsonDocument>.Filter.Eq("resourceId", id));
+            await _questionnaireCollection!.ReplaceOneAsync(
+                filter, SerializeQuestionnaire(questionnaire, tenantId),
+                new ReplaceOptions { IsUpsert = true }, ct);
         }
 
         _questionnaires[$"{tenantId}:{id}"] = questionnaire;
@@ -167,11 +177,21 @@ public class DtrService : IDtrService
 
     // ── QuestionnaireResponse ────────────────────────────────────────────────
 
-    public Task<QuestionnaireResponse?> GetResponseAsync(
+    public async Task<QuestionnaireResponse?> GetResponseAsync(
         string id, string tenantId, CancellationToken ct = default)
     {
+        if (_useMongoDb)
+        {
+            var filter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.Eq("tenantId", tenantId),
+                Builders<BsonDocument>.Filter.Eq("resourceId", id));
+            var doc = await _responseCollection!.Find(filter).FirstOrDefaultAsync(ct);
+            if (doc != null)
+                return _parser.Parse<QuestionnaireResponse>(doc["fhirJson"].AsString);
+        }
+
         _responses.TryGetValue($"{tenantId}:{id}", out var qr);
-        return Task.FromResult(qr);
+        return qr;
     }
 
     public Task<(IReadOnlyList<QuestionnaireResponse> Items, int Total)> SearchResponsesAsync(

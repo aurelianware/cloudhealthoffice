@@ -22,8 +22,8 @@ public class DtrServiceMongoTests
         var appConfig = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["MongoDB:ConnectionString"] = "",
-                ["MongoDB:DatabaseName"] = "test",
+                ["MongoDb:ConnectionString"] = "",
+                ["MongoDb:DatabaseName"] = "test",
             })
             .Build();
 

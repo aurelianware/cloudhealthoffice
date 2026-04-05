@@ -25,37 +25,25 @@ public class CrdConfigController : FhirControllerBase
         _logger = logger;
     }
 
-    /// <summary>GET /api/v1/crd/code-classification — get current classification for tenant</summary>
+    /// <summary>GET /api/v1/crd/code-classification — get current classification for caller's tenant</summary>
     [HttpGet("code-classification")]
-    public IActionResult GetClassification([FromQuery] string? tenantId)
+    public IActionResult GetClassification()
     {
-        var effectiveTenant = tenantId ?? TenantId;
-
-        if (_crdService is not CrdService crdService)
-            return StatusCode(503, new { error = "CRD classification not available" });
-
-        var classification = crdService.GetClassificationOrNull(effectiveTenant)
-            ?? crdService.GetClassification("default");
+        var classification = _crdService.GetClassificationOrNull(TenantId)
+            ?? _crdService.GetClassification("default");
 
         return Ok(classification);
     }
 
-    /// <summary>PUT /api/v1/crd/code-classification — update classification for tenant</summary>
+    /// <summary>PUT /api/v1/crd/code-classification — update classification for caller's tenant</summary>
     [HttpPut("code-classification")]
-    public IActionResult SetClassification(
-        [FromQuery] string? tenantId,
-        [FromBody] CrdCodeClassification classification)
+    public IActionResult SetClassification([FromBody] CrdCodeClassification classification)
     {
-        var effectiveTenant = tenantId ?? TenantId;
-
-        if (_crdService is not CrdService crdService)
-            return StatusCode(503, new { error = "CRD classification not available" });
-
-        crdService.SetClassification(effectiveTenant, classification);
+        _crdService.SetClassification(TenantId, classification);
 
         _logger.LogInformation(
             "CRD code classification updated for tenant {TenantId}: auth={AuthCount}, approved={ApprovedCount}, doc={DocCount}",
-            SanitizeForLog(effectiveTenant),
+            SanitizeForLog(TenantId),
             classification.AuthRequiredCodes.Count,
             classification.AutoApprovedCodes.Count,
             classification.DocumentationRequiredCodes.Count);
