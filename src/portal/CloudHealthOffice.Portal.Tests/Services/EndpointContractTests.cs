@@ -229,6 +229,178 @@ public class EndpointContractTests
             .Which.Should().StartWith("http://appeals-service/");
     }
 
+    // ── Authorization Service Contracts ────────────────────────────
+
+    [Fact]
+    public async Task AuthorizationService_Search_CallsSearchEndpoint()
+    {
+        var handler = new RecordingHandler();
+        var config = BuildConfig(new()
+        {
+            ["Services:AuthorizationService"] = "http://authorization-service/api"
+        });
+        var sut = new AuthorizationService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://authorization-service") },
+            config, Mock.Of<ILogger<AuthorizationService>>(),
+            Mock.Of<Microsoft.Identity.Web.ITokenAcquisition>());
+
+        await sut.GetAuthorizationsAsync();
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().Be("/api/authorizations/search");
+    }
+
+    [Fact]
+    public async Task AuthorizationService_SearchWithMember_IncludesMemberIdParam()
+    {
+        var handler = new RecordingHandler();
+        var config = BuildConfig(new()
+        {
+            ["Services:AuthorizationService"] = "http://authorization-service/api"
+        });
+        var sut = new AuthorizationService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://authorization-service") },
+            config, Mock.Of<ILogger<AuthorizationService>>(),
+            Mock.Of<Microsoft.Identity.Web.ITokenAcquisition>());
+
+        await sut.GetAuthorizationsAsync(memberId: "MBR-007");
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().Contain("/api/authorizations/search?memberId=MBR-007");
+    }
+
+    [Fact]
+    public async Task AuthorizationService_GetById_CallsCorrectUrl()
+    {
+        var handler = new RecordingHandler(body: "null");
+        var config = BuildConfig(new()
+        {
+            ["Services:AuthorizationService"] = "http://authorization-service/api"
+        });
+        var sut = new AuthorizationService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://authorization-service") },
+            config, Mock.Of<ILogger<AuthorizationService>>(),
+            Mock.Of<Microsoft.Identity.Web.ITokenAcquisition>());
+
+        await sut.GetAuthorizationByIdAsync("AUTH-001");
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().Be("/api/authorizations/AUTH-001");
+    }
+
+    // ── Coverage Service Contracts ───────────────────────────────
+
+    [Fact]
+    public async Task CoverageService_GetByMemberId_CallsHistoryEndpoint()
+    {
+        var handler = new RecordingHandler();
+        var config = BuildConfig(new());
+        var sut = new CoverageService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://coverage-service") },
+            config, Mock.Of<ILogger<CoverageService>>());
+
+        await sut.GetCoverageByMemberIdAsync("MBR-001");
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().Be("/api/v1/coverage/member/MBR-001/history");
+    }
+
+    // ── Metrics Service Contracts ────────────────────────────────
+
+    [Fact]
+    public async Task MetricsService_GetDashboardMetrics_CallsSummaryEndpoint()
+    {
+        var handler = new RecordingHandler(body: """{"totalClaims":0,"approvedClaims":0,"deniedClaims":0,"pendedClaims":0,"paidClaims":0,"totalChargeAmount":0,"totalAllowedAmount":0,"totalPaidAmount":0,"averageProcessingDays":0,"approvalRate":0}""");
+        var config = BuildConfig(new());
+        var sut = new MetricsService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://claims-service") },
+            config, Mock.Of<ILogger<MetricsService>>());
+
+        await sut.GetDashboardMetricsAsync();
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().Be("/api/claims/summary");
+    }
+
+    // ── Eligibility Service Contracts ────────────────────────────
+
+    [Fact]
+    public async Task EligibilityService_SubmitInquiry_CallsInquiryEndpoint()
+    {
+        var handler = new RecordingHandler(body: """{"id":"test","isEligible":true}""");
+        var config = BuildConfig(new()
+        {
+            ["Services:EligibilityService"] = "http://eligibility-service/api"
+        });
+        var sut = new Portal.Services.EligibilityService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://eligibility-service") },
+            config, Mock.Of<ILogger<Portal.Services.EligibilityService>>());
+
+        await sut.CheckEligibilityAsync(new { subscriberId = "SUB-001" });
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().Be("/api/eligibility/inquiry");
+    }
+
+    // ── Payment Service Contracts ────────────────────────────────
+
+    [Fact]
+    public async Task PaymentRunService_GetRuns_CallsCorrectUrl()
+    {
+        var handler = new RecordingHandler();
+        var config = BuildConfig(new());
+        var sut = new PaymentRunService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://payment-service") },
+            config, Mock.Of<ILogger<PaymentRunService>>());
+
+        await sut.GetPaymentRunsAsync(10);
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().StartWith("/api/paymentruns")
+            .And.Subject.Should().Contain("limit=10");
+    }
+
+    // ── Sponsor Service Contracts ────────────────────────────────
+
+    [Fact]
+    public async Task SponsorService_Search_CallsCorrectUrl()
+    {
+        var handler = new RecordingHandler(body: """{"sponsors":[]}""");
+        var config = BuildConfig(new()
+        {
+            ["Services:SponsorService"] = "http://sponsor-service/api/v1"
+        });
+        var sut = new SponsorService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://sponsor-service") },
+            config, Mock.Of<ILogger<SponsorService>>());
+
+        await sut.SearchSponsorsAsync("Acme");
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().Contain("/api/v1/sponsors")
+            .And.Contain("search=Acme");
+    }
+
+    // ── Benefit Plan Service Contracts ───────────────────────────
+
+    [Fact]
+    public async Task BenefitPlanService_GetAll_CallsCorrectUrl()
+    {
+        var handler = new RecordingHandler();
+        var config = BuildConfig(new()
+        {
+            ["Services:BenefitPlanService"] = "http://benefit-plan-service/api"
+        });
+        var sut = new BenefitPlanService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://benefit-plan-service") },
+            config, Mock.Of<ILogger<BenefitPlanService>>());
+
+        await sut.GetBenefitPlansAsync();
+
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().StartWith("/api/v1/plans");
+    }
+
     // ── Provider Service Contracts ────────────────────────────────
 
     [Fact]
