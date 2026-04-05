@@ -42,7 +42,23 @@ public class ClaimsService : IClaimsService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<ClaimDetails>($"{baseUrl}/claims/{claimId}");
+            // Try by ID first, then fall back to claim number lookup
+            var response = await _httpClient.GetAsync($"{baseUrl}/claims/{claimId}");
+            if (response.IsSuccessStatusCode)
+                return await response.Content.ReadFromJsonAsync<ClaimDetails>();
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                var fallback = await _httpClient.GetAsync($"{baseUrl}/claims/number/{claimId}");
+                if (fallback.IsSuccessStatusCode)
+                    return await fallback.Content.ReadFromJsonAsync<ClaimDetails>();
+                if (fallback.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    return null;
+                fallback.EnsureSuccessStatusCode();
+            }
+
+            response.EnsureSuccessStatusCode();
+            return null;
         }
         catch (HttpRequestException ex)
         {
