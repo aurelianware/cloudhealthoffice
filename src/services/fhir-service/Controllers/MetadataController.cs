@@ -133,6 +133,14 @@ public class MetadataController : FhirControllerBase
                             CapabilityStatement.TypeRestfulInteraction.SearchType,
                             CapabilityStatement.TypeRestfulInteraction.Create,
                         ])
+                    ],
+                    Operation =
+                    [
+                        new CapabilityStatement.OperationComponent
+                        {
+                            Name = "export",
+                            Definition = "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export",
+                        },
                     ]
                 }
             ]

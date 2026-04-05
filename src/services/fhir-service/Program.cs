@@ -73,10 +73,23 @@ builder.Services.AddHttpClient("TerminologyService", client =>
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 
+// ── Provider Verification Service (used by PAS for provider pre-check) ──────
+builder.Services.AddHttpClient("ProviderVerificationService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ProviderVerificationServiceUrl"]
+            ?? "http://provider-verification-service.cloudhealthoffice:5020/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.Timeout = TimeSpan.FromSeconds(5); // Tight timeout — PAS has 15s SLA
+});
+
 // ── Da Vinci DTR (Documentation Templates & Rules) ──────────────────────────
 builder.Services.Configure<DtrConfig>(
     builder.Configuration.GetSection("Cms0057:Dtr"));
 builder.Services.AddSingleton<IDtrService, DtrService>();
+
+// ── Bulk Data Export (Payer-to-Payer + system-level) ─────────────────────────
+builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
 
 // ── Provider Directory: typed HttpClient for NPPES API ────────────────────────
 builder.Services.AddHttpClient("NppesApi", client =>

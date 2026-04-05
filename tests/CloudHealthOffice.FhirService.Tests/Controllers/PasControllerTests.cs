@@ -43,7 +43,7 @@ public class PasControllerTests
                     Array.Empty<string>(),
                     new TimelineCompliance(true))));
 
-        // Default: mock HTTP client for auth-service
+        // Default: mock HTTP clients
         var httpClient = new HttpClient(new NoOpHandler())
         {
             BaseAddress = new Uri("http://authorization-service.test/"),
@@ -51,6 +51,14 @@ public class PasControllerTests
         _httpClientFactoryMock
             .Setup(f => f.CreateClient("AuthorizationService"))
             .Returns(httpClient);
+
+        var verificationClient = new HttpClient(new NoOpHandler())
+        {
+            BaseAddress = new Uri("http://provider-verification-service.test/"),
+        };
+        _httpClientFactoryMock
+            .Setup(f => f.CreateClient("ProviderVerificationService"))
+            .Returns(verificationClient);
 
         var config = Options.Create(new PasAutoAdjudicationConfig
         {

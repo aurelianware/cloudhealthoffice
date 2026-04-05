@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using Hl7.Fhir.Model;
 using FhirService.Models;
@@ -24,6 +25,7 @@ public class PasController : FhirControllerBase
     private readonly ICms0057ComplianceChecker _complianceChecker;
     private readonly PasAutoAdjudicationConfig _config;
     private readonly HttpClient _authServiceClient;
+    private readonly HttpClient _providerVerificationClient;
     private readonly ILogger<PasController> _logger;
 
     public PasController(
@@ -39,6 +41,7 @@ public class PasController : FhirControllerBase
         _complianceChecker = complianceChecker;
         _config = config.Value;
         _authServiceClient = httpClientFactory.CreateClient("AuthorizationService");
+        _providerVerificationClient = httpClientFactory.CreateClient("ProviderVerificationService");
         _logger = logger;
     }
 
@@ -76,6 +79,41 @@ public class PasController : FhirControllerBase
                 var issues = string.Join("; ", compliance.Issues.Select(i => i.Message));
                 _logger.LogWarning("PAS $submit compliance validation failed: {Issues}", issues);
                 return FhirBadRequest($"Claim does not meet CMS-0057-F compliance requirements: {issues}");
+            }
+
+            // 2.5 Provider verification pre-check
+            var providerNpi = ExtractProviderNpi(claim);
+            if (!string.IsNullOrEmpty(providerNpi))
+            {
+                var verificationResult = await CheckProviderVerificationAsync(providerNpi, HttpContext.RequestAborted);
+                if (verificationResult.IsExcluded)
+                {
+                    var deniedDecision = new PasDecisionResult
+                    {
+                        HasDecision = true,
+                        Decision = "denied",
+                        DenialReasonCode = "PROVIDER_EXCLUDED",
+                        DenialReason = $"Provider NPI {providerNpi} is excluded from federal healthcare programs. " +
+                                       $"Source: {verificationResult.ExclusionSource}",
+                        RuleName = "provider-exclusion-check",
+                    };
+                    var deniedBundle = _responseBuilder.BuildDeniedResponse(claim, deniedDecision);
+                    await PersistAuthorizationAsync(claim, deniedDecision);
+                    RecordMetrics(sw, "denied", "provider-exclusion-check");
+
+                    _logger.LogWarning(
+                        "PAS $submit auto-denied: excluded provider NPI {Npi}, source={Source}",
+                        SanitizeForLog(providerNpi), verificationResult.ExclusionSource);
+
+                    return Ok(deniedBundle);
+                }
+
+                if (verificationResult.IntegrityScore >= 0 && verificationResult.IntegrityScore < 40)
+                {
+                    _logger.LogWarning(
+                        "PAS $submit: provider NPI {Npi} has low integrity score {Score} ({Rating})",
+                        SanitizeForLog(providerNpi), verificationResult.IntegrityScore, verificationResult.Rating);
+                }
             }
 
             // 3. Auto-adjudicate with time budget
@@ -245,5 +283,62 @@ public class PasController : FhirControllerBase
         if (string.IsNullOrEmpty(reference))
             return true; // null/empty handled by required-field checks above
         return RelativeReferencePattern.IsMatch(reference);
+    }
+
+    // ── Provider verification ────────────────────────────────────────────────
+
+    private static string? ExtractProviderNpi(Claim claim)
+        => claim.Provider?.Identifier?.Value;
+
+    private async Task<ProviderVerificationSummary> CheckProviderVerificationAsync(
+        string npi, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _providerVerificationClient.GetAsync(
+                $"api/v1/providers/{Uri.EscapeDataString(npi)}/integrity-score?tier=Basic", ct);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ProviderIntegrityResponse>(
+                    cancellationToken: ct);
+
+                if (result != null)
+                {
+                    return new ProviderVerificationSummary
+                    {
+                        IntegrityScore = result.CompositeScore,
+                        Rating = result.Rating,
+                        IsExcluded = result.Status == "Excluded",
+                        ExclusionSource = result.Flags?
+                            .FirstOrDefault(f => f.Code == "EXCLUDED")?.Source,
+                        Status = result.Status,
+                    };
+                }
+            }
+
+            _logger.LogWarning(
+                "Provider Verification Service returned {StatusCode} for NPI {Npi} — proceeding without verification",
+                response.StatusCode, SanitizeForLog(npi));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Provider Verification Service unavailable for NPI {Npi} — proceeding without verification",
+                SanitizeForLog(npi));
+        }
+
+        // Graceful degradation: if verification service is down, proceed without blocking
+        return new ProviderVerificationSummary
+        {
+            IntegrityScore = -1,
+            Rating = "Unknown",
+            IsExcluded = false,
+            Status = "Unavailable",
+        };
     }
 }
