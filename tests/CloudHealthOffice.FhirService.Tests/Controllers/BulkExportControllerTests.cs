@@ -3,6 +3,7 @@ using FhirService.Models;
 using FhirService.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using FluentAssertions;
@@ -16,10 +17,12 @@ public class BulkExportControllerTests
 
     public BulkExportControllerTests()
     {
+        var config = new Mock<IConfiguration>();
+        config.Setup(c => c["Fhir:ServerBaseUrl"]).Returns("https://test.example.com/fhir/r4");
         var logger = new Mock<ILogger<BulkExportService>>();
         var controllerLogger = new Mock<ILogger<BulkExportController>>();
 
-        _exportService = new BulkExportService(logger.Object);
+        _exportService = new BulkExportService(config.Object, logger.Object);
         _controller = new BulkExportController(_exportService, controllerLogger.Object);
 
         var httpContext = new DefaultHttpContext();

@@ -93,8 +93,10 @@ public class PasController : FhirControllerBase
                         HasDecision = true,
                         Decision = "denied",
                         DenialReasonCode = "PROVIDER_EXCLUDED",
-                        DenialReason = $"Provider NPI {providerNpi} is excluded from federal healthcare programs. " +
-                                       $"Source: {verificationResult.ExclusionSource}",
+                        DenialReason = $"Provider NPI {providerNpi} is excluded from federal healthcare programs." +
+                                       (string.IsNullOrWhiteSpace(verificationResult.ExclusionSource)
+                                           ? string.Empty
+                                           : $" Source: {verificationResult.ExclusionSource}"),
                         RuleName = "provider-exclusion-check",
                     };
                     var deniedBundle = _responseBuilder.BuildDeniedResponse(claim, deniedDecision);
@@ -309,7 +311,7 @@ public class PasController : FhirControllerBase
                     {
                         IntegrityScore = result.CompositeScore,
                         Rating = result.Rating,
-                        IsExcluded = result.Status == "Excluded",
+                        IsExcluded = string.Equals(result.Status, "Excluded", StringComparison.OrdinalIgnoreCase),
                         ExclusionSource = result.Flags?
                             .FirstOrDefault(f => f.Code == "EXCLUDED")?.Source,
                         Status = result.Status,

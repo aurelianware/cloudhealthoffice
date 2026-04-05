@@ -6,6 +6,7 @@ namespace FhirService.Services;
 public class BulkExportService : IBulkExportService
 {
     private readonly ConcurrentDictionary<string, BulkExportJob> _jobs = new();
+    private readonly string _serverBaseUrl;
     private readonly ILogger<BulkExportService> _logger;
 
     private static readonly List<string> DefaultResourceTypes = new()
@@ -13,8 +14,10 @@ public class BulkExportService : IBulkExportService
         "Patient", "ExplanationOfBenefit", "Coverage", "Encounter",
     };
 
-    public BulkExportService(ILogger<BulkExportService> logger)
+    public BulkExportService(IConfiguration configuration, ILogger<BulkExportService> logger)
     {
+        _serverBaseUrl = configuration["Fhir:ServerBaseUrl"]
+            ?? "https://api.cloudhealthoffice.com/fhir/r4";
         _logger = logger;
     }
 
@@ -24,11 +27,11 @@ public class BulkExportService : IBulkExportService
         var jobId = $"export-{Guid.NewGuid().ToString("N")[..12]}";
 
         var resourceTypes = string.IsNullOrWhiteSpace(request.Type)
-            ? DefaultResourceTypes
+            ? DefaultResourceTypes.ToList()
             : request.Type.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
 
-        var baseUrl = "https://api.cloudhealthoffice.com/fhir/r4";
+        var baseUrl = _serverBaseUrl;
         var manifest = new BulkExportManifest
         {
             TransactionTime = DateTimeOffset.UtcNow.ToString("o"),
@@ -61,7 +64,7 @@ public class BulkExportService : IBulkExportService
 
         _logger.LogInformation(
             "Bulk export job {JobId} created for tenant {TenantId}, types={Types}",
-            jobId, tenantId, string.Join(",", resourceTypes));
+            jobId, Sanitize(tenantId), Sanitize(string.Join(",", resourceTypes)));
 
         return Task.FromResult(job);
     }
@@ -81,7 +84,12 @@ public class BulkExportService : IBulkExportService
             return Task.FromResult(false);
 
         job.Status = BulkExportStatus.Cancelled;
-        _logger.LogInformation("Bulk export job {JobId} cancelled for tenant {TenantId}", jobId, tenantId);
+        _logger.LogInformation("Bulk export job {JobId} cancelled for tenant {TenantId}", jobId, Sanitize(tenantId));
         return Task.FromResult(true);
     }
+
+    private static string Sanitize(string? value)
+        => string.IsNullOrEmpty(value) ? string.Empty
+           : value.Replace("\r", string.Empty, StringComparison.Ordinal)
+                  .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

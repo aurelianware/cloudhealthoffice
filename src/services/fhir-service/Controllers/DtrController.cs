@@ -81,7 +81,7 @@ public class DtrController : FhirControllerBase
         _logger.LogInformation("Created Questionnaire {Id} for tenant {TenantId}",
             SanitizeForLog(created.Id), SanitizeForLog(TenantId));
 
-        Response.Headers["Location"] = $"{FhirBaseUrl}/Questionnaire/{created.Id}";
+        Response.Headers["Location"] = $"{FhirBaseUrl}/Questionnaire/{Uri.EscapeDataString(created.Id)}";
         return StatusCode(201, created);
     }
 
@@ -175,7 +175,7 @@ public class DtrController : FhirControllerBase
         _logger.LogInformation("Submitted QuestionnaireResponse {Id} for tenant {TenantId}",
             SanitizeForLog(submitted.Id), SanitizeForLog(TenantId));
 
-        Response.Headers["Location"] = $"{FhirBaseUrl}/QuestionnaireResponse/{submitted.Id}";
+        Response.Headers["Location"] = $"{FhirBaseUrl}/QuestionnaireResponse/{Uri.EscapeDataString(submitted.Id)}";
         return StatusCode(201, submitted);
     }
 

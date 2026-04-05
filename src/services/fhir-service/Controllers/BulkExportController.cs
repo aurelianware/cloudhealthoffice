@@ -102,6 +102,7 @@ public class BulkExportController : FhirControllerBase
 
         // Still in progress
         Response.Headers["X-Progress"] = $"{job.ProgressPercent}% complete";
+        Response.Headers["Retry-After"] = "120";
         return StatusCode(202);
     }
 
