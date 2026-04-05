@@ -114,7 +114,7 @@
                 <MudCard Elevation="1">
                     <MudCardContent>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Approved</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Success">@_filteredAuthorizations.Count(a => a.Status == "Approved")</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Success">@_filteredAuthorizations.Count(a => a.StatusText == "Approved" || a.StatusText == "Modified")</MudText>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -122,7 +122,7 @@
                 <MudCard Elevation="1">
                     <MudCardContent>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Pending Review</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Warning">@_filteredAuthorizations.Count(a => a.Status == "Pending" || a.Status == "Review Required")</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@_filteredAuthorizations.Count(a => a.StatusText == "Pended" || a.StatusText == "InReview")</MudText>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -189,8 +189,8 @@
                         </MudTd>
                         <MudTd DataLabel="Status">
                             <MudChip Size="Size.Small"
-                                    Color="@GetStatusColor(context.Status)">
-                                @context.Status
+                                    Color="@GetStatusColor(context.StatusText)">
+                                @context.StatusText
                             </MudChip>
                         </MudTd>
                         <MudTd DataLabel="Actions">
@@ -289,16 +289,12 @@
                 a.AuthorizationId.ToLowerInvariant().Contains(id)).ToList();
         }
 
-        if (!string.IsNullOrWhiteSpace(_memberIdSearch))
-        {
-            var mid = _memberIdSearch.ToLowerInvariant();
-            _filteredAuthorizations = _filteredAuthorizations.Where(a =>
-                a.MemberName.ToLowerInvariant().Contains(mid)).ToList();
-        }
+        // Member ID filtering is handled server-side by the API call.
+        // No client-side filter needed for member ID.
 
         if (_statusFilter != "All")
         {
-            _filteredAuthorizations = _filteredAuthorizations.Where(a => a.Status == _statusFilter).ToList();
+            _filteredAuthorizations = _filteredAuthorizations.Where(a => a.StatusText == _statusFilter).ToList();
         }
     }
 
@@ -331,14 +327,17 @@
         };
     }
 
+    private double GetProcessingTimeMs(AuthorizationSummary a) =>
+        a.ReviewedDate.HasValue ? (a.ReviewedDate.Value - a.SubmittedDate).TotalMilliseconds : 0;
+
     private string GetAverageProcessingTime()
     {
-        if (!_filteredAuthorizations.Any(a => a.ProcessingTimeMs > 0))
+        if (!_filteredAuthorizations.Any(a => GetProcessingTimeMs(a) > 0))
             return "N/A";
 
         var avg = _filteredAuthorizations
-            .Where(a => a.ProcessingTimeMs > 0)
-            .Average(a => a.ProcessingTimeMs);
+            .Where(a => GetProcessingTimeMs(a) > 0)
+            .Average(a => GetProcessingTimeMs(a));
 
         if (avg < 1000)
             return $"{avg:F0}ms";

@@ -17,18 +17,19 @@
         else if (_authorization != null)
         {
             <!-- Status Header -->
-            <MudAlert Severity="@GetSeverity(_authorization.Status)" Class="mb-4">
+            <MudAlert Severity="@GetSeverity(_authorization.StatusText)" Class="mb-4">
                 <MudText Typo="Typo.h6">
-                    Status: @_authorization.Status
+                    Status: @_authorization.StatusText
                     @if (_authorization.DecisionDate.HasValue)
                     {
                         <span> • Decision made @_authorization.DecisionDate.Value.ToString("MM/dd/yyyy hh:mm tt")</span>
                     }
                 </MudText>
-                @if (_authorization.ProcessingTimeMs > 0)
+                @{ var processingTimeMs = _authorization.ReviewedDate.HasValue ? (_authorization.ReviewedDate.Value - _authorization.SubmittedDate).TotalMilliseconds : 0; }
+                @if (processingTimeMs > 0)
                 {
                     <MudText Typo="Typo.body2">
-                        Processing time: @FormatProcessingTime(_authorization.ProcessingTimeMs)
+                        Processing time: @FormatProcessingTime((int)processingTimeMs)
                     </MudText>
                 }
             </MudAlert>
@@ -250,7 +251,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Close">Close</MudButton>
-        @if (_authorization != null && _authorization.Status == "Approved")
+        @if (_authorization != null && _authorization.StatusText == "Approved")
         {
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print">
                 Print Approval
