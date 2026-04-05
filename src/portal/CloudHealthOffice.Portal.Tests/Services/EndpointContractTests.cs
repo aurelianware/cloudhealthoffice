@@ -209,7 +209,7 @@ public class EndpointContractTests
         await sut.SearchAppealsAsync(memberId: "MEM-001");
 
         handler.RecordedPaths.Should().ContainSingle()
-            .Which.Should().Contain("/api/appeals/search")
+            .Which.Should().Contain("/api/appeals?")
             .And.Contain("memberId=MEM-001");
     }
 
