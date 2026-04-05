@@ -24,7 +24,7 @@ spec:
     service: api-docs
     port: 80
   replicas:
-    min: 0
+    min: 1
     max: 3
   scalingMetric:
     requestRate:
