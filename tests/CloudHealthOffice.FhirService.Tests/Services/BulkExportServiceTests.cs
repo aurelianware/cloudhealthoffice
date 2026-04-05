@@ -1,6 +1,7 @@
 using FhirService.Models;
 using FhirService.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -12,8 +13,10 @@ public class BulkExportServiceTests
 
     public BulkExportServiceTests()
     {
+        var config = new Mock<IConfiguration>();
+        config.Setup(c => c["Fhir:ServerBaseUrl"]).Returns("https://test.example.com/fhir/r4");
         var logger = new Mock<ILogger<BulkExportService>>();
-        _service = new BulkExportService(logger.Object);
+        _service = new BulkExportService(config.Object, logger.Object);
     }
 
     [Fact]
