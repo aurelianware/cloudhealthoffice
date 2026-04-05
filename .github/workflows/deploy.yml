@@ -32,7 +32,7 @@ jobs:
       sp-id: ${{ steps.ensure-sp.outputs.sp-id }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set default secrets if not configured
         id: set-defaults

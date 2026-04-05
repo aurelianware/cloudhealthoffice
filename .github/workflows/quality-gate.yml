@@ -53,7 +53,7 @@ jobs:
       duration_ms: ${{ steps.results.outputs.duration_ms }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -142,7 +142,7 @@ jobs:
       pass_count: ${{ steps.results.outputs.pass_count }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run structural validation
         id: results
@@ -224,7 +224,7 @@ jobs:
       duration_ms: ${{ steps.results.outputs.duration_ms }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -319,7 +319,7 @@ jobs:
       duration_ms: ${{ steps.results.outputs.duration_ms }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
