@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Million Claim Challenge — Open Claims Adjudication Benchmark | Cloud Health Office</title>
+  <meta name="description" content="The Million Claim Challenge is an open-source benchmarking tool that generates 1,000,000 synthetic healthcare claims — professional, institutional, dental, and 29 edge case scenarios — with pre-computed expected adjudication outcomes. Benchmark any claims engine against a shared yardstick." />
+  <meta name="keywords" content="million claim challenge, claims adjudication benchmark, synthetic claim generator, healthcare benchmarking, CMS-0057-F testing, cloud health office benchmark, FHIR R4 compliance testing, healthcare claims testing, payer platform benchmark, claims accuracy testing, COB coordination of benefits testing, prior authorization testing, QNXT benchmark, Facets benchmark, HealthEdge benchmark, adjudication engine accuracy, healthcare QA, claims edge cases, DRG grouper testing, dental claims benchmark" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/million-claim-challenge" />
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+  <meta name="theme-color" content="#000000" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/million-claim-challenge" />
+  <meta property="og:title" content="Million Claim Challenge — Open Claims Adjudication Benchmark" />
+  <meta property="og:description" content="One million synthetic claims. Pre-computed outcomes. Zero excuses. The open benchmark for healthcare adjudication engines. Run it on ours, run it on yours." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="article:published_time" content="2026-04-05T00:00:00Z" />
+  <meta property="article:modified_time" content="2026-04-05T00:00:00Z" />
+  <meta property="article:section" content="Testing &amp; Benchmarks" />
+  <meta property="article:tag" content="claims adjudication" />
+  <meta property="article:tag" content="benchmarking" />
+  <meta property="article:tag" content="healthcare" />
+  <meta property="article:tag" content="CMS-0057-F" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Million Claim Challenge — Open Claims Adjudication Benchmark" />
+  <meta name="twitter:description" content="1,000,000 synthetic claims. 29 edge case scenarios. Pre-computed outcomes. The open benchmark for healthcare adjudication engines." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png" />
+
+  <!-- JSON-LD: TechArticle -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Million Claim Challenge — Open Claims Adjudication Benchmark",
+    "alternativeHeadline": "Benchmark Any Healthcare Claims Engine With 1 Million Synthetic Claims",
+    "description": "Generate 1,000,000 stratified synthetic healthcare claims — professional CMS-1500, institutional UB-04, dental ADA, and 29 named edge case scenarios — with pre-computed expected adjudication outcomes. Benchmark any claims engine against a shared yardstick.",
+    "url": "https://cloudhealthoffice.com/docs/million-claim-challenge",
+    "mainEntityOfPage": "https://cloudhealthoffice.com/docs/million-claim-challenge",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc.", "url": "https://github.com/aurelianware" },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Cloud Health Office",
+      "url": "https://cloudhealthoffice.com",
+      "logo": { "@type": "ImageObject", "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" }
+    },
+    "datePublished": "2026-04-05",
+    "dateModified": "2026-04-05",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      { "@type": "Thing", "name": "Claims Adjudication" },
+      { "@type": "Thing", "name": "Healthcare Benchmarking" },
+      { "@type": "Thing", "name": "CMS-0057-F Compliance" }
+    ],
+    "keywords": "million claim challenge, claims adjudication benchmark, synthetic claim generator, healthcare benchmarking, CMS-0057-F, FHIR R4",
+    "wordCount": 3600,
+    "inLanguage": "en-US",
+    "isAccessibleForFree": true,
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Million Claim Challenge", "item": "https://cloudhealthoffice.com/docs/million-claim-challenge" }
+      ]
+    }
+  }
+  </script>
+
+  <!-- JSON-LD: FAQPage for rich snippets -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is the Million Claim Challenge?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The Million Claim Challenge (MCC) is an open-source benchmarking tool that generates 1,000,000 deterministic synthetic healthcare claims with pre-computed expected adjudication outcomes. It produces a stratified corpus of professional CMS-1500 claims (60%), institutional UB-04 claims (25%), dental ADA claims (10%), and edge case claims (5%) covering 29 named scenarios including COB, retro-eligibility, newborn auto-adjudication, prior authorization, subrogation, behavioral health parity, and Medicaid subprograms."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I use the Million Claim Challenge to benchmark competitors like QNXT, Facets, or HealthEdge?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The Million Claim Challenge is open source and not coupled to Cloud Health Office. Generate a corpus, convert it to whatever intake format the other platform expects, run it, and compare results against the pre-computed answer key. The corpus, scoring methodology, and generator are all publicly available."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What edge case scenarios does the Million Claim Challenge test?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The MCC tests 29 named edge case scenarios across 7 categories: Coordination of Benefits (primary, secondary, tertiary payer, birthday rule, gender rule, Medicare Secondary Payer), Retro-Eligibility (retroactive add, termination, coverage change), Newborn (auto-adjudication, mother claim link, first 30 days), Prior Authorization (auth on file, no auth, expired auth, wrong provider, wrong procedure), Subrogation (accident-related, workers' comp, third-party liability), Behavioral Health (carve-out, carve-in, parity check), and Medicaid Subprogram (TANF, SSI, CHIP, dual eligible, spend-down)."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does the Million Claim Challenge help with CMS-0057-F compliance?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Every claim in the MCC corpus includes CMS-0057-F compliance fields: prior authorization status and expected decision, FHIR R4 resource generation tracking, and payer-to-payer exchange readiness flags. The FHIR Bundle output format maps each claim to a FHIR Claim resource for validating Patient Access and Provider Access APIs. The prior auth edge cases (auth on file, no auth, expired, wrong provider, wrong procedure) map directly to CMS enforcement test scenarios."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How long does the Million Claim Challenge take to generate 1 million claims?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The generator produces the full 1,000,000 claim corpus in under 5 minutes on an Apple M-series MacBook. It uses System.Threading.Channels to pipeline four parallel producers (one per claim type) into a single writer consumer. Generation is deterministic — the same seed produces the identical corpus on any machine."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What accuracy scores should a claims adjudication engine achieve on the Million Claim Challenge?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The MCC recommends three scoring tiers: Disposition Accuracy (Paid/Denied/Pended matching) should be 99.5% or higher, Amount Accuracy (paid amount within plus or minus $0.01) should be 98.0% or higher, and Edge Case Accuracy (disposition plus amount correct on the 50,000 edge cases) should be 95.0% or higher. Cloud Health Office publishes its own MCC scores with every release."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can the Million Claim Challenge be used for load testing and capacity planning?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The Million Claim Challenge corpus is large enough to stress-test a production-grade adjudication pipeline. Feed the million claims at pace to measure sustained throughput (claims per second), P99 latency, autoscaler behavior, and per-claim infrastructure cost. The deterministic corpus means you can repeat the load test and get directly comparable results as you tune. It answers whether accuracy holds steady or degrades under sustained volume."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I use the Million Claim Challenge for an RFP or platform evaluation?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Generate the MCC corpus and provide it to each vendor under evaluation. Ask them to run the full million claims and report back on disposition accuracy, amount accuracy, edge case accuracy, sustained throughput, and cost per claim. Because every vendor runs the same deterministic corpus, the comparison is apples-to-apples. The scoring report serves as a ready-made evaluation artifact for RFP committees, replacing subjective demo impressions with objective, reproducible data."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <!-- JSON-LD: SoftwareSourceCode for open-source discovery -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "BenchmarkClaimGenerator",
+    "description": "Open-source synthetic healthcare claim generator for the Million Claim Challenge benchmark. Produces 1,000,000 stratified claims with pre-computed expected adjudication outcomes.",
+    "codeRepository": "https://github.com/aurelianware/cloudhealthoffice",
+    "programmingLanguage": "C#",
+    "runtimePlatform": ".NET 8.0",
+    "license": "https://mariadb.com/bsl11/",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "isPartOf": {
+      "@type": "SoftwareApplication",
+      "name": "Cloud Health Office",
+      "applicationCategory": "HealthApplication"
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start (Docker)</a></li>
+              <li><a href="/docs/quickstart-kubernetes">Quick Start (Kubernetes)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#what-is-it">What Is It</a></li>
+              <li><a href="#why-we-built-it">Why We Built It</a></li>
+              <li><a href="#corpus-anatomy">Corpus Anatomy</a></li>
+              <li><a href="#edge-cases">The Edge Cases</a></li>
+              <li><a href="#expected-outcomes">Expected Outcomes</a></li>
+              <li><a href="#cms-0057f">CMS-0057-F Coverage</a></li>
+              <li><a href="#running-the-benchmark">Running the Benchmark</a></li>
+              <li><a href="#evaluating-a-platform">Platform Evaluation</a></li>
+              <li><a href="#scoring">Scoring</a></li>
+              <li><a href="#faq">FAQ</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Testing &amp; Benchmarks</div>
+            <ul>
+              <li><a href="/docs/million-claim-challenge" class="active">Million Claim Challenge</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Million Claim Challenge</span>
+        </div>
+
+        <h1>The Million Claim Challenge</h1>
+        <p class="docs-subtitle">
+          One million synthetic claims. Pre-computed expected outcomes. A single question: <em>does your adjudication engine get them all right?</em>
+        </p>
+
+        <!-- What Is It -->
+        <h2 id="what-is-it">What Is It</h2>
+
+        <p>
+          The Million Claim Challenge (MCC) is an open benchmarking tool that generates a deterministic corpus of
+          <strong>1,000,000 synthetic healthcare claims</strong> &mdash; each with a pre-computed expected adjudication
+          result. Feed them into any claims engine, compare the output to the answer key, and get a score.
+        </p>
+        <p>
+          Think of it as a unit test suite for your entire adjudication pipeline, except the test suite is a million claims long and covers professional, institutional, dental, and every edge case we could think of at 2 a.m. on a Wednesday.
+        </p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Open by design</div>
+          <p>
+            The generator, the corpus profile, and the scoring methodology are all open source.
+            We built MCC to benchmark Cloud Health Office against itself &mdash; and then decided
+            the industry could use a shared yardstick. Use it on our platform, use it on
+            someone else's, use it on that mainframe in the basement that nobody wants to touch.
+            We don't mind.
+          </p>
+        </div>
+
+        <!-- Why We Built It -->
+        <h2 id="why-we-built-it">Why We Built It</h2>
+
+        <p>
+          Healthcare claims adjudication is one of those domains where &ldquo;works on my machine&rdquo; can mean a payer
+          eats a six-figure overpayment or a member gets an incorrect denial on a surgery they already had.
+          The stakes are too high for vibes-based QA.
+        </p>
+        <p>
+          We wanted a benchmark that was:
+        </p>
+        <ul>
+          <li><strong>Comprehensive</strong> &mdash; not just the happy path, but COB birthday rule disputes, retro-eligibility swaps, newborn auto-adjudication, and Medicaid spend-down edge cases</li>
+          <li><strong>Deterministic</strong> &mdash; same seed, same corpus, every time, on every machine</li>
+          <li><strong>Fast</strong> &mdash; generates the full million on an M-series Mac in under five minutes</li>
+          <li><strong>Honest</strong> &mdash; we run it on CHO too, and we publish the results</li>
+        </ul>
+
+        <p>
+          If you're evaluating payer platforms, MCC gives you something concrete to compare against.
+          If you're building one, it tells you where your blind spots are before a real claim finds them for you.
+        </p>
+
+        <!-- Corpus Anatomy -->
+        <h2 id="corpus-anatomy">Corpus Anatomy</h2>
+
+        <p>
+          The default corpus profile generates exactly 1,000,000 claims with a stratified distribution
+          designed to mirror real-world payer volume:
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Claim Type</th><th>Count</th><th>Share</th><th>What It Tests</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Professional</strong></td>
+              <td>600,000</td>
+              <td>60%</td>
+              <td>CMS-1500 &mdash; E/M visits, modifier stacking, global surgery, bilateral, telehealth, lab/path</td>
+            </tr>
+            <tr>
+              <td><strong>Institutional</strong></td>
+              <td>250,000</td>
+              <td>25%</td>
+              <td>UB-04 &mdash; inpatient DRG, outpatient per diem, ED, observation, stop-loss outliers, SNF</td>
+            </tr>
+            <tr>
+              <td><strong>Dental</strong></td>
+              <td>100,000</td>
+              <td>10%</td>
+              <td>ADA &mdash; preventive, restorative, endodontics, periodontics, orthodontics (lifetime max), oral surgery</td>
+            </tr>
+            <tr>
+              <td><strong>Edge Cases</strong></td>
+              <td>50,000</td>
+              <td>5%</td>
+              <td>The hard stuff &mdash; 29 named scenarios across 7 categories (see below)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>
+          The 60/25/10/5 split isn't arbitrary. It roughly tracks the volume distribution of a mid-size commercial
+          payer with a dental rider and a Medicaid line of business. We tuned it so the benchmark hurts in the
+          right places.
+        </p>
+
+        <!-- Professional Breakdown -->
+        <h3>Professional Claims &mdash; 600K</h3>
+        <p>Seven sub-types, weighted by frequency in real-world claims data:</p>
+        <table>
+          <thead><tr><th>Sub-Type</th><th>Share</th><th>Key Challenge</th></tr></thead>
+          <tbody>
+            <tr><td>Office Visits (E/M 99211&ndash;99215)</td><td>40%</td><td>Basic fee schedule lookup and cost-sharing</td></tr>
+            <tr><td>Multi-Line Procedures</td><td>20%</td><td>Modifier stacking (25, 59, 76, 77, RT/LT)</td></tr>
+            <tr><td>Global Surgery Packages</td><td>10%</td><td>10/90-day global period follow-up bundling</td></tr>
+            <tr><td>Bilateral (Modifier 50)</td><td>5%</td><td>150% payment rule</td></tr>
+            <tr><td>Assistant Surgeon (80/82)</td><td>5%</td><td>Reduced fee schedule application</td></tr>
+            <tr><td>Telemedicine (POS 02)</td><td>10%</td><td>Modifier 95, place-of-service override</td></tr>
+            <tr><td>Lab/Pathology (80000&ndash;89999)</td><td>10%</td><td>Panel bundling, fee-for-service pricing</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Institutional Breakdown -->
+        <h3>Institutional Claims &mdash; 250K</h3>
+        <table>
+          <thead><tr><th>Sub-Type</th><th>Share</th><th>Key Challenge</th></tr></thead>
+          <tbody>
+            <tr><td>Inpatient with DRG</td><td>40%</td><td>DRG grouper assignment, per-case pricing</td></tr>
+            <tr><td>Outpatient Per Diem</td><td>25%</td><td>Per diem rate application</td></tr>
+            <tr><td>Emergency Department</td><td>15%</td><td>ED copay rules, prudent layperson</td></tr>
+            <tr><td>Observation Stays</td><td>10%</td><td>Outpatient status, observation-to-inpatient conversion</td></tr>
+            <tr><td>Stop-Loss / Outlier</td><td>5%</td><td>Outlier thresholds, cost-to-charge ratios</td></tr>
+            <tr><td>Skilled Nursing Facility</td><td>5%</td><td>SNF day limits, coinsurance progression</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Dental Breakdown -->
+        <h3>Dental Claims &mdash; 100K</h3>
+        <table>
+          <thead><tr><th>Category</th><th>Share</th><th>Key Challenge</th></tr></thead>
+          <tbody>
+            <tr><td>Preventive (D0100&ndash;D1999)</td><td>40%</td><td>100% coverage, frequency limitations</td></tr>
+            <tr><td>Restorative (D2000&ndash;D2999)</td><td>25%</td><td>Basic/major classification, downcoding</td></tr>
+            <tr><td>Endodontics (D3000&ndash;D3999)</td><td>10%</td><td>Tooth-specific history</td></tr>
+            <tr><td>Periodontics (D4000&ndash;D4999)</td><td>10%</td><td>Quadrant-based billing</td></tr>
+            <tr><td>Orthodontics (D8000&ndash;D8999)</td><td>10%</td><td>Lifetime maximum tracking</td></tr>
+            <tr><td>Oral Surgery (D7000&ndash;D7999)</td><td>5%</td><td>Medical/dental crossover</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Edge Cases -->
+        <h2 id="edge-cases">The Edge Cases</h2>
+
+        <p>
+          Fifty thousand claims. Twenty-nine named scenarios. Seven categories of pain. These are the claims
+          that make senior adjudication analysts reach for their coffee and say &ldquo;oh, <em>this</em> one.&rdquo;
+        </p>
+
+        <table>
+          <thead><tr><th>Category</th><th>Count</th><th>Scenarios</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Coordination of Benefits</strong></td>
+              <td>12,000</td>
+              <td>Primary, secondary, and tertiary payer; birthday rule; gender rule; Medicare Secondary Payer</td>
+            </tr>
+            <tr>
+              <td><strong>Retro-Eligibility</strong></td>
+              <td>8,000</td>
+              <td>Retroactive add, retroactive termination, retroactive coverage change</td>
+            </tr>
+            <tr>
+              <td><strong>Newborn</strong></td>
+              <td>6,000</td>
+              <td>Auto-adjudication under mother's coverage, mother-claim linkage, first 30 days</td>
+            </tr>
+            <tr>
+              <td><strong>Prior Authorization</strong></td>
+              <td>8,000</td>
+              <td>Auth on file, no auth, expired auth, wrong provider, wrong procedure</td>
+            </tr>
+            <tr>
+              <td><strong>Subrogation</strong></td>
+              <td>4,000</td>
+              <td>Accident-related, workers' comp, third-party liability</td>
+            </tr>
+            <tr>
+              <td><strong>Behavioral Health</strong></td>
+              <td>6,000</td>
+              <td>Carve-out, carve-in, mental health parity quantitative limit check</td>
+            </tr>
+            <tr>
+              <td><strong>Medicaid Subprogram</strong></td>
+              <td>6,000</td>
+              <td>TANF, SSI, CHIP, dual eligible, spend-down</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Why 5% edge cases?</div>
+          <p>
+            In production, edge cases are maybe 3&ndash;5% of volume. But they account for 40&ndash;60% of claim
+            disputes, member complaints, and late-night pages. The MCC over-indexes on them on purpose.
+            If your engine aces the 600K office visits but fumbles a COB birthday rule, you've got a problem
+            that no amount of throughput will fix.
+          </p>
+        </div>
+
+        <!-- Expected Outcomes -->
+        <h2 id="expected-outcomes">Expected Outcomes &mdash; The Answer Key</h2>
+
+        <p>
+          Every claim in the corpus ships with a pre-computed <code>ExpectedOutcome</code> that serves as
+          the answer key. This includes:
+        </p>
+
+        <table>
+          <thead><tr><th>Field</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>Disposition</code></td><td>Paid, Denied, or Pended</td></tr>
+            <tr><td><code>DenialReasonCode</code></td><td>CARC/RARC code (e.g., 197 for missing prior auth, 22 for COB)</td></tr>
+            <tr><td><code>ExpectedAllowedAmount</code></td><td>After fee schedule application</td></tr>
+            <tr><td><code>ExpectedPaidAmount</code></td><td>After member cost-sharing</td></tr>
+            <tr><td><code>ExpectedCopay</code></td><td>Member copay amount</td></tr>
+            <tr><td><code>ExpectedCoinsurance</code></td><td>Member coinsurance amount</td></tr>
+            <tr><td><code>ExpectedDeductible</code></td><td>Deductible applied</td></tr>
+            <tr><td><code>ExpectedDrgCode</code></td><td>DRG assignment (institutional only)</td></tr>
+            <tr><td><code>LineOutcomes</code></td><td>Per-line disposition, allowed, paid, and reason codes</td></tr>
+          </tbody>
+        </table>
+
+        <p>
+          Disposition matching alone catches the big bugs. Amount matching catches the subtle ones &mdash;
+          the off-by-a-penny coinsurance calculation, the deductible that applied when it shouldn't have,
+          the bilateral modifier that paid at 100% instead of 150%.
+        </p>
+
+        <!-- CMS-0057-F -->
+        <h2 id="cms-0057f">CMS-0057-F Compliance Coverage</h2>
+
+        <p>
+          Every claim in the corpus includes CMS-0057-F compliance fields, making MCC double as a
+          compliance readiness smoke test:
+        </p>
+
+        <ul>
+          <li><strong>Prior Authorization Status</strong> &mdash; every claim carries a <code>PriorAuthStatus</code> (Required, OnFile, NotRequired, Expired) and an <code>ExpectedPriorAuthDecision</code> in the answer key</li>
+          <li><strong>FHIR R4 Readiness</strong> &mdash; the <code>FhirBundleWriter</code> output format maps each claim to a FHIR Claim resource, so you can validate your Patient Access and Provider Access APIs against real-shaped data</li>
+          <li><strong>Payer-to-Payer Exchange</strong> &mdash; the <code>PayerToPayerReady</code> flag tracks whether each claim meets the data completeness requirements for P2P exchange</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Two birds, one corpus</div>
+          <p>
+            Run MCC once and you get adjudication accuracy <em>and</em> a CMS-0057-F compliance artifact inventory.
+            The prior auth edge cases alone (auth on file, no auth, expired auth, wrong provider, wrong procedure)
+            map directly to the scenarios CMS will test during enforcement.
+          </p>
+        </div>
+
+        <!-- Running the Benchmark -->
+        <h2 id="running-the-benchmark">Running the Benchmark</h2>
+
+        <h3>Quick Start &mdash; CLI</h3>
+
+        <p>The fastest way to generate a corpus is with the <code>mcc-runner</code> console tool:</p>
+
+<pre><code><span class="code-comment"># Clone the repo (if you haven't already)</span>
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
+
+<span class="code-comment"># Generate a 1,000-claim test corpus (takes &lt; 1 second)</span>
+dotnet run --project src/tools/mcc-runner -- --claims 1000
+
+<span class="code-comment"># Generate the full million (takes ~5 minutes)</span>
+dotnet run --project src/tools/mcc-runner -- --claims 1000000
+
+<span class="code-comment"># Custom output directory and FHIR format</span>
+dotnet run --project src/tools/mcc-runner -- -n 5000 -f fhir -o ./fhir-output
+
+<span class="code-comment"># Custom seed for reproducibility</span>
+dotnet run --project src/tools/mcc-runner -- -n 10000 --seed 123</code></pre>
+
+        <h3>CLI Options</h3>
+
+        <table>
+          <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>-n, --claims</code></td><td>1,000</td><td>Number of claims to generate. Distribution scales proportionally.</td></tr>
+            <tr><td><code>-s, --seed</code></td><td>42</td><td>Random seed. Same seed = same corpus, every time, any machine.</td></tr>
+            <tr><td><code>-o, --output</code></td><td><code>./mcc-output</code></td><td>Output directory. Created automatically.</td></tr>
+            <tr><td><code>-f, --format</code></td><td><code>json</code></td><td>Output format: <code>json</code> (partitioned) or <code>fhir</code> (R4 Bundles).</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-success">
+          <div class="callout-title">What the output looks like</div>
+          <p>
+            The generator creates a directory per claim type (<code>Professional/</code>, <code>Institutional/</code>,
+            <code>Dental/</code>, <code>EdgeCase/</code>) plus a <code>corpus-manifest.json</code> with generation stats.
+            Each JSON file contains a batch of fully-populated claims with expected outcomes &mdash; ready to
+            feed into any claims engine via API or batch import.
+          </p>
+        </div>
+
+        <h3>Using the Library Directly</h3>
+
+        <p>If you want to integrate corpus generation into your own tooling or test harness:</p>
+
+<pre><code><span class="code-comment">// Reference CloudHealthOffice.BenchmarkClaimGenerator</span>
+var profile = DefaultCorpusProfile.Create();     <span class="code-comment">// 1M claims, 60/25/10/5</span>
+var refData = new InMemoryReferenceDataProvider();
+var writer = new JsonCorpusWriter("/output/corpus");
+var generator = new ClaimCorpusGenerator(refData);
+
+var result = await generator.GenerateCorpusAsync(profile, writer);
+
+Console.WriteLine($"Generated {result.TotalClaims:N0} claims in {result.ElapsedTime}");
+Console.WriteLine($"  Professional: {result.ProfessionalCount:N0}");
+Console.WriteLine($"  Institutional: {result.InstitutionalCount:N0}");
+Console.WriteLine($"  Dental: {result.DentalCount:N0}");
+Console.WriteLine($"  Edge Cases: {result.EdgeCaseCount:N0}");</code></pre>
+
+        <h3>Output Formats</h3>
+
+        <table>
+          <thead><tr><th>Writer</th><th>Format</th><th>Use Case</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>JsonCorpusWriter</code></td>
+              <td>Partitioned JSON files</td>
+              <td>Primary &mdash; feed into any claims engine via API or batch import</td>
+            </tr>
+            <tr>
+              <td><code>FhirBundleWriter</code></td>
+              <td>FHIR R4 Bundle JSON</td>
+              <td>CMS-0057-F compliance testing &mdash; validate FHIR APIs directly</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Deterministic Reproducibility</h3>
+
+        <p>
+          The generator uses seeded randomness throughout. Same seed, same corpus, byte-for-byte, on
+          any machine. The default seed is <code>42</code> because of course it is.
+        </p>
+
+        <!-- Platform Evaluation -->
+        <h2 id="evaluating-a-platform">Evaluating a Payer Platform</h2>
+
+        <p>
+          If you're evaluating a claims adjudication platform &mdash; whether that's Cloud Health Office, a legacy
+          system like QNXT or Facets, or a newer entrant like HealthEdge &mdash; MCC gives you three things
+          that vendor demos and slide decks can't: <strong>accuracy under volume</strong>,
+          <strong>throughput at scale</strong>, and <strong>edge case coverage you didn't have to invent yourself</strong>.
+        </p>
+
+        <h3>Accuracy Under Volume</h3>
+        <p>
+          Any engine can adjudicate 10 claims correctly on a demo call. The question is whether it still gets the right
+          answer on claim 847,293 &mdash; a COB birthday rule dispute for a dual-eligible member with an expired prior auth.
+          MCC answers that question with data, not promises.
+        </p>
+
+        <h3>Throughput &amp; Load Testing</h3>
+        <p>
+          The corpus is large enough to stress-test a production-grade pipeline. Feed it in at pace and you'll learn
+          how the engine behaves under sustained load &mdash; where the bottlenecks are, whether accuracy degrades
+          at volume, and what the actual per-claim cost looks like when the cluster is under real pressure.
+        </p>
+
+        <table>
+          <thead><tr><th>Metric</th><th>What to Measure</th><th>Why It Matters</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Claims/Second Sustained</strong></td>
+              <td>Throughput over the full million, not a burst</td>
+              <td>Burst numbers look great in demos. Sustained throughput predicts production reality.</td>
+            </tr>
+            <tr>
+              <td><strong>P99 Latency</strong></td>
+              <td>99th percentile single-claim adjudication time</td>
+              <td>Outlier latency shows where the engine chokes &mdash; complex DRG, COB cascades, etc.</td>
+            </tr>
+            <tr>
+              <td><strong>Cost Per Claim</strong></td>
+              <td>Total infrastructure cost / 1,000,000</td>
+              <td>Vendor pricing decks quote per-member-per-month. MCC gives you the <em>real</em> per-claim compute cost.</td>
+            </tr>
+            <tr>
+              <td><strong>Accuracy at Scale</strong></td>
+              <td>Does accuracy hold steady or drift as volume increases?</td>
+              <td>Some engines cache aggressively and return stale results under load. MCC catches that.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Ask the vendor to run it</div>
+          <p>
+            When evaluating a payer platform, hand them the MCC corpus and ask for results.
+            A vendor confident in their engine will welcome the test. A vendor that declines
+            just told you something important.
+          </p>
+        </div>
+
+        <h3>RFP-Ready Artifact</h3>
+        <p>
+          The MCC scoring report &mdash; disposition accuracy, amount accuracy, edge case accuracy,
+          throughput, and cost-per-claim &mdash; is a ready-made evaluation artifact for RFP scoring committees.
+          It's objective, reproducible, and directly comparable across platforms. No more "our engine is accurate"
+          without receipts.
+        </p>
+
+        <!-- Scoring -->
+        <h2 id="scoring">Scoring</h2>
+
+        <p>Run the corpus through your adjudication engine and compare against the answer key. We recommend three tiers:</p>
+
+        <table>
+          <thead><tr><th>Metric</th><th>What It Measures</th><th>Target</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Disposition Accuracy</strong></td>
+              <td>Paid/Denied/Pended matches the expected disposition</td>
+              <td>&ge; 99.5%</td>
+            </tr>
+            <tr>
+              <td><strong>Amount Accuracy</strong></td>
+              <td>Paid amount within &plusmn;$0.01 of expected</td>
+              <td>&ge; 98.0%</td>
+            </tr>
+            <tr>
+              <td><strong>Edge Case Accuracy</strong></td>
+              <td>Disposition + amount correct on the 50K edge cases</td>
+              <td>&ge; 95.0%</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>
+          Why are the targets different? Because getting office visits right is table stakes. Getting a
+          Medicaid dual-eligible spend-down claim right while a COB birthday rule is in play &mdash;
+          that's where engines separate themselves.
+        </p>
+
+        <div class="callout callout-success">
+          <div class="callout-title">How does Cloud Health Office score?</div>
+          <p>
+            We run MCC against CHO on every release. Our current scores are published in the
+            <a href="https://github.com/aurelianware/cloudhealthoffice">repository README</a>.
+            We believe in showing our work. If we're going to build a benchmark, we should be willing
+            to stand in front of it.
+          </p>
+        </div>
+
+        <!-- FAQ -->
+        <h2 id="faq">FAQ</h2>
+
+        <h3>Can I use MCC to benchmark a competitor's platform?</h3>
+        <p>
+          Yes. That's the point. MCC is open source and not coupled to Cloud Health Office. Generate a corpus,
+          convert it to whatever intake format the other platform expects, run it, and compare.
+          We'd genuinely love to see the results.
+        </p>
+
+        <h3>Are the ICD-10 / CPT / CDT codes real?</h3>
+        <p>
+          The codes are drawn from real code ranges with simplified descriptions. <code>99213</code> is really CPT 99213
+          (established patient, low complexity). <code>D2750</code> is really CDT D2750 (porcelain fused to high noble
+          metal crown). The charges are realistic but synthetic &mdash; no PHI, no real patients, nothing to worry about.
+        </p>
+
+        <h3>Why are expected outcomes simplified in v1?</h3>
+        <p>
+          V1 uses straightforward pricing rules (e.g., allowed = charges &times; 0.65 for professional claims, DRG flat
+          rates for inpatient). This lets you validate your engine's <em>logic</em> &mdash; does it pick the right
+          disposition, apply the right cost-sharing, catch the right edge cases? V2 will plug in the real
+          BenefitEngine and FeeScheduleEngine for contract-accurate expected amounts.
+        </p>
+
+        <h3>How long does generation take?</h3>
+        <p>
+          On an Apple M-series MacBook: under 5 minutes for the full million. The generator uses
+          <code>System.Threading.Channels</code> to pipeline four parallel producers (one per claim type)
+          into a single writer consumer. It's fast enough that you won't have time to get coffee,
+          but slow enough that you can watch the progress counter and feel productive.
+        </p>
+
+        <h3>What's the claim ID format?</h3>
+        <p>
+          <code>MCC-{type}-{sequence}</code> where type is <code>P</code> (Professional),
+          <code>I</code> (Institutional), <code>D</code> (Dental), or <code>E</code> (Edge Case),
+          and sequence is a zero-padded 7-digit number. Example: <code>MCC-P-0000001</code>,
+          <code>MCC-E-0042000</code>.
+        </p>
+
+        <h3>Can I use MCC for load testing and capacity planning?</h3>
+        <p>
+          Absolutely. A million claims is a meaningful volume for stress-testing a production-grade adjudication
+          pipeline. Feed them in at pace to measure sustained throughput, P99 latency, autoscaler behavior,
+          and per-claim infrastructure cost. The deterministic corpus means you can run the same load test
+          repeatedly and get directly comparable results as you tune.
+        </p>
+
+        <h3>I'm evaluating payer platforms for an RFP. How do I use this?</h3>
+        <p>
+          Generate the corpus, hand it to each vendor under evaluation, and ask them to run it.
+          Compare disposition accuracy, amount accuracy, edge case accuracy, throughput, and cost-per-claim
+          side by side. It's the same million claims, so the comparison is apples-to-apples. We've seen
+          this approach cut weeks off payer platform evaluation cycles because it replaces subjective
+          demo impressions with objective, reproducible data.
+        </p>
+
+        <h3>Does Cloud Health Office publish its own MCC results?</h3>
+        <p>
+          Yes. We run MCC against CHO on every release and publish the results. We built the benchmark,
+          so it would be strange to hide from it. You can find our current scores in the
+          <a href="https://github.com/aurelianware/cloudhealthoffice">repository README</a>.
+        </p>
+
+        <!-- Next Steps -->
+        <div class="docs-hub-cards">
+          <a href="/docs/quickstart" class="docs-hub-card">
+            <h3>Quick Start</h3>
+            <p>Get Cloud Health Office running locally and submit your first claim in under 15 minutes.</p>
+            <span class="card-arrow">Quick start &rarr;</span>
+          </a>
+          <a href="/docs/compliance" class="docs-hub-card">
+            <h3>CMS-0057-F Compliance</h3>
+            <p>See how MCC's prior auth and FHIR output maps to the CMS-0057-F compliance requirements.</p>
+            <span class="card-arrow">Compliance guide &rarr;</span>
+          </a>
+          <a href="/docs/architecture" class="docs-hub-card">
+            <h3>Architecture</h3>
+            <p>Understand the 29-service architecture that MCC benchmarks &mdash; from claim intake to 835 ERA.</p>
+            <span class="card-arrow">Architecture &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Docs Home</div>
+          </a>
+          <a href="/docs/compliance" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">CMS-0057-F Compliance</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems.</p>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="/docs/million-claim-challenge">Million Claim Challenge</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
