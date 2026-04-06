@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CloudHealthOffice.Tools.MccRunner</RootNamespace>
+    <AssemblyName>mcc-runner</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\CloudHealthOffice.BenchmarkClaimGenerator\CloudHealthOffice.BenchmarkClaimGenerator.csproj" />
+  </ItemGroup>
+
+</Project>
