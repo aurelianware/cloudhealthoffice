@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FFS Payment Runs — Cloud Health Office</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #080c14;
+      --bg-card: #0d1219;
+      --bg-nav: #0a0e16;
+      --cyan: #00f0ff;
+      --cyan-dim: rgba(0,240,255,0.15);
+      --green: #10b981;
+      --green-light: #34d399;
+      --red: #ef4444;
+      --red-light: #f87171;
+      --yellow: #f59e0b;
+      --yellow-light: #fbbf24;
+      --purple: #a78bfa;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-dim: #64748b;
+      --border: rgba(255,255,255,0.06);
+      --border-light: rgba(255,255,255,0.10);
+    }
+
+    html { font-size: 14px; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    .sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: var(--bg-nav);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+    }
+    .sidebar-brand {
+      padding: 20px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sidebar-brand .logo-icon {
+      width: 28px; height: 28px;
+      background: var(--cyan);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 13px; color: #080c14;
+    }
+    .sidebar-brand span {
+      font-weight: 700; font-size: 13px; letter-spacing: 0.02em;
+      color: var(--text-primary);
+    }
+    .sidebar-nav { flex: 1; overflow-y: auto; padding: 12px 0; }
+    .nav-section { margin-bottom: 6px; }
+    .nav-section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-dim); padding: 8px 18px 4px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 18px; font-size: 12.5px; font-weight: 500;
+      color: var(--text-secondary); cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .nav-item:hover { color: var(--text-primary); background: rgba(255,255,255,0.03); }
+    .nav-item.active {
+      color: var(--cyan); background: var(--cyan-dim);
+      border-left-color: var(--cyan);
+    }
+    .nav-item .icon { width: 16px; text-align: center; font-size: 13px; opacity: 0.8; }
+    .sidebar-footer {
+      padding: 14px 18px;
+      border-top: 1px solid var(--border);
+      font-size: 10px; color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Main wrapper ────────────────────────────────────── */
+    .main-wrapper { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    /* ── Top bar ─────────────────────────────────────────── */
+    .topbar {
+      height: 52px; background: var(--bg-nav);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 24px; gap: 16px;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .topbar-hamburger { font-size: 18px; color: var(--text-secondary); cursor: pointer; }
+    .topbar-title { font-weight: 600; font-size: 13px; color: var(--text-primary); }
+    .topbar-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 600;
+      background: var(--cyan-dim); color: var(--cyan);
+      padding: 2px 8px; border-radius: 4px;
+    }
+    .topbar-spacer { flex: 1; }
+    .topbar-bell { font-size: 16px; color: var(--text-secondary); cursor: pointer; position: relative; }
+    .topbar-bell::after {
+      content: ''; position: absolute; top: 0; right: -2px;
+      width: 7px; height: 7px; background: var(--red); border-radius: 50%;
+    }
+    .topbar-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #080c14; cursor: pointer;
+    }
+
+    /* ── Content ──────────────────────────────────────────── */
+    .content { flex: 1; padding: 28px 32px; overflow-y: auto; }
+    .page-header { margin-bottom: 28px; }
+    .page-title { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .page-subtitle { color: var(--text-secondary); font-size: 12.5px; margin-top: 6px; line-height: 1.6; }
+
+    /* ── KPI Cards ────────────────────────────────────────── */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-bottom: 28px;
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px;
+      transition: border-color 0.2s;
+    }
+    .kpi-card:hover { border-color: var(--border-light); }
+    .kpi-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-dim); margin-bottom: 8px;
+    }
+    .kpi-value { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+    .kpi-value.cyan { color: var(--cyan); }
+    .kpi-value.green { color: var(--green-light); }
+    .kpi-value.purple { color: var(--purple); }
+    .kpi-value.primary { color: var(--text-primary); }
+    .kpi-sub {
+      font-size: 11px; color: var(--text-dim); line-height: 1.4;
+    }
+
+    /* ── Pipeline ─────────────────────────────────────────── */
+    .section-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 24px;
+      margin-bottom: 28px;
+    }
+    .section-title {
+      font-size: 14px; font-weight: 700; margin-bottom: 4px;
+    }
+    .section-subtitle {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px; color: var(--text-dim); margin-bottom: 20px;
+    }
+    .pipeline {
+      display: flex; align-items: center; gap: 0;
+    }
+    .pipeline-step {
+      flex: 1; text-align: center; padding: 14px 8px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 8px; position: relative;
+      transition: all 0.2s;
+    }
+    .pipeline-step.completed {
+      border-color: rgba(16,185,129,0.3);
+      background: rgba(16,185,129,0.06);
+    }
+    .pipeline-step.completed .step-icon { color: var(--green-light); }
+    .pipeline-step.active {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+      box-shadow: 0 0 20px rgba(0,240,255,0.08);
+    }
+    .pipeline-step.active .step-icon { color: var(--cyan); }
+    .pipeline-step.pending {
+      opacity: 0.5;
+    }
+    .step-icon { font-size: 18px; margin-bottom: 6px; }
+    .step-label {
+      font-size: 11px; font-weight: 600; color: var(--text-primary);
+    }
+    .step-status {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px; color: var(--text-dim); margin-top: 4px;
+    }
+    .pipeline-arrow {
+      color: var(--text-dim); font-size: 14px; margin: 0 4px; flex-shrink: 0;
+    }
+    .pipeline-arrow.done { color: var(--green-light); }
+    .pipeline-arrow.active-arrow { color: var(--cyan); }
+
+    /* ── Data Table ───────────────────────────────────────── */
+    .table-wrapper { overflow-x: auto; }
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 12px;
+    }
+    thead th {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-dim); text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-light);
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 12px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
+    .provider-name { font-weight: 600; color: var(--text-primary); }
+    .npi {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--text-secondary);
+    }
+    .money { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+    .money.allowed { color: var(--text-primary); }
+    .money.plan-paid { color: var(--green-light); }
+    .money.member-resp { color: var(--yellow-light); }
+    .era-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px; color: var(--purple);
+    }
+    .payment-method {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px; color: var(--text-secondary);
+    }
+    .status-badge { font-size: 12px; white-space: nowrap; }
+
+    /* ── Pagination ───────────────────────────────────────── */
+    .pagination {
+      display: flex; align-items: center; justify-content: flex-end;
+      gap: 24px; padding: 14px 12px 4px;
+      font-size: 11.5px; color: var(--text-dim);
+    }
+    .pagination select {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border-light);
+      color: var(--text-secondary); border-radius: 4px;
+      padding: 2px 6px; font-size: 11px; font-family: inherit;
+    }
+    .pagination .page-arrows {
+      display: flex; gap: 6px;
+    }
+    .pagination .page-arrows button {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text-secondary); border-radius: 4px;
+      width: 26px; height: 26px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+    }
+    .pagination .page-arrows button:hover { border-color: var(--cyan); color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+<!-- ━━ Sidebar ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo-icon">CH</div>
+    <span>Cloud Health Office</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">
+      <div class="nav-section-label">Overview</div>
+      <div class="nav-item"><span class="icon">&#9632;</span> Dashboard</div>
+      <div class="nav-item"><span class="icon">&#9881;</span> Plan Config</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Clinical</div>
+      <div class="nav-item"><span class="icon">&#9764;</span> Prior Auth</div>
+      <div class="nav-item"><span class="icon">&#128196;</span> UM Reviews</div>
+      <div class="nav-item"><span class="icon">&#128202;</span> Quality (HEDIS)</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Claims</div>
+      <div class="nav-item"><span class="icon">&#128203;</span> Adjudication</div>
+      <div class="nav-item"><span class="icon">&#128269;</span> Claims Search</div>
+      <div class="nav-item"><span class="icon">&#128736;</span> Repricing</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Financial</div>
+      <div class="nav-item active"><span class="icon">&#127974;</span> FFS Payments</div>
+      <div class="nav-item"><span class="icon">&#128176;</span> Capitation</div>
+      <div class="nav-item"><span class="icon">&#128200;</span> Risk Adjustment</div>
+      <div class="nav-item"><span class="icon">&#128209;</span> Remittance (835)</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Network</div>
+      <div class="nav-item"><span class="icon">&#128101;</span> Providers</div>
+      <div class="nav-item"><span class="icon">&#127959;</span> Facilities</div>
+      <div class="nav-item"><span class="icon">&#128196;</span> Contracts</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Interoperability</div>
+      <div class="nav-item"><span class="icon">&#128268;</span> FHIR R4 APIs</div>
+      <div class="nav-item"><span class="icon">&#128259;</span> EDI Gateway</div>
+      <div class="nav-item"><span class="icon">&#128640;</span> Bulk Export</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Admin</div>
+      <div class="nav-item"><span class="icon">&#128100;</span> Users &amp; Roles</div>
+      <div class="nav-item"><span class="icon">&#128274;</span> Audit Log</div>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    v4.2.0-sentinel &middot; &copy; 2026 Aurelianware
+  </div>
+</aside>
+
+<!-- ━━ Main ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+<div class="main-wrapper">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="topbar-hamburger">&#9776;</div>
+    <div class="topbar-title">Cloud Health Office</div>
+    <div class="topbar-badge">PAYER ADMIN</div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-bell">&#128276;</div>
+    <div class="topbar-avatar">JD</div>
+  </header>
+
+  <!-- Content -->
+  <main class="content">
+
+    <!-- Header -->
+    <div class="page-header">
+      <div class="page-title">&#127974; FFS Payment Runs</div>
+      <div class="page-subtitle">Fee-for-service claim payments &mdash; 835 ERA generation, EFT/check processing, and provider remittance</div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Weekly Run Total</div>
+        <div class="kpi-value cyan">$4,287,341</div>
+        <div class="kpi-sub">Week of Mar 31 &ndash; Apr 4, 2026</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Claims in Run</div>
+        <div class="kpi-value green">2,847</div>
+        <div class="kpi-sub">across 312 providers</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">835 ERAs Generated</div>
+        <div class="kpi-value purple">312</div>
+        <div class="kpi-sub">all providers &mdash; HIPAA 5010</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Turnaround</div>
+        <div class="kpi-value primary">4.2 days</div>
+        <div class="kpi-sub">claim receipt to payment</div>
+      </div>
+    </div>
+
+    <!-- Pipeline -->
+    <div class="section-card">
+      <div class="section-title">Payment Run &mdash; PR-2026-W14</div>
+      <div class="section-subtitle">Run initiated Apr 4, 2026 &middot; 2,847 claims &middot; 312 providers</div>
+      <div class="pipeline">
+        <div class="pipeline-step completed">
+          <div class="step-icon">&#10003;</div>
+          <div class="step-label">Claims Finalized</div>
+          <div class="step-status">2,847 claims locked</div>
+        </div>
+        <div class="pipeline-arrow done">&#10132;</div>
+        <div class="pipeline-step completed">
+          <div class="step-icon">&#10003;</div>
+          <div class="step-label">Payment Calc</div>
+          <div class="step-status">$4.29M computed</div>
+        </div>
+        <div class="pipeline-arrow done">&#10132;</div>
+        <div class="pipeline-step active">
+          <div class="step-icon">&#9881;</div>
+          <div class="step-label">835 ERA Gen</div>
+          <div class="step-status">248 / 312 complete</div>
+        </div>
+        <div class="pipeline-arrow active-arrow">&#10132;</div>
+        <div class="pipeline-step pending">
+          <div class="step-icon">&#9711;</div>
+          <div class="step-label">ACH/Check Processing</div>
+          <div class="step-status">pending</div>
+        </div>
+        <div class="pipeline-arrow">&#10132;</div>
+        <div class="pipeline-step pending">
+          <div class="step-icon">&#9711;</div>
+          <div class="step-label">Provider Settlement</div>
+          <div class="step-status">pending</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="section-card" style="padding: 0;">
+      <div style="padding: 20px 24px 12px;">
+        <div class="section-title">Provider Payment Detail</div>
+        <div class="section-subtitle">Payment run PR-2026-W14 &middot; Week ending Apr 4, 2026</div>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>NPI</th>
+              <th style="text-align:right">Claims</th>
+              <th style="text-align:right">Allowed</th>
+              <th style="text-align:right">Plan Paid</th>
+              <th style="text-align:right">Member Resp</th>
+              <th>835 ERA</th>
+              <th>Payment Method</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="provider-name">Dr. Sarah Chen, MD</td>
+              <td class="npi">1234567890</td>
+              <td style="text-align:right">47</td>
+              <td class="money allowed" style="text-align:right">$89,420.00</td>
+              <td class="money plan-paid" style="text-align:right">$71,536.00</td>
+              <td class="money member-resp" style="text-align:right">$17,884.00</td>
+              <td class="era-id">ERA-20260404-001</td>
+              <td class="payment-method">ACH (CCD+)</td>
+              <td class="status-badge">&#9989; Remitted</td>
+            </tr>
+            <tr>
+              <td class="provider-name">Texas Heart Associates</td>
+              <td class="npi">2345678901</td>
+              <td style="text-align:right">124</td>
+              <td class="money allowed" style="text-align:right">$342,180.00</td>
+              <td class="money plan-paid" style="text-align:right">$273,744.00</td>
+              <td class="money member-resp" style="text-align:right">$68,436.00</td>
+              <td class="era-id">ERA-20260404-002</td>
+              <td class="payment-method">ACH (CCD+)</td>
+              <td class="status-badge">&#9989; Remitted</td>
+            </tr>
+            <tr>
+              <td class="provider-name">Valley Orthopedics</td>
+              <td class="npi">3456789012</td>
+              <td style="text-align:right">89</td>
+              <td class="money allowed" style="text-align:right">$214,670.00</td>
+              <td class="money plan-paid" style="text-align:right">$171,736.00</td>
+              <td class="money member-resp" style="text-align:right">$42,934.00</td>
+              <td class="era-id">ERA-20260404-003</td>
+              <td class="payment-method">ACH (CCD+)</td>
+              <td class="status-badge">&#9203; Processing</td>
+            </tr>
+            <tr>
+              <td class="provider-name">Gulf Coast Radiology</td>
+              <td class="npi">4567890123</td>
+              <td style="text-align:right">156</td>
+              <td class="money allowed" style="text-align:right">$478,920.00</td>
+              <td class="money plan-paid" style="text-align:right">$383,136.00</td>
+              <td class="money member-resp" style="text-align:right">$95,784.00</td>
+              <td class="era-id">ERA-20260404-004</td>
+              <td class="payment-method">ACH (CCD+)</td>
+              <td class="status-badge">&#9203; Processing</td>
+            </tr>
+            <tr>
+              <td class="provider-name">Prairie Family Practice</td>
+              <td class="npi">5678901234</td>
+              <td style="text-align:right">63</td>
+              <td class="money allowed" style="text-align:right">$74,280.00</td>
+              <td class="money plan-paid" style="text-align:right">$59,424.00</td>
+              <td class="money member-resp" style="text-align:right">$14,856.00</td>
+              <td class="era-id">ERA-20260404-005</td>
+              <td class="payment-method">Check</td>
+              <td class="status-badge">&#128238; Mailed</td>
+            </tr>
+            <tr>
+              <td class="provider-name">Meridian Surgical Center</td>
+              <td class="npi">6789012345</td>
+              <td style="text-align:right">34</td>
+              <td class="money allowed" style="text-align:right">$892,450.00</td>
+              <td class="money plan-paid" style="text-align:right">$713,960.00</td>
+              <td class="money member-resp" style="text-align:right">$178,490.00</td>
+              <td class="era-id">ERA-20260404-006</td>
+              <td class="payment-method">ACH (CCD+)</td>
+              <td class="status-badge">&#9989; Remitted</td>
+            </tr>
+            <tr>
+              <td class="provider-name">Bluebonnet Pharmacy</td>
+              <td class="npi">7890123456</td>
+              <td style="text-align:right">412</td>
+              <td class="money allowed" style="text-align:right">$67,340.00</td>
+              <td class="money plan-paid" style="text-align:right">$53,872.00</td>
+              <td class="money member-resp" style="text-align:right">$13,468.00</td>
+              <td class="era-id">ERA-20260404-007</td>
+              <td class="payment-method">ACH (CCD+)</td>
+              <td class="status-badge">&#9989; Remitted</td>
+            </tr>
+            <tr>
+              <td class="provider-name">Lone Star Behavioral</td>
+              <td class="npi">8901234567</td>
+              <td style="text-align:right">78</td>
+              <td class="money allowed" style="text-align:right">$128,740.00</td>
+              <td class="money plan-paid" style="text-align:right">$102,992.00</td>
+              <td class="money member-resp" style="text-align:right">$25,748.00</td>
+              <td class="era-id">ERA-20260404-008</td>
+              <td class="payment-method">ACH (CCD+)</td>
+              <td class="status-badge">&#9203; Processing</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <span>Rows per page:
+          <select><option>10</option><option>25</option><option>50</option></select>
+        </span>
+        <span>1-8 of 312</span>
+        <div class="page-arrows">
+          <button>&#8249;</button>
+          <button>&#8250;</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

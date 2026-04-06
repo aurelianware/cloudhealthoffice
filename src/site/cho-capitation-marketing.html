@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1440">
+  <title>Capitation Management — Cloud Health Office</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #080c14;
+      --bg-card: #0d1219;
+      --bg-nav: #0a0e16;
+      --cyan: #00f0ff;
+      --cyan-dim: rgba(0, 240, 255, 0.12);
+      --green: #10b981;
+      --green-light: #34d399;
+      --red: #ef4444;
+      --red-light: #f87171;
+      --yellow: #f59e0b;
+      --yellow-light: #fbbf24;
+      --purple: #a78bfa;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-dim: #64748b;
+      --border: #1e293b;
+      --border-hover: #334155;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 900px;
+      width: 1440px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Top Bar ─────────────────────────────────────── */
+    .topbar {
+      height: 52px;
+      background: var(--bg-nav);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .topbar-hamburger {
+      width: 20px; height: 14px;
+      display: flex; flex-direction: column; justify-content: space-between;
+      cursor: pointer; margin-right: 16px;
+    }
+    .topbar-hamburger span {
+      display: block; height: 2px; background: var(--text-secondary); border-radius: 1px;
+    }
+    .topbar-brand {
+      font-weight: 700; font-size: 15px; color: var(--text-primary); letter-spacing: -0.3px;
+    }
+    .topbar-brand .cho-accent { color: var(--cyan); }
+    .topbar-right {
+      margin-left: auto; display: flex; align-items: center; gap: 18px;
+    }
+    .topbar-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 500;
+      background: rgba(0, 240, 255, 0.1);
+      color: var(--cyan);
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      padding: 3px 8px; border-radius: 4px;
+    }
+    .topbar-bell {
+      position: relative; cursor: pointer; color: var(--text-secondary); font-size: 18px;
+    }
+    .topbar-bell::after {
+      content: ''; position: absolute; top: -1px; right: -2px;
+      width: 7px; height: 7px; background: var(--red); border-radius: 50%;
+      border: 1.5px solid var(--bg-nav);
+    }
+    .topbar-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 600; color: var(--bg-primary); cursor: pointer;
+    }
+
+    /* ── Layout ───────────────────────────────────────── */
+    .layout {
+      display: flex; flex: 1; overflow: hidden;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────── */
+    .sidebar {
+      width: 232px;
+      background: var(--bg-nav);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+    .sidebar-section {
+      padding: 16px 12px 4px;
+    }
+    .sidebar-section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 500;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      padding: 0 8px;
+      margin-bottom: 6px;
+    }
+    .sidebar-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 13px; font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+    .sidebar-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-primary);
+    }
+    .sidebar-item.active {
+      background: var(--cyan-dim);
+      color: var(--cyan);
+    }
+    .sidebar-item .icon {
+      width: 18px; text-align: center; font-size: 14px; flex-shrink: 0;
+    }
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    /* ── Main Content ─────────────────────────────────── */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+    }
+
+    .page-title {
+      font-size: 22px; font-weight: 700; margin-bottom: 4px;
+    }
+    .page-subtitle {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; color: var(--text-dim); margin-bottom: 28px;
+    }
+
+    /* ── KPI Cards ─────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      transition: border-color 0.2s;
+    }
+    .kpi-card:hover { border-color: var(--border-hover); }
+    .kpi-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; font-weight: 500;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 10px;
+    }
+    .kpi-value {
+      font-size: 28px; font-weight: 700; margin-bottom: 6px;
+      letter-spacing: -0.5px;
+    }
+    .kpi-value.cyan { color: var(--cyan); }
+    .kpi-value.green { color: var(--green-light); }
+    .kpi-value.purple { color: var(--purple); }
+    .kpi-value.primary { color: var(--text-primary); }
+    .kpi-sub {
+      font-size: 12px; color: var(--text-dim);
+    }
+
+    /* ── Payment Run ──────────────────────────────────── */
+    .section-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 24px;
+    }
+    .section-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .section-title {
+      font-size: 14px; font-weight: 600;
+    }
+    .section-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 500;
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--yellow-light);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      padding: 3px 10px; border-radius: 4px;
+    }
+
+    .pipeline {
+      display: flex; align-items: center;
+      padding: 24px 20px;
+      gap: 0;
+    }
+    .pipeline-step {
+      display: flex; flex-direction: column; align-items: center;
+      flex: 1; position: relative;
+    }
+    .pipeline-dot {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 600;
+      margin-bottom: 8px;
+      position: relative;
+      z-index: 2;
+    }
+    .pipeline-step.done .pipeline-dot {
+      background: var(--green);
+      color: #fff;
+    }
+    .pipeline-step.current .pipeline-dot {
+      background: var(--yellow);
+      color: var(--bg-primary);
+      box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
+    }
+    .pipeline-step.pending .pipeline-dot {
+      background: var(--border);
+      color: var(--text-dim);
+    }
+    .pipeline-step-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; font-weight: 500;
+    }
+    .pipeline-step.done .pipeline-step-label { color: var(--green-light); }
+    .pipeline-step.current .pipeline-step-label { color: var(--yellow-light); }
+    .pipeline-step.pending .pipeline-step-label { color: var(--text-dim); }
+
+    .pipeline-connector {
+      flex: 1; height: 2px;
+      margin-bottom: 20px;
+    }
+    .pipeline-connector.done { background: var(--green); }
+    .pipeline-connector.pending { background: var(--border); }
+
+    /* ── Data Table ────────────────────────────────────── */
+    .table-wrapper {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead th {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 500;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 12px 16px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+      white-space: nowrap;
+    }
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .cell-provider {
+      font-weight: 600; color: var(--text-primary);
+    }
+    .cell-contract {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; color: var(--cyan);
+    }
+    .cell-mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    .cell-amount {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; font-weight: 500; color: var(--green-light);
+    }
+    .cell-method {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 3px 8px; border-radius: 4px;
+      color: var(--text-secondary);
+      display: inline-block;
+    }
+    .badge-active {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 500;
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--green-light);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 3px 10px; border-radius: 4px;
+      display: inline-block;
+    }
+
+    /* ── Pagination ────────────────────────────────────── */
+    .pagination {
+      display: flex; align-items: center; justify-content: flex-end;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      gap: 24px;
+    }
+    .pagination span {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--text-dim);
+    }
+    .pagination-arrows {
+      display: flex; gap: 4px;
+    }
+    .pagination-arrows button {
+      background: none; border: 1px solid var(--border);
+      color: var(--text-dim); border-radius: 4px;
+      width: 28px; height: 28px;
+      cursor: pointer; font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pagination-arrows button:hover {
+      border-color: var(--border-hover); color: var(--text-secondary);
+    }
+
+    /* ── Scrollbar ─────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+  </style>
+</head>
+<body>
+
+<!-- ═══ Top Bar ═══ -->
+<div class="topbar">
+  <div class="topbar-hamburger"><span></span><span></span><span></span></div>
+  <div class="topbar-brand"><span class="cho-accent">Cloud</span> Health Office</div>
+  <div class="topbar-right">
+    <div class="topbar-badge">PROD</div>
+    <div class="topbar-bell">&#128276;</div>
+    <div class="topbar-avatar">KR</div>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ═══ Sidebar ═══ -->
+  <nav class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Operations</div>
+      <a class="sidebar-item"><span class="icon">&#9632;</span> Dashboard</a>
+      <a class="sidebar-item"><span class="icon">&#128196;</span> Claims</a>
+      <a class="sidebar-item"><span class="icon">&#128203;</span> Work Queues</a>
+      <a class="sidebar-item"><span class="icon">&#128101;</span> Eligibility</a>
+      <a class="sidebar-item"><span class="icon">&#9989;</span> Authorizations</a>
+      <a class="sidebar-item"><span class="icon">&#9878;</span> Appeals</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Financial</div>
+      <a class="sidebar-item"><span class="icon">&#128181;</span> AR Ledger</a>
+      <a class="sidebar-item active"><span class="icon">&#127974;</span> Capitation</a>
+      <a class="sidebar-item"><span class="icon">&#128179;</span> Premium Billing</a>
+      <a class="sidebar-item"><span class="icon">&#128176;</span> FFS Payments</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Members &amp; Providers</div>
+      <a class="sidebar-item"><span class="icon">&#128100;</span> Members</a>
+      <a class="sidebar-item"><span class="icon">&#127973;</span> Providers</a>
+      <a class="sidebar-item"><span class="icon">&#128221;</span> Enrollment Ops</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Configuration</div>
+      <a class="sidebar-item"><span class="icon">&#128218;</span> Benefit Plans</a>
+      <a class="sidebar-item"><span class="icon">&#127970;</span> Sponsors</a>
+      <a class="sidebar-item"><span class="icon">&#128279;</span> Trading Partners</a>
+      <a class="sidebar-item"><span class="icon">&#128451;</span> Reference Data</a>
+    </div>
+    <div class="sidebar-footer">
+      The Sentinel v4.0.0<br>Cloud Health Office
+    </div>
+  </nav>
+
+  <!-- ═══ Main Content ═══ -->
+  <main class="main">
+    <div class="page-title">&#127973; Capitation Management</div>
+    <div class="page-subtitle">PMPM rate configuration, capitation payment runs, and provider settlement</div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Active Cap Contracts</div>
+        <div class="kpi-value cyan">47</div>
+        <div class="kpi-sub">across 12 provider groups</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Monthly Cap Obligation</div>
+        <div class="kpi-value green">$1,847,200</div>
+        <div class="kpi-sub">April 2026 cycle</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg PMPM Rate</div>
+        <div class="kpi-value purple">$342.18</div>
+        <div class="kpi-sub">blended across all LOBs</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Members Under Cap</div>
+        <div class="kpi-value primary">5,398</div>
+        <div class="kpi-sub">Medicaid + Commercial</div>
+      </div>
+    </div>
+
+    <!-- Payment Run Pipeline -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title">Current Payment Run &mdash; April 2026</div>
+        <div class="section-badge">Under Review</div>
+      </div>
+      <div class="pipeline">
+        <div class="pipeline-step done">
+          <div class="pipeline-dot">&#10003;</div>
+          <div class="pipeline-step-label">Generated</div>
+        </div>
+        <div class="pipeline-connector done"></div>
+        <div class="pipeline-step current">
+          <div class="pipeline-dot">2</div>
+          <div class="pipeline-step-label">Under Review</div>
+        </div>
+        <div class="pipeline-connector pending"></div>
+        <div class="pipeline-step pending">
+          <div class="pipeline-dot">3</div>
+          <div class="pipeline-step-label">Approved</div>
+        </div>
+        <div class="pipeline-connector pending"></div>
+        <div class="pipeline-step pending">
+          <div class="pipeline-dot">4</div>
+          <div class="pipeline-step-label">ACH Submitted</div>
+        </div>
+        <div class="pipeline-connector pending"></div>
+        <div class="pipeline-step pending">
+          <div class="pipeline-dot">5</div>
+          <div class="pipeline-step-label">Settled</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="section-card">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Provider Group</th>
+              <th>Contract #</th>
+              <th>Members</th>
+              <th>PMPM Rate</th>
+              <th>Monthly Amount</th>
+              <th>YTD Paid</th>
+              <th>Payment Method</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cell-provider">Valley Primary Care Network</td>
+              <td class="cell-contract">CAP-2026-001</td>
+              <td class="cell-mono">1,240</td>
+              <td class="cell-mono">$318.50</td>
+              <td class="cell-amount">$394,940</td>
+              <td class="cell-amount">$1,579,760</td>
+              <td><span class="cell-method">ACH (CCD)</span></td>
+              <td><span class="badge-active">Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-provider">Heritage Family Medicine</td>
+              <td class="cell-contract">CAP-2026-002</td>
+              <td class="cell-mono">890</td>
+              <td class="cell-mono">$356.00</td>
+              <td class="cell-amount">$316,840</td>
+              <td class="cell-amount">$1,267,360</td>
+              <td><span class="cell-method">ACH (CCD)</span></td>
+              <td><span class="badge-active">Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-provider">Lone Star Pediatrics</td>
+              <td class="cell-contract">CAP-2026-003</td>
+              <td class="cell-mono">612</td>
+              <td class="cell-mono">$289.75</td>
+              <td class="cell-amount">$177,327</td>
+              <td class="cell-amount">$709,308</td>
+              <td><span class="cell-method">ACH (CCD)</span></td>
+              <td><span class="badge-active">Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-provider">Gulf Coast OB/GYN Associates</td>
+              <td class="cell-contract">CAP-2026-004</td>
+              <td class="cell-mono">445</td>
+              <td class="cell-mono">$412.00</td>
+              <td class="cell-amount">$183,340</td>
+              <td class="cell-amount">$733,360</td>
+              <td><span class="cell-method">ACH (CCD)</span></td>
+              <td><span class="badge-active">Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-provider">Prairie Health Partners</td>
+              <td class="cell-contract">CAP-2026-005</td>
+              <td class="cell-mono">978</td>
+              <td class="cell-mono">$298.25</td>
+              <td class="cell-amount">$291,489</td>
+              <td class="cell-amount">$1,165,956</td>
+              <td><span class="cell-method">Stripe Connect</span></td>
+              <td><span class="badge-active">Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-provider">Meridian Behavioral Health</td>
+              <td class="cell-contract">CAP-2026-006</td>
+              <td class="cell-mono">533</td>
+              <td class="cell-mono">$378.90</td>
+              <td class="cell-amount">$201,954</td>
+              <td class="cell-amount">$807,816</td>
+              <td><span class="cell-method">ACH (CCD)</span></td>
+              <td><span class="badge-active">Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-provider">Bluebonnet Community Health</td>
+              <td class="cell-contract">CAP-2026-007</td>
+              <td class="cell-mono">700</td>
+              <td class="cell-mono">$402.15</td>
+              <td class="cell-amount">$281,505</td>
+              <td class="cell-amount">$1,126,020</td>
+              <td><span class="cell-method">Stripe Connect</span></td>
+              <td><span class="badge-active">Active</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <span>Rows per page: 10</span>
+        <span>1-7 of 47</span>
+        <div class="pagination-arrows">
+          <button>&#8249;</button>
+          <button>&#8250;</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>
