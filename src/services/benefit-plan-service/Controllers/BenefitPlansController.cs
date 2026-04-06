@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using BenefitPlanService.Services;
+using MongoDB.Driver;
 
 namespace BenefitPlanService.Controllers;
 
@@ -145,10 +146,126 @@ public class BenefitPlansController : ControllerBase
         return CreatedAtAction(nameof(GetPlanBenefits), new { id }, added);
     }
 
+    /// <summary>
+    /// Get deductible and out-of-pocket accumulation data for a subscriber.
+    /// Used by eligibility-service to populate the 271 response with
+    /// deductible-met / OOP-met progress.
+    /// </summary>
+    [HttpGet("{id}/accumulation/{subscriberId}")]
+    [ProducesResponseType(typeof(AccumulationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AccumulationResponse>> GetAccumulation(string id, string subscriberId)
+    {
+        var plan = await _service.GetPlanAsync(id, TenantId);
+        if (plan == null)
+        {
+            return NotFound(new { message = $"Benefit plan '{id}' not found" });
+        }
+
+        var cs = plan.CostSharing;
+
+        // Query the Accumulators collection (shared with the BenefitEngine) for this member's balances
+        var db = HttpContext.RequestServices.GetRequiredService<IMongoDatabase>();
+        var collection = db.GetCollection<AccumulatorDoc>("Accumulators");
+        var filter = Builders<AccumulatorDoc>.Filter.And(
+            Builders<AccumulatorDoc>.Filter.Eq(a => a.TenantId, TenantId),
+            Builders<AccumulatorDoc>.Filter.Eq(a => a.OwnerId, subscriberId),
+            Builders<AccumulatorDoc>.Filter.Eq(a => a.BenefitPlanId, id));
+        var doc = await collection.Find(filter).FirstOrDefaultAsync();
+
+        decimal BalanceOf(string type) =>
+            doc?.Balances?.FirstOrDefault(b => b.Type == type)?.AccumulatedAmount ?? 0m;
+
+        var individualDeductibleMet = BalanceOf("IndividualDeductible");
+        var familyDeductibleMet = BalanceOf("FamilyDeductible");
+        var individualOopMet = BalanceOf("IndividualOOP");
+        var familyOopMet = BalanceOf("FamilyOOP");
+
+        var response = new AccumulationResponse
+        {
+            Deductible = new AccumulationDeductibleInfo
+            {
+                IndividualDeductible = cs.IndividualDeductible,
+                IndividualDeductibleMet = individualDeductibleMet,
+                IndividualDeductibleRemaining = Math.Max(0, cs.IndividualDeductible - individualDeductibleMet),
+                FamilyDeductible = cs.FamilyDeductible,
+                FamilyDeductibleMet = familyDeductibleMet,
+                FamilyDeductibleRemaining = Math.Max(0, cs.FamilyDeductible - familyDeductibleMet),
+                TimePeriod = "Calendar Year"
+            },
+            OutOfPocket = new AccumulationOutOfPocketInfo
+            {
+                IndividualOOPMax = cs.IndividualOutOfPocketMax,
+                IndividualOOPMet = individualOopMet,
+                IndividualOOPRemaining = Math.Max(0, cs.IndividualOutOfPocketMax - individualOopMet),
+                FamilyOOPMax = cs.FamilyOutOfPocketMax,
+                FamilyOOPMet = familyOopMet,
+                FamilyOOPRemaining = Math.Max(0, cs.FamilyOutOfPocketMax - familyOopMet),
+                TimePeriod = "Calendar Year"
+            }
+        };
+
+        return Ok(response);
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
             return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
+}
+
+/// <summary>
+/// Response DTO matching the shape that eligibility-service AccumulationDto deserialises.
+/// Property names must match EligibilityService.Models.DeductibleInfo / OutOfPocketInfo.
+/// </summary>
+public class AccumulationResponse
+{
+    public AccumulationDeductibleInfo? Deductible { get; set; }
+    public AccumulationOutOfPocketInfo? OutOfPocket { get; set; }
+}
+
+public class AccumulationDeductibleInfo
+{
+    public decimal IndividualDeductible { get; set; }
+    public decimal IndividualDeductibleMet { get; set; }
+    public decimal IndividualDeductibleRemaining { get; set; }
+    public decimal FamilyDeductible { get; set; }
+    public decimal FamilyDeductibleMet { get; set; }
+    public decimal FamilyDeductibleRemaining { get; set; }
+    public string TimePeriod { get; set; } = "Year";
+}
+
+public class AccumulationOutOfPocketInfo
+{
+    public decimal IndividualOOPMax { get; set; }
+    public decimal IndividualOOPMet { get; set; }
+    public decimal IndividualOOPRemaining { get; set; }
+    public decimal FamilyOOPMax { get; set; }
+    public decimal FamilyOOPMet { get; set; }
+    public decimal FamilyOOPRemaining { get; set; }
+    public string TimePeriod { get; set; } = "Year";
+}
+
+/// <summary>
+/// Read-only DTO matching the existing Accumulators collection shape
+/// (seeded by seed-demo-data.js, written by BenefitEngine during adjudication).
+/// </summary>
+public class AccumulatorDoc
+{
+    public string Id { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
+    public string OwnerId { get; set; } = string.Empty;
+    public string BenefitPlanId { get; set; } = string.Empty;
+    public string PlanYear { get; set; } = string.Empty;
+    public List<AccumulatorBalanceDoc> Balances { get; set; } = new();
+}
+
+public class AccumulatorBalanceDoc
+{
+    public string Type { get; set; } = string.Empty;
+    public string NetworkTier { get; set; } = string.Empty;
+    public decimal LimitAmount { get; set; }
+    public decimal AccumulatedAmount { get; set; }
 }

@@ -145,7 +145,7 @@ function makePlanBenefits(copayPCP, copaySpec, coinsIn, coinsOut, erCopay, deduc
 }
 
 const benefitPlansData = [
-  { idx: 1, name: "Gold PPO",     type: 1,    metal: 2,          lob: 1,            indDed: 500,  famDed: 1500, indOop: 3000, famOop: 9000,  copayPCP: 30, copaySpec: 50, coinsIn: 20, coinsOut: 40, erCopay: 250, dedPCP: false },
+  { idx: 1, name: "Gold PPO",     type: 1,    metal: 2,          lob: 1,            indDed: 1500, famDed: 3000, indOop: 6000, famOop: 12000, copayPCP: 25, copaySpec: 50, coinsIn: 20, coinsOut: 40, erCopay: 150, dedPCP: false },
   { idx: 2, name: "Silver PPO",   type: 1,    metal: 1,          lob: 1,            indDed: 1000, famDed: 2500, indOop: 5000, famOop: 10000, copayPCP: 40, copaySpec: 65, coinsIn: 30, coinsOut: 50, erCopay: 350, dedPCP: false },
   { idx: 3, name: "Bronze HDHP",  type: 4,    metal: 0,          lob: 1,            indDed: 3000, famDed: 6000, indOop: 7000, famOop: 14000, copayPCP: 0,  copaySpec: 0,  coinsIn: 20, coinsOut: 40, erCopay: 0,   dedPCP: true },
   { idx: 4, name: "Platinum HMO", type: 0,    metal: 3,          lob: 1,            indDed: 250,  famDed: 500,  indOop: 2000, famOop: 4000,  copayPCP: 20, copaySpec: 40, coinsIn: 10, coinsOut: 50, erCopay: 150, dedPCP: false },
@@ -1008,6 +1008,21 @@ const accumulators = members.map(function (m) {
 
 choDb.Accumulators.insertMany(accumulators);
 print("✓ " + accumulators.length + " Accumulators");
+
+// Override member 1's accumulator with specific demo values
+// (believable partial-year utilisation for Thomas & Victoria demo)
+choDb.Accumulators.updateOne(
+  { OwnerId: makeId("mbr", 1), TenantId: TENANT_ID },
+  { $set: {
+    Balances: [
+      { Type: "IndividualDeductible", NetworkTier: "InNetwork", LimitAmount: 1500,  AccumulatedAmount: 875.00  },
+      { Type: "FamilyDeductible",     NetworkTier: "InNetwork", LimitAmount: 3000,  AccumulatedAmount: 1240.00 },
+      { Type: "IndividualOOP",        NetworkTier: "InNetwork", LimitAmount: 6000,  AccumulatedAmount: 2100.00 },
+      { Type: "FamilyOOP",            NetworkTier: "InNetwork", LimitAmount: 12000, AccumulatedAmount: 3150.00 }
+    ]
+  }}
+);
+print("✓ Member 1 accumulator overridden with demo values (ded $875/$1500, OOP $2100/$6000)");
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 10. APPEALS (12)

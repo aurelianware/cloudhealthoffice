@@ -121,9 +121,11 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             InsuranceType = b.InsuranceType,
             TimePeriodQualifier = b.TimePeriodQualifier,
             MonetaryAmount = b.MonetaryAmount,
-            Percentage = b.Percentage,
+            // Benefit plan stores coinsurance as whole number (e.g. 20 for 20%);
+            // portal renders with "P0" format which expects a fraction (0.20 → "20%")
+            Percentage = b.Percentage.HasValue ? b.Percentage.Value / 100m : null,
             Quantity = b.Quantity,
-            NetworkIndicator = b.NetworkIndicator,
+            NetworkIndicator = string.IsNullOrEmpty(b.NetworkIndicator) ? "Y" : b.NetworkIndicator,
             AuthorizationRequired = b.AuthorizationRequired ? "Y" : "N",
             BenefitBeginDate = b.BenefitBeginDate,
             BenefitEndDate = b.BenefitEndDate

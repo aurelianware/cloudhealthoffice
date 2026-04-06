@@ -2,6 +2,7 @@ using EligibilityService.Adapters;
 using EligibilityService.Models;
 using EligibilityService.Repositories;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace EligibilityService.Services;
 
@@ -392,18 +393,37 @@ public class MemberDto
     public string Gender { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// DTO for deserialising the benefit-plan-service GET /plans/{id}/benefits response.
+/// JsonPropertyName attributes map from the benefit-plan-service Benefit model field names
+/// to the eligibility-domain field names used by the adapter.
+/// </summary>
 public class BenefitDto
 {
+    [JsonPropertyName("serviceCategory")]
     public string ServiceTypeCode { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
     public string ServiceTypeName { get; set; } = string.Empty;
+
     public string CoverageLevel { get; set; } = string.Empty;
     public string InsuranceType { get; set; } = string.Empty;
     public string TimePeriodQualifier { get; set; } = string.Empty;
+
+    [JsonPropertyName("inNetworkCopay")]
     public decimal? MonetaryAmount { get; set; }
+
+    [JsonPropertyName("inNetworkCoinsurance")]
     public decimal? Percentage { get; set; }
+
+    [JsonPropertyName("visitLimit")]
     public int? Quantity { get; set; }
+
     public string NetworkIndicator { get; set; } = string.Empty;
+
+    [JsonPropertyName("priorAuthRequired")]
     public bool AuthorizationRequired { get; set; }
+
     public DateTime? BenefitBeginDate { get; set; }
     public DateTime? BenefitEndDate { get; set; }
 }
