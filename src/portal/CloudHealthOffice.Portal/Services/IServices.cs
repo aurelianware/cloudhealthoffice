@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -732,23 +733,47 @@ public class EligibilityResponse
 
 public class DeductibleInfo
 {
+    [JsonPropertyName("individualDeductible")]
     public decimal IndividualAmount { get; set; }  // EB*C*30*HLT*IND
+
+    [JsonPropertyName("individualDeductibleMet")]
     public decimal IndividualMet { get; set; }  // EB*C accumulated
+
+    [JsonPropertyName("individualDeductibleRemaining")]
     public decimal IndividualRemaining { get; set; }  // EB*D remaining
+
+    [JsonPropertyName("familyDeductible")]
     public decimal FamilyAmount { get; set; }  // EB*C*30*HLT*FAM
+
+    [JsonPropertyName("familyDeductibleMet")]
     public decimal FamilyMet { get; set; }
+
+    [JsonPropertyName("familyDeductibleRemaining")]
     public decimal FamilyRemaining { get; set; }
+
     public string TimePeriod { get; set; } = "Calendar Year";  // EB06: 29=Year
 }
 
 public class OutOfPocketInfo
 {
+    [JsonPropertyName("individualOOPMax")]
     public decimal IndividualAmount { get; set; }  // EB*G*30*HLT*IND
+
+    [JsonPropertyName("individualOOPMet")]
     public decimal IndividualMet { get; set; }
+
+    [JsonPropertyName("individualOOPRemaining")]
     public decimal IndividualRemaining { get; set; }
+
+    [JsonPropertyName("familyOOPMax")]
     public decimal FamilyAmount { get; set; }  // EB*G*30*HLT*FAM
+
+    [JsonPropertyName("familyOOPMet")]
     public decimal FamilyMet { get; set; }
+
+    [JsonPropertyName("familyOOPRemaining")]
     public decimal FamilyRemaining { get; set; }
+
     public string TimePeriod { get; set; } = "Calendar Year";
 }
 
