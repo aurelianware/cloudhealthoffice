@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>AR Balances — Cloud Health Office</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-primary: #080c14;
+    --bg-card: #0d1219;
+    --bg-card-alt: #0f1520;
+    --bg-nav: #0a0e16;
+    --border: rgba(0, 240, 255, 0.08);
+    --border-bright: rgba(0, 240, 255, 0.15);
+    --cyan: #00f0ff;
+    --cyan-dim: rgba(0, 240, 255, 0.6);
+    --green: #10b981;
+    --green-bright: #34d399;
+    --red: #ef4444;
+    --red-bright: #f87171;
+    --yellow: #f59e0b;
+    --yellow-bright: #fbbf24;
+    --purple: #a78bfa;
+    --text-primary: #e5e7eb;
+    --text-secondary: rgba(255,255,255,0.5);
+    --text-dim: rgba(255,255,255,0.3);
+  }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, sans-serif;
+    display: flex;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ===== SIDEBAR NAV ===== */
+  .sidebar {
+    width: 200px;
+    background: var(--bg-nav);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 16px 0;
+    flex-shrink: 0;
+  }
+
+  .nav-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    padding: 0 20px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .nav-group { margin-bottom: 4px; }
+
+  .nav-group-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    position: relative;
+  }
+
+  .nav-group-header .icon { font-size: 0.9rem; width: 20px; text-align: center; }
+  .nav-group-header .arrow { position: absolute; right: 16px; font-size: 0.5rem; color: var(--text-dim); }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 20px 7px 50px;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+
+  .nav-item:hover { color: var(--text-secondary); }
+  .nav-item.active {
+    color: var(--cyan);
+    background: rgba(0, 240, 255, 0.04);
+  }
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--cyan);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .nav-item .icon { font-size: 0.85rem; width: 18px; text-align: center; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 12px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .sidebar-footer span { color: var(--green-bright); }
+
+  /* ===== MAIN ===== */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-nav);
+    flex-shrink: 0;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .topbar-left .hamburger { font-size: 1.2rem; color: var(--text-secondary); cursor: pointer; }
+
+  .topbar-right { display: flex; align-items: center; gap: 16px; }
+
+  .topbar-badge {
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-size: 0.65rem;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 4px 12px;
+    border-radius: 4px;
+  }
+
+  .topbar-icon { font-size: 1.1rem; color: var(--text-secondary); cursor: pointer; position: relative; }
+  .topbar-icon .dot { position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; background: var(--red); border-radius: 50%; }
+
+  .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--cyan), var(--purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* ===== CONTENT ===== */
+  .content { padding: 28px; flex: 1; }
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+    color: var(--cyan);
+  }
+  .page-title .icon { margin-right: 8px; }
+
+  .page-sub {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+  }
+
+  /* ===== AGING BUCKETS ===== */
+  .aging-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .aging-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .aging-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .aging-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+
+  .aging-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* ===== FILTERS ===== */
+  .filter-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    align-items: center;
+  }
+
+  .filter-select {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    appearance: none;
+    cursor: pointer;
+  }
+
+  .btn-apply {
+    background: transparent;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ===== TABLE ===== */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+
+  .data-table thead th {
+    text-align: left;
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--cyan);
+    border-bottom: 1px solid var(--border-bright);
+    white-space: nowrap;
+  }
+
+  .data-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  .data-table tbody tr:hover { background: rgba(0, 240, 255, 0.02); }
+
+  .data-table td {
+    padding: 11px 14px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  .data-table td.mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+  }
+
+  .data-table td.amount { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.03em;
+  }
+  .badge-yes { background: rgba(16,185,129,0.12); color: var(--green-bright); }
+  .badge-no { background: rgba(239,68,68,0.12); color: var(--red-bright); }
+  .badge-partial { background: rgba(245,158,11,0.12); color: var(--yellow-bright); }
+
+  .action-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    cursor: pointer;
+  }
+
+  .pagination {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 16px;
+    padding: 14px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+  }
+
+  .pagination span { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
+  .page-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<nav class="sidebar">
+  <div class="nav-label">NAVIGATION</div>
+
+  <div class="nav-group">
+    <div class="nav-group-header">
+      <span class="icon">⊙</span> Operations <span class="arrow">▲</span>
+    </div>
+    <div class="nav-item"><span class="icon">▦</span> Dashboard</div>
+    <div class="nav-item"><span class="icon">📋</span> Claims</div>
+    <div class="nav-item"><span class="icon">📂</span> Work Queues</div>
+    <div class="nav-item"><span class="icon">◉</span> Eligibility</div>
+    <div class="nav-item"><span class="icon">🔐</span> Authorizations</div>
+    <div class="nav-item"><span class="icon">⚖</span> Appeals</div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-header">
+      <span class="icon">👥</span> Members &amp; Providers <span class="arrow">▼</span>
+    </div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-header">
+      <span class="icon">⚙</span> Configuration <span class="arrow">▼</span>
+    </div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-header">
+      <span class="icon">🏦</span> Finance <span class="arrow">▲</span>
+    </div>
+    <div class="nav-item active"><span class="icon">💰</span> AR Balances</div>
+    <div class="nav-item"><span class="icon">📊</span> GL Accounts</div>
+    <div class="nav-item"><span class="icon">🏥</span> Capitation</div>
+    <div class="nav-item"><span class="icon">💳</span> Premium Billing</div>
+    <div class="nav-item"><span class="icon">🏦</span> FFS Payments</div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-header">
+      <span class="icon">📈</span> Monitoring <span class="arrow">▼</span>
+    </div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-header">
+      <span class="icon">🛡</span> Admin <span class="arrow">▼</span>
+    </div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-header">
+      <span class="icon">🔧</span> Platform <span class="arrow">▼</span>
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    The Sentinel <span>v4.0 Production</span><br>
+    Source-available (BSL 1.1)<br>
+    Free for non-production use
+  </div>
+</nav>
+
+<!-- ===== MAIN ===== -->
+<div class="main">
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="hamburger">☰</span>
+      Cloud Health Office
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-badge">Cloud Health Office</div>
+      <div class="topbar-icon">🔔<div class="dot"></div></div>
+      <div class="avatar">AW</div>
+    </div>
+  </header>
+
+  <div class="content">
+    <!-- Page header -->
+    <h1 class="page-title"><span class="icon">💰</span>AR Balances</h1>
+    <p class="page-sub">Period balances, aging, and reconciliation</p>
+
+    <!-- Aging buckets -->
+    <div class="aging-row">
+      <div class="aging-card">
+        <div class="aging-icon" style="background: rgba(16,185,129,0.12);">
+          <span style="color: var(--green-bright);">✅</span>
+        </div>
+        <div>
+          <div class="aging-value" style="color: var(--green-bright);">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--cyan); margin-right:4px;">¤</span>847,293
+          </div>
+          <div class="aging-label">Current</div>
+        </div>
+      </div>
+      <div class="aging-card">
+        <div class="aging-icon" style="background: rgba(245,158,11,0.12);">
+          <span style="color: var(--yellow-bright);">⏱</span>
+        </div>
+        <div>
+          <div class="aging-value" style="color: var(--yellow-bright);">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--cyan); margin-right:4px;">¤</span>423,891
+          </div>
+          <div class="aging-label">31-60 Days</div>
+        </div>
+      </div>
+      <div class="aging-card">
+        <div class="aging-icon" style="background: rgba(245,158,11,0.12);">
+          <span style="color: var(--yellow);">⚠</span>
+        </div>
+        <div>
+          <div class="aging-value" style="color: var(--yellow);">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--cyan); margin-right:4px;">¤</span>187,412
+          </div>
+          <div class="aging-label">61-90 Days</div>
+        </div>
+      </div>
+      <div class="aging-card">
+        <div class="aging-icon" style="background: rgba(239,68,68,0.12);">
+          <span style="color: var(--red-bright);">⊘</span>
+        </div>
+        <div>
+          <div class="aging-value" style="color: var(--red-bright);">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--cyan); margin-right:4px;">¤</span>98,340
+          </div>
+          <div class="aging-label">91-120 Days</div>
+        </div>
+      </div>
+      <div class="aging-card">
+        <div class="aging-icon" style="background: rgba(239,68,68,0.15);">
+          <span style="color: var(--red);">⛔</span>
+        </div>
+        <div>
+          <div class="aging-value" style="color: var(--red);">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--cyan); margin-right:4px;">¤</span>42,187
+          </div>
+          <div class="aging-label">120+ Days</div>
+        </div>
+      </div>
+      <div class="aging-card">
+        <div class="aging-icon" style="background: rgba(0,240,255,0.08);">
+          <span style="color: var(--cyan);">§</span>
+        </div>
+        <div>
+          <div class="aging-value" style="color: var(--cyan);">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--cyan); margin-right:4px;">¤</span>1,599,123
+          </div>
+          <div class="aging-label">Total Outstanding</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-row">
+      <div class="filter-select">Account ▾</div>
+      <div class="filter-select">Reconciled ▾</div>
+      <button class="btn-apply">☰ APPLY</button>
+    </div>
+
+    <!-- Table -->
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ACCOUNT #</th>
+          <th>ACCOUNT NAME</th>
+          <th>OPENING</th>
+          <th>DEBITS</th>
+          <th>CREDITS</th>
+          <th>CLOSING</th>
+          <th>SPONSOR BALANCE</th>
+          <th>MEMBER BALANCE</th>
+          <th>RECONCILED</th>
+          <th>PERIOD</th>
+          <th>ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono" style="color:var(--cyan);">AR-1001</td>
+          <td>ACME Manufacturing</td>
+          <td class="amount">$142,380.00</td>
+          <td class="amount" style="color:var(--red-bright);">$128,450.00</td>
+          <td class="amount" style="color:var(--green-bright);">($114,290.00)</td>
+          <td class="amount" style="color:var(--text-primary); font-weight:600;">$156,540.00</td>
+          <td class="amount">$128,450.00</td>
+          <td class="amount">$28,090.00</td>
+          <td><span class="badge badge-yes">YES</span></td>
+          <td class="mono">Apr 2026</td>
+          <td><button class="action-btn">View</button></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--cyan);">AR-1002</td>
+          <td>Lone Star ISD</td>
+          <td class="amount">$412,870.50</td>
+          <td class="amount" style="color:var(--red-bright);">$412,870.50</td>
+          <td class="amount" style="color:var(--green-bright);">($398,420.00)</td>
+          <td class="amount" style="color:var(--text-primary); font-weight:600;">$427,321.00</td>
+          <td class="amount">$412,870.50</td>
+          <td class="amount">$14,450.50</td>
+          <td><span class="badge badge-yes">YES</span></td>
+          <td class="mono">Apr 2026</td>
+          <td><button class="action-btn">View</button></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--cyan);">AR-1003</td>
+          <td>Texas Municipal League</td>
+          <td class="amount">$298,142.00</td>
+          <td class="amount" style="color:var(--red-bright);">$298,142.00</td>
+          <td class="amount" style="color:var(--green-bright);">($210,800.00)</td>
+          <td class="amount" style="color:var(--yellow-bright); font-weight:600;">$385,484.00</td>
+          <td class="amount">$298,142.00</td>
+          <td class="amount">$87,342.00</td>
+          <td><span class="badge badge-partial">PARTIAL</span></td>
+          <td class="mono">Apr 2026</td>
+          <td><button class="action-btn">View</button></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--cyan);">AR-1004</td>
+          <td>Heritage Health Alliance</td>
+          <td class="amount">$167,340.00</td>
+          <td class="amount" style="color:var(--red-bright);">$167,340.00</td>
+          <td class="amount" style="color:var(--green-bright);">($167,340.00)</td>
+          <td class="amount" style="color:var(--green-bright); font-weight:600;">$167,340.00</td>
+          <td class="amount">$167,340.00</td>
+          <td class="amount">$0.00</td>
+          <td><span class="badge badge-yes">YES</span></td>
+          <td class="mono">Apr 2026</td>
+          <td><button class="action-btn">View</button></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--cyan);">AR-1005</td>
+          <td>Gulf Coast Employers</td>
+          <td class="amount">$214,890.75</td>
+          <td class="amount" style="color:var(--red-bright);">$214,890.75</td>
+          <td class="amount" style="color:var(--green-bright);">$0.00</td>
+          <td class="amount" style="color:var(--red-bright); font-weight:600;">$429,781.50</td>
+          <td class="amount">$214,890.75</td>
+          <td class="amount">$214,890.75</td>
+          <td><span class="badge badge-no">NO</span></td>
+          <td class="mono">Apr 2026</td>
+          <td><button class="action-btn">View</button></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--cyan);">AR-1006</td>
+          <td>Prairie Wind Co-op</td>
+          <td class="amount">$68,420.00</td>
+          <td class="amount" style="color:var(--red-bright);">$68,420.00</td>
+          <td class="amount" style="color:var(--green-bright);">($34,210.00)</td>
+          <td class="amount" style="color:var(--yellow-bright); font-weight:600;">$102,630.00</td>
+          <td class="amount">$68,420.00</td>
+          <td class="amount">$34,210.00</td>
+          <td><span class="badge badge-partial">PARTIAL</span></td>
+          <td class="mono">Apr 2026</td>
+          <td><button class="action-btn">View</button></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--cyan);">AR-1007</td>
+          <td>Meridian Hospital System</td>
+          <td class="amount">$742,380.00</td>
+          <td class="amount" style="color:var(--red-bright);">$742,380.00</td>
+          <td class="amount" style="color:var(--green-bright);">($742,380.00)</td>
+          <td class="amount" style="color:var(--green-bright); font-weight:600;">$742,380.00</td>
+          <td class="amount">$742,380.00</td>
+          <td class="amount">$0.00</td>
+          <td><span class="badge badge-yes">YES</span></td>
+          <td class="mono">Apr 2026</td>
+          <td><button class="action-btn">View</button></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:var(--cyan);">AR-1008</td>
+          <td>Bluebonnet Teachers</td>
+          <td class="amount">$182,187.00</td>
+          <td class="amount" style="color:var(--red-bright);">$182,187.00</td>
+          <td class="amount" style="color:var(--green-bright);">$0.00</td>
+          <td class="amount" style="color:var(--red-bright); font-weight:600;">$364,374.00</td>
+          <td class="amount">$182,187.00</td>
+          <td class="amount">$182,187.00</td>
+          <td><span class="badge badge-no">NO</span></td>
+          <td class="mono">Apr 2026</td>
+          <td><button class="action-btn">View</button></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pagination">
+      <span>Rows per page: 10 ▾</span>
+      <span>1-8 of 142</span>
+      <button class="page-btn">|&lt;</button>
+      <button class="page-btn">&lt;</button>
+      <button class="page-btn">&gt;</button>
+      <button class="page-btn">&gt;|</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -666,6 +666,280 @@
 
 <div class="divider"></div>
 
+    <!-- ===== COMPLIANCE IN ACTION — WORK QUEUES SCREENSHOT ===== -->
+    <section id="compliance-in-action" style="
+      padding: 5rem 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    ">
+      <!-- Section header -->
+      <div style="text-align: center; margin-bottom: 3rem;">
+        <p style="
+          font-family: 'JetBrains Mono', 'SF Mono', monospace;
+          font-size: 0.7rem;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(0, 240, 255, 0.6);
+          margin: 0 0 0.75rem;
+        ">Compliance in Action</p>
+
+        <h2 style="
+          font-family: 'Inter', -apple-system, sans-serif;
+          font-size: clamp(1.5rem, 3vw, 2.2rem);
+          font-weight: 700;
+          color: #e5e7eb;
+          margin: 0 0 1rem;
+          line-height: 1.2;
+        ">CMS-0057-F Isn't a Feature. It's How the Platform Works.</h2>
+
+        <p style="
+          font-family: 'Inter', -apple-system, sans-serif;
+          font-size: 1rem;
+          color: rgba(255, 255, 255, 0.45);
+          max-width: 700px;
+          margin: 0 auto;
+          line-height: 1.6;
+        ">
+          Every claim that enters Cloud Health Office is automatically routed through
+          compliance-aware work queues. Prior authorization, COB coordination, provider
+          contracting, and NCCI/MUE edits aren't bolt-on modules — they're native to
+          the adjudication pipeline.
+        </p>
+      </div>
+
+      <!-- Two-column layout: screenshot + callouts -->
+      <div style="
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 2.5rem;
+        align-items: start;
+      ">
+        <!-- Screenshot with browser chrome -->
+        <div style="
+          border-radius: 10px;
+          overflow: hidden;
+          box-shadow:
+            0 0 0 1px rgba(0, 240, 255, 0.06),
+            0 20px 60px rgba(0, 0, 0, 0.5),
+            0 0 40px rgba(0, 240, 255, 0.03);
+        ">
+          <!-- Mini browser bar -->
+          <div style="
+            background: #0d1117;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          ">
+            <div style="display: flex; gap: 5px;">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #ff5f57;"></div>
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #febc2e;"></div>
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #28c840;"></div>
+            </div>
+            <div style="
+              flex: 1;
+              background: rgba(255, 255, 255, 0.04);
+              border-radius: 4px;
+              padding: 4px 10px;
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 0.6rem;
+              color: rgba(255, 255, 255, 0.3);
+            ">portal.cloudhealthoffice.com/operations/work-queues</div>
+          </div>
+          <img
+            src="/graphics/platform-work-queues.png"
+            alt="Cloud Health Office Claims Work Queues showing compliance-driven queue routing"
+            style="width: 100%; display: block; background: #080c14;"
+            loading="lazy"
+          />
+        </div>
+
+        <!-- Queue callouts -->
+        <div style="display: flex; flex-direction: column; gap: 16px; padding-top: 8px;">
+
+          <div style="
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(0, 240, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px 20px;
+          ">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="
+                width: 8px; height: 8px; border-radius: 50%;
+                background: #f87171;
+                box-shadow: 0 0 8px rgba(248, 113, 113, 0.4);
+              "></div>
+              <span style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: #e5e7eb;
+              ">NCCI/MUE Edit Failures</span>
+            </div>
+            <p style="
+              font-family: 'Inter', sans-serif;
+              font-size: 0.8rem;
+              color: rgba(255, 255, 255, 0.4);
+              margin: 0;
+              line-height: 1.5;
+            ">
+              Claims failing National Correct Coding Initiative or Medically Unlikely Edit
+              rules are automatically flagged and routed for examiner review.
+            </p>
+          </div>
+
+          <div style="
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(0, 240, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px 20px;
+          ">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="
+                width: 8px; height: 8px; border-radius: 50%;
+                background: #fbbf24;
+                box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+              "></div>
+              <span style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: #e5e7eb;
+              ">Missing Prior Authorization</span>
+            </div>
+            <p style="
+              font-family: 'Inter', sans-serif;
+              font-size: 0.8rem;
+              color: rgba(255, 255, 255, 0.4);
+              margin: 0;
+              line-height: 1.5;
+            ">
+              CMS-0057-F requires prior auth decisioning with rationale. Claims requiring
+              authorization that lack an auth on file are pended — not denied — per
+              the PriorAuthDecisionEngine's configured pathways.
+            </p>
+          </div>
+
+          <div style="
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(0, 240, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px 20px;
+          ">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="
+                width: 8px; height: 8px; border-radius: 50%;
+                background: #00f0ff;
+                box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+              "></div>
+              <span style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: #e5e7eb;
+              ">COB / Other Payer</span>
+            </div>
+            <p style="
+              font-family: 'Inter', sans-serif;
+              font-size: 0.8rem;
+              color: rgba(255, 255, 255, 0.4);
+              margin: 0;
+              line-height: 1.5;
+            ">
+              Coordination of benefits claims with primary, secondary, or tertiary payer
+              involvement. Birthday rule, gender rule, and Medicare secondary payer
+              logic handled natively.
+            </p>
+          </div>
+
+          <div style="
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(0, 240, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px 20px;
+          ">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="
+                width: 8px; height: 8px; border-radius: 50%;
+                background: #a78bfa;
+                box-shadow: 0 0 8px rgba(167, 139, 250, 0.4);
+              "></div>
+              <span style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: #e5e7eb;
+              ">Provider Not Contracted</span>
+            </div>
+            <p style="
+              font-family: 'Inter', sans-serif;
+              font-size: 0.8rem;
+              color: rgba(255, 255, 255, 0.4);
+              margin: 0;
+              line-height: 1.5;
+            ">
+              Claims from providers without active contracts are flagged via the
+              ProviderVerificationService — checking NPPES, OIG/LEIE, SAM.gov,
+              PECOS, and CMS Open Payments for a composite integrity score.
+            </p>
+          </div>
+
+          <div style="
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(0, 240, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px 20px;
+          ">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="
+                width: 8px; height: 8px; border-radius: 50%;
+                background: #34d399;
+                box-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
+              "></div>
+              <span style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: #e5e7eb;
+              ">Medical Review</span>
+            </div>
+            <p style="
+              font-family: 'Inter', sans-serif;
+              font-size: 0.8rem;
+              color: rgba(255, 255, 255, 0.4);
+              margin: 0;
+              line-height: 1.5;
+            ">
+              Claims exceeding charge thresholds, unusual procedure combinations,
+              or requiring clinical documentation are routed for medical director
+              review with full audit trail.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Responsive fallback for mobile: stack the grid -->
+      <style>
+        @media (max-width: 900px) {
+          #compliance-in-action > div:last-of-type {
+            grid-template-columns: 1fr !important;
+          }
+        }
+        @media (max-width: 768px) {
+          #compliance-in-action {
+            padding: 3rem 1rem !important;
+          }
+          #compliance-in-action > div:last-of-type {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      </style>
+    </section>
+
+    <div class="divider"></div>
+
 <!-- ═══════════════ X12 ↔ FHIR TRANSFORMATION ═══════════════ -->
 
 <section id="x12-fhir" data-reveal>

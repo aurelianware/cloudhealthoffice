@@ -150,6 +150,108 @@
       <div class="hero-scroll-hint" aria-hidden="true">&darr; SCROLL</div>
     </section>
 
+    <!-- ===== PLATFORM PREVIEW SCREENSHOT ===== -->
+    <section id="platform-preview" style="
+      padding: 4rem 2rem 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+    ">
+      <!-- Section label -->
+      <div style="
+        display: inline-block;
+        padding: 0.25rem 1rem;
+        border: 1px solid rgba(0, 240, 255, 0.2);
+        border-radius: 100px;
+        font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+        font-size: 0.7rem;
+        letter-spacing: 0.15em;
+        color: rgba(0, 240, 255, 0.7);
+        text-transform: uppercase;
+        margin-bottom: 1.5rem;
+      ">Production Platform · v4.0.0</div>
+
+      <!-- Browser chrome mockup -->
+      <div style="
+        max-width: 1100px;
+        margin: 0 auto;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow:
+          0 0 0 1px rgba(0, 240, 255, 0.08),
+          0 25px 80px rgba(0, 0, 0, 0.6),
+          0 0 60px rgba(0, 240, 255, 0.04);
+        position: relative;
+      ">
+        <!-- Browser top bar -->
+        <div style="
+          background: #0d1117;
+          padding: 12px 16px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        ">
+          <!-- Traffic lights -->
+          <div style="display: flex; gap: 6px; margin-right: 12px;">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+          </div>
+          <!-- URL bar -->
+          <div style="
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 5px 14px;
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          ">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink: 0;">
+              <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+            </svg>
+            portal.cloudhealthoffice.com/operations/work-queues
+          </div>
+        </div>
+
+        <!-- Screenshot image -->
+        <img
+          src="/graphics/platform-work-queues.png"
+          alt="Cloud Health Office Claims Work Queues — showing NCCI/MUE Edit Failures, Missing Prior Auth, Provider Not Contracted, COB/Other Payer, and Medical Review queues with real claim data"
+          style="
+            width: 100%;
+            display: block;
+            background: #080c14;
+          "
+          loading="lazy"
+        />
+      </div>
+
+      <!-- Caption -->
+      <p style="
+        margin-top: 1.25rem;
+        font-family: 'Inter', -apple-system, sans-serif;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.35);
+        letter-spacing: 0.02em;
+      ">
+        Claims Work Queues — NCCI/MUE edits, prior auth, COB, provider contracting, and medical review.
+        <span style="color: rgba(0, 240, 255, 0.5);">The Sentinel v4.0.0</span>
+      </p>
+    </section>
+    <style>
+      @media (max-width: 768px) {
+        #platform-preview {
+          padding: 2rem 1rem 1rem !important;
+        }
+      }
+    </style>
+
     <!-- ===== TICKER ===== -->
     <div class="ticker-section" aria-label="Platform highlights">
       <div class="ticker-track" aria-hidden="true">

@@ -221,6 +221,8 @@
         <h2>Core Capabilities</h2>
         <p>Production-ready EDI processing for all major transaction types. No custom code. No vendor lock-in.</p>
         
+
+        
         <div class="capability-grid">
           <div class="capability-card">
             <h3>Real-Time Prior Authorization</h3>
@@ -300,6 +302,1098 @@
           </div>
         </div>
       </section>
+
+      <!-- ===== PRODUCT TOUR ===== -->
+      <section id="product-tour" style="
+        padding: 5rem 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+      ">
+
+        <!-- Section header -->
+        <div style="text-align: center; margin-bottom: 3rem;">
+          <p style="
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: rgba(0, 240, 255, 0.6);
+            margin: 0 0 0.75rem;
+          ">Inside the Platform</p>
+
+          <h2 style="
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: clamp(1.5rem, 3vw, 2.2rem);
+            font-weight: 700;
+            color: #e5e7eb;
+            margin: 0 0 1rem;
+            line-height: 1.2;
+          ">This Is What Production Looks Like</h2>
+
+          <p style="
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.4);
+            max-width: 660px;
+            margin: 0 auto;
+            line-height: 1.6;
+          ">
+            Not a mockup. Not a pitch deck. The Sentinel v4.0 — live claims adjudication,
+            work queues, prior authorization, eligibility verification, and CMS-0057-F compliance
+            running in production.
+          </p>
+        </div>
+
+        <!-- Tab navigation -->
+        <div id="tour-tabs" style="
+          display: flex;
+          justify-content: center;
+          gap: 4px;
+          margin-bottom: 2rem;
+        ">
+          <button onclick="showTab('dashboard')" id="tab-dashboard" class="tour-tab tour-tab-active" style="
+            padding: 10px 24px;
+            background: rgba(0, 240, 255, 0.08);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            border-radius: 6px 0 0 6px;
+            color: #00f0ff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">&#9673; OPERATIONS DASHBOARD</button>
+
+          <button onclick="showTab('queues')" id="tab-queues" class="tour-tab" style="
+            padding: 10px 24px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0;
+            color: rgba(255, 255, 255, 0.4);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">&#9673; CLAIMS WORK QUEUES</button>
+
+          <button onclick="showTab('architecture')" id="tab-architecture" class="tour-tab" style="
+            padding: 10px 24px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0 6px 6px 0;
+            color: rgba(255, 255, 255, 0.4);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">&#9673; 29 MICROSERVICES</button>
+        </div>
+
+        <!-- ===== TAB: DASHBOARD ===== -->
+        <div id="panel-dashboard" class="tour-panel" style="display: block;">
+
+          <!-- Browser chrome + screenshot -->
+          <div style="
+            max-width: 1100px;
+            margin: 0 auto 2rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow:
+              0 0 0 1px rgba(0, 240, 255, 0.06),
+              0 30px 80px rgba(0, 0, 0, 0.6),
+              0 0 60px rgba(0, 240, 255, 0.03);
+          ">
+            <!-- Browser bar -->
+            <div style="
+              background: #0d1117;
+              padding: 12px 16px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            ">
+              <div style="display: flex; gap: 6px; margin-right: 12px;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+              </div>
+              <div style="
+                flex: 1;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 6px;
+                padding: 5px 14px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.7rem;
+                color: rgba(255, 255, 255, 0.35);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                </svg>
+                portal.cloudhealthoffice.com/operations/dashboard
+              </div>
+            </div>
+            <img
+              src="/graphics/platform-dashboard.png"
+              alt="Cloud Health Office Operations Dashboard showing 14,892 total claims, 87.3% approval rate, 1.2 second average processing time, and $4.2M total plan paid"
+              style="width: 100%; display: block; background: #080c14;"
+              loading="lazy"
+            />
+          </div>
+
+          <!-- Feature callouts below screenshot -->
+          <div style="
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            max-width: 1100px;
+            margin: 0 auto;
+          ">
+            <div style="
+              background: rgba(255,255,255,0.015);
+              border: 1px solid rgba(0, 240, 255, 0.08);
+              border-radius: 8px;
+              padding: 16px 18px;
+            ">
+              <div style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 1.3rem;
+                font-weight: 700;
+                color: #00f0ff;
+                margin-bottom: 4px;
+              ">14,892</div>
+              <div style="
+                font-size: 0.72rem;
+                color: rgba(255,255,255,0.35);
+                line-height: 1.4;
+              ">Claims processed with full audit trail, real-time status tracking, and compliance metadata.</div>
+            </div>
+
+            <div style="
+              background: rgba(255,255,255,0.015);
+              border: 1px solid rgba(16, 185, 129, 0.12);
+              border-radius: 8px;
+              padding: 16px 18px;
+            ">
+              <div style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 1.3rem;
+                font-weight: 700;
+                color: #34d399;
+                margin-bottom: 4px;
+              ">87.3%</div>
+              <div style="
+                font-size: 0.72rem;
+                color: rgba(255,255,255,0.35);
+                line-height: 1.4;
+              ">Auto-adjudication rate. Denied and pended claims route to examiner work queues automatically.</div>
+            </div>
+
+            <div style="
+              background: rgba(255,255,255,0.015);
+              border: 1px solid rgba(0, 240, 255, 0.08);
+              border-radius: 8px;
+              padding: 16px 18px;
+            ">
+              <div style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 1.3rem;
+                font-weight: 700;
+                color: #e5e7eb;
+                margin-bottom: 4px;
+              ">1.2 sec</div>
+              <div style="
+                font-size: 0.72rem;
+                color: rgba(255,255,255,0.35);
+                line-height: 1.4;
+              ">Average end-to-end claim processing. Eligibility, benefit resolution, pricing, and adjudication.</div>
+            </div>
+
+            <div style="
+              background: rgba(255,255,255,0.015);
+              border: 1px solid rgba(0, 240, 255, 0.08);
+              border-radius: 8px;
+              padding: 16px 18px;
+            ">
+              <div style="
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 1.3rem;
+                font-weight: 700;
+                color: #e5e7eb;
+                margin-bottom: 4px;
+              ">$4.2M</div>
+              <div style="
+                font-size: 0.72rem;
+                color: rgba(255,255,255,0.35);
+                line-height: 1.4;
+              ">Total plan paid. Real-time financial visibility across all claim types and benefit plans.</div>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- ===== TAB: WORK QUEUES ===== -->
+        <div id="panel-queues" class="tour-panel" style="display: none;">
+
+          <div style="
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 2rem;
+            max-width: 1100px;
+            margin: 0 auto;
+            align-items: start;
+          ">
+            <!-- Screenshot -->
+            <div style="
+              border-radius: 12px;
+              overflow: hidden;
+              box-shadow:
+                0 0 0 1px rgba(0, 240, 255, 0.06),
+                0 30px 80px rgba(0, 0, 0, 0.6),
+                0 0 60px rgba(0, 240, 255, 0.03);
+            ">
+              <div style="
+                background: #0d1117;
+                padding: 12px 16px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+              ">
+                <div style="display: flex; gap: 6px; margin-right: 12px;">
+                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
+                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
+                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+                </div>
+                <div style="
+                  flex: 1;
+                  background: rgba(255, 255, 255, 0.05);
+                  border: 1px solid rgba(255, 255, 255, 0.08);
+                  border-radius: 6px;
+                  padding: 5px 14px;
+                  font-family: 'JetBrains Mono', monospace;
+                  font-size: 0.7rem;
+                  color: rgba(255, 255, 255, 0.35);
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                ">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                  </svg>
+                  portal.cloudhealthoffice.com/operations/work-queues
+                </div>
+              </div>
+              <img
+                src="/graphics/platform-work-queues.png"
+                alt="Cloud Health Office Claims Work Queues with NCCI/MUE, Prior Auth, COB, Provider, and Medical Review queues"
+                style="width: 100%; display: block; background: #080c14;"
+                loading="lazy"
+              />
+            </div>
+
+            <!-- Queue callout cards -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+
+              <div style="
+                background: rgba(255,255,255,0.015);
+                border: 1px solid rgba(248, 113, 113, 0.15);
+                border-radius: 8px;
+                padding: 14px 16px;
+              ">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">NCCI/MUE Edits</span>
+                </div>
+                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                  National Correct Coding Initiative and Medically Unlikely Edit violations
+                  caught during adjudication. Automatic unbundling detection.
+                </p>
+              </div>
+
+              <div style="
+                background: rgba(255,255,255,0.015);
+                border: 1px solid rgba(251, 191, 36, 0.15);
+                border-radius: 8px;
+                padding: 14px 16px;
+              ">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #fbbf24; box-shadow: 0 0 6px rgba(251,191,36,0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">Missing Prior Auth</span>
+                </div>
+                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                  Claims requiring authorization without an auth on file. Routed via the
+                  PriorAuthDecisionEngine — CMS-0057-F compliant decisioning with rationale.
+                </p>
+              </div>
+
+              <div style="
+                background: rgba(255,255,255,0.015);
+                border: 1px solid rgba(0, 240, 255, 0.15);
+                border-radius: 8px;
+                padding: 14px 16px;
+              ">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #00f0ff; box-shadow: 0 0 6px rgba(0,240,255,0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">COB / Other Payer</span>
+                </div>
+                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                  Coordination of benefits with primary, secondary, tertiary payers.
+                  Birthday rule, gender rule, and Medicare secondary logic built in.
+                </p>
+              </div>
+
+              <div style="
+                background: rgba(255,255,255,0.015);
+                border: 1px solid rgba(167, 139, 250, 0.15);
+                border-radius: 8px;
+                padding: 14px 16px;
+              ">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 6px rgba(167,139,250,0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">Provider Not Contracted</span>
+                </div>
+                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                  Flagged by the ProviderVerificationService — multi-source integrity
+                  checks against NPPES, OIG/LEIE, SAM.gov, PECOS, CMS Open Payments.
+                </p>
+              </div>
+
+              <div style="
+                background: rgba(255,255,255,0.015);
+                border: 1px solid rgba(52, 211, 153, 0.15);
+                border-radius: 8px;
+                padding: 14px 16px;
+              ">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">Medical Review</span>
+                </div>
+                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                  High-dollar claims, unusual procedure combinations, or clinical documentation
+                  requirements. Full examiner assignment and audit trail.
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+
+        <!-- ===== TAB: MICROSERVICES ===== -->
+        <div id="panel-architecture" class="tour-panel" style="display: none;">
+          <div style="
+            max-width: 1100px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+          ">
+
+            <!-- Service cards - all 29 -->
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">01 · ClaimsService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">837 P/I/D intake, validation, adjudication orchestration</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">02 · EligibilityService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">270/271 real-time eligibility verification</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">03 · AuthorizationService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">278 prior auth request/response, Da Vinci PAS</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">04 · ClaimStatusService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">276/277 real-time claim status inquiry</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">05 · RemittanceService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">835 ERA generation, payment reconciliation</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">06 · EnrollmentService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">834 enrollment, member lifecycle management</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">07 · ProviderService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Provider directory, credentialing, NPI management</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">08 · MemberService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Member demographics, coverage, ID card generation</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">09 · AppealsService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Appeals intake, workflow, deadline tracking</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">10 · FhirGateway</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">FHIR R4 API surface, SMART on FHIR, Da Vinci profiles</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">11 · ApiGateway (YARP)</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Reverse proxy, rate limiting, auth, routing</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">12 · NotificationService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Email, SMS, in-app alerts, deadline reminders</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">13 · AuditService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Immutable audit log, 7-year retention, PHI tracking</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">14 · ReportingService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Operational analytics, compliance dashboards, exports</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">15 · WorkQueueService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Examiner routing, assignment, pend management</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">16 · DocumentService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">275 attachments, clinical docs, blob storage</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">17 · PremiumBillingService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">NACHA/ACH generation, Stripe, EFT lifecycle</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">18 · IdentityService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Azure AD, RBAC, tenant isolation, SMART scopes</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">19 · ConfigurationService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Tenant config, benefit plans, business rules</div>
+            </div>
+            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">20 · ClearinghouseAdapter</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Availity, Change, Optum, Inovalon connectors</div>
+            </div>
+
+            <!-- Engines / specialty services -->
+            <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">21 · BenefitEngine</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">HDHP/HSA, COB waterfall, NCCI, accumulator mgmt</div>
+            </div>
+            <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">22 · FeeScheduleEngine</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">DRG, Medicaid cross-schedule, multiple procedure ranking</div>
+            </div>
+            <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">23 · PriorAuthDecisionEngine</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">TX Medicaid PA pathways, 400–600+ rules, CMS-0057-F</div>
+            </div>
+            <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">24 · TerminologyService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">SNOMED↔ICD-10↔CPT translation, plan-specific overrides</div>
+            </div>
+            <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">25 · CapitationService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">PMPM calc, NACHA ACH credit, Stripe Connect, X12 835 ERA</div>
+            </div>
+            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">26 · ProviderVerificationService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">NPPES, OIG/LEIE, SAM.gov, PECOS, composite integrity score</div>
+            </div>
+            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">27 · ComplianceChecker</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">CMS-0057-F automated validation, 72hr/7-day SLA tracking</div>
+            </div>
+            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">28 · AccumulatorService</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Redis-backed, QNXT source-of-truth pattern, reversal support</div>
+            </div>
+            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">29 · BlazorPortal</div>
+              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">The Sentinel UI — operations, config, work queues, analytics</div>
+            </div>
+
+          </div>
+
+          <!-- Summary bar -->
+          <div style="
+            max-width: 1100px;
+            margin: 1.5rem auto 0;
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            padding: 16px 0;
+            border-top: 1px solid rgba(0, 240, 255, 0.06);
+          ">
+            <div style="text-align: center;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #00f0ff;">29</div>
+              <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">MICROSERVICES</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #a78bfa;">9</div>
+              <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">CLASS LIBRARIES</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #34d399;">2,589</div>
+              <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">TESTS PASSING</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #e5e7eb;">250K+</div>
+              <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">REPO CLONES</div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Product Tour tab switching logic -->
+      <script>
+      function showTab(tab) {
+        // Hide all panels
+        document.querySelectorAll('.tour-panel').forEach(p => p.style.display = 'none');
+        // Reset all tabs
+        document.querySelectorAll('.tour-tab').forEach(t => {
+          t.style.background = 'transparent';
+          t.style.border = '1px solid rgba(255,255,255,0.1)';
+          t.style.color = 'rgba(255,255,255,0.4)';
+        });
+        // Show selected
+        document.getElementById('panel-' + tab).style.display = 'block';
+        const activeTab = document.getElementById('tab-' + tab);
+        activeTab.style.background = 'rgba(0,240,255,0.08)';
+        activeTab.style.border = '1px solid rgba(0,240,255,0.2)';
+        activeTab.style.color = '#00f0ff';
+      }
+      </script>
+
+      <!-- Product Tour responsive styles -->
+      <style>
+        @media (max-width: 900px) {
+          #panel-queues > div { grid-template-columns: 1fr !important; }
+          #panel-architecture > div { grid-template-columns: repeat(2, 1fr) !important; }
+          #tour-tabs { flex-wrap: wrap; }
+          #tour-tabs button { border-radius: 6px !important; }
+        }
+        @media (max-width: 600px) {
+          #panel-architecture > div { grid-template-columns: 1fr !important; }
+          .kpi-row-tour { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+      </style>
+
+      <!-- ===== ARCHITECTURE DIAGRAM ===== -->
+      <section id="architecture-diagram" style="
+        padding: 5rem 2rem 3rem;
+        max-width: 1200px;
+        margin: 0 auto;
+      ">
+        <div style="text-align: center; margin-bottom: 3rem;">
+          <p style="
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: rgba(0, 240, 255, 0.6);
+            margin: 0 0 0.75rem;
+          ">Platform Architecture</p>
+
+          <h2 style="
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: clamp(1.5rem, 3vw, 2.2rem);
+            font-weight: 700;
+            color: #e5e7eb;
+            margin: 0 0 1rem;
+            line-height: 1.2;
+          ">29 Microservices. One Adjudication Pipeline.</h2>
+
+          <p style="
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.4);
+            max-width: 700px;
+            margin: 0 auto;
+            line-height: 1.6;
+          ">
+            Cloud Health Office runs as a sidecar to your existing CAPS — QNXT, Facets, or HealthEdge.
+            X12 EDI in, FHIR R4 out, with full claims adjudication, prior auth, eligibility,
+            and CMS-0057-F compliance running on Azure Kubernetes Service.
+          </p>
+        </div>
+
+        <div style="
+          max-width: 1100px;
+          margin: 0 auto;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow:
+            0 0 0 1px rgba(0, 240, 255, 0.06),
+            0 30px 80px rgba(0, 0, 0, 0.6),
+            0 0 60px rgba(0, 240, 255, 0.03);
+        ">
+          <img
+            src="/graphics/platform-architecture.png"
+            alt="Cloud Health Office platform architecture — 29 C# microservices on Azure Kubernetes Service with X12 EDI intake, FHIR R4 APIs, claims adjudication pipeline, and CMS-0057-F compliance layer"
+            style="width: 100%; display: block; background: #080c14;"
+            loading="lazy"
+          />
+        </div>
+      </section>
+
+      <!-- ===== FINANCIAL OPERATIONS ===== -->
+      <section id="financial-ops" style="
+        padding: 5rem 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+      ">
+
+        <!-- Section header -->
+        <div style="text-align: center; margin-bottom: 3rem;">
+          <p style="
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: rgba(0, 240, 255, 0.6);
+            margin: 0 0 0.75rem;
+          ">Financial Operations</p>
+
+          <h2 style="
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: clamp(1.5rem, 3vw, 2.2rem);
+            font-weight: 700;
+            color: #e5e7eb;
+            margin: 0 0 1rem;
+            line-height: 1.2;
+          ">End-to-End Payer Financial Lifecycle</h2>
+
+          <p style="
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.4);
+            max-width: 720px;
+            margin: 0 auto;
+            line-height: 1.6;
+          ">
+            Accounts receivable, capitation management, premium billing with NACHA/ACH,
+            and fee-for-service payment runs with 835 ERA generation — all native to the platform.
+          </p>
+        </div>
+
+        <!-- Tab navigation -->
+        <div id="fin-tabs" style="
+          display: flex;
+          justify-content: center;
+          gap: 4px;
+          margin-bottom: 2rem;
+        ">
+          <button onclick="showFinTab('ar')" id="fin-tab-ar" class="fin-tab fin-tab-active" style="
+            padding: 10px 20px;
+            background: rgba(0, 240, 255, 0.08);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            border-radius: 6px 0 0 6px;
+            color: #00f0ff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">&#9673; AR BALANCES</button>
+
+          <button onclick="showFinTab('cap')" id="fin-tab-cap" class="fin-tab" style="
+            padding: 10px 20px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0;
+            color: rgba(255, 255, 255, 0.4);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">&#9673; CAPITATION</button>
+
+          <button onclick="showFinTab('billing')" id="fin-tab-billing" class="fin-tab" style="
+            padding: 10px 20px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0;
+            color: rgba(255, 255, 255, 0.4);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">&#9673; PREMIUM BILLING</button>
+
+          <button onclick="showFinTab('ffs')" id="fin-tab-ffs" class="fin-tab" style="
+            padding: 10px 20px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0 6px 6px 0;
+            color: rgba(255, 255, 255, 0.4);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">&#9673; FFS PAYMENTS</button>
+        </div>
+
+        <!-- ===== FIN TAB: AR BALANCES ===== -->
+        <div id="fin-panel-ar" class="fin-panel" style="display: block;">
+          <div style="
+            max-width: 1100px;
+            margin: 0 auto 2rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow:
+              0 0 0 1px rgba(0, 240, 255, 0.06),
+              0 30px 80px rgba(0, 0, 0, 0.6),
+              0 0 60px rgba(0, 240, 255, 0.03);
+          ">
+            <div style="
+              background: #0d1117;
+              padding: 12px 16px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            ">
+              <div style="display: flex; gap: 6px; margin-right: 12px;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+              </div>
+              <div style="
+                flex: 1;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 6px;
+                padding: 5px 14px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.7rem;
+                color: rgba(255, 255, 255, 0.35);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                </svg>
+                portal.cloudhealthoffice.com/finance/ar-balances
+              </div>
+            </div>
+            <img
+              src="/graphics/platform-balances.png"
+              alt="Cloud Health Office AR Balances — period balances, aging buckets (Current through 120+ Days), sponsor and member balances, reconciliation status across 142 accounts"
+              style="width: 100%; display: block; background: #080c14;"
+              loading="lazy"
+            />
+          </div>
+
+          <!-- AR KPI callouts -->
+          <div style="
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            max-width: 1100px;
+            margin: 0 auto;
+          ">
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #00f0ff; margin-bottom: 4px;">$1.6M</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Total outstanding AR across 142 sponsor group accounts with full aging visibility.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #34d399; margin-bottom: 4px;">53%</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Current (0-30 days). Healthy AR aging with automated reconciliation and period close.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">Debit/Credit</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Double-entry GL integration. Opening + debits - credits = closing balance every period.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">Split View</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Sponsor balance vs. member balance breakout with one-click reconciliation.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== FIN TAB: CAPITATION ===== -->
+        <div id="fin-panel-cap" class="fin-panel" style="display: none;">
+          <div style="
+            max-width: 1100px;
+            margin: 0 auto 2rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow:
+              0 0 0 1px rgba(0, 240, 255, 0.06),
+              0 30px 80px rgba(0, 0, 0, 0.6),
+              0 0 60px rgba(0, 240, 255, 0.03);
+          ">
+            <div style="
+              background: #0d1117;
+              padding: 12px 16px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            ">
+              <div style="display: flex; gap: 6px; margin-right: 12px;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+              </div>
+              <div style="
+                flex: 1;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 6px;
+                padding: 5px 14px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.7rem;
+                color: rgba(255, 255, 255, 0.35);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                </svg>
+                portal.cloudhealthoffice.com/finance/capitation
+              </div>
+            </div>
+            <img
+              src="/graphics/platform-capitation.png"
+              alt="Cloud Health Office Capitation Management — 47 active contracts, $1.8M monthly obligation, PMPM rate configuration, ACH payment runs across 5,398 capitated members"
+              style="width: 100%; display: block; background: #080c14;"
+              loading="lazy"
+            />
+          </div>
+
+          <!-- Capitation KPI callouts -->
+          <div style="
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            max-width: 1100px;
+            margin: 0 auto;
+          ">
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #00f0ff; margin-bottom: 4px;">47</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Active capitation contracts across 12 provider groups with PMPM rate management.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #34d399; margin-bottom: 4px;">$1.85M</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Monthly capitation obligation. Payment run pipeline: Generated → Review → ACH → Settled.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(167, 139, 250, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #a78bfa; margin-bottom: 4px;">$342</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Blended average PMPM rate. Per-contract rate configuration with LOB segmentation.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">5,398</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Members under capitation. Medicaid and commercial LOBs with automatic enrollment sync.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== FIN TAB: PREMIUM BILLING ===== -->
+        <div id="fin-panel-billing" class="fin-panel" style="display: none;">
+          <div style="
+            max-width: 1100px;
+            margin: 0 auto 2rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow:
+              0 0 0 1px rgba(0, 240, 255, 0.06),
+              0 30px 80px rgba(0, 0, 0, 0.6),
+              0 0 60px rgba(0, 240, 255, 0.03);
+          ">
+            <div style="
+              background: #0d1117;
+              padding: 12px 16px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            ">
+              <div style="display: flex; gap: 6px; margin-right: 12px;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+              </div>
+              <div style="
+                flex: 1;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 6px;
+                padding: 5px 14px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.7rem;
+                color: rgba(255, 255, 255, 0.35);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                </svg>
+                portal.cloudhealthoffice.com/finance/premium-billing
+              </div>
+            </div>
+            <img
+              src="/graphics/platform-premium-billing.png"
+              alt="Cloud Health Office Premium Billing — $3.2M billed for April 2026, 89.9% collection rate, NACHA/ACH file generation, EFT lifecycle tracking across 142 sponsor groups"
+              style="width: 100%; display: block; background: #080c14;"
+              loading="lazy"
+            />
+          </div>
+
+          <!-- Premium Billing KPI callouts -->
+          <div style="
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            max-width: 1100px;
+            margin: 0 auto;
+          ">
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #00f0ff; margin-bottom: 4px;">$3.2M</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Monthly premium billed across 142 sponsor groups with automated invoice generation.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #34d399; margin-bottom: 4px;">89.9%</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Collection rate. NACHA/ACH CCD format with Stripe ACH integration and webhook processing.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(245, 158, 11, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #fbbf24; margin-bottom: 4px;">$187K</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Pending EFT drafts. Full lifecycle tracking: Pending → Settled → Returned with audit trail.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">5-Step</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Billing cycle pipeline. Invoice → Send → Payment Window → ACH Processing → Reconciliation.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== FIN TAB: FFS PAYMENTS ===== -->
+        <div id="fin-panel-ffs" class="fin-panel" style="display: none;">
+          <div style="
+            max-width: 1100px;
+            margin: 0 auto 2rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow:
+              0 0 0 1px rgba(0, 240, 255, 0.06),
+              0 30px 80px rgba(0, 0, 0, 0.6),
+              0 0 60px rgba(0, 240, 255, 0.03);
+          ">
+            <div style="
+              background: #0d1117;
+              padding: 12px 16px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            ">
+              <div style="display: flex; gap: 6px; margin-right: 12px;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+              </div>
+              <div style="
+                flex: 1;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 6px;
+                padding: 5px 14px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.7rem;
+                color: rgba(255, 255, 255, 0.35);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                </svg>
+                portal.cloudhealthoffice.com/finance/ffs-payments
+              </div>
+            </div>
+            <img
+              src="/graphics/platform-ffs-payments.png"
+              alt="Cloud Health Office FFS Payment Runs — $4.3M weekly run, 2,847 claims across 312 providers, 835 ERA generation, ACH/check processing with provider remittance"
+              style="width: 100%; display: block; background: #080c14;"
+              loading="lazy"
+            />
+          </div>
+
+          <!-- FFS KPI callouts -->
+          <div style="
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            max-width: 1100px;
+            margin: 0 auto;
+          ">
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #00f0ff; margin-bottom: 4px;">$4.3M</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Weekly FFS payment run. Claims finalized, priced, and settled with full 835 ERA remittance.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #34d399; margin-bottom: 4px;">2,847</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Claims in run across 312 providers. Allowed, plan paid, and member responsibility breakout.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(167, 139, 250, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #a78bfa; margin-bottom: 4px;">312</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">835 ERAs generated. HIPAA 5010 compliant remittance advice per provider per payment run.</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">4.2 days</div>
+              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Average turnaround from claim receipt to provider payment. ACH CCD+ or check disbursement.</div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Financial Operations tab switching -->
+      <script>
+      function showFinTab(tab) {
+        document.querySelectorAll('.fin-panel').forEach(p => p.style.display = 'none');
+        document.querySelectorAll('.fin-tab').forEach(t => {
+          t.style.background = 'transparent';
+          t.style.border = '1px solid rgba(255,255,255,0.1)';
+          t.style.color = 'rgba(255,255,255,0.4)';
+        });
+        document.getElementById('fin-panel-' + tab).style.display = 'block';
+        const activeTab = document.getElementById('fin-tab-' + tab);
+        activeTab.style.background = 'rgba(0,240,255,0.08)';
+        activeTab.style.border = '1px solid rgba(0,240,255,0.2)';
+        activeTab.style.color = '#00f0ff';
+      }
+      </script>
+
+      <!-- Financial Operations responsive styles -->
+      <style>
+        @media (max-width: 900px) {
+          #fin-tabs { flex-wrap: wrap; }
+          #fin-tabs button { border-radius: 6px !important; }
+        }
+        @media (max-width: 600px) {
+          #financial-ops .fin-panel div[style*="grid-template-columns: repeat(4"] {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+      </style>
 
       <section class="cta-section">
         <h2>See How It Works With Your Core System</h2>
