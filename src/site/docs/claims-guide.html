@@ -241,9 +241,10 @@
           <li><strong>Queue for Adjudication</strong> &mdash; Claim record placed on the adjudication queue for auto-adjudication processing</li>
         </ol>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: claim ingestion flow -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-claims-ingestion-flow.svg" alt="Claim ingestion flow: SFTP/API receipt, X12 parsing, 999 acknowledgment, internal claim creation" />
+          <figcaption><strong>Claim ingestion flow</strong></figcaption>
+          <p><code>SFTP / API Receipt</code> &rarr; <code>X12 837 Parsing</code> &rarr; <code>Syntax Validation</code> &rarr; <code>999 Acknowledgment</code> &rarr; <code>Internal Claim Record</code> &rarr; <code>Adjudication Queue</code></p>
         </figure>
 
         <h3 id="duplicate-detection">Duplicate Detection</h3>
@@ -268,9 +269,10 @@
 
         <p>The auto-adjudication pipeline processes each claim through ten sequential steps. If any step fails, the claim is either denied or pended to a work queue for manual review. The goal is to auto-adjudicate 85&ndash;95% of clean claims without human intervention.</p>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: auto-adjudication pipeline -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-claims-adjudication-pipeline.svg" alt="10-step auto-adjudication pipeline from eligibility through final disposition" />
+          <figcaption><strong>10-step auto-adjudication pipeline</strong></figcaption>
+          <p><code>1. Eligibility</code> &rarr; <code>2. Coverage</code> &rarr; <code>3. Auth Check</code> &rarr; <code>4. Coordination of Benefits</code> &rarr; <code>5. Duplicate Detection</code> &rarr; <code>6. Clinical Edits</code> &rarr; <code>7. Fee Schedule</code> &rarr; <code>8. Cost Sharing</code> &rarr; <code>9. Payment Calculation</code> &rarr; <code>10. Disposition</code> (Pay | Deny | Pend)</p>
         </figure>
 
         <h3 id="pipeline-step-1">Step 1: Eligibility Verification</h3>

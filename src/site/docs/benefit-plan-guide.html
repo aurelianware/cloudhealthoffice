@@ -186,9 +186,10 @@
 
         <p>Benefit plans in Cloud Health Office follow a three-level hierarchy that mirrors how health plans are designed in the real world: the <strong>Plan</strong> is the top-level product, which contains one or more <strong>Benefit Packages</strong> (sets of covered services), each offered at multiple <strong>Coverage Tiers</strong> (employee-only, family, etc.).</p>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: benefit plan hierarchy -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-benefit-plan-hierarchy.svg" alt="Benefit plan hierarchy: Plan, Benefit Package, Coverage Tier relationships" />
+          <figcaption><strong>Benefit plan hierarchy</strong></figcaption>
+          <p><code>Plan</code> (top-level product) &rarr; one or more <code>Benefit Packages</code> (covered service sets) &rarr; multiple <code>Coverage Tiers</code> (Employee Only, Employee + Spouse, Employee + Children, Family)</p>
         </figure>
 
         <h3 id="plan-fields">Plan Fields</h3>
@@ -314,9 +315,10 @@
           </tbody>
         </table>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: cost sharing rule evaluation flow -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-benefit-cost-sharing-flow.svg" alt="Cost sharing rule evaluation flow: service category lookup, network tier check, deductible application, copay/coinsurance calculation" />
+          <figcaption><strong>Cost sharing rule evaluation flow</strong></figcaption>
+          <p><code>Service Category Lookup</code> &rarr; <code>Network Tier Check</code> (in-network / out-of-network / OON emergency) &rarr; <code>Deductible Application</code> (has member met deductible?) &rarr; <code>Copay / Coinsurance Calculation</code> &rarr; <code>Out-of-Pocket Maximum Check</code></p>
         </figure>
 
         <h3 id="hdhp-hsa">HDHP / HSA-Specific Rules</h3>
@@ -586,9 +588,9 @@
 
         <!-- Prev / Next -->
         <div class="docs-pager">
-          <a href="/docs/provider-verification-guide">
+          <a href="/docs/finance-guide">
             <div class="pager-label">&larr; Previous</div>
-            <div class="pager-title">Provider Verification</div>
+            <div class="pager-title">Finance Guide</div>
           </a>
           <a href="/docs/claims-guide" class="next">
             <div class="pager-label">Next &rarr;</div>

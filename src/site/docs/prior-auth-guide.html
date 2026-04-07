@@ -243,9 +243,10 @@
           <li><strong>Itiliti PA-Check integration</strong> &mdash; Cloud Health Office integrates with Itiliti&rsquo;s PA-Check service for real-time auth-required determination across multiple payers, enabling providers to check auth requirements before submission</li>
         </ul>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: prior auth request flow -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-prior-auth-request-flow.svg" alt="Prior auth request flow: receipt, validation, auth-required check, decision engine routing" />
+          <figcaption><strong>Prior authorization request flow</strong></figcaption>
+          <p><code>Submission</code> (X12 278 / FHIR PAS / Portal) &rarr; <code>Validation</code> (member, provider, plan) &rarr; <code>Auth-Required Check</code> (service category + LOB + POS) &rarr; <code>Decision Engine</code> (auto-approve / auto-deny / pend / request info)</p>
         </figure>
 
         <!-- ============================= -->
@@ -280,9 +281,10 @@
           </li>
         </ul>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: decision engine rule evaluation -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-prior-auth-decision-engine.svg" alt="Decision engine rule evaluation: condition matching, priority ordering, action determination" />
+          <figcaption><strong>Decision engine rule evaluation</strong></figcaption>
+          <p><code>Condition Set</code> (diagnosis + procedure + POS + LOB + demographics) &rarr; <code>Priority-Ordered Rule Match</code> &rarr; <code>Action</code>: Auto-Approve | Auto-Deny | Pend for Clinical Review | Request Additional Info</p>
         </figure>
 
         <h3 id="pathway-capacity">Pathway Capacity</h3>

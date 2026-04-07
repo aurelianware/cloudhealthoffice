@@ -220,9 +220,11 @@
           </tbody>
         </table>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: fee schedule rate lookup -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-fee-schedule-rate-lookup.svg" alt="Fee schedule rate lookup: procedure code + modifier + POS + date of service → rate" />
+          <figcaption><strong>Fee schedule rate lookup</strong></figcaption>
+          <p><code>Procedure Code</code> + <code>Modifier</code> + <code>Place of Service</code> + <code>Date of Service</code> &rarr; <code>Matched Rate</code></p>
+          <p>Example: <code>99213</code> + <code>26</code> + <code>11</code> + <code>2026-03-15</code> &rarr; <code>$92.33</code></p>
         </figure>
 
         <h3 id="geographic-adjustments">Geographic Locality Adjustments</h3>
@@ -376,9 +378,10 @@
           <li><strong>Percent of Billed (Fallback)</strong> &mdash; A configurable percentage of the provider&rsquo;s billed amount (e.g., 80% of billed charges). Used only when no other rate source is available.</li>
         </ol>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: cross-schedule resolution hierarchy -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-fee-schedule-resolution.svg" alt="Cross-schedule resolution hierarchy: contract → plan → Medicaid → Medicare → % of billed" />
+          <figcaption><strong>Cross-schedule resolution hierarchy</strong></figcaption>
+          <p><code>Contract Rate</code> (provider-specific) &rarr; <code>Plan Fee Schedule</code> (LOB-level) &rarr; <code>Medicaid State Fee Schedule</code> &rarr; <code>Medicare RBRVS</code> (GPCI-adjusted) &rarr; <code>% of Billed Charges</code> (fallback)</p>
         </figure>
 
         <h3 id="medicaid-cross-schedule">Medicaid Cross-Schedule</h3>

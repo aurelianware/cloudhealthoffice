@@ -213,9 +213,10 @@
           <li><strong>834 Acknowledgment</strong> &mdash; A response file is generated for the submitting entity confirming successful processing or listing errors for individual records that failed validation.</li>
         </ol>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: 834 enrollment processing flow -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-eligibility-enrollment-flow.svg" alt="834 enrollment processing: file receipt, parsing, member match, coverage activation" />
+          <figcaption><strong>834 enrollment processing flow</strong></figcaption>
+          <p><code>File Receipt</code> (SFTP / API) &rarr; <code>X12 834 Parsing</code> &rarr; <code>Member Match / Create</code> (SSN + DOB or Member ID) &rarr; <code>Coverage Activation</code> (effective dates, plan, tier, PCP) &rarr; <code>834 Acknowledgment</code></p>
         </figure>
 
         <h3 id="member-data-model">Member Data Model</h3>
@@ -271,9 +272,10 @@
           <li><strong>271 response generated</strong> &mdash; Response returned through the originating clearinghouse channel</li>
         </ol>
 
-        <!-- Screenshot placeholder -->
+        <!-- Diagram: 270/271 eligibility verification flow -->
         <figure class="docs-diagram">
-          <img src="/graphics/docs-eligibility-270-271-flow.svg" alt="270/271 eligibility verification flow" />
+          <figcaption><strong>270/271 eligibility verification flow</strong></figcaption>
+          <p><code>Provider submits X12 270</code> &rarr; <code>Clearinghouse Routing</code> (Availity / Change Healthcare / Optum) &rarr; <code>Member Lookup</code> &rarr; <code>Eligibility Evaluation</code> (coverage, benefits, cost sharing, PCP) &rarr; <code>X12 271 Response</code> returned</p>
         </figure>
 
         <h3 id="271-response-content">271 Response Content</h3>
