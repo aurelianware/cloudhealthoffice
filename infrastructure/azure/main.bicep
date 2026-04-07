@@ -53,8 +53,34 @@ param backendApiToken string = ''
 param enableDeploymentKeyVault bool = true
 param deploymentKeyVaultName string = '${baseName}-deploy-kv'
 
+// Secret Provider parameters (application secrets — distinct from deployment KV)
+@description('Application secret provider backend')
+@allowed([
+  'none'
+  'azurekeyvault'
+])
+param secretProvider string = 'none'
+
+@description('SKU for the application Key Vault (Premium provides HSM-backed keys)')
+@allowed([
+  'standard'
+  'premium'
+])
+param keyVaultSku string = 'premium'
+
+@description('AKS kubelet identity principal ID for Key Vault RBAC (required when secretProvider == azurekeyvault)')
+param aksKubeletIdentityPrincipalId string = ''
+
+@description('AKS subnet ID for Key Vault network rules (required when secretProvider == azurekeyvault)')
+param aksSubnetId string = ''
+
+@description('Log Analytics workspace ID for Key Vault diagnostic settings')
+param logAnalyticsWorkspaceId string = ''
+
 // =========================
  // Variables
+var enableKeyVault = (secretProvider == 'azurekeyvault')
+var appKeyVaultName = '${baseName}-app-kv'
 var storageAccountName = 'staging${uniqueString(resourceGroup().id)}'
 var effectiveBlobAccountName = empty(blobAccountName) ? stg.name : blobAccountName
 var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].value : blobAccountKey
@@ -82,6 +108,28 @@ module deploymentKeyVault 'modules/deployment-keyvault.bicep' = if (enableDeploy
   }
 }
 
+
+// =========================
+// Application Key Vault (secret provider for microservices)
+// =========================
+module appKeyVault 'modules/app-keyvault.bicep' = if (enableKeyVault) {
+  name: 'app-keyvault'
+  params: {
+    name: appKeyVaultName
+    location: location
+    skuName: keyVaultSku
+    aksKubeletIdentityPrincipalId: aksKubeletIdentityPrincipalId
+    aksSubnetId: aksSubnetId
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
+    tags: {
+      Environment: 'Production'
+      Compliance: 'HIPAA'
+      CostCenter: 'Security'
+      ManagedBy: 'Bicep'
+      Purpose: 'ApplicationSecrets'
+    }
+  }
+}
 
 // =========================
 // Storage (ADLS Gen2)
@@ -511,3 +559,8 @@ output edi837ClaimsTopicName string = sbTopicEdi837Claims.name
 output deploymentKeyVaultName string = enableDeploymentKeyVault ? deploymentKeyVault.outputs.keyVaultName : 'disabled'
 output deploymentKeyVaultId string = enableDeploymentKeyVault ? deploymentKeyVault.outputs.keyVaultId : 'disabled'
 output deploymentKeyVaultUri string = enableDeploymentKeyVault ? deploymentKeyVault.outputs.keyVaultUri : 'disabled'
+
+// Application Key Vault outputs (secret provider)
+output appKeyVaultName string = enableKeyVault ? appKeyVault.outputs.keyVaultName : 'disabled'
+output appKeyVaultId string = enableKeyVault ? appKeyVault.outputs.keyVaultId : 'disabled'
+output appKeyVaultUri string = enableKeyVault ? appKeyVault.outputs.keyVaultUri : 'disabled'

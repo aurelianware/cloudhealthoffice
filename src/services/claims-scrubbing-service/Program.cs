@@ -1,8 +1,12 @@
 using CloudHealthOffice.Infrastructure.Extensions;
+using CloudHealthOffice.Infrastructure.Configuration;
 using ClaimsScrubbingService.Repositories;
 using ClaimsScrubbingService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // ── Infrastructure ────────────────────────────────────────────────────────────
 

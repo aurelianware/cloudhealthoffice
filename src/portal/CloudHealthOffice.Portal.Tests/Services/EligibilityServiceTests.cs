@@ -68,10 +68,10 @@ public class EligibilityServiceTests
             isCovered = true, insurancePlanName = "Gold PPO",
             groupNumber = "GRP-100", coverageLevel = "Employee+Family",
             coverageBeginDate = "2024-01-01",
-            deductible = new { individualAmount = 1500m, individualMet = 750m,
-                               familyAmount = 3000m, familyMet = 1200m },
-            outOfPocket = new { individualAmount = 6000m, individualMet = 2000m,
-                                familyAmount = 12000m, familyMet = 4000m },
+            deductible = new { individualDeductible = 1500m, individualDeductibleMet = 750m,
+                               familyDeductible = 3000m, familyDeductibleMet = 1200m },
+            outOfPocket = new { individualOOPMax = 6000m, individualOOPMet = 2000m,
+                                familyOOPMax = 12000m, familyOOPMet = 4000m },
             benefits = new[]
             {
                 new { serviceTypeName = "Office Visit", monetaryAmount = 30m,

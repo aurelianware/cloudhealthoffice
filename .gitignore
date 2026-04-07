@@ -6,6 +6,7 @@ temp/
 
 # Build outputs
 arm.json
+infrastructure/azure/main.json
 dist/
 *.tsbuildinfo
 

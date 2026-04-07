@@ -2,9 +2,13 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using ProviderService.Middleware;
 using ProviderService.Repositories;
+using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Add services to the container
 builder.Services.AddControllers();

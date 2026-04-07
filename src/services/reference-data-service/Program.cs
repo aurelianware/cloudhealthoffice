@@ -1,8 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using ReferenceDataService.Repositories;
+using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Resolve PostgreSQL connection string (supports env var substitution)
 var postgresConnection = builder.Configuration.GetConnectionString("PostgreSQL") ?? string.Empty;

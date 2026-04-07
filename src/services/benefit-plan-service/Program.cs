@@ -11,7 +11,11 @@ using CloudHealthOffice.FeeScheduleEngine.Configuration;
 using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Configuration;
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Configure Database (Cosmos DB or MongoDB)
 if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))

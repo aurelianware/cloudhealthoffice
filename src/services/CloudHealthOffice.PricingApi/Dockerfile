@@ -3,10 +3,12 @@ WORKDIR /repo
 
 # Copy csproj and restore (preserves layer caching)
 COPY src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj src/services/CloudHealthOffice.PricingApi/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
 RUN dotnet restore src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj
 
 # Copy source code and build
 COPY src/services/CloudHealthOffice.PricingApi/ src/services/CloudHealthOffice.PricingApi/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 RUN dotnet build src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj -c Release --no-restore
 
 # Publish stage
