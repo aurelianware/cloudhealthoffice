@@ -24,7 +24,11 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
     <!-- These two packages have no stable release; pre-release is the latest available. -->
     <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.15.0-beta.1" />
-    <PackageReference Include="MongoDB.Driver.Core.Extensions.DiagnosticSources" Version="1.5.0" />
+    <!-- Exclude transitive MongoDB.Driver.Core 2.x — types moved inline into MongoDB.Driver 3.x -->
+    <PackageReference Include="MongoDB.Driver.Core.Extensions.DiagnosticSources" Version="1.5.0">
+      <ExcludeAssets>compile</ExcludeAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.15.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.15.0-beta.1" />

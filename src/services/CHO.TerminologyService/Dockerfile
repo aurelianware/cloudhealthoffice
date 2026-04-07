@@ -3,10 +3,12 @@ WORKDIR /repo
 
 # Copy csproj and restore (matches CI repo-root build context)
 COPY src/services/CHO.TerminologyService/CHO.TerminologyService.csproj src/services/CHO.TerminologyService/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
 RUN dotnet restore src/services/CHO.TerminologyService/CHO.TerminologyService.csproj
 
 # Copy source and publish
 COPY src/services/CHO.TerminologyService/ src/services/CHO.TerminologyService/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 RUN dotnet publish src/services/CHO.TerminologyService/CHO.TerminologyService.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
