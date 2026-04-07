@@ -364,7 +364,7 @@ jobs:
       # the workflow falls back to GitHub Secrets as before.
       - name: Fetch secrets from Azure Key Vault
         if: vars.KEY_VAULT_NAME != ''
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           azcliversion: latest
           inlineScript: |
