@@ -7,9 +7,13 @@ using AttachmentService;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
 using CloudHealthOffice.DocumentStore;
+using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Azure AD Authentication (Multi-tenant)
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

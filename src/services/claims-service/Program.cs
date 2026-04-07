@@ -1,8 +1,12 @@
+using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Shared infrastructure: health checks, CORS, Swagger, database, tenant middleware
 builder.Services.AddChoInfrastructure(builder.Configuration, options =>

@@ -3,8 +3,12 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Identity.Web;
 using CloudHealthOffice.TradingPartnerService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Add services to the container
 builder.Services.AddControllers();

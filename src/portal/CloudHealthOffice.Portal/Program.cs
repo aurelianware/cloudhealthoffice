@@ -15,8 +15,12 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using MongoDB.Driver;
 using MongoDB.Bson.Serialization.Conventions;
+using CloudHealthOffice.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Override Stripe keys from environment variables (Kubernetes secrets)
 if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY")))

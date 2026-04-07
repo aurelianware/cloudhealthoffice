@@ -1,0 +1,42 @@
+# =============================================================================
+# Workload Identity ServiceAccount Template
+# =============================================================================
+# Each microservice should have its own ServiceAccount annotated with the
+# client ID of its dedicated managed identity. This ensures per-service RBAC
+# scoping to Azure Key Vault (Key Vault Secrets User per identity).
+#
+# Setup steps:
+#   1. Create a User-Assigned Managed Identity for the service:
+#      az identity create -g <rg> -n <service-name>-identity
+#
+#   2. Create a federated credential linking the K8s SA to the managed identity:
+#      az identity federated-credential create \
+#        --name <service-name>-fed-cred \
+#        --identity-name <service-name>-identity \
+#        --resource-group <rg> \
+#        --issuer <AKS_OIDC_ISSUER_URL> \
+#        --subject system:serviceaccount:<namespace>:<service-name>-sa \
+#        --audiences api://AzureADTokenExchange
+#
+#   3. Assign Key Vault Secrets User role to the managed identity:
+#      az role assignment create \
+#        --role "Key Vault Secrets User" \
+#        --assignee <managed-identity-principal-id> \
+#        --scope <key-vault-resource-id>
+#
+#   4. Deploy this ServiceAccount, replacing the placeholders below.
+#
+#   5. Set serviceAccountName in the pod/deployment spec:
+#      spec:
+#        serviceAccountName: <service-name>-sa
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: <SERVICE_NAME>-sa            # e.g. claims-service-sa
+  namespace: cho                      # adjust per environment
+  annotations:
+    # Client ID of the User-Assigned Managed Identity for this service
+    azure.workload.identity/client-id: "<MANAGED_IDENTITY_CLIENT_ID>"
+  labels:
+    azure.workload.identity/use: "true"

@@ -5,8 +5,12 @@ using CHO.TerminologyService.Services.Loaders;
 using CHO.TerminologyService.Services.Rules;
 using MongoDB.Driver;
 using Serilog;
+using CloudHealthOffice.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // ──────────────────────────────────────────────────────
 // Logging
