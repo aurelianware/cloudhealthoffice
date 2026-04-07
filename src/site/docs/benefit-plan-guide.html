@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benefit Plan Configuration Guide — Cloud Health Office</title>
+  <meta name="description" content="Complete user guide for configuring benefit plans in Cloud Health Office — plan structures, coverage tiers, cost sharing, accumulators, and plan-to-network assignment for healthcare payer organizations." />
+  <meta name="keywords" content="benefit plan configuration, healthcare payer benefit plans, coverage tiers, cost sharing copay coinsurance, accumulator management, deductible tracking, QNXT benefit plan alternative, HDHP HSA configuration, benefit plan engine, healthcare plan design" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/benefit-plan-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/benefit-plan-guide" />
+  <meta property="og:title" content="Benefit Plan Configuration Guide — Cloud Health Office" />
+  <meta property="og:description" content="Complete user guide for configuring benefit plans — plan structures, coverage tiers, cost sharing, accumulators, and network assignment." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Benefit Plan Configuration Guide — Cloud Health Office",
+    "description": "Complete user guide for configuring benefit plans in Cloud Health Office — plan structures, coverage tiers, cost sharing, accumulators, and plan-to-network assignment.",
+    "url": "https://cloudhealthoffice.com/docs/benefit-plan-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-07",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Benefit plan configuration",
+      "Coverage tiers",
+      "Cost sharing rules",
+      "Accumulator management",
+      "Provider network assignment"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Benefit Plan Guide", "item": "https://cloudhealthoffice.com/docs/benefit-plan-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide" class="active">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#plan-structure">Plan Structure</a></li>
+              <li><a href="#cost-sharing">Cost Sharing Rules</a></li>
+              <li><a href="#accumulators">Accumulators</a></li>
+              <li><a href="#network-assignment">Network Assignment</a></li>
+              <li><a href="#getting-started">Getting Started</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Benefit Plan Guide</span>
+        </div>
+
+        <h1>Benefit Plan Configuration Guide</h1>
+        <p class="docs-subtitle">
+          End-to-end guide to configuring benefit plans in Cloud Health Office &mdash; plan hierarchies, coverage tiers, cost sharing rules, accumulator tracking, and network assignment. Covers commercial, Medicaid, Medicare Advantage, and Exchange (QHP) plan types.
+        </p>
+
+        <!-- Overview -->
+        <h2 id="overview">Overview</h2>
+
+        <p>Cloud Health Office benefit plan configuration is organized around four interconnected areas that define how members are covered and how claims are adjudicated:</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4CB;</span>
+            <h3>Plan Structure</h3>
+            <p>Plan hierarchy (Plan &rarr; Benefit Package &rarr; Coverage Tier), lines of business, effective dating, and plan status lifecycle.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4B2;</span>
+            <h3>Cost Sharing</h3>
+            <p>Copay, coinsurance, deductible, and out-of-pocket maximum configuration per service category and network tier.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4CA;</span>
+            <h3>Accumulators</h3>
+            <p>Individual and family deductible/OOP tracking, accumulator periods, cross-plan accumulation, and reversal handling.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F3E5;</span>
+            <h3>Network Assignment</h3>
+            <p>Plan-to-provider-network linking, tiered networks, out-of-network rules, and single/multi-network plans.</p>
+          </div>
+        </div>
+
+        <p>Each area feeds directly into the claims adjudication pipeline. When a claim is processed, the adjudication engine looks up the member's benefit plan to determine covered services, applies cost sharing rules, updates accumulators, and validates provider network participation &mdash; all driven by the configuration described in this guide.</p>
+
+        <!-- ============================= -->
+        <!-- PLAN STRUCTURE                -->
+        <!-- ============================= -->
+        <h2 id="plan-structure">1. Plan Structure</h2>
+
+        <p>Benefit plans in Cloud Health Office follow a three-level hierarchy that mirrors how health plans are designed in the real world: the <strong>Plan</strong> is the top-level product, which contains one or more <strong>Benefit Packages</strong> (sets of covered services), each offered at multiple <strong>Coverage Tiers</strong> (employee-only, family, etc.).</p>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-benefit-plan-hierarchy.svg" alt="Benefit plan hierarchy: Plan, Benefit Package, Coverage Tier relationships" />
+        </figure>
+
+        <h3 id="plan-fields">Plan Fields</h3>
+
+        <p>Each plan record contains the following core fields:</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>PlanId</code></td><td>String</td><td>Unique identifier for the plan (system-generated or user-defined)</td></tr>
+            <tr><td><code>PlanName</code></td><td>String</td><td>Display name (e.g., "Gold PPO 2026", "Medicaid Standard")</td></tr>
+            <tr><td><code>LineOfBusiness</code></td><td>Enum</td><td>Medicaid, Medicare Advantage, Commercial, or Exchange (QHP)</td></tr>
+            <tr><td><code>EffectiveDate</code></td><td>Date</td><td>Date the plan becomes active and can accept enrollments</td></tr>
+            <tr><td><code>TermDate</code></td><td>Date</td><td>Date the plan is terminated (null for open-ended plans)</td></tr>
+            <tr><td><code>PlanStatus</code></td><td>Enum</td><td>Current lifecycle status (see lifecycle table below)</td></tr>
+            <tr><td><code>RegulatoryType</code></td><td>Enum</td><td>HMO, PPO, EPO, POS, HDHP, Indemnity &mdash; drives network and cost sharing rules</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="plan-status-lifecycle">Plan Status Lifecycle</h3>
+
+        <p>Plans progress through a defined lifecycle that controls enrollment eligibility and claims processing behavior:</p>
+
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Description</th><th>Enrollment Allowed</th><th>Claims Processed</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Draft</code></td><td>Plan is being designed; rates and benefits are editable</td><td>No</td><td>No</td></tr>
+            <tr><td><code>Active</code></td><td>Plan is live; members can be enrolled and claims adjudicated</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td><code>Grandfathered</code></td><td>Plan is closed to new enrollment but existing members retain coverage</td><td>No (new)</td><td>Yes</td></tr>
+            <tr><td><code>Closed</code></td><td>Plan is closed; no new enrollments, existing members being transitioned</td><td>No</td><td>Yes (runout)</td></tr>
+            <tr><td><code>Terminated</code></td><td>Plan is fully terminated; no enrollment or claims processing</td><td>No</td><td>No</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="lines-of-business">Lines of Business</h3>
+
+        <p>The Line of Business (LOB) assigned to a plan drives significant downstream behavior throughout the platform:</p>
+
+        <ul>
+          <li><strong>Medicaid</strong> &mdash; State-specific prompt-pay rules (typically 30 days clean claim), nominal copay limits, Medicaid-specific NCCI edits, state regulatory reporting requirements</li>
+          <li><strong>Medicare Advantage</strong> &mdash; CMS prompt-pay (30 days clean claim), MA-specific fee schedules, CMS STAR quality reporting, risk adjustment (HCC) integration</li>
+          <li><strong>Commercial</strong> &mdash; Employer-sponsored plans with contractual prompt-pay terms, commercial fee schedules, state DOI reporting</li>
+          <li><strong>Exchange (QHP)</strong> &mdash; ACA marketplace plans with Essential Health Benefit requirements, actuarial value calculations, risk corridor/reinsurance programs, 90-day grace period rules</li>
+        </ul>
+
+        <h3 id="benefit-packages">Benefit Package Configuration</h3>
+
+        <p>A Benefit Package defines the set of service categories covered under a plan. Each package specifies which services are covered, and the cost sharing rules for each category are configured separately (see <a href="#cost-sharing">Section 2: Cost Sharing Rules</a>).</p>
+
+        <p>Standard service categories:</p>
+
+        <table>
+          <thead>
+            <tr><th>Service Category</th><th>Description</th><th>Typical Claim Types</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Inpatient</strong></td><td>Hospital admissions, skilled nursing facility stays</td><td>837I (Institutional)</td></tr>
+            <tr><td><strong>Outpatient</strong></td><td>Hospital outpatient services, ambulatory surgery centers</td><td>837I, 837P</td></tr>
+            <tr><td><strong>Professional</strong></td><td>Physician office visits, specialist consultations</td><td>837P (Professional)</td></tr>
+            <tr><td><strong>Pharmacy</strong></td><td>Prescription drugs (retail, mail-order, specialty)</td><td>NCPDP D.0</td></tr>
+            <tr><td><strong>Behavioral Health</strong></td><td>Mental health and substance use disorder services</td><td>837P, 837I</td></tr>
+            <tr><td><strong>DME</strong></td><td>Durable medical equipment (wheelchairs, CPAP, prosthetics)</td><td>837P</td></tr>
+            <tr><td><strong>Lab</strong></td><td>Laboratory testing (blood work, pathology, genetic testing)</td><td>837P</td></tr>
+            <tr><td><strong>Imaging</strong></td><td>Radiology, MRI, CT, ultrasound, PET scans</td><td>837P, 837I</td></tr>
+            <tr><td><strong>Emergency</strong></td><td>Emergency department visits and urgent care</td><td>837I, 837P</td></tr>
+            <tr><td><strong>Preventive</strong></td><td>Wellness exams, immunizations, screenings (ACA first-dollar coverage)</td><td>837P</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="coverage-tiers">Coverage Tiers</h3>
+
+        <p>Each benefit package is offered at multiple coverage tiers that determine the number of covered individuals and the associated premium:</p>
+
+        <table>
+          <thead>
+            <tr><th>Coverage Tier</th><th>Covered Members</th><th>Typical Premium Ratio</th><th>Example Monthly Premium</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Employee Only</strong></td><td>Subscriber only</td><td>1.0x</td><td>$650</td></tr>
+            <tr><td><strong>Employee + Spouse</strong></td><td>Subscriber + spouse/domestic partner</td><td>2.0x</td><td>$1,300</td></tr>
+            <tr><td><strong>Employee + Children</strong></td><td>Subscriber + child dependents</td><td>1.7x</td><td>$1,100</td></tr>
+            <tr><td><strong>Family</strong></td><td>Subscriber + spouse + children</td><td>2.8x</td><td>$1,800</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Composite vs. list billing</div>
+          <p>Coverage tiers use <strong>composite rating</strong> &mdash; a single premium for the tier regardless of how many dependents are enrolled. Some Medicaid and individual market plans use <strong>list billing</strong> instead, where each covered member has an individual premium. Cloud Health Office supports both models via the plan's <code>RatingMethod</code> field.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- COST SHARING RULES            -->
+        <!-- ============================= -->
+        <h2 id="cost-sharing">2. Cost Sharing Rules</h2>
+
+        <p>Cost sharing rules define the member's financial responsibility for each covered service. For every combination of <strong>service category</strong>, <strong>place of service</strong>, and <strong>network tier</strong>, the plan specifies copay amounts, coinsurance percentages, deductible applicability, and prior authorization requirements.</p>
+
+        <h3 id="cost-sharing-table">Cost Sharing by Service Category</h3>
+
+        <p>Example cost sharing configuration for a typical Commercial PPO plan (Gold tier):</p>
+
+        <table>
+          <thead>
+            <tr><th>Service Category</th><th>In-Network Copay</th><th>In-Network Coinsurance</th><th>Deductible Applies</th><th>Prior Auth Required</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>PCP Visit</td><td>$25</td><td>0%</td><td>No</td><td>No</td></tr>
+            <tr><td>Specialist Visit</td><td>$50</td><td>0%</td><td>No</td><td>No</td></tr>
+            <tr><td>Emergency Room</td><td>$250</td><td>20%</td><td>Yes</td><td>No</td></tr>
+            <tr><td>Inpatient Admission</td><td>$500/day</td><td>20%</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td>Outpatient Surgery</td><td>$200</td><td>20%</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td>Lab</td><td>$0</td><td>10%</td><td>Yes</td><td>No</td></tr>
+            <tr><td>Imaging (Advanced)</td><td>$100</td><td>20%</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td>Pharmacy &mdash; Tier 1 (Generic)</td><td>$10</td><td>0%</td><td>No</td><td>No</td></tr>
+            <tr><td>Pharmacy &mdash; Tier 2 (Preferred Brand)</td><td>$35</td><td>0%</td><td>No</td><td>No</td></tr>
+            <tr><td>Pharmacy &mdash; Tier 3 (Non-Preferred)</td><td>$60</td><td>0%</td><td>Yes</td><td>No</td></tr>
+            <tr><td>Pharmacy &mdash; Tier 4 (Specialty)</td><td>N/A</td><td>30%</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td>Behavioral Health</td><td>$25</td><td>0%</td><td>No</td><td>No (outpatient) / Yes (inpatient)</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-benefit-cost-sharing-flow.svg" alt="Cost sharing rule evaluation flow: service category lookup, network tier check, deductible application, copay/coinsurance calculation" />
+        </figure>
+
+        <h3 id="hdhp-hsa">HDHP / HSA-Specific Rules</h3>
+
+        <p>High Deductible Health Plans (HDHPs) paired with Health Savings Accounts (HSAs) have IRS-mandated parameters that the plan configuration must enforce:</p>
+
+        <ul>
+          <li><strong>Minimum deductible</strong> &mdash; Individual: $1,650 (2026); Family: $3,300 (2026). The plan deductible must meet or exceed these thresholds.</li>
+          <li><strong>Maximum out-of-pocket</strong> &mdash; Individual: $8,300 (2026); Family: $16,600 (2026). Total member cost sharing cannot exceed these limits.</li>
+          <li><strong>Preventive care exception</strong> &mdash; ACA-compliant preventive services must be covered at 100% <em>before</em> the deductible is met (first-dollar coverage). This is the only exception to the deductible-first rule.</li>
+          <li><strong>No copays before deductible</strong> &mdash; Unlike standard plans, HDHPs cannot apply copays until the full deductible is satisfied (except preventive care).</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">IRS compliance validation</div>
+          <p>When a plan is configured with <code>RegulatoryType = HDHP</code>, Cloud Health Office validates the deductible and OOP maximum against the current IRS thresholds and prevents activation if the plan does not meet the minimums. IRS thresholds are updated annually via configuration.</p>
+        </div>
+
+        <h3 id="pediatric-dental-vision">Pediatric Dental &amp; Vision (ACA EHB)</h3>
+
+        <p>Exchange (QHP) plans must cover the ten ACA Essential Health Benefit categories, including <strong>pediatric dental</strong> and <strong>pediatric vision</strong> for members under age 19. Cloud Health Office automatically applies these coverage rules when <code>LineOfBusiness = Exchange</code>:</p>
+
+        <ul>
+          <li>Pediatric dental and vision services are covered at the plan's standard cost sharing rates</li>
+          <li>If the plan does not include an embedded dental/vision package, the system references the state's benchmark EHB plan</li>
+          <li>Pediatric dental/vision accumulators can be tracked separately or combined with medical accumulators (configurable)</li>
+        </ul>
+
+        <h3 id="medicaid-cost-sharing">Medicaid-Specific Cost Sharing</h3>
+
+        <p>Medicaid plans have unique cost sharing constraints mandated by federal and state regulation:</p>
+
+        <ul>
+          <li><strong>Nominal copays</strong> &mdash; Federal regulation limits Medicaid copays to nominal amounts (typically $1&ndash;$4 per service). Cloud Health Office enforces the state-specific copay schedule.</li>
+          <li><strong>Copay-exempt services</strong> &mdash; Certain services are exempt from any cost sharing: preventive care, pregnancy-related services, emergency services, family planning, and services for children under 18.</li>
+          <li><strong>Income-based copay caps</strong> &mdash; Total member cost sharing in a quarter cannot exceed 5% of the member's household income. Cloud Health Office tracks quarterly copay accumulation against the income-based cap.</li>
+          <li><strong>No balance billing</strong> &mdash; Medicaid members cannot be balance-billed; provider must accept the Medicaid allowed amount as payment in full.</li>
+        </ul>
+
+        <!-- ============================= -->
+        <!-- ACCUMULATORS                  -->
+        <!-- ============================= -->
+        <h2 id="accumulators">3. Accumulators</h2>
+
+        <p>Accumulators track member cost sharing over time and determine when deductibles are met, out-of-pocket maximums are reached, and visit limits are exhausted. Cloud Health Office uses Redis-backed real-time accumulator tracking to support sub-millisecond lookups during claims adjudication.</p>
+
+        <h3 id="accumulator-types">Accumulator Types</h3>
+
+        <table>
+          <thead>
+            <tr><th>Accumulator Type</th><th>Description</th><th>Typical Threshold</th><th>Effect When Met</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Individual Deductible</strong></td><td>Amount the member must pay before the plan begins paying coinsurance</td><td>$1,500 &ndash; $8,300</td><td>Plan pays coinsurance; copays still apply</td></tr>
+            <tr><td><strong>Family Deductible</strong></td><td>Combined deductible for all family members</td><td>$3,000 &ndash; $16,600</td><td>All family members' deductibles considered met</td></tr>
+            <tr><td><strong>Individual OOP Max</strong></td><td>Maximum total cost sharing for one member in a period</td><td>$8,300 (ACA max)</td><td>Plan pays 100%; no further member cost sharing</td></tr>
+            <tr><td><strong>Family OOP Max</strong></td><td>Combined OOP max for all family members</td><td>$16,600 (ACA max)</td><td>Plan pays 100% for all family members</td></tr>
+            <tr><td><strong>Lifetime Maximum</strong></td><td>Total plan benefits over member's lifetime (grandfathered plans only)</td><td>$1,000,000+</td><td>No further plan payments; ACA-compliant plans prohibit this</td></tr>
+            <tr><td><strong>Visit Limits</strong></td><td>Maximum number of visits per service category per period</td><td>20 PT visits/year, 30 BH visits/year</td><td>Additional visits denied or require auth override</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="accumulator-periods">Accumulator Periods</h3>
+
+        <p>Accumulators reset based on the configured accumulator period:</p>
+
+        <ul>
+          <li><strong>Calendar Year</strong> &mdash; Resets January 1; most common for commercial and Exchange plans</li>
+          <li><strong>Plan Year</strong> &mdash; Resets on a custom start date (e.g., October 1 for employers with fiscal-year-aligned benefit years)</li>
+          <li><strong>Rolling 12-Month</strong> &mdash; Resets 12 months from the member's enrollment effective date; used by some Medicaid programs</li>
+        </ul>
+
+        <h3 id="family-accumulator-models">Family Accumulator Models</h3>
+
+        <p>For family coverage tiers, Cloud Health Office supports two accumulator models:</p>
+
+        <table>
+          <thead>
+            <tr><th>Model</th><th>How It Works</th><th>Typical Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Embedded</strong></td><td>Each family member has an individual deductible within the family deductible. A single member's deductible is met when their individual threshold is reached, even if the family deductible is not yet met.</td><td>Most PPO and commercial plans</td></tr>
+            <tr><td><strong>Aggregate</strong></td><td>All family members' claims count toward a single family deductible. No individual member's deductible is met until the total family deductible is satisfied.</td><td>HDHP/HSA plans (IRS requirement), some HMO plans</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">IRS mandate for HDHP family accumulators</div>
+          <p>The IRS requires that HDHP family plans use the <strong>aggregate</strong> model &mdash; no individual family member can have their deductible met independently. Cloud Health Office enforces this when <code>RegulatoryType = HDHP</code>.</p>
+        </div>
+
+        <h3 id="cross-plan-accumulation">Cross-Plan Accumulation</h3>
+
+        <p>When a member changes plans mid-year (e.g., during a Special Enrollment Period or open enrollment with a different plan), accumulators can optionally carry over to the new plan:</p>
+
+        <ul>
+          <li><strong>Full carry-over</strong> &mdash; All accumulated amounts transfer to the new plan's accumulators</li>
+          <li><strong>Partial carry-over</strong> &mdash; Only specific accumulator types carry over (e.g., deductible carries over but visit limits reset)</li>
+          <li><strong>No carry-over</strong> &mdash; Accumulators reset to zero on the new plan (default for cross-LOB plan changes)</li>
+        </ul>
+
+        <p>Cross-plan accumulation is configured at the plan level and can be restricted to same-LOB transfers only.</p>
+
+        <h3 id="accumulator-reversals">Accumulator Reversals</h3>
+
+        <p>When a claim is reversed, voided, or adjusted, the associated accumulator entries are automatically decremented. This ensures accumulator balances remain accurate after:</p>
+
+        <ul>
+          <li>Claim payment reversals (overpayment recovery)</li>
+          <li>Claim adjustments that change the member responsibility amount</li>
+          <li>Retroactive eligibility changes that invalidate previously processed claims</li>
+          <li>Coordination of benefits (COB) corrections where the other payer's payment changes</li>
+        </ul>
+
+        <h3 id="redis-tracking">Redis-Backed Real-Time Tracking</h3>
+
+        <p>During claims adjudication, accumulator lookups must be instantaneous to avoid blocking the auto-adjudication pipeline. Cloud Health Office uses a dual-layer architecture:</p>
+
+        <ul>
+          <li><strong>Redis cache</strong> &mdash; Current accumulator balances are cached in Redis for sub-millisecond read access. Every claim adjudication reads from and writes to Redis in real time.</li>
+          <li><strong>Core admin system</strong> &mdash; The health plan's core admin system (QNXT, Facets, or Cloud Health Office's own member database) is the system of record. A periodic reconciliation job (configurable &mdash; typically every 4 hours) syncs Redis with the source of truth.</li>
+          <li><strong>Conflict resolution</strong> &mdash; If Redis and the source of truth diverge during reconciliation, the source of truth wins. A reconciliation exception report is generated for manual review.</li>
+        </ul>
+
+        <h3 id="accumulator-lifecycle">Accumulator Lifecycle</h3>
+
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Initialized</code></td><td>Accumulator created at the start of the accumulator period with a balance of $0</td></tr>
+            <tr><td><code>Accumulating</code></td><td>Claims are being processed and member cost sharing is being tracked</td></tr>
+            <tr><td><code>Met</code></td><td>Threshold reached &mdash; deductible satisfied or OOP max hit</td></tr>
+            <tr><td><code>Reset</code></td><td>Accumulator period ended; balance reset to $0 for the new period</td></tr>
+          </tbody>
+        </table>
+
+        <!-- ============================= -->
+        <!-- NETWORK ASSIGNMENT            -->
+        <!-- ============================= -->
+        <h2 id="network-assignment">4. Network Assignment</h2>
+
+        <p>Every benefit plan must be assigned to one or more provider networks. The network assignment determines which providers are considered in-network for the plan's members and drives cost sharing tier selection during claims adjudication.</p>
+
+        <h3 id="plan-network-linking">Plan-to-Network Linking</h3>
+
+        <p>Network assignment is configured at the plan level. A plan can be linked to:</p>
+
+        <ul>
+          <li><strong>Single network</strong> &mdash; One provider network for all services (typical for HMO and EPO plans)</li>
+          <li><strong>Multiple networks</strong> &mdash; Different networks for different service categories (e.g., a separate behavioral health network, a carve-out pharmacy network)</li>
+          <li><strong>Tiered network</strong> &mdash; Multiple network tiers with different cost sharing at each tier (typical for PPO and POS plans)</li>
+        </ul>
+
+        <h3 id="network-tiers">Network Tiers</h3>
+
+        <p>Tiered networks allow plans to incentivize members to use preferred providers through lower cost sharing:</p>
+
+        <table>
+          <thead>
+            <tr><th>Network Tier</th><th>Description</th><th>Typical Cost Sharing</th><th>Example Providers</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Tier 1 &mdash; Preferred</strong></td><td>High-value providers with negotiated rates and quality metrics</td><td>Lowest copays, lowest coinsurance</td><td>Centers of Excellence, ACO partners</td></tr>
+            <tr><td><strong>Tier 2 &mdash; Standard</strong></td><td>In-network providers with standard contracted rates</td><td>Standard copays, standard coinsurance</td><td>Most contracted physicians and facilities</td></tr>
+            <tr><td><strong>Tier 3 &mdash; Out-of-Network</strong></td><td>Non-contracted providers; highest member cost sharing</td><td>Highest copays/coinsurance, balance billing possible</td><td>Non-participating providers</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="oon-rules">Out-of-Network Rules</h3>
+
+        <p>When a member receives care from an out-of-network provider, the plan's OON rules determine the allowed amount and member responsibility:</p>
+
+        <ul>
+          <li><strong>Allowed amount calculation</strong> &mdash; Configurable per plan:
+            <ul>
+              <li><code>Medicare Rate %</code> &mdash; A percentage of the Medicare fee schedule rate (e.g., 150% of Medicare)</li>
+              <li><code>UCR Percentile</code> &mdash; Usual, Customary, and Reasonable charges at a configured percentile (e.g., 80th percentile of FAIR Health data)</li>
+              <li><code>Billed Charge %</code> &mdash; A percentage of the provider's billed amount (least common, highest cost)</li>
+            </ul>
+          </li>
+          <li><strong>Balance billing protection</strong> &mdash; Under the No Surprises Act (NSA), emergency services and certain non-emergency services at in-network facilities cannot be balance-billed to the member. Cloud Health Office flags NSA-protected claims and applies the appropriate allowed amount methodology.</li>
+          <li><strong>Surprise billing</strong> &mdash; For NSA-protected claims, the member cost sharing is calculated as if the provider were in-network. The difference between the provider's charge and the in-network allowed amount is resolved through the independent dispute resolution (IDR) process.</li>
+        </ul>
+
+        <h3 id="network-adequacy">Network Adequacy</h3>
+
+        <p>State regulators require health plans to maintain adequate provider networks. Cloud Health Office tracks network adequacy metrics per plan per county:</p>
+
+        <ul>
+          <li><strong>Time/distance standards</strong> &mdash; Members must be within X miles or Y minutes of a provider for each required specialty</li>
+          <li><strong>Appointment wait times</strong> &mdash; Maximum days to next available appointment by provider type (PCP: 10 days, specialist: 15 days, urgent: 48 hours)</li>
+          <li><strong>Provider-to-member ratios</strong> &mdash; Minimum ratio of providers per 1,000 members by specialty (e.g., 1 PCP per 2,000 members, 1 OB/GYN per 5,000 members)</li>
+        </ul>
+
+        <p>Network adequacy reports can be exported for state DOI filing or CMS MA network adequacy submissions.</p>
+
+        <h3 id="plan-type-distinctions">Plan Type Network Rules</h3>
+
+        <p>The plan's <code>RegulatoryType</code> determines how network rules are enforced:</p>
+
+        <table>
+          <thead>
+            <tr><th>Plan Type</th><th>In-Network Required</th><th>OON Coverage</th><th>PCP Referral Required</th><th>Typical Networks</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>HMO</strong></td><td>Yes (except emergency)</td><td>No (except emergency)</td><td>Yes</td><td>Single narrow network</td></tr>
+            <tr><td><strong>EPO</strong></td><td>Yes (except emergency)</td><td>No (except emergency)</td><td>No</td><td>Single network, no referrals</td></tr>
+            <tr><td><strong>PPO</strong></td><td>No</td><td>Yes (higher cost sharing)</td><td>No</td><td>Tiered network (Tier 1/2/3)</td></tr>
+            <tr><td><strong>POS</strong></td><td>No</td><td>Yes (higher cost sharing)</td><td>Yes (for in-network tier)</td><td>HMO-like in-network + PPO-like OON</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Multi-network plans</div>
+          <p>Some large employers offer a "choice" model where members select their network tier at enrollment (e.g., a narrow network option at lower premium vs. a broad network at higher premium). Cloud Health Office supports this via multiple network assignments on a single plan, with the member's selected tier stored on their enrollment record.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- GETTING STARTED               -->
+        <!-- ============================= -->
+        <h2 id="getting-started">Getting Started</h2>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Try it in the Demo Portal</div>
+          <p>Benefit plan configuration is available in the <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> with pre-configured sample plans. Navigate to <strong>Plans</strong> in the left sidebar to explore plan structures, cost sharing rules, accumulators, and network assignments for Commercial, Medicaid, Medicare Advantage, and Exchange plan types.</p>
+        </div>
+
+        <p>Recommended setup order for a new health plan implementation:</p>
+
+        <ol>
+          <li><strong>Create Line of Business entries</strong> &mdash; Define the LOBs your organization operates (Medicaid, MA, Commercial, Exchange)</li>
+          <li><strong>Configure provider networks</strong> &mdash; Set up network definitions and load provider rosters</li>
+          <li><strong>Create benefit plans with packages and tiers</strong> &mdash; Define the plan hierarchy: Plan &rarr; Benefit Package &rarr; Coverage Tier</li>
+          <li><strong>Define cost sharing rules per service category</strong> &mdash; Configure copays, coinsurance, deductible applicability, and prior auth requirements</li>
+          <li><strong>Configure accumulators</strong> &mdash; Set deductible and OOP max thresholds, select accumulator period and family model</li>
+          <li><strong>Assign networks to plans</strong> &mdash; Link plans to provider networks and configure tier-based cost sharing</li>
+          <li><strong>Test with a sample claim</strong> &mdash; Submit a test claim through the adjudication pipeline to verify benefit lookup, cost sharing, and accumulator behavior</li>
+        </ol>
+
+        <!-- Related Docs -->
+        <h2 id="related-docs">Related Documentation</h2>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <h3>Claims Adjudication</h3>
+            <p>See how benefit plan configuration drives the 10-step auto-adjudication pipeline &mdash; from eligibility through repricing and accumulator updates.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/fee-schedule-guide" class="docs-hub-card">
+            <h3>Fee Schedule</h3>
+            <p>Configure the fee schedules and rate tables used during claims repricing &mdash; Medicare RBRVS, Medicaid rates, and commercial contracted rates.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/finance-guide" class="docs-hub-card">
+            <h3>Finance Guide</h3>
+            <p>Premium billing, accounts receivable, capitation payments, and FFS payment runs &mdash; the financial backbone connected to benefit plans.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/architecture" class="docs-hub-card">
+            <h3>Architecture</h3>
+            <p>Understand how the benefit plan engine fits into the broader Cloud Health Office platform microservices architecture.</p>
+            <span class="card-arrow">Explore &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/provider-verification-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Provider Verification</div>
+          </a>
+          <a href="/docs/claims-guide" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Claims Adjudication</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

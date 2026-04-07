@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claims Adjudication Guide — Cloud Health Office</title>
+  <meta name="description" content="Complete user guide for claims adjudication in Cloud Health Office — 837 ingestion, auto-adjudication pipeline, NCCI/MUE edits, work queues, and EOB generation for healthcare payer organizations." />
+  <meta name="keywords" content="claims adjudication engine, healthcare payer claims processing, 837 claim ingestion, NCCI MUE edits, auto-adjudication, claims work queues, EOB generation, QNXT claims alternative, claims repricing, healthcare claims pipeline" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/claims-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/claims-guide" />
+  <meta property="og:title" content="Claims Adjudication Guide — Cloud Health Office" />
+  <meta property="og:description" content="Complete user guide for claims adjudication — 837 ingestion, auto-adjudication pipeline, NCCI/MUE edits, work queues, and EOB generation." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Claims Adjudication Guide — Cloud Health Office",
+    "description": "Complete user guide for claims adjudication in Cloud Health Office — 837 ingestion, auto-adjudication pipeline, NCCI/MUE edits, work queues, and EOB generation.",
+    "url": "https://cloudhealthoffice.com/docs/claims-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-07",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Claims adjudication",
+      "837 EDI ingestion",
+      "Auto-adjudication pipeline",
+      "NCCI/MUE clinical edits",
+      "Claims work queues",
+      "EOB and ERA generation"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Claims Adjudication Guide", "item": "https://cloudhealthoffice.com/docs/claims-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide" class="active">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#claim-ingestion">Claim Ingestion</a></li>
+              <li><a href="#auto-adjudication">Auto-Adjudication Pipeline</a></li>
+              <li><a href="#clinical-edits">Clinical Edits</a></li>
+              <li><a href="#work-queues">Work Queues</a></li>
+              <li><a href="#payment-denial">Payment &amp; Denial Output</a></li>
+              <li><a href="#getting-started">Getting Started</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Claims Adjudication Guide</span>
+        </div>
+
+        <h1>Claims Adjudication Guide</h1>
+        <p class="docs-subtitle">
+          End-to-end guide to claims processing in Cloud Health Office &mdash; from 837 EDI ingestion through auto-adjudication, clinical edits, work queue management, and payment/denial generation. Covers professional (837P), institutional (837I), and dental (837D) claim types.
+        </p>
+
+        <!-- Overview -->
+        <h2 id="overview">Overview</h2>
+
+        <p>Cloud Health Office claims adjudication spans four major stages, from initial claim receipt through final payment or denial output:</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4E5;</span>
+            <h3>Claim Ingestion</h3>
+            <p>837 EDI receipt via SFTP/API, clearinghouse connectors (Availity, Change Healthcare, Optum), real-time and batch modes.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x2699;</span>
+            <h3>Auto-Adjudication</h3>
+            <p>10-step pipeline: eligibility verification, benefit lookup, provider validation, duplicate check, NCCI/MUE edits, fee schedule repricing, COB, accumulator update, authorization match, final disposition.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F50D;</span>
+            <h3>Work Queues</h3>
+            <p>Claims that fail auto-adjudication route to specialized queues: NCCI/MUE Edit Failures, Missing Prior Auth, Provider Not Contracted, COB/Other Payer, Medical Review.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4C4;</span>
+            <h3>Payment &amp; Denial</h3>
+            <p>EOB generation, 835 ERA output, CARC/RARC reason codes, and member EOB statements with plain-language denial reasons.</p>
+          </div>
+        </div>
+
+        <p>The auto-adjudication engine processes the majority of claims without human intervention. Claims that cannot be auto-adjudicated are routed to work queues where trained examiners resolve exceptions using the portal&rsquo;s built-in review tools.</p>
+
+        <!-- ============================= -->
+        <!-- CLAIM INGESTION               -->
+        <!-- ============================= -->
+        <h2 id="claim-ingestion">1. Claim Ingestion</h2>
+
+        <p>Claim ingestion is the first stage of processing &mdash; receiving claims from providers and clearinghouses, parsing the X12 837 transactions, validating syntax, and creating internal claim records ready for adjudication.</p>
+
+        <h3 id="supported-formats">Supported Claim Formats</h3>
+
+        <table>
+          <thead>
+            <tr><th>Format</th><th>Transaction Set</th><th>Use Case</th><th>Claim Types</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>837P</strong></td><td>X12 837 Professional</td><td>Physician office visits, outpatient services, lab, imaging</td><td>CMS-1500 equivalent</td></tr>
+            <tr><td><strong>837I</strong></td><td>X12 837 Institutional</td><td>Hospital inpatient, outpatient facility, SNF, home health</td><td>UB-04 equivalent</td></tr>
+            <tr><td><strong>837D</strong></td><td>X12 837 Dental</td><td>Dental services for plans with dental benefits</td><td>ADA Dental Claim equivalent</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="ingestion-channels">Ingestion Channels</h3>
+
+        <table>
+          <thead>
+            <tr><th>Channel</th><th>Protocol</th><th>Mode</th><th>Typical Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>SFTP Batch</strong></td><td>SFTP (SSH File Transfer)</td><td>Batch (scheduled)</td><td>Standard clearinghouse drops &mdash; files arrive on schedule (hourly, daily)</td></tr>
+            <tr><td><strong>Real-time API</strong></td><td>FHIR R4 <code>Claim/$submit</code></td><td>Real-time</td><td>EHR-integrated providers submitting claims directly via FHIR</td></tr>
+            <tr><td><strong>Portal Manual Entry</strong></td><td>HTTPS (portal UI)</td><td>Real-time</td><td>Manual claim entry by payer staff for phone/fax claims</td></tr>
+            <tr><td><strong>Direct 837 Upload</strong></td><td>HTTPS (portal file upload)</td><td>On-demand</td><td>Providers or small clearinghouses uploading 837 files directly</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="clearinghouse-connectors">Clearinghouse Connectors</h3>
+
+        <p>Cloud Health Office includes pre-built connectors for the major healthcare clearinghouses. Each connector handles SFTP polling, file format translation, acknowledgment generation, and failover:</p>
+
+        <ul>
+          <li><strong>Availity</strong> &mdash; Primary connector for commercial and Medicare Advantage claims; supports real-time 276/277 status inquiries</li>
+          <li><strong>Change Healthcare</strong> &mdash; High-volume connector with batch and real-time modes; integrated with Change Healthcare&rsquo;s claims status and eligibility services</li>
+          <li><strong>Optum</strong> &mdash; Connector for UnitedHealthcare-affiliated providers and Optum clearinghouse clients</li>
+          <li><strong>Inovalon</strong> &mdash; Connector for Medicaid managed care plans using Inovalon&rsquo;s NASCO clearinghouse services</li>
+        </ul>
+
+        <p>Each connector supports <strong>failover configuration</strong>: if the primary clearinghouse connection fails, claims are automatically routed through a backup connector after a configurable timeout.</p>
+
+        <h3 id="claim-receipt-workflow">Claim Receipt Workflow</h3>
+
+        <p>When a claim file arrives, the system processes it through a six-step ingestion pipeline:</p>
+
+        <ol>
+          <li><strong>Receive</strong> &mdash; File picked up from SFTP directory or received via API endpoint</li>
+          <li><strong>Parse</strong> &mdash; X12 837 transaction parsed into individual claim records (CLM loops)</li>
+          <li><strong>Validate X12 Syntax</strong> &mdash; Structural validation against the X12 implementation guide; segment counts, loop integrity, required element presence</li>
+          <li><strong>Generate 999 Acknowledgment</strong> &mdash; X12 999 Implementation Acknowledgment returned to the submitter confirming receipt and syntax validation results</li>
+          <li><strong>Create Internal Claim Record</strong> &mdash; Parsed claim data mapped to the internal claim data model with a unique <code>ClaimId</code> assigned</li>
+          <li><strong>Queue for Adjudication</strong> &mdash; Claim record placed on the adjudication queue for auto-adjudication processing</li>
+        </ol>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-claims-ingestion-flow.svg" alt="Claim ingestion flow: SFTP/API receipt, X12 parsing, 999 acknowledgment, internal claim creation" />
+        </figure>
+
+        <h3 id="duplicate-detection">Duplicate Detection</h3>
+
+        <p>Duplicate claims are detected at ingestion time by matching on a composite key within a configurable time window:</p>
+
+        <ul>
+          <li><strong>Match fields</strong> &mdash; Member ID + Rendering Provider NPI + Date of Service + Procedure Code + Billed Amount</li>
+          <li><strong>Time window</strong> &mdash; Configurable per LOB (default: 90 days). A claim matching all fields within the window is flagged as a potential duplicate.</li>
+          <li><strong>Exact vs. near-duplicate</strong> &mdash; Exact matches (all fields identical) are rejected automatically. Near-duplicates (same member/provider/date but different billed amount) are flagged for manual review.</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Corrected claims vs. duplicates</div>
+          <p>Providers submit corrected claims using frequency code <code>7</code> (replacement) or <code>8</code> (void). These are not treated as duplicates &mdash; the system matches the corrected claim to the original using the original claim reference number and processes the correction accordingly.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- AUTO-ADJUDICATION PIPELINE    -->
+        <!-- ============================= -->
+        <h2 id="auto-adjudication">2. Auto-Adjudication Pipeline</h2>
+
+        <p>The auto-adjudication pipeline processes each claim through ten sequential steps. If any step fails, the claim is either denied or pended to a work queue for manual review. The goal is to auto-adjudicate 85&ndash;95% of clean claims without human intervention.</p>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-claims-adjudication-pipeline.svg" alt="10-step auto-adjudication pipeline from eligibility through final disposition" />
+        </figure>
+
+        <h3 id="pipeline-step-1">Step 1: Eligibility Verification</h3>
+
+        <p>The system confirms the member has active coverage on the date of service. It verifies:</p>
+
+        <ul>
+          <li>Member ID matches an enrolled member in the system</li>
+          <li>Coverage is active (not terminated or suspended) on the claim&rsquo;s date of service</li>
+          <li>The coverage includes the type of service billed (medical, dental, pharmacy)</li>
+        </ul>
+
+        <p><strong>Failure action:</strong> Deny with CARC code <code>27</code> (Expenses incurred after coverage terminated) or <code>31</code> (Patient cannot be identified as our insured).</p>
+
+        <h3 id="pipeline-step-2">Step 2: Benefit Lookup</h3>
+
+        <p>Identifies the member&rsquo;s benefit plan, benefit package, and applicable cost sharing rules for the billed service category. This step retrieves the configuration described in the <a href="/docs/benefit-plan-guide">Benefit Plan Configuration Guide</a>.</p>
+
+        <p><strong>Failure action:</strong> Pend to work queue if plan mapping cannot be resolved (rare &mdash; typically indicates a data issue).</p>
+
+        <h3 id="pipeline-step-3">Step 3: Provider Validation</h3>
+
+        <p>Verifies the rendering and billing providers are active, credentialed, and not excluded from federal programs. This step integrates with the <a href="/docs/provider-verification-guide">ProviderVerificationService</a>:</p>
+
+        <ul>
+          <li>NPI is valid and active in NPPES</li>
+          <li>Provider is not on the OIG exclusion list (LEIE) or GSA SAM exclusion list</li>
+          <li>Provider credentials are current (license, DEA, board certification)</li>
+          <li>Provider is contracted with the member&rsquo;s plan network (determines in-network vs. out-of-network tier)</li>
+        </ul>
+
+        <p><strong>Failure action:</strong> Deny if provider is excluded. Pend to &ldquo;Provider Not Contracted&rdquo; queue if provider is not in the plan&rsquo;s network.</p>
+
+        <h3 id="pipeline-step-4">Step 4: Duplicate Check</h3>
+
+        <p>A second duplicate check is performed post-ingestion to catch duplicates that may have arrived between the ingestion check and adjudication processing (race condition protection for high-volume environments).</p>
+
+        <p><strong>Failure action:</strong> Deny with CARC code <code>18</code> (Exact duplicate claim/service).</p>
+
+        <h3 id="pipeline-step-5">Step 5: NCCI/MUE Edits</h3>
+
+        <p>National Correct Coding Initiative (NCCI) edit pairs and Medically Unlikely Edits (MUE) are applied. See <a href="#clinical-edits">Section 3: Clinical Edits</a> for full detail.</p>
+
+        <ul>
+          <li><strong>NCCI Column 1/Column 2</strong> &mdash; Checks for mutually exclusive procedure code combinations on the same date of service</li>
+          <li><strong>MUE unit limits</strong> &mdash; Validates that billed units do not exceed the CMS-published per-procedure per-day limit</li>
+        </ul>
+
+        <p><strong>Failure action:</strong> Deny the affected line(s) or pend to &ldquo;NCCI/MUE Edit Failures&rdquo; queue depending on configuration.</p>
+
+        <h3 id="pipeline-step-6">Step 6: Fee Schedule Repricing</h3>
+
+        <p>The contracted fee schedule or regulatory rate is applied to calculate the allowed amount for each claim line. This step uses the <a href="/docs/fee-schedule-guide">FeeScheduleEngine</a>:</p>
+
+        <ul>
+          <li><strong>Professional claims (837P)</strong> &mdash; Fee schedule rate by CPT/HCPCS code, modifier, and place of service</li>
+          <li><strong>Institutional claims (837I)</strong> &mdash; DRG-based pricing for inpatient; APC or fee schedule for outpatient</li>
+          <li><strong>Multiple procedure reduction</strong> &mdash; Subsequent procedures in the same session are reduced per configured rules</li>
+        </ul>
+
+        <p><strong>Failure action:</strong> Pend to &ldquo;No Rate&rdquo; queue if no fee schedule rate is found after cross-schedule resolution.</p>
+
+        <h3 id="pipeline-step-7">Step 7: Coordination of Benefits (COB)</h3>
+
+        <p>Determines the plan&rsquo;s liability when the member has coverage from multiple payers:</p>
+
+        <ul>
+          <li><strong>Primary/secondary determination</strong> &mdash; Based on COB rules (birthday rule, active employee rule, etc.)</li>
+          <li><strong>Other payer payment</strong> &mdash; If this plan is secondary, the other payer&rsquo;s payment is subtracted from the allowed amount before calculating plan liability</li>
+          <li><strong>Medicare Secondary Payer (MSP)</strong> &mdash; Special handling for Medicare Advantage plans when Medicare is secondary</li>
+        </ul>
+
+        <p><strong>Failure action:</strong> Pend to &ldquo;COB/Other Payer&rdquo; queue if other payer information is missing or conflicting.</p>
+
+        <h3 id="pipeline-step-8">Step 8: Accumulator Update</h3>
+
+        <p>The member&rsquo;s deductible, out-of-pocket, and visit limit accumulators are read from Redis (see <a href="/docs/benefit-plan-guide#accumulators">Benefit Plan Guide: Accumulators</a>), and the member&rsquo;s cost sharing is calculated:</p>
+
+        <ul>
+          <li>If the deductible is not yet met, the member pays the allowed amount (up to the remaining deductible)</li>
+          <li>After the deductible, copay and/or coinsurance are applied per the plan&rsquo;s cost sharing rules</li>
+          <li>If the OOP max is met, the plan pays 100% &mdash; no further member cost sharing</li>
+          <li>Accumulators are updated in Redis in real time to ensure subsequent claims in the same session reflect the latest balances</li>
+        </ul>
+
+        <p><strong>Failure action:</strong> If accumulator data is unavailable (Redis outage), claim is queued for retry with exponential backoff.</p>
+
+        <h3 id="pipeline-step-9">Step 9: Authorization Match</h3>
+
+        <p>For services that require prior authorization (as defined in the benefit plan&rsquo;s auth-required rules), the system attempts to match the claim to an approved authorization:</p>
+
+        <ul>
+          <li>Match criteria: member ID + service type + procedure code + date of service within the authorization&rsquo;s valid date range</li>
+          <li>Unit/day validation: billed units must not exceed remaining authorized units</li>
+          <li>Authorization status must be <code>Approved</code> or <code>Partial</code> (not <code>Expired</code> or <code>Voided</code>)</li>
+        </ul>
+
+        <p><strong>Failure action:</strong> Pend to &ldquo;Missing Prior Auth&rdquo; queue. See the <a href="/docs/prior-auth-guide">Prior Authorization Guide</a> for auth lifecycle details.</p>
+
+        <h3 id="pipeline-step-10">Step 10: Final Disposition</h3>
+
+        <p>After all nine preceding steps complete successfully, the claim receives its final disposition:</p>
+
+        <ul>
+          <li><strong>Approve</strong> &mdash; All steps passed; claim is marked <code>Adjudicated</code> and queued for payment</li>
+          <li><strong>Deny</strong> &mdash; One or more steps resulted in a hard denial (e.g., not eligible, duplicate, excluded provider)</li>
+          <li><strong>Pend</strong> &mdash; One or more steps require manual review; claim is routed to the appropriate work queue</li>
+        </ul>
+
+        <h3 id="pipeline-summary-table">Pipeline Summary</h3>
+
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Engine / Service</th><th>Failure Action</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1. Eligibility Verification</td><td>EligibilityService</td><td>Deny (CARC 27/31)</td></tr>
+            <tr><td>2. Benefit Lookup</td><td>BenefitPlanEngine</td><td>Pend (data issue)</td></tr>
+            <tr><td>3. Provider Validation</td><td>ProviderVerificationService</td><td>Deny (excluded) / Pend (not contracted)</td></tr>
+            <tr><td>4. Duplicate Check</td><td>DuplicateDetectionService</td><td>Deny (CARC 18)</td></tr>
+            <tr><td>5. NCCI/MUE Edits</td><td>ClinicalEditEngine</td><td>Deny line(s) / Pend to NCCI queue</td></tr>
+            <tr><td>6. Fee Schedule Repricing</td><td>FeeScheduleEngine</td><td>Pend (no rate found)</td></tr>
+            <tr><td>7. COB</td><td>COBEngine</td><td>Pend to COB queue</td></tr>
+            <tr><td>8. Accumulator Update</td><td>AccumulatorService (Redis)</td><td>Retry (Redis outage)</td></tr>
+            <tr><td>9. Authorization Match</td><td>PriorAuthMatchService</td><td>Pend to Missing Auth queue</td></tr>
+            <tr><td>10. Final Disposition</td><td>AdjudicationOrchestrator</td><td>Approve / Deny / Pend</td></tr>
+          </tbody>
+        </table>
+
+        <!-- ============================= -->
+        <!-- CLINICAL EDITS                -->
+        <!-- ============================= -->
+        <h2 id="clinical-edits">3. Clinical Edits</h2>
+
+        <p>Clinical edits enforce coding compliance by detecting invalid procedure code combinations and medically unlikely billing patterns. Cloud Health Office applies CMS-published NCCI and MUE edits, plus configurable plan-specific custom edits.</p>
+
+        <h3 id="ncci-pairs">NCCI Column 1 / Column 2 Pairs</h3>
+
+        <p>The National Correct Coding Initiative defines pairs of procedure codes that should not normally be billed together on the same date of service by the same provider for the same member:</p>
+
+        <ul>
+          <li><strong>Column 1 code</strong> &mdash; The comprehensive or primary procedure (payable)</li>
+          <li><strong>Column 2 code</strong> &mdash; The component or lesser procedure (denied unless a modifier exception applies)</li>
+          <li><strong>Modifier indicator</strong> &mdash; <code>0</code> = no modifier exception allowed (always deny Column 2); <code>1</code> = modifier exception allowed (Column 2 payable if modifier 25, 59, XE, XS, XP, or XU is present)</li>
+        </ul>
+
+        <p>When an NCCI pair is detected, the Column 2 procedure line is denied with the appropriate CARC/RARC codes unless a valid modifier override exists.</p>
+
+        <h3 id="mue-edits">MUE (Medically Unlikely Edits)</h3>
+
+        <p>Medically Unlikely Edits define the maximum number of units of service a provider would report for a single procedure code on a single date of service for a single member:</p>
+
+        <ul>
+          <li><strong>MUE value</strong> &mdash; The maximum allowed units (e.g., CPT 99213 has an MUE of 1 &mdash; you can only bill one Level 3 E/M visit per day)</li>
+          <li><strong>MUE adjudication indicator (MAI)</strong> &mdash; Determines the scope:
+            <ul>
+              <li><code>1</code> = Per claim line &mdash; each line evaluated independently</li>
+              <li><code>2</code> = Per date of service &mdash; all lines for the same code on the same date summed</li>
+              <li><code>3</code> = Per date of service, per provider &mdash; same as 2 but scoped to a single NPI</li>
+            </ul>
+          </li>
+        </ul>
+
+        <p>Units exceeding the MUE threshold are denied on the affected claim line.</p>
+
+        <h3 id="edit-overrides">Edit Overrides</h3>
+
+        <p>Authorized clinical staff can override NCCI and MUE denials when clinically justified. All overrides are:</p>
+
+        <ul>
+          <li>Logged with the overriding user&rsquo;s identity, timestamp, and reason code</li>
+          <li>Subject to audit review &mdash; overrides above a configurable dollar threshold trigger a second-level review</li>
+          <li>Tracked in the claim&rsquo;s adjudication trace log for compliance and reporting</li>
+        </ul>
+
+        <h3 id="custom-edits">Custom Edits</h3>
+
+        <p>Beyond CMS-standard NCCI/MUE edits, health plans can define plan-specific clinical edit rules:</p>
+
+        <ul>
+          <li><strong>State-specific edits</strong> &mdash; For example, Texas Medicaid-specific edits that go beyond federal NCCI rules</li>
+          <li><strong>LOB-specific edits</strong> &mdash; Medicare Advantage plans may have additional CMS-mandated edits not covered by standard NCCI files</li>
+          <li><strong>Plan-specific edits</strong> &mdash; Commercial plans may define edits based on medical policy (e.g., genetic testing requires specific diagnosis codes)</li>
+        </ul>
+
+        <h3 id="edit-types-table">Edit Types Summary</h3>
+
+        <table>
+          <thead>
+            <tr><th>Edit Type</th><th>Source</th><th>Example</th><th>Default Action</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>NCCI Column 1/2</strong></td><td>CMS quarterly release</td><td>CPT 58661 bundled with CPT 49320 (laparoscopy)</td><td>Deny Column 2 line</td></tr>
+            <tr><td><strong>MUE</strong></td><td>CMS quarterly release</td><td>CPT 99213 limited to 1 unit per day</td><td>Deny excess units</td></tr>
+            <tr><td><strong>Custom &mdash; State</strong></td><td>State Medicaid agency</td><td>Texas TMHP-specific procedure bundling rules</td><td>Deny or pend per rule</td></tr>
+            <tr><td><strong>Custom &mdash; Plan</strong></td><td>Health plan medical policy</td><td>Genetic test CPT 81235 requires ICD-10 C50.x</td><td>Deny or pend per rule</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Quarterly NCCI/MUE updates</div>
+          <p>CMS publishes updated NCCI and MUE files quarterly (January, April, July, October). Cloud Health Office supports bulk import of the CMS NCCI Physician and Practitioner files and MUE files. After import, changes take effect for claims with dates of service on or after the CMS-specified effective date.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- WORK QUEUES                   -->
+        <!-- ============================= -->
+        <h2 id="work-queues">4. Work Queues</h2>
+
+        <p>Claims that cannot be fully auto-adjudicated are routed to one of five standard work queues for manual review. Each queue targets a specific type of exception, allowing specialized examiners to resolve claims efficiently.</p>
+
+        <h3 id="standard-queues">Standard Work Queues</h3>
+
+        <table>
+          <thead>
+            <tr><th>#</th><th>Queue</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><strong>NCCI/MUE Edit Failures</strong></td><td>Claims with clinical edit denials (NCCI pair violations, MUE unit limit exceeded) requiring clinical review to determine if an override is justified</td></tr>
+            <tr><td>2</td><td><strong>Missing Prior Auth</strong></td><td>Service required prior authorization but no matching approved auth was found; examiner verifies if an auth exists outside the system or if a retroactive auth is warranted</td></tr>
+            <tr><td>3</td><td><strong>Provider Not Contracted</strong></td><td>Rendering provider is not in the member&rsquo;s plan network; examiner determines if OON benefits apply, if single-case agreement exists, or if No Surprises Act protections apply</td></tr>
+            <tr><td>4</td><td><strong>COB/Other Payer</strong></td><td>Coordination of benefits issues &mdash; other payer information is missing, conflicting, or the member&rsquo;s COB order needs to be verified with the member or other carrier</td></tr>
+            <tr><td>5</td><td><strong>Medical Review</strong></td><td>Claims flagged for medical necessity review based on dollar threshold (e.g., claims over $25,000), specific diagnosis codes, or random audit selection</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="queue-assignment">Queue Assignment Rules</h3>
+
+        <p>Queue routing is configurable at multiple levels:</p>
+
+        <ul>
+          <li><strong>LOB-level</strong> &mdash; Different LOBs can have different queue routing thresholds (e.g., Medicaid claims over $10,000 go to Medical Review; Commercial threshold is $25,000)</li>
+          <li><strong>Claim type-level</strong> &mdash; Institutional claims may have different routing rules than professional claims</li>
+          <li><strong>Dollar threshold</strong> &mdash; Claims exceeding a configurable dollar amount are automatically routed to Medical Review regardless of auto-adjudication outcome</li>
+          <li><strong>Random audit</strong> &mdash; A configurable percentage of auto-approved claims are randomly sampled and routed to Medical Review for quality assurance</li>
+        </ul>
+
+        <h3 id="queue-workflow">Queue Workflow</h3>
+
+        <p>Each claim in a work queue progresses through a four-stage workflow:</p>
+
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Assigned</code></td><td>Claim assigned to the queue; awaiting examiner pickup</td></tr>
+            <tr><td><code>In Review</code></td><td>Examiner has opened the claim and is actively reviewing</td></tr>
+            <tr><td><code>Approved / Denied</code></td><td>Examiner has made a disposition decision; claim returns to the adjudication pipeline for finalization</td></tr>
+            <tr><td><code>Closed</code></td><td>Claim fully processed; payment or denial generated</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="sla-tracking">SLA Tracking</h3>
+
+        <p>Each work queue has a configurable SLA target. The system tracks time from queue assignment to resolution and escalates claims approaching or exceeding their SLA:</p>
+
+        <table>
+          <thead>
+            <tr><th>Queue</th><th>Typical Volume</th><th>SLA Target</th><th>Escalation Rule</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>NCCI/MUE Edit Failures</td><td>5&ndash;10% of claims</td><td>5 business days</td><td>Auto-reassign to senior clinical examiner at 4 days</td></tr>
+            <tr><td>Missing Prior Auth</td><td>3&ndash;8% of claims</td><td>10 business days</td><td>Notify auth coordinator at 7 days; escalate to supervisor at 9 days</td></tr>
+            <tr><td>Provider Not Contracted</td><td>2&ndash;5% of claims</td><td>10 business days</td><td>Notify network management at 7 days</td></tr>
+            <tr><td>COB/Other Payer</td><td>3&ndash;7% of claims</td><td>15 business days</td><td>Send member COB questionnaire at 5 days; escalate at 12 days</td></tr>
+            <tr><td>Medical Review</td><td>1&ndash;3% of claims</td><td>30 calendar days</td><td>Escalate to medical director at 25 days</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Prompt-pay compliance</div>
+          <p>Work queue SLAs are configured to ensure compliance with state and federal prompt-pay regulations. The system tracks the &ldquo;clean claim date&rdquo; (date the claim was received with all required information) and alerts when a claim in any queue is approaching the regulatory payment deadline (typically 30 days for Medicaid, 30&ndash;45 days for commercial depending on state).</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- PAYMENT & DENIAL OUTPUT       -->
+        <!-- ============================= -->
+        <h2 id="payment-denial">5. Payment &amp; Denial Output</h2>
+
+        <p>After adjudication is complete &mdash; whether through auto-adjudication or work queue resolution &mdash; the system generates payment and denial outputs for both providers and members.</p>
+
+        <h3 id="claim-dispositions">Claim Dispositions</h3>
+
+        <table>
+          <thead>
+            <tr><th>Disposition</th><th>Member Impact</th><th>Provider Impact</th><th>ERA Action</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Paid</strong></td><td>Member responsibility calculated (copay/coinsurance/deductible); EOB generated</td><td>Payment issued via FFS payment run; 835 ERA generated</td><td>CLP01 = <code>1</code> (Processed as Primary)</td></tr>
+            <tr><td><strong>Denied</strong></td><td>No member responsibility; EOB with denial reason and appeal rights</td><td>No payment; 835 ERA with denial CARC/RARC codes</td><td>CLP01 = <code>4</code> (Denied)</td></tr>
+            <tr><td><strong>Partial</strong></td><td>Member responsibility on paid lines; EOB shows paid and denied lines</td><td>Payment for approved lines; 835 with line-level dispositions</td><td>Mixed CLP/SVC status codes</td></tr>
+            <tr><td><strong>Adjusted</strong></td><td>Updated EOB reflecting the adjustment; refund or additional payment if applicable</td><td>Adjustment payment or recoupment; corrected 835 ERA</td><td>CLP01 = <code>22</code> (Reversal) + new payment</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="carc-rarc">CARC/RARC Reason Codes</h3>
+
+        <p>Every denied or adjusted claim line includes standardized reason codes per the X12 835 standard:</p>
+
+        <ul>
+          <li><strong>CARC (Claim Adjustment Reason Code)</strong> &mdash; Explains why the payment amount differs from the billed amount. Examples:
+            <ul>
+              <li><code>1</code> &mdash; Deductible amount</li>
+              <li><code>2</code> &mdash; Coinsurance amount</li>
+              <li><code>3</code> &mdash; Copayment amount</li>
+              <li><code>18</code> &mdash; Exact duplicate claim/service</li>
+              <li><code>27</code> &mdash; Expenses incurred after coverage terminated</li>
+              <li><code>45</code> &mdash; Charge exceeds fee schedule/maximum allowable</li>
+              <li><code>197</code> &mdash; Precertification/authorization/notification absent</li>
+            </ul>
+          </li>
+          <li><strong>RARC (Remittance Advice Remark Code)</strong> &mdash; Provides supplemental information. Examples:
+            <ul>
+              <li><code>N362</code> &mdash; Missing/incomplete/invalid service authorization number</li>
+              <li><code>N657</code> &mdash; This procedure code is not payable with the billed procedure code per NCCI</li>
+              <li><code>M15</code> &mdash; Separately billed services/tests have been bundled</li>
+            </ul>
+          </li>
+        </ul>
+
+        <h3 id="eob-generation">EOB Generation</h3>
+
+        <p>Member-facing Explanations of Benefits (EOBs) are generated for every adjudicated claim and include:</p>
+
+        <ul>
+          <li>Provider name, date of service, and services performed (plain-language descriptions)</li>
+          <li>Billed amount, allowed amount, plan payment, and member responsibility breakdown</li>
+          <li>For denied services: plain-language denial reason (translated from CARC/RARC codes), the specific plan provision that applies, and appeal instructions</li>
+          <li>Accumulator summary showing current deductible and OOP max progress</li>
+        </ul>
+
+        <p>EOBs are available in the member portal and can be delivered via email notification or physical mail based on member preference.</p>
+
+        <h3 id="era-835-output">835 ERA Output</h3>
+
+        <p>Provider-facing Electronic Remittance Advice is generated as part of the FFS Payment Run process. For full detail on 835 generation, payment batching, and disbursement channels (NACHA ACH, Stripe Connect), see the <a href="/docs/finance-guide#ffs-payment-runs">Finance Guide: FFS Payment Runs</a> section.</p>
+
+        <h3 id="appeal-rights">Appeal Rights</h3>
+
+        <p>Every denied claim includes appeal instructions that comply with state regulation and ACA requirements:</p>
+
+        <ul>
+          <li><strong>Internal appeal</strong> &mdash; Member or provider can file an internal appeal within 180 days of the denial notice (ACA standard; state-specific timeframes may vary)</li>
+          <li><strong>External review</strong> &mdash; After exhausting internal appeals, the member can request an independent external review by a state-approved review organization</li>
+          <li><strong>Expedited review</strong> &mdash; Available for urgent/pre-service denials where standard timeframes could jeopardize the member&rsquo;s health (decision within 72 hours)</li>
+          <li><strong>Provider appeals</strong> &mdash; Providers can appeal on behalf of the member with the member&rsquo;s written authorization</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Appeal tracking</div>
+          <p>All appeals are tracked in the Claims module with their own lifecycle (Received &rarr; In Review &rarr; Upheld / Overturned). Appeal overturn rates are reported in the denial analytics dashboard to identify patterns that may indicate adjudication rule misconfiguration.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- GETTING STARTED               -->
+        <!-- ============================= -->
+        <h2 id="getting-started">Getting Started</h2>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Try it in the Demo Portal</div>
+          <p>The full claims adjudication pipeline is available in the <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> with synthetic claims data. Navigate to <strong>Claims &rarr; Work Queues</strong> to see pended claims, review auto-adjudication trace logs, and explore the 10-step pipeline output for individual claims.</p>
+        </div>
+
+        <p>Recommended setup order for a new health plan implementation:</p>
+
+        <ol>
+          <li><strong>Configure clearinghouse connectors</strong> &mdash; Set up SFTP connections for Availity, Change Healthcare, or your primary clearinghouse</li>
+          <li><strong>Load NCCI/MUE edit files</strong> &mdash; Import the latest CMS quarterly release of NCCI physician/practitioner pairs and MUE values</li>
+          <li><strong>Configure fee schedules</strong> &mdash; Load rate tables for Medicare RBRVS, Medicaid, and commercial contracts (see <a href="/docs/fee-schedule-guide">Fee Schedule Guide</a>)</li>
+          <li><strong>Configure benefit plans</strong> &mdash; Set up plan structures, cost sharing rules, and accumulators (see <a href="/docs/benefit-plan-guide">Benefit Plan Guide</a>)</li>
+          <li><strong>Set up work queue routing rules</strong> &mdash; Configure queue assignment thresholds per LOB, claim type, and dollar amount</li>
+          <li><strong>Submit a test 837P through the pipeline</strong> &mdash; Use the Direct 837 Upload or the API to submit a sample professional claim</li>
+          <li><strong>Review the auto-adjudication trace log and generated 835</strong> &mdash; Verify each of the 10 pipeline steps executed correctly and the ERA output matches expected results</li>
+        </ol>
+
+        <!-- Related Docs -->
+        <h2 id="related-docs">Related Documentation</h2>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <a href="/docs/benefit-plan-guide" class="docs-hub-card">
+            <h3>Benefit Plan Configuration</h3>
+            <p>Plan structures, cost sharing rules, and accumulator configuration that drive claims adjudication behavior.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/fee-schedule-guide" class="docs-hub-card">
+            <h3>Fee Schedule</h3>
+            <p>Rate tables, DRG pricing, multiple procedure rules, and the cross-schedule resolution hierarchy used during repricing.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/prior-auth-guide" class="docs-hub-card">
+            <h3>Prior Authorization</h3>
+            <p>Authorization request processing, decision engine, and lifecycle management &mdash; the auth records matched during Step 9.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/finance-guide" class="docs-hub-card">
+            <h3>Finance Guide</h3>
+            <p>FFS payment runs, 835 ERA generation, and provider disbursement &mdash; the downstream output of paid claims.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/benefit-plan-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Benefit Plan Configuration</div>
+          </a>
+          <a href="/docs/prior-auth-guide" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Prior Authorization</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

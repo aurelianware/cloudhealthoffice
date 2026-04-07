@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fee Schedule Guide — Cloud Health Office</title>
+  <meta name="description" content="Complete user guide for fee schedule configuration in Cloud Health Office — Medicare RBRVS, Medicaid rates, commercial contracted rates, DRG-based inpatient pricing, and multiple procedure reduction rules." />
+  <meta name="keywords" content="fee schedule configuration, healthcare payer fee schedule, Medicare RBRVS, Medicaid fee schedule, DRG pricing, claims repricing, multiple procedure reduction, QNXT fee schedule alternative, FeeScheduleEngine, healthcare rate management" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/fee-schedule-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/fee-schedule-guide" />
+  <meta property="og:title" content="Fee Schedule Guide — Cloud Health Office" />
+  <meta property="og:description" content="Complete user guide for fee schedule configuration — Medicare RBRVS, Medicaid rates, commercial contracted rates, DRG pricing, and multiple procedure reduction rules." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Fee Schedule Guide — Cloud Health Office",
+    "description": "Complete user guide for fee schedule configuration in Cloud Health Office — Medicare RBRVS, Medicaid rates, commercial contracted rates, DRG-based inpatient pricing, and multiple procedure reduction rules.",
+    "url": "https://cloudhealthoffice.com/docs/fee-schedule-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-07",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Fee schedule configuration",
+      "Medicare RBRVS",
+      "Medicaid fee schedules",
+      "DRG-based inpatient pricing",
+      "Multiple procedure reduction rules",
+      "Cross-schedule resolution"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Fee Schedule Guide", "item": "https://cloudhealthoffice.com/docs/fee-schedule-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide" class="active">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#rate-tables">Rate Tables</a></li>
+              <li><a href="#drg-pricing">DRG-Based Inpatient Pricing</a></li>
+              <li><a href="#multiple-procedure-rules">Multiple Procedure Rules</a></li>
+              <li><a href="#cross-schedule-resolution">Cross-Schedule Resolution</a></li>
+              <li><a href="#repricing-api">Repricing API</a></li>
+              <li><a href="#getting-started">Getting Started</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Fee Schedule Guide</span>
+        </div>
+
+        <h1>Fee Schedule Guide</h1>
+        <p class="docs-subtitle">
+          End-to-end guide to fee schedule configuration in Cloud Health Office &mdash; from Medicare RBRVS and Medicaid rate loading through commercial contracted rates, DRG-based inpatient pricing, and multiple procedure reduction rules. Covers the <strong>FeeScheduleEngine</strong> used during claims adjudication repricing.
+        </p>
+
+        <!-- Overview -->
+        <h2 id="overview">Overview</h2>
+
+        <p>Fee schedule configuration determines how much Cloud Health Office pays for every procedure, service, and inpatient stay. The FeeScheduleEngine evaluates each claim line during Step 6 (Repricing) of the <a href="/docs/claims-guide">auto-adjudication pipeline</a>, resolving the allowed amount based on the member&rsquo;s benefit plan, provider contract, and applicable fee schedule rules.</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4B2;</span>
+            <h3>Rate Tables</h3>
+            <p>Medicare RBRVS, Medicaid state fee schedules, commercial contracted rates, per-diem rates.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F3E5;</span>
+            <h3>DRG Pricing</h3>
+            <p>MS-DRG and APR-DRG based inpatient pricing with outlier calculations.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4CB;</span>
+            <h3>Multiple Procedure Rules</h3>
+            <p>Multiple procedure reduction, bilateral procedure discounts, assistant surgeon rates.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F504;</span>
+            <h3>Cross-Schedule Resolution</h3>
+            <p>Medicaid cross-walk when primary schedule has no rate; configurable fallback hierarchy.</p>
+          </div>
+        </div>
+
+        <!-- ============================= -->
+        <!-- RATE TABLES                   -->
+        <!-- ============================= -->
+        <h2 id="rate-tables">1. Rate Tables</h2>
+
+        <p>Rate tables define the allowed amount for each procedure code, modifier, and place of service combination. Cloud Health Office supports multiple fee schedule types, each serving a different pricing methodology.</p>
+
+        <h3 id="fee-schedule-types">Fee Schedule Types</h3>
+
+        <table>
+          <thead>
+            <tr><th>Fee Schedule Type</th><th>Source</th><th>Update Frequency</th><th>Typical Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Medicare RBRVS</strong></td><td>CMS annual release (Physician Fee Schedule)</td><td>Annually (January) + quarterly updates</td><td>Medicare Advantage, benchmark for commercial rates</td></tr>
+            <tr><td><strong>Medicaid State Schedule</strong></td><td>State Medicaid agency (e.g., TMHP for Texas)</td><td>Varies by state (quarterly to annually)</td><td>Medicaid managed care, CHIP</td></tr>
+            <tr><td><strong>Commercial Contracted</strong></td><td>Provider contract negotiation</td><td>Per contract term (typically 1&ndash;3 years)</td><td>Commercial HMO/PPO/POS plans</td></tr>
+            <tr><td><strong>Per Diem</strong></td><td>Provider contract (daily rate by service type)</td><td>Per contract term</td><td>Inpatient facility claims, SNF, rehab</td></tr>
+            <tr><td><strong>Percent of Billed</strong></td><td>Contract or fallback configuration</td><td>As configured</td><td>Out-of-network, fallback when no other rate exists</td></tr>
+            <tr><td><strong>Case Rate</strong></td><td>Provider contract (flat rate per episode)</td><td>Per contract term</td><td>Bundled payments (e.g., maternity global, joint replacement)</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="rate-table-structure">Rate Table Structure</h3>
+
+        <p>Each rate table entry maps a procedure code to a payment rate using the following key fields:</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Description</th><th>Example</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Procedure Code</strong></td><td>CPT or HCPCS code identifying the service</td><td><code>99213</code> (office visit), <code>27447</code> (total knee)</td></tr>
+            <tr><td><strong>Modifier</strong></td><td>Modifier that affects the rate (optional)</td><td><code>26</code> (professional component), <code>TC</code> (technical component)</td></tr>
+            <tr><td><strong>Place of Service</strong></td><td>POS code where the service is rendered</td><td><code>11</code> (office), <code>22</code> (outpatient hospital)</td></tr>
+            <tr><td><strong>Rate</strong></td><td>Allowed amount in dollars</td><td><code>$92.33</code></td></tr>
+            <tr><td><strong>Effective Date</strong></td><td>Date the rate becomes active</td><td><code>2026-01-01</code></td></tr>
+            <tr><td><strong>Term Date</strong></td><td>Date the rate expires (null = open-ended)</td><td><code>2026-12-31</code> or null</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-fee-schedule-rate-lookup.svg" alt="Fee schedule rate lookup: procedure code + modifier + POS + date of service → rate" />
+        </figure>
+
+        <h3 id="geographic-adjustments">Geographic Locality Adjustments</h3>
+
+        <p>Rates vary by geographic region to account for differences in practice costs:</p>
+
+        <ul>
+          <li><strong>Medicare GPCI</strong> (Geographic Practice Cost Index) &mdash; CMS publishes three GPCI components per locality: Work, Practice Expense, and Malpractice. The RBRVS rate is calculated as: <code>(Work RVU × Work GPCI + PE RVU × PE GPCI + MP RVU × MP GPCI) × Conversion Factor</code></li>
+          <li><strong>Medicaid locality factors</strong> &mdash; State-specific adjustments (e.g., Texas TMHP uses locality-adjusted rates for urban vs. rural areas)</li>
+          <li><strong>Commercial contracts</strong> &mdash; May use flat rates per provider/facility or apply locality adjustments based on the provider&rsquo;s practice ZIP code</li>
+        </ul>
+
+        <h3 id="rate-loading">Rate Loading</h3>
+
+        <p>Fee schedule rates can be loaded into the system through multiple channels:</p>
+
+        <ul>
+          <li><strong>Bulk import (CSV/Excel)</strong> &mdash; Upload a file containing procedure codes, modifiers, POS, rates, and effective dates. The system validates the file format and identifies duplicate or conflicting rates before committing.</li>
+          <li><strong>API upload</strong> &mdash; Programmatic rate loading via the Fee Schedule API. Used for automated CMS rate updates and clearinghouse integrations.</li>
+          <li><strong>Portal manual entry</strong> &mdash; Individual rate creation and editing through the admin portal. Suitable for one-off rate corrections or contract-specific overrides.</li>
+        </ul>
+
+        <h3 id="rate-versioning">Rate Versioning</h3>
+
+        <p>Each fee schedule maintains a full version history. When a new rate is loaded for a procedure code that already has an active rate, the existing rate is automatically term-dated and the new rate takes effect on its configured effective date. Claims are always repriced using the rate that was effective on the date of service, ensuring that historical claims can be reprocessed with the correct rate even after rate updates.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Rate effective date matching</div>
+          <p>The FeeScheduleEngine resolves rates using the claim line&rsquo;s date of service, not the claim receipt date. A claim received on March 15 with a date of service of January 5 will be repriced using the rate that was effective on January 5.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- DRG PRICING                   -->
+        <!-- ============================= -->
+        <h2 id="drg-pricing">2. DRG-Based Inpatient Pricing</h2>
+
+        <p>Inpatient facility claims are typically priced using Diagnosis-Related Groups (DRGs) rather than individual procedure code rates. The DRG grouper assigns each inpatient stay to a DRG category based on clinical data, and the payment is calculated from the DRG&rsquo;s relative weight and the facility&rsquo;s base rate.</p>
+
+        <h3 id="drg-types">DRG Types</h3>
+
+        <table>
+          <thead>
+            <tr><th>DRG Type</th><th>Grouper</th><th>Input Data</th><th>Output</th><th>Typical Payer Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>MS-DRG</strong></td><td>CMS MS-DRG Grouper (v42+)</td><td>Principal diagnosis, secondary diagnoses, procedures, discharge status, age, sex</td><td>MS-DRG number + relative weight</td><td>Medicare, Medicare Advantage, some commercial</td></tr>
+            <tr><td><strong>APR-DRG</strong></td><td>3M APR-DRG Grouper</td><td>Same as MS-DRG + severity of illness (SOI) and risk of mortality (ROM) subclasses</td><td>APR-DRG number + SOI/ROM level + relative weight</td><td>Medicaid managed care, CHIP, some commercial</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="drg-pricing-formula">DRG Pricing Formula</h3>
+
+        <p>The payment for a DRG-priced inpatient claim is calculated as:</p>
+
+        <div class="callout callout-info" style="font-family: monospace; font-size: 1.05rem;">
+          <strong>Payment = Base Rate &times; DRG Relative Weight &times; (1 + Outlier Adjustment)</strong>
+        </div>
+
+        <ul>
+          <li><strong>Base Rate</strong> &mdash; Configured per hospital or per line of business. Represents the standardized payment amount before DRG adjustment. Can vary by contract (e.g., Hospital A has a base rate of $6,200; Hospital B has $5,800).</li>
+          <li><strong>DRG Relative Weight</strong> &mdash; A numeric factor assigned to each DRG that reflects resource intensity. A DRG with weight 1.0 represents the average; higher weights indicate more costly cases. Example: MS-DRG 470 (Major Hip/Knee Joint Replacement) has a relative weight of approximately 1.74.</li>
+          <li><strong>Outlier Adjustment</strong> &mdash; Additional payment for exceptionally costly or long-stay cases (see below).</li>
+        </ul>
+
+        <h3 id="outlier-calculations">Outlier Calculations</h3>
+
+        <p>Outlier payments protect hospitals from excessive losses on unusually costly cases:</p>
+
+        <ul>
+          <li><strong>Cost outlier</strong> &mdash; Triggered when the hospital&rsquo;s cost for the case exceeds the DRG payment by a threshold amount (typically the DRG payment &times; 3 or a fixed dollar threshold). The outlier payment covers a percentage (typically 80%) of the cost above the threshold.</li>
+          <li><strong>Day outlier</strong> &mdash; Triggered when the length of stay (LOS) exceeds the DRG&rsquo;s geometric mean LOS plus a configurable threshold (e.g., geometric mean + 20 days). A per-diem rate is applied for each day beyond the threshold.</li>
+        </ul>
+
+        <h3 id="transfer-pricing">Transfer Pricing</h3>
+
+        <p>When a patient is transferred to another facility before completing the full DRG episode, the transferring hospital receives a per-diem transfer rate instead of the full DRG payment:</p>
+
+        <ul>
+          <li><strong>Transfer per-diem</strong> &mdash; Full DRG payment &divide; geometric mean LOS &times; actual LOS (capped at the full DRG payment)</li>
+          <li><strong>Transfer DRGs</strong> &mdash; CMS designates specific DRGs as transfer-eligible; non-transfer DRGs pay the full amount regardless of discharge status</li>
+        </ul>
+
+        <!-- ============================= -->
+        <!-- MULTIPLE PROCEDURE RULES      -->
+        <!-- ============================= -->
+        <h2 id="multiple-procedure-rules">3. Multiple Procedure Rules</h2>
+
+        <p>When multiple procedures are performed during the same encounter, payment reduction rules apply to prevent overpayment. The FeeScheduleEngine applies these rules automatically during repricing based on the claim&rsquo;s procedure codes, modifiers, and configuration.</p>
+
+        <h3 id="multiple-procedure-reduction">Multiple Procedure Reduction</h3>
+
+        <p>When multiple procedures are performed in the same operative session:</p>
+
+        <ol>
+          <li>All procedures on the claim are ranked by allowed amount in descending order</li>
+          <li>The highest-valued procedure (primary) pays at <strong>100%</strong> of the fee schedule rate</li>
+          <li>The second procedure pays at a reduced rate (typically <strong>50%</strong>)</li>
+          <li>Third and subsequent procedures pay at a further reduced rate (typically <strong>25%</strong>)</li>
+        </ol>
+
+        <p>Reduction percentages are configurable per fee schedule and can vary by procedure category.</p>
+
+        <h3 id="rule-types">Rule Types</h3>
+
+        <table>
+          <thead>
+            <tr><th>Rule Type</th><th>Application</th><th>Rate Adjustment</th><th>Modifier Exceptions</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Multiple Procedure Reduction</strong></td><td>2+ procedures in same session</td><td>100% / 50% / 25% (configurable)</td><td>Modifier 59, XE, XS, XP, XU bypass reduction</td></tr>
+            <tr><td><strong>Bilateral Procedure</strong></td><td>Procedure performed on both sides</td><td>150% of single rate (or 100% &times; 2, per contract)</td><td>Modifier 50 triggers bilateral logic</td></tr>
+            <tr><td><strong>Assistant Surgeon</strong></td><td>Assistant surgeon present during procedure</td><td>16% of primary surgeon allowed amount</td><td>Modifier 80, 81, 82 identify assistant surgeon claims</td></tr>
+            <tr><td><strong>Co-Surgery</strong></td><td>Two surgeons performing distinct portions</td><td>62.5% each (configurable)</td><td>Modifier 62 identifies co-surgery</td></tr>
+            <tr><td><strong>Global Surgery</strong></td><td>Pre/post-op visits within global period</td><td>$0 (included in surgical rate)</td><td>Modifier 24, 25, 57, 58, 78, 79 override global denial</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="global-surgery-periods">Global Surgery Periods</h3>
+
+        <p>Surgical procedures include a global period that covers related pre-operative and post-operative services:</p>
+
+        <ul>
+          <li><strong>0-day global</strong> &mdash; Minor procedures (e.g., lesion destruction); only the day-of visit is included</li>
+          <li><strong>10-day global</strong> &mdash; Minor surgical procedures; includes the day of surgery + 10 post-operative days</li>
+          <li><strong>90-day global</strong> &mdash; Major surgical procedures; includes 1 pre-operative day + day of surgery + 90 post-operative days</li>
+        </ul>
+
+        <p>E/M visits billed during the global period by the same provider for the same diagnosis are denied as included in the surgical rate. Modifiers <code>24</code> (unrelated E/M during post-op), <code>25</code> (significant, separately identifiable E/M on the same day), and <code>57</code> (decision for surgery) override the global period denial.</p>
+
+        <h3 id="modifier-exceptions">Modifier-Based Exceptions</h3>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Distinct procedural service modifiers</div>
+          <p>Modifier <code>59</code> (Distinct Procedural Service) and the CMS subset modifiers <code>XE</code> (separate encounter), <code>XS</code> (separate structure), <code>XP</code> (separate practitioner), and <code>XU</code> (unusual non-overlapping service) indicate that two procedures that would normally be subject to multiple procedure reduction are in fact distinct services. When these modifiers are present, the FeeScheduleEngine bypasses the reduction and pays each procedure at the full fee schedule rate.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- CROSS-SCHEDULE RESOLUTION     -->
+        <!-- ============================= -->
+        <h2 id="cross-schedule-resolution">4. Cross-Schedule Resolution</h2>
+
+        <p>When the primary fee schedule assigned to a member&rsquo;s benefit plan does not contain a rate for a given procedure code, the FeeScheduleEngine falls through a configurable resolution hierarchy to find an applicable rate.</p>
+
+        <h3 id="resolution-hierarchy">Default Resolution Hierarchy</h3>
+
+        <ol>
+          <li><strong>Provider Contract Rate</strong> &mdash; Rate negotiated in the provider&rsquo;s contract for the specific procedure code and modifier. Checked first because contract terms take precedence.</li>
+          <li><strong>Plan-Specific Rate</strong> &mdash; Rate configured at the benefit plan level (e.g., a plan-specific override table for certain high-cost procedures).</li>
+          <li><strong>Medicaid State Fee Schedule</strong> &mdash; State Medicaid fee schedule rate. Applicable for Medicaid managed care when the primary contract does not include the procedure.</li>
+          <li><strong>Medicare RBRVS</strong> &mdash; CMS Physician Fee Schedule rate with applicable GPCI adjustments. Used as a widely-accepted benchmark rate.</li>
+          <li><strong>Percent of Billed (Fallback)</strong> &mdash; A configurable percentage of the provider&rsquo;s billed amount (e.g., 80% of billed charges). Used only when no other rate source is available.</li>
+        </ol>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-fee-schedule-resolution.svg" alt="Cross-schedule resolution hierarchy: contract → plan → Medicaid → Medicare → % of billed" />
+        </figure>
+
+        <h3 id="medicaid-cross-schedule">Medicaid Cross-Schedule</h3>
+
+        <p>Medicaid programs frequently reference Medicare rates when the state fee schedule does not include a procedure code. For example, Texas Medicaid (TMHP) uses cross-references to the CMS Physician Fee Schedule when the TMHP fee schedule has no rate for a given CPT code. Cloud Health Office supports this cross-schedule logic as a configurable rule:</p>
+
+        <ul>
+          <li>Primary schedule: TMHP State Fee Schedule</li>
+          <li>Cross-reference: Medicare RBRVS with Texas locality GPCI</li>
+          <li>Adjustment: configurable percentage of Medicare rate (e.g., 95% of Medicare)</li>
+        </ul>
+
+        <h3 id="rate-floor-ceiling">Rate Floor / Ceiling</h3>
+
+        <p>Regardless of which fee schedule the rate is resolved from, configurable floor and ceiling amounts can be applied:</p>
+
+        <ul>
+          <li><strong>Rate floor</strong> &mdash; Minimum allowed amount for any procedure (e.g., $5.00). Prevents $0 or extremely low rates from being applied to claims.</li>
+          <li><strong>Rate ceiling</strong> &mdash; Maximum allowed amount for any procedure (e.g., $50,000). Prevents erroneously high rates from being applied without review.</li>
+          <li>Floor and ceiling can be configured globally, per fee schedule, or per procedure code range.</li>
+        </ul>
+
+        <h3 id="no-rate-handling">No-Rate Handling</h3>
+
+        <div class="callout callout-info">
+          <div class="callout-title">No rate found after full resolution</div>
+          <p>If no rate is found after traversing the entire resolution hierarchy (including the percent-of-billed fallback), the claim line is pended to the <strong>&ldquo;No Rate&rdquo; work queue</strong> for manual pricing. The claim examiner can research the appropriate rate, enter it manually, and optionally add it to the fee schedule for future claims with the same procedure code.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- REPRICING API                 -->
+        <!-- ============================= -->
+        <h2 id="repricing-api">5. Repricing API</h2>
+
+        <p>The FeeScheduleEngine is exposed via the <strong>Claims Repricing API</strong> at <a href="https://portal.cloudhealthoffice.com/apis" target="_blank" rel="noopener noreferrer">portal.cloudhealthoffice.com/apis</a>, enabling real-time rate lookup and repricing outside the claims adjudication pipeline.</p>
+
+        <h3 id="api-interface">API Interface</h3>
+
+        <p>The Repricing API accepts claim line details and returns the resolved allowed amount along with full transparency into which fee schedule and rules were applied:</p>
+
+        <table>
+          <thead>
+            <tr><th>API Endpoint</th><th>Method</th><th>Input</th><th>Output</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>/api/v1/reprice</code></td><td>POST</td><td>Procedure code, modifier, POS, date of service, provider NPI, member plan, LOB</td><td>Allowed amount, fee schedule used, rate effective date, multiple procedure adjustments</td></tr>
+            <tr><td><code>/api/v1/reprice/batch</code></td><td>POST</td><td>Array of claim lines (same fields as single reprice)</td><td>Array of repricing results with per-line detail</td></tr>
+            <tr><td><code>/api/v1/reprice/estimate</code></td><td>POST</td><td>Procedure code, modifier, POS, provider NPI, plan ID</td><td>Estimated allowed amount (uses current date; no member-specific accumulators)</td></tr>
+            <tr><td><code>/api/v1/fee-schedules/{id}/rates</code></td><td>GET</td><td>Fee schedule ID, optional procedure code filter</td><td>Rate table entries matching the filter criteria</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="api-request-response">Request &amp; Response</h3>
+
+        <p>A typical repricing request includes:</p>
+
+        <ul>
+          <li><strong>Procedure code</strong> &mdash; CPT or HCPCS code for the service</li>
+          <li><strong>Modifier(s)</strong> &mdash; Up to four modifiers that may affect the rate or trigger reduction rules</li>
+          <li><strong>Place of service</strong> &mdash; POS code (e.g., <code>11</code> office, <code>22</code> outpatient hospital)</li>
+          <li><strong>Date of service</strong> &mdash; Used for rate effective date matching and geographic adjustments</li>
+          <li><strong>Provider NPI</strong> &mdash; Resolves the provider&rsquo;s contract and network tier</li>
+          <li><strong>Member plan / LOB</strong> &mdash; Determines the applicable fee schedule and cross-schedule resolution hierarchy</li>
+        </ul>
+
+        <p>The response includes:</p>
+
+        <ul>
+          <li><strong>Allowed amount</strong> &mdash; The final repriced amount after all rules and adjustments</li>
+          <li><strong>Fee schedule used</strong> &mdash; Which fee schedule in the resolution hierarchy provided the rate</li>
+          <li><strong>Rate effective date</strong> &mdash; The effective date of the matched rate entry</li>
+          <li><strong>Multiple procedure adjustments</strong> &mdash; Any reduction percentages applied (for batch repricing with multiple lines)</li>
+          <li><strong>Resolution path</strong> &mdash; The full hierarchy traversal showing which schedules were checked</li>
+        </ul>
+
+        <h3 id="api-use-cases">Use Cases</h3>
+
+        <ul>
+          <li><strong>Real-time repricing during claim submission</strong> &mdash; Front-end claim entry screens call the Repricing API to display the expected allowed amount before the claim is submitted to the adjudication pipeline</li>
+          <li><strong>Provider contract modeling</strong> &mdash; &ldquo;What if&rdquo; scenarios comparing current contracted rates against proposed new rates for contract negotiation</li>
+          <li><strong>Network adequacy rate analysis</strong> &mdash; Batch repricing of historical claims against a proposed fee schedule to evaluate financial impact before loading the schedule into production</li>
+          <li><strong>Member cost estimation</strong> &mdash; Combined with benefit plan cost sharing rules, the repricing result can estimate the member&rsquo;s out-of-pocket responsibility for a planned service</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Repricing API Sandbox</div>
+          <p>The Repricing API is available in the <a href="https://sandbox.cloudhealthoffice.com/?spec=repricing" target="_blank" rel="noopener noreferrer">API Sandbox</a> with sample fee schedules and provider contracts. Submit test repricing requests and inspect the full resolution path to understand how rates are determined.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- GETTING STARTED               -->
+        <!-- ============================= -->
+        <h2 id="getting-started">Getting Started</h2>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Try it in the Demo Portal</div>
+          <p>The fee schedule module is available in the <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> with sample Medicare RBRVS and commercial contracted rates. Navigate to <strong>Configuration &rarr; Fee Schedules</strong> to explore rate tables, DRG pricing, and multiple procedure rules. Also try the <a href="https://sandbox.cloudhealthoffice.com/?spec=repricing" target="_blank" rel="noopener noreferrer">Repricing API Sandbox</a> to test real-time rate resolution.</p>
+        </div>
+
+        <p>Recommended setup order for a new health plan implementation:</p>
+
+        <ol>
+          <li><strong>Load Medicare RBRVS rates</strong> &mdash; Import the annual CMS Physician Fee Schedule release as the baseline rate source</li>
+          <li><strong>Load Medicaid state fee schedules</strong> &mdash; Import the applicable state fee schedule(s) for Medicaid LOBs</li>
+          <li><strong>Configure DRG base rates by hospital/LOB</strong> &mdash; Set facility base rates and load DRG relative weights per hospital contract</li>
+          <li><strong>Set up multiple procedure reduction rules</strong> &mdash; Configure reduction percentages, bilateral logic, and modifier exception handling</li>
+          <li><strong>Configure cross-schedule resolution hierarchy</strong> &mdash; Set the fallback order, Medicaid cross-references, and percent-of-billed default</li>
+          <li><strong>Test repricing with sample claims</strong> &mdash; Submit test claims through the Repricing API and verify the FeeScheduleEngine resolves correct rates</li>
+          <li><strong>Verify rates match expected QNXT/legacy system rates</strong> &mdash; Run a batch comparison of repriced amounts against the legacy system to confirm parity</li>
+        </ol>
+
+        <!-- Related Docs -->
+        <h2 id="related-docs">Related Documentation</h2>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <h3>Claims Adjudication</h3>
+            <p>How the FeeScheduleEngine integrates with the auto-adjudication pipeline at Step 6 (Repricing).</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/benefit-plan-guide" class="docs-hub-card">
+            <h3>Benefit Plan Configuration</h3>
+            <p>Plan structures and cost sharing rules that interact with fee schedule allowed amounts.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/finance-guide" class="docs-hub-card">
+            <h3>Finance Guide</h3>
+            <p>Premium billing, capitation, and financial reporting that depend on fee schedule pricing data.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/api" class="docs-hub-card">
+            <h3>API Reference</h3>
+            <p>Fee Schedule API for programmatic rate loading, lookup, and repricing integration.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/eligibility-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Eligibility &amp; Enrollment</div>
+          </a>
+          <a href="/docs/terminology-guide" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Terminology Crosswalk</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
