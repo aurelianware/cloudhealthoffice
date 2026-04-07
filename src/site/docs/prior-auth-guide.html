@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prior Authorization Guide — Cloud Health Office</title>
+  <meta name="description" content="Complete user guide for prior authorization in Cloud Health Office — X12 278 request/response, decision engine, clinical criteria, Da Vinci CRD/DTR/PAS integration, and authorization lifecycle management." />
+  <meta name="keywords" content="prior authorization engine, healthcare payer prior auth, X12 278 integration, Da Vinci CRD DTR PAS, prior auth decision engine, clinical criteria automation, PCHP prior auth, Texas Medicaid authorization, prior authorization API, CMS-0057-F prior auth" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/prior-auth-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/prior-auth-guide" />
+  <meta property="og:title" content="Prior Authorization Guide — Cloud Health Office" />
+  <meta property="og:description" content="Complete user guide for prior authorization — X12 278 request/response, decision engine, clinical criteria, Da Vinci CRD/DTR/PAS integration, and authorization lifecycle." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Prior Authorization Guide — Cloud Health Office",
+    "description": "Complete user guide for prior authorization in Cloud Health Office — X12 278 request/response, decision engine, clinical criteria, Da Vinci CRD/DTR/PAS integration, and authorization lifecycle management.",
+    "url": "https://cloudhealthoffice.com/docs/prior-auth-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-07",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Prior authorization",
+      "X12 278 request/response",
+      "Clinical decision engine",
+      "Da Vinci CRD/DTR/PAS",
+      "Authorization lifecycle management",
+      "CMS-0057-F prior auth compliance"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Prior Authorization Guide", "item": "https://cloudhealthoffice.com/docs/prior-auth-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide" class="active">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#auth-requests">Authorization Requests</a></li>
+              <li><a href="#decision-engine">Decision Engine</a></li>
+              <li><a href="#auth-lifecycle">Authorization Lifecycle</a></li>
+              <li><a href="#cms-0057f-apis">CMS-0057-F Prior Auth APIs</a></li>
+              <li><a href="#reporting">Reporting &amp; Analytics</a></li>
+              <li><a href="#getting-started">Getting Started</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Prior Authorization Guide</span>
+        </div>
+
+        <h1>Prior Authorization Guide</h1>
+        <p class="docs-subtitle">
+          End-to-end guide to prior authorization in Cloud Health Office &mdash; from X12 278 request receipt through clinical decision engine evaluation, authorization lifecycle, and Da Vinci FHIR IG integration. Covers CMS-0057-F prior auth API compliance.
+        </p>
+
+        <!-- Overview -->
+        <h2 id="overview">Overview</h2>
+
+        <p>Cloud Health Office prior authorization spans four major areas &mdash; from inbound request processing through automated clinical decision-making, lifecycle management, and CMS-mandated FHIR API compliance:</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4CB;</span>
+            <h3>Auth Requests</h3>
+            <p>X12 278 request receipt via clearinghouse EDI, FHIR Prior Auth API, and portal manual entry.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F9E0;</span>
+            <h3>Decision Engine</h3>
+            <p>Rule-based clinical criteria evaluation: PriorAuthDecisionEngine with 400&ndash;600+ configurable pathways per LOB.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F504;</span>
+            <h3>Auth Lifecycle</h3>
+            <p>Request &rarr; Pend &rarr; Approved/Denied/Partial &rarr; Extended &rarr; Expired; real-time status via 278 response and FHIR API.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F517;</span>
+            <h3>CMS-0057-F</h3>
+            <p>Da Vinci CRD (Coverage Requirements Discovery), DTR (Documentation Templates &amp; Rules), PAS (Prior Auth Support) integration.</p>
+          </div>
+        </div>
+
+        <p>The prior authorization module integrates directly with the <a href="/docs/claims-guide">claims adjudication pipeline</a> &mdash; approved authorizations are matched to inbound claims at Step 9 (Authorization Match) to determine whether the required auth exists and is valid.</p>
+
+        <!-- ============================= -->
+        <!-- AUTHORIZATION REQUESTS        -->
+        <!-- ============================= -->
+        <h2 id="auth-requests">1. Authorization Requests</h2>
+
+        <p>Authorization requests arrive from providers and facilities through multiple channels. Each request is validated, checked against the plan&rsquo;s auth-required rules, and routed to the decision engine for evaluation.</p>
+
+        <h3 id="inbound-channels">Inbound Channels</h3>
+
+        <table>
+          <thead>
+            <tr><th>Channel</th><th>Protocol</th><th>Mode</th><th>Typical Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>X12 278 via Clearinghouse</strong></td><td>SFTP / AS2</td><td>Batch &amp; real-time</td><td>Standard EDI channel via Availity, Change Healthcare, or other clearinghouses</td></tr>
+            <tr><td><strong>FHIR PriorAuth/$submit</strong></td><td>HTTPS (FHIR R4)</td><td>Real-time</td><td>Da Vinci PAS-enabled EHR systems submitting via FHIR API</td></tr>
+            <tr><td><strong>Portal Manual Entry</strong></td><td>HTTPS (portal UI)</td><td>Real-time</td><td>Payer staff entering requests received by phone, fax, or mail</td></tr>
+            <tr><td><strong>Phone / Fax (Digitized)</strong></td><td>Portal data entry</td><td>Asynchronous</td><td>Legacy requests digitized by utilization management staff into the portal</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="request-data">Request Data Elements</h3>
+
+        <p>Each authorization request includes the following data elements, regardless of the inbound channel:</p>
+
+        <table>
+          <thead>
+            <tr><th>Data Element</th><th>Source</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>MemberID</code></td><td>278 Loop 2010C / FHIR Patient</td><td>Unique identifier for the member requiring the service</td></tr>
+            <tr><td><code>RequestingProviderNPI</code></td><td>278 Loop 2010B / FHIR Practitioner</td><td>Ordering/referring provider&rsquo;s NPI</td></tr>
+            <tr><td><code>ServicingProviderNPI</code></td><td>278 Loop 2010EA / FHIR Practitioner</td><td>Provider or facility performing the service</td></tr>
+            <tr><td><code>DiagnosisCodes</code></td><td>278 HI segment / FHIR Condition</td><td>ICD-10-CM codes supporting medical necessity</td></tr>
+            <tr><td><code>ProcedureCodes</code></td><td>278 SV1/SV2 / FHIR ServiceRequest</td><td>CPT/HCPCS codes for the requested service(s)</td></tr>
+            <tr><td><code>PlaceOfService</code></td><td>278 UM04 / FHIR Encounter.class</td><td>Where the service will be rendered (Inpatient, Outpatient, Office, Home, etc.)</td></tr>
+            <tr><td><code>RequestedUnits</code></td><td>278 UM05 / FHIR ServiceRequest.quantity</td><td>Number of units, visits, or days requested</td></tr>
+            <tr><td><code>ClinicalNotes</code></td><td>278 PWK segment / FHIR DocumentReference</td><td>Attached clinical documentation supporting the request</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="request-validation">Request Validation</h3>
+
+        <p>Before routing to the decision engine, each request undergoes three validation checks:</p>
+
+        <ol>
+          <li><strong>Member eligibility check</strong> &mdash; Confirm the member has active coverage on the requested service date. If the member is not eligible, the request is denied immediately.</li>
+          <li><strong>Provider active/credentialed check</strong> &mdash; Verify both the requesting and servicing providers are active, credentialed, and not on any exclusion list (OIG LEIE, GSA SAM). Integrates with the <a href="/docs/provider-verification-guide">ProviderVerificationService</a>.</li>
+          <li><strong>Service-requires-auth lookup</strong> &mdash; Check whether the requested service + plan + place of service combination requires prior authorization. If no auth is required, the system returns an informational response indicating the service is covered without auth.</li>
+        </ol>
+
+        <h3 id="auth-required-determination">Auth-Required Determination</h3>
+
+        <p>The <code>IsAuthRequired</code> API checks the plan&rsquo;s auth-required configuration to determine whether the requested service needs prior authorization. This lookup considers:</p>
+
+        <ul>
+          <li><strong>Service category + procedure code</strong> &mdash; Some procedures always require auth (e.g., advanced imaging, inpatient admissions); others never do (e.g., routine PCP visits, preventive care)</li>
+          <li><strong>Place of service</strong> &mdash; The same procedure may require auth in one setting (outpatient surgery center) but not another (physician office)</li>
+          <li><strong>Line of Business</strong> &mdash; Medicaid may have different auth requirements than Commercial or Medicare Advantage</li>
+          <li><strong>Itiliti PA-Check integration</strong> &mdash; Cloud Health Office integrates with Itiliti&rsquo;s PA-Check service for real-time auth-required determination across multiple payers, enabling providers to check auth requirements before submission</li>
+        </ul>
+
+        <!-- Diagram: prior auth request flow -->
+        <figure class="docs-diagram">
+          <figcaption><strong>Prior authorization request flow</strong></figcaption>
+          <p><code>Submission</code> (X12 278 / FHIR PAS / Portal) &rarr; <code>Validation</code> (member, provider, plan) &rarr; <code>Auth-Required Check</code> (service category + LOB + POS) &rarr; <code>Decision Engine</code> (auto-approve / auto-deny / pend / request info)</p>
+        </figure>
+
+        <!-- ============================= -->
+        <!-- DECISION ENGINE               -->
+        <!-- ============================= -->
+        <h2 id="decision-engine">2. Decision Engine</h2>
+
+        <p>The <strong>PriorAuthDecisionEngine</strong> is the core of Cloud Health Office&rsquo;s prior authorization processing. It is a configuration-driven rule engine &mdash; no clinical logic is hardcoded. All rules are stored in Cosmos DB/MongoDB and can be modified, added, or deactivated without code deployment.</p>
+
+        <h3 id="rule-structure">Rule Structure</h3>
+
+        <p>Each decision rule follows a <strong>Condition &rarr; Action</strong> pattern:</p>
+
+        <ul>
+          <li><strong>Condition</strong> &mdash; A combination of criteria that must all be true for the rule to fire:
+            <ul>
+              <li>Diagnosis codes (ICD-10-CM code or code range)</li>
+              <li>Procedure codes (CPT/HCPCS code or code range)</li>
+              <li>Place of service</li>
+              <li>Line of Business</li>
+              <li>Member demographics (age range, sex, pregnancy status)</li>
+              <li>Prior treatment history (e.g., conservative therapy attempted for X weeks)</li>
+            </ul>
+          </li>
+          <li><strong>Action</strong> &mdash; The disposition when the condition matches:
+            <ul>
+              <li><code>Auto-Approve</code> &mdash; Request meets clinical criteria; authorization issued immediately</li>
+              <li><code>Auto-Deny</code> &mdash; Service is not covered or explicitly excluded by the plan</li>
+              <li><code>Pend for Clinical Review</code> &mdash; Requires nurse or physician reviewer evaluation</li>
+              <li><code>Request Additional Info</code> &mdash; Missing clinical documentation; request returned to provider</li>
+            </ul>
+          </li>
+        </ul>
+
+        <!-- Diagram: decision engine rule evaluation -->
+        <figure class="docs-diagram">
+          <figcaption><strong>Decision engine rule evaluation</strong></figcaption>
+          <p><code>Condition Set</code> (diagnosis + procedure + POS + LOB + demographics) &rarr; <code>Priority-Ordered Rule Match</code> &rarr; <code>Action</code>: Auto-Approve | Auto-Deny | Pend for Clinical Review | Request Additional Info</p>
+        </figure>
+
+        <h3 id="pathway-capacity">Pathway Capacity</h3>
+
+        <p>The PriorAuthDecisionEngine is designed to handle <strong>400&ndash;600+ authorization pathways</strong> per Line of Business. This is a key differentiator &mdash; many legacy and vendor solutions cap at approximately 130 rules, which is insufficient for complex Medicaid programs like Texas Medicaid that require hundreds of distinct authorization pathways across service categories.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Texas Medicaid example</div>
+          <p>Texas Medicaid alone has 400+ distinct prior authorization pathways covering behavioral health, DME, home health, therapies, and specialty pharmacy. The PriorAuthDecisionEngine supports the full pathway catalog with per-pathway turnaround SLAs, clinical criteria, and documentation requirements &mdash; all configurable without code changes.</p>
+        </div>
+
+        <h3 id="decision-categories">Decision Categories</h3>
+
+        <table>
+          <thead>
+            <tr><th>Decision Type</th><th>Criteria</th><th>Typical % of Volume</th><th>Turnaround SLA</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Auto-Approve</strong></td><td>Request meets all clinical criteria; no review needed</td><td>40&ndash;60%</td><td>Immediate (&lt; 1 minute)</td></tr>
+            <tr><td><strong>Auto-Deny</strong></td><td>Service not covered, explicitly excluded, or member not eligible</td><td>5&ndash;10%</td><td>Immediate (&lt; 1 minute)</td></tr>
+            <tr><td><strong>Pend for Clinical Review</strong></td><td>Requires nurse/physician evaluation; clinical criteria partially met or complex case</td><td>25&ndash;40%</td><td>Standard: 2 business days (Medicaid); Urgent: 24 hours</td></tr>
+            <tr><td><strong>Request Additional Info</strong></td><td>Missing clinical documentation; request cannot be evaluated without notes/records</td><td>5&ndash;15%</td><td>Clock paused until documentation received</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="rule-priority">Rule Priority &amp; Conflict Resolution</h3>
+
+        <p>Rules are evaluated in priority order (lowest priority number = highest priority). When multiple rules match a single request:</p>
+
+        <ul>
+          <li><strong>First match wins</strong> &mdash; The highest-priority matching rule determines the disposition</li>
+          <li><strong>Specificity tiebreaker</strong> &mdash; If two rules have the same priority, the more specific rule (more condition fields populated) takes precedence</li>
+          <li><strong>Audit trail</strong> &mdash; The decision trace log records every rule that was evaluated, which rules matched, and which rule ultimately fired &mdash; enabling compliance audits and rule tuning</li>
+        </ul>
+
+        <h3 id="turnaround-tracking">Turnaround Time Tracking</h3>
+
+        <p>The system tracks turnaround time from request receipt to final disposition, segmented by urgency level:</p>
+
+        <table>
+          <thead>
+            <tr><th>Urgency</th><th>Definition</th><th>Regulatory SLA</th><th>Clock Behavior</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Urgent / Expedited</strong></td><td>Delay could jeopardize member&rsquo;s life, health, or ability to regain maximum function</td><td>24 hours (Medicaid); 72 hours (CMS MA)</td><td>Continuous (no clock pause)</td></tr>
+            <tr><td><strong>Standard (Pre-service)</strong></td><td>Non-urgent request for a service not yet rendered</td><td>2 business days (TX Medicaid); 14 calendar days (CMS MA); varies by state</td><td>Pauses when additional info requested; resumes on receipt</td></tr>
+            <tr><td><strong>Post-service</strong></td><td>Retroactive auth request for a service already rendered</td><td>30 calendar days</td><td>Continuous</td></tr>
+          </tbody>
+        </table>
+
+        <!-- ============================= -->
+        <!-- AUTHORIZATION LIFECYCLE       -->
+        <!-- ============================= -->
+        <h2 id="auth-lifecycle">3. Authorization Lifecycle</h2>
+
+        <p>Each authorization progresses through a defined lifecycle from initial submission through final resolution. The lifecycle supports standard approvals, partial approvals, extensions, expirations, and voids.</p>
+
+        <h3 id="status-lifecycle">Status Lifecycle</h3>
+
+        <table>
+          <thead>
+            <tr><th>Status</th><th>X12 278 Code</th><th>FHIR ClaimResponse Status</th><th>Portal Display</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Submitted</code></td><td>A1 (Certification Action: Request)</td><td><code>active</code></td><td>&#x1F7E1; Submitted</td></tr>
+            <tr><td><code>In Review</code></td><td>A1 (Pending)</td><td><code>active</code></td><td>&#x1F535; In Review</td></tr>
+            <tr><td><code>Approved</code></td><td>A1 (Certified)</td><td><code>active</code> (outcome: complete)</td><td>&#x1F7E2; Approved</td></tr>
+            <tr><td><code>Denied</code></td><td>A1 (Not Certified)</td><td><code>active</code> (outcome: error)</td><td>&#x1F534; Denied</td></tr>
+            <tr><td><code>Partial</code></td><td>A1 (Certified, modified)</td><td><code>active</code> (outcome: partial)</td><td>&#x1F7E0; Partial</td></tr>
+            <tr><td><code>Pended</code></td><td>A4 (Pended)</td><td><code>active</code></td><td>&#x1F7E1; Pended &mdash; Awaiting Info</td></tr>
+            <tr><td><code>Extended</code></td><td>A1 (Certified, extended)</td><td><code>active</code></td><td>&#x1F7E2; Extended</td></tr>
+            <tr><td><code>Expired</code></td><td>N/A (system-generated)</td><td><code>cancelled</code></td><td>&#x26AA; Expired</td></tr>
+            <tr><td><code>Voided</code></td><td>A3 (Cancel)</td><td><code>cancelled</code></td><td>&#x26D4; Voided</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="partial-auth">Partial Authorization</h3>
+
+        <p>A partial authorization approves fewer units, visits, or days than the provider requested. This is common for therapy services, behavioral health, and home health:</p>
+
+        <ul>
+          <li>Provider requests 10 physical therapy visits; plan approves 5 visits based on clinical criteria</li>
+          <li>Provider requests 14-day inpatient stay; plan approves 7 days with review required for extension</li>
+          <li>The partial authorization includes the approved quantity and a reason code explaining the modification</li>
+          <li>Providers can request additional units via a new authorization or an extension request</li>
+        </ul>
+
+        <h3 id="extension">Extension</h3>
+
+        <p>An extension extends the authorized service period or adds units without requiring a completely new authorization request:</p>
+
+        <ul>
+          <li><strong>Continued stay reviews</strong> &mdash; For inpatient admissions, clinical staff review continued stay requests (typically every 2&ndash;3 days) and extend the authorization if medical necessity criteria are still met</li>
+          <li><strong>Therapy extensions</strong> &mdash; After the initial authorized visits are exhausted, a new clinical review determines if additional visits are warranted</li>
+          <li>Extensions are tracked as amendments to the original authorization, maintaining the full history chain</li>
+        </ul>
+
+        <h3 id="expiration">Expiration</h3>
+
+        <p>Every authorization has a <code>ValidThrough</code> date. When this date passes without the authorized service being rendered:</p>
+
+        <ul>
+          <li>The authorization status automatically transitions to <code>Expired</code></li>
+          <li>Expired authorizations do <strong>not</strong> satisfy the claims adjudication auth-match step &mdash; claims submitted after the auth expires will pend to the &ldquo;Missing Prior Auth&rdquo; work queue</li>
+          <li>Providers must submit a new authorization request if the service is still needed</li>
+        </ul>
+
+        <h3 id="voiding">Voiding</h3>
+
+        <p>A previously approved authorization can be voided (cancelled) when:</p>
+
+        <ul>
+          <li>The member disenrolls from the plan before the service is rendered</li>
+          <li>The service is no longer needed (provider cancellation)</li>
+          <li>The authorization was issued in error (data entry mistake, wrong member/service)</li>
+        </ul>
+
+        <p>Voided authorizations cannot be reinstated &mdash; a new request must be submitted if the service is later needed.</p>
+
+        <h3 id="notification">Notification</h3>
+
+        <p>Authorization decisions are communicated back to the requesting provider and the member through multiple channels:</p>
+
+        <ul>
+          <li><strong>X12 278 Response</strong> &mdash; Sent back through the originating clearinghouse channel (Availity, Change Healthcare, etc.)</li>
+          <li><strong>FHIR ClaimResponse</strong> &mdash; Returned via the Da Vinci PAS API for FHIR-enabled providers</li>
+          <li><strong>Portal</strong> &mdash; Real-time status update visible in the provider and member portals</li>
+          <li><strong>Letter generation</strong> &mdash; For denials and partial approvals, a formal determination letter is generated with appeal rights, clinical rationale, and the specific plan provision applied</li>
+        </ul>
+
+        <h3 id="newborn-auth">Newborn Authorization</h3>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Automatic newborn authorization</div>
+          <p>When a delivery claim is received for a mother with active coverage, the system automatically generates an authorization for the newborn&rsquo;s birth episode. The newborn inherits the mother&rsquo;s authorization for the delivery, covering the initial hospital stay, nursery care, and routine newborn services. This eliminates the need for a separate prior auth request for the birth event.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- CMS-0057-F PRIOR AUTH APIs    -->
+        <!-- ============================= -->
+        <h2 id="cms-0057f-apis">4. CMS-0057-F Prior Auth APIs</h2>
+
+        <p>The CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F) requires payers to implement three Da Vinci FHIR Implementation Guides for prior authorization by January 1, 2027. Cloud Health Office implements all three as production-ready APIs.</p>
+
+        <h3 id="da-vinci-crd">Da Vinci CRD (Coverage Requirements Discovery)</h3>
+
+        <p>CRD provides real-time coverage information to providers at the point of care via CDS Hooks integration with the provider&rsquo;s EHR:</p>
+
+        <ul>
+          <li><strong>Hook trigger</strong> &mdash; When a provider orders a service in the EHR (e.g., orders an MRI), the CDS Hooks <code>order-sign</code> or <code>order-select</code> hook fires</li>
+          <li><strong>Response cards</strong> &mdash; Cloud Health Office returns information cards indicating:
+            <ul>
+              <li>Whether prior authorization is required for this service</li>
+              <li>What clinical documentation is needed</li>
+              <li>Whether the service is covered under the member&rsquo;s plan</li>
+              <li>A link to launch the DTR questionnaire (if applicable)</li>
+            </ul>
+          </li>
+          <li><strong>No prior auth needed</strong> &mdash; If the service does not require auth, the response says so explicitly, eliminating unnecessary auth submissions</li>
+        </ul>
+
+        <h3 id="da-vinci-dtr">Da Vinci DTR (Documentation Templates &amp; Rules)</h3>
+
+        <p>DTR reduces provider documentation burden by pre-filling clinical questionnaires with data already available in the EHR:</p>
+
+        <ul>
+          <li><strong>SMART-on-FHIR app</strong> &mdash; Launches within the EHR workflow when the provider clicks the DTR link from a CRD response card</li>
+          <li><strong>Questionnaire pre-fill</strong> &mdash; The DTR app retrieves the payer&rsquo;s clinical questionnaire (FHIR Questionnaire resource) and pre-fills answers using CQL (Clinical Quality Language) expressions that query the EHR&rsquo;s FHIR server</li>
+          <li><strong>Provider review</strong> &mdash; The provider reviews pre-filled answers, corrects any inaccuracies, and submits the completed questionnaire</li>
+          <li><strong>Attachment to auth request</strong> &mdash; The completed QuestionnaireResponse is attached to the prior auth request, providing the clinical documentation the decision engine needs</li>
+        </ul>
+
+        <h3 id="da-vinci-pas">Da Vinci PAS (Prior Authorization Support)</h3>
+
+        <p>PAS is the FHIR-based replacement for X12 278, enabling fully electronic prior auth submission and response:</p>
+
+        <ul>
+          <li><strong>FHIR Claim/$submit</strong> &mdash; Providers submit a prior auth request as a FHIR Claim resource with <code>use = preauthorization</code></li>
+          <li><strong>Synchronous response</strong> &mdash; For auto-approve/auto-deny decisions, the ClaimResponse is returned immediately</li>
+          <li><strong>Asynchronous (pended)</strong> &mdash; For requests requiring clinical review, a pended ClaimResponse is returned with a reference ID; the provider can poll for updates via <code>Claim/$inquire</code></li>
+          <li><strong>Update and cancel</strong> &mdash; Providers can update a pending request (add documentation) or cancel a request via the PAS API</li>
+        </ul>
+
+        <h3 id="cms-compliance-table">Implementation Status</h3>
+
+        <table>
+          <thead>
+            <tr><th>Implementation Guide</th><th>FHIR Operation</th><th>Endpoint</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Da Vinci CRD</strong></td><td>CDS Hooks (<code>order-sign</code>, <code>order-select</code>)</td><td><code>/cds-services/prior-auth-check</code></td><td>&#x1F7E2; Production</td></tr>
+            <tr><td><strong>Da Vinci DTR</strong></td><td>SMART-on-FHIR Launch + Questionnaire/$populate</td><td><code>/fhir/Questionnaire/$populate</code></td><td>&#x1F7E2; Production</td></tr>
+            <tr><td><strong>Da Vinci PAS</strong></td><td>Claim/$submit, Claim/$inquire</td><td><code>/fhir/Claim/$submit</code></td><td>&#x1F7E2; Production</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">CMS-0057-F deadline</div>
+          <p>The CMS Interoperability and Prior Authorization Final Rule requires all impacted payers (Medicaid, CHIP, Medicare Advantage, and QHP issuers on the FFE) to implement CRD, DTR, and PAS by <strong>January 1, 2027</strong>. Cloud Health Office&rsquo;s implementations have passed Touchstone and Inferno testing suites and are production-deployed.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- REPORTING & ANALYTICS         -->
+        <!-- ============================= -->
+        <h2 id="reporting">5. Reporting &amp; Analytics</h2>
+
+        <p>The prior authorization module includes built-in dashboards and reports for monitoring authorization volume, turnaround compliance, and denial patterns.</p>
+
+        <h3 id="auth-volume-dashboard">Auth Volume Dashboard</h3>
+
+        <p>The volume dashboard provides real-time and historical views of authorization activity:</p>
+
+        <ul>
+          <li><strong>Requests by LOB</strong> &mdash; Volume breakdown by Medicaid, Medicare Advantage, Commercial, and Exchange</li>
+          <li><strong>Requests by status</strong> &mdash; Current counts of Submitted, In Review, Approved, Denied, Partial, Pended, Extended, and Expired</li>
+          <li><strong>Requests by decision type</strong> &mdash; Auto-Approve vs. Auto-Deny vs. Pend for Clinical Review vs. Request Additional Info</li>
+          <li><strong>Trend analysis</strong> &mdash; Week-over-week and month-over-month volume trends with seasonality indicators</li>
+        </ul>
+
+        <h3 id="denial-analytics">Denial Analytics</h3>
+
+        <ul>
+          <li><strong>Top denial reasons</strong> &mdash; Ranked list of denial reason codes with counts and percentages</li>
+          <li><strong>Denial rate by procedure category</strong> &mdash; Percentage of denials per service category (e.g., imaging denials at 18%, pharmacy denials at 12%)</li>
+          <li><strong>Appeal overturn rate</strong> &mdash; Percentage of denials overturned on appeal, segmented by denial reason &mdash; high overturn rates indicate potential rule misconfiguration</li>
+        </ul>
+
+        <h3 id="turnaround-compliance">Turnaround Compliance</h3>
+
+        <ul>
+          <li><strong>SLA compliance rate</strong> &mdash; Percentage of authorizations completed within the regulatory SLA, segmented by LOB and urgency level</li>
+          <li><strong>Average turnaround time</strong> &mdash; Mean and median time from request receipt to final determination</li>
+          <li><strong>Breached auths</strong> &mdash; List of authorizations that exceeded their SLA with root cause categorization (staffing, documentation delays, system issues)</li>
+        </ul>
+
+        <h3 id="provider-metrics">Provider-Level Metrics</h3>
+
+        <ul>
+          <li><strong>Request volume by provider</strong> &mdash; Identifies high-volume requesting providers for outreach and education</li>
+          <li><strong>Auto-approval rate by provider</strong> &mdash; Providers with low auto-approval rates may benefit from documentation improvement support</li>
+          <li><strong>Pend rate by provider</strong> &mdash; High pend rates indicate incomplete or inadequate clinical documentation</li>
+        </ul>
+
+        <!-- ============================= -->
+        <!-- GETTING STARTED               -->
+        <!-- ============================= -->
+        <h2 id="getting-started">Getting Started</h2>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Try it in the Demo Portal</div>
+          <p>The full prior authorization workflow is available in the <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> with synthetic authorization data. Navigate to <strong>Authorizations</strong> in the left sidebar to explore the decision engine, review pended requests, and view the authorization lifecycle for sample cases.</p>
+        </div>
+
+        <p>Recommended setup order for a new health plan implementation:</p>
+
+        <ol>
+          <li><strong>Configure auth-required rules</strong> &mdash; Define which services require prior authorization per plan and LOB</li>
+          <li><strong>Load clinical criteria rules</strong> &mdash; Import or configure decision rules in the PriorAuthDecisionEngine for each authorization pathway</li>
+          <li><strong>Configure clearinghouse 278 inbound/outbound</strong> &mdash; Set up X12 278 request receipt and response transmission via Availity, Change Healthcare, etc.</li>
+          <li><strong>Set up Da Vinci CRD/DTR/PAS endpoints</strong> &mdash; Configure the FHIR-based prior auth APIs for CMS-0057-F compliance</li>
+          <li><strong>Submit a test 278 request</strong> &mdash; Send a sample authorization request through the clearinghouse or API</li>
+          <li><strong>Review the decision trace log</strong> &mdash; Verify which rules were evaluated, which rule fired, and confirm the expected disposition</li>
+        </ol>
+
+        <!-- Related Docs -->
+        <h2 id="related-docs">Related Documentation</h2>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <h3>Claims Adjudication</h3>
+            <p>How approved authorizations are matched to inbound claims during Step 9 of the auto-adjudication pipeline.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/benefit-plan-guide" class="docs-hub-card">
+            <h3>Benefit Plan Configuration</h3>
+            <p>Plan structures and cost sharing rules that determine which services require prior authorization.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/compliance" class="docs-hub-card">
+            <h3>CMS-0057-F Compliance</h3>
+            <p>Full compliance guide covering Patient Access, Provider Directory, Prior Auth APIs, and payer-to-payer data exchange.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/api" class="docs-hub-card">
+            <h3>API Reference</h3>
+            <p>FHIR R4 API documentation including the Claim/$submit and CDS Hooks endpoints used by Da Vinci PAS and CRD.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/claims-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Claims Adjudication</div>
+          </a>
+          <a href="/docs/eligibility-guide" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Eligibility &amp; Enrollment</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

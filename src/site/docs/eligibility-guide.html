@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eligibility &amp; Enrollment Guide — Cloud Health Office</title>
+  <meta name="description" content="Complete user guide for eligibility and enrollment in Cloud Health Office — member enrollment, 834 transaction processing, 270/271 eligibility verification, PCP assignment, and coverage lifecycle management." />
+  <meta name="keywords" content="healthcare member enrollment, eligibility verification, X12 834 enrollment, X12 270 271 eligibility, PCP assignment, coverage lifecycle, QNXT enrollment alternative, member eligibility API, healthcare payer enrollment, Medicaid enrollment" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/eligibility-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/eligibility-guide" />
+  <meta property="og:title" content="Eligibility &amp; Enrollment Guide — Cloud Health Office" />
+  <meta property="og:description" content="Complete user guide for eligibility and enrollment — member enrollment, 834 processing, 270/271 verification, PCP assignment, and coverage lifecycle." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Eligibility & Enrollment Guide — Cloud Health Office",
+    "description": "Complete user guide for eligibility and enrollment in Cloud Health Office — member enrollment, 834 transaction processing, 270/271 eligibility verification, PCP assignment, and coverage lifecycle management.",
+    "url": "https://cloudhealthoffice.com/docs/eligibility-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-07",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Member enrollment",
+      "834 EDI transaction processing",
+      "270/271 eligibility verification",
+      "PCP assignment",
+      "Coverage lifecycle management"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Eligibility & Enrollment Guide", "item": "https://cloudhealthoffice.com/docs/eligibility-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide" class="active">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#member-enrollment">Member Enrollment</a></li>
+              <li><a href="#eligibility-verification">Eligibility Verification</a></li>
+              <li><a href="#pcp-assignment">PCP Assignment</a></li>
+              <li><a href="#coverage-lifecycle">Coverage Lifecycle</a></li>
+              <li><a href="#getting-started">Getting Started</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Eligibility &amp; Enrollment Guide</span>
+        </div>
+
+        <h1>Eligibility &amp; Enrollment Guide</h1>
+        <p class="docs-subtitle">
+          End-to-end guide to eligibility and enrollment in Cloud Health Office &mdash; from 834 enrollment file processing through real-time 270/271 eligibility verification, PCP assignment, and member coverage lifecycle management.
+        </p>
+
+        <!-- Overview -->
+        <h2 id="overview">Overview</h2>
+
+        <p>Cloud Health Office eligibility and enrollment spans four interconnected areas that manage the full member lifecycle from initial enrollment through real-time eligibility verification:</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F464;</span>
+            <h3>Member Enrollment</h3>
+            <p>834 file processing, portal enrollment, demographic management, and subscriber/dependent relationships.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x2705;</span>
+            <h3>Eligibility Verification</h3>
+            <p>Real-time 270/271 via clearinghouse, FHIR Coverage API, and portal lookup.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F3E5;</span>
+            <h3>PCP Assignment</h3>
+            <p>Primary care provider assignment, auto-assignment logic, PCP change rules, and panel capacity tracking.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F504;</span>
+            <h3>Coverage Lifecycle</h3>
+            <p>Effective/term dating, retroactive enrollment, COBRA, special enrollment periods, and disenrollment.</p>
+          </div>
+        </div>
+
+        <p>Eligibility data is the foundation for every downstream process in Cloud Health Office. Claims adjudication begins with an eligibility check (Step 1), prior authorization validates member coverage before evaluating clinical criteria, and premium billing relies on accurate enrollment counts for invoice generation.</p>
+
+        <!-- ============================= -->
+        <!-- MEMBER ENROLLMENT             -->
+        <!-- ============================= -->
+        <h2 id="member-enrollment">1. Member Enrollment</h2>
+
+        <p>Member enrollment creates and maintains the member records that drive eligibility, claims, and financial processing. Members are enrolled through multiple channels, with the X12 834 EDI file being the most common high-volume source.</p>
+
+        <h3 id="enrollment-channels">Enrollment Channels</h3>
+
+        <table>
+          <thead>
+            <tr><th>Enrollment Source</th><th>Format</th><th>Typical Volume</th><th>Processing SLA</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>834 EDI File (Sponsor)</strong></td><td>X12 834 Benefit Enrollment</td><td>100&ndash;50,000+ members per file</td><td>24 hours from receipt</td></tr>
+            <tr><td><strong>834 EDI File (Exchange)</strong></td><td>X12 834 via CMS/state exchange</td><td>Varies by open enrollment period</td><td>24&ndash;48 hours</td></tr>
+            <tr><td><strong>Portal Manual Entry</strong></td><td>HTTPS (portal UI)</td><td>1&ndash;50 members per session</td><td>Real-time</td></tr>
+            <tr><td><strong>FHIR API</strong></td><td>FHIR R4 Patient + Coverage</td><td>1 member per API call</td><td>Real-time</td></tr>
+            <tr><td><strong>State Medicaid File</strong></td><td>State-specific flat file or 834</td><td>10,000&ndash;500,000+ members</td><td>48 hours</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="834-processing">834 Processing Pipeline</h3>
+
+        <p>When an 834 enrollment file arrives, the system processes it through a five-step pipeline:</p>
+
+        <ol>
+          <li><strong>File Receipt</strong> &mdash; 834 file picked up from the configured SFTP directory or received via API. A file-level acknowledgment is generated immediately.</li>
+          <li><strong>Parsing</strong> &mdash; X12 834 transaction parsed into individual member enrollment records (INS/REF/DTP/NM1 loops). Each member&rsquo;s maintenance type code (INS01) determines the action: add, change, reinstate, or terminate.</li>
+          <li><strong>Member Match/Create</strong> &mdash; Parsed records are matched against existing members using configurable match criteria (SSN + DOB, or Member ID, or name + DOB + address). New members are created; existing members are updated.</li>
+          <li><strong>Coverage Activation</strong> &mdash; Coverage records are created or updated with effective dates, term dates, benefit plan assignment, and coverage tier. PCP assignment is triggered if the member did not select a PCP.</li>
+          <li><strong>834 Acknowledgment</strong> &mdash; A response file is generated for the submitting entity confirming successful processing or listing errors for individual records that failed validation.</li>
+        </ol>
+
+        <!-- Diagram: 834 enrollment processing flow -->
+        <figure class="docs-diagram">
+          <figcaption><strong>834 enrollment processing flow</strong></figcaption>
+          <p><code>File Receipt</code> (SFTP / API) &rarr; <code>X12 834 Parsing</code> &rarr; <code>Member Match / Create</code> (SSN + DOB or Member ID) &rarr; <code>Coverage Activation</code> (effective dates, plan, tier, PCP) &rarr; <code>834 Acknowledgment</code></p>
+        </figure>
+
+        <h3 id="member-data-model">Member Data Model</h3>
+
+        <p>Each member record contains comprehensive demographic and relationship data:</p>
+
+        <table>
+          <thead>
+            <tr><th>Data Category</th><th>Fields</th><th>Source</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Demographics</strong></td><td>Name (first, middle, last, suffix), Date of Birth, Sex, SSN (masked), Race/Ethnicity (optional)</td><td>834 NM1/DMG segments</td></tr>
+            <tr><td><strong>Contact</strong></td><td>Address (street, city, state, ZIP), Phone (home, mobile, work), Email</td><td>834 N3/N4/PER segments</td></tr>
+            <tr><td><strong>Identifiers</strong></td><td>Member ID (system-assigned), Subscriber ID, Medicaid ID, Medicare HICN/MBI, SSN</td><td>834 REF segments / system-generated</td></tr>
+            <tr><td><strong>Relationship</strong></td><td>Subscriber/dependent flag, relationship to subscriber (self, spouse, child, other)</td><td>834 INS02 segment</td></tr>
+            <tr><td><strong>Coverage</strong></td><td>Benefit plan, coverage tier, effective date, term date, PCP assignment</td><td>834 HD/DTP segments</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="subscriber-dependent">Subscriber / Dependent Hierarchy</h3>
+
+        <p>Enrollment follows a hierarchical structure:</p>
+
+        <ul>
+          <li><strong>Subscriber (policyholder)</strong> &mdash; The primary enrollee who holds the coverage relationship with the sponsor group. Assigned the subscriber-level Member ID.</li>
+          <li><strong>Spouse / Domestic Partner</strong> &mdash; Dependent enrolled under the subscriber&rsquo;s coverage. Assigned a unique Member ID but linked to the subscriber&rsquo;s coverage.</li>
+          <li><strong>Child Dependents</strong> &mdash; Children enrolled under the subscriber. ACA requires coverage of dependents up to age 26. Each child receives a unique Member ID.</li>
+        </ul>
+
+        <p>All dependents share the subscriber&rsquo;s benefit plan and coverage tier but maintain individual records for claims, accumulators, and eligibility verification.</p>
+
+        <h3 id="retroactive-enrollment">Retroactive Enrollment</h3>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Retroactive enrollment and claim reprocessing</div>
+          <p>Members can be enrolled with a past effective date (e.g., a Medicaid member whose eligibility determination was delayed). When retroactive enrollment is processed, the system automatically identifies any claims that were denied with CARC code <code>27</code> (coverage terminated) or <code>31</code> (cannot identify as insured) during the retroactive coverage period and queues them for reprocessing through the <a href="/docs/claims-guide">auto-adjudication pipeline</a>.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- ELIGIBILITY VERIFICATION      -->
+        <!-- ============================= -->
+        <h2 id="eligibility-verification">2. Eligibility Verification (270/271)</h2>
+
+        <p>Real-time eligibility verification allows providers to confirm a member&rsquo;s coverage status, benefit plan details, and cost sharing information before rendering services. Cloud Health Office processes inbound X12 270 Eligibility Inquiry transactions and returns X12 271 Eligibility Response transactions.</p>
+
+        <h3 id="verification-flow">Verification Flow</h3>
+
+        <ol>
+          <li><strong>Provider submits 270 inquiry</strong> &mdash; Contains member identification (name, DOB, member ID), provider NPI, and the type of eligibility information requested (service type code)</li>
+          <li><strong>Clearinghouse routing</strong> &mdash; Inbound 270s arrive via Availity, Change Healthcare, or Optum and are routed based on the submitter ID and payer ID in the ISA/GS segments</li>
+          <li><strong>Member lookup</strong> &mdash; System matches the 270 inquiry to an enrolled member using the submitted identifiers</li>
+          <li><strong>Eligibility evaluation</strong> &mdash; Coverage status is checked as of the service date; benefit plan details, cost sharing, and PCP information are assembled</li>
+          <li><strong>271 response generated</strong> &mdash; Response returned through the originating clearinghouse channel</li>
+        </ol>
+
+        <!-- Diagram: 270/271 eligibility verification flow -->
+        <figure class="docs-diagram">
+          <figcaption><strong>270/271 eligibility verification flow</strong></figcaption>
+          <p><code>Provider submits X12 270</code> &rarr; <code>Clearinghouse Routing</code> (Availity / Change Healthcare / Optum) &rarr; <code>Member Lookup</code> &rarr; <code>Eligibility Evaluation</code> (coverage, benefits, cost sharing, PCP) &rarr; <code>X12 271 Response</code> returned</p>
+        </figure>
+
+        <h3 id="271-response-content">271 Response Content</h3>
+
+        <p>The 271 response provides comprehensive eligibility and benefit information to the requesting provider:</p>
+
+        <table>
+          <thead>
+            <tr><th>270 Element</th><th>271 Response Element</th><th>Source</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Subscriber/Member ID</td><td>Member identification echo</td><td>Member record</td><td>Confirms the member was found</td></tr>
+            <tr><td>Service Type Code</td><td>EB01 &mdash; Eligibility/Benefit Info</td><td>Coverage record</td><td>Active Coverage, Inactive, etc.</td></tr>
+            <tr><td>Date of Service</td><td>Coverage dates (DTP segments)</td><td>Coverage record</td><td>Effective and term dates for the coverage</td></tr>
+            <tr><td>N/A</td><td>Benefit plan name</td><td>Benefit Plan</td><td>Plan name and plan ID returned in REF segment</td></tr>
+            <tr><td>N/A</td><td>PCP name and NPI</td><td>PCP assignment</td><td>Returned in NM1 loop if PCP assigned</td></tr>
+            <tr><td>N/A</td><td>Copay amounts</td><td>Cost sharing rules</td><td>Per service type (PCP visit, specialist, ER, etc.)</td></tr>
+            <tr><td>N/A</td><td>Deductible remaining</td><td>Accumulator (Redis)</td><td>Current individual deductible balance</td></tr>
+            <tr><td>N/A</td><td>OOP max remaining</td><td>Accumulator (Redis)</td><td>Current individual OOP max balance</td></tr>
+            <tr><td>N/A</td><td>Prior auth required flag</td><td>Auth-required config</td><td>Indicates if the requested service needs prior auth</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="eb01-handling">EB01 Segment Handling</h3>
+
+        <p>The EB01 (Eligibility or Benefit Information) code in the 271 response indicates the member&rsquo;s coverage status. Key codes used by Cloud Health Office:</p>
+
+        <table>
+          <thead>
+            <tr><th>EB01 Code</th><th>Meaning</th><th>When Returned</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>1</code></td><td>Active Coverage</td><td>Member has active coverage on the date of service</td></tr>
+            <tr><td><code>6</code></td><td>Inactive</td><td>Member was enrolled but coverage is not active on the date of service (terminated or not yet effective)</td></tr>
+            <tr><td><code>I</code></td><td>Non-Covered</td><td>Service type requested is not covered under the member&rsquo;s plan</td></tr>
+            <tr><td><code>R</code></td><td>Other/Additional Payer</td><td>Member has other insurance; COB information returned</td></tr>
+            <tr><td><code>W</code></td><td>Other Source of Data</td><td>Eligibility information is available from another source (e.g., state Medicaid portal)</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="configuration-points">Key Configuration Points</h3>
+
+        <ul>
+          <li><strong>PCP loop inclusion</strong> &mdash; Configurable whether PCP name and NPI are included in the 271 response. Some clearinghouses require this; others do not expect it.</li>
+          <li><strong>Date qualifier mapping</strong> &mdash; Maps internal coverage date types to X12 DTP qualifier codes (e.g., <code>346</code> = Plan Begin, <code>347</code> = Plan End, <code>348</code> = Benefit Begin)</li>
+          <li><strong>EB01 code mapping</strong> &mdash; Maps internal coverage statuses to EB01 codes. Customizable per clearinghouse if specific clearinghouses require non-standard mappings.</li>
+          <li><strong>Accumulator inclusion</strong> &mdash; Configurable whether real-time deductible and OOP balances are included in the 271 response (requires Redis accumulator lookup)</li>
+        </ul>
+
+        <h3 id="fhir-coverage-api">FHIR Coverage API</h3>
+
+        <p>In addition to X12 270/271, Cloud Health Office exposes real-time eligibility via the FHIR R4 Coverage resource:</p>
+
+        <ul>
+          <li><strong>FHIR Coverage read</strong> &mdash; <code>GET /fhir/Coverage/{id}</code> returns the member&rsquo;s coverage record including plan, period, and class (group, plan, subplan)</li>
+          <li><strong>FHIR Coverage search</strong> &mdash; <code>GET /fhir/Coverage?beneficiary={patient-id}&amp;status=active</code> returns all active coverages for a member</li>
+          <li><strong>Da Vinci CRD integration</strong> &mdash; The CRD CDS Hooks service uses the FHIR Coverage API internally to check eligibility during the <code>order-sign</code> hook evaluation</li>
+          <li><strong>Provider Access API</strong> &mdash; The CMS-0057-F Provider Access API uses FHIR Coverage for member eligibility queries</li>
+        </ul>
+
+        <!-- ============================= -->
+        <!-- PCP ASSIGNMENT                -->
+        <!-- ============================= -->
+        <h2 id="pcp-assignment">3. PCP Assignment</h2>
+
+        <p>For HMO and POS plans (and some Medicaid programs), each member must be assigned a Primary Care Provider (PCP). The PCP serves as the member&rsquo;s primary point of care and, in HMO plans, the gatekeeper for specialist referrals.</p>
+
+        <h3 id="assignment-methods">Assignment Methods</h3>
+
+        <table>
+          <thead>
+            <tr><th>Assignment Method</th><th>Trigger</th><th>Effective Date</th><th>Constraints</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Member Selection</strong></td><td>Member selects PCP during enrollment (834 or portal)</td><td>Coverage effective date</td><td>PCP must be in plan network; panel must have capacity</td></tr>
+            <tr><td><strong>Auto-Assignment</strong></td><td>Member does not select PCP within configured window (e.g., 15 days)</td><td>Coverage effective date</td><td>System selects based on proximity, capacity, language, specialty</td></tr>
+            <tr><td><strong>PCP Change (Member)</strong></td><td>Member requests PCP change via portal or phone</td><td>1st of following month (configurable)</td><td>New PCP must be in plan network; one change per month (configurable)</td></tr>
+            <tr><td><strong>PCP Change (System)</strong></td><td>Current PCP leaves network or terminates</td><td>Immediate or end of month</td><td>System auto-reassigns; member notified of change</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="auto-assignment-logic">Auto-Assignment Logic</h3>
+
+        <p>When a member does not select a PCP, the auto-assignment algorithm evaluates candidates based on a weighted scoring model:</p>
+
+        <ol>
+          <li><strong>Geographic proximity</strong> (weight: 40%) &mdash; Distance from the member&rsquo;s residential address to the provider&rsquo;s practice location. Closer providers score higher.</li>
+          <li><strong>Panel capacity</strong> (weight: 25%) &mdash; Percentage of the provider&rsquo;s maximum panel that is currently filled. Providers with more available capacity score higher.</li>
+          <li><strong>Language match</strong> (weight: 20%) &mdash; Whether the provider speaks the member&rsquo;s preferred language. Exact match scores highest; partial match (e.g., bilingual staff) scores medium.</li>
+          <li><strong>Specialty match</strong> (weight: 15%) &mdash; For specific populations (e.g., pediatric members assigned to pediatricians, pregnant members assigned to OB/GYN-capable PCPs).</li>
+        </ol>
+
+        <p>The highest-scoring eligible provider is assigned. If all candidates in the member&rsquo;s area are at capacity, the assignment is escalated to the enrollment operations team for manual resolution.</p>
+
+        <h3 id="panel-capacity">Panel Capacity Tracking</h3>
+
+        <p>Each PCP has a configured maximum panel size that limits the number of members who can be assigned:</p>
+
+        <ul>
+          <li><strong>Panel maximum</strong> &mdash; Configurable per provider (typical range: 1,500&ndash;2,500 for adult PCPs; 1,000&ndash;2,000 for pediatricians)</li>
+          <li><strong>Current panel count</strong> &mdash; Real-time count of active member assignments</li>
+          <li><strong>Capacity alerts</strong> &mdash; System alerts network management when a provider reaches 85% and 95% of panel capacity</li>
+          <li><strong>Hard cap enforcement</strong> &mdash; Assignments are blocked when the provider reaches 100% capacity (unless overridden by an authorized user)</li>
+        </ul>
+
+        <h3 id="pcp-network-validation">PCP-to-Network Validation</h3>
+
+        <p>The assigned PCP must be a participating provider in the member&rsquo;s plan network. The system validates:</p>
+
+        <ul>
+          <li>Provider is in the member&rsquo;s plan network on the coverage effective date</li>
+          <li>Provider&rsquo;s specialty qualifies as a PCP specialty (Family Medicine, Internal Medicine, Pediatrics, General Practice &mdash; configurable per plan)</li>
+          <li>Provider is currently accepting new patients (not on a temporary enrollment hold)</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">PCP termination handling</div>
+          <p>When a PCP leaves the plan&rsquo;s network (contract termination or voluntary departure), all members assigned to that PCP are identified and a bulk reassignment process is initiated. Members are notified of the change and given the option to select a new PCP before the auto-reassignment takes effect.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- COVERAGE LIFECYCLE            -->
+        <!-- ============================= -->
+        <h2 id="coverage-lifecycle">4. Coverage Lifecycle</h2>
+
+        <p>Coverage records track the full lifecycle of a member&rsquo;s enrollment from initial activation through termination. The lifecycle supports standard enrollment, qualifying life events, COBRA continuation, and retroactive changes.</p>
+
+        <h3 id="coverage-statuses">Coverage Statuses</h3>
+
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Description</th><th>Claims Processing</th><th>Premium Billing</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Pending</code></td><td>Enrollment received but not yet activated (e.g., future effective date, awaiting premium payment)</td><td>No</td><td>No</td></tr>
+            <tr><td><code>Active</code></td><td>Coverage is in effect; member is eligible for services</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td><code>Suspended</code></td><td>Coverage temporarily paused (e.g., non-payment grace period, pending eligibility redetermination)</td><td>Pend to queue</td><td>Yes (during grace period)</td></tr>
+            <tr><td><code>Terminated</code></td><td>Coverage has ended; member is no longer eligible</td><td>No (except runout period)</td><td>No</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="effective-term-dating">Effective / Term Dating</h3>
+
+        <ul>
+          <li><strong>Effective date</strong> &mdash; The date coverage begins. Can be first of the month, date of qualifying event, or retroactive date depending on enrollment rules.</li>
+          <li><strong>Term date</strong> &mdash; The date coverage ends. Null for open-ended coverage (member remains enrolled until actively terminated). For fixed-term coverage (e.g., annual Exchange plans), the term date is set at enrollment.</li>
+          <li><strong>Runout period</strong> &mdash; After the term date, a configurable runout period (typically 90&ndash;180 days) allows claims with dates of service during the covered period to be processed.</li>
+        </ul>
+
+        <h3 id="cobra">COBRA Continuation Coverage</h3>
+
+        <p>COBRA (Consolidated Omnibus Budget Reconciliation Act) provides continuation coverage after a qualifying event (job loss, reduction in hours, divorce, etc.):</p>
+
+        <ul>
+          <li><strong>Qualifying events</strong> &mdash; Voluntary/involuntary termination, reduction in hours, divorce/legal separation, death of subscriber, dependent aging out</li>
+          <li><strong>Election period</strong> &mdash; Member has 60 days from the qualifying event notice to elect COBRA continuation</li>
+          <li><strong>Premium</strong> &mdash; Member pays the full premium (employer + employee portions) plus a 2% administrative fee</li>
+          <li><strong>Duration</strong> &mdash; 18 months for most qualifying events; 36 months for divorce, death, or dependent aging out</li>
+          <li><strong>Tracking</strong> &mdash; COBRA coverage is tracked as a separate coverage segment linked to the original enrollment. The member retains the same benefit plan but changes to a COBRA-specific billing arrangement.</li>
+        </ul>
+
+        <h3 id="special-enrollment">Special Enrollment Periods</h3>
+
+        <p>Outside of open enrollment, members can enroll or change plans during Special Enrollment Periods (SEPs) triggered by qualifying life events:</p>
+
+        <table>
+          <thead>
+            <tr><th>Event</th><th>Coverage Action</th><th>Effective Date Logic</th><th>Downstream Impact</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Marriage</strong></td><td>Add spouse; change plan if desired</td><td>1st of month following event</td><td>Premium billing updated; new member eligibility created</td></tr>
+            <tr><td><strong>Birth / Adoption</strong></td><td>Add newborn/adopted child</td><td>Date of birth/adoption (retroactive)</td><td>Newborn auto-enrollment; retroactive claim reprocessing if needed</td></tr>
+            <tr><td><strong>Loss of Other Coverage</strong></td><td>New enrollment or plan change</td><td>1st of month following loss</td><td>COB records updated; eligibility effective immediately</td></tr>
+            <tr><td><strong>Relocation</strong></td><td>Plan change if new area has different plan options</td><td>1st of month following move</td><td>Network and PCP may change based on new service area</td></tr>
+            <tr><td><strong>Medicaid/CHIP Loss</strong></td><td>New Exchange/commercial enrollment</td><td>1st of month following Medicaid termination</td><td>60-day SEP window per ACA rules</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="disenrollment">Disenrollment</h3>
+
+        <p>Members can be disenrolled (terminated) through several mechanisms:</p>
+
+        <ul>
+          <li><strong>Voluntary disenrollment</strong> &mdash; Member requests to end coverage (e.g., obtaining coverage elsewhere). Effective end of month or per plan rules.</li>
+          <li><strong>Involuntary disenrollment (non-payment)</strong> &mdash; After the grace period is exhausted (ACA: 90 days for Exchange plans with APTC; varies by state for Medicaid), coverage is terminated retroactively to the end of the first month of non-payment.</li>
+          <li><strong>Involuntary disenrollment (fraud)</strong> &mdash; Coverage terminated upon determination of enrollment fraud. May be retroactive to the enrollment date.</li>
+          <li><strong>Retroactive disenrollment</strong> &mdash; Term date is set in the past (e.g., member was not eligible during a period). Triggers retroactive claim reversal for claims paid during the ineligible period.</li>
+        </ul>
+
+        <h3 id="newborn-enrollment">Newborn Enrollment</h3>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Automatic newborn enrollment</div>
+          <p>When a delivery claim is received for a mother with active coverage, the system automatically creates a member record for the newborn and enrolls them under the mother&rsquo;s coverage. The newborn&rsquo;s coverage is effective from the date of birth for a configured period (30, 60, or 90 days depending on LOB and state rules). A permanent enrollment must be submitted via 834 or portal before the automatic coverage expires. The newborn is also auto-assigned the mother&rsquo;s PCP unless a pediatrician is selected.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- GETTING STARTED               -->
+        <!-- ============================= -->
+        <h2 id="getting-started">Getting Started</h2>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Try it in the Demo Portal</div>
+          <p>The member enrollment and eligibility module is available in the <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> with synthetic member data. Navigate to <strong>Members</strong> in the left sidebar to explore enrollment records, coverage history, PCP assignments, and real-time eligibility lookups.</p>
+        </div>
+
+        <p>Recommended setup order for a new health plan implementation:</p>
+
+        <ol>
+          <li><strong>Configure member ID assignment rules</strong> &mdash; Define the member ID format and auto-generation rules</li>
+          <li><strong>Set up 834 file ingestion</strong> &mdash; Configure the SFTP path, sponsor/exchange mapping, and member match criteria</li>
+          <li><strong>Configure 270/271 clearinghouse routing</strong> &mdash; Map submitter IDs and payer IDs for Availity, Change Healthcare, Optum, etc.</li>
+          <li><strong>Define PCP auto-assignment rules</strong> &mdash; Set the assignment window, scoring weights, and panel capacity thresholds</li>
+          <li><strong>Configure coverage lifecycle rules per LOB</strong> &mdash; Set grace periods, runout periods, COBRA parameters, and SEP rules</li>
+          <li><strong>Process a test 834 file</strong> &mdash; Submit a sample enrollment file and verify member creation, coverage activation, and PCP assignment</li>
+          <li><strong>Submit a test 270 and verify the 271 response</strong> &mdash; Confirm eligibility information, copay/deductible details, and PCP data are returned correctly</li>
+        </ol>
+
+        <!-- Related Docs -->
+        <h2 id="related-docs">Related Documentation</h2>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <a href="/docs/benefit-plan-guide" class="docs-hub-card">
+            <h3>Benefit Plan Configuration</h3>
+            <p>Plan structures, coverage tiers, and cost sharing rules assigned to members during enrollment.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <h3>Claims Adjudication</h3>
+            <p>How eligibility data drives Step 1 of the auto-adjudication pipeline and determines claims processing.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/provider-verification-guide" class="docs-hub-card">
+            <h3>Provider Verification</h3>
+            <p>Provider credentialing and network validation used during PCP assignment and eligibility verification.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/api" class="docs-hub-card">
+            <h3>API Reference</h3>
+            <p>FHIR R4 Patient, Coverage, and Practitioner APIs used for member enrollment and eligibility queries.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/prior-auth-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Prior Authorization</div>
+          </a>
+          <a href="/docs/fee-schedule-guide" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Fee Schedule</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
