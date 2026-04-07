@@ -36,8 +36,9 @@ public static class SecretProviderServiceCollectionExtensions
                 break;
 
             case SecretProviderType.HashiCorpVault:
-                // Registered by the HashiCorp Vault integration package (v4.1)
-                break;
+                throw new NotSupportedException(
+                    "HashiCorp Vault secret provider requires the CloudHealthOffice.HashiCorpVault package (planned for v4.1). " +
+                    "Use SecretProviderType.AzureKeyVault or SecretProviderType.None.");
 
             case SecretProviderType.None:
             default:

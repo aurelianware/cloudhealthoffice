@@ -13,6 +13,7 @@ public class SecretProviderConfigurationProvider : ConfigurationProvider, IDispo
     private readonly SecretProviderOptions _options;
     private readonly ILogger<SecretProviderConfigurationProvider> _logger;
     private readonly Timer? _reloadTimer;
+    private int _reloading;
     private bool _disposed;
 
     /// <summary>
@@ -47,7 +48,7 @@ public class SecretProviderConfigurationProvider : ConfigurationProvider, IDispo
                 .GetAwaiter()
                 .GetResult();
 
-            Data = new Dictionary<string, string?>(secrets!, StringComparer.OrdinalIgnoreCase);
+            Data = secrets.ToDictionary(kvp => kvp.Key, kvp => (string?)kvp.Value, StringComparer.OrdinalIgnoreCase);
             _logger.LogInformation("Loaded {Count} secret(s) from {Provider}", secrets.Count, _options.Provider);
         }
         catch (Exception ex)
@@ -58,6 +59,9 @@ public class SecretProviderConfigurationProvider : ConfigurationProvider, IDispo
 
     private void ReloadSecrets()
     {
+        if (Interlocked.CompareExchange(ref _reloading, 1, 0) != 0)
+            return;
+
         try
         {
             var secrets = _secretProvider
@@ -65,13 +69,17 @@ public class SecretProviderConfigurationProvider : ConfigurationProvider, IDispo
                 .GetAwaiter()
                 .GetResult();
 
-            Data = new Dictionary<string, string?>(secrets!, StringComparer.OrdinalIgnoreCase);
+            Data = secrets.ToDictionary(kvp => kvp.Key, kvp => (string?)kvp.Value, StringComparer.OrdinalIgnoreCase);
             OnReload();
             _logger.LogInformation("Reloaded {Count} secret(s) from {Provider}", secrets.Count, _options.Provider);
         }
         catch (Exception ex)
         {
             HandleLoadFailure(ex);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _reloading, 0);
         }
     }
 

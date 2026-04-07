@@ -153,7 +153,7 @@ helm install cloudhealthoffice ./infrastructure/helm/cloudhealthoffice \
           <thead><tr><th>Phase</th><th>Flow</th><th>Secrets in K8s?</th><th>When to Use</th></tr></thead>
           <tbody>
             <tr><td><strong>A: CI/CD Bridge</strong></td><td>Key Vault &rarr; GitHub Actions &rarr; K8s Secrets &rarr; Pod env vars</td><td>Yes (etcd)</td><td>Initial migration, simpler setup</td></tr>
-            <tr><td><strong>B: CSI Direct</strong></td><td>Key Vault &rarr; CSI Driver &rarr; Pod volume mount &rarr; ISecretProvider</td><td>No</td><td>End goal &mdash; HIPAA compliant, zero secrets in etcd</td></tr>
+            <tr><td><strong>B: CSI Direct</strong></td><td>Key Vault &rarr; CSI Driver &rarr; Pod volume mount (future: file-based provider)</td><td>No</td><td>Planned &mdash; requires file-based ISecretProvider implementation</td></tr>
           </tbody>
         </table>
 

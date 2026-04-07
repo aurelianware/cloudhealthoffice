@@ -59,7 +59,8 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enabledForTemplateDeployment: false
 
     // Network security — deny by default, allow AKS subnet + Azure trusted services
-    publicNetworkAccess: 'Disabled'
+    // Phase B: switch to 'Disabled' after provisioning a private endpoint + DNS zone
+    publicNetworkAccess: 'Enabled'
     networkAcls: {
       defaultAction: 'Deny'
       bypass: 'AzureServices'

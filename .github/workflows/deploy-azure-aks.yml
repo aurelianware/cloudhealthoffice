@@ -22,11 +22,11 @@ env:
   ACA_SITE_NAME: ${{ vars.ACA_SITE_NAME || 'cho-site' }}
   RESOURCE_GROUP: ${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}
   IMAGE_PREFIX: cloudhealthoffice
-  # Azure Key Vault secret provider — set these repository variables to enable:
-  #   KEY_VAULT_NAME:        Application Key Vault name (empty = use GitHub Secrets only)
-  #   AZURE_CLIENT_ID:       Workload Identity client ID for OIDC login
-  #   AZURE_TENANT_ID:       Azure AD tenant ID
-  #   AZURE_SUBSCRIPTION_ID: Subscription containing the Key Vault
+  # Azure Key Vault secret provider — set these GitHub settings to enable:
+  # Repository variable: KEY_VAULT_NAME        Application Key Vault name (empty = use GitHub Secrets only)
+  # Repository secret:   AZURE_CLIENT_ID       Workload Identity client ID for OIDC login
+  # Repository secret:   AZURE_TENANT_ID       Azure AD tenant ID
+  # Repository secret:   AZURE_SUBSCRIPTION_ID Subscription containing the Key Vault
 
 jobs:
   # ─────────────────────────────────────────────────────────────
