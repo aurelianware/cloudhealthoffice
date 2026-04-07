@@ -9,9 +9,13 @@ using AuthorizationService.Middleware;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Azure AD Authentication (Multi-tenant organizational accounts)
 // Frontend passes bearer token, services validate independently

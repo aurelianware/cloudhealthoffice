@@ -1,9 +1,13 @@
 using EnrollmentImportService;
 using EnrollmentImportService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Configuration;
 using Microsoft.Azure.Cosmos;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Add services
 builder.Services.AddControllers();

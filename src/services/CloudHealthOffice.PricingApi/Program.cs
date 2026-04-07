@@ -5,6 +5,7 @@ using CloudHealthOffice.PricingApi.Configuration;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Middleware;
 using CloudHealthOffice.PricingApi.Services;
+using CloudHealthOffice.Infrastructure.Configuration;
 using MongoDB.Driver;
 using Serilog;
 
@@ -15,6 +16,9 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    // Secret provider (Azure Key Vault / none)
+    builder.Services.AddSecretProvider(builder.Configuration);
+    builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
     // ── Serilog ──
     builder.Host.UseSerilog((ctx, lc) => lc

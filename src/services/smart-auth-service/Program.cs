@@ -6,8 +6,12 @@ using SmartAuthService.Services;
 using SmartAuthService.Workers;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // ── MongoDB ───────────────────────────────────────────────────────────────────
 var mongoConnStr = builder.Configuration["MongoDb:ConnectionString"];

@@ -32,7 +32,7 @@
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment" class="active">Deployment</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">User Guides</div><ul><li><a href="/docs/finance-guide">Finance Modules</a></li><li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li><li><a href="/docs/provider-verification-guide">Provider Verification</a></li></ul></div>
-        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#saas">Option A: SaaS</a></li><li><a href="#self-hosted">Option B: Self-Hosted</a></li><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#local-dev">Local Development</a></li><li><a href="#cicd">CI/CD Pipeline</a></li><li><a href="#production">Production Deployment</a></li><li><a href="#verification">Verification</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#saas">Option A: SaaS</a></li><li><a href="#self-hosted">Option B: Self-Hosted</a></li><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#local-dev">Local Development</a></li><li><a href="#cicd">CI/CD Pipeline</a></li><li><a href="#production">Production Deployment</a></li><li><a href="#secrets">Secret Management</a></li><li><a href="#verification">Verification</a></li></ul></div>
       </div></aside>
 
       <div class="docs-content">
@@ -144,6 +144,98 @@ helm install cloudhealthoffice ./infrastructure/helm/cloudhealthoffice \
   --namespace cloudhealthoffice \
   --create-namespace \
   --values infrastructure/helm/values-prod.yaml</code></pre>
+
+        <h2 id="secrets">Secret Management</h2>
+        <p>Production secrets are stored in <strong>Azure Key Vault</strong> (Premium SKU with HSM-backed keys). Secrets flow to services through two mechanisms — a CI/CD bridge for immediate adoption, and CSI direct mount for zero-secrets-in-Kubernetes.</p>
+
+        <h3>Architecture</h3>
+        <table>
+          <thead><tr><th>Phase</th><th>Flow</th><th>Secrets in K8s?</th><th>When to Use</th></tr></thead>
+          <tbody>
+            <tr><td><strong>A: CI/CD Bridge</strong></td><td>Key Vault &rarr; GitHub Actions &rarr; K8s Secrets &rarr; Pod env vars</td><td>Yes (etcd)</td><td>Initial migration, simpler setup</td></tr>
+            <tr><td><strong>B: CSI Direct</strong></td><td>Key Vault &rarr; CSI Driver &rarr; Pod volume mount (future: file-based provider)</td><td>No</td><td>Planned &mdash; requires file-based ISecretProvider implementation</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Setup (Phase A &mdash; CI/CD Bridge)</h3>
+<pre><code><span class="code-comment"># 1. Provision Key Vault with RBAC, purge protection, and AKS network rules</span>
+./scripts/setup-azure-keyvault.sh \
+  --resource-group rg-cloudhealthoffice-prod \
+  --vault-name cho-app-kv \
+  --aks-cluster cho-aks \
+  --location eastus \
+  --log-analytics cho-logs
+
+<span class="code-comment"># 2. Populate secrets from manifest</span>
+cp scripts/secrets-manifest.example.env scripts/secrets-manifest.env
+<span class="code-comment"># Edit with real values &mdash; NEVER commit this file</span>
+./scripts/populate-keyvault-secrets.sh --vault-name cho-app-kv --file scripts/secrets-manifest.env
+
+<span class="code-comment"># 3. Enable in GitHub Actions (workflow falls back to GitHub Secrets if unset)</span>
+gh variable set KEY_VAULT_NAME -b 'cho-app-kv'
+
+<span class="code-comment"># 4. Validate access</span>
+./scripts/validate-keyvault-access.sh --vault-name cho-app-kv --verbose</code></pre>
+
+        <h3>Setup (Phase B &mdash; CSI Direct Mount)</h3>
+<pre><code><span class="code-comment"># 1. Install CSI driver add-on</span>
+az aks enable-addons --addons azure-keyvault-secrets-provider \
+  --name cho-aks --resource-group rg-cloudhealthoffice-prod
+
+<span class="code-comment"># 2. Enable OIDC issuer and Workload Identity</span>
+az aks update --name cho-aks --resource-group rg-cloudhealthoffice-prod \
+  --enable-oidc-issuer --enable-workload-identity
+
+<span class="code-comment"># 3. Per-service: create managed identity, federated credential, and RBAC</span>
+<span class="code-comment"># See docs/AZURE-KEYVAULT-INSTALLATION.md for the full 30-service checklist</span></code></pre>
+
+        <h3>Service Inventory</h3>
+        <p>Each service requires its own Managed Identity for per-service RBAC scoping to Key Vault.</p>
+        <table>
+          <thead><tr><th>Category</th><th>Count</th><th>Secret Source</th></tr></thead>
+          <tbody>
+            <tr><td>.NET Microservices</td><td>29</td><td>ISecretProvider (Phase B) or K8s Secret env vars (Phase A)</td></tr>
+            <tr><td>Blazor Portal</td><td>1</td><td>ISecretProvider (Phase B) or K8s Secret env vars (Phase A)</td></tr>
+            <tr><td>Non-.NET Containers</td><td>8</td><td>K8s Secret env vars only (Phase A &mdash; no code changes needed)</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Secret Naming Convention</h3>
+        <p>Key Vault does not allow <code>:</code> in secret names. Use <code>--</code> (double-dash) as the hierarchy delimiter. The <code>ISecretProvider</code> configuration layer maps <code>--</code> &rarr; <code>:</code> automatically.</p>
+        <table>
+          <thead><tr><th>Key Vault Name</th><th>.NET Configuration Key</th></tr></thead>
+          <tbody>
+            <tr><td><code>CosmosDb--ConnectionString</code></td><td><code>CosmosDb:ConnectionString</code></td></tr>
+            <tr><td><code>Stripe--SecretKey</code></td><td><code>Stripe:SecretKey</code></td></tr>
+            <tr><td><code>AzureAd--ClientSecret</code></td><td><code>AzureAd:ClientSecret</code></td></tr>
+          </tbody>
+        </table>
+
+        <h3>Key Vault Security Configuration</h3>
+        <table>
+          <thead><tr><th>Setting</th><th>Value</th><th>Rationale</th></tr></thead>
+          <tbody>
+            <tr><td>SKU</td><td>Premium</td><td>HSM-backed keys for HIPAA</td></tr>
+            <tr><td>RBAC Authorization</td><td>Enabled</td><td>Per-identity scoping (not vault-level access policies)</td></tr>
+            <tr><td>Purge Protection</td><td>Enabled</td><td>Cannot be disabled once enabled &mdash; prevents accidental deletion</td></tr>
+            <tr><td>Soft Delete</td><td>90 days</td><td>Recovery window for accidental deletions</td></tr>
+            <tr><td>Network Default</td><td>Deny</td><td>Only AKS subnet and Azure trusted services allowed</td></tr>
+            <tr><td>Diagnostics</td><td>AuditEvent &rarr; Log Analytics</td><td>365-day retention for HIPAA audit trail</td></tr>
+            <tr><td>Rotation Policy</td><td>90 days</td><td>Automated expiration alerts via <code>rotate-keyvault-secrets.sh</code></td></tr>
+          </tbody>
+        </table>
+
+        <h3>Rotation &amp; Alerting</h3>
+<pre><code><span class="code-comment"># Check for secrets expiring within 14 days</span>
+./scripts/rotate-keyvault-secrets.sh --vault-name cho-app-kv --days 14
+
+<span class="code-comment"># JSON output for CI/CD alerting (scheduled GitHub Action)</span>
+./scripts/rotate-keyvault-secrets.sh --vault-name cho-app-kv --days 30 --format json</code></pre>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Full installation guide</div>
+          <p>For the complete per-service Workload Identity checklist with step-by-step commands for all 30 services, see <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/AZURE-KEYVAULT-INSTALLATION.md" target="_blank" rel="noopener noreferrer">AZURE-KEYVAULT-INSTALLATION.md</a> on GitHub.</p>
+        </div>
 
         <h2 id="verification">Post-Deployment Verification</h2>
 <pre><code><span class="code-comment"># Health check all services</span>

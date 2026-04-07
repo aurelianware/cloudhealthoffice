@@ -3,8 +3,12 @@ using MongoDB.Driver;
 using ArService.Middleware;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(

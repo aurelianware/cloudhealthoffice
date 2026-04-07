@@ -8,12 +8,16 @@ using CloudHealthOffice.ProviderVerificationEngine.Scoring;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Configuration;
 
 public class Program
 {
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        // Secret provider (Azure Key Vault / none)
+        builder.Services.AddSecretProvider(builder.Configuration);
+        builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
         // ── Configuration ────────────────────────────────────────
         builder.Services.Configure<VerificationOptions>(

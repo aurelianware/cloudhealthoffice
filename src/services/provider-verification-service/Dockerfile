@@ -4,11 +4,13 @@ WORKDIR /repo
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/provider-verification-service/CloudHealthOffice.ProviderVerificationService.csproj src/services/provider-verification-service/
 COPY src/engines/CloudHealthOffice.ProviderVerificationEngine/CloudHealthOffice.ProviderVerificationEngine.csproj src/engines/CloudHealthOffice.ProviderVerificationEngine/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
 RUN dotnet restore src/services/provider-verification-service/CloudHealthOffice.ProviderVerificationService.csproj
 
 # Copy source code and build
 COPY src/services/provider-verification-service/ src/services/provider-verification-service/
 COPY src/engines/CloudHealthOffice.ProviderVerificationEngine/ src/engines/CloudHealthOffice.ProviderVerificationEngine/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 RUN dotnet build src/services/provider-verification-service/CloudHealthOffice.ProviderVerificationService.csproj -c Release --no-restore
 
 # Publish stage

@@ -22,6 +22,11 @@ env:
   ACA_SITE_NAME: ${{ vars.ACA_SITE_NAME || 'cho-site' }}
   RESOURCE_GROUP: ${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}
   IMAGE_PREFIX: cloudhealthoffice
+  # Azure Key Vault secret provider — set these GitHub settings to enable:
+  # Repository variable: KEY_VAULT_NAME        Application Key Vault name (empty = use GitHub Secrets only)
+  # Repository secret:   AZURE_CLIENT_ID       Workload Identity client ID for OIDC login
+  # Repository secret:   AZURE_TENANT_ID       Azure AD tenant ID
+  # Repository secret:   AZURE_SUBSCRIPTION_ID Subscription containing the Key Vault
 
 jobs:
   # ─────────────────────────────────────────────────────────────
@@ -353,6 +358,84 @@ jobs:
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --overwrite-existing
 
+      # ── Fetch secrets from Azure Key Vault (if configured) ─────
+      # When KEY_VAULT_NAME is set, secrets are pulled from Key Vault
+      # and override the GitHub Secrets defaults below. When not set,
+      # the workflow falls back to GitHub Secrets as before.
+      - name: Fetch secrets from Azure Key Vault
+        if: vars.KEY_VAULT_NAME != ''
+        uses: azure/cli@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            set -euo pipefail
+            KV="${{ vars.KEY_VAULT_NAME }}"
+
+            # fetch_secret <kv-secret-name> <ENV_VAR_NAME>
+            # Fetches from Key Vault, masks the value, and sets as env var
+            fetch_secret() {
+              local kv_name="$1"
+              local env_name="$2"
+              local value
+              value=$(az keyvault secret show --vault-name "$KV" --name "$kv_name" --query value -o tsv 2>/dev/null || echo "")
+              if [ -n "$value" ]; then
+                echo "::add-mask::${value}"
+                echo "${env_name}=${value}" >> "$GITHUB_ENV"
+                echo "  Fetched: $kv_name -> $env_name"
+              else
+                echo "  Not found: $kv_name (will fall back to GitHub Secret)"
+              fi
+            }
+
+            echo "Fetching secrets from Key Vault: $KV"
+
+            # Database
+            fetch_secret "CosmosDb--ConnectionString"   "KV_COSMOS_DB_CONNECTION_STRING"
+            fetch_secret "CosmosDb--Endpoint"            "KV_COSMOS_DB_ENDPOINT"
+            fetch_secret "CosmosDb--Key"                 "KV_COSMOS_DB_KEY"
+            fetch_secret "MongoDb--Username"             "KV_MONGODB_USERNAME"
+            fetch_secret "MongoDb--Password"             "KV_MONGODB_PASSWORD"
+
+            # Redis
+            fetch_secret "Redis--ConnectionString"       "KV_REDIS_CONNECTION_STRING"
+
+            # Kafka
+            fetch_secret "Kafka--SaslUsername"            "KV_KAFKA_SASL_USERNAME"
+            fetch_secret "Kafka--SaslPassword"            "KV_KAFKA_SASL_PASSWORD"
+
+            # Azure Storage
+            fetch_secret "Azure--StorageConnectionString" "KV_AZURE_STORAGE_CONNECTION_STRING"
+
+            # Azure AD
+            fetch_secret "AzureAd--TenantId"             "KV_AZURE_AD_TENANT_ID"
+            fetch_secret "AzureAd--ClientId"             "KV_AZURE_AD_CLIENT_ID"
+            fetch_secret "AzureAd--ClientSecret"         "KV_AZURE_AD_CLIENT_SECRET"
+            fetch_secret "AzureAd--Audience"             "KV_AZURE_AD_AUDIENCE"
+
+            # Stripe
+            fetch_secret "Stripe--PublishableKey"         "KV_STRIPE_PUBLISHABLE_KEY"
+            fetch_secret "Stripe--SecretKey"              "KV_STRIPE_SECRET_KEY"
+            fetch_secret "Stripe--Price--Starter"         "KV_STRIPE_PRICE_STARTER"
+            fetch_secret "Stripe--Price--Professional"    "KV_STRIPE_PRICE_PROFESSIONAL"
+
+            # Pricing API
+            fetch_secret "PricingApi--AdminSecret"        "KV_PRICING_API_ADMIN_SECRET"
+
+            # Seed admin
+            fetch_secret "SeedAdmin--Email"               "KV_SEED_ADMIN_EMAIL"
+            fetch_secret "SeedAdmin--DisplayName"          "KV_SEED_ADMIN_DISPLAY_NAME"
+
+            # Email config
+            fetch_secret "Email--SmtpHost"                "KV_EMAIL_SMTP_HOST"
+            fetch_secret "Email--SmtpPort"                "KV_EMAIL_SMTP_PORT"
+            fetch_secret "Email--EnableSsl"               "KV_EMAIL_ENABLE_SSL"
+            fetch_secret "Email--FromAddress"              "KV_EMAIL_FROM_ADDRESS"
+            fetch_secret "Email--SalesTeamAddress"         "KV_EMAIL_SALES_TEAM_ADDRESS"
+            fetch_secret "Email--Username"                 "KV_EMAIL_USERNAME"
+            fetch_secret "Email--Password"                 "KV_EMAIL_PASSWORD"
+
+            echo "Key Vault secret fetch complete"
+
       - name: Create namespace
         run: |
           kubectl create namespace ${{ env.NAMESPACE }} \
@@ -360,11 +443,11 @@ jobs:
 
       - name: Create database secret (MongoDB or CosmosDB)
         run: |
-          # Build connection string: use CosmosDB if configured, otherwise standalone MongoDB
-          CONN="${{ secrets.COSMOS_DB_CONNECTION_STRING }}"
+          # Key Vault env vars (KV_*) override GitHub Secrets when present
+          CONN="${KV_COSMOS_DB_CONNECTION_STRING:-${{ secrets.COSMOS_DB_CONNECTION_STRING }}}"
           if [ -z "$CONN" ]; then
-            MONGO_USER="${{ secrets.MONGODB_USERNAME }}"
-            MONGO_PASS="${{ secrets.MONGODB_PASSWORD }}"
+            MONGO_USER="${KV_MONGODB_USERNAME:-${{ secrets.MONGODB_USERNAME }}}"
+            MONGO_PASS="${KV_MONGODB_PASSWORD:-${{ secrets.MONGODB_PASSWORD }}}"
             : "${MONGO_USER:=admin}"
             : "${MONGO_PASS:=admin}"
             CONN="mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb.cloudhealthoffice.svc.cluster.local:27017"
@@ -372,8 +455,8 @@ jobs:
           fi
 
           # CosmosDB endpoint/key: leave empty when using standalone MongoDB
-          ENDPOINT="${{ secrets.COSMOS_DB_ENDPOINT }}"
-          KEY="${{ secrets.COSMOS_DB_KEY }}"
+          ENDPOINT="${KV_COSMOS_DB_ENDPOINT:-${{ secrets.COSMOS_DB_ENDPOINT }}}"
+          KEY="${KV_COSMOS_DB_KEY:-${{ secrets.COSMOS_DB_KEY }}}"
 
           kubectl create secret generic database-secret \
             --from-literal=connectionString="${CONN}" \
@@ -384,8 +467,8 @@ jobs:
 
       - name: Create MongoDB auth secret (standalone StatefulSet credentials)
         run: |
-          MONGO_USER="${{ secrets.MONGODB_USERNAME }}"
-          MONGO_PASS="${{ secrets.MONGODB_PASSWORD }}"
+          MONGO_USER="${KV_MONGODB_USERNAME:-${{ secrets.MONGODB_USERNAME }}}"
+          MONGO_PASS="${KV_MONGODB_PASSWORD:-${{ secrets.MONGODB_PASSWORD }}}"
           : "${MONGO_USER:=admin}"
           : "${MONGO_PASS:=admin}"
           kubectl create secret generic mongodb-auth \
@@ -397,70 +480,70 @@ jobs:
       - name: Create Redis secret
         run: |
           kubectl create secret generic redis-secret \
-            --from-literal=connectionString="${{ secrets.REDIS_CONNECTION_STRING }}" \
+            --from-literal=connectionString="${KV_REDIS_CONNECTION_STRING:-${{ secrets.REDIS_CONNECTION_STRING }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create Kafka secret
         run: |
           kubectl create secret generic kafka-secret \
-            --from-literal=saslUsername="${{ secrets.KAFKA_SASL_USERNAME }}" \
-            --from-literal=saslPassword="${{ secrets.KAFKA_SASL_PASSWORD }}" \
+            --from-literal=saslUsername="${KV_KAFKA_SASL_USERNAME:-${{ secrets.KAFKA_SASL_USERNAME }}}" \
+            --from-literal=saslPassword="${KV_KAFKA_SASL_PASSWORD:-${{ secrets.KAFKA_SASL_PASSWORD }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create Azure Storage secret
         run: |
           kubectl create secret generic azure-storage-secret \
-            --from-literal=connectionString="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+            --from-literal=connectionString="${KV_AZURE_STORAGE_CONNECTION_STRING:-${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create Azure AD secret
         run: |
           kubectl create secret generic azure-ad-config \
-            --from-literal=TenantId="${{ secrets.AZURE_AD_TENANT_ID }}" \
-            --from-literal=ClientId="${{ secrets.AZURE_AD_CLIENT_ID }}" \
-            --from-literal=ClientSecret="${{ secrets.AZURE_AD_CLIENT_SECRET }}" \
-            --from-literal=Audience="${{ secrets.AZURE_AD_AUDIENCE }}" \
+            --from-literal=TenantId="${KV_AZURE_AD_TENANT_ID:-${{ secrets.AZURE_AD_TENANT_ID }}}" \
+            --from-literal=ClientId="${KV_AZURE_AD_CLIENT_ID:-${{ secrets.AZURE_AD_CLIENT_ID }}}" \
+            --from-literal=ClientSecret="${KV_AZURE_AD_CLIENT_SECRET:-${{ secrets.AZURE_AD_CLIENT_SECRET }}}" \
+            --from-literal=Audience="${KV_AZURE_AD_AUDIENCE:-${{ secrets.AZURE_AD_AUDIENCE }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create Stripe secret
         run: |
           kubectl create secret generic stripe-api-keys \
-            --from-literal=publishable-key="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
-            --from-literal=secret-key="${{ secrets.STRIPE_SECRET_KEY }}" \
-            --from-literal=starter-price-id="${{ secrets.STRIPE_PRICE_STARTER }}" \
-            --from-literal=professional-price-id="${{ secrets.STRIPE_PRICE_PROFESSIONAL }}" \
+            --from-literal=publishable-key="${KV_STRIPE_PUBLISHABLE_KEY:-${{ secrets.STRIPE_PUBLISHABLE_KEY }}}" \
+            --from-literal=secret-key="${KV_STRIPE_SECRET_KEY:-${{ secrets.STRIPE_SECRET_KEY }}}" \
+            --from-literal=starter-price-id="${KV_STRIPE_PRICE_STARTER:-${{ secrets.STRIPE_PRICE_STARTER }}}" \
+            --from-literal=professional-price-id="${KV_STRIPE_PRICE_PROFESSIONAL:-${{ secrets.STRIPE_PRICE_PROFESSIONAL }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create Pricing API secret
         run: |
           kubectl create secret generic pricing-api-secret \
-            --from-literal=AdminSecret="${{ secrets.PRICING_API_ADMIN_SECRET }}" \
+            --from-literal=AdminSecret="${KV_PRICING_API_ADMIN_SECRET:-${{ secrets.PRICING_API_ADMIN_SECRET }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create seed admin secret
         run: |
           kubectl create secret generic seed-admin-secret \
-            --from-literal=email="${{ secrets.SEED_ADMIN_EMAIL }}" \
-            --from-literal=displayName="${{ secrets.SEED_ADMIN_DISPLAY_NAME }}" \
+            --from-literal=email="${KV_SEED_ADMIN_EMAIL:-${{ secrets.SEED_ADMIN_EMAIL }}}" \
+            --from-literal=displayName="${KV_SEED_ADMIN_DISPLAY_NAME:-${{ secrets.SEED_ADMIN_DISPLAY_NAME }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create email config secret
         run: |
           kubectl create secret generic email-config \
-            --from-literal=SmtpHost="${{ secrets.EMAIL_SMTP_HOST }}" \
-            --from-literal=SmtpPort="${{ secrets.EMAIL_SMTP_PORT }}" \
-            --from-literal=EnableSsl="${{ secrets.EMAIL_ENABLE_SSL }}" \
-            --from-literal=FromAddress="${{ secrets.EMAIL_FROM_ADDRESS }}" \
-            --from-literal=SalesTeamAddress="${{ secrets.EMAIL_SALES_TEAM_ADDRESS }}" \
-            --from-literal=Username="${{ secrets.EMAIL_USERNAME }}" \
-            --from-literal=Password="${{ secrets.EMAIL_PASSWORD }}" \
+            --from-literal=SmtpHost="${KV_EMAIL_SMTP_HOST:-${{ secrets.EMAIL_SMTP_HOST }}}" \
+            --from-literal=SmtpPort="${KV_EMAIL_SMTP_PORT:-${{ secrets.EMAIL_SMTP_PORT }}}" \
+            --from-literal=EnableSsl="${KV_EMAIL_ENABLE_SSL:-${{ secrets.EMAIL_ENABLE_SSL }}}" \
+            --from-literal=FromAddress="${KV_EMAIL_FROM_ADDRESS:-${{ secrets.EMAIL_FROM_ADDRESS }}}" \
+            --from-literal=SalesTeamAddress="${KV_EMAIL_SALES_TEAM_ADDRESS:-${{ secrets.EMAIL_SALES_TEAM_ADDRESS }}}" \
+            --from-literal=Username="${KV_EMAIL_USERNAME:-${{ secrets.EMAIL_USERNAME }}}" \
+            --from-literal=Password="${KV_EMAIL_PASSWORD:-${{ secrets.EMAIL_PASSWORD }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 

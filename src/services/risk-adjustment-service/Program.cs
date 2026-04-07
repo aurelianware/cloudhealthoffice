@@ -6,8 +6,12 @@ using RiskAdjustmentService.Middleware;
 using RiskAdjustmentService.Repositories;
 using CloudHealthOffice.RiskAdjustmentEngine.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secret provider (Azure Key Vault / none)
+builder.Services.AddSecretProvider(builder.Configuration);
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Add services to the container — serialize enums as strings to match OpenAPI spec
 builder.Services.AddControllers()
