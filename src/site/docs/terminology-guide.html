@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Terminology Crosswalk Guide — Cloud Health Office</title>
+  <title>Terminology Crosswalk — Cloud Health Office</title>
   <meta name="description" content="FHIR-native SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance. ConceptMap/$translate API, context-aware disambiguation, NLM/UMLS maps, and payer system integration." />
   <meta name="keywords" content="SNOMED CT ICD-10 crosswalk, FHIR ConceptMap translate, healthcare terminology service, CMS-0057 code translation, CPT SNOMED mapping, healthcare code crosswalk, terminology translation, payer interoperability" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/terminology-guide" />
 
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/terminology-guide" />
-  <meta property="og:title" content="Terminology Crosswalk Guide — Cloud Health Office" />
+  <meta property="og:title" content="Terminology Crosswalk — Cloud Health Office" />
   <meta property="og:description" content="FHIR-native SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance. Context-aware disambiguation with ConceptMap/$translate." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
 
@@ -18,7 +18,7 @@
   {
     "@context": "https://schema.org",
     "@type": "TechArticle",
-    "headline": "Terminology Crosswalk Guide — Cloud Health Office",
+    "headline": "Terminology Crosswalk — Cloud Health Office",
     "description": "Complete guide to the CHO Terminology Crosswalk service: FHIR-native SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance, context-aware disambiguation, and payer system integration.",
     "url": "https://cloudhealthoffice.com/docs/terminology-guide",
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
@@ -30,7 +30,7 @@
       "itemListElement": [
         { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
         { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
-        { "@type": "ListItem", "position": 3, "name": "Terminology Crosswalk Guide", "item": "https://cloudhealthoffice.com/docs/terminology-guide" }
+        { "@type": "ListItem", "position": 3, "name": "Terminology Crosswalk", "item": "https://cloudhealthoffice.com/docs/terminology-guide" }
       ]
     }
   }
@@ -95,7 +95,12 @@
             <div class="docs-sidebar-section-title">User Guides</div>
             <ul>
               <li><a href="/docs/finance-guide">Finance Guide</a></li>
-              <li><a href="/docs/terminology-guide" class="active">Terminology Crosswalk Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide" class="active">Terminology Crosswalk</a></li>
               <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
             </ul>
           </div>
@@ -131,10 +136,10 @@
           <span class="sep">&#x25B8;</span>
           <a href="/docs">Docs</a>
           <span class="sep">&#x25B8;</span>
-          <span class="current">Terminology Crosswalk Guide</span>
+          <span class="current">Terminology Crosswalk</span>
         </div>
 
-        <h1>Terminology Crosswalk Guide</h1>
+        <h1>Terminology Crosswalk</h1>
         <p class="docs-subtitle">
           FHIR-native SNOMED CT, CPT, and ICD-10-CM code translation for CMS-0057 compliance. The crosswalk bridges the terminology gap between Da Vinci clinical workflows and payer claims adjudication systems.
         </p>
@@ -558,13 +563,13 @@ curl -s -X POST http://localhost:5010/fhir/ConceptMap/\$batch-translate \
 
         <!-- Prev / Next -->
         <div class="docs-pager">
-          <a href="/docs/finance-guide">
+          <a href="/docs/fee-schedule-guide">
             <div class="pager-label">&larr; Previous</div>
-            <div class="pager-title">Finance Guide</div>
+            <div class="pager-title">Fee Schedule</div>
           </a>
-          <a href="/docs/api" class="next">
+          <a href="/docs/provider-verification-guide" class="next">
             <div class="pager-label">Next &rarr;</div>
-            <div class="pager-title">API Reference</div>
+            <div class="pager-title">Provider Verification</div>
           </a>
         </div>
       </div>
