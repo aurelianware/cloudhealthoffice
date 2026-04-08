@@ -18,173 +18,342 @@ public class StateEnrollmentGateTests
     private const string TenantId = "pchp";
     private const string Taxonomy = "207Q00000X";
 
-    private readonly DateOnly _serviceDate = DateOnly.FromDateTime(DateTime.Today);
+    private readonly DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
 
-    // ── Shared builder ───────────────────────────────────────────────
-
-    /// <summary>
-    /// Build a <see cref="StateEnrollmentGate"/> with full control over
-    /// HTTP context, tenant config, and the enrollment record returned
-    /// by the aggregator's TX source.
-    /// </summary>
-    private static StateEnrollmentGate BuildGate(
-        StateEnrollmentRecord? record,
-        TenantEnrollmentConfig? tenantConfig = null,
-        string? tenantId = TenantId,
-        bool hasHttpContext = true)
-    {
-        // Aggregator backed by a single TX source
-        var source = Substitute.For<IStateEnrollmentSource>();
-        source.StateCode.Returns("TX");
-        source.GetEnrollmentAsync(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
-            .Returns(record);
-
-        var aggregator = new MultiStateEnrollmentAggregator(
-            new[] { source },
-            Options.Create(new ProviderEnrollmentOptions()),
-            Substitute.For<ILogger<MultiStateEnrollmentAggregator>>());
-
-        // Tenant config repo
-        var configRepo = Substitute.For<ITenantEnrollmentConfigRepository>();
-        if (tenantId is not null)
-        {
-            configRepo.GetAsync(tenantId, Arg.Any<CancellationToken>())
-                .Returns(tenantConfig);
-        }
-
-        // HTTP context with X-Tenant-Id header
-        var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
-        if (hasHttpContext && tenantId is not null)
-        {
-            var httpContext = new DefaultHttpContext();
-            httpContext.Request.Headers["X-Tenant-Id"] = tenantId;
-            httpContextAccessor.HttpContext.Returns(httpContext);
-        }
-
-        return new StateEnrollmentGate(
-            aggregator,
-            configRepo,
-            httpContextAccessor,
-            Substitute.For<ILogger<StateEnrollmentGate>>());
-    }
-
-    /// <summary>
-    /// Shortcut: build a gate in Enforce mode with TX enabled.
-    /// </summary>
-    private static StateEnrollmentGate BuildEnforceGate(StateEnrollmentRecord? record) =>
-        BuildGate(record, tenantConfig: MakeConfig(EnrollmentGateMode.Enforce));
+    // Mocks stored by BuildGate so individual tests can assert on them
+    private IStateEnrollmentSource _source = null!;
+    private ITenantEnrollmentConfigRepository _configRepo = null!;
+    private ILogger<StateEnrollmentGate> _logger = null!;
 
     // ── Helpers ──────────────────────────────────────────────────────
 
-    private static StateEnrollmentRecord MakeActiveRecord(
-        string? taxonomy = Taxonomy,
-        LineOfBusiness lobs = LineOfBusiness.Medicaid) => new()
+    private StateEnrollmentGate BuildGate(
+        IHttpContextAccessor? httpContext = null,
+        TenantEnrollmentConfig? config = null,
+        StateEnrollmentRecord? record = null)
+    {
+        _source = Substitute.For<IStateEnrollmentSource>();
+        _source.StateCode.Returns("TX");
+        _source.GetEnrollmentAsync(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(record);
+
+        var aggregator = new MultiStateEnrollmentAggregator(
+            new[] { _source },
+            Options.Create(new ProviderEnrollmentOptions()),
+            Substitute.For<ILogger<MultiStateEnrollmentAggregator>>());
+
+        _configRepo = Substitute.For<ITenantEnrollmentConfigRepository>();
+        _configRepo.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(config);
+
+        _logger = Substitute.For<ILogger<StateEnrollmentGate>>();
+
+        return new StateEnrollmentGate(
+            aggregator,
+            _configRepo,
+            httpContext ?? Substitute.For<IHttpContextAccessor>(),
+            _logger);
+    }
+
+    private static StateEnrollmentRecord BuildActiveRecord() => new()
     {
         Npi = Npi,
         StateCode = StateCode,
         SourceSystem = "PEMS",
         Status = EnrollmentStatus.Active,
-        EffectiveDate = new DateOnly(2023, 1, 1),
+        EffectiveDate = DateOnly.FromDateTime(DateTime.Today).AddYears(-1),
         ProviderType = ProviderTypeClassification.PhysicianMD,
-        SupportedLobs = lobs,
-        EnrolledTaxonomies = taxonomy is null ? [] : [taxonomy]
+        SupportedLobs = LineOfBusiness.Medicaid,
+        EnrolledTaxonomies = [Taxonomy]
     };
 
-    private static TenantEnrollmentConfig MakeConfig(
-        EnrollmentGateMode gateMode = EnrollmentGateMode.Enforce,
+    private static TenantEnrollmentConfig BuildConfig(
+        EnrollmentGateMode mode,
         IReadOnlyList<string>? enabledStates = null,
         IReadOnlyList<LobEnrollmentOverride>? lobOverrides = null) => new()
     {
         TenantId = TenantId,
-        DefaultGateMode = gateMode,
-        EnabledStateCodes = enabledStates ?? [],
+        DefaultGateMode = mode,
+        EnabledStateCodes = enabledStates ?? ["TX"],
         LobOverrides = lobOverrides ?? []
     };
 
+    private static IHttpContextAccessor BuildHttpContext(string? tenantId)
+    {
+        var accessor = Substitute.For<IHttpContextAccessor>();
+
+        if (tenantId is not null)
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Request.Headers["X-Tenant-Id"] = tenantId;
+            accessor.HttpContext.Returns(ctx);
+        }
+
+        return accessor;
+    }
+
     // ═════════════════════════════════════════════════════════════════
-    //  Tests 1-4, 8, 9 — Tenant-config-aware behaviour
+    //  1-2: No tenant context → Pass
     // ═════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task EvaluateAsync_NoTenantContext_ReturnsPass()
+    public async Task NoHttpContext_ReturnsPass()
     {
-        // Arrange — no HttpContext (batch/test path)
-        var gate = BuildGate(record: null, hasHttpContext: false);
+        // HttpContext is null — batch/test path
+        var accessor = Substitute.For<IHttpContextAccessor>();
+        accessor.HttpContext.Returns((HttpContext?)null);
 
-        // Act
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
+        var gate = BuildGate(httpContext: accessor);
 
-        // Assert
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
         result.Passed.Should().BeTrue();
+        await _configRepo.DidNotReceive().GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task EvaluateAsync_NoTenantConfig_ReturnsPass()
+    public async Task TenantIdMissingFromItems_ReturnsPass()
     {
-        // Arrange — tenant config repo returns null
-        var gate = BuildGate(record: null, tenantConfig: null);
+        // HttpContext exists but X-Tenant-Id header is absent
+        var accessor = BuildHttpContext(null);
+        var ctx = new DefaultHttpContext(); // no tenant header
+        accessor.HttpContext.Returns(ctx);
 
-        // Act
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
+        var gate = BuildGate(httpContext: accessor);
 
-        // Assert
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
         result.Passed.Should().BeTrue();
+        await _configRepo.DidNotReceive().GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    // ═════════════════════════════════════════════════════════════════
+    //  3: No tenant config → Pass
+    // ═════════════════════════════════════════════════════════════════
+
     [Fact]
-    public async Task EvaluateAsync_GateModeDisabled_ReturnsPass()
+    public async Task NoTenantConfig_ReturnsPass()
     {
-        // Arrange — gate mode Disabled, provider NOT enrolled
         var gate = BuildGate(
-            record: null,
-            tenantConfig: MakeConfig(EnrollmentGateMode.Disabled));
+            httpContext: BuildHttpContext(TenantId),
+            config: null);
 
-        // Act
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
 
-        // Assert — pass regardless of enrollment status
         result.Passed.Should().BeTrue();
+        await _source.DidNotReceive()
+            .GetEnrollmentAsync(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    //  4-6: Gate mode / LOB override / state filter → Pass
+    // ═════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task GateModeDisabled_ReturnsPass()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Disabled));
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeTrue();
+        await _source.DidNotReceive()
+            .GetEnrollmentAsync(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task EvaluateAsync_GateModeWarn_EnrollmentFails_StillReturnsPass_AndLogs()
+    public async Task GateModeDisabled_ViaLobOverride_Marketplace_ReturnsPass()
     {
-        // Arrange — Warn mode, aggregator returns null (not enrolled)
-        var logger = Substitute.For<ILogger<StateEnrollmentGate>>();
+        var config = BuildConfig(EnrollmentGateMode.Enforce, lobOverrides:
+        [
+            new LobEnrollmentOverride
+            {
+                Lob = LineOfBusiness.Marketplace,
+                GateMode = EnrollmentGateMode.Disabled
+            }
+        ]);
 
-        var source = Substitute.For<IStateEnrollmentSource>();
-        source.StateCode.Returns("TX");
-        source.GetEnrollmentAsync(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
-            .Returns((StateEnrollmentRecord?)null);
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: config);
 
-        var aggregator = new MultiStateEnrollmentAggregator(
-            new[] { source },
-            Options.Create(new ProviderEnrollmentOptions()),
-            Substitute.For<ILogger<MultiStateEnrollmentAggregator>>());
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Marketplace);
 
-        var configRepo = Substitute.For<ITenantEnrollmentConfigRepository>();
-        configRepo.GetAsync(TenantId, Arg.Any<CancellationToken>())
-            .Returns(MakeConfig(EnrollmentGateMode.Warn));
+        result.Passed.Should().BeTrue();
+        await _source.DidNotReceive()
+            .GetEnrollmentAsync(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+    }
 
-        var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
-        var httpContext = new DefaultHttpContext();
-        httpContext.Request.Headers["X-Tenant-Id"] = TenantId;
-        httpContextAccessor.HttpContext.Returns(httpContext);
+    [Fact]
+    public async Task StateNotInEnabledList_ReturnsPass()
+    {
+        // Only CA is enabled; request is for TX
+        var config = BuildConfig(EnrollmentGateMode.Enforce, enabledStates: ["CA"]);
 
-        var gate = new StateEnrollmentGate(aggregator, configRepo, httpContextAccessor, logger);
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: config);
 
-        // Act
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
 
-        // Assert — passes despite enrollment failure
+        result.Passed.Should().BeTrue();
+        await _source.DidNotReceive()
+            .GetEnrollmentAsync(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    //  7-14: Enforce mode denial codes
+    // ═════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Enforce_ProviderNotFound_ReturnsDeny_PEMS001()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: null);
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-001");
+    }
+
+    [Fact]
+    public async Task Enforce_StatusSuspended_ReturnsDeny_PEMS003()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: BuildActiveRecord() with { Status = EnrollmentStatus.Suspended });
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-003");
+    }
+
+    [Fact]
+    public async Task Enforce_StatusRevalidationRequired_ReturnsDeny_PEMS004()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: BuildActiveRecord() with { Status = EnrollmentStatus.RevalidationRequired });
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-004");
+    }
+
+    [Fact]
+    public async Task Enforce_StatusPending_ReturnsDeny_PEMS001()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: BuildActiveRecord() with { Status = EnrollmentStatus.Pending });
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-001");
+    }
+
+    [Fact]
+    public async Task Enforce_EffectiveDateInFuture_ReturnsDeny_PEMS001()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: BuildActiveRecord() with { EffectiveDate = _today.AddDays(30) });
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-001");
+    }
+
+    [Fact]
+    public async Task Enforce_TerminatedBeforeServiceDate_ReturnsDeny_PEMS001()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: BuildActiveRecord() with { TerminationDate = _today.AddDays(-1) });
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-001");
+    }
+
+    [Fact]
+    public async Task Enforce_TaxonomyNotEnrolled_ReturnsDeny_PEMS002()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: BuildActiveRecord()); // enrolled: 207Q00000X
+
+        var result = await gate.EvaluateAsync(Npi, "2084P0800X", StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-002");
+    }
+
+    [Fact]
+    public async Task Enforce_LobNotSupported_ReturnsDeny_PEMS005()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: BuildActiveRecord()); // SupportedLobs = Medicaid only
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.CHIP);
+
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-005");
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    //  15: Enforce happy path
+    // ═════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Enforce_AllChecksPass_ReturnsPass()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Enforce),
+            record: BuildActiveRecord());
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        result.Passed.Should().BeTrue();
+        result.DenialCode.Should().BeNull();
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    //  16-17: Warn mode
+    // ═════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Warn_ProviderNotFound_ReturnsPass_AndLogsWarning()
+    {
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Warn),
+            record: null);
+
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
         result.Passed.Should().BeTrue();
 
-        // Assert — logger received a warning containing "warn-only"
-        logger.Received().Log(
+        _logger.Received().Log(
             LogLevel.Warning,
             Arg.Any<EventId>(),
             Arg.Is<object>(o => o.ToString()!.Contains("warn-only")),
@@ -193,177 +362,47 @@ public class StateEnrollmentGateTests
     }
 
     [Fact]
-    public async Task EvaluateAsync_GateModeEnforce_LobOverride_Marketplace_Disabled_ReturnsPass()
+    public async Task Warn_AllChecksPass_ReturnsPass()
     {
-        // Arrange — Enforce by default, but Marketplace overridden to Disabled
-        var config = MakeConfig(
-            gateMode: EnrollmentGateMode.Enforce,
-            lobOverrides:
-            [
-                new LobEnrollmentOverride
-                {
-                    Lob = LineOfBusiness.Marketplace,
-                    GateMode = EnrollmentGateMode.Disabled
-                }
-            ]);
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: BuildConfig(EnrollmentGateMode.Warn),
+            record: BuildActiveRecord());
 
-        var gate = BuildGate(record: null, tenantConfig: config);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
 
-        // Act — Marketplace LOB, provider not enrolled
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Marketplace);
-
-        // Assert — pass because Marketplace gate is Disabled
-        result.Passed.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task EvaluateAsync_StateNotInEnabledList_ReturnsPass()
-    {
-        // Arrange — only CA is enabled, request is for TX
-        var config = MakeConfig(
-            gateMode: EnrollmentGateMode.Enforce,
-            enabledStates: ["CA"]);
-
-        var gate = BuildGate(record: null, tenantConfig: config);
-
-        // Act
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
-
-        // Assert — TX not in enabled list, gate skipped
         result.Passed.Should().BeTrue();
     }
 
     // ═════════════════════════════════════════════════════════════════
-    //  Tests 5, 6, 7 — Pure enrollment-status checks (Enforce mode)
+    //  18: LOB override inherits Enforce with extra fields
     // ═════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task EvaluateAsync_GateModeEnforce_ProviderNotFound_ReturnsDeny_PEMS001()
+    public async Task LobOverride_STARPlus_InheritedEnforce_ValidRecord_ReturnsPass()
     {
-        // Arrange — aggregator returns null (NPI unknown to TX PEMS)
-        var gate = BuildEnforceGate(record: null);
+        // STARPlus override sets RevalidationWarningDays only — GateMode inherits Enforce
+        var config = BuildConfig(EnrollmentGateMode.Enforce, lobOverrides:
+        [
+            new LobEnrollmentOverride
+            {
+                Lob = LineOfBusiness.STARPlus,
+                RevalidationWarningDays = 45
+            }
+        ]);
 
-        // Act
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
-
-        // Assert
-        result.Passed.Should().BeFalse();
-        result.DenialCode.Should().Be("PEMS-001");
-        result.DenialReason.Should().Contain(Npi);
-    }
-
-    [Fact]
-    public async Task EvaluateAsync_GateModeEnforce_StatusSuspended_ReturnsDeny_PEMS003()
-    {
-        // Arrange — provider is enrolled but suspended
-        var record = MakeActiveRecord() with { Status = EnrollmentStatus.Suspended };
-        var gate = BuildEnforceGate(record);
-
-        // Act
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
-
-        // Assert
-        result.Passed.Should().BeFalse();
-        result.DenialCode.Should().Be("PEMS-003");
-        result.DenialReason.Should().Contain("suspend");
-    }
-
-    [Fact]
-    public async Task EvaluateAsync_GateModeEnforce_TaxonomyNotEnrolled_ReturnsDeny_PEMS002()
-    {
-        // Arrange — provider active but enrolled taxonomy differs from request
-        var record = MakeActiveRecord(taxonomy: "207Q00000X");
-        var gate = BuildEnforceGate(record);
-
-        // Act — request taxonomy 2084P0800X is NOT in the enrolled list
-        var result = await gate.EvaluateAsync(
-            Npi, "2084P0800X", StateCode, _serviceDate, LineOfBusiness.Medicaid);
-
-        // Assert
-        result.Passed.Should().BeFalse();
-        result.DenialCode.Should().Be("PEMS-002");
-        result.DenialReason.Should().Contain("2084P0800X");
-        result.DenialReason.Should().Contain("207Q00000X");
-    }
-
-    // ═════════════════════════════════════════════════════════════════
-    //  Additional gate-logic coverage
-    // ═════════════════════════════════════════════════════════════════
-
-    [Fact]
-    public async Task EvaluateAsync_ActiveProvider_MatchingTaxonomy_ReturnsPass()
-    {
-        var record = MakeActiveRecord();
-        var gate = BuildEnforceGate(record);
-
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
-
-        result.Passed.Should().BeTrue();
-        result.DenialCode.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task EvaluateAsync_RevalidationRequired_ReturnsDeny_PEMS004()
-    {
-        var record = MakeActiveRecord() with { Status = EnrollmentStatus.RevalidationRequired };
-        var gate = BuildEnforceGate(record);
-
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
-
-        result.Passed.Should().BeFalse();
-        result.DenialCode.Should().Be("PEMS-004");
-    }
-
-    [Fact]
-    public async Task EvaluateAsync_LobNotSupported_ReturnsDeny_PEMS005()
-    {
-        var record = MakeActiveRecord(lobs: LineOfBusiness.Medicaid);
-        var gate = BuildEnforceGate(record);
-
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.CHIP);
-
-        result.Passed.Should().BeFalse();
-        result.DenialCode.Should().Be("PEMS-005");
-    }
-
-    [Fact]
-    public async Task EvaluateAsync_EffectiveDateAfterServiceDate_ReturnsDeny_PEMS001()
-    {
-        var record = MakeActiveRecord() with
+        var record = BuildActiveRecord() with
         {
-            EffectiveDate = _serviceDate.AddDays(30)
+            SupportedLobs = LineOfBusiness.STARPlus | LineOfBusiness.Medicaid
         };
-        var gate = BuildEnforceGate(record);
 
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
+        var gate = BuildGate(
+            httpContext: BuildHttpContext(TenantId),
+            config: config,
+            record: record);
 
-        result.Passed.Should().BeFalse();
-        result.DenialCode.Should().Be("PEMS-001");
-        result.DenialReason.Should().Contain("not effective");
-    }
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.STARPlus);
 
-    [Fact]
-    public async Task EvaluateAsync_TerminatedBeforeServiceDate_ReturnsDeny_PEMS001()
-    {
-        var record = MakeActiveRecord() with
-        {
-            TerminationDate = _serviceDate.AddDays(-1)
-        };
-        var gate = BuildEnforceGate(record);
-
-        var result = await gate.EvaluateAsync(
-            Npi, Taxonomy, StateCode, _serviceDate, LineOfBusiness.Medicaid);
-
-        result.Passed.Should().BeFalse();
-        result.DenialCode.Should().Be("PEMS-001");
-        result.DenialReason.Should().Contain("terminated");
+        result.Passed.Should().BeTrue();
     }
 }
