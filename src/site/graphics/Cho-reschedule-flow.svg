@@ -1,0 +1,325 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 960" font-family="'Courier New', monospace">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0e17"/>
+      <stop offset="50%" style="stop-color:#0d1321"/>
+      <stop offset="100%" style="stop-color:#0a0e17"/>
+    </linearGradient>
+    <linearGradient id="boxCyan" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00f0ff;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#00f0ff;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxAmber" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff9f1c;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#ff9f1c;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxGreen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ff88;stop-opacity:0.12"/>
+      <stop offset="100%" style="stop-color:#00ff88;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxRed" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff3366;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#ff3366;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxPurple" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxTeal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2dd4bf;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#2dd4bf;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxSlate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#64748b;stop-opacity:0.18"/>
+      <stop offset="100%" style="stop-color:#64748b;stop-opacity:0.04"/>
+    </linearGradient>
+    <linearGradient id="boxGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#eab308;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#eab308;stop-opacity:0.02"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="aCyan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#00f0ff" opacity="0.85"/>
+    </marker>
+    <marker id="aAmber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#ff9f1c" opacity="0.85"/>
+    </marker>
+    <marker id="aGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#00ff88" opacity="0.85"/>
+    </marker>
+    <marker id="aRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#ff3366" opacity="0.85"/>
+    </marker>
+    <marker id="aPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#a855f7" opacity="0.85"/>
+    </marker>
+    <marker id="aTeal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#2dd4bf" opacity="0.85"/>
+    </marker>
+    <marker id="aGold" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#eab308" opacity="0.85"/>
+    </marker>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a2744" stroke-width="0.4"/>
+    </pattern>
+  </defs>
+
+  <!-- BG -->
+
+  <rect width="1200" height="960" fill="url(#bg)"/>
+  <rect width="1200" height="960" fill="url(#grid)" opacity="0.35"/>
+
+  <!-- Title bar -->
+
+  <rect x="0" y="0" width="1200" height="48" fill="#0b1120" opacity="0.95"/>
+  <line x1="0" y1="48" x2="1200" y2="48" stroke="#00f0ff" stroke-width="0.8" opacity="0.35"/>
+  <text x="18" y="31" fill="#00f0ff" font-size="13" font-weight="bold" filter="url(#glow)" letter-spacing="3">▸ CLOUD HEALTH OFFICE</text>
+  <text x="300" y="31" fill="#4a6a8a" font-size="11" letter-spacing="2">FEE SCHEDULE UPDATE &amp; PRICING ENGINE FLOW</text>
+  <text x="1050" y="31" fill="#2a4a6a" font-size="10" letter-spacing="1">CLAIMS PRICING</text>
+  <circle cx="1170" cy="24" r="4" fill="#00ff88" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- ═══════ LEFT COLUMN: FEE SCHEDULE SOURCES ═══════ -->
+
+<text x="120" y="82" fill="#eab308" font-size="10" text-anchor="middle" letter-spacing="2" opacity="0.6">FEE SCHEDULE SOURCES</text>
+
+  <!-- CMS MPFS -->
+
+  <rect x="25" y="95" width="190" height="60" rx="3" fill="url(#boxGold)" stroke="#eab308" stroke-width="1"/>
+  <text x="120" y="116" fill="#eab308" font-size="10" text-anchor="middle" font-weight="bold">CMS MPFS</text>
+  <text x="120" y="132" fill="#a08a20" font-size="8" text-anchor="middle">Medicare Physician Fee Sched</text>
+  <text x="120" y="144" fill="#7a6a1a" font-size="7.5" text-anchor="middle">Annual + Quarterly Updates</text>
+
+  <!-- CMS OPPS -->
+
+  <rect x="25" y="168" width="190" height="60" rx="3" fill="url(#boxGold)" stroke="#eab308" stroke-width="1"/>
+  <text x="120" y="189" fill="#eab308" font-size="10" text-anchor="middle" font-weight="bold">CMS OPPS / ASC</text>
+  <text x="120" y="205" fill="#a08a20" font-size="8" text-anchor="middle">Outpatient Prospective Pay</text>
+  <text x="120" y="217" fill="#7a6a1a" font-size="7.5" text-anchor="middle">APC Rates + Status Indicators</text>
+
+  <!-- TX Medicaid -->
+
+  <rect x="25" y="241" width="190" height="60" rx="3" fill="url(#boxPurple)" stroke="#a855f7" stroke-width="1"/>
+  <text x="120" y="262" fill="#a855f7" font-size="10" text-anchor="middle" font-weight="bold">TX MEDICAID FEE SCHED</text>
+  <text x="120" y="278" fill="#7c5aaa" font-size="8" text-anchor="middle">HHSC / TMHP Rates</text>
+  <text x="120" y="290" fill="#5a4a7a" font-size="7.5" text-anchor="middle">STAR · STAR+PLUS · CHIP</text>
+
+  <!-- Commercial / Contracted -->
+
+  <rect x="25" y="314" width="190" height="60" rx="3" fill="url(#boxTeal)" stroke="#2dd4bf" stroke-width="1"/>
+  <text x="120" y="335" fill="#2dd4bf" font-size="10" text-anchor="middle" font-weight="bold">CONTRACTED RATES</text>
+  <text x="120" y="351" fill="#5eead4" font-size="8" text-anchor="middle">Provider Network Agreements</text>
+  <text x="120" y="363" fill="#3a8a7a" font-size="7.5" text-anchor="middle">Per-Diem · Case Rate · % of MC</text>
+
+  <!-- Blazor Manual Upload -->
+
+  <rect x="25" y="387" width="190" height="60" rx="3" fill="url(#boxCyan)" stroke="#00f0ff" stroke-width="1"/>
+  <text x="120" y="408" fill="#00f0ff" font-size="10" text-anchor="middle" font-weight="bold">PORTAL UPLOAD</text>
+  <text x="120" y="424" fill="#7ab8d4" font-size="8" text-anchor="middle">Blazor — Manual / CSV / Excel</text>
+  <text x="120" y="436" fill="#4a6a8a" font-size="7.5" text-anchor="middle">Custom Plan-Specific Schedules</text>
+
+  <!-- ═══════ ARROWS: Sources → Ingestion ═══════ -->
+
+  <line x1="215" y1="125" x2="290" y2="215" stroke="#eab308" stroke-width="1" marker-end="url(#aGold)" opacity="0.5"/>
+  <line x1="215" y1="198" x2="290" y2="225" stroke="#eab308" stroke-width="1" marker-end="url(#aGold)" opacity="0.5"/>
+  <line x1="215" y1="271" x2="290" y2="240" stroke="#a855f7" stroke-width="1" marker-end="url(#aPurple)" opacity="0.5"/>
+  <line x1="215" y1="344" x2="290" y2="252" stroke="#2dd4bf" stroke-width="1" marker-end="url(#aTeal)" opacity="0.5"/>
+  <line x1="215" y1="417" x2="290" y2="260" stroke="#00f0ff" stroke-width="1" marker-end="url(#aCyan)" opacity="0.5"/>
+
+  <!-- ═══════ CHO ZONE ═══════ -->
+
+  <rect x="280" y="68" width="490" height="840" rx="4" fill="none" stroke="#00f0ff" stroke-width="0.6" stroke-dasharray="6,4" opacity="0.2"/>
+  <text x="525" y="88" fill="#00f0ff" font-size="9" text-anchor="middle" opacity="0.4" letter-spacing="3">CHO FEE SCHEDULE ENGINE</text>
+
+  <!-- ═══════ STAGE 1: INGESTION & VALIDATION ═══════ -->
+
+  <rect x="295" y="195" width="240" height="85" rx="3" fill="url(#boxGold)" stroke="#eab308" stroke-width="1.2"/>
+  <text x="415" y="218" fill="#eab308" font-size="10" text-anchor="middle" font-weight="bold" filter="url(#glow)">INGESTION &amp; VALIDATION</text>
+  <text x="415" y="235" fill="#a08a20" font-size="9" text-anchor="middle">FeeScheduleLoaderService</text>
+  <line x1="315" y1="243" x2="515" y2="243" stroke="#eab308" stroke-width="0.4" opacity="0.3"/>
+  <text x="415" y="258" fill="#7a6a1a" font-size="8" text-anchor="middle">Format detection · Schema validate</text>
+  <text x="415" y="272" fill="#7a6a1a" font-size="8" text-anchor="middle">CPT/HCPCS code verify · Dup check</text>
+
+  <!-- Validation fail -->
+
+  <rect x="600" y="205" width="140" height="32" rx="2" fill="url(#boxRed)" stroke="#ff3366" stroke-width="0.7"/>
+  <text x="670" y="225" fill="#ff3366" font-size="8" text-anchor="middle" font-weight="bold">✖ REJECT — Bad Format</text>
+  <line x1="535" y1="225" x2="598" y2="221" stroke="#ff3366" stroke-width="0.7" stroke-dasharray="4,3" marker-end="url(#aRed)" opacity="0.5"/>
+
+  <!-- Arrow down -->
+
+  <line x1="415" y1="280" x2="415" y2="310" stroke="#eab308" stroke-width="1.2" marker-end="url(#aGold)" opacity="0.6"/>
+  <text x="430" y="300" fill="#00ff88" font-size="7" opacity="0.5">VALID ▾</text>
+
+  <!-- ═══════ STAGE 2: VERSIONING & EFFECTIVE DATING ═══════ -->
+
+  <rect x="295" y="315" width="240" height="90" rx="3" fill="url(#boxAmber)" stroke="#ff9f1c" stroke-width="1.2"/>
+  <text x="415" y="337" fill="#ff9f1c" font-size="10" text-anchor="middle" font-weight="bold" filter="url(#glow)">VERSION &amp; EFFECTIVE DATE</text>
+  <text x="415" y="354" fill="#d4a66a" font-size="9" text-anchor="middle">FeeScheduleVersionStore</text>
+  <line x1="315" y1="362" x2="515" y2="362" stroke="#ff9f1c" stroke-width="0.4" opacity="0.3"/>
+  <text x="415" y="378" fill="#8a7a5a" font-size="8" text-anchor="middle">Effective / Term date ranges</text>
+  <text x="415" y="392" fill="#8a7a5a" font-size="8" text-anchor="middle">Immutable version history · Rollback</text>
+
+  <!-- Versioning detail -->
+
+  <rect x="600" y="315" width="155" height="75" rx="2" fill="url(#boxAmber)" stroke="#ff9f1c" stroke-width="0.6" opacity="0.7"/>
+  <text x="677" y="333" fill="#ff9f1c" font-size="8" text-anchor="middle" font-weight="bold">VERSION CONTROL</text>
+  <text x="677" y="348" fill="#8a7a5a" font-size="7.5" text-anchor="middle">v2026.Q1 → v2026.Q2</text>
+  <text x="677" y="362" fill="#8a7a5a" font-size="7.5" text-anchor="middle">Future-dated schedules</text>
+  <text x="677" y="376" fill="#8a7a5a" font-size="7.5" text-anchor="middle">Auto-activate on eff date</text>
+  <text x="677" y="388" fill="#6a5a3a" font-size="7" text-anchor="middle">Audit trail per change</text>
+  <line x1="535" y1="360" x2="598" y2="355" stroke="#ff9f1c" stroke-width="0.6" stroke-dasharray="3,3" opacity="0.5"/>
+
+  <!-- Arrow down -->
+
+  <line x1="415" y1="405" x2="415" y2="435" stroke="#ff9f1c" stroke-width="1.2" marker-end="url(#aAmber)" opacity="0.6"/>
+
+  <!-- ═══════ STAGE 3: FEE SCHEDULE REPOSITORY ═══════ -->
+
+  <rect x="295" y="440" width="240" height="90" rx="3" fill="url(#boxCyan)" stroke="#00f0ff" stroke-width="1.4"/>
+  <rect x="295" y="440" width="240" height="22" rx="3" fill="#00f0ff" opacity="0.06"/>
+  <text x="415" y="457" fill="#00f0ff" font-size="10" text-anchor="middle" font-weight="bold" filter="url(#glow)">FEE SCHEDULE REPOSITORY</text>
+  <text x="415" y="478" fill="#7ab8d4" font-size="8.5" text-anchor="middle">Indexed by: LOB · Provider Type</text>
+  <text x="415" y="494" fill="#7ab8d4" font-size="8.5" text-anchor="middle">POS · Modifier · Proc Code</text>
+  <text x="415" y="510" fill="#4a6a8a" font-size="8" text-anchor="middle">Network · Contract · Geo Region</text>
+  <text x="415" y="524" fill="#4a6a8a" font-size="7.5" text-anchor="middle">MongoDB · Hot cache in Redis</text>
+
+  <!-- Arrow down to pricing engine -->
+
+  <line x1="415" y1="530" x2="415" y2="568" stroke="#00f0ff" stroke-width="1.2" marker-end="url(#aCyan)" opacity="0.6"/>
+  <text x="430" y="555" fill="#00f0ff" font-size="7" opacity="0.5">LOOKUP ▾</text>
+
+  <!-- ═══════ STAGE 4: PRICING ENGINE (CLAIM TIME) ═══════ -->
+
+  <rect x="295" y="573" width="240" height="115" rx="3" fill="url(#boxGreen)" stroke="#00ff88" stroke-width="1.4"/>
+  <text x="415" y="596" fill="#00ff88" font-size="10" text-anchor="middle" font-weight="bold" filter="url(#glow)">PRICING ENGINE</text>
+  <text x="415" y="613" fill="#6ad4a0" font-size="9" text-anchor="middle">FeeScheduleEngine (calc lib)</text>
+  <line x1="315" y1="621" x2="515" y2="621" stroke="#00ff88" stroke-width="0.4" opacity="0.3"/>
+  <text x="415" y="637" fill="#4a8a6a" font-size="8" text-anchor="middle">Resolve fee sched for claim line</text>
+  <text x="415" y="651" fill="#4a8a6a" font-size="8" text-anchor="middle">Apply modifier logic (–26, –TC, –59)</text>
+  <text x="415" y="665" fill="#4a8a6a" font-size="8" text-anchor="middle">Multiple procedure reduction</text>
+  <text x="415" y="679" fill="#4a8a6a" font-size="8" text-anchor="middle">Geographic GPCI adjustment</text>
+
+  <!-- Claim input from left -->
+
+  <rect x="25" y="590" width="190" height="70" rx="3" fill="url(#boxGreen)" stroke="#00ff88" stroke-width="0.8"/>
+  <text x="120" y="612" fill="#00ff88" font-size="10" text-anchor="middle" font-weight="bold">837 CLAIM LINE</text>
+  <text x="120" y="628" fill="#4a8a6a" font-size="8" text-anchor="middle">CPT/HCPCS + Modifiers</text>
+  <text x="120" y="642" fill="#4a8a6a" font-size="8" text-anchor="middle">POS · Provider NPI · DOS</text>
+  <text x="120" y="654" fill="#3a6a4a" font-size="7.5" text-anchor="middle">Member LOB · Network Tier</text>
+  <line x1="215" y1="625" x2="293" y2="625" stroke="#00ff88" stroke-width="1" marker-end="url(#aGreen)" opacity="0.6"/>
+  <text x="255" y="618" fill="#00ff88" font-size="7" opacity="0.5">IN ▸</text>
+
+  <!-- Engine detail callouts right -->
+
+  <rect x="600" y="573" width="155" height="55" rx="2" fill="url(#boxGreen)" stroke="#00ff88" stroke-width="0.6" opacity="0.7"/>
+  <text x="677" y="591" fill="#00ff88" font-size="8" text-anchor="middle" font-weight="bold">RESOLUTION ORDER</text>
+  <text x="677" y="605" fill="#4a8a6a" font-size="7.5" text-anchor="middle">1. Contracted rate (exact)</text>
+  <text x="677" y="617" fill="#4a8a6a" font-size="7.5" text-anchor="middle">2. LOB fee sched (Medicaid)</text>
+  <text x="677" y="629" fill="#3a6a4a" font-size="7" text-anchor="middle">3. Medicare MPFS fallback</text>
+  <line x1="535" y1="608" x2="598" y2="605" stroke="#00ff88" stroke-width="0.6" stroke-dasharray="3,3" opacity="0.5"/>
+
+  <rect x="600" y="638" width="155" height="48" rx="2" fill="url(#boxTeal)" stroke="#2dd4bf" stroke-width="0.6" opacity="0.7"/>
+  <text x="677" y="656" fill="#2dd4bf" font-size="8" text-anchor="middle" font-weight="bold">METHODOLOGY</text>
+  <text x="677" y="670" fill="#5eead4" font-size="7.5" text-anchor="middle">RBRVS · Per Diem · DRG</text>
+  <text x="677" y="682" fill="#3a8a7a" font-size="7" text-anchor="middle">Case Rate · % of Medicare · UCR</text>
+  <line x1="535" y1="665" x2="598" y2="660" stroke="#2dd4bf" stroke-width="0.6" stroke-dasharray="3,3" opacity="0.5"/>
+
+  <!-- Arrow down -->
+
+  <line x1="415" y1="688" x2="415" y2="720" stroke="#00ff88" stroke-width="1.2" marker-end="url(#aGreen)" opacity="0.6"/>
+
+  <!-- ═══════ STAGE 5: ALLOWED AMOUNT OUTPUT ═══════ -->
+
+  <rect x="295" y="725" width="240" height="70" rx="3" fill="url(#boxGreen)" stroke="#00ff88" stroke-width="1.2"/>
+  <rect x="295" y="725" width="240" height="20" rx="3" fill="#00ff88" opacity="0.06"/>
+  <text x="415" y="740" fill="#00ff88" font-size="9" text-anchor="middle" font-weight="bold">ALLOWED AMOUNT</text>
+  <text x="415" y="762" fill="#6ad4a0" font-size="8.5" text-anchor="middle">Priced claim line → Adjudication</text>
+  <text x="415" y="778" fill="#4a8a6a" font-size="8" text-anchor="middle">Fee sched ID · Version · Method</text>
+  <text x="415" y="790" fill="#3a6a4a" font-size="7.5" text-anchor="middle">Full audit trail on pricing decision</text>
+
+  <!-- Split output: augment vs replace -->
+
+  <line x1="380" y1="795" x2="340" y2="830" stroke="#64748b" stroke-width="1" marker-end="url(#aCyan)" opacity="0.5"/>
+  <line x1="450" y1="795" x2="490" y2="830" stroke="#00f0ff" stroke-width="1" marker-end="url(#aCyan)" opacity="0.5"/>
+
+  <rect x="275" y="835" width="120" height="50" rx="3" fill="url(#boxSlate)" stroke="#64748b" stroke-width="0.8"/>
+  <text x="335" y="855" fill="#94a3b8" font-size="9" text-anchor="middle" font-weight="bold">AUGMENT</text>
+  <text x="335" y="870" fill="#64748b" font-size="7.5" text-anchor="middle">→ QNXT Pricing</text>
+  <text x="335" y="881" fill="#475569" font-size="7" text-anchor="middle">Override / Validate</text>
+
+  <rect x="435" y="835" width="120" height="50" rx="3" fill="url(#boxCyan)" stroke="#00f0ff" stroke-width="0.8"/>
+  <text x="495" y="855" fill="#00f0ff" font-size="9" text-anchor="middle" font-weight="bold">REPLACE</text>
+  <text x="495" y="870" fill="#7ab8d4" font-size="7.5" text-anchor="middle">→ CHO Adjudication</text>
+  <text x="495" y="881" fill="#4a6a8a" font-size="7" text-anchor="middle">Native SOR</text>
+
+  <!-- ═══════ RIGHT PANEL: LEGEND ═══════ -->
+
+  <rect x="830" y="80" width="340" height="250" rx="4" fill="#0b1120" opacity="0.85" stroke="#1a2744" stroke-width="0.8"/>
+  <text x="1000" y="105" fill="#4a6a8a" font-size="10" text-anchor="middle" letter-spacing="2" font-weight="bold">LEGEND</text>
+  <line x1="850" y1="115" x2="1150" y2="115" stroke="#1a2744" stroke-width="0.6"/>
+
+  <rect x="860" y="128" width="12" height="12" rx="1" fill="url(#boxGold)" stroke="#eab308" stroke-width="0.8"/>
+  <text x="882" y="138" fill="#eab308" font-size="9">Fee Schedule Sources / Load</text>
+  <rect x="860" y="150" width="12" height="12" rx="1" fill="url(#boxAmber)" stroke="#ff9f1c" stroke-width="0.8"/>
+  <text x="882" y="160" fill="#d4a66a" font-size="9">Versioning / Effective Dating</text>
+  <rect x="860" y="172" width="12" height="12" rx="1" fill="url(#boxCyan)" stroke="#00f0ff" stroke-width="0.8"/>
+  <text x="882" y="182" fill="#7ab8d4" font-size="9">Repository / Storage</text>
+  <rect x="860" y="194" width="12" height="12" rx="1" fill="url(#boxGreen)" stroke="#00ff88" stroke-width="0.8"/>
+  <text x="882" y="204" fill="#6ad4a0" font-size="9">Pricing Engine / Output</text>
+  <rect x="860" y="216" width="12" height="12" rx="1" fill="url(#boxPurple)" stroke="#a855f7" stroke-width="0.8"/>
+  <text x="882" y="226" fill="#c084fc" font-size="9">TX Medicaid Specific</text>
+  <rect x="860" y="238" width="12" height="12" rx="1" fill="url(#boxTeal)" stroke="#2dd4bf" stroke-width="0.8"/>
+  <text x="882" y="248" fill="#5eead4" font-size="9">Provider Contracted</text>
+  <rect x="860" y="260" width="12" height="12" rx="1" fill="url(#boxRed)" stroke="#ff3366" stroke-width="0.8"/>
+  <text x="882" y="270" fill="#ff3366" font-size="9">Validation Failure</text>
+
+  <line x1="850" y1="285" x2="1150" y2="285" stroke="#1a2744" stroke-width="0.6"/>
+  <text x="860" y="302" fill="#4a6a8a" font-size="8">Update pipeline is separate from</text>
+  <text x="860" y="316" fill="#4a6a8a" font-size="8">claim-time pricing lookup</text>
+
+  <!-- Update Cycle detail -->
+
+  <rect x="830" y="350" width="340" height="145" rx="4" fill="#0b1120" opacity="0.85" stroke="#eab308" stroke-width="0.6"/>
+  <text x="1000" y="373" fill="#eab308" font-size="9" text-anchor="middle" letter-spacing="2" font-weight="bold">UPDATE CADENCE</text>
+  <line x1="850" y1="383" x2="1150" y2="383" stroke="#eab308" stroke-width="0.3" opacity="0.3"/>
+  <text x="860" y="401" fill="#a08a20" font-size="8">▸ CMS MPFS: Annual (Jan) + Q updates</text>
+  <text x="860" y="417" fill="#a08a20" font-size="8">▸ CMS OPPS/ASC: Annual + corrections</text>
+  <text x="860" y="433" fill="#c084fc" font-size="8">▸ TX Medicaid: HHSC rate notices</text>
+  <text x="860" y="449" fill="#5eead4" font-size="8">▸ Contracted: Per agreement cycle</text>
+  <text x="860" y="465" fill="#7ab8d4" font-size="8">▸ Portal: Ad hoc / plan-driven</text>
+  <text x="860" y="485" fill="#4a6a8a" font-size="7">All versioned · Future-dated · Non-destructive</text>
+
+  <!-- Pricing at claim time -->
+
+  <rect x="830" y="515" width="340" height="130" rx="4" fill="#0b1120" opacity="0.85" stroke="#00ff88" stroke-width="0.6"/>
+  <text x="1000" y="538" fill="#00ff88" font-size="9" text-anchor="middle" letter-spacing="2" font-weight="bold">AT CLAIM TIME</text>
+  <line x1="850" y1="548" x2="1150" y2="548" stroke="#00ff88" stroke-width="0.3" opacity="0.3"/>
+  <text x="860" y="566" fill="#6ad4a0" font-size="8">1. Claim line arrives with CPT + mods</text>
+  <text x="860" y="582" fill="#6ad4a0" font-size="8">2. Engine resolves provider contract</text>
+  <text x="860" y="598" fill="#6ad4a0" font-size="8">3. Looks up active fee sched by DOS</text>
+  <text x="860" y="614" fill="#6ad4a0" font-size="8">4. Applies modifier / GPCI / reduction</text>
+  <text x="860" y="630" fill="#6ad4a0" font-size="8">5. Returns allowed amount + audit ref</text>
+  <text x="860" y="643" fill="#3a6a4a" font-size="7">Sub-millisecond from Redis hot cache</text>
+
+  <!-- COB / NCCI interaction -->
+
+  <rect x="830" y="665" width="340" height="105" rx="4" fill="#0b1120" opacity="0.85" stroke="#00f0ff" stroke-width="0.6"/>
+  <text x="1000" y="688" fill="#00f0ff" font-size="9" text-anchor="middle" letter-spacing="2" font-weight="bold">ENGINE INTERACTIONS</text>
+  <line x1="850" y1="698" x2="1150" y2="698" stroke="#00f0ff" stroke-width="0.3" opacity="0.3"/>
+  <text x="860" y="716" fill="#7ab8d4" font-size="8">▸ NCCI Engine: Unbundling before price</text>
+  <text x="860" y="732" fill="#7ab8d4" font-size="8">▸ COB Engine: Primary/secondary split</text>
+  <text x="860" y="748" fill="#7ab8d4" font-size="8">▸ Benefit Engine: Copay/coinsurance</text>
+  <text x="860" y="764" fill="#4a6a8a" font-size="8">▸ Accumulators: Deductible applied</text>
+
+  <!-- Footer -->
+
+  <rect x="0" y="920" width="1200" height="40" fill="#0b1120" opacity="0.9"/>
+  <line x1="0" y1="920" x2="1200" y2="920" stroke="#1a2744" stroke-width="0.6"/>
+  <text x="20" y="944" fill="#2a4a6a" font-size="8" letter-spacing="1">AURELIANWARE, INC. · CLOUD HEALTH OFFICE · CONFIDENTIAL</text>
+  <text x="1180" y="944" fill="#2a4a6a" font-size="8" text-anchor="end" letter-spacing="1">v1.0 · APR 2026 · FEE SCHEDULE PIPELINE</text>
+</svg>
