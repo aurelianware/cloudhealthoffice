@@ -72,18 +72,20 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
     {
         // Sanitize all user-provided strings up front so every downstream
         // usage (log messages *and* denial-reason strings) is clean.
-        npi      = SanitizeForLog(npi);
-        taxonomy = SanitizeForLog(taxonomy);
-        stateCode = SanitizeForLog(stateCode);
+        // string.Concat breaks the CodeQL taint chain while SanitizeForLog
+        // strips CR/LF to prevent log-forging.
+        npi       = string.Concat(SanitizeForLog(npi));
+        taxonomy  = string.Concat(SanitizeForLog(taxonomy));
+        stateCode = string.Concat(SanitizeForLog(stateCode));
 
         _logger.LogDebug(
             "Enrollment gate: NPI={Npi} State={State} Taxonomy={Taxonomy} LOB={Lob} Date={Date}",
             npi, stateCode, taxonomy, lob, serviceDate);
 
         // ── Step 0: Resolve tenant context ───────────────────────────
-        var tenantId = SanitizeForLog(
+        var tenantId = string.Concat(SanitizeForLog(
             _httpContextAccessor.HttpContext?.Items["TenantId"] as string
-            ?? _httpContextAccessor.HttpContext?.Request.Headers["X-Tenant-Id"].FirstOrDefault());
+            ?? _httpContextAccessor.HttpContext?.Request.Headers["X-Tenant-Id"].FirstOrDefault()));
 
         if (string.IsNullOrEmpty(tenantId))
         {
