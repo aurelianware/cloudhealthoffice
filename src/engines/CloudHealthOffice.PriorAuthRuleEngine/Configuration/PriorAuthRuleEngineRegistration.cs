@@ -35,7 +35,7 @@ namespace CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 /// ── appsettings.json additions ────────────────────────────────────────────
 ///
 /// "PriorAuthRuleEngine": {
-///   "RuleSetCacheTtlMinutes": 15,
+///   "RuleSetCacheTtl": "00:15:00",
 ///   "GoldCardLookbackDays": 180,
 ///   "PendOnRuleError": true,
 ///   "RulesContainer": "prior-auth-rules",       // Cosmos
@@ -223,14 +223,23 @@ internal sealed class PriorAuthRuleEngineSeeder : IHostedService
         var platformRules = TxMedicaidSeedRules.GetAll();
         var seeded        = 0;
 
+        // Pre-fetch existing rules per state to avoid N+1 queries
+        var existingRuleIdsByState = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var rule in platformRules)
         {
-            // Check if already present (by state + ruleId)
-            var existing = await repo.ListAsync(tenantId: null, stateCode: rule.StateCode, ct);
-            if (existing.Any(r => r.RuleId == rule.RuleId))
+            if (!existingRuleIdsByState.TryGetValue(rule.StateCode, out var existingRuleIds))
+            {
+                var existing = await repo.ListAsync(tenantId: null, stateCode: rule.StateCode, ct);
+                existingRuleIds = new HashSet<string>(existing.Select(r => r.RuleId), StringComparer.OrdinalIgnoreCase);
+                existingRuleIdsByState[rule.StateCode] = existingRuleIds;
+            }
+
+            if (existingRuleIds.Contains(rule.RuleId))
                 continue;
 
             await repo.UpsertAsync(rule, ct);
+            existingRuleIds.Add(rule.RuleId);
             seeded++;
             _logger.LogInformation("Seeded PA rule {RuleId}: {RuleName}", rule.RuleId, rule.RuleName);
         }

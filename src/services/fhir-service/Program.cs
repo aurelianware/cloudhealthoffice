@@ -95,7 +95,7 @@ if (hasDb && hasRedis)
     //
     // Required appsettings.json:
     //   "PriorAuthRuleEngine": {
-    //     "RuleSetCacheTtlMinutes": 15,
+    //     "RuleSetCacheTtl": "00:15:00",
     //     "GoldCardLookbackDays": 180,
     //     "PendOnRuleError": true
     //   }
@@ -107,6 +107,15 @@ if (hasDb && hasRedis)
         builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
             .UseCosmosRepository().WithRedisRuleCache()
             .WithPlatformRules().SeedOnStartup();
+}
+else
+{
+    // Local dev / test without Redis+DB: register passthrough implementations
+    // so DI resolution of PasAutoAdjudicator doesn't fail.
+    builder.Services.AddSingleton<CloudHealthOffice.ProviderEnrollmentService.Abstractions.IEnrollmentDecisionGate,
+        CloudHealthOffice.ProviderEnrollmentService.Gates.PassthroughEnrollmentGate>();
+    builder.Services.AddSingleton<CloudHealthOffice.PriorAuthRuleEngine.Abstractions.IPriorAuthRuleEngine,
+        FhirService.Services.NoOpPriorAuthRuleEngine>();
 }
 
 // ── FHIR data adapters ────────────────────────────────────────────────────────

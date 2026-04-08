@@ -16,9 +16,9 @@
 
   <ItemGroup>
     <!-- Azure -->
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.40.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.58.0" />
     <!-- MongoDB -->
-    <PackageReference Include="MongoDB.Driver" Version="2.30.0" />
+    <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
     <!-- HTTP resilience -->
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
     <!-- Hosting / DI -->

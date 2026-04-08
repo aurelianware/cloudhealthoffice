@@ -60,8 +60,8 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Configuration;
 ///
 /// appsettings.json additions:
 ///   "ProviderEnrollmentService": {
-///     "CacheTtlHours": 4,
-///     "TenantConfigCacheTtlSeconds": 300,
+///     "CacheTtl": "04:00:00",
+///     "TenantConfigCacheTtl": "00:05:00",
 ///     "RevalidationWarningDays": 90,
 ///     "EnabledStateCodes": [],
 ///     "Tmhp": { "BaseUrl": "...", "ApiKey": "..." },
@@ -189,9 +189,10 @@ public sealed class ProviderEnrollmentServiceBuilder
 
     public ProviderEnrollmentServiceBuilder WithTexasSource()
     {
-        _services.AddHttpClient<TmhpPemsSource>(c =>
+        _services.AddHttpClient<TmhpPemsSource>((sp, c) =>
         {
-            c.BaseAddress = new Uri("https://www.tmhp.com/api/provider");
+            var opts = sp.GetRequiredService<IOptions<ProviderEnrollmentOptions>>().Value;
+            c.BaseAddress = new Uri(opts.Tmhp.BaseUrl);
             c.DefaultRequestHeaders.Add("Accept", "application/json");
         }).AddStandardResilienceHandler();
 
@@ -236,14 +237,15 @@ public sealed class ProviderEnrollmentServiceBuilder
     }
 
     /// <summary>
-    /// Register CAQH ProView. OrganizationId is resolved per-tenant at runtime
-    /// from TenantEnrollmentConfig.CaqhOrganizationId — not from appsettings.
+    /// Register CAQH ProView. OrganizationId is read from
+    /// ProviderEnrollmentOptions.Caqh.OrganizationId (appsettings).
     /// </summary>
     public ProviderEnrollmentServiceBuilder WithCaqhSource()
     {
-        _services.AddHttpClient<CaqhProViewSource>(c =>
+        _services.AddHttpClient<CaqhProViewSource>((sp, c) =>
         {
-            c.BaseAddress = new Uri("https://proview.caqh.org/api");
+            var opts = sp.GetRequiredService<IOptions<ProviderEnrollmentOptions>>().Value;
+            c.BaseAddress = new Uri(opts.Caqh.BaseUrl);
             c.DefaultRequestHeaders.Add("Accept", "application/json");
         }).AddStandardResilienceHandler();
 

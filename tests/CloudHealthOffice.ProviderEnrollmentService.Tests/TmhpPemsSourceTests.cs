@@ -33,6 +33,7 @@ public class TmhpPemsSourceTests
         var logger = Substitute.For<ILogger<TmhpPemsSource>>();
         var options = Options.Create(new ProviderEnrollmentOptions
         {
+            CacheTtl = TimeSpan.FromHours(4),
             Tmhp = new TmhpPemsOptions
             {
                 BaseUrl = "https://test.tmhp.com",

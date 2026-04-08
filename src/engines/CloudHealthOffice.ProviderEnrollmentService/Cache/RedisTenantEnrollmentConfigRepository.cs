@@ -91,7 +91,25 @@ public sealed class RedisTenantEnrollmentConfigRepository : ITenantEnrollmentCon
             if (value.HasValue)
             {
                 _logger.LogDebug("TenantEnrollmentConfig Redis hit for tenant {TenantId}", tenantId);
-                return JsonSerializer.Deserialize<TenantEnrollmentConfig>(value!, _json);
+                try
+                {
+                    var cached = JsonSerializer.Deserialize<TenantEnrollmentConfig>(value!, _json);
+                    if (cached is not null)
+                        return cached;
+
+                    // Null deserialization (corrupted entry) — treat as cache miss
+                    _logger.LogWarning(
+                        "TenantEnrollmentConfig Redis entry for tenant {TenantId} deserialized to null — deleting corrupted key",
+                        tenantId);
+                    await db.KeyDeleteAsync(key);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex,
+                        "TenantEnrollmentConfig Redis entry for tenant {TenantId} failed to deserialize — deleting corrupted key",
+                        tenantId);
+                    await db.KeyDeleteAsync(key);
+                }
             }
         }
         catch (RedisException ex)

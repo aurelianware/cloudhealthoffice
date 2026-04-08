@@ -143,10 +143,10 @@ spec:
       type: Opaque
       data:
         - objectName: tmhp-api-key
-          key: TMHP__APIKEY
+          key: ProviderEnrollmentService__Tmhp__ApiKey
         - objectName: tmhp-sftp-username
-          key: TMHP__SFTPUSERNAME
+          key: ProviderEnrollmentService__Tmhp__SftpUsername
         - objectName: caqh-username
-          key: CAQH__USERNAME
+          key: ProviderEnrollmentService__Caqh__Username
         - objectName: caqh-password
-          key: CAQH__PASSWORD
+          key: ProviderEnrollmentService__Caqh__Password

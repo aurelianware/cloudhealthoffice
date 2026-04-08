@@ -46,6 +46,7 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
         IMemberAuthHistoryService? memberHistory = null)
     {
         _repository      = repository;
+        _ruleImpls       = ruleImpls;
         _opts            = options.Value;
         _logger          = logger;
         _providerHistory = providerHistory;
@@ -210,26 +211,27 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
             new RuleSetKey { StateCode = context.StateCode, Lob = context.Lob, Program = null,            TenantId = null }
         };
 
-        // Deduplicate — when TenantId is null or Program is null, some keys collapse
-        var seen   = new HashSet<string>();
-        var merged = new List<PaRuleDocument>();
+        // Deduplicate — when TenantId is null or Program is null, some keys collapse.
+        // Return the first non-empty rule set (most specific wins).
+        var seen = new HashSet<string>();
 
         foreach (var key in candidates)
         {
             var keyStr = key.ToString();
             if (!seen.Add(keyStr)) continue;
 
-            var rules = await _repository.GetRulesAsync(key, ct);
-            merged.AddRange(rules.Where(r => r.IsEnabled));
+            var rules = (await _repository.GetRulesAsync(key, ct))
+                .Where(r => r.IsEnabled)
+                .OrderBy(r => (int)r.Category)
+                .ThenBy(r => r.Priority)
+                .ThenBy(r => r.Scope == RuleScope.Platform ? 1 : 0) // tenant rules first
+                .ToList();
+
+            if (rules.Count > 0)
+                return rules;
         }
 
-        // Sort: Category band first (RegulatoryExemption=0 before ClinicalCriteria=1),
-        // then Priority within band, then Scope (Tenant before Platform)
-        return merged
-            .OrderBy(r => (int)r.Category)
-            .ThenBy(r => r.Priority)
-            .ThenBy(r => r.Scope == RuleScope.Platform ? 1 : 0) // tenant rules first
-            .ToList();
+        return Array.Empty<PaRuleDocument>();
     }
 
     // ── Helpers ───────────────────────────────────────────────────

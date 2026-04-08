@@ -75,8 +75,8 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
             npi, stateCode, taxonomy, lob, serviceDate);
 
         // ── Step 0: Resolve tenant context ───────────────────────────
-        var tenantId = _httpContextAccessor.HttpContext?
-            .Request.Headers["X-Tenant-Id"].FirstOrDefault();
+        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"] as string
+            ?? _httpContextAccessor.HttpContext?.Request.Headers["X-Tenant-Id"].FirstOrDefault();
 
         if (string.IsNullOrEmpty(tenantId))
         {

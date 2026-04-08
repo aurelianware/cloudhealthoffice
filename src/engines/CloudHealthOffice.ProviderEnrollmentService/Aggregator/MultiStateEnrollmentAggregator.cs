@@ -9,7 +9,7 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Aggregator;
 /// Fans out enrollment lookups to all registered IStateEnrollmentSource implementations
 /// and assembles a ProviderEnrollmentSummary with cross-state gap detection.
 ///
-/// Registered as a singleton — sources are resolved via DI and filtered by
+/// Registered as scoped — sources are resolved via DI and filtered by
 /// ProviderEnrollmentOptions.EnabledStateCodes at runtime.
 /// </summary>
 public sealed class MultiStateEnrollmentAggregator
