@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fee Schedule Engine — Cloud Health Office Documentation</title>
+  <meta name="description" content="Fee Schedule Engine documentation — fee schedule ingestion pipeline, claim-time pricing engine, modifier logic, GPCI adjustments, and full audit trail with sub-millisecond Redis-cached response." />
+  <meta name="keywords" content="fee schedule engine, claims pricing engine, Medicare MPFS, CMS OPPS, Medicaid fee schedule, RBRVS pricing, GPCI adjustment, fee schedule versioning, healthcare claims repricing, Redis hot cache pricing" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/fee-schedule-engine" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/fee-schedule-engine" />
+  <meta property="og:title" content="Fee Schedule Engine — Cloud Health Office" />
+  <meta property="og:description" content="Fee schedule ingestion pipeline and claim-time pricing engine — ingest any schedule, price any claim line, audit every decision." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Fee Schedule Engine — Cloud Health Office",
+    "description": "Fee Schedule Engine documentation — fee schedule ingestion pipeline, claim-time pricing engine, modifier logic, GPCI adjustments, and full audit trail.",
+    "url": "https://cloudhealthoffice.com/docs/fee-schedule-engine",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-08",
+    "proficiencyLevel": "Advanced",
+    "about": [
+      "Fee schedule ingestion pipeline",
+      "Claim-time pricing engine",
+      "Medicare MPFS",
+      "CMS OPPS/ASC",
+      "Medicaid fee schedules",
+      "Fee schedule versioning",
+      "Redis hot cache pricing"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Fee Schedule Engine", "item": "https://cloudhealthoffice.com/docs/fee-schedule-engine" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine" class="active">Fee Schedule Engine</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#fee-schedule-sources">Fee Schedule Sources</a></li>
+              <li><a href="#update-pipeline">Update Pipeline</a></li>
+              <li><a href="#claim-time-pricing">Claim-Time Pricing</a></li>
+              <li><a href="#engine-interactions">Engine Interactions</a></li>
+              <li><a href="#operating-mode-behavior">Operating Mode Behavior</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Fee Schedule Engine</span>
+        </div>
+
+        <h1>Fee Schedule Engine</h1>
+        <p class="docs-subtitle">Ingest any fee schedule. Price any claim line. Audit every decision.</p>
+
+        <p>CHO&rsquo;s fee schedule pipeline separates the update path from the claim-time pricing path. Fee schedules are loaded, validated, versioned, and stored independently. At claim time, the pricing engine resolves the correct schedule, applies modifier logic, and returns an allowed amount with full audit trail &mdash; in sub-millisecond time from Redis hot cache.</p>
+
+        <!-- SVG Diagram -->
+        <figure class="docs-diagram">
+          <img src="/graphics/cho-feschedule-flow.svg" alt="Fee Schedule Engine flow diagram showing the update pipeline from ingestion through versioning to the fee schedule repository, and the claim-time pricing path from 837 claim line through resolution, modifier logic, and allowed amount output" />
+          <figcaption>Fee schedule pipeline &mdash; update path (ingestion, validation, versioning) and claim-time pricing path (resolution, modifier logic, allowed amount)</figcaption>
+        </figure>
+
+        <!-- ============================= -->
+        <!-- FEE SCHEDULE SOURCES          -->
+        <!-- ============================= -->
+        <h2 id="fee-schedule-sources">Fee Schedule Sources</h2>
+
+        <p>The platform supports five source types, each with its own ingestion format and update cadence.</p>
+
+        <h3>CMS MPFS (Medicare Physician Fee Schedule)</h3>
+        <ul>
+          <li>Annual release (January) with quarterly updates</li>
+          <li>RBRVS-based: Work RVU + Practice Expense RVU + Malpractice RVU &times; Conversion Factor</li>
+          <li>Geographic Practice Cost Index (GPCI) adjustments per locality</li>
+          <li>CHO auto-ingests CMS flat files on release</li>
+        </ul>
+
+        <h3>CMS OPPS / ASC (Outpatient Prospective Payment)</h3>
+        <ul>
+          <li>APC-based rates with status indicators</li>
+          <li>Annual update with mid-year corrections</li>
+          <li>Facility vs non-facility differential</li>
+        </ul>
+
+        <h3>TX Medicaid Fee Schedules</h3>
+        <ul>
+          <li>HHSC / TMHP published rates</li>
+          <li>STAR, STAR+PLUS, CHIP program-specific schedules</li>
+          <li>Rate notices and mid-cycle adjustments</li>
+          <li>Critical for PCHP and any Texas managed care organization</li>
+        </ul>
+
+        <h3>Contracted Provider Rates</h3>
+        <ul>
+          <li>Per-diem, case rate, percentage of Medicare, UCR</li>
+          <li>Loaded per provider agreement with effective/term dates</li>
+          <li>Network tier awareness (in-network, out-of-network, tier 1/2/3)</li>
+        </ul>
+
+        <h3>Portal Manual Upload</h3>
+        <ul>
+          <li>Blazor portal interface for CSV/Excel upload</li>
+          <li>Custom plan-specific schedules</li>
+          <li>Validation and preview before activation</li>
+        </ul>
+
+        <!-- ============================= -->
+        <!-- UPDATE PIPELINE               -->
+        <!-- ============================= -->
+        <h2 id="update-pipeline">Update Pipeline</h2>
+
+        <p>The update pipeline moves fee schedule data through three stages before it is available for claim-time pricing.</p>
+
+        <h3>1. Ingestion &amp; Validation (FeeScheduleLoaderService)</h3>
+        <ul>
+          <li>Format auto-detection (CMS flat file, CSV, Excel, FHIR)</li>
+          <li>Schema validation against expected structure</li>
+          <li>CPT/HCPCS code verification against TerminologyService</li>
+          <li>Duplicate detection &mdash; prevent double-loading</li>
+          <li>Rejected loads generate detailed error reports</li>
+        </ul>
+
+        <h3>2. Versioning &amp; Effective Dating (FeeScheduleVersionStore)</h3>
+        <ul>
+          <li>Every load creates an immutable version (e.g., v2026.Q1 &rarr; v2026.Q2)</li>
+          <li>Future-dated schedules auto-activate on effective date</li>
+          <li>No destructive updates &mdash; old versions retained indefinitely</li>
+          <li>Rollback to any prior version without data loss</li>
+          <li>Full audit trail: who loaded, when, what changed</li>
+        </ul>
+
+        <h3>3. Fee Schedule Repository</h3>
+
+        <table>
+          <thead>
+            <tr><th>Index Dimension</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Line of Business</td><td>Isolate Medicare, Medicaid, Commercial schedules</td></tr>
+            <tr><td>Provider Type</td><td>Facility vs professional rate differentiation</td></tr>
+            <tr><td>Place of Service</td><td>Office, outpatient hospital, ASC, etc.</td></tr>
+            <tr><td>Modifier</td><td>Component-specific rates (26, TC, etc.)</td></tr>
+            <tr><td>Procedure Code</td><td>CPT/HCPCS code lookup</td></tr>
+            <tr><td>Network</td><td>In-network, out-of-network, tiered</td></tr>
+            <tr><td>Contract</td><td>Provider-specific negotiated rates</td></tr>
+            <tr><td>Geographic Region</td><td>GPCI locality, state, ZIP-based</td></tr>
+          </tbody>
+        </table>
+
+        <p>MongoDB serves as the primary store with Redis hot cache. Cache warming occurs on version activation. Multi-tenant isolation ensures each health plan has its own schedule sets.</p>
+
+        <!-- ============================= -->
+        <!-- CLAIM-TIME PRICING            -->
+        <!-- ============================= -->
+        <h2 id="claim-time-pricing">Claim-Time Pricing</h2>
+
+        <p>When an 837 claim line arrives for adjudication, the pricing engine resolves the allowed amount through a defined resolution order, applies modifier and reduction logic, and returns a fully auditable result.</p>
+
+        <h3>Resolution Order</h3>
+
+        <ol>
+          <li><strong>Contracted rate</strong> &mdash; Exact match on provider + procedure + network</li>
+          <li><strong>LOB-specific fee schedule</strong> &mdash; e.g., TX Medicaid STAR rate</li>
+          <li><strong>Medicare MPFS fallback</strong> &mdash; Default floor</li>
+        </ol>
+
+        <h3>Pricing Logic</h3>
+
+        <table>
+          <thead>
+            <tr><th>Rule</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Modifier application</td><td>&ndash;26 (professional), &ndash;TC (technical), &ndash;59 (distinct procedure), etc.</td></tr>
+            <tr><td>Multiple procedure reduction (MPPR)</td><td>Per CMS rules &mdash; highest-valued at 100%, subsequent at 50%/25%</td></tr>
+            <tr><td>Geographic GPCI adjustment</td><td>Work, PE, and MP GPCI components per provider locality</td></tr>
+            <tr><td>Bilateral procedure rules</td><td>150% of single rate for modifier 50</td></tr>
+            <tr><td>Assistant surgeon reduction</td><td>16% of primary surgeon allowed amount (modifiers 80, 81, 82)</td></tr>
+            <tr><td>Anesthesia pricing</td><td>Base units + time units &times; conversion factor</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Output</h3>
+
+        <p>Each pricing call returns:</p>
+
+        <ul>
+          <li><strong>Allowed amount</strong> per claim line</li>
+          <li><strong>Fee schedule ID + version</strong> used for the determination</li>
+          <li><strong>Pricing methodology</strong> applied (contracted, LOB schedule, Medicare fallback)</li>
+          <li><strong>Full audit reference</strong> for downstream review</li>
+          <li><strong>Sub-millisecond response</strong> from Redis hot cache</li>
+        </ul>
+
+        <!-- ============================= -->
+        <!-- ENGINE INTERACTIONS           -->
+        <!-- ============================= -->
+        <h2 id="engine-interactions">Engine Interactions</h2>
+
+        <p>The fee schedule engine is one step in the claims adjudication pipeline. Each engine is a separate class library invoked by the claims-service orchestrator in this sequence:</p>
+
+        <table>
+          <thead>
+            <tr><th>Order</th><th>Engine</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>Claims Scrub</td><td>Edit checks, clean claim validation</td></tr>
+            <tr><td>2</td><td>NCCI Engine</td><td>Unbundling &mdash; must run before pricing</td></tr>
+            <tr><td>3</td><td><strong>Fee Schedule Engine</strong></td><td><strong>Price the claim line</strong></td></tr>
+            <tr><td>4</td><td>COB Engine</td><td>Primary/secondary payer split</td></tr>
+            <tr><td>5</td><td>Benefit Engine</td><td>Copay, coinsurance, covered amount</td></tr>
+            <tr><td>6</td><td>Accumulators</td><td>Deductible application, OOP tracking</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">NCCI before pricing</div>
+          <p>The NCCI Engine must run before the Fee Schedule Engine because unbundling edits can remove or modify claim lines. Pricing a line that will be denied by NCCI wastes compute and produces misleading audit data. The orchestrator enforces this ordering.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- OPERATING MODE BEHAVIOR       -->
+        <!-- ============================= -->
+        <h2 id="operating-mode-behavior">Operating Mode Behavior</h2>
+
+        <p>The fee schedule engine operates differently depending on the platform&rsquo;s configured operating mode for the line of business.</p>
+
+        <h3>Augment Mode</h3>
+        <p>CHO prices the claim independently and passes the allowed amount to QNXT. Can be used as a validation/override check against QNXT&rsquo;s native pricing, or as the authoritative price if QNXT pricing is disabled for the line of business.</p>
+
+        <h3>Replace Mode</h3>
+        <p>CHO pricing IS the adjudication price. The allowed amount flows directly into CHO&rsquo;s claim record as the system-of-record determination.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Per-engine mode toggle</div>
+          <p>Operating mode is configurable per engine, per line of business. A health plan can run fee schedule pricing in Replace mode while keeping other engines (e.g., eligibility) in Augment mode. See the <a href="/docs/architecture">Architecture</a> page for the full platform operating mode design.</p>
+        </div>
+
+        <!-- Related Docs -->
+        <h2 id="related-docs">Related Documentation</h2>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <a href="/docs/fee-schedule-guide" class="docs-hub-card">
+            <h3>Fee Schedule Guide</h3>
+            <p>User guide for rate table configuration, DRG pricing, multiple procedure rules, and cross-schedule resolution.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <h3>Claims Adjudication</h3>
+            <p>Full 10-step auto-adjudication pipeline where the Fee Schedule Engine executes at Step 6 (Repricing).</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/architecture" class="docs-hub-card">
+            <h3>Architecture</h3>
+            <p>Platform architecture including all 9 calculation engines, multi-tenant design, and infrastructure.</p>
+            <span class="card-arrow">Explore &rarr;</span>
+          </a>
+          <a href="/docs/api" class="docs-hub-card">
+            <h3>API Reference</h3>
+            <p>Repricing API for programmatic rate lookup and real-time claim line pricing.</p>
+            <span class="card-arrow">Browse APIs &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/architecture">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Architecture</div>
+          </a>
+          <a href="/docs/api" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">API Reference</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></li>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
