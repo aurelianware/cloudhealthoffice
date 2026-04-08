@@ -1,5 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Domain;
+using CloudHealthOffice.PriorAuthRuleEngine.Models;
+using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
+using CloudHealthOffice.ProviderEnrollmentService.Models;
 using FluentAssertions;
 using FhirService.Models;
 using FhirService.Services;
@@ -162,7 +167,25 @@ public class PasAutoAdjudicatorTests
         var factoryMock = new Mock<IHttpClientFactory>();
         factoryMock.Setup(f => f.CreateClient("AuthorizationService")).Returns(httpClient);
 
-        return new PasAutoAdjudicator(options, factoryMock.Object, _loggerMock.Object);
+        var enrollmentGateMock = new Mock<IEnrollmentDecisionGate>();
+        enrollmentGateMock
+            .Setup(g => g.EvaluateAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<DateOnly>(), It.IsAny<LineOfBusiness>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GateResult.Pass());
+
+        var ruleEngineMock = new Mock<IPriorAuthRuleEngine>();
+        ruleEngineMock
+            .Setup(r => r.EvaluateAsync(It.IsAny<PaRuleContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PaRuleDecision
+            {
+                Outcome = PaDecisionOutcome.Pend,
+                FiringRuleId = "NoRuleMatch",
+                FiringRuleName = "NoRuleMatch",
+                ResolvedRuleSetKey = "platform/TX/Medicaid/any"
+            });
+
+        return new PasAutoAdjudicator(options, factoryMock.Object, enrollmentGateMock.Object, ruleEngineMock.Object, _loggerMock.Object);
     }
 
     private void SetupAuthServiceResponse(object responseBody)

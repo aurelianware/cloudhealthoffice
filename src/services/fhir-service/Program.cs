@@ -6,55 +6,133 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.ProviderEnrollmentService.Configuration;
+using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
+using Microsoft.Azure.Cosmos;
+using MongoDB.Driver;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
-// Secret provider (Azure Key Vault / none)
+
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-// ── SMART JWT Bearer authentication ──────────────────────────────────────────
-// Validates tokens issued by smart-auth-service using OIDC discovery.
-// smart-auth-service uses DisableAccessTokenEncryption() so tokens are standard
-// RS256-signed JWTs discoverable via /.well-known/openid-configuration.
-var smartIssuer = builder.Configuration["SmartAuth:Issuer"]
+// ── SMART JWT Bearer ──────────────────────────────────────────────────────────
+var smartIssuer   = builder.Configuration["SmartAuth:Issuer"]
     ?? throw new InvalidOperationException("SmartAuth:Issuer is required.");
 var smartAudience = builder.Configuration["SmartAuth:Audience"] ?? "fhir-api";
-var requireHttps = builder.Configuration.GetValue<bool>("SmartAuth:RequireHttpsMetadata", true);
+var requireHttps  = builder.Configuration.GetValue<bool>("SmartAuth:RequireHttpsMetadata", true);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // OIDC discovery: fetches signing keys from {Issuer}/.well-known/openid-configuration
-        options.Authority = smartIssuer;
-        options.Audience = smartAudience;
-        options.RequireHttpsMetadata = requireHttps;
+        options.Authority                 = smartIssuer;
+        options.Audience                  = smartAudience;
+        options.RequireHttpsMetadata      = requireHttps;
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidIssuer = smartIssuer,
-            ValidateAudience = true,
-            ValidAudience = smartAudience,
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30)
+            ValidateIssuer   = true,  ValidIssuer   = smartIssuer,
+            ValidateAudience = true,  ValidAudience = smartAudience,
+            ValidateLifetime = true,  ClockSkew     = TimeSpan.FromSeconds(30)
         };
     });
-
-// Allow scope-based authorization policies
 builder.Services.AddAuthorization();
 
-// ── FHIR data adapter ─────────────────────────────────────────────────────────
+// ── Shared infrastructure ─────────────────────────────────────────────────────
+// Redis — shared by ProviderEnrollmentService and PriorAuthRuleEngine caches
+if (!string.IsNullOrEmpty(builder.Configuration["Redis:ConnectionString"]))
+{
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+        ConnectionMultiplexer.Connect(builder.Configuration["Redis:ConnectionString"]!));
+}
+
+var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);
+
+if (useMongo)
+{
+    builder.Services.AddSingleton<IMongoClient>(_ =>
+        new MongoClient(builder.Configuration["MongoDb:ConnectionString"]));
+    builder.Services.AddScoped<IMongoDatabase>(sp =>
+        sp.GetRequiredService<IMongoClient>()
+          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
+}
+else if (!string.IsNullOrEmpty(builder.Configuration["CosmosDb:Endpoint"]))
+{
+    builder.Services.AddSingleton<CosmosClient>(_ =>
+        new CosmosClient(
+            builder.Configuration["CosmosDb:Endpoint"],
+            builder.Configuration["CosmosDb:Key"]));
+}
+
+// ── Provider Enrollment Service ───────────────────────────────────────────────
+// Supplies IEnrollmentDecisionGate → PasAutoAdjudicator Rule 0.
+// TenantEnrollmentConfig cached in Redis (5 min TTL, invalidated on write).
+//
+// Required appsettings.json:
+//   "ProviderEnrollmentService": {
+//     "TenantConfigCacheTtlSeconds": 300,
+//     "Tmhp": { "ApiKey": "...(from AKV)" },
+//     "Caqh": { "Username": "...", "Password": "...(from AKV)" }
+//   }
+var hasDb = useMongo || !string.IsNullOrEmpty(builder.Configuration["CosmosDb:Endpoint"]);
+var hasRedis = !string.IsNullOrEmpty(builder.Configuration["Redis:ConnectionString"]);
+
+if (hasDb && hasRedis)
+{
+    if (useMongo)
+        builder.Services.AddProviderEnrollmentService(builder.Configuration)
+            .UseMongoRepositories().WithRedisTenantConfigCache()
+            .WithTexasSource().WithCaqhSource();
+    else
+        builder.Services.AddProviderEnrollmentService(builder.Configuration)
+            .UseCosmosRepositories().WithRedisTenantConfigCache()
+            .WithTexasSource().WithCaqhSource();
+
+    // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
+    // Supplies IPriorAuthRuleEngine → PasAutoAdjudicator Rule 5.
+    // Rule sets cached in Redis (15 min TTL, invalidated on admin write).
+    // Seeds TX platform rules (STAR / STARPlus / STARKids) on first deployment.
+    //
+    // Required appsettings.json:
+    //   "PriorAuthRuleEngine": {
+    //     "RuleSetCacheTtl": "00:15:00",
+    //     "GoldCardLookbackDays": 180,
+    //     "PendOnRuleError": true
+    //   }
+    if (useMongo)
+        builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+            .UseMongoRepository().WithRedisRuleCache()
+            .WithPlatformRules().SeedOnStartup();
+    else
+        builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+            .UseCosmosRepository().WithRedisRuleCache()
+            .WithPlatformRules().SeedOnStartup();
+}
+else
+{
+    // Local dev / test without Redis+DB: register passthrough implementations
+    // so DI resolution of PasAutoAdjudicator doesn't fail.
+    builder.Services.AddSingleton<CloudHealthOffice.ProviderEnrollmentService.Abstractions.IEnrollmentDecisionGate,
+        CloudHealthOffice.ProviderEnrollmentService.Gates.PassthroughEnrollmentGate>();
+    builder.Services.AddSingleton<CloudHealthOffice.PriorAuthRuleEngine.Abstractions.IPriorAuthRuleEngine,
+        FhirService.Services.NoOpPriorAuthRuleEngine>();
+}
+
+// ── FHIR data adapters ────────────────────────────────────────────────────────
 builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
 builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
 builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecker>();
 
-// ── Da Vinci PAS auto-adjudication ───────────────────────────────────────────
+// ── Da Vinci PAS ──────────────────────────────────────────────────────────────
+// PasAutoAdjudicator now receives IEnrollmentDecisionGate (Rule 0)
+// and IPriorAuthRuleEngine (Rule 5) via constructor injection.
 builder.Services.Configure<PasAutoAdjudicationConfig>(
     builder.Configuration.GetSection("Cms0057:PasAutoAdjudication"));
 builder.Services.AddSingleton<IPasAutoAdjudicator, PasAutoAdjudicator>();
 builder.Services.AddSingleton<PasResponseBuilder>();
 
-// ── Authorization service HTTP client (used by PAS auto-adjudicator) ─────────
+// ── HTTP clients ──────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient("AuthorizationService", client =>
 {
     client.BaseAddress = new Uri(
@@ -62,13 +140,6 @@ builder.Services.AddHttpClient("AuthorizationService", client =>
             ?? "http://authorization-service.cloudhealthoffice/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
-
-// ── Da Vinci CRD (Coverage Requirements Discovery) ──────────────────────────
-builder.Services.Configure<CrdConfig>(
-    builder.Configuration.GetSection("Cms0057:Crd"));
-builder.Services.AddSingleton<ICrdService, CrdService>();
-
-// ── Terminology Service HTTP client (used by CRD for SNOMED→CPT/ICD) ────────
 builder.Services.AddHttpClient("TerminologyService", client =>
 {
     client.BaseAddress = new Uri(
@@ -76,26 +147,14 @@ builder.Services.AddHttpClient("TerminologyService", client =>
             ?? "http://terminology-service.cloudhealthoffice:5010/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
-
-// ── Provider Verification Service (used by PAS for provider pre-check) ──────
 builder.Services.AddHttpClient("ProviderVerificationService", client =>
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:ProviderVerificationServiceUrl"]
             ?? "http://provider-verification-service.cloudhealthoffice:5020/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
-    client.Timeout = TimeSpan.FromSeconds(5); // Tight timeout — PAS has 15s SLA
+    client.Timeout = TimeSpan.FromSeconds(5);
 });
-
-// ── Da Vinci DTR (Documentation Templates & Rules) ──────────────────────────
-builder.Services.Configure<DtrConfig>(
-    builder.Configuration.GetSection("Cms0057:Dtr"));
-builder.Services.AddSingleton<IDtrService, DtrService>();
-
-// ── Bulk Data Export (Payer-to-Payer + system-level) ─────────────────────────
-builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
-
-// ── Provider Directory: typed HttpClient for NPPES API ────────────────────────
 builder.Services.AddHttpClient("NppesApi", client =>
 {
     client.BaseAddress = new Uri(
@@ -103,56 +162,44 @@ builder.Services.AddHttpClient("NppesApi", client =>
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 
-// Insert FHIR formatters first so they take priority over default System.Text.Json
+// ── Da Vinci CRD / DTR / Bulk ─────────────────────────────────────────────────
+builder.Services.Configure<CrdConfig>(builder.Configuration.GetSection("Cms0057:Crd"));
+builder.Services.AddSingleton<ICrdService, CrdService>();
+builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:Dtr"));
+builder.Services.AddSingleton<IDtrService, DtrService>();
+builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
+
+// ── ASP.NET Core ──────────────────────────────────────────────────────────────
 builder.Services.AddControllers(options =>
 {
     options.InputFormatters.Insert(0, new FhirInputFormatter());
     options.OutputFormatters.Insert(0, new FhirOutputFormatter());
 });
-
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.RedisConnectionString   = builder.Configuration["Redis:ConnectionString"];
+    options.CosmosDbEndpoint        = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey             = builder.Configuration["CosmosDb:Key"];
 });
 builder.Services.AddHttpContextAccessor();
-
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-});
+builder.Services.AddCors(options => options.AddPolicy("AllowAll",
+    p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
+if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
-
-// JWT validation must run before SMART scope enforcement
 app.UseAuthentication();
-
-// SmartScopeEnforcementMiddleware: enforces SMART scopes and patient binding.
-// Must run before TenantMiddleware so that unauthenticated requests receive a
-// FHIR OperationOutcome 401 (not a plain-JSON tenant error).
 app.UseMiddleware<SmartScopeEnforcementMiddleware>();
-
-// TenantMiddleware: extracts CHO tenant context from JWT claim or header.
-// Runs after scope enforcement so context.User is already validated.
 app.UseMiddleware<TenantMiddleware>();
-
 app.UseAuthorization();
 app.MapControllers();
 app.MapChoHealthChecks();
-
 app.Run();
 
-// Exposed for WebApplicationFactory in integration tests
 public partial class Program { }

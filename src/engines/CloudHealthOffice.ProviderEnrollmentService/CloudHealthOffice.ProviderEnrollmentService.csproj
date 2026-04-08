@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
+    <RootNamespace>CloudHealthOffice.ProviderEnrollmentService</RootNamespace>
+    <AssemblyName>CloudHealthOffice.ProviderEnrollmentService</AssemblyName>
+    <Description>Multi-state Medicaid provider enrollment hub. Aggregates state enrollment systems (TX PEMS, CA PAVE, FL FMMIS, NY eMedNY) and CAQH ProView into a unified enrollment lifecycle engine.</Description>
+    <Version>4.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Azure -->
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.58.0" />
+    <!-- MongoDB -->
+    <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
+    <!-- HTTP resilience -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
+    <!-- Hosting / DI -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
+    <!-- Redis -->
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+    <!-- Polly (resilience) -->
+    <PackageReference Include="Polly.Extensions" Version="8.5.0" />
+    <!-- SFTP for batch file pulls -->
+    <PackageReference Include="SSH.NET" Version="2024.2.0" />
+  </ItemGroup>
+
+</Project>

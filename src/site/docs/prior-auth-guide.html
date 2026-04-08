@@ -110,6 +110,7 @@
               <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
               <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
               <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
             </ul>
           </div>
           <div class="docs-sidebar-section">
@@ -118,6 +119,8 @@
               <li><a href="#overview">Overview</a></li>
               <li><a href="#auth-requests">Authorization Requests</a></li>
               <li><a href="#decision-engine">Decision Engine</a></li>
+              <li><a href="#rule-types">Rule Type Catalog</a></li>
+              <li><a href="#gold-card">Gold Card Exemptions</a></li>
               <li><a href="#auth-lifecycle">Authorization Lifecycle</a></li>
               <li><a href="#cms-0057f-apis">CMS-0057-F Prior Auth APIs</a></li>
               <li><a href="#reporting">Reporting &amp; Analytics</a></li>
@@ -334,6 +337,71 @@
             <tr><td><strong>Post-service</strong></td><td>Retroactive auth request for a service already rendered</td><td>30 calendar days</td><td>Continuous</td></tr>
           </tbody>
         </table>
+
+        <h3 id="rule-types">Rule Type Catalog (PriorAuthRuleEngine)</h3>
+
+        <p>The <strong>PriorAuthRuleEngine</strong> extends the PriorAuthDecisionEngine with a library of composable, state-specific rule types. Each rule is a self-contained class that evaluates a single criterion and returns an <code>Approve</code>, <code>Deny</code>, <code>Pend</code>, or <code>Skip</code> result. Rules are resolved per-tenant from the database and cached in Redis.</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr><th>Rule Type</th><th>Description</th><th>Example</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>TxGoldCardExemptionRule</code></td><td>Auto-approves requests from providers with Texas &ldquo;gold card&rdquo; status (2+ years, &lt;5% denial rate)</td><td>Provider with 98% approval rate auto-approved for outpatient imaging</td></tr>
+              <tr><td><code>MemberAgeLimitRule</code></td><td>Enforces age-based authorization requirements (min/max age for procedure)</td><td>Pediatric tonsillectomy: age &lt; 18 auto-approved; age &ge; 18 pended</td></tr>
+              <tr><td><code>DiagnosisRequiredRule</code></td><td>Requires a specific diagnosis code or code range for the requested procedure</td><td>MRI lumbar spine requires ICD-10 M54.5 (low back pain) or related</td></tr>
+              <tr><td><code>QuantityLimitRule</code></td><td>Caps the number of units/visits that can be auto-approved per authorization period</td><td>Physical therapy: max 12 visits per 90-day period auto-approved</td></tr>
+              <tr><td><code>ProviderTypeExemptionRule</code></td><td>Exempts specific provider types or specialties from prior auth for certain services</td><td>Oncologists exempt from PA for chemotherapy infusions</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="gold-card">Gold Card Exemptions</h3>
+
+        <p>Texas HB 3459 (2021) established &ldquo;gold card&rdquo; exemptions for providers who consistently meet prior authorization approval criteria. The <code>TxGoldCardExemptionRule</code> implements this by checking:</p>
+
+        <ul>
+          <li><strong>Provider history</strong> &mdash; 90%+ approval rate for the specific service category over the past 6 months</li>
+          <li><strong>Tenure threshold</strong> &mdash; Provider enrolled in the Medicaid MCO network for 2+ years</li>
+          <li><strong>No recent adverse actions</strong> &mdash; No sanctions, exclusions, or material fraud referrals</li>
+        </ul>
+
+        <p>When all gold card criteria are met, the request is auto-approved immediately with a <code>GoldCardExemption</code> reason code in the audit trail. Gold card status is re-evaluated quarterly.</p>
+
+        <h3 id="rule-seeding">Rule Seeding &amp; Management</h3>
+
+        <p>Rules are managed through the <code>PriorAuthRuleSeeder</code> which loads seed rule sets from JSON configuration. The seeder uses a dictionary pre-fetch strategy to avoid N+1 queries when checking for existing rules:</p>
+
+        <ol>
+          <li><strong>Load seed data</strong> &mdash; Read rule definitions from <code>config/</code> JSON files</li>
+          <li><strong>Pre-fetch existing</strong> &mdash; Query all existing rules for the tenant in a single batch</li>
+          <li><strong>Upsert delta</strong> &mdash; Only insert new rules or update changed rules; skip unchanged entries</li>
+          <li><strong>Cache invalidation</strong> &mdash; Clear the Redis rule cache for affected tenants</li>
+        </ol>
+
+        <h3 id="rule-caching">Rule Caching (Redis)</h3>
+
+        <p>Resolved rule sets are cached in Redis to avoid database round-trips during high-volume claims processing:</p>
+
+        <ul>
+          <li><strong>Cache key</strong>: <code>pa-rules:{tenantId}:{lobCode}:{state}</code></li>
+          <li><strong>Default TTL</strong>: 30 minutes (configurable via <code>PriorAuthRuleEngine:CacheTtlMinutes</code>)</li>
+          <li><strong>Null safety</strong>: If a cached value deserializes to <code>null</code> (e.g., corrupted entry or <code>JsonException</code>), it is treated as a cache miss and rules are re-resolved from the database</li>
+          <li><strong>Invalidation</strong>: Rule changes via the seeder or admin API automatically invalidate the relevant cache entries</li>
+        </ul>
+
+        <h3 id="rule-evaluation-pipeline">Rule Evaluation Pipeline</h3>
+
+        <p>When a prior auth request enters the PriorAuthRuleEngine, rules are evaluated in the following order:</p>
+
+        <ol>
+          <li><strong>Resolve rules</strong> &mdash; Load the rule set for the request&rsquo;s tenant + LOB + state (from Redis cache or database). Uses first-non-empty-wins across registered <code>IRuleSource</code> implementations.</li>
+          <li><strong>Sort by priority</strong> &mdash; Rules are ordered by priority (ascending). Lower priority numbers evaluate first.</li>
+          <li><strong>Sequential evaluation</strong> &mdash; Each rule is evaluated against the request context. A rule returns <code>Approve</code>, <code>Deny</code>, <code>Pend</code>, or <code>Skip</code>.</li>
+          <li><strong>First decisive result</strong> &mdash; The first non-<code>Skip</code> result becomes the final disposition. All subsequent rules are short-circuited.</li>
+          <li><strong>Audit trace</strong> &mdash; Every rule evaluation (including skipped rules) is logged to the decision audit trail for compliance and tuning.</li>
+        </ol>
 
         <!-- ============================= -->
         <!-- AUTHORIZATION LIFECYCLE       -->

@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────────
+# REPLACEMENT for the validate-provider-step template in
+# infrastructure/argo-workflows/claims-adjudication-workflow.yaml
+#
+# Find:   - name: validate-provider-step
+# Replace: the entire template block with this HTTP-based version.
+#
+# This replaces the Python inline script that called provider-service
+# and only checked credentialingStatus/providerStatus — with no concept
+# of Medicaid enrollment — with a typed C# endpoint that gates on
+# active PEMS enrollment status.
+# ─────────────────────────────────────────────────────────────────
+
+  - name: validate-provider-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: tenant-id
+    http:
+      method: POST
+      url: "http://benefit-plan-service.cloudhealthoffice/api/v1/adjudication/validate-provider-enrollment"
+      headers:
+        - name: X-Tenant-ID
+          value: "{{inputs.parameters.tenant-id}}"
+        - name: Content-Type
+          value: "application/json"
+      # Extract fields from the claim payload.
+      # The claim-data parameter is the JSON string from the get-claim step.
+      body: |
+        {
+          "claimId":          "{{=jsonpath(inputs.parameters['claim-data'], '$.claimId')}}",
+          "providerNpi":      "{{=jsonpath(inputs.parameters['claim-data'], '$.billingProviderNPI')}}",
+          "providerTaxonomy": "{{=jsonpath(inputs.parameters['claim-data'], '$.providerTaxonomy')}}",
+          "stateCode":        "{{=jsonpath(inputs.parameters['claim-data'], '$.serviceStateCode')}}",
+          "serviceDate":      "{{=jsonpath(inputs.parameters['claim-data'], '$.serviceDate')}}",
+          "lineOfBusiness":   "{{=jsonpath(inputs.parameters['claim-data'], '$.lineOfBusiness')}}"
+        }
+      successCondition: "response.statusCode == 200"
+      timeoutSeconds: 10
+
+# ─────────────────────────────────────────────────────────────────
+# The DAG task referencing this template needs a dependency check
+# added so that a DENIED status from validate-provider fails the
+# adjudication DAG before the adjudicate step runs.
+#
+# Update the adjudicate task's when clause (or add failFast: true
+# to the DAG) to gate on validate-provider result:
+#
+#   - name: adjudicate
+#     dependencies: [verify-coverage, validate-provider, check-prior-auth]
+#     when: "{{tasks.validate-provider.outputs.result}} contains 'APPROVED'"
+#     template: adjudicate-step
+#     ...
+#
+# Alternatively, the validate-provider-step can be configured to
+# return a non-200 status on DENIED (change successCondition to
+# "response.body contains 'APPROVED'") which will fail the Argo task
+# automatically and halt the DAG without a when clause.
+# ─────────────────────────────────────────────────────────────────

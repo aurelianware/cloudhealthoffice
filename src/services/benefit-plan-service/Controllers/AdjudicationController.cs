@@ -10,6 +10,8 @@ using CloudHealthOffice.ClaimsScrubEngine.Services;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
+using CloudHealthOffice.ProviderEnrollmentService.Models;
 using BenefitPlanService.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
@@ -46,6 +48,7 @@ public class AdjudicationController : ControllerBase
     private readonly IBenefitCalculationEngine _benefitEngine;
     private readonly IRateResolutionService _rateEngine;
     private readonly INcciEditService _ncciEngine;
+    private readonly IEnrollmentDecisionGate _enrollmentGate;
     private readonly ILogger<AdjudicationController> _logger;
 
     public AdjudicationController(
@@ -53,12 +56,14 @@ public class AdjudicationController : ControllerBase
         IBenefitCalculationEngine benefitEngine,
         IRateResolutionService rateEngine,
         INcciEditService ncciEngine,
+        IEnrollmentDecisionGate enrollmentGate,
         ILogger<AdjudicationController> logger)
     {
         _scrubEngine = scrubEngine;
         _benefitEngine = benefitEngine;
         _rateEngine = rateEngine;
         _ncciEngine = ncciEngine;
+        _enrollmentGate = enrollmentGate;
         _logger = logger;
     }
 
@@ -483,6 +488,72 @@ public class AdjudicationController : ControllerBase
 
         var result = await _scrubEngine.ScrubAndRouteAsync(request, ct);
         return Ok(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/validate-provider-enrollment
+    //
+    // Called by Argo workflow Step 3 (validate-provider) in parallel with
+    // verify-coverage and validate-codes. Replaces the Python inline script
+    // that only checked credentialingStatus and providerStatus.
+    // ═══════════════════════════════════════════════════════════════════
+
+    [HttpPost("validate-provider-enrollment")]
+    [ProducesResponseType(typeof(BenefitPlanService.Models.ProviderEnrollmentValidationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BenefitPlanService.Models.ProviderEnrollmentValidationResponse>> ValidateProviderEnrollment(
+        [FromBody] BenefitPlanService.Models.ProviderEnrollmentValidationRequest request,
+        CancellationToken ct)
+    {
+        using var span = ChoActivitySource.StartActivity(
+            "claim.validate-provider-enrollment",
+            System.Diagnostics.ActivityKind.Internal,
+            tenantId: TenantId,
+            claimId: request.ClaimId);
+
+        if (string.IsNullOrEmpty(request.ProviderNpi))
+            return BadRequest("ProviderNpi is required.");
+
+        // Map string LOB from the Argo workflow payload to the enrollment service enum
+        var lob = request.LineOfBusiness?.ToUpperInvariant() switch
+        {
+            "MEDICAID"    => LineOfBusiness.Medicaid,
+            "STAR"        => LineOfBusiness.STAR,
+            "STARPLUS"    => LineOfBusiness.STARPlus,
+            "STARKIDS"    => LineOfBusiness.STARKids,
+            "CHIP"        => LineOfBusiness.CHIP,
+            "MARKETPLACE" or "EXCHANGE" => LineOfBusiness.Marketplace,
+            "MEDICARE"    => LineOfBusiness.Medicare,
+            _             => LineOfBusiness.None
+        };
+
+        var gateResult = await _enrollmentGate.EvaluateAsync(
+            npi:         request.ProviderNpi,
+            taxonomy:    request.ProviderTaxonomy ?? string.Empty,
+            stateCode:   request.StateCode ?? "TX",
+            serviceDate: request.ServiceDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            lob:         lob,
+            ct:          ct);
+
+        span?.SetTag("cho.enrollment.passed",      gateResult.Passed);
+        span?.SetTag("cho.enrollment.denial_code", gateResult.DenialCode ?? string.Empty);
+
+        _logger.LogInformation(
+            "Provider enrollment validation: NPI={Npi} State={State} LOB={Lob} Passed={Passed}",
+            SanitizeForLog(request.ProviderNpi),
+            SanitizeForLog(request.StateCode),
+            SanitizeForLog(request.LineOfBusiness),
+            gateResult.Passed);
+
+        return Ok(new BenefitPlanService.Models.ProviderEnrollmentValidationResponse
+        {
+            ClaimId    = request.ClaimId,
+            Status     = gateResult.Passed ? "APPROVED" : "DENIED",
+            DenialCode = gateResult.DenialCode,
+            Reason     = gateResult.DenialReason,
+            // CARC 185: Provider not enrolled in Medicaid
+            Carc       = gateResult.Passed ? null : "185"
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════════

@@ -18,6 +18,8 @@
     <ProjectReference Include="..\..\engines\CloudHealthOffice.FeeScheduleEngine\CloudHealthOffice.FeeScheduleEngine.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ClaimsScrubEngine\CloudHealthOffice.ClaimsScrubEngine.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.NcciEngine\CloudHealthOffice.NcciEngine.csproj" />
+    <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />
+    <ProjectReference Include="..\..\engines\CloudHealthOffice.PriorAuthRuleEngine\CloudHealthOffice.PriorAuthRuleEngine.csproj" />
   </ItemGroup>
 
 </Project>

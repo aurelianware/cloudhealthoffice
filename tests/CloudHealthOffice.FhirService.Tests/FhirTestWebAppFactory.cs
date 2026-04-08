@@ -1,6 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Domain;
+using CloudHealthOffice.PriorAuthRuleEngine.Models;
+using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
+using CloudHealthOffice.ProviderEnrollmentService.Gates;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -32,6 +37,13 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
+            // ── Enrollment gate + rule engine stubs ─────────────────────
+            // PasAutoAdjudicator now requires IEnrollmentDecisionGate and
+            // IPriorAuthRuleEngine. Tests exercise the FHIR/PAS layer, not
+            // the rule engine — provide no-op implementations.
+            services.AddSingleton<IEnrollmentDecisionGate, PassthroughEnrollmentGate>();
+            services.AddSingleton<IPriorAuthRuleEngine, NoOpPriorAuthRuleEngine>();
+
             // Override JWT Bearer validation parameters via PostConfigure
             // instead of removing and re-adding the auth scheme (which causes
             // "Scheme already exists: Bearer" when the host registers it first).
@@ -95,5 +107,22 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private sealed class NoOpPriorAuthRuleEngine : IPriorAuthRuleEngine
+    {
+        public Task<PaRuleDecision> EvaluateAsync(
+            PaRuleContext context, CancellationToken ct = default)
+            => Task.FromResult(new PaRuleDecision
+            {
+                Outcome            = PaDecisionOutcome.Pend,
+                FiringRuleId       = "NoOp",
+                FiringRuleName     = "NoOp",
+                ResolvedRuleSetKey = "test"
+            });
+
+        public Task<IReadOnlyList<PaRuleDocument>> GetApplicableRulesAsync(
+            RuleSetKey key, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<PaRuleDocument>>([]);
     }
 }

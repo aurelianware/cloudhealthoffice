@@ -11,10 +11,15 @@ using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
 using CloudHealthOffice.ClaimsScrubEngine.Models;
 using CloudHealthOffice.ClaimsScrubEngine.Services;
+using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Persistence;
+using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
+using CloudHealthOffice.ProviderEnrollmentService.Gates;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using StackExchange.Redis;
 
@@ -46,6 +51,9 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
 
             builder.ConfigureServices(services =>
             {
+                // Remove hosted services that require real DB connections (PriorAuthRuleEngineSeeder etc.)
+                services.RemoveAll<IHostedService>();
+
                 // Remove infrastructure services that require real connections
                 services.RemoveAll<IConnectionMultiplexer>();
                 services.RemoveAll<IClaimsAccumulatorSource>();
@@ -63,6 +71,16 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
 
                 services.RemoveAll<IClaimRoutingService>();
                 services.AddSingleton(ScrubEngine);
+
+                // Stub out PriorAuthRuleEngine and its repository
+                services.RemoveAll<IPriorAuthRuleEngine>();
+                services.AddSingleton(Substitute.For<IPriorAuthRuleEngine>());
+                services.RemoveAll<IPaRuleRepository>();
+                services.AddSingleton(Substitute.For<IPaRuleRepository>());
+
+                // Stub out ProviderEnrollment gate (passthrough allows all claims)
+                services.RemoveAll<IEnrollmentDecisionGate>();
+                services.AddSingleton<IEnrollmentDecisionGate, PassthroughEnrollmentGate>();
 
                 // Stub out Redis connection with a no-op
                 services.AddSingleton(Substitute.For<IConnectionMultiplexer>());

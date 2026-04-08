@@ -12,145 +12,149 @@ using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.ProviderEnrollmentService.Configuration;  // ← NEW
+using CloudHealthOffice.ProviderEnrollmentService.Gates;           // ← NEW (passthrough fallback)
+using CloudHealthOffice.ProviderEnrollmentService.Abstractions;    // ← NEW (IEnrollmentDecisionGate)
+using CloudHealthOffice.PriorAuthRuleEngine.Configuration;         // ← NEW
+
 var builder = WebApplication.CreateBuilder(args);
-// Secret provider (Azure Key Vault / none)
+
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-// Configure Database (Cosmos DB or MongoDB)
-if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
+// ── Database backend ──────────────────────────────────────────────────────────
+var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);
+
+if (useMongo)
 {
-    // Use MongoDB
     builder.Services.AddSingleton<IMongoClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        return new MongoClient(configuration["MongoDb:ConnectionString"]);
-    });
-
+        new MongoClient(builder.Configuration["MongoDb:ConnectionString"]));
     builder.Services.AddScoped<IMongoDatabase>(sp =>
-    {
-        var wrapper = sp.GetRequiredService<IMongoClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        return wrapper.GetDatabase(configuration["MongoDb:DatabaseName"]);
-    });
-
+        sp.GetRequiredService<IMongoClient>()
+          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
     builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
 {
-    // Use Cosmos DB (Default)
     builder.Services.AddSingleton<CosmosClient>(sp =>
     {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"];
-        var key = configuration["CosmosDb:Key"];
-        return new CosmosClient(endpoint, key);
+        var cfg = sp.GetRequiredService<IConfiguration>();
+        return new CosmosClient(cfg["CosmosDb:Endpoint"], cfg["CosmosDb:Key"]);
     });
-
     builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
     Console.WriteLine("Using Cosmos DB repository");
 }
 
-// Add business logic services
-builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
-
-// Required by RedisAccumulatorService — reads TenantId set by TenantMiddleware
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IBenefitEngineTenantContext, HttpContextTenantContext>();
-
-// Typed HttpClient for claims-service (used by ClaimsServiceAccumulatorSource on cache miss)
-builder.Services.AddHttpClient<IClaimsAccumulatorSource, ClaimsServiceAccumulatorSource>(client =>
-{
-    var url = builder.Configuration["Services:ClaimsServiceUrl"]
-              ?? throw new InvalidOperationException(
-                     "Services:ClaimsServiceUrl is required when using the Redis accumulator service. " +
-                     "Add it to appsettings.json or as an environment variable.");
-    client.BaseAddress = new Uri(url);
-    client.Timeout = TimeSpan.FromSeconds(10);
-});
-
-// Redis-backed (recommended for production)
+// ── Redis — shared across all engines ────────────────────────────────────────
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(
         builder.Configuration["Redis:ConnectionString"]
         ?? throw new InvalidOperationException("Redis:ConnectionString is required.")));
 
-builder.Services.AddBenefitEngine()
-    .UseRedisAccumulatorService();
+// ── Benefit Engine ────────────────────────────────────────────────────────────
+builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IBenefitEngineTenantContext, HttpContextTenantContext>();
 
-// Real CHO-native providers (replace engine stubs)
-builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IBenefitPlanProvider, BenefitPlanService.Services.ChoBenefitPlanProvider>();
-builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository, BenefitPlanService.Services.NullServiceCategoryMappingRepository>();
+builder.Services.AddHttpClient<IClaimsAccumulatorSource, ClaimsServiceAccumulatorSource>(client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ClaimsServiceUrl"]
+        ?? throw new InvalidOperationException("Services:ClaimsServiceUrl is required."));
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 
-builder.Services.AddFeeScheduleEngine()
-    .UseRepositoriesFromConfiguration(builder.Configuration);
-
+builder.Services.AddBenefitEngine().UseRedisAccumulatorService();
+builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IBenefitPlanProvider,
+                           BenefitPlanService.Services.ChoBenefitPlanProvider>();
+builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository,
+                           BenefitPlanService.Services.NullServiceCategoryMappingRepository>();
+builder.Services.AddFeeScheduleEngine().UseRepositoriesFromConfiguration(builder.Configuration);
 builder.Services.AddClaimsScrubEngine();
-
-builder.Services.AddNcciEngine()
-    .UseRepositoryFromConfiguration(builder.Configuration);
-
-// Audit trail: write accumulator history to MongoDB/Cosmos alongside the Redis hot cache
+builder.Services.AddNcciEngine().UseRepositoryFromConfiguration(builder.Configuration);
 builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();
 
+// ── Provider Enrollment Service ───────────────────────────────────────────────
+// Supplies IEnrollmentDecisionGate → AdjudicationController.ValidateProviderEnrollment
+// and the validate-provider step in the Argo adjudication workflow.
+//
+// PassthroughEnrollmentGate is registered first as a fallback — it is overridden
+// by StateEnrollmentGate inside AddProviderEnrollmentService when Redis/DB are
+// available. In test environments where infrastructure is stubbed out, the
+// passthrough remains and always passes (correct test behavior).
+//
+// Required appsettings.json additions:
+//   "ProviderEnrollmentService": {
+//     "TenantConfigCacheTtlSeconds": 300,
+//     "EnabledStateCodes": [],
+//     "Tmhp": { "ApiKey": "...(from AKV)" },
+//     "Caqh": { "Username": "...", "Password": "...(from AKV)" }
+//   }
+builder.Services.AddScoped<IEnrollmentDecisionGate, PassthroughEnrollmentGate>();
 
-// Add controllers
+if (useMongo)
+    builder.Services.AddProviderEnrollmentService(builder.Configuration)
+        .UseMongoRepositories().WithRedisTenantConfigCache()
+        .WithTexasSource().WithCaqhSource();
+else
+    builder.Services.AddProviderEnrollmentService(builder.Configuration)
+        .UseCosmosRepositories().WithRedisTenantConfigCache()
+        .WithTexasSource().WithCaqhSource();
+
+// ── Prior Auth Rule Engine ────────────────────────────────────────────────────
+// Supplies IPriorAuthRuleEngine → AdjudicationController (future: pre-adjudication
+// PA check endpoint) and the authorization-service direct 278 path.
+// Seeds TX platform rules on first deployment.
+//
+// Required appsettings.json additions:
+//   "PriorAuthRuleEngine": {
+//     "RuleSetCacheTtlMinutes": 15,
+//     "GoldCardLookbackDays": 180,
+//     "PendOnRuleError": true
+//   }
+if (useMongo)
+    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+        .UseMongoRepository().WithRedisRuleCache()
+        .WithPlatformRules().SeedOnStartup();
+else
+    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+        .UseCosmosRepository().WithRedisRuleCache()
+        .WithPlatformRules().SeedOnStartup();
+
+// ── ASP.NET Core ──────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
-
-// Add Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add health checks (MongoDB or Cosmos DB, Redis, claims-service HTTP)
-var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"] ?? "http://claims-service:8080";
+var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"]
+    ?? "http://claims-service:8080";
 builder.Services.AddChoHealthChecks(options =>
 {
-    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.MongoDbConnectionString  = builder.Configuration["MongoDb:ConnectionString"];
     options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
-    options.RedisConnectionString = builder.Configuration["Redis:ConnectionString"];
-    options.HttpDependencies["claims-service"] = $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
+    options.CosmosDbEndpoint         = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey              = builder.Configuration["CosmosDb:Key"];
+    options.RedisConnectionString    = builder.Configuration["Redis:ConnectionString"];
+    options.HttpDependencies["claims-service"] =
+        $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 
-// Add CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+builder.Services.AddCors(options => options.AddPolicy("AllowAll",
+    policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
+if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-
 app.UseCors("AllowAll");
-
-// Add tenant middleware
 app.UseMiddleware<TenantMiddleware>();
-
 app.UseAuthorization();
-
 app.MapControllers();
 app.MapChoHealthChecks();
-
 app.Run();
 
-// Marker class so integration tests can reference the entry point assembly
-// via WebApplicationFactory<Program>.
 public partial class Program { }
