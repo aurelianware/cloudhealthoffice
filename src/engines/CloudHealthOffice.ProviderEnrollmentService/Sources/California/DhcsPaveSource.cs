@@ -47,7 +47,7 @@ public sealed class DhcsPaveSource : IStateEnrollmentSource
     {
         // TODO: implement against DHCS PAVE API
         // Pattern: check _cache first, call _http on miss, upsert result
-        _logger.LogWarning("CA PAVE adapter not yet implemented for NPI {Npi}", npi);
+        _logger.LogWarning("CA PAVE adapter not yet implemented for NPI {Npi}", SanitizeForLog(npi));
         return Task.FromResult<StateEnrollmentRecord?>(null);
     }
 
@@ -81,5 +81,11 @@ public sealed class DhcsPaveSource : IStateEnrollmentSource
             Errors           = 0,
             ErrorDetails     = ["Not implemented"]
         });
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -58,7 +58,7 @@ public sealed class TmhpPemsSource : IStateEnrollmentSource
         var cached = await _cache.GetAsync(npi, StateCode, ct);
         if (cached is not null && !IsCacheStale(cached))
         {
-            _logger.LogDebug("PEMS cache hit for NPI {Npi}", npi);
+            _logger.LogDebug("PEMS cache hit for NPI {Npi}", SanitizeForLog(npi));
             return cached with { IsFromCache = true };
         }
 
@@ -78,7 +78,7 @@ public sealed class TmhpPemsSource : IStateEnrollmentSource
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "TMHP API unavailable for NPI {Npi}; returning stale cache if available", npi);
+            _logger.LogWarning(ex, "TMHP API unavailable for NPI {Npi}; returning stale cache if available", SanitizeForLog(npi));
             return cached;   // return stale rather than null — callers must check IsFromCache
         }
     }
@@ -401,5 +401,11 @@ public sealed class TmhpPemsSource : IStateEnrollmentSource
         public string DueDate       { get; init; } = string.Empty;
         [JsonPropertyName("isResolved")]
         public bool IsResolved      { get; init; }
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

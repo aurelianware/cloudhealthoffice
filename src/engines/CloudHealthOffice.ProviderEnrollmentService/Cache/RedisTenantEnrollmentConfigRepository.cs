@@ -90,7 +90,7 @@ public sealed class RedisTenantEnrollmentConfigRepository : ITenantEnrollmentCon
 
             if (value.HasValue)
             {
-                _logger.LogDebug("TenantEnrollmentConfig Redis hit for tenant {TenantId}", tenantId);
+                _logger.LogDebug("TenantEnrollmentConfig Redis hit for tenant {TenantId}", SanitizeForLog(tenantId));
                 try
                 {
                     var cached = JsonSerializer.Deserialize<TenantEnrollmentConfig>(value!, _json);
@@ -100,14 +100,14 @@ public sealed class RedisTenantEnrollmentConfigRepository : ITenantEnrollmentCon
                     // Null deserialization (corrupted entry) — treat as cache miss
                     _logger.LogWarning(
                         "TenantEnrollmentConfig Redis entry for tenant {TenantId} deserialized to null — deleting corrupted key",
-                        tenantId);
+                        SanitizeForLog(tenantId));
                     await db.KeyDeleteAsync(key);
                 }
                 catch (JsonException ex)
                 {
                     _logger.LogWarning(ex,
                         "TenantEnrollmentConfig Redis entry for tenant {TenantId} failed to deserialize — deleting corrupted key",
-                        tenantId);
+                        SanitizeForLog(tenantId));
                     await db.KeyDeleteAsync(key);
                 }
             }
@@ -191,5 +191,11 @@ public sealed class RedisTenantEnrollmentConfigRepository : ITenantEnrollmentCon
             _logger.LogWarning(ex,
                 "Failed to invalidate TenantEnrollmentConfig cache for key {Key}", (string)key);
         }
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

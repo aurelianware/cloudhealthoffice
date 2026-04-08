@@ -84,7 +84,7 @@ public sealed class MultiStateEnrollmentAggregator
 
         if (source is null)
         {
-            _logger.LogWarning("No enrollment source registered for state {StateCode}", stateCode);
+            _logger.LogWarning("No enrollment source registered for state {StateCode}", SanitizeForLog(stateCode));
             return null;
         }
 
@@ -202,5 +202,11 @@ public sealed class MultiStateEnrollmentAggregator
             })
             .OrderBy(r => r.DaysRemaining)
             .ToList();
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

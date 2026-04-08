@@ -72,7 +72,7 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
     {
         _logger.LogDebug(
             "Enrollment gate: NPI={Npi} State={State} Taxonomy={Taxonomy} LOB={Lob} Date={Date}",
-            npi, stateCode, taxonomy, lob, serviceDate);
+            SanitizeForLog(npi), SanitizeForLog(stateCode), SanitizeForLog(taxonomy), lob, serviceDate);
 
         // ── Step 0: Resolve tenant context ───────────────────────────
         var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"] as string
@@ -89,7 +89,7 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
 
         if (tenantConfig is null)
         {
-            _logger.LogDebug("No enrollment config for tenant {TenantId} — gate disabled", tenantId);
+            _logger.LogDebug("No enrollment config for tenant {TenantId} — gate disabled", SanitizeForLog(tenantId));
             return GateResult.Pass();
         }
 
@@ -98,7 +98,7 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
 
         if (resolved.GateMode == EnrollmentGateMode.Disabled)
         {
-            _logger.LogDebug("Enrollment gate disabled for tenant {TenantId} LOB {Lob}", tenantId, lob);
+            _logger.LogDebug("Enrollment gate disabled for tenant {TenantId} LOB {Lob}", SanitizeForLog(tenantId), lob);
             return GateResult.Pass();
         }
 
@@ -108,7 +108,7 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
         {
             _logger.LogDebug(
                 "State {State} not in enabled list for tenant {TenantId} — gate skipped",
-                stateCode, tenantId);
+                SanitizeForLog(stateCode), SanitizeForLog(tenantId));
             return GateResult.Pass();
         }
 
@@ -125,7 +125,7 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
                 _logger.LogWarning(
                     "Enrollment gate warn-only: would deny NPI {Npi} in {State} — " +
                     "Code={Code} Reason={Reason}",
-                    npi, stateCode, enrollmentResult.DenialCode, enrollmentResult.DenialReason);
+                    SanitizeForLog(npi), SanitizeForLog(stateCode), enrollmentResult.DenialCode, enrollmentResult.DenialReason);
             }
 
             return GateResult.Pass();
@@ -134,7 +134,7 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
         // ── Enforce mode: return the actual result ───────────────────
         if (enrollmentResult.Passed)
         {
-            _logger.LogDebug("Enrollment gate passed for NPI={Npi} State={State}", npi, stateCode);
+            _logger.LogDebug("Enrollment gate passed for NPI={Npi} State={State}", SanitizeForLog(npi), SanitizeForLog(stateCode));
         }
 
         return enrollmentResult;
@@ -214,5 +214,11 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
         }
 
         return GateResult.Pass();
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

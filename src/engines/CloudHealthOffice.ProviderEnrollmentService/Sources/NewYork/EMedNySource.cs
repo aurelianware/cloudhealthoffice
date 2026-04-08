@@ -42,7 +42,7 @@ public sealed class EMedNySource : IStateEnrollmentSource
     public Task<StateEnrollmentRecord?> GetEnrollmentAsync(
         string npi, DateOnly asOfDate, CancellationToken ct = default)
     {
-        _logger.LogWarning("NY eMedNY adapter not yet implemented for NPI {Npi}", npi);
+        _logger.LogWarning("NY eMedNY adapter not yet implemented for NPI {Npi}", SanitizeForLog(npi));
         return Task.FromResult<StateEnrollmentRecord?>(null);
     }
 
@@ -64,4 +64,10 @@ public sealed class EMedNySource : IStateEnrollmentSource
             SyncStarted = DateTime.UtcNow, SyncCompleted = DateTime.UtcNow,
             ErrorDetails = ["Not implemented"]
         });
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
 }
