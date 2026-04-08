@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />
     <PackageReference Include="Hl7.Fhir.R4" Version="5.10.2" />
     <PackageReference Include="MongoDB.Driver" Version="3.6.0" />
     <!-- Standard JWT Bearer validation — tokens issued by smart-auth-service with

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CloudHealthOffice.PriorAuthRuleEngine</RootNamespace>
+    <AssemblyName>CloudHealthOffice.PriorAuthRuleEngine</AssemblyName>
+    <Description>
+      State-specific prior authorization decision rule engine.
+      Resolves applicable rule sets by (StateCode, LOB, Program) and evaluates
+      them in priority order. Produces Approve / Deny / Pend decisions consumed
+      by PasAutoAdjudicator and the authorization-service directly.
+    </Description>
+    <Version>4.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Cosmos"              Version="3.40.0" />
+    <PackageReference Include="MongoDB.Driver"                      Version="2.30.0" />
+    <PackageReference Include="StackExchange.Redis"                 Version="2.8.16" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options"        Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

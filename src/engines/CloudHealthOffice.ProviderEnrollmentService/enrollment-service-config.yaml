@@ -1,0 +1,152 @@
+# ─────────────────────────────────────────────────────────────────
+# ProviderEnrollmentService — appsettings.json configuration block
+# Add to the host service's appsettings.json (or per-environment override)
+# ─────────────────────────────────────────────────────────────────
+
+# appsettings.json snippet:
+#
+# "ProviderEnrollmentService": {
+#   "CacheTtlHours": 4,
+#   "RevalidationWarningDays": 90,
+#   "EnabledStateCodes": [ "TX" ],          // empty = all registered sources
+#   "Tmhp": {
+#     "BaseUrl": "https://www.tmhp.com/api/provider",
+#     "ApiKey": "",                          // from Azure Key Vault: tmhp-api-key
+#     "SftpHost": "sftp.tmhp.com",
+#     "SftpUsername": "",                    // from AKV: tmhp-sftp-username
+#     "SftpPrivateKeyPath": "/secrets/tmhp/sftp_key",   // CSI SecretStore mount
+#     "BatchDropPath": "/pems/exports/"
+#   },
+#   "Caqh": {
+#     "BaseUrl": "https://proview.caqh.org/api",
+#     "Username": "",                        // from AKV: caqh-username
+#     "Password": "",                        // from AKV: caqh-password
+#     "OrganizationId": ""                   // PCHP's CAQH org ID
+#   }
+# }
+
+---
+# ─────────────────────────────────────────────────────────────────
+# KEDA ScaledJob — Nightly Batch Sync Worker
+# Runs daily at 2:00 AM CT; hard stops at 4:00 AM CT
+# ─────────────────────────────────────────────────────────────────
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: enrollment-batch-sync
+  namespace: cho-prod
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        restartPolicy: OnFailure
+        containers:
+          - name: batch-sync
+            image: ghcr.io/aurelianware/cho-enrollment-worker:latest
+            env:
+              - name: WORKER_MODE
+                value: "batch-sync"
+            envFrom:
+              - secretRef:
+                  name: cho-enrollment-secrets
+            volumeMounts:
+              - name: tmhp-sftp-key
+                mountPath: /secrets/tmhp
+                readOnly: true
+        volumes:
+          - name: tmhp-sftp-key
+            csi:
+              driver: secrets-store.csi.k8s.io
+              readOnly: true
+              volumeAttributes:
+                secretProviderClass: cho-enrollment-akv
+        activeDeadlineSeconds: 7200   # 2-hour hard stop
+  triggers:
+    - type: cron
+      metadata:
+        timezone: "America/Chicago"
+        start: "0 2 * * *"
+        end:   "0 4 * * *"
+        desiredReplicas: "1"
+
+---
+# ─────────────────────────────────────────────────────────────────
+# KEDA ScaledJob — Revalidation Alert Engine
+# Runs daily at 6:00 AM CT
+# ─────────────────────────────────────────────────────────────────
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: enrollment-revalidation-alerts
+  namespace: cho-prod
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        restartPolicy: OnFailure
+        containers:
+          - name: revalidation-alerts
+            image: ghcr.io/aurelianware/cho-enrollment-worker:latest
+            env:
+              - name: WORKER_MODE
+                value: "revalidation-alerts"
+            envFrom:
+              - secretRef:
+                  name: cho-enrollment-secrets
+        activeDeadlineSeconds: 3600   # 1-hour hard stop
+  triggers:
+    - type: cron
+      metadata:
+        timezone: "America/Chicago"
+        start: "0 6 * * *"
+        end:   "0 7 * * *"
+        desiredReplicas: "1"
+
+---
+# ─────────────────────────────────────────────────────────────────
+# SecretProviderClass — Azure Key Vault CSI driver
+# Maps AKV secrets → Kubernetes secret for enrollment worker pods
+# ─────────────────────────────────────────────────────────────────
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: cho-enrollment-akv
+  namespace: cho-prod
+spec:
+  provider: azure
+  parameters:
+    usePodIdentity: "false"
+    useVMManagedIdentity: "false"
+    clientID: ""             # workload identity client ID
+    keyvaultName: "cho-keyvault"
+    tenantId: ""
+    objects: |
+      array:
+        - |
+          objectName: tmhp-api-key
+          objectType: secret
+        - |
+          objectName: tmhp-sftp-username
+          objectType: secret
+        - |
+          objectName: tmhp-sftp-private-key
+          objectType: secret
+          objectEncoding: "base64"
+        - |
+          objectName: caqh-username
+          objectType: secret
+        - |
+          objectName: caqh-password
+          objectType: secret
+  secretObjects:
+    - secretName: cho-enrollment-secrets
+      type: Opaque
+      data:
+        - objectName: tmhp-api-key
+          key: TMHP__APIKEY
+        - objectName: tmhp-sftp-username
+          key: TMHP__SFTPUSERNAME
+        - objectName: caqh-username
+          key: CAQH__USERNAME
+        - objectName: caqh-password
+          key: CAQH__PASSWORD
