@@ -43,7 +43,7 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Gates;
 ///   var gateResult = await _enrollmentGate.EvaluateAsync(npi, taxonomy, "TX", serviceDate, lob);
 ///   if (!gateResult.Passed) return PaDecision.Deny(gateResult.DenialCode, gateResult.DenialReason);
 /// </summary>
-public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
+public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
 {
     private readonly MultiStateEnrollmentAggregator _aggregator;
     private readonly ITenantEnrollmentConfigRepository _configRepo;
@@ -78,9 +78,7 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
         taxonomy  = string.Concat(SanitizeForLog(taxonomy));
         stateCode = string.Concat(SanitizeForLog(stateCode));
 
-        _logger.LogDebug(
-            "Enrollment gate: NPI={Npi} State={State} Taxonomy={Taxonomy} LOB={Lob} Date={Date}",
-            npi, stateCode, taxonomy, lob, serviceDate);
+        LogEnrollmentGateEntry(_logger, npi, stateCode, taxonomy, lob, serviceDate);
 
         // ── Step 0: Resolve tenant context ───────────────────────────
         var tenantId = string.Concat(SanitizeForLog(
@@ -230,4 +228,9 @@ public sealed class StateEnrollmentGate : IEnrollmentDecisionGate
         if (string.IsNullOrEmpty(value)) return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Enrollment gate: NPI={Npi} State={State} Taxonomy={Taxonomy} LOB={Lob} Date={Date}")]
+    private static partial void LogEnrollmentGateEntry(
+        ILogger logger, string npi, string state, string taxonomy, LineOfBusiness lob, DateOnly date);
 }
