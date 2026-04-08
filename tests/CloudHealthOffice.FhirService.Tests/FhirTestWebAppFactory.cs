@@ -5,14 +5,12 @@ using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
-using CloudHealthOffice.ProviderEnrollmentService.Models;
+using CloudHealthOffice.ProviderEnrollmentService.Gates;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
-using Moq;
 using SecurityClaim = System.Security.Claims.Claim;
 
 namespace CloudHealthOffice.FhirService.Tests;
@@ -39,27 +37,12 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
-            // ── Mock IEnrollmentDecisionGate and IPriorAuthRuleEngine ─────
-            // PasAutoAdjudicator's constructor now requires these two params.
-            // In test environments without Redis/DB, the engine registrations
-            // are skipped so we provide no-op mocks.
-            var gateMock = new Mock<IEnrollmentDecisionGate>();
-            gateMock.Setup(g => g.EvaluateAsync(
-                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                    It.IsAny<DateOnly>(), It.IsAny<LineOfBusiness>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(GateResult.Pass());
-            services.TryAddSingleton(gateMock.Object);
-
-            var ruleEngineMock = new Mock<IPriorAuthRuleEngine>();
-            ruleEngineMock.Setup(r => r.EvaluateAsync(It.IsAny<PaRuleContext>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new PaRuleDecision
-                {
-                    Outcome = PaDecisionOutcome.Pend,
-                    FiringRuleId = "NoRuleMatch",
-                    FiringRuleName = "NoRuleMatch",
-                    ResolvedRuleSetKey = "test/TX/Medicaid/any"
-                });
-            services.TryAddSingleton(ruleEngineMock.Object);
+            // ── Enrollment gate + rule engine stubs ─────────────────────
+            // PasAutoAdjudicator now requires IEnrollmentDecisionGate and
+            // IPriorAuthRuleEngine. Tests exercise the FHIR/PAS layer, not
+            // the rule engine — provide no-op implementations.
+            services.AddSingleton<IEnrollmentDecisionGate, PassthroughEnrollmentGate>();
+            services.AddSingleton<IPriorAuthRuleEngine, NoOpPriorAuthRuleEngine>();
 
             // Override JWT Bearer validation parameters via PostConfigure
             // instead of removing and re-adding the auth scheme (which causes
@@ -124,5 +107,22 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private sealed class NoOpPriorAuthRuleEngine : IPriorAuthRuleEngine
+    {
+        public Task<PaRuleDecision> EvaluateAsync(
+            PaRuleContext context, CancellationToken ct = default)
+            => Task.FromResult(new PaRuleDecision
+            {
+                Outcome            = PaDecisionOutcome.Pend,
+                FiringRuleId       = "NoOp",
+                FiringRuleName     = "NoOp",
+                ResolvedRuleSetKey = "test"
+            });
+
+        public Task<IReadOnlyList<PaRuleDocument>> GetApplicableRulesAsync(
+            RuleSetKey key, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<PaRuleDocument>>([]);
     }
 }
