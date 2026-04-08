@@ -77,7 +77,7 @@ public static class ProviderEnrollmentServiceCollectionExtensions
         services.Configure<ProviderEnrollmentOptions>(
             configuration.GetSection(ProviderEnrollmentOptions.SectionName));
 
-        services.AddSingleton<MultiStateEnrollmentAggregator>();
+        services.AddScoped<MultiStateEnrollmentAggregator>();
         services.AddScoped<IEnrollmentDecisionGate, StateEnrollmentGate>();
         // IHttpContextAccessor — needed by StateEnrollmentGate to resolve tenantId.
         // AddHttpContextAccessor is idempotent — safe even if the host already registered it.
