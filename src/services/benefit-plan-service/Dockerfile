@@ -9,6 +9,8 @@ COPY src/engines/CloudHealthOffice.OperatingMode/CloudHealthOffice.OperatingMode
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/CloudHealthOffice.ClaimsScrubEngine.csproj src/engines/CloudHealthOffice.ClaimsScrubEngine/
 COPY src/engines/CloudHealthOffice.NcciEngine/CloudHealthOffice.NcciEngine.csproj src/engines/CloudHealthOffice.NcciEngine/
+COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/CloudHealthOffice.ProviderEnrollmentService.csproj src/engines/CloudHealthOffice.ProviderEnrollmentService/
+COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/CloudHealthOffice.PriorAuthRuleEngine.csproj src/engines/CloudHealthOffice.PriorAuthRuleEngine/
 RUN dotnet restore src/services/benefit-plan-service/benefit-plan-service.csproj
 
 # Copy source code and build
@@ -19,6 +21,8 @@ COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/ src/engines/CloudHealthOffice.ClaimsScrubEngine/
 COPY src/engines/CloudHealthOffice.NcciEngine/ src/engines/CloudHealthOffice.NcciEngine/
+COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
+COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/
 RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release --no-restore
 
 # Publish stage

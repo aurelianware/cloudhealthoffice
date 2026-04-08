@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Provider Enrollment Guide — Cloud Health Office</title>
+  <meta name="description" content="Multi-state Medicaid provider enrollment verification. Aggregates TMHP PEMS, CAQH ProView, CA PAVE, FL FMMIS, and NY eMedNY to produce a unified enrollment status for every rendering provider — with revalidation risk detection and claims-gate integration." />
+  <meta name="keywords" content="provider enrollment, Medicaid enrollment verification, TMHP PEMS, CAQH ProView, CA PAVE, FL FMMIS, eMedNY, enrollment gate, revalidation, multi-state enrollment, provider credentialing, MCO panel reconciliation" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/provider-enrollment-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/provider-enrollment-guide" />
+  <meta property="og:title" content="Provider Enrollment Guide — Cloud Health Office" />
+  <meta property="og:description" content="Multi-state Medicaid provider enrollment verification with revalidation risk detection and claims-gate integration." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Provider Enrollment Guide — Cloud Health Office",
+    "description": "Complete guide to multi-state Medicaid provider enrollment verification: TMHP PEMS, CAQH ProView, CA PAVE, FL FMMIS, eMedNY aggregation, enrollment gating for claims adjudication, and revalidation risk detection.",
+    "url": "https://cloudhealthoffice.com/docs/provider-enrollment-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-06-10",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Provider enrollment verification",
+      "Medicaid enrollment",
+      "TMHP PEMS",
+      "CAQH ProView",
+      "Enrollment gate",
+      "Revalidation risk detection"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Provider Enrollment Guide", "item": "https://cloudhealthoffice.com/docs/provider-enrollment-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide" class="active">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#state-sources">State Enrollment Sources</a></li>
+              <li><a href="#multi-state-aggregator">Multi-State Aggregator</a></li>
+              <li><a href="#enrollment-gate">Enrollment Gate</a></li>
+              <li><a href="#revalidation">Revalidation Risk Detection</a></li>
+              <li><a href="#caching">Caching &amp; Performance</a></li>
+              <li><a href="#configuration">Tenant Configuration</a></li>
+              <li><a href="#getting-started">Getting Started</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Provider Enrollment Guide</span>
+        </div>
+
+        <h1>Provider Enrollment Guide</h1>
+        <p class="docs-subtitle">
+          Multi-state Medicaid provider enrollment verification &mdash; aggregates TMHP PEMS, CAQH ProView, CA PAVE, FL FMMIS, and NY eMedNY into a single enrollment status per provider. Includes enrollment-gate integration for claims adjudication and revalidation risk detection.
+        </p>
+
+        <!-- Overview -->
+        <h2 id="overview">Overview</h2>
+
+        <p>The <strong>ProviderEnrollmentService</strong> consolidates enrollment status data from state Medicaid portals and national credentialing databases into a unified view. Before a claim reaches adjudication, the <strong>Enrollment Gate</strong> verifies that the rendering provider holds an active enrollment in the claim&rsquo;s state &mdash; stopping unenrolled-provider claims before they incur processing cost.</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F3DB;</span>
+            <h3>State Sources</h3>
+            <p>Direct integration with TMHP PEMS (TX), CAQH ProView (national), CA PAVE, FL FMMIS, and NY eMedNY enrollment portals.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F310;</span>
+            <h3>Multi-State Aggregator</h3>
+            <p>First-non-empty-wins resolution across all configured sources. Returns the best available enrollment status per NPI + state.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F6E1;</span>
+            <h3>Enrollment Gate</h3>
+            <p>Pre-adjudication check that blocks or flags claims from providers without active enrollment in the rendering state.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x26A0;</span>
+            <h3>Revalidation Alerts</h3>
+            <p>Proactive detection of upcoming revalidation deadlines with configurable 30/60/90-day advance warning windows.</p>
+          </div>
+        </div>
+
+        <!-- State Enrollment Sources -->
+        <h2 id="state-sources">State Enrollment Sources</h2>
+
+        <p>Each state source is implemented as a dedicated adapter that normalizes enrollment responses into a common <code>EnrollmentRecord</code> model. The platform ships with five production adapters:</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>State</th>
+                <th>Protocol</th>
+                <th>Key Fields</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>TMHP PEMS</strong></td>
+                <td>Texas</td>
+                <td>REST API</td>
+                <td>NPI, TPI, enrollment status, LOB (STAR, STAR+PLUS, STAR Kids, CHIP), effective/end dates</td>
+              </tr>
+              <tr>
+                <td><strong>CAQH ProView</strong></td>
+                <td>National</td>
+                <td>REST API</td>
+                <td>NPI, Organization ID, attestation status, roster status, last attestation date</td>
+              </tr>
+              <tr>
+                <td><strong>CA PAVE</strong></td>
+                <td>California</td>
+                <td>REST API</td>
+                <td>NPI, Medi-Cal provider ID, enrollment status, specialty, effective date</td>
+              </tr>
+              <tr>
+                <td><strong>FL FMMIS</strong></td>
+                <td>Florida</td>
+                <td>REST API</td>
+                <td>NPI, Medicaid provider ID, enrollment status, revalidation due date</td>
+              </tr>
+              <tr>
+                <td><strong>NY eMedNY</strong></td>
+                <td>New York</td>
+                <td>REST API</td>
+                <td>NPI, MMIS provider ID, enrollment status, service category, effective date</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>Extensibility:</strong> Additional state sources can be added by implementing the <code>IEnrollmentSource</code> interface and registering in DI. The aggregator automatically picks up new sources.
+        </div>
+
+        <!-- Multi-State Aggregator -->
+        <h2 id="multi-state-aggregator">Multi-State Aggregator</h2>
+
+        <p>The <strong>MultiStateEnrollmentAggregator</strong> queries all configured sources in parallel and returns the first non-empty result set per NPI + state combination. This &ldquo;first-non-empty-wins&rdquo; strategy provides resilience &mdash; if the primary source (e.g., TMHP) is down, the aggregator falls through to CAQH ProView or other configured sources.</p>
+
+        <h3>Resolution Pipeline</h3>
+        <ol>
+          <li><strong>Parallel dispatch</strong> &mdash; All registered <code>IEnrollmentSource</code> implementations are queried concurrently for the given NPI and state.</li>
+          <li><strong>Result ranking</strong> &mdash; Sources are evaluated in priority order (state-specific sources first, then national).</li>
+          <li><strong>First-non-empty wins</strong> &mdash; The first source returning a non-empty enrollment record set is used as the canonical response.</li>
+          <li><strong>Cache write-through</strong> &mdash; The resolved result is written to Redis with a configurable TTL (default: 1 hour) to avoid redundant portal queries.</li>
+        </ol>
+
+        <h3>Supported Lines of Business</h3>
+        <p>Texas Medicaid enrollment records include LOB classification. The aggregator maps TMHP LOB codes to individual enum values:</p>
+        <ul>
+          <li><code>STAR</code> &mdash; Medicaid managed care</li>
+          <li><code>STARPlusPlus</code> &mdash; Acute care + long-term services (adults with disabilities, age 65+)</li>
+          <li><code>STARKids</code> &mdash; Children with disabilities</li>
+          <li><code>CHIP</code> &mdash; Children&rsquo;s Health Insurance Program</li>
+          <li><code>DentalMaintenanceOrganization</code> &mdash; Dental managed care</li>
+        </ul>
+
+        <!-- Enrollment Gate -->
+        <h2 id="enrollment-gate">Enrollment Gate</h2>
+
+        <p>The <strong>StateEnrollmentGate</strong> runs as a pre-adjudication middleware in the claims pipeline. For every inbound claim, the gate:</p>
+
+        <ol>
+          <li>Extracts the rendering provider NPI and service state from the claim.</li>
+          <li>Resolves the tenant ID (from <code>HttpContext.Items["TenantId"]</code> or the authorization token).</li>
+          <li>Calls the aggregator to retrieve enrollment status.</li>
+          <li>Returns <strong>Pass</strong> if the provider has an active enrollment, or <strong>Fail</strong> with a reason code if enrollment is inactive, expired, or not found.</li>
+        </ol>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>Fail-open by default:</strong> If no enrollment sources are configured for a tenant, the gate uses a <code>PassthroughEnrollmentGate</code> that allows all claims. This enables incremental rollout &mdash; configure enrollment checking per-tenant as sources are onboarded.
+        </div>
+
+        <h3>Gate Response Codes</h3>
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Meaning</th>
+                <th>Claim Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>PASS</code></td>
+                <td>Active enrollment confirmed</td>
+                <td>Continue to adjudication</td>
+              </tr>
+              <tr>
+                <td><code>ENROLLMENT_INACTIVE</code></td>
+                <td>Provider enrollment is inactive or terminated</td>
+                <td>Pend for review</td>
+              </tr>
+              <tr>
+                <td><code>ENROLLMENT_EXPIRED</code></td>
+                <td>Enrollment expired before date of service</td>
+                <td>Pend for review</td>
+              </tr>
+              <tr>
+                <td><code>ENROLLMENT_NOT_FOUND</code></td>
+                <td>No enrollment record found for NPI + state</td>
+                <td>Pend for manual verification</td>
+              </tr>
+              <tr>
+                <td><code>SOURCE_UNAVAILABLE</code></td>
+                <td>All enrollment sources returned errors</td>
+                <td>Configurable: pend or pass-through</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Revalidation Risk Detection -->
+        <h2 id="revalidation">Revalidation Risk Detection</h2>
+
+        <p>Medicaid providers must revalidate their enrollment periodically (typically every 3&ndash;5 years depending on state and risk tier). The ProviderEnrollmentService detects upcoming revalidation deadlines and generates alerts:</p>
+
+        <ul>
+          <li><strong>90-day warning</strong> &mdash; Early notice for providers approaching revalidation. Surfaced in the Sentinel Portal provider dashboard.</li>
+          <li><strong>60-day warning</strong> &mdash; Elevated urgency. Triggers notification to the provider relations team.</li>
+          <li><strong>30-day warning</strong> &mdash; Critical. Provider flagged in claims pipeline with soft-hold for manual review.</li>
+          <li><strong>Past-due</strong> &mdash; Revalidation deadline missed. Enrollment gate may pend new claims pending confirmation.</li>
+        </ul>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>CMS-0057-F alignment:</strong> Proactive revalidation tracking supports the CMS requirement for health plans to maintain accurate provider directories and enrollment status for network adequacy.
+        </div>
+
+        <!-- Caching & Performance -->
+        <h2 id="caching">Caching &amp; Performance</h2>
+
+        <p>Enrollment lookups are cached in <strong>Redis</strong> to minimize latency and reduce load on external state portals:</p>
+
+        <ul>
+          <li><strong>Cache key</strong>: <code>enrollment:{tenantId}:{npi}:{state}</code></li>
+          <li><strong>Default TTL</strong>: 1 hour (configurable per tenant)</li>
+          <li><strong>Null handling</strong>: If a cached value deserializes to <code>null</code> (e.g., due to a JSON parsing error), the cache entry is treated as a miss and the source is re-queried.</li>
+          <li><strong>Throughput</strong>: Sub-millisecond cache hits support high-volume claims processing without bottlenecking on external APIs.</li>
+        </ul>
+
+        <!-- Tenant Configuration -->
+        <h2 id="configuration">Tenant Configuration</h2>
+
+        <p>Provider enrollment is configured per-tenant via the standard Cloud Health Office configuration system. Key settings are bound via .NET options pattern:</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Config Key</th>
+                <th>Description</th>
+                <th>Default</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>ProviderEnrollment:EnabledStates</code></td>
+                <td>Array of state codes to activate enrollment checking for</td>
+                <td><code>[]</code> (disabled)</td>
+              </tr>
+              <tr>
+                <td><code>ProviderEnrollment:TmhpPems:BaseUrl</code></td>
+                <td>TMHP PEMS API base URL</td>
+                <td>&mdash;</td>
+              </tr>
+              <tr>
+                <td><code>ProviderEnrollment:TmhpPems:ApiKey</code></td>
+                <td>TMHP API key (stored in Azure Key Vault)</td>
+                <td>&mdash;</td>
+              </tr>
+              <tr>
+                <td><code>ProviderEnrollment:CaqhProView:BaseUrl</code></td>
+                <td>CAQH ProView API base URL</td>
+                <td>&mdash;</td>
+              </tr>
+              <tr>
+                <td><code>ProviderEnrollment:CaqhProView:OrganizationId</code></td>
+                <td>CAQH-assigned organization identifier for your health plan</td>
+                <td>&mdash;</td>
+              </tr>
+              <tr>
+                <td><code>ProviderEnrollment:CacheTtlMinutes</code></td>
+                <td>Redis cache TTL for enrollment lookups</td>
+                <td><code>60</code></td>
+              </tr>
+              <tr>
+                <td><code>ProviderEnrollment:GateMode</code></td>
+                <td><code>enforce</code> (pend on failure) or <code>audit</code> (log only)</td>
+                <td><code>audit</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>Secrets management:</strong> API keys and credentials are stored in Azure Key Vault and injected via the <code>populate-keyvault-secrets.sh</code> script. See the <a href="/docs/deployment">Deployment Guide</a> for Key Vault configuration.
+        </div>
+
+        <!-- Getting Started -->
+        <h2 id="getting-started">Getting Started</h2>
+
+        <ol>
+          <li><strong>Enable enrollment checking</strong> &mdash; Set <code>ProviderEnrollment:EnabledStates</code> to the states you operate in (e.g., <code>["TX", "CA", "FL"]</code>).</li>
+          <li><strong>Configure source credentials</strong> &mdash; Add API keys for each state source to Azure Key Vault.</li>
+          <li><strong>Set gate mode</strong> &mdash; Start with <code>audit</code> mode to observe enrollment check results without blocking claims. Switch to <code>enforce</code> after validation.</li>
+          <li><strong>Verify via portal</strong> &mdash; Use the Sentinel Portal provider enrollment dashboard to confirm enrollment statuses are loading correctly.</li>
+          <li><strong>Monitor</strong> &mdash; Check the <code>/health</code> endpoint for enrollment source connectivity status.</li>
+        </ol>
+
+        <!-- Related Documentation -->
+        <h2 id="related-docs">Related Documentation</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 16px;">
+          <a href="/docs/provider-verification-guide" class="docs-hub-card">
+            <h3>Provider Verification</h3>
+            <p>NPPES, OIG/LEIE, PECOS, and composite integrity scoring for provider network management.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <h3>Claims Adjudication</h3>
+            <p>End-to-end claims pipeline including pre-adjudication gates and enrollment validation.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/prior-auth-guide" class="docs-hub-card">
+            <h3>Prior Authorization</h3>
+            <p>PriorAuthRuleEngine, gold card exemptions, and state-specific decision rules.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/deployment" class="docs-hub-card">
+            <h3>Deployment</h3>
+            <p>Azure Key Vault secrets, Kubernetes configuration, and environment setup.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/provider-verification-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Provider Verification</div>
+          </a>
+          <a href="/docs/prior-auth-guide" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Prior Authorization</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.2.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

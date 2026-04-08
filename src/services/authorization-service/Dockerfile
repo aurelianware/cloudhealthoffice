@@ -4,11 +4,15 @@ WORKDIR /repo
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/authorization-service/authorization-service.csproj src/services/authorization-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/CloudHealthOffice.ProviderEnrollmentService.csproj src/engines/CloudHealthOffice.ProviderEnrollmentService/
+COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/CloudHealthOffice.PriorAuthRuleEngine.csproj src/engines/CloudHealthOffice.PriorAuthRuleEngine/
 RUN dotnet restore src/services/authorization-service/authorization-service.csproj
 
 # Copy source code and build
 COPY src/services/authorization-service/ src/services/authorization-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
+COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/
 RUN dotnet build src/services/authorization-service/authorization-service.csproj -c Release --no-restore
 
 # Publish stage
