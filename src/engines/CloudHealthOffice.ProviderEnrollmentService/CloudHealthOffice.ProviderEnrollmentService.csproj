@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
     <RootNamespace>CloudHealthOffice.ProviderEnrollmentService</RootNamespace>
     <AssemblyName>CloudHealthOffice.ProviderEnrollmentService</AssemblyName>
     <Description>Multi-state Medicaid provider enrollment hub. Aggregates state enrollment systems (TX PEMS, CA PAVE, FL FMMIS, NY eMedNY) and CAQH ProView into a unified enrollment lifecycle engine.</Description>

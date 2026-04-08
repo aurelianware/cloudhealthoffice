@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
     <RootNamespace>CloudHealthOffice.PriorAuthRuleEngine</RootNamespace>
     <AssemblyName>CloudHealthOffice.PriorAuthRuleEngine</AssemblyName>
     <Description>
