@@ -6,7 +6,7 @@ using ClaimsService.EDI.Florida;
 using ClaimsService.EDI.Florida.Models;
 using ClaimsService.Models;
 
-namespace CloudHealthOffice.FlAhca.E2E;
+namespace CloudHealthOffice.FlAhca.E2ETests;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Docker-compose fixture for FL AHCA workflow
