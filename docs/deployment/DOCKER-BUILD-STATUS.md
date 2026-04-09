@@ -126,7 +126,7 @@ docker build --build-arg REGISTRY=mcr.microsoft.com \
 docker build -f src/services/member-service/Dockerfile .
 ```
 
-**PR builds:** The workflow logs in to ACR using a dedicated read-only token (`ACR_USERNAME` / `ACR_PASSWORD` secrets) so pull requests can fetch base images without Azure OIDC. This step uses `continue-on-error: true` and is skipped gracefully if the secrets are absent.
+**PR builds:** The workflow logs in to ACR using a dedicated read-only token (`ACR_USERNAME` / `ACR_PASSWORD` secrets) so pull requests can fetch base images without Azure OIDC. A preceding check step inspects whether `ACR_USERNAME` is set; if the secret is absent (e.g. fork PRs), the login step is skipped entirely and the build falls back to pulling base images directly from `mcr.microsoft.com`.
 
 ### Multi-Stage Docker Builds
 1. **Build stage:** `${REGISTRY}/dotnet/sdk:8.0` (ACR-mirrored from MCR)
