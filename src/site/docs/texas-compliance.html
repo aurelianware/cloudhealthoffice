@@ -192,7 +192,7 @@
         <p>The <strong>Texas Medicaid &amp; Healthcare Partnership (TMHP)</strong> operates the <strong>Provider Enrollment &amp; Management System (PEMS)</strong> &mdash; the authoritative source for Texas Medicaid provider enrollment status. CHO integrates directly with PEMS through the <code>TmhpPemsSource</code> adapter in the ProviderEnrollmentService.</p>
 
         <h3>What CHO Does</h3>
-        <p>The <code>TmhpPemsSource</code> adapter queries PEMS for active enrollment status per NPI. Every inbound claim or prior authorization request triggers an enrollment check before processing continues.</p>
+        <p>The <code>TmhpPemsSource</code> adapter queries PEMS for active enrollment status per NPI. When the enrollment gate is enabled or enforced for the tenant, inbound claims and prior authorization requests trigger an enrollment check before processing continues.</p>
 
         <h3>Data Returned</h3>
         <div class="docs-table-wrapper" style="margin-top: 16px;">
@@ -221,19 +221,19 @@
         <p>TMHP returns raw LOB codes that CHO normalizes into typed enums:</p>
         <ul>
           <li>TMHP LOB code &rarr; <code>Star</code> (Medicaid managed care &mdash; children and families)</li>
-          <li>TMHP LOB code &rarr; <code>StarPlusPlus</code> (adults with disabilities, age 65+)</li>
+          <li>TMHP LOB code &rarr; <code>STARPlus</code> (adults with disabilities, age 65+)</li>
           <li>TMHP LOB code &rarr; <code>StarKids</code> (children with disabilities)</li>
           <li>TMHP LOB code &rarr; <code>CHIP</code> (Children&rsquo;s Health Insurance Program)</li>
         </ul>
 
         <h3>Resilience</h3>
-        <p>The <code>MultiStateEnrollmentAggregator</code> queries TMHP PEMS in parallel with other configured sources. If TMHP is unavailable, the aggregator falls through to <strong>CAQH ProView</strong> as a backup source &mdash; ensuring enrollment checks are never blocked by a single-source outage.</p>
+        <p>For Texas enrollment checks, the <code>MultiStateEnrollmentAggregator</code> routes the lookup to the TMHP PEMS source configured for <code>TX</code>; it does not fall through to <strong>CAQH ProView</strong> for cross-source failover. In production, resilience comes from TMHP-specific safeguards such as cached enrollment results and configurable warn-mode gating, allowing Cloud Health Office to continue processing during transient TMHP degradation without misrepresenting the source of truth.</p>
 
         <h3>Configuration</h3>
-        <p>Two configuration keys are required, both stored in Azure Key Vault:</p>
+        <p>Two configuration keys are required, both stored in Azure Key Vault under the provider enrollment service section:</p>
         <ul>
-          <li><code>ProviderEnrollment:TmhpPems:BaseUrl</code> &mdash; TMHP PEMS API endpoint</li>
-          <li><code>ProviderEnrollment:TmhpPems:ApiKey</code> &mdash; API authentication key</li>
+          <li><code>ProviderEnrollmentService:Tmhp:BaseUrl</code> &mdash; TMHP PEMS API endpoint</li>
+          <li><code>ProviderEnrollmentService:Tmhp:ApiKey</code> &mdash; API authentication key</li>
         </ul>
 
         <div class="docs-callout" style="margin-top: 16px;">
