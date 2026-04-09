@@ -1,89 +1,394 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using EncounterSubmissionService.Models;
+using MongoDB.Driver;
 
 namespace EncounterSubmissionService.Services;
 
 /// <summary>
 /// Manages the lifecycle of FMMIS encounter submissions: tracking records,
 /// batching, acknowledgment processing, and deadline monitoring.
+/// Persists to MongoDB and calls claims-service / reference-data-service via HTTP.
 /// </summary>
 public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 {
+    private readonly IMongoCollection<EncounterSubmission> _collection;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<EncounterSubmissionServiceImpl> _logger;
 
-    /// <summary>
-    /// AHCA MCO contract: encounters must be submitted within 60 days of adjudication.
-    /// </summary>
-    private const int SubmissionWindowDays = 60;
+    private const int DefaultSubmissionWindowDays = 60;
+    private const int MaxRetryCount = 3;
 
-    public EncounterSubmissionServiceImpl(ILogger<EncounterSubmissionServiceImpl> logger)
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    public EncounterSubmissionServiceImpl(
+        IMongoDatabase database,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        ILogger<EncounterSubmissionServiceImpl> logger)
+    {
+        _collection = database.GetCollection<EncounterSubmission>("encounter_submissions");
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
         _logger = logger;
     }
 
-    public Task<EncounterSubmission> CreateAsync(string tenantId, string claimId, DateTime adjudicatedAt)
+    // ── Method 1: CreateSubmissionRecord ─────────────────────────────
+
+    public async Task<EncounterSubmission> CreateSubmissionRecordAsync(
+        string claimId, string tenantId, DateTime adjudicatedAt)
     {
+        // Look up TenantComplianceConfig to get EncounterSubmissionDays
+        var submissionDays = await GetEncounterSubmissionDaysAsync(tenantId);
+
         var submission = new EncounterSubmission
         {
             TenantId = tenantId,
             ClaimId = claimId,
             ClaimAdjudicatedAt = adjudicatedAt,
             StateCode = "FL",
-            SubmissionDeadline = adjudicatedAt.AddDays(SubmissionWindowDays),
+            SubmissionDeadline = adjudicatedAt.AddDays(submissionDays),
             Status = EncounterSubmissionStatus.Pending,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
+        await _collection.InsertOneAsync(submission);
+
         _logger.LogInformation(
-            "Created encounter submission for claim {ClaimId}, deadline {Deadline}",
-            claimId, submission.SubmissionDeadline);
+            "Created encounter submission {Id} for claim {ClaimId}, tenant {TenantId}, " +
+            "deadline {Deadline:yyyy-MM-dd} ({Days} days from adjudication)",
+            submission.Id, claimId, tenantId, submission.SubmissionDeadline, submissionDays);
 
-        // TODO: persist to Cosmos DB via repository
-        return Task.FromResult(submission);
+        return submission;
     }
 
-    public Task<EncounterSubmission?> GetByIdAsync(string id)
-    {
-        // TODO: implement Cosmos DB lookup
-        _logger.LogInformation("GetByIdAsync called for {Id}", id);
-        return Task.FromResult<EncounterSubmission?>(null);
-    }
+    // ── Method 2: GetPendingSubmissions ──────────────────────────────
 
-    public Task<IEnumerable<EncounterSubmission>> GetPendingByTenantAsync(string tenantId)
+    public async Task<IEnumerable<EncounterSubmission>> GetPendingSubmissionsAsync(
+        string tenantId, int batchSize = 100)
     {
-        // TODO: query Cosmos DB for pending encounters by tenant
-        _logger.LogInformation("GetPendingByTenantAsync called for tenant {TenantId}", tenantId);
-        return Task.FromResult<IEnumerable<EncounterSubmission>>(Array.Empty<EncounterSubmission>());
-    }
+        // Return pending submissions ordered by deadline ascending.
+        // Exclude Accepted and permanently Rejected (RetryCount >= MaxRetryCount).
+        var filter = Builders<EncounterSubmission>.Filter.And(
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
+            Builders<EncounterSubmission>.Filter.In(s => s.Status, new[]
+            {
+                EncounterSubmissionStatus.Pending,
+                EncounterSubmissionStatus.DeadlineWarning,
+                EncounterSubmissionStatus.Rejected
+            }),
+            // Exclude permanently rejected (exhausted retries)
+            Builders<EncounterSubmission>.Filter.Lt(s => s.RetryCount, MaxRetryCount)
+        );
 
-    public Task<IEnumerable<EncounterSubmission>> GetApproachingDeadlineAsync(int warningDays = 7)
-    {
-        // TODO: query across tenants for submissions where deadline is within warningDays
-        _logger.LogInformation("GetApproachingDeadlineAsync called with {WarningDays} day threshold", warningDays);
-        return Task.FromResult<IEnumerable<EncounterSubmission>>(Array.Empty<EncounterSubmission>());
-    }
+        var sort = Builders<EncounterSubmission>.Sort.Ascending(s => s.SubmissionDeadline);
 
-    public Task BatchAsync(IEnumerable<string> submissionIds, string batchId)
-    {
-        // TODO: update status to Batched, set BatchId
-        _logger.LogInformation("Batching {Count} submissions into batch {BatchId}",
-            submissionIds.Count(), batchId);
-        return Task.CompletedTask;
-    }
+        var submissions = await _collection
+            .Find(filter)
+            .Sort(sort)
+            .Limit(batchSize)
+            .ToListAsync();
 
-    public Task MarkSubmittedAsync(string batchId, DateTime submittedAt)
-    {
-        // TODO: update all submissions in batch to Submitted status
-        _logger.LogInformation("Marking batch {BatchId} as submitted at {SubmittedAt}", batchId, submittedAt);
-        return Task.CompletedTask;
-    }
-
-    public Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentCode, List<string>? errors = null)
-    {
-        // TODO: update submissions based on 999 acknowledgment
         _logger.LogInformation(
-            "Processing 999 acknowledgment for batch {BatchId}: code={Code}, errors={ErrorCount}",
-            batchId, acknowledgmentCode, errors?.Count ?? 0);
-        return Task.CompletedTask;
+            "Found {Count} pending submissions for tenant {TenantId}",
+            submissions.Count, tenantId);
+
+        return submissions;
     }
+
+    public async Task<EncounterSubmission?> GetByIdAsync(string id, string tenantId)
+    {
+        var filter = Builders<EncounterSubmission>.Filter.And(
+            Builders<EncounterSubmission>.Filter.Eq(s => s.Id, id),
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId)
+        );
+
+        return await _collection.Find(filter).FirstOrDefaultAsync();
+    }
+
+    public async Task<IEnumerable<EncounterSubmission>> GetApproachingDeadlineAsync(int warningDays = 7)
+    {
+        var warningCutoff = DateTime.UtcNow.AddDays(warningDays);
+
+        var filter = Builders<EncounterSubmission>.Filter.And(
+            Builders<EncounterSubmission>.Filter.In(s => s.Status, new[]
+            {
+                EncounterSubmissionStatus.Pending,
+                EncounterSubmissionStatus.DeadlineWarning
+            }),
+            Builders<EncounterSubmission>.Filter.Lte(s => s.SubmissionDeadline, warningCutoff),
+            Builders<EncounterSubmission>.Filter.Gt(s => s.SubmissionDeadline, DateTime.UtcNow)
+        );
+
+        var sort = Builders<EncounterSubmission>.Sort.Ascending(s => s.SubmissionDeadline);
+
+        return await _collection.Find(filter).Sort(sort).ToListAsync();
+    }
+
+    // ── Method 3: BuildFmmisSubmissionBatch ──────────────────────────
+
+    public async Task<FmmisSubmissionFileDto> BuildFmmisSubmissionBatchAsync(
+        IEnumerable<EncounterSubmission> submissions, string tenantId)
+    {
+        var submissionList = submissions.ToList();
+        var batchId = Guid.NewGuid().ToString();
+
+        _logger.LogInformation(
+            "Building FMMIS batch {BatchId} with {Count} encounters for tenant {TenantId}",
+            batchId, submissionList.Count, tenantId);
+
+        // Call claims-service to fetch each claim
+        var claimsClient = _httpClientFactory.CreateClient("ClaimsService");
+        var claimIds = submissionList.Select(s => s.ClaimId).ToList();
+
+        // POST to claims-service FMMIS batch endpoint with claim IDs
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/claims/fmmis/batch")
+        {
+            Content = JsonContent.Create(new
+            {
+                claimIds,
+                tenantId,
+                batchId
+            }, options: JsonOptions)
+        };
+        request.Headers.Add("X-Tenant-ID", tenantId);
+
+        var response = await claimsClient.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync();
+            _logger.LogError(
+                "Claims service FMMIS batch request failed: {StatusCode} — {Error}",
+                response.StatusCode, errorBody);
+
+            throw new InvalidOperationException(
+                $"Claims service returned {response.StatusCode} for FMMIS batch: {errorBody}");
+        }
+
+        var fileResult = await response.Content.ReadFromJsonAsync<FmmisSubmissionFileDto>(JsonOptions);
+
+        if (fileResult is null)
+        {
+            throw new InvalidOperationException("Claims service returned null FMMIS submission file");
+        }
+
+        fileResult.BatchId = batchId;
+
+        // Update all submissions to Batched status
+        var submissionIds = submissionList.Select(s => s.Id).ToList();
+        var updateFilter = Builders<EncounterSubmission>.Filter.In(s => s.Id, submissionIds);
+        var updateDef = Builders<EncounterSubmission>.Update
+            .Set(s => s.Status, EncounterSubmissionStatus.Batched)
+            .Set(s => s.BatchId, batchId)
+            .Set(s => s.UpdatedAt, DateTime.UtcNow);
+
+        var updateResult = await _collection.UpdateManyAsync(updateFilter, updateDef);
+
+        _logger.LogInformation(
+            "FMMIS batch {BatchId} built: {FileName}, {TransactionCount} transactions, " +
+            "{UpdatedCount} submissions marked Batched",
+            batchId, fileResult.FileName, fileResult.TransactionCount, updateResult.ModifiedCount);
+
+        return fileResult;
+    }
+
+    // ── Method 4: ProcessAcknowledgment ──────────────────────────────
+
+    public async Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentContent)
+    {
+        _logger.LogInformation("Processing 999 acknowledgment for batch {BatchId}", batchId);
+
+        // Parse 999 acknowledgment code from content
+        // A = Accepted, E = Accepted with errors (partial), R = Rejected
+        var (ackCode, errors) = Parse999Acknowledgment(acknowledgmentContent);
+
+        var batchFilter = Builders<EncounterSubmission>.Filter.Eq(s => s.BatchId, batchId);
+        var submissions = await _collection.Find(batchFilter).ToListAsync();
+
+        if (submissions.Count == 0)
+        {
+            _logger.LogWarning("No submissions found for batch {BatchId}", batchId);
+            return;
+        }
+
+        EncounterSubmissionStatus newStatus;
+        switch (ackCode.ToUpperInvariant())
+        {
+            case "A":
+                newStatus = EncounterSubmissionStatus.Accepted;
+                break;
+            case "E":
+                newStatus = EncounterSubmissionStatus.PartialAccept;
+                break;
+            case "R":
+            default:
+                newStatus = EncounterSubmissionStatus.Rejected;
+                break;
+        }
+
+        if (newStatus == EncounterSubmissionStatus.Rejected)
+        {
+            // For rejections: populate LastError, increment RetryCount
+            var errorMessage = errors.Count > 0
+                ? string.Join("; ", errors)
+                : $"FMMIS 999 rejected batch {batchId}";
+
+            var rejectUpdate = Builders<EncounterSubmission>.Update
+                .Set(s => s.Status, EncounterSubmissionStatus.Rejected)
+                .Set(s => s.AcknowledgmentCode, ackCode)
+                .Set(s => s.AcknowledgedAt, DateTime.UtcNow)
+                .Set(s => s.LastError, errorMessage)
+                .Inc(s => s.RetryCount, 1)
+                .Set(s => s.UpdatedAt, DateTime.UtcNow);
+
+            await _collection.UpdateManyAsync(batchFilter, rejectUpdate);
+
+            _logger.LogWarning(
+                "Batch {BatchId} REJECTED: {ErrorCount} errors, {Count} submissions affected — {Errors}",
+                batchId, errors.Count, submissions.Count, errorMessage);
+        }
+        else
+        {
+            var acceptUpdate = Builders<EncounterSubmission>.Update
+                .Set(s => s.Status, newStatus)
+                .Set(s => s.AcknowledgmentCode, ackCode)
+                .Set(s => s.AcknowledgedAt, DateTime.UtcNow)
+                .Set(s => s.UpdatedAt, DateTime.UtcNow);
+
+            await _collection.UpdateManyAsync(batchFilter, acceptUpdate);
+
+            _logger.LogInformation(
+                "Batch {BatchId} acknowledged as {Status}: {Count} submissions updated",
+                batchId, newStatus, submissions.Count);
+        }
+    }
+
+    // ── Flag Deadline Warning ────────────────────────────────────────
+
+    public async Task FlagDeadlineWarningAsync(EncounterSubmission submission)
+    {
+        var filter = Builders<EncounterSubmission>.Filter.And(
+            Builders<EncounterSubmission>.Filter.Eq(s => s.Id, submission.Id),
+            Builders<EncounterSubmission>.Filter.Eq(s => s.Status, EncounterSubmissionStatus.Pending)
+        );
+
+        var update = Builders<EncounterSubmission>.Update
+            .Set(s => s.Status, EncounterSubmissionStatus.DeadlineWarning)
+            .Set(s => s.UpdatedAt, DateTime.UtcNow);
+
+        await _collection.UpdateOneAsync(filter, update);
+
+        _logger.LogWarning(
+            "Flagged encounter submission {Id} (claim {ClaimId}) as DeadlineWarning — " +
+            "deadline {Deadline:yyyy-MM-dd}, {DaysLeft:F1} days remaining",
+            submission.Id, submission.ClaimId, submission.SubmissionDeadline,
+            (submission.SubmissionDeadline - DateTime.UtcNow).TotalDays);
+    }
+
+    // ── Private Helpers ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Fetch the encounter submission window (days) from the tenant's compliance config.
+    /// Falls back to 60 days if the reference-data-service is unavailable.
+    /// </summary>
+    private async Task<int> GetEncounterSubmissionDaysAsync(string tenantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReferenceDataService");
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/compliance-config/{tenantId}/state");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+
+            var response = await client.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var stateConfig = await response.Content
+                    .ReadFromJsonAsync<StateComplianceConfigDto>(JsonOptions);
+
+                if (stateConfig?.EncounterSubmissionDays > 0)
+                {
+                    return stateConfig.EncounterSubmissionDays;
+                }
+            }
+
+            _logger.LogWarning(
+                "Could not fetch compliance config for tenant {TenantId}, using default {Days} days",
+                tenantId, DefaultSubmissionWindowDays);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Error fetching compliance config for tenant {TenantId}, using default {Days} days",
+                tenantId, DefaultSubmissionWindowDays);
+        }
+
+        return DefaultSubmissionWindowDays;
+    }
+
+    /// <summary>
+    /// Parse a 999 acknowledgment response to extract the status code and error list.
+    /// Simplified parser — looks for AK9 segment status code.
+    /// </summary>
+    internal static (string AckCode, List<string> Errors) Parse999Acknowledgment(string content)
+    {
+        var errors = new List<string>();
+        var ackCode = "R"; // Default to rejected if we can't parse
+
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            errors.Add("Empty 999 acknowledgment content");
+            return (ackCode, errors);
+        }
+
+        var segments = content.Split('~', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var segment in segments)
+        {
+            var trimmed = segment.Trim();
+            var elements = trimmed.Split('*');
+
+            // AK9 — Functional Group Response Trailer
+            // AK901: A = Accepted, E = Accepted with errors, R = Rejected
+            if (elements.Length > 1 && elements[0] == "AK9")
+            {
+                ackCode = elements[1];
+            }
+
+            // IK3 — Implementation Segment Note (error detail)
+            if (elements.Length > 3 && elements[0] == "IK3")
+            {
+                errors.Add($"Segment {elements[1]} position {elements[2]}: error code {elements[3]}");
+            }
+
+            // IK4 — Implementation Data Element Note (element-level error)
+            if (elements.Length > 2 && elements[0] == "IK4")
+            {
+                errors.Add($"Element error at position {elements[1]}: code {elements[2]}");
+            }
+        }
+
+        return (ackCode, errors);
+    }
+}
+
+/// <summary>
+/// DTO for the state compliance config returned by reference-data-service
+/// <c>GET /api/compliance-config/{tenantId}/state</c>.
+/// </summary>
+internal class StateComplianceConfigDto
+{
+    public int EncounterSubmissionDays { get; set; }
+    public int PromptPayElectronicDays { get; set; }
+    public int PromptPayPaperDays { get; set; }
 }

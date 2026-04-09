@@ -11,19 +11,20 @@ public interface IEncounterSubmissionService
 {
     /// <summary>
     /// Create a new encounter submission record for an adjudicated claim.
-    /// Called by the <see cref="KafkaConsumers.AdjudicationCompletedConsumer"/>.
+    /// Looks up TenantComplianceConfig to determine EncounterSubmissionDays.
     /// </summary>
-    Task<EncounterSubmission> CreateAsync(string tenantId, string claimId, DateTime adjudicatedAt);
+    Task<EncounterSubmission> CreateSubmissionRecordAsync(string claimId, string tenantId, DateTime adjudicatedAt);
 
     /// <summary>
     /// Get an encounter submission by ID.
     /// </summary>
-    Task<EncounterSubmission?> GetByIdAsync(string id);
+    Task<EncounterSubmission?> GetByIdAsync(string id, string tenantId);
 
     /// <summary>
-    /// Get all pending encounters for a tenant that are ready to be batched.
+    /// Get pending submissions ordered by deadline ascending.
+    /// Excludes Accepted and permanently Rejected (RetryCount >= 3).
     /// </summary>
-    Task<IEnumerable<EncounterSubmission>> GetPendingByTenantAsync(string tenantId);
+    Task<IEnumerable<EncounterSubmission>> GetPendingSubmissionsAsync(string tenantId, int batchSize = 100);
 
     /// <summary>
     /// Get encounters approaching their submission deadline (within N days).
@@ -31,17 +32,32 @@ public interface IEncounterSubmissionService
     Task<IEnumerable<EncounterSubmission>> GetApproachingDeadlineAsync(int warningDays = 7);
 
     /// <summary>
-    /// Mark encounters as batched (included in an FMMIS file).
+    /// Fetch claims from claims-service, transform via FMMIS pipeline,
+    /// assemble a batch file, and update submission statuses to Batched.
     /// </summary>
-    Task BatchAsync(IEnumerable<string> submissionIds, string batchId);
+    Task<FmmisSubmissionFileDto> BuildFmmisSubmissionBatchAsync(
+        IEnumerable<EncounterSubmission> submissions, string tenantId);
 
     /// <summary>
-    /// Mark a batch as submitted (transmitted to FMMIS).
+    /// Process a 999 acknowledgment response for a batch.
+    /// Updates submission statuses and populates error details on rejections.
     /// </summary>
-    Task MarkSubmittedAsync(string batchId, DateTime submittedAt);
+    Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentContent);
 
     /// <summary>
-    /// Process a 999 acknowledgment for a batch.
+    /// Flag a submission with DeadlineWarning status.
     /// </summary>
-    Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentCode, List<string>? errors = null);
+    Task FlagDeadlineWarningAsync(EncounterSubmission submission);
+}
+
+/// <summary>
+/// DTO mirroring the FMMIS submission file produced by claims-service.
+/// </summary>
+public class FmmisSubmissionFileDto
+{
+    public string FileName { get; set; } = string.Empty;
+    public byte[] Content { get; set; } = Array.Empty<byte>();
+    public int TransactionCount { get; set; }
+    public List<string> ClaimIds { get; set; } = new();
+    public string BatchId { get; set; } = string.Empty;
 }

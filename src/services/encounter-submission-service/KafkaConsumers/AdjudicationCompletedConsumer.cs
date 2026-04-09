@@ -103,7 +103,7 @@ public class AdjudicationCompletedConsumer : BackgroundService
                     httpContextAccessor.HttpContext.Items["TenantId"] = message.TenantId;
                 }
 
-                await service.CreateAsync(message.TenantId, message.ClaimId, message.AdjudicatedAt);
+                await service.CreateSubmissionRecordAsync(message.ClaimId, message.TenantId, message.AdjudicatedAt);
 
                 consumer.Commit(consumeResult);
 

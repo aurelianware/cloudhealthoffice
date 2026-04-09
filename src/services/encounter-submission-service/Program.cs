@@ -72,6 +72,25 @@ else
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 
+// Inter-service HTTP clients (named client pattern)
+builder.Services.AddHttpClient("ClaimsService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ClaimsService"]
+        ?? "http://claims-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+builder.Services.AddHttpClient("ReferenceDataService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ReferenceDataService"]
+        ?? "http://reference-data-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
 // Business services
 builder.Services.AddScoped<IEncounterSubmissionService, EncounterSubmissionServiceImpl>();
 
@@ -82,7 +101,7 @@ if (!string.IsNullOrEmpty(kafkaBootstrap))
     builder.Services.AddHostedService<AdjudicationCompletedConsumer>();
 }
 
-// Background worker for deadline monitoring and batching
+// Background worker for deadline monitoring and batching (every 4 hours)
 builder.Services.AddHostedService<EncounterSubmissionWorker>();
 
 // Health checks (MongoDB or Cosmos DB)

@@ -28,12 +28,12 @@ public class EncounterSubmissionController : ControllerBase
     /// <summary>
     /// Get an encounter submission by ID.
     /// </summary>
-    [HttpGet("{id}")]
+    [HttpGet("{tenantId}/{id}")]
     [ProducesResponseType(typeof(EncounterSubmission), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<EncounterSubmission>> GetById(string id)
+    public async Task<ActionResult<EncounterSubmission>> GetById(string tenantId, string id)
     {
-        var submission = await _service.GetByIdAsync(id);
+        var submission = await _service.GetByIdAsync(id, tenantId);
         if (submission is null)
         {
             return NotFound(new { message = $"Encounter submission '{id}' not found" });
@@ -42,13 +42,15 @@ public class EncounterSubmissionController : ControllerBase
     }
 
     /// <summary>
-    /// Get all pending encounter submissions for a tenant.
+    /// Get pending encounter submissions for a tenant, ordered by deadline.
     /// </summary>
     [HttpGet("tenant/{tenantId}/pending")]
     [ProducesResponseType(typeof(IEnumerable<EncounterSubmission>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<EncounterSubmission>>> GetPending(string tenantId)
+    public async Task<ActionResult<IEnumerable<EncounterSubmission>>> GetPending(
+        string tenantId,
+        [FromQuery] int batchSize = 100)
     {
-        var submissions = await _service.GetPendingByTenantAsync(tenantId);
+        var submissions = await _service.GetPendingSubmissionsAsync(tenantId, batchSize);
         return Ok(submissions);
     }
 
@@ -65,7 +67,7 @@ public class EncounterSubmissionController : ControllerBase
     }
 
     /// <summary>
-    /// Process a 999 acknowledgment for a batch.
+    /// Process a 999 acknowledgment for a batch (raw EDI 999 content).
     /// </summary>
     [HttpPost("batch/{batchId}/acknowledgment")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -74,12 +76,12 @@ public class EncounterSubmissionController : ControllerBase
         string batchId,
         [FromBody] AcknowledgmentRequest request)
     {
-        if (!ModelState.IsValid)
+        if (string.IsNullOrWhiteSpace(request.Content))
         {
-            return BadRequest(ModelState);
+            return BadRequest(new { message = "Acknowledgment content is required" });
         }
 
-        await _service.ProcessAcknowledgmentAsync(batchId, request.AcknowledgmentCode, request.Errors);
+        await _service.ProcessAcknowledgmentAsync(batchId, request.Content);
         return Ok(new { message = $"Acknowledgment processed for batch {batchId}" });
     }
 }
@@ -89,6 +91,8 @@ public class EncounterSubmissionController : ControllerBase
 /// </summary>
 public class AcknowledgmentRequest
 {
-    public string AcknowledgmentCode { get; set; } = string.Empty;
-    public List<string>? Errors { get; set; }
+    /// <summary>
+    /// Raw X12 999 acknowledgment content from FMMIS.
+    /// </summary>
+    public string Content { get; set; } = string.Empty;
 }
