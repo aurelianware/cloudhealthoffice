@@ -82,6 +82,30 @@ jobs:
         if: github.event_name != 'pull_request'
         run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
 
+      # PR builds cannot use OIDC (no push), but still need ACR access to pull
+      # mirrored .NET base images. Uses a read-only ACR token (ACR_USERNAME /
+      # ACR_PASSWORD secrets). Skips gracefully for fork PRs where secrets are
+      # unavailable; the next step then falls back to pulling directly from MCR.
+      - name: Log in to ACR for PR base-image pulls
+        id: acr-pr-login
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      # For fork PRs where ACR login is unavailable, fall back to MCR so the
+      # build-push-action can still pull the base image without credentials.
+      - name: Set effective base-image registry
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.acr-pr-login.outcome }}" != "success" ]; then
+            echo "BUILD_REGISTRY=mcr.microsoft.com" >> $GITHUB_ENV
+          else
+            echo "BUILD_REGISTRY=${{ env.REGISTRY }}" >> $GITHUB_ENV
+          fi
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -101,6 +125,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: REGISTRY=${{ env.BUILD_REGISTRY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
@@ -131,6 +156,30 @@ jobs:
         if: github.event_name != 'pull_request'
         run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
 
+      # PR builds cannot use OIDC (no push), but still need ACR access to pull
+      # mirrored .NET base images. Uses a read-only ACR token (ACR_USERNAME /
+      # ACR_PASSWORD secrets). Skips gracefully for fork PRs where secrets are
+      # unavailable; the next step then falls back to pulling directly from MCR.
+      - name: Log in to ACR for PR base-image pulls
+        id: acr-pr-login
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      # For fork PRs where ACR login is unavailable, fall back to MCR so the
+      # build-push-action can still pull the base image without credentials.
+      - name: Set effective base-image registry
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.acr-pr-login.outcome }}" != "success" ]; then
+            echo "BUILD_REGISTRY=mcr.microsoft.com" >> $GITHUB_ENV
+          else
+            echo "BUILD_REGISTRY=${{ env.REGISTRY }}" >> $GITHUB_ENV
+          fi
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -150,6 +199,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: REGISTRY=${{ env.BUILD_REGISTRY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
