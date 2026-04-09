@@ -50,6 +50,11 @@ if (!string.IsNullOrEmpty(cosmosEndpoint) && !string.IsNullOrEmpty(cosmosKey))
         };
         return new CosmosClient(cosmosEndpoint, cosmosKey, options);
     });
+    builder.Services.AddSingleton<IComplianceConfigRepository, CosmosComplianceConfigRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<IComplianceConfigRepository, InMemoryComplianceConfigRepository>();
 }
 
 // Azure AD Authentication

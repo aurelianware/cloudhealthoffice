@@ -158,7 +158,7 @@ public class FmmisClaimTransformer
     /// Builds the complete FMMIS 837 EDI string. This is a pure function
     /// (no I/O) to facilitate unit testing.
     /// </summary>
-    internal static string BuildEdi(
+    public static string BuildEdi(
         Claim claim,
         FmmisComplianceConfigDto config,
         string flMedicaidProviderId,

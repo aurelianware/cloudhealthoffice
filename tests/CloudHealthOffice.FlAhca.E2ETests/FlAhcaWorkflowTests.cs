@@ -458,8 +458,9 @@ public class FlAhcaWorkflowTests
             mpipEnabled = true
         };
 
-        var response = await _fixture.ReferenceDataClient.PutAsJsonAsync(
-            $"/api/compliance-config/{FlAhcaFixture.TenantId}", config, Json);
+        // Use the dev-seed endpoint (no admin auth required in Development/Test environments).
+        var response = await _fixture.ReferenceDataClient.PostAsJsonAsync(
+            $"/api/compliance-config/{FlAhcaFixture.TenantId}/dev-seed", config, Json);
 
         Assert.True(
             response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created,
