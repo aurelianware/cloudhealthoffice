@@ -2,6 +2,7 @@ using System.Text.Json;
 using Azure.Storage.Blobs;
 using Confluent.Kafka;
 using EncounterSubmissionService.Models;
+using EncounterSubmissionService.Models.Events;
 using EncounterSubmissionService.Services;
 
 namespace EncounterSubmissionService.Workers;
@@ -168,14 +169,13 @@ public class EncounterSubmissionWorker : BackgroundService
         {
             using var producer = new ProducerBuilder<string, string>(producerConfig).Build();
 
-            var eventPayload = JsonSerializer.Serialize(new
+            var eventPayload = JsonSerializer.Serialize(new EncounterDeadlineWarningEvent
             {
-                submissionId = submission.Id,
-                tenantId = submission.TenantId,
-                claimId = submission.ClaimId,
-                submissionDeadline = submission.SubmissionDeadline,
-                daysRemaining = (submission.SubmissionDeadline - DateTime.UtcNow).TotalDays,
-                timestamp = DateTime.UtcNow
+                SubmissionId = submission.Id,
+                ClaimId = submission.ClaimId,
+                TenantId = submission.TenantId,
+                Deadline = submission.SubmissionDeadline,
+                DaysRemaining = (submission.SubmissionDeadline - DateTime.UtcNow).TotalDays
             }, JsonOptions);
 
             await producer.ProduceAsync(topic, new Message<string, string>

@@ -21,15 +21,26 @@ public interface IEncounterSubmissionService
     Task<EncounterSubmission?> GetByIdAsync(string id, string tenantId);
 
     /// <summary>
-    /// Get pending submissions ordered by deadline ascending.
+    /// Get pending submissions ordered by deadline ascending, paginated.
     /// Excludes Accepted and permanently Rejected (RetryCount >= 3).
     /// </summary>
-    Task<IEnumerable<EncounterSubmission>> GetPendingSubmissionsAsync(string tenantId, int batchSize = 100);
+    Task<IEnumerable<EncounterSubmission>> GetPendingSubmissionsAsync(
+        string tenantId, int page = 1, int pageSize = 50);
 
     /// <summary>
-    /// Get encounters approaching their submission deadline (within N days).
+    /// Get encounters approaching their submission deadline (within N days) for a tenant.
+    /// </summary>
+    Task<IEnumerable<EncounterSubmission>> GetDeadlineWarningsAsync(string tenantId, int warningDays = 7);
+
+    /// <summary>
+    /// Get encounters approaching their submission deadline across all tenants.
     /// </summary>
     Task<IEnumerable<EncounterSubmission>> GetApproachingDeadlineAsync(int warningDays = 7);
+
+    /// <summary>
+    /// Get status counts for a tenant (pending, batched, submitted, accepted, warning, rejected).
+    /// </summary>
+    Task<EncounterStatusSummary> GetStatusSummaryAsync(string tenantId);
 
     /// <summary>
     /// Fetch claims from claims-service, transform via FMMIS pipeline,
@@ -48,6 +59,28 @@ public interface IEncounterSubmissionService
     /// Flag a submission with DeadlineWarning status.
     /// </summary>
     Task FlagDeadlineWarningAsync(EncounterSubmission submission);
+
+    /// <summary>
+    /// Manually retry a rejected submission: reset status to Pending
+    /// so it is included in the next batch cycle.
+    /// </summary>
+    Task<EncounterSubmission> RetrySubmissionAsync(string submissionId, string tenantId);
+}
+
+/// <summary>
+/// Dashboard summary of encounter submission counts by status.
+/// </summary>
+public class EncounterStatusSummary
+{
+    public string TenantId { get; set; } = string.Empty;
+    public int Pending { get; set; }
+    public int Batched { get; set; }
+    public int Submitted { get; set; }
+    public int Accepted { get; set; }
+    public int PartialAccept { get; set; }
+    public int Rejected { get; set; }
+    public int DeadlineWarning { get; set; }
+    public int Total { get; set; }
 }
 
 /// <summary>

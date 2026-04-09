@@ -73,10 +73,8 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
     // ── Method 2: GetPendingSubmissions ──────────────────────────────
 
     public async Task<IEnumerable<EncounterSubmission>> GetPendingSubmissionsAsync(
-        string tenantId, int batchSize = 100)
+        string tenantId, int page = 1, int pageSize = 50)
     {
-        // Return pending submissions ordered by deadline ascending.
-        // Exclude Accepted and permanently Rejected (RetryCount >= MaxRetryCount).
         var filter = Builders<EncounterSubmission>.Filter.And(
             Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
             Builders<EncounterSubmission>.Filter.In(s => s.Status, new[]
@@ -85,21 +83,22 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
                 EncounterSubmissionStatus.DeadlineWarning,
                 EncounterSubmissionStatus.Rejected
             }),
-            // Exclude permanently rejected (exhausted retries)
             Builders<EncounterSubmission>.Filter.Lt(s => s.RetryCount, MaxRetryCount)
         );
 
         var sort = Builders<EncounterSubmission>.Sort.Ascending(s => s.SubmissionDeadline);
+        var skip = (page - 1) * pageSize;
 
         var submissions = await _collection
             .Find(filter)
             .Sort(sort)
-            .Limit(batchSize)
+            .Skip(skip)
+            .Limit(pageSize)
             .ToListAsync();
 
         _logger.LogInformation(
-            "Found {Count} pending submissions for tenant {TenantId}",
-            submissions.Count, tenantId);
+            "Found {Count} pending submissions for tenant {TenantId} (page {Page})",
+            submissions.Count, tenantId, page);
 
         return submissions;
     }
@@ -292,6 +291,103 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
             "deadline {Deadline:yyyy-MM-dd}, {DaysLeft:F1} days remaining",
             submission.Id, submission.ClaimId, submission.SubmissionDeadline,
             (submission.SubmissionDeadline - DateTime.UtcNow).TotalDays);
+    }
+
+    // ── GetDeadlineWarnings (tenant-scoped) ─────────────────────────
+
+    public async Task<IEnumerable<EncounterSubmission>> GetDeadlineWarningsAsync(
+        string tenantId, int warningDays = 7)
+    {
+        var warningCutoff = DateTime.UtcNow.AddDays(warningDays);
+
+        var filter = Builders<EncounterSubmission>.Filter.And(
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
+            Builders<EncounterSubmission>.Filter.In(s => s.Status, new[]
+            {
+                EncounterSubmissionStatus.Pending,
+                EncounterSubmissionStatus.DeadlineWarning
+            }),
+            Builders<EncounterSubmission>.Filter.Lte(s => s.SubmissionDeadline, warningCutoff),
+            Builders<EncounterSubmission>.Filter.Gt(s => s.SubmissionDeadline, DateTime.UtcNow)
+        );
+
+        var sort = Builders<EncounterSubmission>.Sort.Ascending(s => s.SubmissionDeadline);
+
+        return await _collection.Find(filter).Sort(sort).ToListAsync();
+    }
+
+    // ── GetStatusSummary ─────────────────────────────────────────────
+
+    public async Task<EncounterStatusSummary> GetStatusSummaryAsync(string tenantId)
+    {
+        var tenantFilter = Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId);
+        var allForTenant = await _collection.Find(tenantFilter).ToListAsync();
+
+        var summary = new EncounterStatusSummary
+        {
+            TenantId = tenantId,
+            Pending = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Pending),
+            Batched = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Batched),
+            Submitted = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Submitted),
+            Accepted = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Accepted),
+            PartialAccept = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.PartialAccept),
+            Rejected = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Rejected),
+            DeadlineWarning = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.DeadlineWarning),
+            Total = allForTenant.Count
+        };
+
+        _logger.LogInformation(
+            "Status summary for tenant {TenantId}: {Pending} pending, {Batched} batched, " +
+            "{Accepted} accepted, {Warning} warning, {Rejected} rejected",
+            tenantId, summary.Pending, summary.Batched,
+            summary.Accepted, summary.DeadlineWarning, summary.Rejected);
+
+        return summary;
+    }
+
+    // ── RetrySubmission ──────────────────────────────────────────────
+
+    public async Task<EncounterSubmission> RetrySubmissionAsync(string submissionId, string tenantId)
+    {
+        var filter = Builders<EncounterSubmission>.Filter.And(
+            Builders<EncounterSubmission>.Filter.Eq(s => s.Id, submissionId),
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId)
+        );
+
+        var submission = await _collection.Find(filter).FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException($"Submission '{submissionId}' not found for tenant '{tenantId}'");
+
+        if (submission.Status != EncounterSubmissionStatus.Rejected)
+        {
+            throw new InvalidOperationException(
+                $"Only rejected submissions can be retried; current status is '{submission.Status}'");
+        }
+
+        if (submission.RetryCount >= MaxRetryCount)
+        {
+            throw new InvalidOperationException(
+                $"Submission '{submissionId}' has exhausted all {MaxRetryCount} retries");
+        }
+
+        var update = Builders<EncounterSubmission>.Update
+            .Set(s => s.Status, EncounterSubmissionStatus.Pending)
+            .Set(s => s.BatchId, null)
+            .Set(s => s.LastError, null)
+            .Set(s => s.UpdatedAt, DateTime.UtcNow);
+
+        await _collection.UpdateOneAsync(filter, update);
+
+        submission.Status = EncounterSubmissionStatus.Pending;
+        submission.BatchId = null;
+        submission.LastError = null;
+        submission.UpdatedAt = DateTime.UtcNow;
+
+        _logger.LogInformation(
+            "Submission {SubmissionId} (claim {ClaimId}) reset to Pending for retry " +
+            "(attempt {RetryCount}/{MaxRetries})",
+            submissionId, submission.ClaimId, submission.RetryCount + 1, MaxRetryCount);
+
+        return submission;
     }
 
     // ── Private Helpers ──────────────────────────────────────────────
