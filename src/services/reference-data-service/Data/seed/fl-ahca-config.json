@@ -1,0 +1,21 @@
+{
+  "id": "fl-ahca-default",
+  "tenantId": "SEED-FL-AHCA",
+  "stateCode": "FL",
+  "stateConfig": {
+    "promptPayElectronicDays": 35,
+    "promptPayPaperDays": 45,
+    "promptPayPenaltyRateAnnual": 0.10,
+    "claimAcknowledgmentDays": 0,
+    "priorAuthUrgentHours": 72,
+    "priorAuthStandardDays": 5,
+    "appealStandardDays": 30,
+    "appealExpeditedHours": 72,
+    "encounterSubmissionDays": 60
+  },
+  "fmmisSubmitterId": "",
+  "fmmisInterchangeSenderId": "",
+  "mpipEnabled": false,
+  "createdAt": "2026-04-09T00:00:00Z",
+  "updatedAt": "2026-04-09T00:00:00Z"
+}
