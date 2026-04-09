@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 580" font-family="'Courier New', monospace">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0e17"/>
+      <stop offset="50%" style="stop-color:#0d1321"/>
+      <stop offset="100%" style="stop-color:#0a0e17"/>
+    </linearGradient>
+    <linearGradient id="bCyan" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00f0ff;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#00f0ff;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="bAmber" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff9f1c;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#ff9f1c;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="bGreen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ff88;stop-opacity:0.12"/>
+      <stop offset="100%" style="stop-color:#00ff88;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="bPurple" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="bSlate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#64748b;stop-opacity:0.18"/>
+      <stop offset="100%" style="stop-color:#64748b;stop-opacity:0.04"/>
+    </linearGradient>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="2.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="mCyan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#00f0ff" opacity="0.85"/>
+    </marker>
+    <marker id="mAmber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#ff9f1c" opacity="0.85"/>
+    </marker>
+    <marker id="mGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#00ff88" opacity="0.85"/>
+    </marker>
+    <marker id="mPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#a855f7" opacity="0.85"/>
+    </marker>
+    <marker id="mSlate" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#94a3b8" opacity="0.85"/>
+    </marker>
+    <pattern id="grid2" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a2744" stroke-width="0.4"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="580" fill="url(#bg2)"/>
+  <rect width="1100" height="580" fill="url(#grid2)" opacity="0.35"/>
+
+  <!-- Title bar -->
+  <rect x="0" y="0" width="1100" height="48" fill="#0b1120" opacity="0.95"/>
+  <line x1="0" y1="48" x2="1100" y2="48" stroke="#00f0ff" stroke-width="0.8" opacity="0.35"/>
+  <text x="18" y="31" fill="#00f0ff" font-size="13" font-weight="bold" filter="url(#glow2)" letter-spacing="3">▸ CLOUD HEALTH OFFICE</text>
+  <text x="300" y="31" fill="#4a6a8a" font-size="11" letter-spacing="2">TERMINOLOGY CROSSWALK — CONSUMER INTEGRATION</text>
+  <text x="920" y="31" fill="#2a4a6a" font-size="10" letter-spacing="1">CMS-0057-F · Da Vinci</text>
+  <circle cx="1070" cy="24" r="4" fill="#00ff88" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- ═══════ LEFT: EHR SOURCE ═══════ -->
+
+  <rect x="30" y="190" width="150" height="180" rx="3" fill="url(#bSlate)" stroke="#64748b" stroke-width="1.2"/>
+  <text x="105" y="215" fill="#94a3b8" font-size="11" text-anchor="middle" font-weight="bold">EHR SYSTEM</text>
+  <line x1="50" y1="224" x2="160" y2="224" stroke="#64748b" stroke-width="0.4" opacity="0.3"/>
+  <text x="105" y="245" fill="#7a8a9a" font-size="8" text-anchor="middle">Epic / Cerner / MEDITECH</text>
+  <text x="105" y="265" fill="#7a8a9a" font-size="8" text-anchor="middle">SNOMED CT codes</text>
+  <text x="105" y="280" fill="#7a8a9a" font-size="8" text-anchor="middle">FHIR R4 resources</text>
+  <text x="105" y="300" fill="#475569" font-size="7" text-anchor="middle">─────────────────</text>
+  <text x="105" y="316" fill="#475569" font-size="7" text-anchor="middle">Clinical vocabulary</text>
+  <text x="105" y="332" fill="#475569" font-size="7" text-anchor="middle">encounters, dx, px</text>
+  <text x="105" y="355" fill="#64748b" font-size="8" text-anchor="middle" font-weight="bold">SNOMED CT</text>
+
+  <!-- ═══════ MIDDLE: 3 Da Vinci CONSUMERS ═══════ -->
+
+  <!-- CRD Server -->
+  <rect x="280" y="75" width="230" height="100" rx="3" fill="url(#bCyan)" stroke="#00f0ff" stroke-width="1.2"/>
+  <text x="395" y="98" fill="#00f0ff" font-size="11" text-anchor="middle" font-weight="bold" filter="url(#glow2)">CRD SERVER</text>
+  <text x="395" y="115" fill="#7ab8d4" font-size="9" text-anchor="middle">Coverage Requirements Discovery</text>
+  <line x1="300" y1="123" x2="490" y2="123" stroke="#00f0ff" stroke-width="0.4" opacity="0.3"/>
+  <text x="395" y="140" fill="#4a6a8a" font-size="8" text-anchor="middle">Receives SNOMED CT from EHR hooks</text>
+  <text x="395" y="155" fill="#4a6a8a" font-size="8" text-anchor="middle">Translates → CPT/ICD for benefit check</text>
+  <text x="395" y="168" fill="#4a6a8a" font-size="7" text-anchor="middle">Determines if PA is required</text>
+
+  <!-- PAS Server -->
+  <rect x="280" y="230" width="230" height="100" rx="3" fill="url(#bCyan)" stroke="#00f0ff" stroke-width="1.2"/>
+  <text x="395" y="253" fill="#00f0ff" font-size="11" text-anchor="middle" font-weight="bold" filter="url(#glow2)">PAS SERVER</text>
+  <text x="395" y="270" fill="#7ab8d4" font-size="9" text-anchor="middle">Prior Authorization Support</text>
+  <line x1="300" y1="278" x2="490" y2="278" stroke="#00f0ff" stroke-width="0.4" opacity="0.3"/>
+  <text x="395" y="295" fill="#4a6a8a" font-size="8" text-anchor="middle">X12 278 ↔ FHIR normalization</text>
+  <text x="395" y="310" fill="#4a6a8a" font-size="8" text-anchor="middle">$batch-translate (up to 500 codes)</text>
+  <text x="395" y="323" fill="#4a6a8a" font-size="7" text-anchor="middle">Real-time PA decisions</text>
+
+  <!-- DTR Engine -->
+  <rect x="280" y="385" width="230" height="100" rx="3" fill="url(#bCyan)" stroke="#00f0ff" stroke-width="1.2"/>
+  <text x="395" y="408" fill="#00f0ff" font-size="11" text-anchor="middle" font-weight="bold" filter="url(#glow2)">DTR ENGINE</text>
+  <text x="395" y="425" fill="#7ab8d4" font-size="9" text-anchor="middle">Documentation Templates &amp; Rules</text>
+  <line x1="300" y1="433" x2="490" y2="433" stroke="#00f0ff" stroke-width="0.4" opacity="0.3"/>
+  <text x="395" y="450" fill="#4a6a8a" font-size="8" text-anchor="middle">Questionnaire code resolution</text>
+  <text x="395" y="465" fill="#4a6a8a" font-size="8" text-anchor="middle">Auto-populate answers in correct system</text>
+  <text x="395" y="478" fill="#4a6a8a" font-size="7" text-anchor="middle">Ensures machine-readable responses</text>
+
+  <!-- Arrows from EHR to consumers -->
+  <line x1="180" y1="240" x2="278" y2="125" stroke="#64748b" stroke-width="1" marker-end="url(#mCyan)" opacity="0.5"/>
+  <line x1="180" y1="280" x2="278" y2="280" stroke="#64748b" stroke-width="1" marker-end="url(#mCyan)" opacity="0.5"/>
+  <line x1="180" y1="320" x2="278" y2="435" stroke="#64748b" stroke-width="1" marker-end="url(#mCyan)" opacity="0.5"/>
+
+  <text x="218" y="168" fill="#64748b" font-size="7" opacity="0.6" transform="rotate(-35 218 168)">SNOMED CT</text>
+  <text x="230" y="270" fill="#64748b" font-size="7" opacity="0.6">SNOMED CT</text>
+  <text x="218" y="408" fill="#64748b" font-size="7" opacity="0.6" transform="rotate(35 218 408)">SNOMED CT</text>
+
+  <!-- ═══════ CENTER: CROSSWALK SERVICE ═══════ -->
+
+  <rect x="580" y="175" width="200" height="210" rx="4" fill="url(#bPurple)" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="680" y="200" fill="#a855f7" font-size="12" text-anchor="middle" font-weight="bold" filter="url(#glow2)">TERMINOLOGY</text>
+  <text x="680" y="218" fill="#a855f7" font-size="12" text-anchor="middle" font-weight="bold" filter="url(#glow2)">CROSSWALK</text>
+  <line x1="600" y1="228" x2="760" y2="228" stroke="#a855f7" stroke-width="0.4" opacity="0.3"/>
+  <text x="680" y="248" fill="#c084fc" font-size="9" text-anchor="middle">ConceptMap/$translate</text>
+  <text x="680" y="268" fill="#7c5aaa" font-size="8" text-anchor="middle">───────────────────</text>
+  <text x="680" y="286" fill="#7c5aaa" font-size="8" text-anchor="middle">NLM/UMLS · AMA CPT</text>
+  <text x="680" y="302" fill="#7c5aaa" font-size="8" text-anchor="middle">Plan overrides</text>
+  <text x="680" y="318" fill="#7c5aaa" font-size="8" text-anchor="middle">───────────────────</text>
+  <text x="680" y="336" fill="#7c5aaa" font-size="8" text-anchor="middle">Context engine</text>
+  <text x="680" y="352" fill="#7c5aaa" font-size="8" text-anchor="middle">Scoring &amp; ranking</text>
+  <text x="680" y="372" fill="#5a4a7a" font-size="7" text-anchor="middle">~128K total map entries</text>
+
+  <!-- Arrows from consumers to crosswalk -->
+  <line x1="510" y1="125" x2="578" y2="230" stroke="#00f0ff" stroke-width="1" marker-end="url(#mPurple)" opacity="0.6"/>
+  <line x1="510" y1="280" x2="578" y2="280" stroke="#00f0ff" stroke-width="1" marker-end="url(#mPurple)" opacity="0.6"/>
+  <line x1="510" y1="435" x2="578" y2="330" stroke="#00f0ff" stroke-width="1" marker-end="url(#mPurple)" opacity="0.6"/>
+
+  <text x="545" y="170" fill="#00f0ff" font-size="7" opacity="0.5" transform="rotate(-35 545 170)">$translate</text>
+  <text x="545" y="272" fill="#00f0ff" font-size="7" opacity="0.5">$batch-translate</text>
+  <text x="545" y="395" fill="#00f0ff" font-size="7" opacity="0.5" transform="rotate(30 545 395)">$translate</text>
+
+  <!-- ═══════ RIGHT: PAYER OUTPUT ═══════ -->
+
+  <rect x="870" y="190" width="190" height="180" rx="3" fill="url(#bGreen)" stroke="#00ff88" stroke-width="1.2"/>
+  <text x="965" y="215" fill="#00ff88" font-size="11" text-anchor="middle" font-weight="bold" filter="url(#glow2)">PAYER SYSTEM</text>
+  <line x1="890" y1="224" x2="1040" y2="224" stroke="#00ff88" stroke-width="0.4" opacity="0.3"/>
+  <text x="965" y="245" fill="#6ad4a0" font-size="8.5" text-anchor="middle">QNXT / Facets / HealthEdge</text>
+  <text x="965" y="265" fill="#6ad4a0" font-size="8.5" text-anchor="middle">CPT + ICD-10-CM codes</text>
+  <text x="965" y="285" fill="#4a8a6a" font-size="8" text-anchor="middle">─────────────────────</text>
+  <text x="965" y="305" fill="#4a8a6a" font-size="8" text-anchor="middle">Benefit configuration</text>
+  <text x="965" y="320" fill="#4a8a6a" font-size="8" text-anchor="middle">Claims adjudication</text>
+  <text x="965" y="335" fill="#4a8a6a" font-size="8" text-anchor="middle">PA rule evaluation</text>
+  <text x="965" y="355" fill="#00ff88" font-size="8" text-anchor="middle" font-weight="bold">CPT · ICD-10-CM</text>
+
+  <!-- Arrow from crosswalk to payer -->
+  <line x1="780" y1="280" x2="868" y2="280" stroke="#00ff88" stroke-width="1.2" marker-end="url(#mGreen)" opacity="0.7"/>
+  <text x="824" y="272" fill="#00ff88" font-size="7" text-anchor="middle" opacity="0.6">translated</text>
+
+  <!-- ═══════ BOTTOM: FLOW SUMMARY ═══════ -->
+
+  <rect x="180" y="510" width="700" height="30" rx="3" fill="#0b1120" stroke="#00f0ff" stroke-width="0.5" opacity="0.6"/>
+  <text x="530" y="530" fill="#7ab8d4" font-size="9" text-anchor="middle">EHR (SNOMED CT) → Da Vinci CRD / PAS / DTR → Crosswalk $translate → Payer System (CPT / ICD-10-CM)</text>
+
+  <!-- Footer -->
+  <rect x="0" y="548" width="1100" height="32" fill="#0b1120" opacity="0.9"/>
+  <line x1="0" y1="548" x2="1100" y2="548" stroke="#1a2744" stroke-width="0.6"/>
+  <text x="20" y="568" fill="#2a4a6a" font-size="8" letter-spacing="1">AURELIANWARE, INC. · CLOUD HEALTH OFFICE · CMS-0057-F TERMINOLOGY INTEGRATION</text>
+  <text x="1080" y="568" fill="#2a4a6a" font-size="8" text-anchor="end" letter-spacing="1">v1.0 · APR 2026</text>
+</svg>
