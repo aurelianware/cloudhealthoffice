@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
+using ClaimsService.EDI.Florida;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 
@@ -42,6 +43,10 @@ else
 
 // 277CA acknowledgment generator
 builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();
+
+// FL FMMIS encounter submission pipeline
+builder.Services.AddScoped<FmmisClaimTransformer>();
+builder.Services.AddScoped<FmmisFileBuilder>();
 
 var app = builder.Build();
 

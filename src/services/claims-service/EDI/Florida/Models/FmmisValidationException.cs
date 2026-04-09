@@ -10,17 +10,19 @@ public class FmmisValidationException : Exception
     /// <summary>
     /// Individual validation errors describing each Companion Guide violation.
     /// </summary>
-    public IReadOnlyList<string> Errors { get; }
+    public IReadOnlyList<string> ValidationErrors { get; }
 
-    public FmmisValidationException(IEnumerable<string> errors)
-        : base($"FMMIS validation failed with {errors.Count()} error(s): {string.Join("; ", errors)}")
+    public FmmisValidationException(IEnumerable<string> validationErrors)
+        : base($"FMMIS validation failed with {validationErrors.Count()} error(s): " +
+               string.Join("; ", validationErrors))
     {
-        Errors = errors.ToList().AsReadOnly();
+        ValidationErrors = validationErrors.ToList().AsReadOnly();
     }
 
-    public FmmisValidationException(IEnumerable<string> errors, Exception innerException)
-        : base($"FMMIS validation failed with {errors.Count()} error(s): {string.Join("; ", errors)}", innerException)
+    public FmmisValidationException(IEnumerable<string> validationErrors, Exception innerException)
+        : base($"FMMIS validation failed with {validationErrors.Count()} error(s): " +
+               string.Join("; ", validationErrors), innerException)
     {
-        Errors = errors.ToList().AsReadOnly();
+        ValidationErrors = validationErrors.ToList().AsReadOnly();
     }
 }

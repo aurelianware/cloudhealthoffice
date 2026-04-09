@@ -55,45 +55,112 @@ public class FmmisTransaction
 }
 
 /// <summary>
-/// Aggregated result of an FMMIS batch submission, returned by
-/// <see cref="FmmisFileBuilder"/> after packaging one or more
-/// <see cref="FmmisTransaction"/> instances into a submission file.
+/// Physical file produced by <see cref="FmmisFileBuilder"/>. Contains the
+/// assembled EDI content (ISA/GS/.../GE/IEA) as a byte array ready for
+/// SFTP transmission to FMMIS.
 /// </summary>
-public class FmmisSubmissionResult
+public class FmmisSubmissionFile
 {
     /// <summary>
     /// FMMIS file name following the required convention:
-    /// FMMIS.{SubmitterId}.{yyyyMMdd_HHmmss}.dat
+    /// <c>FMMIS.{SubmitterId}.{yyyyMMdd_HHmmss}.dat</c>
     /// </summary>
     public string FileName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Total number of transactions included in the file.
+    /// UTF-8 encoded EDI content ready for transmission.
+    /// </summary>
+    public byte[] Content { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// Total number of ST/SE transaction sets included in this file.
     /// </summary>
     public int TransactionCount { get; set; }
 
     /// <summary>
-    /// Total number of claim lines across all transactions.
+    /// Claim numbers (CLM01) for every transaction in this file.
     /// </summary>
-    public int TotalClaimLines { get; set; }
+    public List<string> ClaimIds { get; set; } = new();
+}
+
+/// <summary>
+/// Tracking record for an FMMIS submission. Persisted after a file is
+/// transmitted so the 999 response can be correlated back to the original batch.
+/// </summary>
+public class FmmisSubmissionResult
+{
+    /// <summary>
+    /// Unique submission identifier.
+    /// </summary>
+    public Guid SubmissionId { get; set; } = Guid.NewGuid();
 
     /// <summary>
-    /// Interchange control number (ISA13) for the batch envelope.
+    /// Tenant that submitted the file.
     /// </summary>
-    public string InterchangeControlNumber { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Submitter ID (ISA06) used in the batch envelope.
+    /// FMMIS file name (<c>FMMIS.{SubmitterId}.{yyyyMMdd_HHmmss}.dat</c>).
     /// </summary>
-    public string SubmitterId { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
 
     /// <summary>
-    /// UTC timestamp when the file was generated.
+    /// UTC timestamp when the file was submitted to FMMIS.
     /// </summary>
-    public DateTime GeneratedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Individual transactions included in this submission.
+    /// Number of ST/SE transaction sets in the submitted file.
     /// </summary>
-    public List<FmmisTransaction> Transactions { get; set; } = new();
+    public int TransactionCount { get; set; }
+
+    /// <summary>
+    /// Claim numbers (CLM01) for every transaction in the submission.
+    /// </summary>
+    public List<string> ClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Current status of this submission in the FMMIS acknowledgment lifecycle.
+    /// </summary>
+    public FmmisSubmissionStatus Status { get; set; } = FmmisSubmissionStatus.Pending;
+
+    /// <summary>
+    /// Acknowledgment code returned in the FMMIS 999 response
+    /// (e.g., "A" accepted, "R" rejected). Null until a 999 is received.
+    /// </summary>
+    public string? AcknowledgmentCode { get; set; }
+
+    /// <summary>
+    /// Error messages from the FMMIS 999 response or from transmission failures.
+    /// Empty if the submission was accepted.
+    /// </summary>
+    public List<string> Errors { get; set; } = new();
+}
+
+/// <summary>
+/// Lifecycle status of an FMMIS encounter submission, tracked from
+/// initial file generation through 999 acknowledgment processing.
+/// </summary>
+public enum FmmisSubmissionStatus
+{
+    /// <summary>
+    /// File generated and transmitted; awaiting FMMIS acknowledgment.
+    /// </summary>
+    Pending,
+
+    /// <summary>
+    /// FMMIS 999 received with status A — all transactions accepted.
+    /// </summary>
+    Accepted,
+
+    /// <summary>
+    /// FMMIS 999 received with status E — some transactions accepted,
+    /// others rejected. Check <see cref="FmmisSubmissionResult.Errors"/>.
+    /// </summary>
+    PartialAccept,
+
+    /// <summary>
+    /// FMMIS 999 received with status R — entire file rejected.
+    /// </summary>
+    Rejected
 }

@@ -93,10 +93,10 @@ public class FmmisClaimTransformer
     public async Task<FmmisTransaction> TransformAsync(Claim claim, string tenantId)
     {
         // ── Step 1: Validate claim compliance ────────────────────────
-        var errors = FmmisCompanionGuide.ValidateFmmisCompliance(claim);
-        if (errors.Count > 0)
+        var validationErrors = FmmisCompanionGuide.ValidateFmmisCompliance(claim);
+        if (validationErrors.Count > 0)
         {
-            throw new FmmisValidationException(errors);
+            throw new FmmisValidationException(validationErrors);
         }
 
         // ── Step 2: Fetch provider FL Medicaid ID ────────────────────
