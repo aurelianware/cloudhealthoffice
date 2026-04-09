@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -42,14 +41,12 @@ if (!string.IsNullOrEmpty(cosmosEndpoint) && !string.IsNullOrEmpty(cosmosKey))
 {
     builder.Services.AddSingleton(sp =>
     {
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
         var options = new CosmosClientOptions
         {
-            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
+            SerializerOptions = new CosmosSerializationOptions
+            {
+                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
+            }
         };
         return new CosmosClient(cosmosEndpoint, cosmosKey, options);
     });

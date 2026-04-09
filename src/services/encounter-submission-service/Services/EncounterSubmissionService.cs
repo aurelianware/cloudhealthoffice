@@ -98,7 +98,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
         _logger.LogInformation(
             "Found {Count} pending submissions for tenant {TenantId} (page {Page})",
-            submissions.Count, tenantId, page);
+            submissions.Count, SanitizeForLog(tenantId), page);
 
         return submissions;
     }
@@ -144,47 +144,56 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
             "Building FMMIS batch {BatchId} with {Count} encounters for tenant {TenantId}",
             batchId, submissionList.Count, tenantId);
 
-        // Call claims-service to fetch each claim
+        // Call claims-service to fetch each claim individually
         var claimsClient = _httpClientFactory.CreateClient("ClaimsService");
         var claimIds = submissionList.Select(s => s.ClaimId).ToList();
 
-        // POST to claims-service FMMIS batch endpoint with claim IDs
-        var request = new HttpRequestMessage(HttpMethod.Post, "/api/claims/fmmis/batch")
+        var claimDataList = new List<JsonElement>();
+        foreach (var claimId in claimIds)
         {
-            Content = JsonContent.Create(new
+            var request = new HttpRequestMessage(HttpMethod.Get, $"/api/claims/{claimId}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+
+            var response = await claimsClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
             {
-                claimIds,
-                tenantId,
-                batchId
-            }, options: JsonOptions)
-        };
-        request.Headers.Add("X-Tenant-ID", tenantId);
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning(
+                    "Claims service GET /api/claims/{ClaimId} failed: {StatusCode} — {Error}",
+                    claimId, response.StatusCode, errorBody);
+                continue;
+            }
 
-        var response = await claimsClient.SendAsync(request);
+            var claimData = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+            claimDataList.Add(claimData);
+        }
 
-        if (!response.IsSuccessStatusCode)
+        if (claimDataList.Count == 0)
         {
-            var errorBody = await response.Content.ReadAsStringAsync();
-            _logger.LogError(
-                "Claims service FMMIS batch request failed: {StatusCode} — {Error}",
-                response.StatusCode, errorBody);
-
             throw new InvalidOperationException(
-                $"Claims service returned {response.StatusCode} for FMMIS batch: {errorBody}");
+                "Claims service returned no valid claims for FMMIS batch");
         }
 
-        var fileResult = await response.Content.ReadFromJsonAsync<FmmisSubmissionFileDto>(JsonOptions);
+        // Build the batch file locally from individual claim data
+        var batchContent = JsonSerializer.SerializeToUtf8Bytes(claimDataList, JsonOptions);
+        var fileName = $"FMMIS_{tenantId}_{batchId}_{DateTime.UtcNow:yyyyMMddHHmmss}.json";
 
-        if (fileResult is null)
+        var fileResult = new FmmisSubmissionFileDto
         {
-            throw new InvalidOperationException("Claims service returned null FMMIS submission file");
-        }
-
-        fileResult.BatchId = batchId;
+            BatchId = batchId,
+            FileName = fileName,
+            Content = batchContent,
+            TransactionCount = claimDataList.Count,
+            ClaimIds = claimIds
+        };
 
         // Update all submissions to Batched status
         var submissionIds = submissionList.Select(s => s.Id).ToList();
-        var updateFilter = Builders<EncounterSubmission>.Filter.In(s => s.Id, submissionIds);
+        var updateFilter = Builders<EncounterSubmission>.Filter.And(
+            Builders<EncounterSubmission>.Filter.In(s => s.Id, submissionIds),
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId)
+        );
         var updateDef = Builders<EncounterSubmission>.Update
             .Set(s => s.Status, EncounterSubmissionStatus.Batched)
             .Set(s => s.BatchId, batchId)
@@ -202,20 +211,23 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
     // ── Method 4: ProcessAcknowledgment ──────────────────────────────
 
-    public async Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentContent)
+    public async Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentContent, string tenantId)
     {
-        _logger.LogInformation("Processing 999 acknowledgment for batch {BatchId}", batchId);
+        _logger.LogInformation("Processing 999 acknowledgment for batch {BatchId}", SanitizeForLog(batchId));
 
         // Parse 999 acknowledgment code from content
         // A = Accepted, E = Accepted with errors (partial), R = Rejected
         var (ackCode, errors) = Parse999Acknowledgment(acknowledgmentContent);
 
-        var batchFilter = Builders<EncounterSubmission>.Filter.Eq(s => s.BatchId, batchId);
+        var batchFilter = Builders<EncounterSubmission>.Filter.And(
+            Builders<EncounterSubmission>.Filter.Eq(s => s.BatchId, batchId),
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId)
+        );
         var submissions = await _collection.Find(batchFilter).ToListAsync();
 
         if (submissions.Count == 0)
         {
-            _logger.LogWarning("No submissions found for batch {BatchId}", batchId);
+            _logger.LogWarning("No submissions found for batch {BatchId}", SanitizeForLog(batchId));
             return;
         }
 
@@ -253,7 +265,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
             _logger.LogWarning(
                 "Batch {BatchId} REJECTED: {ErrorCount} errors, {Count} submissions affected — {Errors}",
-                batchId, errors.Count, submissions.Count, errorMessage);
+                SanitizeForLog(batchId), errors.Count, submissions.Count, SanitizeForLog(errorMessage));
         }
         else
         {
@@ -267,7 +279,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
             _logger.LogInformation(
                 "Batch {BatchId} acknowledged as {Status}: {Count} submissions updated",
-                batchId, newStatus, submissions.Count);
+                SanitizeForLog(batchId), newStatus, submissions.Count);
         }
     }
 
@@ -339,7 +351,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         _logger.LogInformation(
             "Status summary for tenant {TenantId}: {Pending} pending, {Batched} batched, " +
             "{Accepted} accepted, {Warning} warning, {Rejected} rejected",
-            tenantId, summary.Pending, summary.Batched,
+            SanitizeForLog(tenantId), summary.Pending, summary.Batched,
             summary.Accepted, summary.DeadlineWarning, summary.Rejected);
 
         return summary;
@@ -385,12 +397,18 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         _logger.LogInformation(
             "Submission {SubmissionId} (claim {ClaimId}) reset to Pending for retry " +
             "(attempt {RetryCount}/{MaxRetries})",
-            submissionId, submission.ClaimId, submission.RetryCount + 1, MaxRetryCount);
+            SanitizeForLog(submissionId), submission.ClaimId, submission.RetryCount + 1, MaxRetryCount);
 
         return submission;
     }
 
     // ── Private Helpers ──────────────────────────────────────────────
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
 
     /// <summary>
     /// Fetch the encounter submission window (days) from the tenant's compliance config.

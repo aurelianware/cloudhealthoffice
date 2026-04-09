@@ -325,7 +325,9 @@ public class FmmisClaimTransformer
         }
 
         // ── SE ───────────────────────────────────────────────────────
-        sb.Append(Seg(ref segCount, true, $"SE*{segCount}*0001~"));
+        // SE01 = total segments from ST to SE inclusive; segCount already
+        // includes ST through the last service-line segment, so +1 for SE itself.
+        sb.Append(Seg(ref segCount, false, $"SE*{segCount + 1}*0001~"));
 
         // ── GE / IEA ─────────────────────────────────────────────────
         sb.Append(Seg(ref segCount, false, "GE*1*1~"));

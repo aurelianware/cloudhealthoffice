@@ -5,11 +5,10 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
-  CosmosDb__ContainerName: "EncounterSubmissions"
+  MongoDb__DatabaseName: "cloudhealthoffice"
   Kafka__AdjudicationCompletedTopic: "adjudication-completed"
   Kafka__DeadlineWarningTopic: "encounter-deadline-warning"
-  Worker__IntervalMinutes: "15"
+  Worker__IntervalHours: "4"
   Worker__DeadlineWarningDays: "7"
   Services__ClaimsService: "http://claims-service.cloudhealthoffice"
   Services__ReferenceDataService: "http://reference-data-service.cloudhealthoffice"
@@ -47,26 +46,6 @@ spec:
             configMapKeyRef:
               name: encounter-submission-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__AccountEndpoint
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: endpoint
-        - name: CosmosDb__AccountKey
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: key
-        - name: CosmosDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: encounter-submission-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__ContainerName
-          valueFrom:
-            configMapKeyRef:
-              name: encounter-submission-service-config
-              key: CosmosDb__ContainerName
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
@@ -89,11 +68,11 @@ spec:
             configMapKeyRef:
               name: encounter-submission-service-config
               key: Kafka__DeadlineWarningTopic
-        - name: Worker__IntervalMinutes
+        - name: Worker__IntervalHours
           valueFrom:
             configMapKeyRef:
               name: encounter-submission-service-config
-              key: Worker__IntervalMinutes
+              key: Worker__IntervalHours
         - name: Worker__DeadlineWarningDays
           valueFrom:
             configMapKeyRef:

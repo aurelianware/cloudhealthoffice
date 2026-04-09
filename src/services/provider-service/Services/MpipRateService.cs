@@ -99,7 +99,7 @@ public class MpipRateService : IMpipRateService
         {
             _logger.LogDebug(
                 "MPIP: member age {Age} >= {MaxAge}, returning standard multiplier for provider {ProviderId}",
-                memberAgeAtServiceDate, MaxMemberAge, providerId);
+                memberAgeAtServiceDate, MaxMemberAge, Sanitize(providerId));
             return StandardMultiplier;
         }
 
@@ -113,7 +113,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogDebug(
                 "MPIP: no qualification record for provider {ProviderId} in period {Period}, " +
                 "returning standard multiplier",
-                providerId, period);
+                Sanitize(providerId), period);
             return StandardMultiplier;
         }
 
@@ -123,7 +123,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "MPIP: specialist provider {ProviderId} auto-qualifies for {Multiplier}x " +
                 "(member age {Age}, period {Period})",
-                providerId, EnhancedMultiplier, memberAgeAtServiceDate, period);
+                Sanitize(providerId), EnhancedMultiplier, memberAgeAtServiceDate, period);
             return EnhancedMultiplier;
         }
 
@@ -134,7 +134,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "MPIP: {ProviderType} provider {ProviderId} qualified via {Method}, " +
                 "returning {Multiplier}x (member age {Age}, period {Period})",
-                qualification.ProviderType, providerId, qualification.QualificationMethod,
+                qualification.ProviderType, Sanitize(providerId), Sanitize(qualification.QualificationMethod),
                 EnhancedMultiplier, memberAgeAtServiceDate, period);
             return EnhancedMultiplier;
         }
@@ -142,7 +142,7 @@ public class MpipRateService : IMpipRateService
         _logger.LogDebug(
             "MPIP: provider {ProviderId} ({ProviderType}) not qualified for enhanced rate " +
             "in period {Period}",
-            providerId, qualification.ProviderType, period);
+            Sanitize(providerId), qualification.ProviderType, period);
         return StandardMultiplier;
     }
 
@@ -174,8 +174,8 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "Updated MPIP qualification for provider {ProviderId} (period {Period}): " +
                 "qualified={Qualified}, method={Method}, multiplier={Multiplier}",
-                qualification.ProviderId, qualification.QualificationPeriod,
-                qualification.IsQualified, qualification.QualificationMethod,
+                Sanitize(qualification.ProviderId), Sanitize(qualification.QualificationPeriod),
+                qualification.IsQualified, Sanitize(qualification.QualificationMethod),
                 qualification.EnhancedRateMultiplier);
         }
         else
@@ -186,9 +186,9 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "Created MPIP qualification for provider {ProviderId} (period {Period}): " +
                 "type={Type}, qualified={Qualified}, method={Method}",
-                qualification.ProviderId, qualification.QualificationPeriod,
+                Sanitize(qualification.ProviderId), Sanitize(qualification.QualificationPeriod),
                 qualification.ProviderType, qualification.IsQualified,
-                qualification.QualificationMethod);
+                Sanitize(qualification.QualificationMethod));
         }
     }
 
@@ -207,9 +207,15 @@ public class MpipRateService : IMpipRateService
 
         _logger.LogInformation(
             "Found {Count} qualified MPIP providers for tenant {TenantId}, period {Period}",
-            results.Count, tenantId, period);
+            results.Count, Sanitize(tenantId), Sanitize(period));
 
         return results;
+    }
+
+    private static string Sanitize(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────

@@ -103,7 +103,7 @@ public class EncounterSubmissionController : ControllerBase
             "Processing 999 acknowledgment for batch {BatchId}, tenant {TenantId}",
             SanitizeForLog(request.BatchId), SanitizeForLog(tenantId));
 
-        await _service.ProcessAcknowledgmentAsync(request.BatchId, request.Content);
+        await _service.ProcessAcknowledgmentAsync(request.BatchId, request.Content, tenantId);
         return Ok(new { message = $"Acknowledgment processed for batch {request.BatchId}" });
     }
 

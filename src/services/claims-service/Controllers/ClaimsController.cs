@@ -246,7 +246,10 @@ public class ClaimsController : ControllerBase
         if (claim.LineOfBusiness == LineOfBusiness.Medicaid)
         {
             var memberAge = CalculateMemberAge(claim);
-            await _mpipEnhancer.ApplyMpipEnhancementAsync(claim, memberAge);
+            if (memberAge.HasValue)
+            {
+                await _mpipEnhancer.ApplyMpipEnhancementAsync(claim, memberAge.Value);
+            }
         }
 
         // Update status based on adjudication
@@ -550,15 +553,14 @@ public class ClaimsController : ControllerBase
 
     /// <summary>
     /// Estimate member age at the service date from claim data.
-    /// Falls back to 0 (which won't trigger MPIP age gate) if DOB is unavailable.
+    /// Returns null when DOB is unavailable so callers can skip MPIP.
     /// </summary>
-    private static int CalculateMemberAge(Claim claim)
+    private static int? CalculateMemberAge(Claim claim)
     {
-        // Member DOB is not directly on the Claim model; in a full implementation
-        // it would be fetched from the member-service. For now, use a placeholder
-        // that callers can override via the adjudication workflow.
-        // The MPIP enhancer will call provider-service with this age.
-        return 0; // Default: age unknown — MPIP will not apply unless overridden
+        // Member DOB is not on the Claim model; in a full implementation
+        // it would be fetched from the member-service. Return null so
+        // callers skip MPIP when age is unknown.
+        return null;
     }
 
     private static string SanitizeForLog(string? value)

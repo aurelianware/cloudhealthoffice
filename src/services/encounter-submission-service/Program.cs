@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using EncounterSubmissionService.KafkaConsumers;
 using EncounterSubmissionService.Services;
@@ -26,48 +25,20 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Database Configuration (Cosmos DB or MongoDB)
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+// Database Configuration (MongoDB required — EncounterSubmissionServiceImpl depends on IMongoDatabase)
+var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"]
+    ?? throw new InvalidOperationException(
+        "Encounter Submission Service requires MongoDB. Configure MongoDb:ConnectionString.");
 
-if (!string.IsNullOrEmpty(mongoConnectionString))
+builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(sp =>
+    new MongoDB.Driver.MongoClient(mongoConnectionString));
+
+builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
 {
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(sp =>
-        new MongoDB.Driver.MongoClient(mongoConnectionString));
-
-    builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
-        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(databaseName);
-    });
-
-    Console.WriteLine("Using MongoDB database provider");
-}
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
-
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-        {
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-        }
-
-        var options = new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        };
-        return new CosmosClient(endpoint, key, options);
-    });
-
-    Console.WriteLine("Using Cosmos DB database provider");
-}
+    var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
+    var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
+    return client.GetDatabase(databaseName);
+});
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
@@ -104,13 +75,10 @@ if (!string.IsNullOrEmpty(kafkaBootstrap))
 // Background worker for deadline monitoring and batching (every 4 hours)
 builder.Services.AddHostedService<EncounterSubmissionWorker>();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // CORS (for development)

@@ -53,7 +53,7 @@ public interface IEncounterSubmissionService
     /// Process a 999 acknowledgment response for a batch.
     /// Updates submission statuses and populates error details on rejections.
     /// </summary>
-    Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentContent);
+    Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentContent, string tenantId);
 
     /// <summary>
     /// Flag a submission with DeadlineWarning status.

@@ -25,7 +25,7 @@ public class MpipController : ControllerBase
     }
 
     /// <summary>
-    /// List all MPIP qualifications for a tenant and period.
+    /// List qualified MPIP providers for a tenant and period.
     /// Defaults to the current FL fiscal year if period is not specified.
     /// </summary>
     [HttpGet("{tenantId}/providers")]
@@ -136,7 +136,7 @@ public class MpipController : ControllerBase
             {
                 var msg = $"Provider {qualification.ProviderId}: {ex.Message}";
                 errors.Add(msg);
-                _logger.LogWarning(ex, "MPIP bulk import error for provider {ProviderId}", qualification.ProviderId);
+                _logger.LogWarning(ex, "MPIP bulk import error for provider {ProviderId}", SanitizeForLog(qualification.ProviderId));
             }
         }
 
