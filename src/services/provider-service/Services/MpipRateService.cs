@@ -134,7 +134,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "MPIP: {ProviderType} provider {ProviderId} qualified via {Method}, " +
                 "returning {Multiplier}x (member age {Age}, period {Period})",
-                qualification.ProviderType, Sanitize(providerId), Sanitize(qualification.QualificationMethod),
+                qualification.ProviderType, Sanitize(providerId), qualification.QualificationMethod,
                 EnhancedMultiplier, memberAgeAtServiceDate, period);
             return EnhancedMultiplier;
         }
@@ -175,7 +175,7 @@ public class MpipRateService : IMpipRateService
                 "Updated MPIP qualification for provider {ProviderId} (period {Period}): " +
                 "qualified={Qualified}, method={Method}, multiplier={Multiplier}",
                 Sanitize(qualification.ProviderId), Sanitize(qualification.QualificationPeriod),
-                qualification.IsQualified, Sanitize(qualification.QualificationMethod),
+                qualification.IsQualified, qualification.QualificationMethod,
                 qualification.EnhancedRateMultiplier);
         }
         else
@@ -188,7 +188,7 @@ public class MpipRateService : IMpipRateService
                 "type={Type}, qualified={Qualified}, method={Method}",
                 Sanitize(qualification.ProviderId), Sanitize(qualification.QualificationPeriod),
                 qualification.ProviderType, qualification.IsQualified,
-                Sanitize(qualification.QualificationMethod));
+                qualification.QualificationMethod);
         }
     }
 
