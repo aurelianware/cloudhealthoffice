@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using ProviderService.Middleware;
 using ProviderService.Repositories;
+using ProviderService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
@@ -65,6 +66,9 @@ else
     // Repositories
     builder.Services.AddScoped<IProviderRepository, ProviderRepository>();
 }
+
+// MPIP rate service (FL SMMC 3.0 physician incentive program)
+builder.Services.AddScoped<IMpipRateService, MpipRateService>();
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();

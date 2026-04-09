@@ -402,6 +402,12 @@ public class ClaimLine
     public string? RevenueCode { get; set; }
 
     /// <summary>
+    /// MPIP rate multiplier applied to this line's allowed amount during adjudication.
+    /// 1.063 if FL SMMC 3.0 enhanced rate applies, null if MPIP was not evaluated.
+    /// </summary>
+    public decimal? MpipMultiplierApplied { get; set; }
+
+    /// <summary>
     /// Adjudication result for this line
     /// </summary>
     public LineAdjudicationResult? AdjudicationResult { get; set; }

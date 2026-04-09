@@ -165,6 +165,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.ProviderE
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.PriorAuthRuleEngine.Tests", "tests\CloudHealthOffice.PriorAuthRuleEngine.Tests\CloudHealthOffice.PriorAuthRuleEngine.Tests.csproj", "{A8E2D9F1-5B3C-4E7A-9D6F-1C2E3B4A5D6E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "encounter-submission-service", "src\services\encounter-submission-service\encounter-submission-service.csproj", "{F1A2B3C4-D5E6-4F7A-8B9C-1A2B3C4D5E6F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.ProviderService.Tests", "tests\CloudHealthOffice.ProviderService.Tests\CloudHealthOffice.ProviderService.Tests.csproj", "{2A3B4C5D-E6F7-4A8B-9C0D-1E2F3A4B5C6D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.FlAhca.E2ETests", "tests\CloudHealthOffice.FlAhca.E2ETests\CloudHealthOffice.FlAhca.E2ETests.csproj", "{3B4C5D6E-F7A8-4B9C-0D1E-2F3A4B5C6D7E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

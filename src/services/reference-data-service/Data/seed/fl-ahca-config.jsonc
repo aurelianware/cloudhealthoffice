@@ -1,0 +1,65 @@
+{
+  // ---------------------------------------------------------------
+  // Florida AHCA / SMMC 3.0 Compliance Configuration
+  // Seed document for a hypothetical FL Medicaid MCO tenant.
+  // All deadlines and rates are sourced from Florida statute and
+  // the AHCA Statewide Medicaid Managed Care (SMMC) contract.
+  // ---------------------------------------------------------------
+  "id": "fl-ahca-default",
+  "tenantId": "TENANT-FL-MCO-001",
+  "stateCode": "FL",
+
+  "stateConfig": {
+    // FL Statute 627.6131(2)(a) — electronic clean claims must be
+    // paid within 35 days of receipt.
+    "promptPayElectronicDays": 35,
+
+    // FL Statute 627.6131(2)(b) — paper clean claims must be paid
+    // within 45 days of receipt.
+    "promptPayPaperDays": 45,
+
+    // FL Statute 627.6131(4) — overdue clean claims accrue simple
+    // interest at 10% per annum from the date the claim was due.
+    "promptPayPenaltyRateAnnual": 0.10,
+
+    // Florida does not impose a separate statutory deadline for
+    // claim acknowledgment; set to 0 (not required).
+    "claimAcknowledgmentDays": 0,
+
+    // SMMC Contract Attachment II, Section V.B.5 — urgent/
+    // concurrent prior authorization decisions within 72 hours.
+    "priorAuthUrgentHours": 72,
+
+    // SMMC Contract Attachment II, Section V.B.4 — standard prior
+    // authorization decisions within 5 calendar days of receipt.
+    "priorAuthStandardDays": 5,
+
+    // SMMC Contract Attachment II, Section X.A — standard member
+    // grievance/appeal resolution within 30 calendar days.
+    "appealStandardDays": 30,
+
+    // SMMC Contract Attachment II, Section X.B — expedited appeals
+    // must be resolved within 72 hours.
+    "appealExpeditedHours": 72,
+
+    // AHCA MCO Contract, Encounter Data Submission Requirements —
+    // encounter data must be submitted to FMMIS within 60 days
+    // of claim adjudication.
+    "encounterSubmissionDays": 60
+  },
+
+  // ISA06 — Submitter Identification assigned by FL AHCA for
+  // FMMIS X12 batch submissions (populated per-tenant at onboarding).
+  "fmmisSubmitterId": "FLMCO00001",
+
+  // ISA08 — Interchange Sender ID used in ISA segment header for
+  // FMMIS transmissions (assigned by FL AHCA).
+  "fmmisInterchangeSenderId": "FLMCO00001ISA",
+
+  // SMMC 3.0 Managed Medical Assistance Program Improvement Project.
+  // Set to true when the MCO is enrolled in MPIP reporting.
+  "mpipEnabled": true,
+
+  "createdAt": "2026-04-09T00:00:00Z",
+  "updatedAt": "2026-04-09T00:00:00Z"
+}

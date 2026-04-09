@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: encounter-submission-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "cloudhealthoffice"
+  Kafka__AdjudicationCompletedTopic: "adjudication-completed"
+  Kafka__DeadlineWarningTopic: "encounter-deadline-warning"
+  Worker__IntervalHours: "4"
+  Worker__DeadlineWarningDays: "7"
+  Services__ClaimsService: "http://claims-service.cloudhealthoffice"
+  Services__ReferenceDataService: "http://reference-data-service.cloudhealthoffice"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: encounter-submission-service
+  namespace: cloudhealthoffice
+  labels:
+    app: encounter-submission-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: encounter-submission-service
+  template:
+    metadata:
+      labels:
+        app: encounter-submission-service
+        tier: backend
+    spec:
+      containers:
+      - name: encounter-submission-service
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-encounter-submission-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: encounter-submission-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
+          value: "cloudhealthoffice"
+        - name: Kafka__BootstrapServers
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secret
+              key: bootstrapServers
+        - name: Kafka__AdjudicationCompletedTopic
+          valueFrom:
+            configMapKeyRef:
+              name: encounter-submission-service-config
+              key: Kafka__AdjudicationCompletedTopic
+        - name: Kafka__DeadlineWarningTopic
+          valueFrom:
+            configMapKeyRef:
+              name: encounter-submission-service-config
+              key: Kafka__DeadlineWarningTopic
+        - name: Worker__IntervalHours
+          valueFrom:
+            configMapKeyRef:
+              name: encounter-submission-service-config
+              key: Worker__IntervalHours
+        - name: Worker__DeadlineWarningDays
+          valueFrom:
+            configMapKeyRef:
+              name: encounter-submission-service-config
+              key: Worker__DeadlineWarningDays
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: encounter-submission-service
+  namespace: cloudhealthoffice
+  labels:
+    app: encounter-submission-service
+spec:
+  type: ClusterIP
+  selector:
+    app: encounter-submission-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

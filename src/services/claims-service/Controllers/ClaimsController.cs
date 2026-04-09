@@ -13,17 +13,20 @@ public class ClaimsController : ControllerBase
 {
     private readonly IClaimRepository _claimRepository;
     private readonly IClaimAcknowledgmentService _ackService;
+    private readonly IMpipAdjudicationEnhancer _mpipEnhancer;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ClaimsController> _logger;
 
     public ClaimsController(
         IClaimRepository claimRepository,
         IClaimAcknowledgmentService ackService,
+        IMpipAdjudicationEnhancer mpipEnhancer,
         IConfiguration configuration,
         ILogger<ClaimsController> logger)
     {
         _claimRepository = claimRepository;
         _ackService = ackService;
+        _mpipEnhancer = mpipEnhancer;
         _configuration = configuration;
         _logger = logger;
     }
@@ -237,6 +240,17 @@ public class ClaimsController : ControllerBase
         claim.AdjudicationResult = adjudication;
         claim.AdjudicatedDate = DateTime.UtcNow;
         claim.LastUpdatedDate = DateTime.UtcNow;
+
+        // Apply FL SMMC 3.0 MPIP enhanced rate if applicable.
+        // Must run after base allowed amount is set and before status determination.
+        if (claim.LineOfBusiness == LineOfBusiness.Medicaid)
+        {
+            var memberAge = CalculateMemberAge(claim);
+            if (memberAge.HasValue)
+            {
+                await _mpipEnhancer.ApplyMpipEnhancementAsync(claim, memberAge.Value);
+            }
+        }
 
         // Update status based on adjudication
         if (adjudication.PayerPayment == 0 && !string.IsNullOrEmpty(adjudication.DenialReasonCode))
@@ -536,6 +550,18 @@ public class ClaimsController : ControllerBase
         "MEDREVIEW" or "CLINICAL" => "Medical Review",
         _ => "Pending Review"
     };
+
+    /// <summary>
+    /// Estimate member age at the service date from claim data.
+    /// Returns null when DOB is unavailable so callers can skip MPIP.
+    /// </summary>
+    private static int? CalculateMemberAge(Claim claim)
+    {
+        // Member DOB is not on the Claim model; in a full implementation
+        // it would be fetched from the member-service. Return null so
+        // callers skip MPIP when age is unknown.
+        return null;
+    }
 
     private static string SanitizeForLog(string? value)
     {
