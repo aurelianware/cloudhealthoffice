@@ -1,4 +1,5 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG REGISTRY=choacrhy6h2vdulfru6.azurecr.io
+FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
 WORKDIR /repo
 
 # Copy csproj files and restore (preserves layer caching)
@@ -16,7 +17,7 @@ FROM build AS publish
 RUN dotnet publish src/services/enrollment-import-service/EnrollmentImportService.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM ${REGISTRY}/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
 RUN apt-get update \
