@@ -1,4 +1,5 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
+ARG REGISTRY=choacrhy6h2vdulfru6.azurecr.io
+FROM ${REGISTRY}/dotnet/sdk:8.0-alpine AS build
 WORKDIR /repo
 
 # Copy csproj and restore (matches CI repo-root build context)
@@ -11,7 +12,7 @@ COPY src/services/CHO.TerminologyService/ src/services/CHO.TerminologyService/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 RUN dotnet publish src/services/CHO.TerminologyService/CHO.TerminologyService.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
+FROM ${REGISTRY}/dotnet/aspnet:8.0-alpine AS runtime
 WORKDIR /app
 
 # Create directory for map file mounts

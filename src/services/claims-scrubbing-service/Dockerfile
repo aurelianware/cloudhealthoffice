@@ -1,4 +1,5 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG REGISTRY=choacrhy6h2vdulfru6.azurecr.io
+FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
 WORKDIR /repo
 
 # Copy csproj files first to maximize layer caching on restore
@@ -17,7 +18,7 @@ RUN dotnet publish src/services/claims-scrubbing-service/claims-scrubbing-servic
     -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM ${REGISTRY}/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
 RUN apt-get update \

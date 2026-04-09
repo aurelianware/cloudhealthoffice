@@ -90,8 +90,46 @@ Expected improvements with real services:
 
 ## 🏗️ Build Architecture
 
+### ACR-Mirrored Base Images
+
+All .NET microservice Dockerfiles pull base images from Azure Container Registry (ACR) instead of directly from `mcr.microsoft.com`. This avoids intermittent `403 Forbidden` errors that can occur when GitHub-hosted runners access MCR directly.
+
+**One-time setup** — import the required .NET base images into ACR:
+
+```bash
+az acr import --name choacrhy6h2vdulfru6 \
+  --source mcr.microsoft.com/dotnet/sdk:8.0 \
+  --image dotnet/sdk:8.0
+
+az acr import --name choacrhy6h2vdulfru6 \
+  --source mcr.microsoft.com/dotnet/aspnet:8.0 \
+  --image dotnet/aspnet:8.0
+
+# Alpine variants (used by CHO.TerminologyService)
+az acr import --name choacrhy6h2vdulfru6 \
+  --source mcr.microsoft.com/dotnet/sdk:8.0-alpine \
+  --image dotnet/sdk:8.0-alpine
+
+az acr import --name choacrhy6h2vdulfru6 \
+  --source mcr.microsoft.com/dotnet/aspnet:8.0-alpine \
+  --image dotnet/aspnet:8.0-alpine
+```
+
+Each Dockerfile exposes an `ARG REGISTRY` (defaulting to `choacrhy6h2vdulfru6.azurecr.io`) so local builds can override:
+
+```bash
+# Local build using MCR directly (no ACR needed)
+docker build --build-arg REGISTRY=mcr.microsoft.com \
+  -f src/services/member-service/Dockerfile .
+
+# CI build using ACR mirror (default)
+docker build -f src/services/member-service/Dockerfile .
+```
+
+**PR builds:** The workflow logs in to ACR using a dedicated read-only token (`ACR_USERNAME` / `ACR_PASSWORD` secrets) so pull requests can fetch base images without Azure OIDC. A preceding check step inspects whether `ACR_USERNAME` is set; if the secret is absent (e.g. fork PRs), the login step is skipped entirely and the build falls back to pulling base images directly from `mcr.microsoft.com`.
+
 ### Multi-Stage Docker Builds
-1. **Build stage:** `mcr.microsoft.com/dotnet/sdk:8.0`
+1. **Build stage:** `${REGISTRY}/dotnet/sdk:8.0` (ACR-mirrored from MCR)
    - Restore NuGet packages
    - Compile C# code
    - Optimize for Release build
@@ -100,7 +138,7 @@ Expected improvements with real services:
    - Create deployment artifacts
    - Trim unused dependencies
 
-3. **Final stage:** `mcr.microsoft.com/dotnet/aspnet:8.0`
+3. **Final stage:** `${REGISTRY}/dotnet/aspnet:8.0` (ACR-mirrored from MCR)
    - Minimal runtime image
    - Non-root user (`$APP_UID`)
    - EXPOSE ports 8080, 8081
