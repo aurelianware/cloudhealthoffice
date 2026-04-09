@@ -1,4 +1,8 @@
+using System.Text.Json;
+using Microsoft.Azure.Cosmos;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Identity.Web;
 using ReferenceDataService.Repositories;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -27,6 +31,47 @@ builder.Services.AddDbContext<ReferenceDataContext>(options =>
 
 // Add repositories
 builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
+
+// Cosmos DB Client — hosts the ComplianceConfig container
+var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")
+    ?? builder.Configuration["CosmosDb:Endpoint"];
+var cosmosKey = Environment.GetEnvironmentVariable("COSMOS_KEY")
+    ?? builder.Configuration["CosmosDb:Key"];
+
+if (!string.IsNullOrEmpty(cosmosEndpoint) && !string.IsNullOrEmpty(cosmosKey))
+{
+    builder.Services.AddSingleton(sp =>
+    {
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+        var options = new CosmosClientOptions
+        {
+            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
+        };
+        return new CosmosClient(cosmosEndpoint, cosmosKey, options);
+    });
+}
+
+// Azure AD Authentication
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApi(options =>
+    {
+        builder.Configuration.Bind("AzureAd", options);
+        options.TokenValidationParameters.ValidateIssuer = true;
+        options.TokenValidationParameters.ValidateAudience = true;
+        options.TokenValidationParameters.ValidateLifetime = true;
+    },
+    options => { builder.Configuration.Bind("AzureAd", options); });
+
+// Authorization policies
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminPolicy", policy =>
+        policy.RequireRole("Administrator"));
+});
 
 // Add memory cache for hot code lookups
 builder.Services.AddMemoryCache();
@@ -67,6 +112,8 @@ app.UseHttpsRedirection();
 
 app.UseCors("AllowAll");
 
+// Authentication MUST come before authorization
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

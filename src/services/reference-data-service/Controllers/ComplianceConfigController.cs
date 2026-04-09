@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using ReferenceDataService.Models;
@@ -5,11 +6,12 @@ using ReferenceDataService.Models;
 namespace ReferenceDataService.Controllers;
 
 /// <summary>
-/// Serves tenant-level compliance configuration (prompt pay deadlines,
-/// PA timelines, FMMIS credentials, MPIP flags) to downstream services.
+/// Serves tenant-level state compliance configuration (prompt pay deadlines,
+/// PA timelines, FMMIS credentials, MPIP flags) consumed at runtime by
+/// claims, authorization, appeals, encounter, and payment services.
 /// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/compliance-config")]
 [Produces("application/json")]
 public class ComplianceConfigController : ControllerBase
 {
@@ -17,7 +19,8 @@ public class ComplianceConfigController : ControllerBase
     private readonly IMemoryCache _cache;
 
     // In-memory store until a Cosmos DB repository is wired up.
-    private static readonly List<TenantComplianceConfig> _configs = new();
+    // Key: tenantId (lowercase)
+    private static readonly Dictionary<string, TenantComplianceConfig> _store = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object _lock = new();
 
     public ComplianceConfigController(
@@ -29,61 +32,78 @@ public class ComplianceConfigController : ControllerBase
     }
 
     /// <summary>
-    /// Get compliance configuration for a tenant and state.
+    /// Get the full compliance configuration document for a tenant.
+    /// Includes state compliance parameters, FMMIS credentials, and MPIP flag.
     /// </summary>
-    [HttpGet("{tenantId}/{stateCode}")]
+    [HttpGet("{tenantId}")]
     [ProducesResponseType(typeof(TenantComplianceConfig), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<TenantComplianceConfig> GetConfig(string tenantId, string stateCode)
+    public ActionResult<TenantComplianceConfig> GetConfig(string tenantId)
     {
-        _logger.LogInformation("Fetching compliance config for tenant {TenantId}, state {StateCode}",
-            SanitizeForLog(tenantId), SanitizeForLog(stateCode));
+        _logger.LogInformation("Fetching compliance config for tenant {TenantId}",
+            SanitizeForLog(tenantId));
 
-        var cacheKey = $"compliance:{tenantId}:{stateCode}";
+        var cacheKey = $"compliance:{tenantId}";
         var config = _cache.GetOrCreate(cacheKey, entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
             lock (_lock)
             {
-                return _configs.FirstOrDefault(c =>
-                    c.TenantId == tenantId &&
-                    c.StateCode.Equals(stateCode, StringComparison.OrdinalIgnoreCase));
+                _store.TryGetValue(tenantId, out var found);
+                return found;
             }
         });
 
         if (config is null)
         {
-            return NotFound($"No compliance config found for tenant {SanitizeForLog(tenantId)} in state {SanitizeForLog(stateCode)}");
+            return NotFound(new { message = $"No compliance config found for tenant {SanitizeForLog(tenantId)}" });
         }
 
         return Ok(config);
     }
 
     /// <summary>
-    /// List all compliance configurations for a tenant.
+    /// Get only the state compliance parameters for a tenant (prompt pay deadlines,
+    /// PA timelines, appeal windows, encounter submission limits).
     /// </summary>
-    [HttpGet("{tenantId}")]
-    [ProducesResponseType(typeof(IEnumerable<TenantComplianceConfig>), StatusCodes.Status200OK)]
-    public ActionResult<IEnumerable<TenantComplianceConfig>> GetConfigsByTenant(string tenantId)
+    [HttpGet("{tenantId}/state")]
+    [ProducesResponseType(typeof(StateComplianceConfig), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<StateComplianceConfig> GetStateConfig(string tenantId)
     {
-        _logger.LogInformation("Listing compliance configs for tenant {TenantId}", SanitizeForLog(tenantId));
+        _logger.LogInformation("Fetching state compliance config for tenant {TenantId}",
+            SanitizeForLog(tenantId));
 
-        List<TenantComplianceConfig> results;
-        lock (_lock)
+        var cacheKey = $"compliance:{tenantId}";
+        var config = _cache.GetOrCreate(cacheKey, entry =>
         {
-            results = _configs.Where(c => c.TenantId == tenantId).ToList();
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+            lock (_lock)
+            {
+                _store.TryGetValue(tenantId, out var found);
+                return found;
+            }
+        });
+
+        if (config is null)
+        {
+            return NotFound(new { message = $"No compliance config found for tenant {SanitizeForLog(tenantId)}" });
         }
 
-        return Ok(results);
+        return Ok(config.StateConfig);
     }
 
     /// <summary>
-    /// Create or update compliance configuration for a tenant/state pair.
+    /// Create or update the compliance configuration for a tenant.
+    /// Requires the AdminPolicy authorization policy.
     /// </summary>
-    [HttpPut]
+    [HttpPut("{tenantId}")]
+    [Authorize(Policy = "AdminPolicy")]
     [ProducesResponseType(typeof(TenantComplianceConfig), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult<TenantComplianceConfig> UpsertConfig([FromBody] TenantComplianceConfig config)
+    public ActionResult<TenantComplianceConfig> UpsertConfig(
+        string tenantId,
+        [FromBody] TenantComplianceConfig config)
     {
         if (!ModelState.IsValid)
         {
@@ -91,16 +111,16 @@ public class ComplianceConfigController : ControllerBase
         }
 
         _logger.LogInformation("Upserting compliance config for tenant {TenantId}, state {StateCode}",
-            SanitizeForLog(config.TenantId), SanitizeForLog(config.StateCode));
+            SanitizeForLog(tenantId), SanitizeForLog(config.StateCode));
+
+        // Route tenantId takes precedence over body
+        config.TenantId = tenantId;
 
         lock (_lock)
         {
-            var existing = _configs.FirstOrDefault(c =>
-                c.TenantId == config.TenantId &&
-                c.StateCode.Equals(config.StateCode, StringComparison.OrdinalIgnoreCase));
-
-            if (existing is not null)
+            if (_store.TryGetValue(tenantId, out var existing))
             {
+                existing.StateCode = config.StateCode;
                 existing.StateConfig = config.StateConfig;
                 existing.FmmisSubmitterId = config.FmmisSubmitterId;
                 existing.FmmisInterchangeSenderId = config.FmmisInterchangeSenderId;
@@ -113,26 +133,14 @@ public class ComplianceConfigController : ControllerBase
                 config.Id = Guid.NewGuid().ToString();
                 config.CreatedAt = DateTime.UtcNow;
                 config.UpdatedAt = DateTime.UtcNow;
-                _configs.Add(config);
+                _store[tenantId] = config;
             }
         }
 
-        // Invalidate cache for this tenant/state pair
-        _cache.Remove($"compliance:{config.TenantId}:{config.StateCode}");
+        // Invalidate cache so next read picks up the new values
+        _cache.Remove($"compliance:{tenantId}");
 
         return Ok(config);
-    }
-
-    /// <summary>
-    /// Get the Florida default compliance configuration (convenience endpoint).
-    /// Returns a <see cref="StateComplianceConfig"/> with AHCA / SMMC 3.0 defaults.
-    /// </summary>
-    [HttpGet("defaults/FL")]
-    [ProducesResponseType(typeof(StateComplianceConfig), StatusCodes.Status200OK)]
-    public ActionResult<StateComplianceConfig> GetFloridaDefaults()
-    {
-        _logger.LogInformation("Returning FL AHCA default compliance parameters");
-        return Ok(StateComplianceConfig.Florida());
     }
 
     private static string SanitizeForLog(string? value)
