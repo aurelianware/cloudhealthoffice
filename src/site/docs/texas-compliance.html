@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Texas State Compliance — Cloud Health Office</title>
+  <meta name="description" content="Texas Medicaid managed care compliance for STAR, STAR+PLUS, STAR Kids, and CHIP. TMHP PEMS provider enrollment verification, Gold Card exemption (HB 3229), HHSC UMCM prior authorization rules, and TX-specific fee schedule support." />
+  <meta name="keywords" content="Texas Medicaid, HHSC, TMHP PEMS, STAR, STAR+PLUS, STAR Kids, CHIP, Gold Card, HB 3229, Texas Insurance Code §4201.653, UMCM, prior authorization, MCO compliance, Parkland, Texas managed care" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/texas-compliance" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/texas-compliance" />
+  <meta property="og:title" content="Texas State Compliance — Cloud Health Office" />
+  <meta property="og:description" content="Texas Medicaid managed care compliance for STAR, STAR+PLUS, STAR Kids, and CHIP. TMHP PEMS enrollment, Gold Card exemption (HB 3229), HHSC UMCM prior auth rules." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Texas State Compliance — Cloud Health Office",
+    "description": "Texas Medicaid managed care compliance: TMHP PEMS provider enrollment verification, Gold Card exemption (HB 3229), HHSC UMCM prior authorization rules for STAR, STAR+PLUS, STAR Kids, and CHIP programs, and TX-specific fee schedule support.",
+    "url": "https://cloudhealthoffice.com/docs/texas-compliance",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-09",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Texas Medicaid compliance",
+      "TMHP PEMS",
+      "Gold Card exemption",
+      "HHSC UMCM",
+      "STAR",
+      "STAR+PLUS",
+      "STAR Kids",
+      "CHIP"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Texas State Compliance", "item": "https://cloudhealthoffice.com/docs/texas-compliance" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">State Compliance</div>
+            <ul>
+              <li><a href="/docs/texas-compliance" class="active">Texas (STAR / STAR+PLUS)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#tmhp-pems">TMHP PEMS Enrollment</a></li>
+              <li><a href="#prior-auth-rules">Prior Auth Rules</a></li>
+              <li><a href="#gold-card">Gold Card Exemption</a></li>
+              <li><a href="#star-rules">STAR Program Rules</a></li>
+              <li><a href="#starplus-rules">STAR+PLUS Rules</a></li>
+              <li><a href="#starkids-rules">STAR Kids Rules</a></li>
+              <li><a href="#fee-schedules">Fee Schedules</a></li>
+              <li><a href="#compliance-pipeline">Compliance Pipeline</a></li>
+              <li><a href="#adding-your-state">Adding Your State</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Texas State Compliance</span>
+        </div>
+
+        <h1>Texas State Compliance</h1>
+        <p class="docs-subtitle">STAR &middot; STAR+PLUS &middot; STAR Kids &middot; CHIP</p>
+
+        <p>CHO ships with platform-level Texas Medicaid compliance rules that apply automatically to any tenant operating TX managed care lines of business. TMHP PEMS enrollment verification, HHSC UMCM prior authorization rules, Gold Card exemption tracking, and TX-specific fee schedules are built in &mdash; not bolted on. Tenants can layer overrides or disable rules through the Blazor portal admin UI, but platform rules cannot be deleted.</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F3DB;</span>
+            <h3>TMHP PEMS</h3>
+            <p>Provider enrollment verification via the Texas Medicaid &amp; Healthcare Partnership portal. NPI, TPI, LOB, and enrollment status.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F3C5;</span>
+            <h3>Gold Card (HB 3229)</h3>
+            <p>Automatic PA exemption for providers with 90%+ approval rates. Runs at Priority 1 before all clinical rules.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4CB;</span>
+            <h3>14 Seed Rules</h3>
+            <p>Platform-level prior auth rules across STAR, STAR+PLUS, and STAR Kids. Sourced from HHSC UMCM Chapters 4, 5, 6.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4B2;</span>
+            <h3>TX Fee Schedules</h3>
+            <p>HHSC/TMHP published rate tables for STAR, STAR+PLUS, and CHIP with effective dating and program-specific resolution.</p>
+          </div>
+        </div>
+
+        <!-- Section 1: TMHP PEMS Provider Enrollment -->
+        <h2 id="tmhp-pems">TMHP PEMS Provider Enrollment</h2>
+
+        <p>The <strong>Texas Medicaid &amp; Healthcare Partnership (TMHP)</strong> operates the <strong>Provider Enrollment &amp; Management System (PEMS)</strong> &mdash; the authoritative source for Texas Medicaid provider enrollment status. CHO integrates directly with PEMS through the <code>TmhpPemsSource</code> adapter in the ProviderEnrollmentService.</p>
+
+        <h3>What CHO Does</h3>
+        <p>The <code>TmhpPemsSource</code> adapter queries PEMS for active enrollment status per NPI. Every inbound claim or prior authorization request triggers an enrollment check before processing continues.</p>
+
+        <h3>Data Returned</h3>
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>NPI</strong></td><td>National Provider Identifier</td></tr>
+              <tr><td><strong>TPI</strong></td><td>Texas Provider Identifier &mdash; state-assigned enrollment ID</td></tr>
+              <tr><td><strong>Enrollment Status</strong></td><td>Active, Inactive, Terminated, Pending</td></tr>
+              <tr><td><strong>LOB Assignment</strong></td><td>STAR, STAR+PLUS, STAR Kids, CHIP</td></tr>
+              <tr><td><strong>Effective Date</strong></td><td>Enrollment start date</td></tr>
+              <tr><td><strong>End Date</strong></td><td>Enrollment termination date (null if active)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Claims Gate Integration</h3>
+        <p>Claims from unenrolled or terminated providers are stopped before adjudication. The <strong>StateEnrollmentGate</strong> evaluates PEMS enrollment status and returns a pass/fail decision with a reason code. This prevents payment for services rendered by providers who are not actively enrolled in the Texas Medicaid program.</p>
+
+        <h3>LOB Mapping</h3>
+        <p>TMHP returns raw LOB codes that CHO normalizes into typed enums:</p>
+        <ul>
+          <li>TMHP LOB code &rarr; <code>Star</code> (Medicaid managed care &mdash; children and families)</li>
+          <li>TMHP LOB code &rarr; <code>StarPlusPlus</code> (adults with disabilities, age 65+)</li>
+          <li>TMHP LOB code &rarr; <code>StarKids</code> (children with disabilities)</li>
+          <li>TMHP LOB code &rarr; <code>CHIP</code> (Children&rsquo;s Health Insurance Program)</li>
+        </ul>
+
+        <h3>Resilience</h3>
+        <p>The <code>MultiStateEnrollmentAggregator</code> queries TMHP PEMS in parallel with other configured sources. If TMHP is unavailable, the aggregator falls through to <strong>CAQH ProView</strong> as a backup source &mdash; ensuring enrollment checks are never blocked by a single-source outage.</p>
+
+        <h3>Configuration</h3>
+        <p>Two configuration keys are required, both stored in Azure Key Vault:</p>
+        <ul>
+          <li><code>ProviderEnrollment:TmhpPems:BaseUrl</code> &mdash; TMHP PEMS API endpoint</li>
+          <li><code>ProviderEnrollment:TmhpPems:ApiKey</code> &mdash; API authentication key</li>
+        </ul>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>Full enrollment documentation:</strong> For the complete multi-state enrollment pipeline, aggregator architecture, caching, and gate configuration, see the <a href="/docs/provider-enrollment-guide">Provider Enrollment Guide</a>.
+        </div>
+
+        <!-- Section 2: Prior Authorization Rules -->
+        <h2 id="prior-auth-rules">Prior Authorization Rules &mdash; TX Programs</h2>
+
+        <p>CHO ships with <strong>14 platform-level seed rules</strong> covering three Texas Medicaid programs. These rules are sourced from the <strong>HHSC Uniform Managed Care Manual (UMCM)</strong> Chapters 4, 5, and 6, and are loaded by the <code>PriorAuthRuleEngineSeeder</code> on first deployment.</p>
+
+        <!-- Gold Card -->
+        <h3 id="gold-card">Gold Card Exemption (All TX Programs)</h3>
+
+        <div class="docs-callout" style="margin-top: 8px;">
+          <strong>Statutory basis:</strong> Texas Insurance Code &sect;4201.653 (HB 3229, effective 09/01/2022)
+        </div>
+
+        <p>The <code>TxGoldCardExemptionRule</code> evaluates at <strong>Priority 1</strong> &mdash; it runs before all clinical rules in the engine. If a provider qualifies for gold card status, the request is auto-approved without clinical review.</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>GoldCardApprovalRateThreshold</code></td>
+                <td>0.90 (90%)</td>
+                <td>Minimum PA approval rate over the lookback period</td>
+              </tr>
+              <tr>
+                <td><code>GoldCardMinimumDecisions</code></td>
+                <td>20</td>
+                <td>Minimum total PA decisions required to qualify</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>How it works:</strong> The rule evaluates provider history &mdash; total decisions must meet the minimum threshold AND the approval rate must be &ge;90%. When both criteria are met, the provider is auto-approved. Gold card status applies across STAR, STAR+PLUS, and STAR Kids programs.</p>
+
+        <p>Rule IDs: <code>TX-STAR-REG-001</code>, <code>TX-STARPLUS-REG-001</code>, <code>TX-STARKIDS-REG-001</code></p>
+
+        <!-- STAR Rules -->
+        <h3 id="star-rules">STAR Program Rules</h3>
+        <p>STAR covers children, pregnant women, and families. Source: HHSC UMCM Chapter 4.</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Rule ID</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>TX-STAR-REG-001</code></td>
+                <td>Regulatory Exemption</td>
+                <td>Gold Card Exemption (HB 3229)</td>
+                <td>90%+ approval rate over 180 days = PA exempt (Texas Insurance Code &sect;4201.653)</td>
+              </tr>
+              <tr>
+                <td><code>TX-STAR-QTY-001</code></td>
+                <td>Quantity Limit</td>
+                <td>Chiropractic Visit Limit</td>
+                <td>20 visits/year auto-approved; over 20 &rarr; clinical review (CPT 98940&ndash;98943)</td>
+              </tr>
+              <tr>
+                <td><code>TX-STAR-QTY-002</code></td>
+                <td>Quantity Limit</td>
+                <td>PT/OT Visit Limit</td>
+                <td>30 visits/year auto-approved; over 30 &rarr; clinical review (CPT 97001&ndash;97546)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- STAR+PLUS Rules -->
+        <h3 id="starplus-rules">STAR+PLUS Program Rules</h3>
+        <p>STAR+PLUS covers adults with disabilities and individuals age 65+. Source: HHSC UMCM Chapter 5.</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Rule ID</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>TX-STARPLUS-REG-001</code></td>
+                <td>Regulatory Exemption</td>
+                <td>Gold Card Exemption (HB 3229)</td>
+                <td>Same HB 3229 logic as STAR</td>
+              </tr>
+              <tr>
+                <td><code>TX-STARPLUS-PA-001</code></td>
+                <td>Cost Threshold</td>
+                <td>DME PA Required Above $500</td>
+                <td>DME items exceeding $500 require prior authorization (HCPCS K*, A*, E* prefixes)</td>
+              </tr>
+              <tr>
+                <td><code>TX-STARPLUS-DX-001</code></td>
+                <td>Diagnosis Required</td>
+                <td>Power Wheelchair Diagnosis Requirement</td>
+                <td>K0800&ndash;K0899 requires qualifying neurological/musculoskeletal diagnosis (ICD G12/G20/G35/G80&ndash;83/M05&ndash;M35/S14&ndash;S34)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- STAR Kids Rules -->
+        <h3 id="starkids-rules">STAR Kids Program Rules</h3>
+        <p>STAR Kids covers medically dependent children. Source: HHSC UMCM Chapter 6.</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Rule ID</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>TX-STARKIDS-REG-001</code></td>
+                <td>Regulatory Exemption</td>
+                <td>Gold Card Exemption (HB 3229)</td>
+                <td>Same HB 3229 logic as STAR and STAR+PLUS</td>
+              </tr>
+              <tr>
+                <td><code>TX-STARKIDS-AGE-001</code></td>
+                <td>Age-Based Exemption</td>
+                <td>EPSDT Under-21 PA Exemption</td>
+                <td>Preventive, diagnostic, and treatment services are PA-exempt for members under 21 when medically necessary</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Rule Management -->
+        <h3 id="rule-management">Rule Management</h3>
+        <ul>
+          <li><strong>14 platform seed rules</strong> ship with every CHO deployment</li>
+          <li>Loaded by <code>PriorAuthRuleEngineSeeder</code> on first deployment</li>
+          <li><strong>Admin UI:</strong> Tenants can override parameters, disable rules, or add tenant-level rules via the Blazor portal</li>
+          <li><strong>Platform rules are immutable</strong> &mdash; ensures the regulatory floor is never removed</li>
+          <li>Rule category: <code>RegulatoryExemption</code> (Gold Card runs at Priority 1)</li>
+        </ul>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>Full prior auth documentation:</strong> For the complete rule engine architecture, decision pathways, SLA tracking, and FHIR PAS integration, see the <a href="/docs/prior-auth-guide">Prior Authorization Guide</a>.
+        </div>
+
+        <!-- Section 3: TX Medicaid Fee Schedules -->
+        <h2 id="fee-schedules">TX Medicaid Fee Schedules</h2>
+
+        <p>CHO ingests <strong>HHSC/TMHP published rate tables</strong> for Texas Medicaid programs. Fee schedules are program-specific and resolved at claim time by the FeeScheduleEngine.</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Program</th>
+                <th>Rate Source</th>
+                <th>Update Frequency</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>STAR</td><td>HHSC/TMHP Medicaid fee schedule</td><td>Quarterly</td></tr>
+              <tr><td>STAR+PLUS</td><td>HHSC/TMHP Medicaid fee schedule</td><td>Quarterly</td></tr>
+              <tr><td>CHIP</td><td>HHSC/TMHP CHIP fee schedule</td><td>Quarterly</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <ul>
+          <li><strong>Ingestion:</strong> <code>FeeScheduleLoaderService</code> imports rate tables with effective dating</li>
+          <li><strong>Resolution:</strong> <code>FeeScheduleEngine</code> resolves the correct rate at claim time per program/LOB and date of service</li>
+          <li><strong>Effective dating:</strong> Historical rates are preserved &mdash; claims are priced against the schedule effective on the date of service, not the current schedule</li>
+        </ul>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>Full pricing documentation:</strong> For the complete fee schedule pipeline, rate table management, and repricing API, see the <a href="/docs/fee-schedule-engine">Fee Schedule Engine</a> documentation.
+        </div>
+
+        <!-- Section 4: Compliance Pipeline Summary -->
+        <h2 id="compliance-pipeline">Compliance Pipeline Summary</h2>
+
+        <p>All TX compliance components chain together at claim/authorization time. Here is the end-to-end flow for a Texas Medicaid prior authorization request:</p>
+
+        <ol>
+          <li><strong>Request arrives</strong> &mdash; 278 transaction or FHIR PAS <code>$submit</code> operation</li>
+          <li><strong>ProviderVerificationEngine</strong> &mdash; NPI validation, OIG exclusion check, PECOS Medicare enrollment verification</li>
+          <li><strong>ProviderEnrollmentService</strong> &mdash; TMHP PEMS enrollment check (active TX Medicaid enrollment required)</li>
+          <li><strong>PriorAuthRuleEngine</strong> &mdash; TX seed rules execute in priority order:
+            <ul>
+              <li>Gold Card exemption (Priority 1 &mdash; auto-approve if qualified)</li>
+              <li>Visit/quantity limits (chiropractic, PT/OT)</li>
+              <li>Diagnosis requirements (power wheelchair)</li>
+              <li>EPSDT under-21 exemption</li>
+            </ul>
+          </li>
+          <li><strong>Decision or pend</strong> &mdash; Auto-approve, auto-deny, or pend for clinical review</li>
+          <li><strong>SLA Watchdog</strong> &mdash; TX turnaround requirements: 72 hours for urgent requests, 14 calendar days for standard</li>
+          <li><strong>Write determination</strong> &mdash; Result written to system of record (QNXT in augment mode, CHO in replace mode)</li>
+        </ol>
+
+        <div style="margin: 24px 0; text-align: center;">
+          <img src="/graphics/AuthFlowAugmentModeQNXT.svg" alt="Prior authorization flow diagram showing the augment-mode pipeline with QNXT integration" style="max-width: 100%; height: auto; border: 1px solid rgba(0,240,255,0.12); border-radius: 8px;" />
+          <p style="font-size: 0.85rem; opacity: 0.6; margin-top: 8px;">Augment-mode prior authorization flow with QNXT system-of-record integration</p>
+        </div>
+
+        <!-- Section 5: Adding Your State -->
+        <h2 id="adding-your-state">Adding Your State</h2>
+
+        <p>CHO&rsquo;s multi-state architecture is extensible. The same enrollment adapter, rule engine, and fee schedule pipeline pattern supports <strong>California</strong> (CA PAVE), <strong>Florida</strong> (FL FMMIS), and <strong>New York</strong> (eMedNY) today, with the same Source &rarr; Aggregator &rarr; Gate pattern.</p>
+
+        <p>Each new state requires:</p>
+        <ul>
+          <li>An <code>IEnrollmentSource</code> adapter for the state&rsquo;s enrollment portal</li>
+          <li>State-specific seed rules in <code>SeedRules/</code> implementing UMCM-equivalent regulations</li>
+          <li>Fee schedule rate tables from the state Medicaid agency</li>
+        </ul>
+
+        <p><a href="https://portal.cloudhealthoffice.com/contact-sales" target="_blank" rel="noopener noreferrer">Contact us</a> to discuss your state&rsquo;s requirements.</p>
+
+        <!-- Related Documentation -->
+        <h2 id="related-docs">Related Documentation</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 16px;">
+          <a href="/docs/provider-enrollment-guide" class="docs-hub-card">
+            <h3>Provider Enrollment</h3>
+            <p>Multi-state Medicaid enrollment verification, aggregation, and claims-gate integration.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/prior-auth-guide" class="docs-hub-card">
+            <h3>Prior Authorization</h3>
+            <p>PriorAuthRuleEngine, decision pathways, SLA tracking, and FHIR PAS integration.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/fee-schedule-engine" class="docs-hub-card">
+            <h3>Fee Schedule Engine</h3>
+            <p>Rate table management, repricing pipeline, and program-specific fee resolution.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/compliance" class="docs-hub-card">
+            <h3>CMS-0057-F Compliance</h3>
+            <p>Federal compliance requirements, FHIR R4 APIs, and interoperability standards.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/provider-enrollment-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Provider Enrollment</div>
+          </a>
+          <a href="/docs/compliance" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">CMS-0057-F Compliance</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.2.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
