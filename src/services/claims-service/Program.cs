@@ -48,6 +48,29 @@ builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentServi
 builder.Services.AddScoped<FmmisClaimTransformer>();
 builder.Services.AddScoped<FmmisFileBuilder>();
 
+// Inter-service HTTP clients
+builder.Services.AddHttpClient("ProviderService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ProviderService"]
+        ?? "http://provider-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+builder.Services.AddHttpClient("ReferenceDataService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ReferenceDataService"]
+        ?? "http://reference-data-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+// FL SMMC 3.0 MPIP rate enhancement
+builder.Services.AddScoped<IMpipRateClient, MpipRateClient>();
+builder.Services.AddScoped<IMpipAdjudicationEnhancer, MpipAdjudicationEnhancer>();
+
 var app = builder.Build();
 
 // Shared middleware pipeline: exception handling, Swagger (dev), tenant middleware, CORS, health checks
