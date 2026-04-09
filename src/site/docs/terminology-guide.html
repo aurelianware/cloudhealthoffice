@@ -169,6 +169,12 @@
           <p>Without terminology translation, a prior authorization request containing SNOMED CT code <code>73211009</code> (Diabetes mellitus) cannot be matched to the payer's ICD-10-CM benefit configuration (<code>E11.9</code>, <code>E10.9</code>, etc.). The crosswalk ensures that clinical intent is preserved as codes move between systems.</p>
         </div>
 
+        <!-- Translation Pipeline Diagram -->
+        <div style="margin: 28px 0; text-align: center;">
+          <img src="/graphics/TerminologyCrosswalkFlow.svg" alt="Terminology crosswalk translation pipeline showing 3-tier map resolution (plan overrides, AMA CPT, NLM/UMLS), context rule engine disambiguation, and scoring output" style="max-width: 100%; height: auto; border: 1px solid rgba(0,240,255,0.12); border-radius: 8px;" />
+          <p style="font-size: 0.85rem; opacity: 0.6; margin-top: 8px;">Translation pipeline: 3-tier map resolution with context-aware disambiguation</p>
+        </div>
+
         <!-- ============================================================ -->
         <!-- 2. How It Works -->
         <!-- ============================================================ -->
@@ -548,6 +554,12 @@ curl -s -X POST http://localhost:5010/fhir/ConceptMap/\$batch-translate \
         <h2 id="consumer-integration">8. Consumer Integration</h2>
 
         <p>Three core CHO services consume the Terminology Crosswalk at runtime:</p>
+
+        <!-- Consumer Integration Diagram -->
+        <div style="margin: 24px 0; text-align: center;">
+          <img src="/graphics/TerminologyConsumerIntegration.svg" alt="Consumer integration diagram showing EHR systems sending SNOMED CT codes through CRD, PAS, and DTR servers to the Terminology Crosswalk, which translates to CPT and ICD-10-CM for payer systems" style="max-width: 100%; height: auto; border: 1px solid rgba(0,240,255,0.12); border-radius: 8px;" />
+          <p style="font-size: 0.85rem; opacity: 0.6; margin-top: 8px;">CRD, PAS, and DTR consume the crosswalk to bridge EHR clinical vocabulary to payer adjudication codes</p>
+        </div>
 
         <h3>CRD Server (Coverage Requirements Discovery)</h3>
         <p>

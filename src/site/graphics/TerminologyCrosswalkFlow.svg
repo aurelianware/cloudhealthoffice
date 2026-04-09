@@ -1,0 +1,208 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 720" font-family="'Courier New', monospace">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0e17"/>
+      <stop offset="50%" style="stop-color:#0d1321"/>
+      <stop offset="100%" style="stop-color:#0a0e17"/>
+    </linearGradient>
+    <linearGradient id="boxCyan" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00f0ff;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#00f0ff;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxAmber" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff9f1c;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#ff9f1c;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxGreen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ff88;stop-opacity:0.12"/>
+      <stop offset="100%" style="stop-color:#00ff88;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxPurple" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.14"/>
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:0.02"/>
+    </linearGradient>
+    <linearGradient id="boxSlate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#64748b;stop-opacity:0.18"/>
+      <stop offset="100%" style="stop-color:#64748b;stop-opacity:0.04"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="aCyan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#00f0ff" opacity="0.85"/>
+    </marker>
+    <marker id="aAmber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#ff9f1c" opacity="0.85"/>
+    </marker>
+    <marker id="aGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#00ff88" opacity="0.85"/>
+    </marker>
+    <marker id="aPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#a855f7" opacity="0.85"/>
+    </marker>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a2744" stroke-width="0.4"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="720" fill="url(#bg)"/>
+  <rect width="1100" height="720" fill="url(#grid)" opacity="0.35"/>
+
+  <!-- Title bar -->
+  <rect x="0" y="0" width="1100" height="48" fill="#0b1120" opacity="0.95"/>
+  <line x1="0" y1="48" x2="1100" y2="48" stroke="#00f0ff" stroke-width="0.8" opacity="0.35"/>
+  <text x="18" y="31" fill="#00f0ff" font-size="13" font-weight="bold" filter="url(#glow)" letter-spacing="3">▸ CLOUD HEALTH OFFICE</text>
+  <text x="300" y="31" fill="#4a6a8a" font-size="11" letter-spacing="2">TERMINOLOGY CROSSWALK — TRANSLATION PIPELINE</text>
+  <text x="920" y="31" fill="#2a4a6a" font-size="10" letter-spacing="1">ConceptMap/$translate</text>
+  <circle cx="1070" cy="24" r="4" fill="#00ff88" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- ═══════ ROW 1: INPUT ═══════ -->
+
+  <!-- SNOMED CT Input -->
+  <rect x="60" y="80" width="240" height="90" rx="3" fill="url(#boxCyan)" stroke="#00f0ff" stroke-width="1.2"/>
+  <text x="180" y="103" fill="#00f0ff" font-size="11" text-anchor="middle" font-weight="bold" filter="url(#glow)">INBOUND CODE</text>
+  <line x1="80" y1="112" x2="280" y2="112" stroke="#00f0ff" stroke-width="0.4" opacity="0.3"/>
+  <text x="180" y="130" fill="#7ab8d4" font-size="9" text-anchor="middle">SNOMED CT 73211009</text>
+  <text x="180" y="145" fill="#4a6a8a" font-size="8" text-anchor="middle">"Diabetes mellitus"</text>
+  <text x="180" y="162" fill="#4a6a8a" font-size="8" text-anchor="middle">system: http://snomed.info/sct</text>
+
+  <!-- Arrow to Map Resolution -->
+  <line x1="300" y1="125" x2="370" y2="125" stroke="#00f0ff" stroke-width="1.2" marker-end="url(#aCyan)" opacity="0.7"/>
+  <text x="335" y="118" fill="#00f0ff" font-size="7" text-anchor="middle" opacity="0.6">$translate</text>
+
+  <!-- ═══════ ROW 1: 3-TIER MAP RESOLUTION ═══════ -->
+
+  <!-- Map Resolution Zone -->
+  <rect x="375" y="65" width="350" height="300" rx="4" fill="none" stroke="#ff9f1c" stroke-width="0.6" stroke-dasharray="6,4" opacity="0.25"/>
+  <text x="550" y="84" fill="#ff9f1c" font-size="9" text-anchor="middle" opacity="0.5" letter-spacing="3">3-TIER MAP RESOLUTION</text>
+
+  <!-- Tier 1: Plan Overrides (highest priority) -->
+  <rect x="395" y="95" width="310" height="60" rx="3" fill="url(#boxAmber)" stroke="#ff9f1c" stroke-width="1.2"/>
+  <text x="415" y="115" fill="#ff9f1c" font-size="8" font-weight="bold">P1</text>
+  <rect x="410" y="104" width="1" height="20" fill="#ff9f1c" opacity="0.4"/>
+  <text x="425" y="115" fill="#ff9f1c" font-size="10" font-weight="bold">PLAN-SPECIFIC OVERRIDES</text>
+  <text x="425" y="132" fill="#d4a66a" font-size="8">Tenant-scoped · Highest priority · Short-circuits if match</text>
+  <text x="425" y="145" fill="#8a7a5a" font-size="7">TX TMPPM, local coding policy, payer conventions</text>
+
+  <!-- Tier 2: AMA CPT -->
+  <rect x="395" y="165" width="310" height="60" rx="3" fill="url(#boxAmber)" stroke="#ff9f1c" stroke-width="0.8"/>
+  <text x="415" y="185" fill="#ff9f1c" font-size="8" font-weight="bold">P2</text>
+  <rect x="410" y="174" width="1" height="20" fill="#ff9f1c" opacity="0.4"/>
+  <text x="425" y="185" fill="#d4a66a" font-size="10" font-weight="bold">AMA CPT CROSS MAPS</text>
+  <text x="425" y="202" fill="#8a7a5a" font-size="8">CPT ↔ SNOMED CT · ~8,700 entries · Customer-provided license</text>
+  <text x="425" y="215" fill="#8a7a5a" font-size="7">Annual update · Proprietary (bring your own license)</text>
+
+  <!-- Tier 3: NLM/UMLS -->
+  <rect x="395" y="235" width="310" height="60" rx="3" fill="url(#boxAmber)" stroke="#ff9f1c" stroke-width="0.8"/>
+  <text x="415" y="255" fill="#ff9f1c" font-size="8" font-weight="bold">P3</text>
+  <rect x="410" y="244" width="1" height="20" fill="#ff9f1c" opacity="0.4"/>
+  <text x="425" y="255" fill="#d4a66a" font-size="10" font-weight="bold">NLM / UMLS MAPS</text>
+  <text x="425" y="272" fill="#8a7a5a" font-size="8">SNOMED CT → ICD-10-CM · ~119,000 entries · Free (UMLS license)</text>
+  <text x="425" y="285" fill="#8a7a5a" font-size="7">RF2 format · Updated twice yearly (March, September)</text>
+
+  <!-- Priority arrows between tiers -->
+  <line x1="550" y1="155" x2="550" y2="163" stroke="#ff9f1c" stroke-width="0.8" opacity="0.4"/>
+  <text x="560" y="162" fill="#ff9f1c" font-size="6" opacity="0.5">fallthrough</text>
+  <line x1="550" y1="225" x2="550" y2="233" stroke="#ff9f1c" stroke-width="0.8" opacity="0.4"/>
+  <text x="560" y="232" fill="#ff9f1c" font-size="6" opacity="0.5">fallthrough</text>
+
+  <!-- Arrow down to Context Engine -->
+  <line x1="550" y1="295" x2="550" y2="310" stroke="#ff9f1c" stroke-width="0.8" opacity="0.4"/>
+  <line x1="550" y1="335" x2="550" y2="390" stroke="#a855f7" stroke-width="1.2" marker-end="url(#aPurple)" opacity="0.7"/>
+  <text x="565" y="370" fill="#a855f7" font-size="7" opacity="0.6">candidates ▾</text>
+
+  <!-- ═══════ CANDIDATE SET ═══════ -->
+
+  <rect x="415" y="310" width="270" height="30" rx="2" fill="#0b1120" stroke="#ff9f1c" stroke-width="0.5" opacity="0.8"/>
+  <text x="550" y="329" fill="#d4a66a" font-size="8" text-anchor="middle">Candidate set: E10.9  E11.9  E13.9  O24.419</text>
+
+  <!-- ═══════ ROW 2: CONTEXT DISAMBIGUATION ═══════ -->
+
+  <rect x="375" y="395" width="350" height="130" rx="3" fill="url(#boxPurple)" stroke="#a855f7" stroke-width="1.2"/>
+  <text x="550" y="418" fill="#a855f7" font-size="11" text-anchor="middle" font-weight="bold" filter="url(#glow)">CONTEXT RULE ENGINE</text>
+  <text x="550" y="435" fill="#c084fc" font-size="9" text-anchor="middle">Disambiguation via patient context</text>
+  <line x1="395" y1="443" x2="705" y2="443" stroke="#a855f7" stroke-width="0.4" opacity="0.3"/>
+  <text x="550" y="460" fill="#7c5aaa" font-size="8" text-anchor="middle">▸ Co-morbidity rules (CKD → selects E11.22 over E11.9)</text>
+  <text x="550" y="476" fill="#7c5aaa" font-size="8" text-anchor="middle">▸ Age rules (under 18 → juvenile E10.x codes)</text>
+  <text x="550" y="492" fill="#7c5aaa" font-size="8" text-anchor="middle">▸ Gender rules (exclude gender-impossible codes)</text>
+  <text x="550" y="508" fill="#7c5aaa" font-size="8" text-anchor="middle">▸ State rules (TX TMPPM, Medicaid variations)</text>
+
+  <!-- Context inputs from left -->
+  <rect x="60" y="395" width="200" height="130" rx="3" fill="url(#boxSlate)" stroke="#64748b" stroke-width="0.8"/>
+  <text x="160" y="418" fill="#94a3b8" font-size="10" text-anchor="middle" font-weight="bold">PATIENT CONTEXT</text>
+  <line x1="80" y1="426" x2="240" y2="426" stroke="#64748b" stroke-width="0.4" opacity="0.3"/>
+  <text x="80" y="445" fill="#7a8a9a" font-size="8.5">age:        12</text>
+  <text x="80" y="461" fill="#7a8a9a" font-size="8.5">gender:     male</text>
+  <text x="80" y="477" fill="#7a8a9a" font-size="8.5">state:      TX</text>
+  <text x="80" y="493" fill="#7a8a9a" font-size="8.5">conditions: CKD</text>
+  <text x="80" y="515" fill="#475569" font-size="7">Optional context parameters</text>
+
+  <line x1="260" y1="460" x2="373" y2="460" stroke="#64748b" stroke-width="1" marker-end="url(#aPurple)" stroke-dasharray="4,3" opacity="0.5"/>
+
+  <!-- ═══════ ROW 3: SCORING ═══════ -->
+
+  <line x1="550" y1="525" x2="550" y2="560" stroke="#a855f7" stroke-width="1.2" marker-end="url(#aGreen)" opacity="0.7"/>
+  <text x="565" y="548" fill="#a855f7" font-size="7" opacity="0.6">scored ▾</text>
+
+  <rect x="375" y="565" width="350" height="55" rx="3" fill="url(#boxGreen)" stroke="#00ff88" stroke-width="1.2"/>
+  <text x="550" y="585" fill="#00ff88" font-size="10" text-anchor="middle" font-weight="bold" filter="url(#glow)">SCORING &amp; RANKING</text>
+  <text x="550" y="603" fill="#6ad4a0" font-size="8" text-anchor="middle">Narrowest matching rules score highest · Best aggregate score wins</text>
+  <text x="550" y="614" fill="#4a8a6a" font-size="7" text-anchor="middle">All candidates returned with individual scores for consumer selection</text>
+
+  <!-- ═══════ ROW 4: OUTPUT ═══════ -->
+
+  <line x1="550" y1="620" x2="550" y2="655" stroke="#00ff88" stroke-width="1.2" marker-end="url(#aGreen)" opacity="0.7"/>
+
+  <rect x="375" y="655" width="350" height="55" rx="3" fill="url(#boxGreen)" stroke="#00ff88" stroke-width="1.5"/>
+  <rect x="375" y="655" width="350" height="20" rx="3" fill="#00ff88" opacity="0.06"/>
+  <text x="550" y="672" fill="#00ff88" font-size="11" text-anchor="middle" font-weight="bold" filter="url(#glow)">TRANSLATED OUTPUT</text>
+  <text x="550" y="693" fill="#6ad4a0" font-size="9" text-anchor="middle">ICD-10-CM E11.22 · "Type 2 DM w/ diabetic CKD" · score: 0.95</text>
+  <text x="550" y="704" fill="#4a8a6a" font-size="7" text-anchor="middle">equivalence: narrower · map-version: US1000124_20250301</text>
+
+  <!-- ═══════ LEGEND ═══════ -->
+
+  <rect x="810" y="80" width="260" height="200" rx="4" fill="#0b1120" opacity="0.85" stroke="#1a2744" stroke-width="0.8"/>
+  <text x="940" y="105" fill="#4a6a8a" font-size="10" text-anchor="middle" letter-spacing="2" font-weight="bold">LEGEND</text>
+  <line x1="830" y1="115" x2="1050" y2="115" stroke="#1a2744" stroke-width="0.6"/>
+  <rect x="830" y="128" width="12" height="12" rx="1" fill="url(#boxCyan)" stroke="#00f0ff" stroke-width="0.8"/>
+  <text x="852" y="138" fill="#7ab8d4" font-size="8.5">Input / FHIR API Layer</text>
+  <rect x="830" y="150" width="12" height="12" rx="1" fill="url(#boxAmber)" stroke="#ff9f1c" stroke-width="0.8"/>
+  <text x="852" y="160" fill="#d4a66a" font-size="8.5">Map Data Sources (3-Tier)</text>
+  <rect x="830" y="172" width="12" height="12" rx="1" fill="url(#boxPurple)" stroke="#a855f7" stroke-width="0.8"/>
+  <text x="852" y="182" fill="#c084fc" font-size="8.5">Context Rule Engine</text>
+  <rect x="830" y="194" width="12" height="12" rx="1" fill="url(#boxGreen)" stroke="#00ff88" stroke-width="0.8"/>
+  <text x="852" y="204" fill="#6ad4a0" font-size="8.5">Scoring / Output</text>
+  <rect x="830" y="216" width="12" height="12" rx="1" fill="url(#boxSlate)" stroke="#64748b" stroke-width="0.8"/>
+  <text x="852" y="226" fill="#94a3b8" font-size="8.5">Patient Context</text>
+  <line x1="830" y1="240" x2="1050" y2="240" stroke="#1a2744" stroke-width="0.6"/>
+  <text x="830" y="256" fill="#4a6a8a" font-size="7.5">P1 = Highest priority</text>
+  <text x="830" y="270" fill="#4a6a8a" font-size="7.5">P3 = Lowest priority (fallthrough)</text>
+
+  <!-- Key insight box -->
+  <rect x="810" y="300" width="260" height="80" rx="4" fill="#0b1120" opacity="0.85" stroke="#00ff88" stroke-width="0.6"/>
+  <text x="940" y="323" fill="#00ff88" font-size="9" text-anchor="middle" letter-spacing="2" font-weight="bold">KEY PRINCIPLE</text>
+  <line x1="830" y1="333" x2="1050" y2="333" stroke="#00ff88" stroke-width="0.3" opacity="0.3"/>
+  <text x="830" y="350" fill="#6ad4a0" font-size="8">Plan overrides short-circuit.</text>
+  <text x="830" y="365" fill="#6ad4a0" font-size="8">Context narrows candidates.</text>
+  <text x="830" y="380" fill="#6ad4a0" font-size="8">Highest score wins.</text>
+
+  <!-- Map stats box -->
+  <rect x="810" y="400" width="260" height="120" rx="4" fill="#0b1120" opacity="0.85" stroke="#ff9f1c" stroke-width="0.6"/>
+  <text x="940" y="423" fill="#ff9f1c" font-size="9" text-anchor="middle" letter-spacing="2" font-weight="bold">MAP STATISTICS</text>
+  <line x1="830" y1="433" x2="1050" y2="433" stroke="#ff9f1c" stroke-width="0.3" opacity="0.3"/>
+  <text x="830" y="451" fill="#d4a66a" font-size="8">▸ NLM/UMLS: ~119,000 entries</text>
+  <text x="830" y="467" fill="#d4a66a" font-size="8">▸ AMA CPT:  ~8,700 entries</text>
+  <text x="830" y="483" fill="#d4a66a" font-size="8">▸ Overrides: tenant-scoped</text>
+  <text x="830" y="499" fill="#8a7a5a" font-size="7">All maps version-tracked (SHA-256)</text>
+  <text x="830" y="512" fill="#8a7a5a" font-size="7">Idempotent loading · Audit trail</text>
+
+  <!-- Footer -->
+  <rect x="0" y="685" width="1100" height="35" fill="#0b1120" opacity="0.9"/>
+  <line x1="0" y1="685" x2="1100" y2="685" stroke="#1a2744" stroke-width="0.6"/>
+  <text x="20" y="707" fill="#2a4a6a" font-size="8" letter-spacing="1">AURELIANWARE, INC. · CLOUD HEALTH OFFICE · TERMINOLOGY CROSSWALK</text>
+  <text x="1080" y="707" fill="#2a4a6a" font-size="8" text-anchor="end" letter-spacing="1">v1.0 · APR 2026</text>
+</svg>
