@@ -34,7 +34,8 @@ public class CosmosComplianceConfigRepository : IComplianceConfigRepository
 
     public async Task<TenantComplianceConfig> UpsertAsync(TenantComplianceConfig config)
     {
-        // Use tenantId as the document ID for deterministic point reads/upserts.
+        // Set document ID to tenantId for deterministic point reads/upserts.
+        // One config per tenant; callers should treat Id as managed by the repository.
         config.Id = config.TenantId;
 
         var response = await _container.UpsertItemAsync(

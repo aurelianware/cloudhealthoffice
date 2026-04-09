@@ -109,17 +109,10 @@ public class ComplianceConfigController : ControllerBase
 
         // Route tenantId takes precedence over body
         config.TenantId = tenantId;
-        config.UpdatedAt = DateTime.UtcNow;
 
         var existing = await _repository.GetAsync(tenantId);
-        if (existing is null)
-        {
-            config.CreatedAt = DateTime.UtcNow;
-        }
-        else
-        {
-            config.CreatedAt = existing.CreatedAt;
-        }
+        config.CreatedAt = existing?.CreatedAt ?? DateTime.UtcNow;
+        config.UpdatedAt = DateTime.UtcNow;
 
         var saved = await _repository.UpsertAsync(config);
 
@@ -158,10 +151,10 @@ public class ComplianceConfigController : ControllerBase
             SanitizeForLog(tenantId), _env.EnvironmentName);
 
         config.TenantId = tenantId;
-        config.UpdatedAt = DateTime.UtcNow;
 
         var existing = await _repository.GetAsync(tenantId);
         config.CreatedAt = existing?.CreatedAt ?? DateTime.UtcNow;
+        config.UpdatedAt = DateTime.UtcNow;
 
         var saved = await _repository.UpsertAsync(config);
         _cache.Remove($"compliance:{tenantId}");
