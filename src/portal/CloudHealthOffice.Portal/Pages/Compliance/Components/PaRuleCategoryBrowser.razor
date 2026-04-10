@@ -1,0 +1,89 @@
+@using CloudHealthOffice.Portal.Models
+
+<MudPaper Style="background: #111118; border: 1px solid #2a2a35; border-radius: 8px; overflow: hidden;">
+    <div style="padding: 16px; border-bottom: 1px solid #2a2a35;">
+        <MudText Typo="Typo.subtitle2" Style="color: #e8e6e0; font-weight: 600;">
+            <MudIcon Icon="@Icons.Material.Filled.Category" Size="Size.Small" Class="mr-1" />
+            PA Categories
+        </MudText>
+    </div>
+
+    @if (Loading)
+    {
+        <div style="padding: 16px;">
+            @for (int i = 0; i < 5; i++)
+            {
+                <MudSkeleton SkeletonType="SkeletonType.Text" Class="mb-2" />
+            }
+        </div>
+    }
+    else if (Categories.Count == 0)
+    {
+        <div style="padding: 24px; text-align: center;">
+            <MudText Typo="Typo.body2" Style="color: #9c9a92;">No categories available</MudText>
+        </div>
+    }
+    else
+    {
+        <MudNavMenu Style="padding: 8px;">
+            @foreach (var group in Categories)
+            {
+                <MudNavGroup Title="@($"{group.Priority} — {GetPriorityLabel(group.Priority)} ({group.Categories.Count})")"
+                             Expanded="@(group.Priority == "P1")"
+                             Icon="@Icons.Material.Filled.FolderOpen"
+                             Style="border-left: 3px solid transparent;">
+                    @foreach (var cat in group.Categories)
+                    {
+                        <MudNavLink OnClick="@(() => SelectCategory(cat.Category))"
+                                    Style="@GetCategoryStyle(cat.Category)">
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <div style="overflow: hidden;">
+                                    <div style="font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                        @cat.Category
+                                    </div>
+                                    <div style="font-size: 0.7rem; color: #9c9a92; font-family: 'JetBrains Mono', monospace;">
+                                        @cat.TmppmRef
+                                    </div>
+                                </div>
+                                <MudChip Size="Size.Small"
+                                         Style="background: transparent; color: #9c9a92; font-size: 0.65rem; min-width: auto; height: 18px;">
+                                    @cat.RuleCount
+                                </MudChip>
+                            </div>
+                        </MudNavLink>
+                    }
+                </MudNavGroup>
+            }
+        </MudNavMenu>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public List<PaCategoryGroup> Categories { get; set; } = [];
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public EventCallback<string> OnCategorySelected { get; set; }
+
+    private string? _selectedCategory;
+
+    private async Task SelectCategory(string category)
+    {
+        _selectedCategory = category;
+        await OnCategorySelected.InvokeAsync(category);
+    }
+
+    private string GetCategoryStyle(string category)
+    {
+        var isSelected = _selectedCategory == category;
+        return isSelected
+            ? "border-left: 3px solid #00e5cc; background: rgba(0, 229, 204, 0.05); transition: all 0.2s ease;"
+            : "border-left: 3px solid transparent; transition: all 0.2s ease;";
+    }
+
+    private static string GetPriorityLabel(string priority) => priority switch
+    {
+        "P1" => "Auth Required",
+        "P2" => "Limits & Restrictions",
+        "P3" => "Other Rules",
+        _ => priority
+    };
+}

@@ -1,0 +1,245 @@
+/* PA Rule Explorer — Sentinel Dark Theme */
+
+::deep .pa-explorer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+::deep .pa-explorer-tabs .mud-tabs-toolbar {
+    background: transparent;
+    border-bottom: 1px solid #2a2a35;
+}
+
+::deep .pa-explorer-tabs .mud-tab.mud-tab-active {
+    color: #00e5cc !important;
+}
+
+::deep .pa-explorer-tabs .mud-tab-slider {
+    background: #00e5cc !important;
+}
+
+/* Search bar */
+::deep .pa-search-bar {
+    position: relative;
+    margin-bottom: 8px;
+}
+
+::deep .pa-search-bar .mud-input-outlined .mud-input-outlined-border {
+    border-color: #2a2a35;
+    transition: border-color 0.2s ease;
+}
+
+::deep .pa-search-bar .mud-input-outlined:hover .mud-input-outlined-border {
+    border-color: rgba(0, 229, 204, 0.4);
+}
+
+::deep .pa-search-bar .mud-input-outlined.mud-focused .mud-input-outlined-border {
+    border-color: #00e5cc;
+    box-shadow: 0 0 0 2px rgba(0, 229, 204, 0.15);
+}
+
+::deep .pa-autocomplete-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: #111118;
+    border: 1px solid #2a2a35;
+    border-radius: 4px;
+    max-height: 240px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
+::deep .pa-autocomplete-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+::deep .pa-autocomplete-item:hover {
+    background: rgba(0, 229, 204, 0.08);
+}
+
+/* Rule card */
+::deep .pa-rule-card {
+    background: #111118;
+    border: 1px solid #2a2a35;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s ease;
+}
+
+::deep .pa-rule-card:hover {
+    border-color: rgba(0, 229, 204, 0.3);
+}
+
+::deep .pa-rule-card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(42, 42, 53, 0.5);
+}
+
+::deep .pa-rule-card-body {
+    padding: 16px;
+}
+
+/* Code pills */
+::deep .pa-code-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+::deep .pa-code-pill {
+    display: inline-block;
+    padding: 2px 10px;
+    background: rgba(0, 229, 204, 0.1);
+    color: #00e5cc;
+    border: 1px solid rgba(0, 229, 204, 0.25);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+::deep .pa-code-pill-secondary {
+    background: rgba(156, 154, 146, 0.1);
+    color: #9c9a92;
+    border-color: rgba(156, 154, 146, 0.25);
+}
+
+/* Limit badges */
+::deep .pa-limit-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: #1a1a24;
+    border: 1px solid #2a2a35;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #e8e6e0;
+}
+
+/* Documentation list */
+::deep .pa-doc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+::deep .pa-doc-list li {
+    position: relative;
+    padding: 4px 0 4px 16px;
+    color: #e8e6e0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+::deep .pa-doc-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 12px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00e5cc;
+    opacity: 0.6;
+}
+
+/* Priority dots */
+::deep .pa-priority-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+::deep .pa-priority-p1 {
+    background: #00ff88;
+    box-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
+}
+
+::deep .pa-priority-p2 {
+    background: #ffaa00;
+    box-shadow: 0 0 6px rgba(255, 170, 0, 0.4);
+}
+
+::deep .pa-priority-p3 {
+    background: #9c9a92;
+}
+
+/* Freshness indicator */
+::deep .pa-freshness-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+::deep .pa-freshness-green {
+    background: #00ff88;
+    box-shadow: 0 0 6px rgba(0, 255, 136, 0.5);
+}
+
+::deep .pa-freshness-amber {
+    background: #ffaa00;
+    box-shadow: 0 0 6px rgba(255, 170, 0, 0.5);
+}
+
+::deep .pa-freshness-red {
+    background: #ff0055;
+    box-shadow: 0 0 6px rgba(255, 0, 85, 0.5);
+}
+
+/* Diff cards */
+::deep .pa-diff-card {
+    background: #111118;
+    border: 1px solid #2a2a35;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+::deep .pa-diff-before {
+    background: rgba(255, 0, 85, 0.05);
+    border: 1px solid rgba(255, 0, 85, 0.2);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+::deep .pa-diff-after {
+    background: rgba(0, 255, 136, 0.05);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+/* Empty state */
+::deep .pa-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 64px 24px;
+    text-align: center;
+}
+
+/* Collapsible panels inside cards */
+::deep .pa-rule-card .mud-expand-panel {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+::deep .pa-rule-card .mud-expand-panel-header {
+    padding: 8px 0 !important;
+}
