@@ -1,3 +1,4 @@
+using ClaimsService.EDI.Florida;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 using Microsoft.AspNetCore.Hosting;
@@ -21,7 +22,9 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             // Remove real repository and acknowledgment service registrations
             var descriptorsToRemove = services
                 .Where(d => d.ServiceType == typeof(IClaimRepository)
-                         || d.ServiceType == typeof(IClaimAcknowledgmentService))
+                         || d.ServiceType == typeof(IClaimAcknowledgmentService)
+                         || d.ServiceType == typeof(IProviderService)
+                         || d.ServiceType == typeof(ITenantComplianceConfigService))
                 .ToList();
 
             foreach (var descriptor in descriptorsToRemove)
@@ -42,6 +45,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
 
             services.AddSingleton(ClaimRepository);
             services.AddSingleton(AcknowledgmentService);
+            services.AddSingleton(Substitute.For<IProviderService>());
+            services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());
         });
     }
 }

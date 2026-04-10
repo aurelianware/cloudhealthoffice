@@ -44,10 +44,6 @@ else
 // 277CA acknowledgment generator
 builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();
 
-// FL FMMIS encounter submission pipeline
-builder.Services.AddScoped<FmmisClaimTransformer>();
-builder.Services.AddScoped<FmmisFileBuilder>();
-
 // Inter-service HTTP clients
 builder.Services.AddHttpClient("ProviderService", client =>
 {
@@ -66,6 +62,12 @@ builder.Services.AddHttpClient("ReferenceDataService", client =>
     client.Timeout = TimeSpan.FromSeconds(10);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+// FL FMMIS encounter submission pipeline
+builder.Services.AddScoped<IProviderService, HttpProviderService>();
+builder.Services.AddScoped<ITenantComplianceConfigService, HttpTenantComplianceConfigService>();
+builder.Services.AddScoped<FmmisClaimTransformer>();
+builder.Services.AddScoped<FmmisFileBuilder>();
 
 // FL SMMC 3.0 MPIP rate enhancement
 builder.Services.AddScoped<IMpipRateClient, MpipRateClient>();
