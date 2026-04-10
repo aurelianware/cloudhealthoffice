@@ -1,3 +1,4 @@
+using EphemeralMongo;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 using ProviderService.Models;
@@ -12,13 +13,16 @@ public class MpipRateServiceTests : IAsyncLifetime
     private const string ProviderId = "provider-001";
     private const string Period = "2025-2026";
 
-    private Mongo2Go.MongoDbRunner _runner = null!;
+    private IMongoRunner _runner = null!;
     private IMongoDatabase _database = null!;
     private MpipRateService _service = null!;
 
     public Task InitializeAsync()
     {
-        _runner = Mongo2Go.MongoDbRunner.Start();
+        _runner = MongoRunner.Run(new MongoRunnerOptions
+        {
+            ConnectionTimeout = TimeSpan.FromSeconds(30)
+        });
         var client = new MongoClient(_runner.ConnectionString);
         _database = client.GetDatabase("mpip_test");
         _service = new MpipRateService(_database, NullLogger<MpipRateService>.Instance);
@@ -27,7 +31,16 @@ public class MpipRateServiceTests : IAsyncLifetime
 
     public Task DisposeAsync()
     {
-        _runner.Dispose();
+        try
+        {
+            _runner.Dispose();
+        }
+        catch (TypeLoadException)
+        {
+            // EphemeralMongo.Core 2.0.0 references MongoClientBase which was
+            // removed in MongoDB.Driver 3.x.  The TypeLoadException only occurs
+            // during disposal; the MongoDB process is cleaned up by the OS.
+        }
         return Task.CompletedTask;
     }
 
