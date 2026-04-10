@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Florida AHCA Compliance — Cloud Health Office</title>
+  <meta name="description" content="Florida AHCA SMMC 3.0 Medicaid managed care compliance. FMMIS encounter submission, 837P/837I companion guide deviations, MPIP 106.3% Medicare rate engine, and FL tenant configuration." />
+  <meta name="keywords" content="Florida AHCA, SMMC 3.0, FMMIS, Medicaid managed care, encounter submission, 837P, 837I, MPIP, MCO compliance, Florida Medicaid, Cloud Health Office" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/florida-compliance" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/florida-compliance" />
+  <meta property="og:title" content="Florida AHCA Compliance — Cloud Health Office" />
+  <meta property="og:description" content="Florida AHCA SMMC 3.0 Medicaid managed care compliance. FMMIS encounter submission, 837P/837I companion guide deviations, MPIP 106.3% Medicare rate engine, and FL tenant configuration." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Florida AHCA Compliance — Cloud Health Office",
+    "description": "Florida AHCA SMMC 3.0 Medicaid managed care compliance. FMMIS encounter submission, 837P/837I companion guide deviations, MPIP 106.3% Medicare rate engine, and FL tenant configuration.",
+    "url": "https://cloudhealthoffice.com/docs/florida-compliance",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-09",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Florida AHCA compliance",
+      "SMMC 3.0",
+      "FMMIS",
+      "MPIP",
+      "Medicaid managed care"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Florida AHCA Compliance", "item": "https://cloudhealthoffice.com/docs/florida-compliance" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">State Compliance</div>
+            <ul>
+              <li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li>
+              <li><a href="/docs/florida-compliance" class="active">Florida AHCA (SMMC 3.0)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#regulatory-requirements">Regulatory Requirements</a></li>
+              <li><a href="#tenant-config">FL Tenant Config</a></li>
+              <li><a href="#fmmis-edi">FMMIS EDI Adapter</a></li>
+              <li><a href="#encounter-submission">Encounter Submission</a></li>
+              <li><a href="#mpip-rate-engine">MPIP Rate Engine</a></li>
+              <li><a href="#submission-flow">Submission Flow</a></li>
+              <li><a href="#target-mcos">Target MCOs</a></li>
+              <li><a href="#known-gaps">Known Gaps</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Florida AHCA Compliance</span>
+        </div>
+
+        <h1>Florida AHCA Compliance</h1>
+        <p class="docs-subtitle">SMMC 3.0 &middot; FMMIS &middot; MPIP</p>
+
+        <p>Cloud Health Office ships native support for Florida&rsquo;s Agency for Health Care Administration (AHCA) regulatory requirements, including the February 2025 SMMC 3.0 program rollout. Four compliance modules handle FMMIS encounter submission, 837 companion guide deviations, MPIP enhanced rates, and FL-specific tenant configuration.</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4E4;</span>
+            <h3>FMMIS Encounters</h3>
+            <p>60-day encounter submission with deadline warnings, batch file assembly, and 999 acknowledgment processing.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4C4;</span>
+            <h3>837 Companion Guide</h3>
+            <p>FL-specific 837P/837I deviations: subscriber-as-primary, REF*1D Medicaid Provider ID, ISA08=FMMIS.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4B0;</span>
+            <h3>MPIP Rate Engine</h3>
+            <p>106.3% Medicare rate multiplier for qualifying services to members under age 21.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x2699;</span>
+            <h3>Tenant Config</h3>
+            <p>FL-specific deadlines, FMMIS credentials, prompt pay SLAs, and MPIP enablement per tenant.</p>
+          </div>
+        </div>
+
+        <!-- Section: Overview -->
+        <h2 id="overview">Overview</h2>
+
+        <p>Florida&rsquo;s Agency for Health Care Administration (AHCA) administers the Statewide Medicaid Managed Care (SMMC) program. On February 1, 2025, AHCA launched SMMC 3.0 &mdash; new 5-year MCO contracts with enhanced requirements including:</p>
+
+        <ul>
+          <li>Mandatory assignment of all Florida Medicaid members to a managed care plan</li>
+          <li>Enhanced prior authorization reform timelines</li>
+          <li>Managed Medical Assistance Physician Incentive Program (MPIP) &mdash; 106.3% of Medicare rates for qualifying services to members under age 21</li>
+          <li>Stricter encounter data submission requirements via FMMIS</li>
+          <li>Continuity of care obligations during plan transitions</li>
+        </ul>
+
+        <!-- Section: Regulatory Requirements -->
+        <h2 id="regulatory-requirements">Regulatory Requirements</h2>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Requirement</th>
+                <th>Regulation</th>
+                <th>Implementation</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Encounter Data Submission (60-day window)</td>
+                <td>AHCA SMMC MCO Contract &sect;X</td>
+                <td><code>EncounterSubmissionService</code></td>
+                <td>&#x2705; Implemented</td>
+              </tr>
+              <tr>
+                <td>FMMIS 837P/837I Companion Guide</td>
+                <td>AHCA FMMIS EDI Spec</td>
+                <td><code>FmmisClaimTransformer</code></td>
+                <td>&#x2705; Implemented</td>
+              </tr>
+              <tr>
+                <td>FL Subscriber-as-Primary rule</td>
+                <td>FMMIS Companion Guide &sect;1.2</td>
+                <td><code>FmmisClaimTransformer</code></td>
+                <td>&#x2705; Implemented</td>
+              </tr>
+              <tr>
+                <td>FL Medicaid Provider ID (REF*1D)</td>
+                <td>FMMIS Companion Guide &sect;1.2</td>
+                <td><code>FmmisClaimTransformer</code></td>
+                <td>&#x2705; Implemented</td>
+              </tr>
+              <tr>
+                <td>Prompt Pay &mdash; Electronic (35 days)</td>
+                <td>FL Stat. &sect;627.6131</td>
+                <td><code>TenantComplianceConfig</code></td>
+                <td>&#x2705; Config</td>
+              </tr>
+              <tr>
+                <td>Prompt Pay &mdash; Paper (45 days)</td>
+                <td>FL Stat. &sect;627.6131</td>
+                <td><code>TenantComplianceConfig</code></td>
+                <td>&#x2705; Config</td>
+              </tr>
+              <tr>
+                <td>Prior Auth &mdash; Urgent (72 hrs)</td>
+                <td>CMS-0057-F + FL AHCA</td>
+                <td><code>AuthorizationService</code></td>
+                <td>&#x2705; Implemented</td>
+              </tr>
+              <tr>
+                <td>Prior Auth &mdash; Standard (5 days)</td>
+                <td>FL AHCA SMMC Contract</td>
+                <td><code>TenantComplianceConfig</code></td>
+                <td>&#x2705; Config</td>
+              </tr>
+              <tr>
+                <td>MPIP Enhanced Rates (106.3% Medicare)</td>
+                <td>FL AHCA SMMC 3.0 MPIP</td>
+                <td><code>MpipRateService</code></td>
+                <td>&#x2705; Implemented</td>
+              </tr>
+              <tr>
+                <td>MPIP Auto-Qualify Specialists (under-21)</td>
+                <td>FL AHCA MPIP &sect;3</td>
+                <td><code>MpipRateService</code></td>
+                <td>&#x2705; Implemented</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Section: FL Tenant Config Schema -->
+        <h2 id="tenant-config">FL Tenant Config Schema</h2>
+
+        <p>The <code>TenantComplianceConfig</code> model holds FL-specific deadlines, FMMIS credentials, and MPIP enablement. <code>StateComplianceConfig</code> is an embedded value object with all FL regulatory timeline values. API: <code>GET/PUT /api/compliance-config/{tenantId}</code>. Seed data: <code>Data/seed/fl-ahca-config.json</code>.</p>
+
+        <pre><code>{
+  "tenantId": "fl-mco-example",
+  "stateCode": "FL",
+  "fmmisSubmitterId": "SUBMITTER_ID",
+  "fmmisInterchangeSenderId": "SENDER_ID",
+  "mpipEnabled": true,
+  "stateConfig": {
+    "promptPayElectronicDays": 35,
+    "promptPayPaperDays": 45,
+    "promptPayPenaltyRateAnnual": 0.10,
+    "claimAcknowledgmentDays": 0,
+    "priorAuthUrgentHours": 72,
+    "priorAuthStandardDays": 5,
+    "appealStandardDays": 30,
+    "appealExpeditedHours": 72,
+    "encounterSubmissionDays": 60
+  }
+}</code></pre>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>Note:</strong> Replace <code>SUBMITTER_ID</code> and <code>SENDER_ID</code> with the values assigned by AHCA during MCO contract setup.
+        </div>
+
+        <!-- Section: FMMIS EDI Adapter -->
+        <h2 id="fmmis-edi">FMMIS EDI Adapter</h2>
+
+        <p>Located in <code>services/claims-service/EDI/Florida/</code>. Three components:</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>FmmisCompanionGuide</code></td>
+                <td>Static class with FMMIS constants and validation rules</td>
+              </tr>
+              <tr>
+                <td><code>FmmisClaimTransformer</code></td>
+                <td>Applies FL-specific 837 deviations to outbound claims</td>
+              </tr>
+              <tr>
+                <td><code>FmmisFileBuilder</code></td>
+                <td>Assembles batch files: <code>FMMIS.{SubmitterId}.{yyyyMMdd_HHmmss}.dat</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>837 Deviations Applied</h3>
+        <ul>
+          <li>All enrollees treated as primary subscribers (no 2000C dependent loop)</li>
+          <li>FL Medicaid Provider Number added to 2010AA loop as REF*1D</li>
+          <li>ISA08 receiver ID set to &ldquo;FMMIS&rdquo;</li>
+        </ul>
+
+        <!-- Section: Encounter Submission Service -->
+        <h2 id="encounter-submission">Encounter Submission Service</h2>
+
+        <p>Located in <code>services/encounter-submission-service</code>. Key behaviors:</p>
+
+        <ul>
+          <li>Background worker polls every 4 hours for pending encounter submissions</li>
+          <li>Calculates 60-day submission deadline from claim adjudication date</li>
+          <li>Fires <code>encounter-deadline-warning</code> Kafka event when deadline is within 7 days</li>
+          <li>Stages batch files to Azure Blob (SFTP transport to FMMIS is a follow-on task)</li>
+          <li>Processes 999 acknowledgment responses and updates submission status</li>
+          <li>Auto-creates submission records when claims-service publishes <code>adjudication-completed</code> event</li>
+        </ul>
+
+        <!-- Section: MPIP Rate Engine -->
+        <h2 id="mpip-rate-engine">MPIP Rate Engine</h2>
+
+        <p>Located in <code>services/provider-service</code>. Two components:</p>
+
+        <ul>
+          <li><code>MpipProviderQualification</code> &mdash; tracks provider qualification per AHCA fiscal year (Oct&ndash;Sep)</li>
+          <li><code>MpipRateService</code> &mdash; applies 106.3% Medicare rate multiplier</li>
+        </ul>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Multiplier</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Specialist + member age &lt; 21</td>
+                <td>1.063x (auto-qualify)</td>
+              </tr>
+              <tr>
+                <td>PCP/OB/GYN + AHCA-qualified + member age &lt; 21</td>
+                <td>1.063x</td>
+              </tr>
+              <tr>
+                <td>Member age &ge; 21</td>
+                <td>1.0x (no enhancement)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <ul>
+          <li>Bulk import endpoint for annual AHCA qualified provider list (Oct 1)</li>
+          <li>Multiplier stored on <code>ClaimLine.MpipMultiplierApplied</code> for audit trail</li>
+        </ul>
+
+        <!-- Section: FMMIS Encounter Submission Flow -->
+        <h2 id="submission-flow">FMMIS Encounter Submission Flow</h2>
+
+        <ol>
+          <li>Claim adjudicated (Approved/Paid)</li>
+          <li><code>AdjudicationCompletedConsumer</code> receives Kafka event</li>
+          <li><code>EncounterSubmissionService.CreateSubmissionRecord()</code> &mdash; SubmissionDeadline = AdjudicatedAt + 60 days, Status = Pending</li>
+          <li><code>EncounterSubmissionWorker</code> runs every 4 hours:
+            <ul>
+              <li>Deadline within 7 days &rarr; Status = DeadlineWarning, publish <code>encounter-deadline-warning</code> event</li>
+              <li>Deadline within 48 hours &rarr; <code>BuildFmmisSubmissionBatch()</code></li>
+            </ul>
+          </li>
+          <li><code>FmmisClaimTransformer.Transform()</code> &rarr; <code>FmmisFileBuilder.Build()</code> &rarr; Write to Azure Blob staging &rarr; Status = Batched &rarr; Submitted</li>
+          <li><code>ProcessAcknowledgment()</code> processes 999 response &rarr; Status = Accepted | PartialAccept | Rejected</li>
+        </ol>
+
+        <!-- Section: Target FL Medicaid MCOs -->
+        <h2 id="target-mcos">Target FL Medicaid MCOs</h2>
+
+        <p>These plans operate under AHCA&rsquo;s SMMC 3.0 contracts (2025&ndash;2030):</p>
+
+        <ul>
+          <li>Sunshine Health (Centene)</li>
+          <li>Molina Healthcare of Florida</li>
+          <li>Humana Medical Plan (Medicaid)</li>
+          <li>Simply Healthcare Plans (Anthem)</li>
+          <li>Staywell Health Plan of Florida (WellCare/Centene)</li>
+          <li>Florida Community Care (LTC)</li>
+        </ul>
+
+        <!-- Section: Known Gaps / Future Work -->
+        <h2 id="known-gaps">Known Gaps / Future Work</h2>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>SFTP transport to FMMIS</td><td>Q3 2026</td></tr>
+              <tr><td>FL COB (Medicaid as payer of last resort)</td><td>Q3 2026</td></tr>
+              <tr><td>AHCA IMR outbound integration</td><td>Q4 2026</td></tr>
+              <tr><td>FL AHCA VBP reporting</td><td>2027</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Section: References -->
+        <h2 id="references">References</h2>
+
+        <ul>
+          <li><a href="https://ahca.myflorida.com/medicaid/statewide-medicaid-managed-care" target="_blank" rel="noopener noreferrer">AHCA SMMC 3.0 Program</a></li>
+          <li>FMMIS 837P Companion Guide &mdash; publicly available from AHCA</li>
+          <li><a href="https://www.flsenate.gov/Laws/Statutes/2023/627.6131" target="_blank" rel="noopener noreferrer">FL Statute &sect;627.6131 (Prompt Pay)</a></li>
+          <li><a href="https://ahca.myflorida.com/medicaid/statewide-medicaid-managed-care/mma-physician-incentive-program-mpip/agency-mpip-model-2025-2026" target="_blank" rel="noopener noreferrer">FL AHCA MPIP 2025-2026</a></li>
+          <li><a href="https://www.cms.gov/newsroom/fact-sheets/cms-interoperability-and-prior-authorization-final-rule-cms-0057-f" target="_blank" rel="noopener noreferrer">CMS-0057-F Prior Authorization Rule</a></li>
+        </ul>
+
+        <!-- Related Documentation -->
+        <h2 id="related-docs">Related Documentation</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 16px;">
+          <a href="/docs/compliance" class="docs-hub-card">
+            <h3>CMS-0057-F Compliance</h3>
+            <p>Federal compliance requirements, FHIR R4 APIs, and interoperability standards.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/texas-compliance" class="docs-hub-card">
+            <h3>Texas Compliance</h3>
+            <p>TX Medicaid compliance: TMHP PEMS, Gold Card exemption, STAR program rules.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/prior-auth-guide" class="docs-hub-card">
+            <h3>Prior Authorization</h3>
+            <p>PriorAuthRuleEngine, decision pathways, SLA tracking, and FHIR PAS integration.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <h3>Claims Adjudication</h3>
+            <p>Claims processing pipeline, adjudication engine, and EDI transaction handling.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/texas-compliance">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Texas Compliance</div>
+          </a>
+          <a href="/docs/compliance" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">CMS-0057-F Compliance</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.2.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

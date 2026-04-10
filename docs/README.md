@@ -31,6 +31,7 @@ CloudHealthOffice v3.0.0 — The Open Frontier Release delivers multi-cloud inde
 | [CMS-0057-F-COMPLIANCE.md](CMS-0057-F-COMPLIANCE.md) | Technical compliance guide with API specifications |
 | [HIPAA-COMPLIANCE-MATRIX.md](HIPAA-COMPLIANCE-MATRIX.md) | HIPAA security control mapping |
 | [HIPAA-AUDIT-REPORT.md](HIPAA-AUDIT-REPORT.md) | Audit report template |
+| [FL-AHCA-COMPLIANCE.md](compliance/FL-AHCA-COMPLIANCE.md) | Florida AHCA / SMMC 3.0 compliance guide — FMMIS, MPIP, encounter submission |
 
 ### Adjudication Engines
 

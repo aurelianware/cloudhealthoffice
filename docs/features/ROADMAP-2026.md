@@ -24,6 +24,22 @@ This roadmap outlines **quarterly milestones** across four strategic pillars:
 
 ---
 
+## State Compliance Strategy
+
+Cloud Health Office targets the Big 4 states by health plan enrollment:
+California, New York, Florida, and Illinois. These states collectively cover ~35%
+of U.S. health plan enrollment and have the most rigorous state-specific compliance
+requirements layered on top of the federal CMS baseline.
+
+The compliance architecture uses a `TenantComplianceConfig` model to hold
+state-specific parameter values (timelines, deadlines, rate multipliers) so that
+the same platform services can handle any state's requirements through configuration
+rather than code branching.
+
+See `docs/compliance/` for state-specific compliance guides.
+
+---
+
 ## 2026 Vision Statement
 
 > **By December 31, 2026, Cloud Health Office will be the industry's most trusted, AI-powered, fully CMS-compliant EDI platform—deployed by 100+ payers, supported by a thriving developer community, and recognized as the standard for healthcare interoperability.**
@@ -354,6 +370,15 @@ SLA: 99.9% availability
 
 ---
 
+### State Compliance — Florida AHCA (SMMC 3.0)
+- [ ] FL Tenant Config Schema (TenantComplianceConfig + StateComplianceConfig)
+- [ ] FMMIS EDI Adapter (837P/837I companion guide deviations)
+- [ ] Encounter Submission Service (60-day AHCA window, deadline warnings)
+- [ ] SMMC 3.0 MPIP Rate Engine (106.3% Medicare rate for under-21)
+- [ ] FL AHCA E2E integration test suite
+
+---
+
 ### Q2 2026 Summary
 
 | Category | Key Milestone | Target |
@@ -518,6 +543,30 @@ Latency Target: <1s per claim
 - Contributors: 60 → 100
 - Conference attendees: 500+
 - Customer case studies: 10+
+
+---
+
+### State Compliance — Florida AHCA (Follow-on)
+- [ ] SFTP transport to FMMIS (currently staged to Azure Blob)
+- [ ] FL COB: Medicaid as payer of last resort
+- [ ] AHCA IMR (Independent Medical Review) outbound integration
+
+### State Compliance — New York (NYDFS / DOH)
+- [ ] NY DFS 23 NYCRR 500 cybersecurity documentation layer
+- [ ] NY external appeal workflow
+- [ ] NY eMedNY encounter data submission adapter
+- [ ] NY prompt pay SLA (30-day electronic / 45-day paper)
+
+### State Compliance — California (DMHC / DHCS)
+- [ ] CA SB 598 Gold Carding (provider PA exemption based on approval rate history)
+- [ ] CA DMHC IMR outbound integration (iFiling system)
+- [ ] CA DHCS encounter data submission
+- [ ] CA prompt pay SLA (30-day electronic / 45-day paper)
+
+### State Compliance — Illinois (IDOI / HFS)
+- [ ] IL HFS Medicaid encounter EDI adapter
+- [ ] IL prompt pay config (30-day electronic / 40-day paper)
+- [ ] IL MCRA managed care reporting
 
 ---
 
@@ -690,6 +739,16 @@ Throughput: 500,000 transactions/day
 | 2026 impact report | Dec 15, 2026 | 🔄 Planning |
 | Top contributor awards | Dec 20, 2026 | 🔄 Planning |
 | 2027 roadmap preview | Dec 31, 2026 | 🔄 Planning |
+
+---
+
+### State Compliance — Phase 2
+- [ ] FL AHCA VBP (value-based payment) reporting
+- [ ] CA DHCS VBP roadmap reporting
+- [ ] NY DOH VBP roadmap compliance
+- [ ] FL AHCA Independent Medical Review (IMR) — full workflow
+- [ ] MLR (Medical Loss Ratio) reporting — all Big 4 states
+- [ ] Network adequacy time/distance standards engine (all states)
 
 ---
 
