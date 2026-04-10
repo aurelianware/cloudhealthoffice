@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1020" font-family="'Inter', 'Segoe UI', sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a0f"/>
+      <stop offset="100%" style="stop-color:#111118"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- Arrow marker -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9c9a92"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="1020" fill="url(#bg)" rx="12"/>
+
+  <!-- Title -->
+  <text x="500" y="40" fill="#e8e6e0" font-size="18" font-weight="600" text-anchor="middle">TMPPM Extraction Pipeline</text>
+
+  <!-- Step 1: TMHP Website -->
+  <rect x="310" y="65" width="380" height="64" rx="10" fill="#4a4a4a" stroke="#666" stroke-width="1"/>
+  <text x="500" y="92" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">TMHP website</text>
+  <text x="500" y="112" fill="#9c9a92" font-size="12" text-anchor="middle" font-family="'JetBrains Mono', monospace">tmhp.com/tmppm</text>
+
+  <!-- Arrow 1→2 -->
+  <line x1="500" y1="129" x2="500" y2="155" stroke="#9c9a92" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 2: Chapter Downloader -->
+  <rect x="310" y="160" width="380" height="64" rx="10" fill="#1a6b5a" stroke="#00e5cc" stroke-width="1" stroke-opacity="0.3"/>
+  <text x="500" y="187" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">Chapter downloader</text>
+  <text x="500" y="207" fill="#00e5cc" font-size="12" text-anchor="middle" opacity="0.8">8 PDFs, SHA256 tracked</text>
+  <!-- Annotation -->
+  <text x="720" y="195" fill="#9c9a92" font-size="11" font-style="italic" opacity="0.6">Monthly refresh</text>
+  <line x1="690" y1="192" x2="715" y2="192" stroke="#9c9a92" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+
+  <!-- Arrow 2→3 -->
+  <line x1="500" y1="224" x2="500" y2="250" stroke="#9c9a92" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 3: Change Detection -->
+  <rect x="310" y="255" width="380" height="54" rx="10" fill="#155e4e" stroke="#00e5cc" stroke-width="1" stroke-opacity="0.2"/>
+  <text x="500" y="287" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">Change detection (SHA256)</text>
+  <!-- Annotation -->
+  <text x="720" y="285" fill="#9c9a92" font-size="11" font-style="italic" opacity="0.6">Only changed chapters</text>
+  <line x1="690" y1="282" x2="715" y2="282" stroke="#9c9a92" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+
+  <!-- Arrow 3→4 -->
+  <line x1="500" y1="309" x2="500" y2="335" stroke="#9c9a92" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 4: Section Extractor -->
+  <rect x="310" y="340" width="380" height="64" rx="10" fill="#3a2a6a" stroke="#a07cf0" stroke-width="1" stroke-opacity="0.3"/>
+  <text x="500" y="367" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">Section extractor (PyMuPDF)</text>
+  <text x="500" y="387" fill="#a07cf0" font-size="12" text-anchor="middle" opacity="0.8">50 PA sections identified</text>
+
+  <!-- Arrow 4→5 -->
+  <line x1="500" y1="404" x2="500" y2="430" stroke="#9c9a92" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 5: Confidence Scoring (diamond-ish) -->
+  <rect x="310" y="435" width="380" height="54" rx="10" fill="#3a2a6a" stroke="#a07cf0" stroke-width="1" stroke-opacity="0.3"/>
+  <text x="500" y="467" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">Confidence scoring</text>
+
+  <!-- Branch labels -->
+  <text x="210" y="510" fill="#9c9a92" font-size="11" font-style="italic" opacity="0.7">High confidence</text>
+  <text x="730" y="510" fill="#9c9a92" font-size="11" font-style="italic" opacity="0.7">Low confidence</text>
+
+  <!-- Arrow 5→6a (left branch - regex) -->
+  <path d="M 400 489 L 300 530" stroke="#9c9a92" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Arrow 5→6b (right branch - LLM) -->
+  <path d="M 600 489 L 700 530" stroke="#9c9a92" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Step 6a: Regex Extraction -->
+  <rect x="140" y="535" width="320" height="64" rx="10" fill="#1a6b5a" stroke="#00e5cc" stroke-width="1" stroke-opacity="0.3"/>
+  <text x="300" y="562" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">Regex extraction</text>
+  <text x="300" y="582" fill="#00e5cc" font-size="12" text-anchor="middle" opacity="0.8">CPT, HCPCS, age rules</text>
+
+  <!-- Step 6b: LLM Enrichment -->
+  <rect x="540" y="535" width="320" height="64" rx="10" fill="#5a2a1a" stroke="#ff6b4a" stroke-width="1" stroke-opacity="0.3"/>
+  <text x="700" y="562" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">LLM enrichment</text>
+  <text x="700" y="582" fill="#ff6b4a" font-size="12" text-anchor="middle" opacity="0.8">Clinical criteria, codes</text>
+
+  <!-- Arrow 6a→7 -->
+  <path d="M 300 599 L 400 640" stroke="#9c9a92" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Arrow 6b→7 -->
+  <path d="M 700 599 L 600 640" stroke="#9c9a92" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Step 7: Cross-validation -->
+  <rect x="310" y="645" width="380" height="54" rx="10" fill="#1a6b5a" stroke="#00e5cc" stroke-width="1" stroke-opacity="0.2"/>
+  <text x="500" y="677" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">Cross-validation + merge</text>
+
+  <!-- Arrow 7→8 -->
+  <line x1="500" y1="699" x2="500" y2="730" stroke="#9c9a92" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 8: Cosmos DB -->
+  <rect x="310" y="735" width="380" height="64" rx="10" fill="#0d3a6a" stroke="#3388ff" stroke-width="1" stroke-opacity="0.3"/>
+  <text x="500" y="762" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">Cosmos DB (MongoDB API)</text>
+  <text x="500" y="782" fill="#3388ff" font-size="12" text-anchor="middle" opacity="0.8">ConceptMapEntry overrides</text>
+  <!-- Annotation -->
+  <text x="720" y="775" fill="#9c9a92" font-size="11" font-style="italic" opacity="0.6">State=TX, tenant=PCHP</text>
+  <line x1="690" y1="772" x2="715" y2="772" stroke="#9c9a92" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+
+  <!-- Arrow 8→9 -->
+  <line x1="500" y1="799" x2="500" y2="830" stroke="#9c9a92" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 9: CRD Server -->
+  <rect x="310" y="835" width="380" height="64" rx="10" fill="#2a5a1a" stroke="#00ff88" stroke-width="1" stroke-opacity="0.3"/>
+  <text x="500" y="862" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">CRD / PriorAuth server</text>
+  <text x="500" y="882" fill="#00ff88" font-size="12" text-anchor="middle" opacity="0.8">TX-correct auth determination</text>
+
+  <!-- Legend -->
+  <rect x="310" y="930" width="380" height="70" rx="8" fill="none" stroke="#2a2a35" stroke-width="1"/>
+  <text x="330" y="952" fill="#9c9a92" font-size="10" text-transform="uppercase" letter-spacing="0.08em">LEGEND</text>
+  <rect x="330" y="962" width="12" height="12" rx="2" fill="#1a6b5a" stroke="#00e5cc" stroke-width="0.5" stroke-opacity="0.3"/>
+  <text x="348" y="973" fill="#9c9a92" font-size="11">Deterministic</text>
+  <rect x="440" y="962" width="12" height="12" rx="2" fill="#3a2a6a" stroke="#a07cf0" stroke-width="0.5" stroke-opacity="0.3"/>
+  <text x="458" y="973" fill="#9c9a92" font-size="11">Analysis</text>
+  <rect x="540" y="962" width="12" height="12" rx="2" fill="#5a2a1a" stroke="#ff6b4a" stroke-width="0.5" stroke-opacity="0.3"/>
+  <text x="558" y="973" fill="#9c9a92" font-size="11">LLM</text>
+  <rect x="610" y="962" width="12" height="12" rx="2" fill="#0d3a6a" stroke="#3388ff" stroke-width="0.5" stroke-opacity="0.3"/>
+  <text x="628" y="973" fill="#9c9a92" font-size="11">Storage</text>
+</svg>

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TMPPM Prior Authorization Rules — Texas Medicaid Compliance — Cloud Health Office</title>
+  <meta name="description" content="Automated TMPPM prior authorization rule extraction for Texas Medicaid. 50 PA categories, 8 TMPPM chapters, monthly auto-refresh from TMHP PDFs to CRD endpoint. The only CMS-0057-F platform with built-in state-specific PA rules." />
+  <meta name="keywords" content="TMPPM, Texas Medicaid Provider Procedures Manual, prior authorization, PA rules, TMHP, CPT, HCPCS, CRD, CDS Hooks, CMS-0057-F, Medicaid compliance, neurostimulators, bariatric surgery, HBOT, hyperbaric oxygen, organ transplants, ConceptMapEntry, Cosmos DB" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules" />
+  <meta property="og:title" content="TMPPM PA Rule Extraction — Cloud Health Office" />
+  <meta property="og:description" content="The only CMS-0057-F platform that ingests the Texas Medicaid Provider Procedures Manual, extracts PA rules from TMHP PDFs, and serves them through CRD in real time." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "TMPPM Prior Authorization Rules — Cloud Health Office",
+    "description": "Automated extraction of Texas Medicaid prior authorization rules from the TMPPM. 50 PA categories across 8 chapters, monthly auto-refresh, hybrid regex + LLM extraction, persisted to Cosmos DB for real-time CRD responses.",
+    "url": "https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-10",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "TMPPM",
+      "Texas Medicaid prior authorization",
+      "TMHP",
+      "CPT code PA requirements",
+      "HCPCS quarterly updates",
+      "CRD endpoint",
+      "CDS Hooks",
+      "ConceptMapEntry"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Texas Compliance", "item": "https://cloudhealthoffice.com/docs/texas-compliance" },
+        { "@type": "ListItem", "position": 4, "name": "TMPPM PA Rules", "item": "https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .tmppm-stats{display:flex;gap:2rem;flex-wrap:wrap;margin:1.5rem 0}
+    .tmppm-stat{text-align:center;flex:1;min-width:120px;padding:1rem;background:rgba(0,229,204,0.04);border:1px solid rgba(0,229,204,0.12);border-radius:8px}
+    .tmppm-stat .num{font-size:1.5rem;font-weight:700;color:#00e5cc;font-family:'JetBrains Mono',monospace}
+    .tmppm-stat .label{font-size:0.75rem;color:#9c9a92;text-transform:uppercase;letter-spacing:0.06em;margin-top:4px}
+    .tmppm-flow{position:relative;padding:0.5rem 0}
+    .tmppm-flow-step{display:flex;align-items:flex-start;gap:1rem;padding:1rem 0;position:relative}
+    .tmppm-flow-step::before{content:'';position:absolute;left:19px;top:0;bottom:0;width:2px;background:linear-gradient(to bottom,rgba(0,229,204,0.4),rgba(42,42,53,0.4))}
+    .tmppm-flow-step:last-child::before{display:none}
+    .tmppm-flow-icon{width:40px;height:40px;min-width:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1rem;position:relative;z-index:1}
+    .tmppm-flow-icon.teal{background:rgba(0,229,204,0.12);border:1px solid rgba(0,229,204,0.25);color:#00e5cc}
+    .tmppm-flow-icon.purple{background:rgba(120,80,220,0.12);border:1px solid rgba(120,80,220,0.25);color:#a07cf0}
+    .tmppm-flow-icon.coral{background:rgba(255,107,74,0.12);border:1px solid rgba(255,107,74,0.25);color:#ff6b4a}
+    .tmppm-flow-icon.blue{background:rgba(51,136,255,0.12);border:1px solid rgba(51,136,255,0.25);color:#3388ff}
+    .tmppm-flow-icon.green{background:rgba(0,255,136,0.12);border:1px solid rgba(0,255,136,0.25);color:#00ff88}
+    .tmppm-flow-body h4{font-size:0.95rem;font-weight:600;margin-bottom:0.25rem}
+    .tmppm-flow-body p{color:#9c9a92;font-size:0.88rem;line-height:1.6}
+    .tmppm-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:1rem}
+    .tmppm-card{background:#111118;border:1px solid #2a2a35;border-radius:10px;padding:1.25rem;transition:border-color 0.2s}
+    .tmppm-card:hover{border-color:rgba(0,229,204,0.3)}
+    .tmppm-card h4{font-size:0.9rem;font-weight:600;margin-bottom:0.4rem;display:flex;align-items:center;gap:8px}
+    .tmppm-card h4 .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .tmppm-card h4 .dot.p1{background:#00ff88}
+    .tmppm-card h4 .dot.p2{background:#f0a030}
+    .tmppm-card p{color:#9c9a92;font-size:0.82rem;line-height:1.6}
+    .tmppm-card .codes{margin-top:0.6rem;display:flex;flex-wrap:wrap;gap:5px}
+    .tmppm-card .codes span{font-family:'JetBrains Mono',monospace;font-size:0.72rem;padding:2px 7px;border-radius:4px;background:rgba(0,229,204,0.08);color:#00e5cc;border:1px solid rgba(0,229,204,0.15)}
+    .tmppm-compare{border:1px solid #2a2a35;border-radius:10px;overflow:hidden;margin-top:1.5rem}
+    .tmppm-compare table{width:100%;border-collapse:collapse}
+    .tmppm-compare th{background:#1a1a24;padding:10px 14px;text-align:left;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#9c9a92;font-weight:500}
+    .tmppm-compare td{padding:10px 14px;border-top:1px solid #2a2a35;font-size:0.85rem;vertical-align:top}
+    .tmppm-compare tr:hover td{background:rgba(0,229,204,0.03)}
+    .tmppm-check{color:#00ff88;font-weight:600}
+    .tmppm-cross{color:#ff6b4a;font-weight:600}
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">State Compliance</div>
+            <ul>
+              <li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li>
+              <li><a href="/docs/texas-tmppm-pa-rules" class="active">Texas TMPPM PA Rules</a></li>
+              <li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#the-problem">The Problem</a></li>
+              <li><a href="#pipeline">Extraction Pipeline</a></li>
+              <li><a href="#validated-rules">Validated Extractions</a></li>
+              <li><a href="#comparison">Competitive Comparison</a></li>
+              <li><a href="#pa-rule-explorer">PA Rule Explorer</a></li>
+              <li><a href="#architecture">Technical Architecture</a></li>
+              <li><a href="#monthly-refresh">Monthly Refresh Cycle</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs/texas-compliance">Texas Compliance</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">TMPPM PA Rules</span>
+        </div>
+
+        <h1>TMPPM Prior Authorization Rules</h1>
+        <p class="docs-subtitle">Automated extraction from the Texas Medicaid Provider Procedures Manual</p>
+
+        <p>The only CMS-0057-F platform that ingests the <strong>Texas Medicaid Provider Procedures Manual (TMPPM)</strong> directly from TMHP, extracts prior authorization rules at the procedure-code level, and serves them through the CRD endpoint in real time. No manual questionnaire authoring. No monthly spreadsheet maintenance.</p>
+
+        <div class="tmppm-stats">
+          <div class="tmppm-stat"><div class="num">50</div><div class="label">PA categories extracted</div></div>
+          <div class="tmppm-stat"><div class="num">8</div><div class="label">TMPPM chapters covered</div></div>
+          <div class="tmppm-stat"><div class="num">Monthly</div><div class="label">Auto-refresh cycle</div></div>
+          <div class="tmppm-stat"><div class="num">&lt;$1</div><div class="label">Per extraction run</div></div>
+        </div>
+
+        <!-- The Problem -->
+        <h2 id="the-problem">The Problem</h2>
+
+        <p>On the March 2024 PCHP interoperability call, Cognizant confirmed their TriZetto EPA has <strong>no Texas Medicaid-specific rules</strong>. Their quote includes 130 custom questionnaires &mdash; but Texas Medicaid exceeds that. Monthly TMPPM maintenance falls entirely on plan staff, who must manually read PDFs, identify changes, and update questionnaires by hand.</p>
+
+        <p>CHO eliminates this manual burden entirely with an automated extraction pipeline that reads the same TMHP PDFs and produces structured, queryable PA rules.</p>
+
+        <!-- Pipeline -->
+        <h2 id="pipeline">From PDF to CRD Response in One Pipeline</h2>
+
+        <div class="tmppm-flow">
+          <div class="tmppm-flow-step">
+            <div class="tmppm-flow-icon teal">&#x2193;</div>
+            <div class="tmppm-flow-body">
+              <h4>1. Download TMPPM chapters</h4>
+              <p>8 priority PDF chapters pulled directly from <code>tmhp.com</code>. Each file SHA256-hashed for month-over-month change detection. Only changed chapters get re-parsed.</p>
+            </div>
+          </div>
+          <div class="tmppm-flow-step">
+            <div class="tmppm-flow-icon purple">&#x23D4;</div>
+            <div class="tmppm-flow-body">
+              <h4>2. Extract PA sections</h4>
+              <p>PyMuPDF locates all 50 &ldquo;Prior Authorization&rdquo; sections by TMPPM reference number. Skips table-of-contents entries, finds the body text with clinical criteria, procedure codes, and documentation requirements.</p>
+            </div>
+          </div>
+          <div class="tmppm-flow-step">
+            <div class="tmppm-flow-icon coral">&#x25C8;</div>
+            <div class="tmppm-flow-body">
+              <h4>3. Hybrid regex + LLM extraction</h4>
+              <p>Regex catches CPT/HCPCS codes and age rules from clean sections. Sections with low regex confidence escalate to Claude API for structured extraction &mdash; clinical criteria, diagnosis restrictions, unit limits, documentation requirements.</p>
+            </div>
+          </div>
+          <div class="tmppm-flow-step">
+            <div class="tmppm-flow-icon blue">&#x25C9;</div>
+            <div class="tmppm-flow-body">
+              <h4>4. Persist to Cosmos DB</h4>
+              <p>Rules stored as <code>ConceptMapEntry</code> overrides with <code>State=TX</code>, <code>IsOverride=true</code>, and optional <code>TenantId</code> for plan-specific scoping. Same collection the TerminologyService queries at runtime.</p>
+            </div>
+          </div>
+          <div class="tmppm-flow-step">
+            <div class="tmppm-flow-icon green">&#x25C6;</div>
+            <div class="tmppm-flow-body">
+              <h4>5. CRD server responds</h4>
+              <p>Provider submits a CRD check &rarr; CHO queries Cosmos &rarr; returns Texas-correct &ldquo;auth required&rdquo; or &ldquo;no auth&rdquo; with the TMPPM section reference and clinical criteria. Sub-second response, zero manual lookup.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin: 32px 0; text-align: center;">
+          <img src="/graphics/TmppmExtractionPipeline.svg" alt="TMPPM extraction pipeline diagram showing the flow from TMHP PDF download through SHA256 change detection, PyMuPDF section extraction, hybrid regex and LLM enrichment, Cosmos DB persistence, to CRD server response" style="max-width: 100%; height: auto; border: 1px solid rgba(0,229,204,0.12); border-radius: 8px;" loading="lazy" />
+          <p style="font-size: 0.85rem; opacity: 0.6; margin-top: 8px;">End-to-end TMPPM extraction pipeline &mdash; from TMHP PDF to CRD response</p>
+        </div>
+
+        <!-- Validated Extractions -->
+        <h2 id="validated-rules">Validated Extractions &mdash; April 2026 TMPPM</h2>
+
+        <p>These are real rules extracted from the current TMPPM edition, verified against the source PDFs:</p>
+
+        <div class="tmppm-card-grid">
+          <div class="tmppm-card">
+            <h4><span class="dot p1"></span>Hypoglossal nerve stimulators</h4>
+            <p>&sect;9.2.46.14 &mdash; PA required for surgical implantation. OSA diagnosis with failed CPAP compliance or seizure diagnosis. DISE procedure required for OSA.</p>
+            <div class="codes"><span>64582</span><span>64583</span><span>64584</span></div>
+          </div>
+          <div class="tmppm-card">
+            <h4><span class="dot p1"></span>Bariatric surgery</h4>
+            <p>&sect;9.2.8.1 &mdash; BMI &ge;35 adults (&ge;40 pediatric). 13 qualifying comorbidities. Psych eval required. 6-month structured diet program. MBSAQIP facility accreditation.</p>
+            <div class="codes"><span>LLM enrichment</span></div>
+          </div>
+          <div class="tmppm-card">
+            <h4><span class="dot p1"></span>Hyperbaric oxygen therapy</h4>
+            <p>&sect;9.2.33.1 &mdash; Session limits per covered indication. Air embolism: 6 intervals. Carbon monoxide: 15 initial, 9 subsequent. Central retinal artery: 36 intervals.</p>
+            <div class="codes"><span>99183</span><span>G0277</span></div>
+          </div>
+          <div class="tmppm-card">
+            <h4><span class="dot p1"></span>Organ transplants</h4>
+            <p>&sect;9.2.51.1 &mdash; General PA requirements. Contraindications: pulmonary HTN, uncontrolled HIV, psychiatric instability. 3-day pre / 6-week post denial window.</p>
+            <div class="codes"><span>Category-level</span></div>
+          </div>
+          <div class="tmppm-card">
+            <h4><span class="dot p2"></span>HCPCS Q1 2026 updates</h4>
+            <p>April 1, 2026 effective. New PA-required codes and diagnosis-restricted drugs. Auto-ingested from TMHP quarterly bulletins.</p>
+            <div class="codes"><span>C8007</span><span>C8011</span><span>J3404</span><span>L2221</span><span>J9601</span><span>J9248</span></div>
+          </div>
+          <div class="tmppm-card">
+            <h4><span class="dot p2"></span>Neurostimulators</h4>
+            <p>&sect;9.2.46 &mdash; 10 sub-categories: dorsal column, vagal nerve, sacral nerve, intracranial, pelvic floor, gastric, TENS, NMES, PENS, diaphragm-pacing.</p>
+            <div class="codes"><span>50+ CPT codes</span></div>
+          </div>
+        </div>
+
+        <!-- Comparison -->
+        <h2 id="comparison">Competitive Comparison</h2>
+
+        <p>How CHO&rsquo;s automated TMPPM extraction compares to manual questionnaire-based approaches:</p>
+
+        <div class="tmppm-compare">
+          <table>
+            <thead>
+              <tr><th style="width:35%">Capability</th><th style="width:32%">Cognizant TriZetto EPA</th><th style="width:33%">CHO TMPPM Engine</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>State-specific PA rules</td><td class="tmppm-cross">&#x2717; None &mdash; 130 generic questionnaires</td><td class="tmppm-check">&#x2713; 50 TX categories, code-level</td></tr>
+              <tr><td>TMPPM monthly tracking</td><td class="tmppm-cross">&#x2717; Manual &mdash; plan staff responsibility</td><td class="tmppm-check">&#x2713; Automated SHA256 change detection</td></tr>
+              <tr><td>HCPCS quarterly updates</td><td class="tmppm-cross">&#x2717; Not included</td><td class="tmppm-check">&#x2713; 8 Q1 2026 rules loaded</td></tr>
+              <tr><td>SNOMED&#x2194;CPT translation</td><td class="tmppm-cross">&#x2717; &ldquo;Go buy from a vendor&rdquo;</td><td class="tmppm-check">&#x2713; Built-in TerminologyService</td></tr>
+              <tr><td>Clinical criteria extraction</td><td class="tmppm-cross">&#x2717; Not digitized</td><td class="tmppm-check">&#x2713; LLM-assisted structured extraction</td></tr>
+              <tr><td>Tenant scoping</td><td>Single-tenant</td><td class="tmppm-check">&#x2713; Per-plan overrides (PCHP, etc.)</td></tr>
+              <tr><td>Completed implementations</td><td class="tmppm-cross">&#x2717; Zero as of March 2024</td><td class="tmppm-check">&#x2713; Pipeline running, data in Cosmos</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- PA Rule Explorer -->
+        <h2 id="pa-rule-explorer">PA Rule Explorer</h2>
+
+        <p>The <strong>PA Rule Explorer</strong> is a Blazor Server page in the CHO portal that gives PCHP plan administrators and UM staff direct access to the extracted TMPPM rules:</p>
+
+        <ul>
+          <li><strong>Search by CPT/HCPCS code</strong> &mdash; type a procedure code and instantly see whether PA is required, the clinical criteria, required documentation, and the TMPPM section reference</li>
+          <li><strong>Browse by category</strong> &mdash; expandable tree of all 50 PA categories grouped by priority (P1 Auth Required, P2 Limits &amp; Restrictions, P3 Other)</li>
+          <li><strong>Edition metadata</strong> &mdash; which TMPPM edition is loaded, last refresh timestamp, and a freshness indicator (green &lt;30 days, amber 30&ndash;60, red &gt;60)</li>
+          <li><strong>Month-over-month diff</strong> &mdash; added, modified, and removed rules with before/after comparison between any two editions</li>
+        </ul>
+
+        <p>Access the PA Rule Explorer at <code>/compliance/pa-rules</code> in the Blazor portal. Requires the <code>compliance:read</code> or <code>authorizations:read</code> permission.</p>
+
+        <!-- Architecture -->
+        <h2 id="architecture">Technical Architecture</h2>
+
+        <h3>Data Model</h3>
+        <p>Extracted rules are stored in three Cosmos DB (MongoDB API) collections in the <code>cho_terminology</code> database:</p>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr><th>Collection</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>tmppm_pa_rules</code></td><td>Raw extracted rules with clinical criteria, CPT/HCPCS codes, age limits, documentation requirements</td></tr>
+              <tr><td><code>tmppm_editions</code></td><td>Version tracking with SHA256 per chapter, publication date, ingestion timestamp</td></tr>
+              <tr><td><code>concept_map_entries</code></td><td><code>ConceptMapEntry</code> overrides queried by the CRD server at runtime (<code>IsOverride=true</code>, <code>State=TX</code>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Tenant Scoping</h3>
+        <p>All rules are tenant-scoped with <code>TenantId</code> (e.g., <code>pchp</code>). The CRD server merges global rules with tenant-specific overrides at query time, allowing plans to customize PA requirements while inheriting the platform baseline.</p>
+
+        <h3>Extraction Pipeline</h3>
+        <p>The <code>TmppmIngestionService</code> is a .NET 8 console application in <code>tools/CloudHealthOffice.TmppmIngestionService</code>:</p>
+        <ul>
+          <li><strong>TmhpChapterDownloader</strong> &mdash; fetches PDFs from TMHP, SHA256 hashes for change detection</li>
+          <li><strong>TmppmPdfParser</strong> &mdash; PdfPig-based text extraction with regex pattern matching for procedure codes, age rules, and section references</li>
+          <li><strong>extract_section.py</strong> &mdash; PyMuPDF script for targeted section extraction when PdfPig has layout issues</li>
+          <li><strong>IngestionPipeline</strong> &mdash; orchestrates download &rarr; parse &rarr; store, with LLM escalation for complex clinical criteria</li>
+          <li><strong>TmppmRuleStore</strong> &mdash; MongoDB upsert logic with edition versioning and diff report generation</li>
+        </ul>
+
+        <!-- Monthly Refresh -->
+        <h2 id="monthly-refresh">Monthly Refresh Cycle</h2>
+
+        <p>TMHP publishes updated TMPPM chapters monthly. CHO&rsquo;s refresh cycle:</p>
+
+        <ol>
+          <li><strong>Download</strong> &mdash; all 8 priority chapters fetched from TMHP</li>
+          <li><strong>Compare</strong> &mdash; SHA256 hash compared to previous edition; unchanged chapters skipped</li>
+          <li><strong>Extract</strong> &mdash; changed chapters re-parsed; new/modified rules identified</li>
+          <li><strong>Diff report</strong> &mdash; <code>TmppmDiffReport</code> generated with added, modified, and removed deltas</li>
+          <li><strong>Publish</strong> &mdash; new <code>ConceptMapEntry</code> overrides upserted; previous edition preserved for audit</li>
+          <li><strong>Notify</strong> &mdash; rules flagged <code>RequiresHumanReview=true</code> appear in the PA Rule Explorer diff view for UM staff review</li>
+        </ol>
+
+        <div class="docs-callout" style="margin-top: 16px;">
+          <strong>Cost:</strong> Each full extraction run costs less than $1 in Claude API calls. Regex handles ~70% of sections; only complex clinical criteria sections escalate to the LLM.
+        </div>
+
+        <!-- TMPPM Chapters Covered -->
+        <h3>TMPPM Chapters Covered</h3>
+
+        <div class="docs-table-wrapper" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr><th>Chapter</th><th>Title</th><th>PA Categories</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>1_05</code></td><td>Prior Authorization</td><td>Master PA category list and general requirements</td></tr>
+              <tr><td><code>2_01</code></td><td>Ambulance Services</td><td>Air ambulance, non-emergency transport</td></tr>
+              <tr><td><code>2_02</code></td><td>Behavioral Health</td><td>Inpatient psych, residential treatment, ABA</td></tr>
+              <tr><td><code>2_06</code></td><td>DME and Supplies</td><td>Power wheelchairs, orthotics, prosthetics</td></tr>
+              <tr><td><code>2_11</code></td><td>Inpatient/Outpatient Hospital</td><td>Transplants, bariatric, cardiac procedures</td></tr>
+              <tr><td><code>2_13</code></td><td>Medical Specialties &amp; Physician Services</td><td>Neurostimulators, HBOT, pain management, imaging</td></tr>
+              <tr><td><code>2_16</code></td><td>PT/OT/ST Services</td><td>Therapy visit limits, specialized rehab</td></tr>
+              <tr><td><code>2_17</code></td><td>Radiology and Lab</td><td>Advanced imaging PA requirements</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Related -->
+        <h2>Related Documentation</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 16px;">
+          <a href="/docs/texas-compliance" class="docs-hub-card">
+            <h3>Texas State Compliance</h3>
+            <p>TMHP PEMS enrollment, Gold Card exemption, HHSC UMCM rules, STAR/STAR+PLUS/STAR Kids programs.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/prior-auth-guide" class="docs-hub-card">
+            <h3>Prior Authorization</h3>
+            <p>PriorAuthRuleEngine, decision pathways, SLA tracking, and FHIR PAS integration.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/terminology-guide" class="docs-hub-card">
+            <h3>Terminology Crosswalk</h3>
+            <p>ConceptMapEntry model, SNOMED&#x2194;ICD translation, and tenant-scoped overrides.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+          <a href="/docs/compliance" class="docs-hub-card">
+            <h3>CMS-0057-F Compliance</h3>
+            <p>Federal compliance requirements, FHIR R4 APIs, and interoperability standards.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/texas-compliance">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Texas State Compliance</div>
+          </a>
+          <a href="/docs/florida-compliance" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Florida AHCA Compliance</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.2.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

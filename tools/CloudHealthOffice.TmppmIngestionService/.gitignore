@@ -1,0 +1,5 @@
+tmppm-data/
+bin/
+obj/
+.DS_Store
+parse_debug.txt

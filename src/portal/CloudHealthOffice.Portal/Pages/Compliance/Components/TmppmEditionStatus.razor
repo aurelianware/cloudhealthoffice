@@ -1,0 +1,81 @@
+@using CloudHealthOffice.Portal.Models
+
+<MudPaper Style="background: #111118; border: 1px solid #2a2a35; border-radius: 8px; padding: 16px; min-width: 220px;">
+    @if (Loading)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Text" Width="120px" />
+        <MudSkeleton SkeletonType="SkeletonType.Text" Width="160px" Class="mt-1" />
+    }
+    else if (Edition != null)
+    {
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span class="@GetFreshnessCssClass()"></span>
+            <MudText Typo="Typo.caption" Style="color: #9c9a92; text-transform: uppercase; letter-spacing: 0.05em;">
+                Current Edition
+            </MudText>
+        </div>
+        <MudText Typo="Typo.subtitle1" Style="color: #e8e6e0; font-weight: 600;">
+            @FormatEditionName(Edition.EditionId)
+        </MudText>
+        <MudText Typo="Typo.caption" Style="color: #9c9a92;">
+            Loaded @FormatIngestedAt() UTC
+        </MudText>
+        @if (Edition.Chapters.Count > 0)
+        {
+            <div style="margin-top: 8px; display: flex; gap: 8px;">
+                <MudChip Size="Size.Small"
+                         Style="background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35; font-size: 0.7rem;">
+                    @GetChapterCountLabel()
+                </MudChip>
+                <MudChip Size="Size.Small"
+                         Style="background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35; font-size: 0.7rem;">
+                    @GetRuleCountLabel()
+                </MudChip>
+            </div>
+        }
+    }
+    else
+    {
+        <MudText Typo="Typo.caption" Style="color: #9c9a92;">No edition loaded</MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public TmppmEditionViewModel? Edition { get; set; }
+    [Parameter] public bool Loading { get; set; }
+
+    private string GetChapterCountLabel()
+    {
+        return Edition != null ? Edition.Chapters.Count + " chapters" : "";
+    }
+
+    private string GetRuleCountLabel()
+    {
+        if (Edition == null) return "";
+        var total = 0;
+        foreach (var ch in Edition.Chapters)
+            total += ch.ExtractedRuleCount;
+        return total + " rules";
+    }
+
+    private string FormatIngestedAt()
+    {
+        return Edition != null ? Edition.IngestedAt.ToString("MMM dd, yyyy HH:mm") : "";
+    }
+
+    private string GetFreshnessCssClass()
+    {
+        if (Edition == null) return "pa-freshness-dot pa-freshness-red";
+        var days = (DateTime.UtcNow - Edition.IngestedAt).TotalDays;
+        if (days < 30) return "pa-freshness-dot pa-freshness-green";
+        if (days < 60) return "pa-freshness-dot pa-freshness-amber";
+        return "pa-freshness-dot pa-freshness-red";
+    }
+
+    private static string FormatEditionName(string editionId)
+    {
+        if (DateOnly.TryParseExact(editionId + "-01", "yyyy-MM-dd", out var date))
+            return date.ToString("MMMM yyyy") + " TMPPM";
+        return editionId;
+    }
+}

@@ -1,0 +1,188 @@
+@using CloudHealthOffice.Portal.Models
+
+<div class="mt-2">
+    <MudGrid>
+        <MudItem xs="12" md="5">
+            <MudSelect T="string" @bind-Value="_fromEdition" Label="From Edition" Variant="Variant.Outlined">
+                @foreach (var edition in Editions)
+                {
+                    <MudSelectItem Value="@edition.EditionId">@FormatEditionName(edition.EditionId)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudSelect T="string" @bind-Value="_toEdition" Label="To Edition" Variant="Variant.Outlined">
+                @foreach (var edition in Editions)
+                {
+                    <MudSelectItem Value="@edition.EditionId">@FormatEditionName(edition.EditionId)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2" Style="display: flex; align-items: center;">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       FullWidth="true"
+                       Disabled="@(string.IsNullOrEmpty(_fromEdition) || string.IsNullOrEmpty(_toEdition) || Loading)"
+                       OnClick="RequestDiff">
+                @if (Loading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Compare
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (Loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+    }
+    else if (DiffResult != null)
+    {
+        <div class="mt-4">
+            <!-- Summary chips -->
+            <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                <MudChip Style="background: rgba(0, 255, 136, 0.15); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="mr-1" />
+                    @DiffResult.AddedCount Added
+                </MudChip>
+                <MudChip Style="background: rgba(0, 229, 204, 0.15); color: #00e5cc; border: 1px solid rgba(0, 229, 204, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-1" />
+                    @DiffResult.ModifiedCount Modified
+                </MudChip>
+                <MudChip Style="background: rgba(255, 0, 85, 0.15); color: #ff0055; border: 1px solid rgba(255, 0, 85, 0.3);">
+                    <MudIcon Icon="@Icons.Material.Filled.Remove" Size="Size.Small" Class="mr-1" />
+                    @DiffResult.RemovedCount Removed
+                </MudChip>
+            </div>
+
+            @if (DiffResult.Deltas.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    No changes detected between these editions.
+                </MudAlert>
+            }
+            else
+            {
+                <!-- Filter by delta type -->
+                <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                    <MudToggleIconButton @bind-Toggled="_showAdded"
+                                         Icon="@Icons.Material.Filled.AddCircleOutline"
+                                         ToggledIcon="@Icons.Material.Filled.AddCircle"
+                                         Style="@(_showAdded ? "color: #00ff88;" : "color: #9c9a92;")"
+                                         Title="Added" />
+                    <MudToggleIconButton @bind-Toggled="_showModified"
+                                         Icon="@Icons.Material.Filled.EditNote"
+                                         ToggledIcon="@Icons.Material.Filled.Edit"
+                                         Style="@(_showModified ? "color: #00e5cc;" : "color: #9c9a92;")"
+                                         Title="Modified" />
+                    <MudToggleIconButton @bind-Toggled="_showRemoved"
+                                         Icon="@Icons.Material.Filled.RemoveCircleOutline"
+                                         ToggledIcon="@Icons.Material.Filled.RemoveCircle"
+                                         Style="@(_showRemoved ? "color: #ff0055;" : "color: #9c9a92;")"
+                                         Title="Removed" />
+                </div>
+
+                @foreach (var delta in FilteredDeltas)
+                {
+                    <MudPaper Class="pa-diff-card mb-3" Elevation="0">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                            <MudChip Size="Size.Small" Style="@GetDeltaStyle(delta.DeltaType)">
+                                @delta.DeltaType
+                            </MudChip>
+                            <MudText Typo="Typo.subtitle2" Style="color: #e8e6e0;">@delta.Category</MudText>
+                            @if (delta.RequiresHumanReview)
+                            {
+                                <MudChip Size="Size.Small"
+                                         Style="background: rgba(255, 170, 0, 0.15); color: #ffaa00; border: 1px solid rgba(255, 170, 0, 0.3);">
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Class="mr-1" />
+                                    Review Required
+                                </MudChip>
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(delta.Description))
+                        {
+                            <MudText Typo="Typo.body2" Style="color: #9c9a92; margin-bottom: 8px;">
+                                @delta.Description
+                            </MudText>
+                        }
+
+                        @if (delta.DeltaType == "Modified")
+                        {
+                            <MudGrid Spacing="2">
+                                @if (!string.IsNullOrEmpty(delta.PreviousValue))
+                                {
+                                    <MudItem xs="12" md="6">
+                                        <div class="pa-diff-before">
+                                            <MudText Typo="Typo.caption" Style="color: #ff0055; margin-bottom: 4px;">Before</MudText>
+                                            <MudText Typo="Typo.body2" Style="color: #e8e6e0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
+                                                @delta.PreviousValue
+                                            </MudText>
+                                        </div>
+                                    </MudItem>
+                                }
+                                @if (!string.IsNullOrEmpty(delta.NewValue))
+                                {
+                                    <MudItem xs="12" md="6">
+                                        <div class="pa-diff-after">
+                                            <MudText Typo="Typo.caption" Style="color: #00ff88; margin-bottom: 4px;">After</MudText>
+                                            <MudText Typo="Typo.body2" Style="color: #e8e6e0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
+                                                @delta.NewValue
+                                            </MudText>
+                                        </div>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                        }
+                    </MudPaper>
+                }
+            }
+        </div>
+    }
+    else if (Editions.Count < 2)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            At least two TMPPM editions are required to generate a diff comparison.
+        </MudAlert>
+    }
+</div>
+
+@code {
+    [Parameter] public List<TmppmEditionViewModel> Editions { get; set; } = [];
+    [Parameter] public EventCallback<(string from, string to)> OnDiffRequested { get; set; }
+    [Parameter] public TmppmDiffViewModel? DiffResult { get; set; }
+    [Parameter] public bool Loading { get; set; }
+
+    private string? _fromEdition;
+    private string? _toEdition;
+    private bool _showAdded = true;
+    private bool _showModified = true;
+    private bool _showRemoved = true;
+
+    private IEnumerable<TmppmRuleDeltaViewModel> FilteredDeltas =>
+        DiffResult?.Deltas.Where(d =>
+            (d.DeltaType == "Added" && _showAdded) ||
+            (d.DeltaType == "Modified" && _showModified) ||
+            (d.DeltaType == "Removed" && _showRemoved)) ?? [];
+
+    private async Task RequestDiff()
+    {
+        if (!string.IsNullOrEmpty(_fromEdition) && !string.IsNullOrEmpty(_toEdition))
+            await OnDiffRequested.InvokeAsync((_fromEdition, _toEdition));
+    }
+
+    private static string FormatEditionName(string editionId)
+    {
+        if (DateOnly.TryParseExact(editionId + "-01", "yyyy-MM-dd", out var date))
+            return $"{date:MMMM yyyy}";
+        return editionId;
+    }
+
+    private static string GetDeltaStyle(string deltaType) => deltaType switch
+    {
+        "Added" => "background: rgba(0, 255, 136, 0.15); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3);",
+        "Modified" => "background: rgba(0, 229, 204, 0.15); color: #00e5cc; border: 1px solid rgba(0, 229, 204, 0.3);",
+        "Removed" => "background: rgba(255, 0, 85, 0.15); color: #ff0055; border: 1px solid rgba(255, 0, 85, 0.3);",
+        _ => "background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35;"
+    };
+}
