@@ -25,11 +25,11 @@
             <div style="margin-top: 8px; display: flex; gap: 8px;">
                 <MudChip Size="Size.Small"
                          Style="background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35; font-size: 0.7rem;">
-                    @Edition.Chapters.Count chapters
+                    @($"{Edition.Chapters.Count} chapters")
                 </MudChip>
                 <MudChip Size="Size.Small"
                          Style="background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35; font-size: 0.7rem;">
-                    @Edition.Chapters.Sum(c => c.ExtractedRuleCount) rules
+                    @($"{GetTotalRuleCount()} rules")
                 </MudChip>
             </div>
         }
@@ -43,6 +43,9 @@
 @code {
     [Parameter] public TmppmEditionViewModel? Edition { get; set; }
     [Parameter] public bool Loading { get; set; }
+
+    private int GetTotalRuleCount() =>
+        Edition?.Chapters.Sum(c => c.ExtractedRuleCount) ?? 0;
 
     private string GetFreshnessClass()
     {
