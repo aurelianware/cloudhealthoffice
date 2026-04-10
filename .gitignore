@@ -78,3 +78,4 @@ obj/
 **/TestResults/
 src/portal/CloudHealthOffice.Portal/appsettings.Development.json
 .env.local
+tmppm-data/

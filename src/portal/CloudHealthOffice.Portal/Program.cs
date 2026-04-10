@@ -255,6 +255,9 @@ builder.Services.AddScoped<IProviderContractsService, ProviderContractsService>(
 builder.Services.AddScoped<IArService, ArServiceImpl>();
 builder.Services.AddScoped<ITerminologyService, TerminologyServiceImpl>();
 
+// TMPPM PA Rule query service (direct MongoDB queries for PA Rule Explorer)
+builder.Services.AddSingleton<ITmppmRuleQueryService, TmppmRuleQueryService>();
+
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
 builder.Services.AddSignalR(options =>
 {
@@ -309,6 +312,7 @@ static string BuildAdminConsentErrorUrl(string? tenantId)
 
 // Register background tenant seed so it doesn't block startup or health probes
 builder.Services.AddHostedService<TenantSeedService>();
+builder.Services.AddHostedService<TmppmIndexService>();
 
 var app = builder.Build();
 

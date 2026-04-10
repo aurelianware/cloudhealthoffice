@@ -1,0 +1,73 @@
+@using CloudHealthOffice.Portal.Models
+
+<div class="pa-search-bar">
+    <MudTextField @bind-Value="_searchText"
+                  Placeholder="Enter CPT or HCPCS code (e.g., 64582, G0277)"
+                  Variant="Variant.Outlined"
+                  Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search"
+                  Immediate="true"
+                  DebounceInterval="300"
+                  OnDebounceIntervalElapsed="HandleInputChanged"
+                  OnKeyDown="HandleKeyDown"
+                  Style="font-family: 'JetBrains Mono', monospace;" />
+
+    @if (_showSuggestions && _localSuggestions.Count > 0)
+    {
+        <MudPaper Class="pa-autocomplete-dropdown" Elevation="4" role="listbox" aria-label="Procedure code suggestions">
+            @foreach (var suggestion in _localSuggestions)
+            {
+                <button type="button" class="pa-autocomplete-item" role="option" aria-selected="false" @onclick="() => SelectSuggestion(suggestion)">
+                    <MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small"
+                             Style="color: #9c9a92; margin-right: 8px;" />
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #00e5cc;">@suggestion</span>
+                </button>
+            }
+        </MudPaper>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnSearch { get; set; }
+    [Parameter] public Func<string, Task<List<string>>>? OnAutocomplete { get; set; }
+
+    private string _searchText = string.Empty;
+    private bool _showSuggestions;
+    private List<string> _localSuggestions = [];
+
+    private async Task HandleInputChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length < 2)
+        {
+            _showSuggestions = false;
+            _localSuggestions = [];
+            return;
+        }
+
+        if (OnAutocomplete != null)
+        {
+            _localSuggestions = await OnAutocomplete(value);
+            _showSuggestions = _localSuggestions.Count > 0;
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_searchText))
+        {
+            _showSuggestions = false;
+            await OnSearch.InvokeAsync(_searchText);
+        }
+        else if (e.Key == "Escape")
+        {
+            _showSuggestions = false;
+        }
+    }
+
+    private async Task SelectSuggestion(string code)
+    {
+        _searchText = code;
+        _showSuggestions = false;
+        await OnSearch.InvokeAsync(code);
+    }
+}
