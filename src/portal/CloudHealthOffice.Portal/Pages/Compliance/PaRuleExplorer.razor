@@ -39,8 +39,7 @@
         <!-- SEARCH TAB -->
         <MudTabPanel Text="Search by Code" Icon="@Icons.Material.Filled.Search">
             <PaRuleSearchBar OnSearch="HandleSearchAsync"
-                             OnAutocomplete="HandleAutocompleteAsync"
-                             Suggestions="_autocompleteSuggestions" />
+                             OnAutocomplete="HandleAutocompleteAsync" />
 
             <div class="mt-4">
                 @if (_searchLoading)

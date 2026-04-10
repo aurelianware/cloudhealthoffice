@@ -12,16 +12,16 @@
                   OnKeyDown="HandleKeyDown"
                   Style="font-family: 'JetBrains Mono', monospace;" />
 
-    @if (_showSuggestions && Suggestions.Count > 0)
+    @if (_showSuggestions && _localSuggestions.Count > 0)
     {
-        <MudPaper Class="pa-autocomplete-dropdown" Elevation="4">
-            @foreach (var suggestion in Suggestions)
+        <MudPaper Class="pa-autocomplete-dropdown" Elevation="4" role="listbox" aria-label="Procedure code suggestions">
+            @foreach (var suggestion in _localSuggestions)
             {
-                <div class="pa-autocomplete-item" @onclick="() => SelectSuggestion(suggestion)">
+                <button type="button" class="pa-autocomplete-item" role="option" aria-selected="false" @onclick="() => SelectSuggestion(suggestion)">
                     <MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small"
                              Style="color: #9c9a92; margin-right: 8px;" />
                     <span style="font-family: 'JetBrains Mono', monospace; color: #00e5cc;">@suggestion</span>
-                </div>
+                </button>
             }
         </MudPaper>
     }
@@ -30,23 +30,24 @@
 @code {
     [Parameter] public EventCallback<string> OnSearch { get; set; }
     [Parameter] public Func<string, Task<List<string>>>? OnAutocomplete { get; set; }
-    [Parameter] public List<string> Suggestions { get; set; } = [];
 
     private string _searchText = string.Empty;
     private bool _showSuggestions;
+    private List<string> _localSuggestions = [];
 
     private async Task HandleInputChanged(string value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length < 2)
         {
             _showSuggestions = false;
+            _localSuggestions = [];
             return;
         }
 
         if (OnAutocomplete != null)
         {
-            await OnAutocomplete(value);
-            _showSuggestions = Suggestions.Count > 0;
+            _localSuggestions = await OnAutocomplete(value);
+            _showSuggestions = _localSuggestions.Count > 0;
         }
     }
 

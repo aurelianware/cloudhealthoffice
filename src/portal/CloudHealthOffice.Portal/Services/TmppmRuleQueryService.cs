@@ -1,4 +1,5 @@
 using CloudHealthOffice.Portal.Models;
+using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Microsoft.Extensions.Logging;
@@ -7,53 +8,42 @@ namespace CloudHealthOffice.Portal.Services;
 
 public class TmppmRuleQueryService : ITmppmRuleQueryService
 {
+    private const string DefaultDatabaseName = "cho_terminology";
+    private const string DefaultPaRulesCollectionName = "tmppm_pa_rules";
+    private const string DefaultEditionsCollectionName = "tmppm_editions";
+    private const string DefaultDiffReportsCollectionName = "tmppm_diff_reports";
+
     private readonly IMongoCollection<BsonDocument> _paRules;
     private readonly IMongoCollection<BsonDocument> _editions;
     private readonly IMongoCollection<BsonDocument> _diffs;
     private readonly ILogger<TmppmRuleQueryService> _logger;
 
-    public TmppmRuleQueryService(IMongoClient mongoClient, ILogger<TmppmRuleQueryService> logger)
+    public TmppmRuleQueryService(
+        IMongoClient mongoClient,
+        IConfiguration configuration,
+        ILogger<TmppmRuleQueryService> logger)
     {
-        var database = mongoClient.GetDatabase("cho_terminology");
-        _paRules = database.GetCollection<BsonDocument>("tmppm_pa_rules");
-        _editions = database.GetCollection<BsonDocument>("tmppm_editions");
-        _diffs = database.GetCollection<BsonDocument>("tmppm_diff_reports");
+        var databaseName = configuration["Mongo:Tmppm:DatabaseName"] ?? DefaultDatabaseName;
+        var paRulesCollectionName = configuration["Mongo:Tmppm:PaRulesCollectionName"] ?? DefaultPaRulesCollectionName;
+        var editionsCollectionName = configuration["Mongo:Tmppm:EditionsCollectionName"] ?? DefaultEditionsCollectionName;
+        var diffReportsCollectionName = configuration["Mongo:Tmppm:DiffReportsCollectionName"] ?? DefaultDiffReportsCollectionName;
+
+        var database = mongoClient.GetDatabase(databaseName);
+        _paRules = database.GetCollection<BsonDocument>(paRulesCollectionName);
+        _editions = database.GetCollection<BsonDocument>(editionsCollectionName);
+        _diffs = database.GetCollection<BsonDocument>(diffReportsCollectionName);
         _logger = logger;
-
-        EnsureIndexes();
     }
 
-    private void EnsureIndexes()
-    {
-        try
-        {
-            _paRules.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
-                Builders<BsonDocument>.IndexKeys.Ascending("procedureCodes"),
-                new CreateIndexOptions { Name = "idx_procedure_codes" }));
-
-            _paRules.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
-                Builders<BsonDocument>.IndexKeys
-                    .Ascending("category")
-                    .Ascending("state"),
-                new CreateIndexOptions { Name = "idx_category_state" }));
-
-            _editions.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
-                Builders<BsonDocument>.IndexKeys.Descending("ingestedAt"),
-                new CreateIndexOptions { Name = "idx_ingested_at" }));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to create TMPPM indexes — may already exist");
-        }
-    }
-
-    public async Task<List<TmppmPaRuleViewModel>> SearchByCodeAsync(string code, string? tenantId = null)
+    public async Task<List<TmppmPaRuleViewModel>> SearchByCodeAsync(string code, string? tenantId = null, string? state = null)
     {
         var normalizedCode = code.Trim().ToUpperInvariant();
 
         var filter = Builders<BsonDocument>.Filter.AnyEq("procedureCodes", normalizedCode);
         if (!string.IsNullOrEmpty(tenantId))
             filter &= Builders<BsonDocument>.Filter.Eq("tenantId", tenantId);
+        if (!string.IsNullOrEmpty(state))
+            filter &= Builders<BsonDocument>.Filter.Eq("state", state);
 
         var docs = await _paRules.Find(filter)
             .Sort(Builders<BsonDocument>.Sort.Ascending("category"))
@@ -154,11 +144,13 @@ public class TmppmRuleQueryService : ITmppmRuleQueryService
         return grouped.Where(g => g.Categories.Count > 0).ToList();
     }
 
-    public async Task<List<TmppmPaRuleViewModel>> GetRulesByCategoryAsync(string category, string? tenantId = null)
+    public async Task<List<TmppmPaRuleViewModel>> GetRulesByCategoryAsync(string category, string? tenantId = null, string? state = null)
     {
         var filter = Builders<BsonDocument>.Filter.Eq("category", category);
         if (!string.IsNullOrEmpty(tenantId))
             filter &= Builders<BsonDocument>.Filter.Eq("tenantId", tenantId);
+        if (!string.IsNullOrEmpty(state))
+            filter &= Builders<BsonDocument>.Filter.Eq("state", state);
 
         var docs = await _paRules.Find(filter)
             .Sort(Builders<BsonDocument>.Sort.Ascending("tmppmRef"))

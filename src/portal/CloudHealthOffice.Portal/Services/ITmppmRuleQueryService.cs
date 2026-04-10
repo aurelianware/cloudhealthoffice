@@ -4,11 +4,11 @@ namespace CloudHealthOffice.Portal.Services;
 
 public interface ITmppmRuleQueryService
 {
-    Task<List<TmppmPaRuleViewModel>> SearchByCodeAsync(string code, string? tenantId = null);
+    Task<List<TmppmPaRuleViewModel>> SearchByCodeAsync(string code, string? tenantId = null, string? state = null);
 
     Task<List<PaCategoryGroup>> GetCategoriesAsync(string state = "TX");
 
-    Task<List<TmppmPaRuleViewModel>> GetRulesByCategoryAsync(string category, string? tenantId = null);
+    Task<List<TmppmPaRuleViewModel>> GetRulesByCategoryAsync(string category, string? tenantId = null, string? state = null);
 
     Task<TmppmEditionViewModel?> GetCurrentEditionAsync();
 

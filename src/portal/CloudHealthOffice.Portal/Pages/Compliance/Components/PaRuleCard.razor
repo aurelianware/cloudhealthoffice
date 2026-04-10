@@ -153,8 +153,8 @@
 
     private string GetTmppmUrl()
     {
-        // Construct TMHP PDF URL from the TMPPM reference
-        // TMHP publishes TMPPM chapters at known URLs
+        // Return the generic TMHP TMPPM landing page.
+        // This method does not currently resolve Rule.TmppmRef to a chapter- or PDF-specific deep link.
         return $"https://www.tmhp.com/resources/provider-manuals/tmppm";
     }
 }

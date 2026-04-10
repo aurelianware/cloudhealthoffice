@@ -12,7 +12,6 @@ public partial class PaRuleExplorer
     private bool _searchLoading;
     private List<TmppmPaRuleViewModel>? _searchResults;
     private string? _lastSearchCode;
-    private List<string> _autocompleteSuggestions = [];
 
     // Category state
     private bool _categoriesLoading = true;
@@ -100,8 +99,7 @@ public partial class PaRuleExplorer
     {
         try
         {
-            _autocompleteSuggestions = await RuleService.AutocompleteCodeAsync(prefix);
-            return _autocompleteSuggestions;
+            return await RuleService.AutocompleteCodeAsync(prefix);
         }
         catch
         {

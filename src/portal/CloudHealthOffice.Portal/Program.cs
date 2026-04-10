@@ -312,6 +312,7 @@ static string BuildAdminConsentErrorUrl(string? tenantId)
 
 // Register background tenant seed so it doesn't block startup or health probes
 builder.Services.AddHostedService<TenantSeedService>();
+builder.Services.AddHostedService<TmppmIndexService>();
 
 var app = builder.Build();
 
