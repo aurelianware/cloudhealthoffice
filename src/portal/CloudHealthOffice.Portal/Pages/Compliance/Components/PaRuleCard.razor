@@ -1,0 +1,160 @@
+@using CloudHealthOffice.Portal.Models
+
+<MudPaper Class="@($"pa-rule-card {Class}")" Elevation="0">
+    <div class="pa-rule-card-header">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            @if (Rule.AuthRequired)
+            {
+                <MudChip Size="Size.Small"
+                         Style="background: rgba(0, 229, 204, 0.15); color: #00e5cc; border: 1px solid rgba(0, 229, 204, 0.3); font-weight: 600;">
+                    PA Required
+                </MudChip>
+                @if (!string.IsNullOrEmpty(Rule.AuthType))
+                {
+                    <MudChip Size="Size.Small"
+                             Style="background: rgba(0, 229, 204, 0.08); color: #9c9a92; border: 1px solid #2a2a35;">
+                        @Rule.AuthType
+                    </MudChip>
+                }
+            }
+            else
+            {
+                <MudChip Size="Size.Small"
+                         Style="background: rgba(0, 255, 136, 0.15); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3); font-weight: 600;">
+                    No PA Required
+                </MudChip>
+            }
+            <MudChip Size="Size.Small"
+                     Style="background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35; font-size: 0.75rem;">
+                @Rule.SourceEdition TMPPM
+            </MudChip>
+        </div>
+    </div>
+
+    <div class="pa-rule-card-body">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+            <div>
+                <MudText Typo="Typo.subtitle1" Style="color: #e8e6e0; font-weight: 600;">
+                    @Rule.Category
+                </MudText>
+                <MudLink Href="@GetTmppmUrl()" Target="_blank"
+                         Style="color: #9c9a92; font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;">
+                    @Rule.TmppmRef
+                    <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Style="font-size: 0.75rem;" />
+                </MudLink>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px;">
+                <MudChip Size="Size.Small"
+                         Style="background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35;">
+                    @Rule.CodeSystem
+                </MudChip>
+            </div>
+        </div>
+
+        <!-- Procedure Codes -->
+        <div class="pa-code-pills">
+            @foreach (var procedureCode in Rule.ProcedureCodes)
+            {
+                <span class="pa-code-pill">@procedureCode</span>
+            }
+        </div>
+
+        <!-- Age / Unit Limits -->
+        @if (Rule.AgeLimit != null || Rule.UnitLimit != null)
+        {
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px;">
+                @if (Rule.AgeLimit != null)
+                {
+                    <div class="pa-limit-badge">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Style="color: #9c9a92;" />
+                        <span>
+                            @if (Rule.AgeLimit.MinAge.HasValue && Rule.AgeLimit.MaxAge.HasValue)
+                            {
+                                @($"{Rule.AgeLimit.MinAge}–{Rule.AgeLimit.MaxAge} {Rule.AgeLimit.Unit}")
+                            }
+                            else if (Rule.AgeLimit.MinAge.HasValue)
+                            {
+                                @($"{Rule.AgeLimit.MinAge}+ {Rule.AgeLimit.Unit}")
+                            }
+                            else if (Rule.AgeLimit.MaxAge.HasValue)
+                            {
+                                @($"Under {Rule.AgeLimit.MaxAge} {Rule.AgeLimit.Unit}")
+                            }
+                        </span>
+                    </div>
+                }
+                @if (Rule.UnitLimit != null)
+                {
+                    <div class="pa-limit-badge">
+                        <MudIcon Icon="@Icons.Material.Filled.Numbers" Size="Size.Small" Style="color: #9c9a92;" />
+                        <span>Max @Rule.UnitLimit.MaxUnits per @Rule.UnitLimit.Per</span>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Clinical Criteria (collapsible) -->
+        @if (!string.IsNullOrEmpty(Rule.ClinicalCriteriaSummary))
+        {
+            <MudExpansionPanels Class="mt-3" Elevation="0">
+                <MudExpansionPanel Style="background: #0a0a0f; border: 1px solid #2a2a35;">
+                    <TitleContent>
+                        <MudText Typo="Typo.body2" Style="color: #9c9a92;">
+                            <MudIcon Icon="@Icons.Material.Filled.MedicalInformation" Size="Size.Small" Class="mr-1" />
+                            Clinical Criteria
+                        </MudText>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudText Typo="Typo.body2" Style="color: #e8e6e0; line-height: 1.6;">
+                            @Rule.ClinicalCriteriaSummary
+                        </MudText>
+                    </ChildContent>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+
+        <!-- Required Documentation -->
+        @if (Rule.RequiredDocumentation is { Count: > 0 })
+        {
+            <div class="mt-3">
+                <MudText Typo="Typo.caption" Style="color: #9c9a92; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+                    Required Documentation
+                </MudText>
+                <ul class="pa-doc-list">
+                    @foreach (var doc in Rule.RequiredDocumentation)
+                    {
+                        <li>@doc</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <!-- Allowed Diagnoses -->
+        @if (Rule.AllowedDiagnoses is { Count: > 0 })
+        {
+            <div class="mt-3">
+                <MudText Typo="Typo.caption" Style="color: #9c9a92; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+                    Allowed Diagnoses
+                </MudText>
+                <div class="pa-code-pills">
+                    @foreach (var dx in Rule.AllowedDiagnoses)
+                    {
+                        <span class="pa-code-pill pa-code-pill-secondary">@dx</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public TmppmPaRuleViewModel Rule { get; set; } = null!;
+    [Parameter] public string? Class { get; set; }
+
+    private string GetTmppmUrl()
+    {
+        // Return the generic TMHP TMPPM landing page.
+        // This method does not currently resolve Rule.TmppmRef to a chapter- or PDF-specific deep link.
+        return $"https://www.tmhp.com/resources/provider-manuals/tmppm";
+    }
+}

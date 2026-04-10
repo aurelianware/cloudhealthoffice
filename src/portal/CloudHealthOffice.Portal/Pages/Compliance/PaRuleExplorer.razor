@@ -1,0 +1,145 @@
+@page "/compliance/pa-rules"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Models
+@using CloudHealthOffice.Portal.Pages.Compliance.Components
+@attribute [Authorize]
+@inject ITmppmRuleQueryService RuleService
+@inject ISnackbar Snackbar
+
+<PageTitle>PA Rule Explorer - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="compliance:read,authorizations:read" RoleName="ComplianceViewer">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+
+    <div class="pa-explorer-header">
+        <div>
+            <MudText Typo="Typo.h3" GutterBottom="true">
+                <MudIcon Icon="@Icons.Material.Filled.Policy" Class="mr-2" />
+                PA Rule Explorer
+            </MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+                Search Texas Medicaid prior authorization requirements from the TMPPM
+            </MudText>
+        </div>
+        <TmppmEditionStatus Edition="_currentEdition" Loading="_editionLoading" />
+    </div>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4"
+                  ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">
+            @_serviceError
+        </MudAlert>
+    }
+
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true"
+             Class="pa-explorer-tabs" @bind-ActivePanelIndex="_activeTab">
+
+        <!-- SEARCH TAB -->
+        <MudTabPanel Text="Search by Code" Icon="@Icons.Material.Filled.Search">
+            <PaRuleSearchBar OnSearch="HandleSearchAsync"
+                             OnAutocomplete="HandleAutocompleteAsync" />
+
+            <div class="mt-4">
+                @if (_searchLoading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+                    <MudGrid>
+                        @for (int i = 0; i < 3; i++)
+                        {
+                            <MudItem xs="12">
+                                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="180px" />
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+                else if (_searchResults != null && _searchResults.Count > 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        @_searchResults.Count rule(s) found for <strong style="color: #00e5cc;">@_lastSearchCode</strong>
+                    </MudText>
+                    @foreach (var rule in _searchResults)
+                    {
+                        <PaRuleCard Rule="rule" Class="mb-3" />
+                    }
+                }
+                else if (_searchResults != null && _searchResults.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+                        No TX Medicaid PA rules found for <strong>@_lastSearchCode</strong>.
+                        This code may not require prior authorization, or rules may not yet be
+                        extracted for this service category.
+                    </MudAlert>
+                }
+                else
+                {
+                    <div class="pa-empty-state">
+                        <MudIcon Icon="@Icons.Material.Filled.ManageSearch"
+                                 Style="font-size: 4rem; color: #2a2a35;" />
+                        <MudText Typo="Typo.h6" Style="color: #9c9a92;" Class="mt-3">
+                            Search by CPT or HCPCS code to check Texas Medicaid PA requirements
+                        </MudText>
+                    </div>
+                }
+            </div>
+        </MudTabPanel>
+
+        <!-- CATEGORY BROWSER TAB -->
+        <MudTabPanel Text="Browse by Category" Icon="@Icons.Material.Filled.Category">
+            <MudGrid Class="mt-2">
+                <MudItem xs="12" md="4" lg="3">
+                    <PaRuleCategoryBrowser Categories="_categories"
+                                           Loading="_categoriesLoading"
+                                           OnCategorySelected="HandleCategorySelectedAsync" />
+                </MudItem>
+                <MudItem xs="12" md="8" lg="9">
+                    @if (_categoryRulesLoading)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+                    }
+                    else if (_categoryRules != null && _categoryRules.Count > 0)
+                    {
+                        <MudText Typo="Typo.h6" Class="mb-3" Style="color: #e8e6e0;">
+                            @_selectedCategory
+                            <MudChip Size="Size.Small" Style="background: #1a1a24; color: #00e5cc; border: 1px solid #2a2a35;">
+                                @_categoryRules.Count rules
+                            </MudChip>
+                        </MudText>
+                        @foreach (var rule in _categoryRules)
+                        {
+                            <PaRuleCard Rule="rule" Class="mb-3" />
+                        }
+                    }
+                    else if (_selectedCategory != null)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                            No rules found for this category.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <div class="pa-empty-state">
+                            <MudIcon Icon="@Icons.Material.Filled.FolderOpen"
+                                     Style="font-size: 4rem; color: #2a2a35;" />
+                            <MudText Typo="Typo.h6" Style="color: #9c9a92;" Class="mt-3">
+                                Select a category from the sidebar to view its PA rules
+                            </MudText>
+                        </div>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- DIFF VIEW TAB -->
+        <MudTabPanel Text="Edition Changes" Icon="@Icons.Material.Filled.CompareArrows">
+            <TmppmDiffViewer Editions="_allEditions"
+                             OnDiffRequested="HandleDiffRequestedAsync"
+                             DiffResult="_diffResult"
+                             Loading="_diffLoading" />
+        </MudTabPanel>
+
+    </MudTabs>
+
+</MudContainer>
+</PermissionGate>
