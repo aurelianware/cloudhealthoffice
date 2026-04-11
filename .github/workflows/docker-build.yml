@@ -116,12 +116,20 @@ jobs:
       # registries — PR-green/main-red regressions must be impossible.
       - name: Fail if ACR login didn't succeed on PR
         if: github.event_name == 'pull_request' && steps.acr-pr-login.outcome != 'success'
+        env:
+          ACR_SHORT_NAME: ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
         run: |
           echo "::error::PR base-image pulls require the ACR_USERNAME / ACR_PASSWORD repo secrets."
           echo "::error::Without them, PR builds and main deploys exercise different container"
           echo "::error::registries, and main-only regressions (like 71c9d37) slip through PR review."
-          echo "::error::Generate a read-only ACR token via 'az acr token create --name cho-ci-readonly"
-          echo "::error::--scope-map cho-ci-dotnet-pull' and store the username/password1 as repo secrets."
+          echo "::error::Setup (run against the subscription that owns $ACR_SHORT_NAME):"
+          echo "::error::  1. az acr scope-map create --registry $ACR_SHORT_NAME --name cho-ci-dotnet-pull --repository dotnet/sdk content/read --repository dotnet/aspnet content/read"
+          echo "::error::  2. az acr token create --registry $ACR_SHORT_NAME --name cho-ci-readonly --scope-map cho-ci-dotnet-pull"
+          echo "::error::     (this command prints credentials.passwords[0].value once — capture it)"
+          echo "::error::  3. If you missed step 2's output, rotate with: az acr token credential generate --registry $ACR_SHORT_NAME --name cho-ci-readonly --password1"
+          echo "::error::  4. Save username 'cho-ci-readonly' as repo secret ACR_USERNAME"
+          echo "::error::  5. Save password1 value as repo secret ACR_PASSWORD"
+          echo "::error::See docs/security/SECRETS-INVENTORY.md for the rationale."
           exit 1
 
       - name: Set effective base-image registry
@@ -211,12 +219,20 @@ jobs:
       # registries — PR-green/main-red regressions must be impossible.
       - name: Fail if ACR login didn't succeed on PR
         if: github.event_name == 'pull_request' && steps.acr-pr-login.outcome != 'success'
+        env:
+          ACR_SHORT_NAME: ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
         run: |
           echo "::error::PR base-image pulls require the ACR_USERNAME / ACR_PASSWORD repo secrets."
           echo "::error::Without them, PR builds and main deploys exercise different container"
           echo "::error::registries, and main-only regressions (like 71c9d37) slip through PR review."
-          echo "::error::Generate a read-only ACR token via 'az acr token create --name cho-ci-readonly"
-          echo "::error::--scope-map cho-ci-dotnet-pull' and store the username/password1 as repo secrets."
+          echo "::error::Setup (run against the subscription that owns $ACR_SHORT_NAME):"
+          echo "::error::  1. az acr scope-map create --registry $ACR_SHORT_NAME --name cho-ci-dotnet-pull --repository dotnet/sdk content/read --repository dotnet/aspnet content/read"
+          echo "::error::  2. az acr token create --registry $ACR_SHORT_NAME --name cho-ci-readonly --scope-map cho-ci-dotnet-pull"
+          echo "::error::     (this command prints credentials.passwords[0].value once — capture it)"
+          echo "::error::  3. If you missed step 2's output, rotate with: az acr token credential generate --registry $ACR_SHORT_NAME --name cho-ci-readonly --password1"
+          echo "::error::  4. Save username 'cho-ci-readonly' as repo secret ACR_USERNAME"
+          echo "::error::  5. Save password1 value as repo secret ACR_PASSWORD"
+          echo "::error::See docs/security/SECRETS-INVENTORY.md for the rationale."
           exit 1
 
       - name: Set effective base-image registry
