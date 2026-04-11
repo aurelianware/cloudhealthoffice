@@ -2,7 +2,13 @@ ARG REGISTRY=choacrhy6h2vdulfru6.azurecr.io
 FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
 WORKDIR /repo
 
-# Copy csproj files and restore (preserves layer caching)
+# Copy csproj files and restore (preserves layer caching).
+# Directory.Build.props pins minimum versions for CVE-2024-43485
+# (System.Formats.Asn1 RCE) and CVE-2024-21907 (Newtonsoft.Json).
+# MSBuild auto-imports it by walking up from the csproj, so it must
+# exist at /repo/src/ before `dotnet restore` runs — otherwise the
+# resolved graph silently uses older, vulnerable package versions.
+COPY src/Directory.Build.props src/
 COPY src/services/claims-service/claims-service.csproj src/services/claims-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/services/shared/CloudHealthOffice.Events/CloudHealthOffice.Events.csproj src/services/shared/CloudHealthOffice.Events/
