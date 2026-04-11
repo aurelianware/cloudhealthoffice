@@ -1,0 +1,146 @@
+# NOTE: the anthropic-secret must be created separately before applying this
+# manifest (it is not checked in anywhere). Create it with:
+#   kubectl create secret generic anthropic-secret \
+#     --from-literal=apiKey=YOUR_KEY \
+#     -n cloudhealthoffice
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claims-examiner-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  # Self-hosted Kafka is cluster-internal and plaintext; no SASL in this
+  # environment. Matches claims-scrubbing-service-config.
+  Kafka__BootstrapServers: "kafka.cloudhealthoffice:9092"
+  Kafka__ClaimPendedTopic: "claims.pended.v1"
+  Kafka__ConsumerGroupId: "claims-examiner-service"
+  Services__ClaimsService: "http://claims-service.cloudhealthoffice:8080"
+  Anthropic__Model: "claude-opus-4-6"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claims-examiner-service
+  namespace: cloudhealthoffice
+  labels:
+    app: claims-examiner-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: claims-examiner-service
+  template:
+    metadata:
+      labels:
+        app: claims-examiner-service
+        tier: backend
+    spec:
+      # Prefer the Spot user pool so KEDA scale-to-zero actually releases
+      # nodes. Falls back to other pools if Spot is unavailable (the
+      # nodeSelector uses a soft label via nodeAffinity, but the toleration
+      # is required to land on tainted spot nodes). See
+      # infrastructure/azure/spot-nodepool-runbook.md for pool setup.
+      tolerations:
+        - key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload
+                    operator: In
+                    values:
+                      - spot
+      containers:
+      - name: claims-examiner-service
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-claims-examiner-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: claims-examiner-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: Kafka__BootstrapServers
+          valueFrom:
+            configMapKeyRef:
+              name: claims-examiner-service-config
+              key: Kafka__BootstrapServers
+        - name: Kafka__ClaimPendedTopic
+          valueFrom:
+            configMapKeyRef:
+              name: claims-examiner-service-config
+              key: Kafka__ClaimPendedTopic
+        - name: Kafka__ConsumerGroupId
+          valueFrom:
+            configMapKeyRef:
+              name: claims-examiner-service-config
+              key: Kafka__ConsumerGroupId
+        - name: Services__ClaimsService
+          valueFrom:
+            configMapKeyRef:
+              name: claims-examiner-service-config
+              key: Services__ClaimsService
+        - name: Anthropic__ApiKey
+          valueFrom:
+            secretKeyRef:
+              name: anthropic-secret
+              key: apiKey
+        - name: Anthropic__Model
+          valueFrom:
+            configMapKeyRef:
+              name: claims-examiner-service-config
+              key: Anthropic__Model
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claims-examiner-service
+  namespace: cloudhealthoffice
+  labels:
+    app: claims-examiner-service
+spec:
+  type: ClusterIP
+  selector:
+    app: claims-examiner-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
