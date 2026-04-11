@@ -23,6 +23,7 @@
 #   5019  Provider Contracts  5020  AR Service          5021  Trading Partner
 #   5022  RFAI                5023  FHIR                5024  Smart Auth
 #   5025  Risk Adjustment     5026  Encounter
+#   5027  Encounter Submission  5028  Claims Examiner (AI)
 #   5080  Terminology
 #   27017 MongoDB             6379  Redis
 
@@ -109,6 +110,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=ClaimsDB
+      - Kafka__BootstrapServers=kafka:9092
+      - Kafka__ClientId=claims-service
     depends_on:
       mongo:
         condition: service_healthy
@@ -494,6 +497,31 @@ services:
       - Kafka__AdjudicationCompletedTopic=adjudication-completed
     depends_on:
       mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  # AI-powered advisory examiner for pended claims. Subscribes to claims.pended.v1
+  # via Kafka, calls Anthropic Claude with NCCI bundling context, and writes an
+  # advisory recommendation to claims-service for human work-queue review.
+  # ANTHROPIC_API_KEY must be set in the host environment (or Key Vault in prod);
+  # the service degrades gracefully if it's missing — events still consume but
+  # the orchestrator writes EscalateToHuman fallbacks.
+  claims-examiner-service:
+    build:
+      context: .
+      dockerfile: src/services/claims-examiner-service/Dockerfile
+    ports:
+      - "5028:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Kafka__BootstrapServers=kafka:9092
+      - Kafka__ClaimPendedTopic=claims.pended.v1
+      - Kafka__ConsumerGroupId=claims-examiner-service
+      - Services__ClaimsService=http://claims-service:8080
+      - Anthropic__ApiKey=${ANTHROPIC_API_KEY:-}
+      - Anthropic__Model=claude-opus-4-6
+    depends_on:
+      claims-service:
         condition: service_healthy
     profiles: [core]
 

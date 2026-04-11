@@ -1,4 +1,5 @@
 using ClaimsService.EDI.Florida;
+using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 using Microsoft.AspNetCore.Hosting;
@@ -12,6 +13,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
 {
     public IClaimRepository ClaimRepository { get; } = Substitute.For<IClaimRepository>();
     public IClaimAcknowledgmentService AcknowledgmentService { get; } = Substitute.For<IClaimAcknowledgmentService>();
+    public IAiExaminationAuditRepository AuditRepository { get; } = Substitute.For<IAiExaminationAuditRepository>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -24,7 +26,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                 .Where(d => d.ServiceType == typeof(IClaimRepository)
                          || d.ServiceType == typeof(IClaimAcknowledgmentService)
                          || d.ServiceType == typeof(IProviderService)
-                         || d.ServiceType == typeof(ITenantComplianceConfigService))
+                         || d.ServiceType == typeof(ITenantComplianceConfigService)
+                         || d.ServiceType == typeof(IAiExaminationAuditRepository))
                 .ToList();
 
             foreach (var descriptor in descriptorsToRemove)
@@ -47,6 +50,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(AcknowledgmentService);
             services.AddSingleton(Substitute.For<IProviderService>());
             services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());
+            services.AddSingleton(AuditRepository);
         });
     }
 }

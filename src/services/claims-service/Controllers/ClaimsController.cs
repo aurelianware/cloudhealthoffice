@@ -12,24 +12,33 @@ namespace ClaimsService.Controllers;
 public class ClaimsController : ControllerBase
 {
     private readonly IClaimRepository _claimRepository;
+    private readonly IAiExaminationAuditRepository _auditRepository;
     private readonly IClaimAcknowledgmentService _ackService;
     private readonly IMpipAdjudicationEnhancer _mpipEnhancer;
+    private readonly IClaimEventPublisher _eventPublisher;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ClaimsController> _logger;
 
     public ClaimsController(
         IClaimRepository claimRepository,
+        IAiExaminationAuditRepository auditRepository,
         IClaimAcknowledgmentService ackService,
         IMpipAdjudicationEnhancer mpipEnhancer,
+        IClaimEventPublisher eventPublisher,
         IConfiguration configuration,
         ILogger<ClaimsController> logger)
     {
         _claimRepository = claimRepository;
+        _auditRepository = auditRepository;
         _ackService = ackService;
         _mpipEnhancer = mpipEnhancer;
+        _eventPublisher = eventPublisher;
         _configuration = configuration;
         _logger = logger;
     }
+
+    private string GetTenantId() =>
+        HttpContext?.Items["TenantId"]?.ToString() ?? string.Empty;
 
     /// <summary>
     /// Submit new claim (837 transaction)
@@ -214,6 +223,65 @@ public class ClaimsController : ControllerBase
         }
 
         var updated = await _claimRepository.UpdateAsync(claim);
+
+        // If a generic status update happens to land on Pended without going through
+        // /pend, still publish the event so downstream consumers see the transition.
+        // Payload will lack PendDetails — consumers must tolerate that.
+        if (updated.Status == ClaimStatus.Pended)
+        {
+            await _eventPublisher.PublishClaimPendedAsync(updated, GetTenantId());
+        }
+
+        return Ok(updated);
+    }
+
+    /// <summary>
+    /// Pend a claim with structured pend details and emit a ClaimPendedEvent.
+    ///
+    /// This is the primary entry point used by the Argo adjudication workflow when
+    /// a deterministic edit (NCCI/MUE today, others later) requires human review.
+    /// The single call sets Status=Pended, writes PendDetails, and publishes the
+    /// event in one transition so the downstream AI examiner service has all the
+    /// context it needs without an extra round-trip.
+    ///
+    /// PendDetails is the authoritative deterministic record of why the claim
+    /// pended. The AI examiner writes its advisory output to AiExamination via
+    /// PUT /{id}/ai-examination — never here.
+    /// </summary>
+    [HttpPut("{id}/pend")]
+    [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Claim>> PendClaim(string id, [FromBody] PendDetails pendDetails)
+    {
+        if (string.IsNullOrWhiteSpace(pendDetails.PendCode))
+        {
+            return BadRequest("pendCode is required");
+        }
+
+        _logger.LogInformation(
+            "Pending claim {Id} with code {PendCode} ({EditCount} edit failures)",
+            SanitizeForLog(id), SanitizeForLog(pendDetails.PendCode), pendDetails.EditFailures.Count);
+
+        var claim = await _claimRepository.GetByIdAsync(id);
+        if (claim == null)
+        {
+            return NotFound($"Claim {id} not found");
+        }
+
+        if (pendDetails.PendedAt == default)
+        {
+            pendDetails.PendedAt = DateTime.UtcNow;
+        }
+
+        claim.PendDetails = pendDetails;
+        claim.Status = ClaimStatus.Pended;
+        claim.LastUpdatedDate = DateTime.UtcNow;
+
+        var updated = await _claimRepository.UpdateAsync(claim);
+
+        await _eventPublisher.PublishClaimPendedAsync(updated, GetTenantId());
+
         return Ok(updated);
     }
 
@@ -263,6 +331,201 @@ public class ClaimsController : ControllerBase
         }
 
         var updated = await _claimRepository.UpdateAsync(claim);
+        return Ok(updated);
+    }
+
+    /// <summary>
+    /// Write the AI Claims Examiner's advisory recommendation onto a pended claim.
+    ///
+    /// Called by claims-examiner-service after it processes a ClaimPendedEvent.
+    /// Strictly advisory: this never changes Status, never touches AdjudicationResult,
+    /// never touches PendDetails. It only writes Claim.AiExamination so the work queue
+    /// can show the recommendation alongside the claim. A human examiner remains in
+    /// the loop and must call /work-queue/{id}/override or /work-queue/{id}/assign
+    /// to actually act on the claim.
+    ///
+    /// Idempotent on retry: a second call from the examiner service for the same
+    /// claim simply replaces the prior recommendation. The ExaminerAgreement field
+    /// is preserved across overwrites so we don't lose feedback signal if the model
+    /// re-examines a claim a human has already acted on.
+    /// </summary>
+    [HttpPut("{id}/ai-examination")]
+    [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<Claim>> SetAiExamination(string id, [FromBody] AiExamination examination)
+    {
+        if (string.IsNullOrWhiteSpace(examination.RecommendedDisposition))
+        {
+            return BadRequest("recommendedDisposition is required");
+        }
+
+        var validDispositions = new[] { "Approve", "Deny", "RequestInfo", "EscalateToHuman" };
+        if (!validDispositions.Contains(examination.RecommendedDisposition))
+        {
+            return BadRequest($"recommendedDisposition must be one of: {string.Join(", ", validDispositions)}");
+        }
+
+        var claim = await _claimRepository.GetByIdAsync(id);
+        if (claim == null)
+        {
+            return NotFound($"Claim {id} not found");
+        }
+
+        // Reject AI recommendations on claims that are no longer pended. The model
+        // is only meaningful while the claim is awaiting human review; if the claim
+        // has already been approved, denied, or paid, a stale recommendation could
+        // confuse the work queue display.
+        if (claim.Status != ClaimStatus.Pended)
+        {
+            _logger.LogWarning(
+                "Rejected AI examination for claim {Id}: status is {Status}, not Pended",
+                SanitizeForLog(id), claim.Status);
+            return Conflict($"Claim {id} is in status {claim.Status}, not Pended; AI examination ignored");
+        }
+
+        if (examination.GeneratedAt == default)
+        {
+            examination.GeneratedAt = DateTime.UtcNow;
+        }
+
+        // Preserve any prior examiner-agreement signal across re-examinations,
+        // so we don't lose human feedback if the examiner service re-runs the model.
+        if (claim.AiExamination?.ExaminerAgreement is { } prior)
+        {
+            examination.ExaminerAgreement = prior;
+            examination.ExaminerActedAt = claim.AiExamination.ExaminerActedAt;
+            examination.ExaminerUserId = claim.AiExamination.ExaminerUserId;
+        }
+
+        claim.AiExamination = examination;
+        claim.LastUpdatedDate = DateTime.UtcNow;
+
+        var updated = await _claimRepository.UpdateAsync(claim);
+
+        // Append an immutable audit row for this recommendation. Snapshots
+        // pend-detail context (rule id, code pair) so historical analyses can
+        // correlate model accuracy with the specific deterministic edit type
+        // even if the claim is later re-pended for a different reason.
+        var firstEdit = claim.PendDetails?.EditFailures.FirstOrDefault();
+        var audit = new AiExaminationAudit
+        {
+            TenantId = GetTenantId(),
+            ClaimId = id,
+            PendCode = claim.PendDetails?.PendCode,
+            RuleId = firstEdit?.RuleId,
+            Column1Code = firstEdit?.Column1Code,
+            Column2Code = firstEdit?.Column2Code,
+            RecommendedDisposition = examination.RecommendedDisposition,
+            ConfidenceScore = examination.ConfidenceScore,
+            Rationale = examination.Rationale,
+            PolicyCitations = new List<string>(examination.PolicyCitations),
+            ModelId = examination.ModelId,
+            PromptVersion = examination.PromptVersion,
+            GeneratedAt = examination.GeneratedAt
+        };
+
+        try
+        {
+            await _auditRepository.AppendAsync(audit);
+        }
+        catch (Exception ex)
+        {
+            // Audit-append failures must not break the live recommendation write.
+            // The Claim.AiExamination update has already succeeded above; the
+            // audit collection is the long-term record but the work-queue UI
+            // can still function without the latest audit row.
+            _logger.LogError(ex,
+                "Failed to append AI examination audit for claim {Id}; live recommendation persisted, audit lost",
+                SanitizeForLog(id));
+        }
+
+        _logger.LogInformation(
+            "AI examination set on claim {Id}: disposition={Disposition} confidence={Confidence:F2} model={Model} prompt={Prompt}",
+            SanitizeForLog(id),
+            examination.RecommendedDisposition,
+            examination.ConfidenceScore,
+            SanitizeForLog(examination.ModelId),
+            SanitizeForLog(examination.PromptVersion));
+
+        return Ok(updated);
+    }
+
+    /// <summary>
+    /// Get the full audit history of AI Claims Examiner recommendations for a claim,
+    /// newest first. Each row is the immutable record of one model run; the live
+    /// "current" recommendation is on Claim.AiExamination.
+    ///
+    /// This endpoint powers the work-queue UI's "show prior AI runs" expander and
+    /// the 90-day override-rate analysis pipeline (joined on PromptVersion x
+    /// RecommendedDisposition x ExaminerAgreement).
+    /// </summary>
+    [HttpGet("{id}/ai-examination/audit")]
+    [ProducesResponseType(typeof(IEnumerable<AiExaminationAudit>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<AiExaminationAudit>>> GetAiExaminationAudit(
+        string id, CancellationToken ct = default)
+    {
+        var history = await _auditRepository.GetByClaimAsync(id, GetTenantId(), ct);
+        return Ok(history);
+    }
+
+    /// <summary>
+    /// Record an examiner's agreement (or disagreement) with a prior AI recommendation.
+    /// This is the feedback signal the 90-day override-rate analysis depends on.
+    /// Call this from the work-queue UI whenever an examiner acts on a claim that
+    /// has an AI recommendation attached.
+    ///
+    /// Values for `agreement`: Accepted | Modified | Overridden.
+    /// </summary>
+    [HttpPost("{id}/ai-examination/agreement")]
+    [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Claim>> SetAiExaminerAgreement(
+        string id,
+        [FromBody] AiExaminerAgreementRequest request)
+    {
+        var validAgreements = new[] { "Accepted", "Modified", "Overridden" };
+        if (string.IsNullOrWhiteSpace(request.Agreement) || !validAgreements.Contains(request.Agreement))
+        {
+            return BadRequest($"agreement must be one of: {string.Join(", ", validAgreements)}");
+        }
+
+        var claim = await _claimRepository.GetByIdAsync(id);
+        if (claim == null) return NotFound($"Claim {id} not found");
+
+        if (claim.AiExamination == null)
+        {
+            return BadRequest($"Claim {id} has no AI examination to mark agreement on");
+        }
+
+        claim.AiExamination.ExaminerAgreement = request.Agreement;
+        claim.AiExamination.ExaminerActedAt = DateTime.UtcNow;
+        claim.AiExamination.ExaminerUserId = request.ExaminerUserId;
+        claim.LastUpdatedDate = DateTime.UtcNow;
+
+        var updated = await _claimRepository.UpdateAsync(claim);
+
+        // Cascade the agreement to the latest audit row. This is the only mutation
+        // permitted on an audit record and is enforced single-write at the repository.
+        // A null return means there was no audit row to update (recommendation may
+        // have been written before the audit collection existed) — log and continue.
+        var auditUpdated = await _auditRepository.SetExaminerAgreementAsync(
+            id, GetTenantId(), request.Agreement, request.ExaminerUserId, request.Notes);
+
+        if (auditUpdated is null)
+        {
+            _logger.LogWarning(
+                "No audit row found for claim {Id} when setting examiner agreement; live AiExamination updated only",
+                SanitizeForLog(id));
+        }
+
+        _logger.LogInformation(
+            "Examiner {User} marked claim {Id} as {Agreement} (recommended {Disposition})",
+            SanitizeForLog(request.ExaminerUserId), SanitizeForLog(id),
+            request.Agreement, claim.AiExamination.RecommendedDisposition);
+
         return Ok(updated);
     }
 
@@ -446,8 +709,10 @@ public class ClaimsController : ControllerBase
             status: ClaimStatus.Pended, lineOfBusiness: null,
             page: 1, pageSize: 1000)).ToList();
 
-        // Categorize by claim-level adjudication denial reason code
-        static string? PendCode(Claim c) => c.AdjudicationResult?.DenialReasonCode;
+        // Prefer PendDetails (structured pend reason from workflow); fall back to
+        // legacy AdjudicationResult.DenialReasonCode for pre-PendDetails claims.
+        static string? PendCode(Claim c) =>
+            c.PendDetails?.PendCode ?? c.AdjudicationResult?.DenialReasonCode;
 
         var summary = new WorkQueueSummary
         {
@@ -482,21 +747,33 @@ public class ClaimsController : ControllerBase
             status: ClaimStatus.Pended, lineOfBusiness: null,
             page: 1, pageSize: limit)).ToList();
 
-        var items = pendedClaims.Select(c => new WorkQueueItem
+        var items = pendedClaims.Select(c =>
         {
-            ClaimId = c.Id,
-            MemberName = c.SubscriberLastName != null ? $"{c.SubscriberFirstName} {c.SubscriberLastName}" : c.MemberId,
-            MemberId = c.MemberId,
-            ProviderName = c.BillingProviderName ?? c.BillingProviderNPI,
-            ServiceDate = c.ClaimLines.FirstOrDefault()?.ServiceDateFrom ?? c.CreatedDate,
-            QueueReason = MapPendReason(c.AdjudicationResult?.DenialReasonCode),
-            QueueReasonCode = c.AdjudicationResult?.DenialReasonCode ?? "REVIEW",
-            DaysInQueue = (int)(DateTime.UtcNow - c.LastUpdatedDate).TotalDays,
-            Priority = (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 14 ? "High" :
-                       (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 7 ? "Medium" : "Low",
-            AssignedTo = "",
-            TotalCharged = c.TotalChargeAmount,
-            ProcedureCodes = c.ClaimLines.Select(sl => sl.ProcedureCode).ToList()
+            // Prefer the structured PendDetails written by the workflow's /pend call;
+            // fall back to legacy AdjudicationResult.DenialReasonCode for claims that
+            // pre-date the PendDetails field.
+            var pendCode = c.PendDetails?.PendCode ?? c.AdjudicationResult?.DenialReasonCode;
+            return new WorkQueueItem
+            {
+                ClaimId = c.Id,
+                MemberName = c.SubscriberLastName != null ? $"{c.SubscriberFirstName} {c.SubscriberLastName}" : c.MemberId,
+                MemberId = c.MemberId,
+                ProviderName = c.BillingProviderName ?? c.BillingProviderNPI,
+                ServiceDate = c.ClaimLines.FirstOrDefault()?.ServiceDateFrom ?? c.CreatedDate,
+                QueueReason = MapPendReason(pendCode),
+                QueueReasonCode = pendCode ?? "REVIEW",
+                DaysInQueue = (int)(DateTime.UtcNow - c.LastUpdatedDate).TotalDays,
+                Priority = (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 14 ? "High" :
+                           (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 7 ? "Medium" : "Low",
+                AssignedTo = "",
+                TotalCharged = c.TotalChargeAmount,
+                ProcedureCodes = c.ClaimLines.Select(sl => sl.ProcedureCode).ToList(),
+                AiRecommendedDisposition = c.AiExamination?.RecommendedDisposition,
+                AiConfidenceScore = c.AiExamination?.ConfidenceScore,
+                AiRationale = c.AiExamination?.Rationale,
+                AiPolicyCitations = c.AiExamination?.PolicyCitations ?? new List<string>(),
+                AiExaminerAgreement = c.AiExamination?.ExaminerAgreement
+            };
         }).ToList();
 
         if (!string.IsNullOrEmpty(queueType))
@@ -594,6 +871,21 @@ public class WorkQueueItem
     public string AssignedTo { get; set; } = string.Empty;
     public decimal TotalCharged { get; set; }
     public List<string> ProcedureCodes { get; set; } = new();
+
+    /// <summary>AI examiner's recommended disposition, null if no AI run yet.</summary>
+    public string? AiRecommendedDisposition { get; set; }
+
+    /// <summary>AI examiner's self-reported confidence (0–1).</summary>
+    public double? AiConfidenceScore { get; set; }
+
+    /// <summary>Plain-English rationale shown alongside the claim in the work queue UI.</summary>
+    public string? AiRationale { get; set; }
+
+    /// <summary>Policy/rule citations the model relied on.</summary>
+    public List<string> AiPolicyCitations { get; set; } = new();
+
+    /// <summary>If a human has acted on this claim: Accepted, Modified, or Overridden.</summary>
+    public string? AiExaminerAgreement { get; set; }
 }
 
 public class AssignClaimRequest
@@ -604,4 +896,16 @@ public class AssignClaimRequest
 public class OverrideClaimRequest
 {
     public string OverrideReason { get; set; } = string.Empty;
+}
+
+public class AiExaminerAgreementRequest
+{
+    /// <summary>Accepted | Modified | Overridden.</summary>
+    public string Agreement { get; set; } = string.Empty;
+
+    /// <summary>User who acted on the claim.</summary>
+    public string ExaminerUserId { get; set; } = string.Empty;
+
+    /// <summary>Optional free-text note (e.g., why the examiner overrode the AI).</summary>
+    public string? Notes { get; set; }
 }
