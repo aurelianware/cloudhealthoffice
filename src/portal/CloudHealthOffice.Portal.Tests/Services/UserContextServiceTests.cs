@@ -701,6 +701,31 @@ public class UserContextServiceTests
     }
 
     [Fact]
+    public async Task ExpandPermissions_ComplianceViewer_GetsExpectedPermissions()
+    {
+        var sut = await CreateServiceWithRole("ComplianceViewer");
+
+        // Must satisfy PA Rule Explorer gate: compliance:read OR authorizations:read
+        sut.HasPermission("compliance:read").Should().BeTrue();
+        sut.HasPermission("authorizations:read").Should().BeTrue();
+        sut.HasPermission("audit:read").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExpandPermissions_ComplianceViewer_DoesNotGetWriteOrAdminPermissions()
+    {
+        var sut = await CreateServiceWithRole("ComplianceViewer");
+
+        // ComplianceViewer is read-only — must not accidentally leak write or admin bits
+        sut.HasPermission("compliance:write").Should().BeFalse();
+        sut.HasPermission("authorizations:write").Should().BeFalse();
+        sut.HasPermission("authorizations:decide").Should().BeFalse();
+        sut.HasPermission("claims:work").Should().BeFalse();
+        sut.HasPermission("users:manage").Should().BeFalse();
+        sut.HasPermission("anything:anything").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ExpandPermissions_UnknownRole_GetsEmptyPermissions()
     {
         var sut = await CreateServiceWithRole("NonExistentRole");
@@ -763,6 +788,7 @@ public class UserContextServiceTests
     [InlineData("ProviderRelations", "Provider Relations")]
     [InlineData("Finance", "Finance")]
     [InlineData("ComplianceOfficer", "Compliance Officer")]
+    [InlineData("ComplianceViewer", "Compliance Viewer")]
     [InlineData("TenantAdmin", "Tenant Admin")]
     [InlineData("PlatformAdmin", "Platform Admin")]
     public void PrimaryRoleDisplayName_MapsCorrectly(string role, string expected)

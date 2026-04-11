@@ -1,6 +1,6 @@
 # GitHub Secrets Inventory & Categorization
 
-**Last Updated:** 2026-02-02  
+**Last Updated:** 2026-04-11  
 **Purpose:** Clear categorization of all GitHub Secrets for Cloud Health Office deployment
 
 ---
@@ -158,6 +158,36 @@ GITHUB_TOKEN               - Automatically provided by GitHub Actions (no action
 
 ---
 
+## 🤖 AI / LLM Provider Secrets
+
+These secrets are **runtime configuration** consumed by AI-enabled services and should live exclusively in Azure Key Vault. They never belong in GitHub Secrets because they are production API keys with PHI-adjacent access and must rotate on a HIPAA-compliant cadence.
+
+### Anthropic (Claude) — Claims Examiner Service
+```
+Anthropic--ApiKey    → Key Vault secret name (maps to config key Anthropic:ApiKey)
+```
+
+**Consumed by:** `src/services/claims-examiner-service` — advisory AI examiner for pended NCCI claims. Binds via `builder.Configuration.GetSection("Anthropic").Get<AnthropicOptions>()` after `AddAzureKeyVaultConfiguration` runs, so the `--` → `:` prefix mapping in `AzureKeyVaultConfigurationExtensions.cs` lands it at `Anthropic:ApiKey` automatically.
+
+**Scope in v1:** pend-resolution only for NCCI NE001 pair edits where a `-59`/`X{EPSU}` modifier is a legal override path. Nothing auto-applies — every recommendation routes to the human work queue.
+
+**Never in GitHub Secrets:**
+- Production API key with per-token rate limits and billing attribution
+- Rotation required independently of any deployment credential
+- PHI-adjacent: prompts include procedure codes, modifiers, and provider RFAI history (no member identifiers in v1, but sensitivity tier justifies Key Vault regardless)
+
+**Populate via:**
+```bash
+./scripts/populate-keyvault-secrets.sh \
+  --vault-name cho-app-kv \
+  --file scripts/secrets-manifest.example.env
+```
+(manifest already includes the `Anthropic--ApiKey` placeholder)
+
+**Rotation cadence:** 90 days, aligned with the Key Vault expiry default in `populate-keyvault-secrets.sh`.
+
+---
+
 ## 📋 Summary Table
 
 | Secret Name | Current Location | Recommended Location | Reason |
@@ -177,6 +207,7 @@ GITHUB_TOKEN               - Automatically provided by GitHub Actions (no action
 | `SNYK_TOKEN` | GitHub Secrets | ✅ Keep in GitHub | Third-party integration |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN_*` | GitHub Secrets | ✅ Keep in GitHub | Deployment token |
 | `GITHUB_TOKEN` | Auto-provided | ✅ Auto-provided | GitHub Actions built-in |
+| `Anthropic--ApiKey` | Key Vault | 🤖 **Key Vault only** | AI Claims Examiner, PHI-adjacent, 90-day rotation |
 
 ---
 
