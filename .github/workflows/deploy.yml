@@ -67,7 +67,7 @@ jobs:
       - name: Azure Login (OIDC) - Optional if secrets exist
         if: env.HAS_AZURE_CREDS == 'true'
         id: azure-login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ env.CLIENT_ID }}
           tenant-id: ${{ env.TENANT_ID }}
