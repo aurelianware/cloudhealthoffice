@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using ClaimsExaminerService.Models;
 using ClaimsExaminerService.Services.Anthropic;
+using CloudHealthOffice.Events;
 
 namespace ClaimsExaminerService.Services.Examiner;
 

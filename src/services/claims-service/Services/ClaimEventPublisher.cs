@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using ClaimsService.Models;
+using CloudHealthOffice.Events;
 using Confluent.Kafka;
 
 namespace ClaimsService.Services;
@@ -20,34 +21,6 @@ public interface IClaimEventPublisher
     /// source of truth, not the event stream).
     /// </summary>
     Task PublishClaimPendedAsync(Claim claim, string tenantId, CancellationToken ct = default);
-}
-
-/// <summary>
-/// Event payload for claims.pended.v1. The version suffix on the topic name
-/// is intentional — schema changes get a new topic, never an in-place break.
-/// </summary>
-public class ClaimPendedEvent
-{
-    public string EventId { get; set; } = Guid.NewGuid().ToString();
-    public string EventType { get; set; } = "claim.pended";
-    public string EventVersion { get; set; } = "1";
-    public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
-
-    public string TenantId { get; set; } = string.Empty;
-    public string ClaimId { get; set; } = string.Empty;
-    public string ClaimNumber { get; set; } = string.Empty;
-    public string MemberId { get; set; } = string.Empty;
-    public string BillingProviderNPI { get; set; } = string.Empty;
-    public LineOfBusiness LineOfBusiness { get; set; }
-    public decimal TotalChargeAmount { get; set; }
-    public DateTime ServiceDateFrom { get; set; }
-
-    /// <summary>
-    /// Pend reason details copied from Claim.PendDetails so consumers can decide
-    /// whether to act without an extra round-trip back to claims-service. Consumers
-    /// that need the full claim still fetch it via GET /api/claims/{id}.
-    /// </summary>
-    public PendDetails? PendDetails { get; set; }
 }
 
 public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncDisposable
@@ -147,10 +120,10 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             ClaimNumber = claim.ClaimNumber,
             MemberId = claim.MemberId,
             BillingProviderNPI = claim.BillingProviderNPI,
-            LineOfBusiness = claim.LineOfBusiness,
+            LineOfBusiness = claim.LineOfBusiness.ToString(),
             TotalChargeAmount = claim.TotalChargeAmount,
             ServiceDateFrom = claim.ServiceDateFrom,
-            PendDetails = claim.PendDetails
+            PendDetails = MapPendDetails(claim.PendDetails)
         };
 
         var message = new Message<string, string>
@@ -186,5 +159,32 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
     {
         await StopAsync(CancellationToken.None);
         GC.SuppressFinalize(this);
+    }
+
+    private static CloudHealthOffice.Events.PendDetails? MapPendDetails(ClaimsService.Models.PendDetails? source)
+    {
+        if (source is null) return null;
+        return new CloudHealthOffice.Events.PendDetails
+        {
+            PendCode = source.PendCode,
+            PendReason = source.PendReason,
+            PendedAt = source.PendedAt,
+            EditFailures = source.EditFailures
+                .Select(e => new CloudHealthOffice.Events.NcciEditFailureSnapshot
+                {
+                    EditType = e.EditType,
+                    RuleId = e.RuleId,
+                    Message = e.Message,
+                    Column1Code = e.Column1Code,
+                    Column2Code = e.Column2Code,
+                    AffectedLineNumbers = e.AffectedLineNumbers.ToList(),
+                    ModifierOverridePresent = e.ModifierOverridePresent,
+                    UnitsBilled = e.UnitsBilled,
+                    MueMaxUnits = e.MueMaxUnits,
+                    SuggestedCarc = e.SuggestedCarc,
+                    SuggestedRarc = e.SuggestedRarc
+                })
+                .ToList()
+        };
     }
 }

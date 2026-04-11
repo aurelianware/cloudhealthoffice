@@ -1,3 +1,5 @@
+using CloudHealthOffice.Events;
+
 namespace ClaimsExaminerService.Models;
 
 /// <summary>
