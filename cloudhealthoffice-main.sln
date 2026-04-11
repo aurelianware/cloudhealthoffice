@@ -177,7 +177,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.ClaimsExa
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{F078A44D-36FD-4053-8C1D-0DA235C6B161}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.Events", "src\shared\CloudHealthOffice.Events\CloudHealthOffice.Events.csproj", "{8DC1EBCE-63CF-42DE-8313-D82F4B949B68}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.Events", "src\services\shared\CloudHealthOffice.Events\CloudHealthOffice.Events.csproj", "{8DC1EBCE-63CF-42DE-8313-D82F4B949B68}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
