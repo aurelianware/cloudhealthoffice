@@ -162,6 +162,17 @@ public static class StandardRoles
         }
     };
 
+    public static readonly TenantRole ComplianceViewer = new()
+    {
+        RoleName = "ComplianceViewer",
+        Description = "Read-only access to compliance reference data (e.g. TMPPM PA Rule Explorer) and authorization records",
+        IsBuiltIn = true,
+        Permissions = new List<string>
+        {
+            "compliance:read", "authorizations:read", "audit:read"
+        }
+    };
+
     public static readonly TenantRole TenantAdmin = new()
     {
         RoleName = "TenantAdmin",
@@ -187,6 +198,7 @@ public static class StandardRoles
         ProviderRelations,
         Finance,
         ComplianceOfficer,
+        ComplianceViewer,
         TenantAdmin
     };
 
