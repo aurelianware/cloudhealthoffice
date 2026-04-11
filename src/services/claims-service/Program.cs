@@ -23,6 +23,7 @@ var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 if (!string.IsNullOrEmpty(mongoConnectionString))
 {
     builder.Services.AddScoped<IClaimRepository, ClaimRepositoryMongo>();
+    builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryMongo>();
 }
 else
 {
@@ -39,6 +40,7 @@ else
     }
 
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
+    builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryCosmos>();
 }
 
 // 277CA acknowledgment generator
@@ -72,6 +74,15 @@ builder.Services.AddScoped<FmmisFileBuilder>();
 // FL SMMC 3.0 MPIP rate enhancement
 builder.Services.AddScoped<IMpipRateClient, MpipRateClient>();
 builder.Services.AddScoped<IMpipAdjudicationEnhancer, MpipAdjudicationEnhancer>();
+
+// Claim lifecycle event publisher (Kafka). Singleton + IHostedService so the
+// underlying producer is initialized at app start and cleanly shut down.
+// Always registered: when Kafka:BootstrapServers is unset the publisher runs
+// in degraded mode and logs a warning, so dev/test environments without Kafka
+// remain functional.
+builder.Services.AddSingleton<ClaimEventPublisher>();
+builder.Services.AddSingleton<IClaimEventPublisher>(sp => sp.GetRequiredService<ClaimEventPublisher>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ClaimEventPublisher>());
 
 var app = builder.Build();
 

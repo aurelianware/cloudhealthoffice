@@ -580,6 +580,7 @@ spec:
       command: [python]
       source: |
         import json
+        import sys
         import urllib.request
 
         claim_id = "{{inputs.parameters.claim-id}}"
@@ -589,7 +590,45 @@ spec:
         adj_status = adj.get('adjudicationStatus', 'DENIED')
         totals     = adj.get('totals', {})
 
-        if adj_status in ('DENIED', 'NCCI_EDIT_FAILURE'):
+        # ── NCCI/MUE edit failure path: pend the claim, do not deny ──
+        # The deterministic NCCI engine produced edit failures. We pend the
+        # claim with structured PendDetails so the AI Claims Examiner service
+        # can pick it up via the claims.pended.v1 Kafka event and produce an
+        # advisory recommendation for human review.
+        if adj_status == 'NCCI_EDIT_FAILURE':
+            # Normalize editType from int to string (NcciEditType enum may
+            # serialize as integer over the wire).
+            normalized_edits = []
+            for ef in adj.get('editFailures', []):
+                ef = dict(ef)  # shallow copy so we don't mutate the source
+                et = ef.get('editType')
+                if et == 0:
+                    ef['editType'] = 'NcciPair'
+                elif et == 1:
+                    ef['editType'] = 'Mue'
+                normalized_edits.append(ef)
+
+            pend_payload = {
+                "pendCode": "NCCI",
+                "pendReason": adj.get('reason', 'NCCI/MUE edit failure'),
+                "editFailures": normalized_edits
+            }
+            pend_url = f"http://claims-service.cloudhealthoffice/api/claims/{claim_id}/pend"
+            pend_data = json.dumps(pend_payload).encode('utf-8')
+            pend_req = urllib.request.Request(pend_url, data=pend_data, method='PUT')
+            pend_req.add_header('X-Tenant-ID', tenant_id)
+            pend_req.add_header('Content-Type', 'application/json')
+
+            with urllib.request.urlopen(pend_req, timeout=5) as response:
+                print(json.dumps({
+                    "claimId": claim_id,
+                    "status": "Pended",
+                    "adjudicationStatus": adj_status,
+                    "editFailureCount": len(normalized_edits)
+                }))
+            sys.exit(0)
+
+        if adj_status == 'DENIED':
             claim_status = "Denied"
             adjudication_payload = {
                 "allowedAmount": 0,
@@ -597,9 +636,8 @@ spec:
                 "payerPayment": 0,
                 "denialReasonCode": adj.get('carc'),
                 "denialReason": adj.get('reason'),
-                "ncciEditFailures": adj.get('editFailures', []),
                 "claimAdjustmentReasons": [{
-                    "groupCode": "CO" if adj_status == "DENIED" else "OA",
+                    "groupCode": "CO",
                     "reasonCode": adj.get('carc', '97'),
                     "amount": totals.get('billedAmount', 0),
                     "description": adj.get('reason', '')

@@ -414,12 +414,47 @@ spec:
       image: python:3.11-alpine
       command: [python]
       source: |
-        import json, urllib.request
+        import json, sys, urllib.request
 
         claim_id = "{{inputs.parameters.claim-id}}"
         adjudication = json.loads('''{{inputs.parameters.adjudication-result}}''')
         prior_auth = json.loads('''{{inputs.parameters.prior-auth-result}}''')
         tenant_id = "{{inputs.parameters.tenant-id}}"
+
+        # ── NCCI/MUE edit failure path: pend the claim, do not deny ──
+        # If the adjudication response carries editFailures, the deterministic
+        # NCCI engine flagged a bundling/MUE issue. Pend (not deny) so the AI
+        # Claims Examiner can post an advisory recommendation for human review.
+        edit_failures = adjudication.get('editFailures') or []
+        if edit_failures and not adjudication.get('success', True):
+            normalized_edits = []
+            for ef in edit_failures:
+                ef = dict(ef)
+                et = ef.get('editType')
+                if et == 0:
+                    ef['editType'] = 'NcciPair'
+                elif et == 1:
+                    ef['editType'] = 'Mue'
+                normalized_edits.append(ef)
+
+            pend_payload = {
+                "pendCode": "NCCI",
+                "pendReason": adjudication.get('denialReasonDescription') or 'NCCI/MUE edit failure',
+                "editFailures": normalized_edits
+            }
+            pend_url = f"http://claims-service.cloudhealthoffice/api/claims/{claim_id}/pend"
+            pend_data = json.dumps(pend_payload).encode('utf-8')
+            pend_req = urllib.request.Request(pend_url, data=pend_data, method='PUT')
+            pend_req.add_header('X-Tenant-ID', tenant_id)
+            pend_req.add_header('Content-Type', 'application/json')
+
+            with urllib.request.urlopen(pend_req, timeout=5) as response:
+                print(json.dumps({
+                    "claimId": claim_id,
+                    "status": "Pended",
+                    "editFailureCount": len(normalized_edits)
+                }))
+            sys.exit(0)
 
         # Determine final status
         if prior_auth.get('status') == 'DENIED':

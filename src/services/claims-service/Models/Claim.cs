@@ -229,6 +229,22 @@ public class Claim
     public AdjudicationResult? AdjudicationResult { get; set; }
 
     /// <summary>
+    /// Structured detail about why this claim is in Pended status. Populated by the
+    /// adjudication workflow when a deterministic edit fails (e.g., NCCI/MUE).
+    /// Distinct from AdjudicationResult so the deterministic pend reason cannot be
+    /// silently overwritten by a downstream consumer.
+    /// </summary>
+    public PendDetails? PendDetails { get; set; }
+
+    /// <summary>
+    /// Advisory recommendation from the AI Claims Examiner service. Always advisory:
+    /// the deterministic pipeline remains authoritative, and a human examiner approves,
+    /// modifies, or overrides the recommendation via the work queue. Stored separately
+    /// from AdjudicationResult to keep the AI/audit boundary explicit.
+    /// </summary>
+    public AiExamination? AiExamination { get; set; }
+
+    /// <summary>
     /// Prior authorization number (if required)
     /// 837: REF*G1 (2300 loop)
     /// </summary>
@@ -657,4 +673,178 @@ public enum LineOfBusiness
     Exchange = 4,
     TRICARE = 5,
     VA = 6
+}
+
+/// <summary>
+/// Why a claim was placed in Pended status. Written by the adjudication workflow
+/// at the moment of the pend; never mutated by downstream consumers (the AI examiner
+/// service writes its output to AiExamination, not here).
+/// </summary>
+[BsonIgnoreExtraElements]
+public class PendDetails
+{
+    /// <summary>
+    /// Short pend reason code consumed by the work queue categorizer.
+    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL.
+    /// </summary>
+    [Required]
+    [StringLength(20)]
+    public string PendCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Human-readable description of the pend reason.
+    /// </summary>
+    [StringLength(500)]
+    public string? PendReason { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the claim was pended.
+    /// </summary>
+    public DateTime PendedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// NCCI/MUE edit failures that caused the pend. Empty for non-edit pends.
+    /// </summary>
+    public List<NcciEditFailureSnapshot> EditFailures { get; set; } = new();
+}
+
+/// <summary>
+/// Claim-service-local snapshot of an NCCI engine edit failure. Mirrors
+/// CloudHealthOffice.NcciEngine.Models.NcciEditFailure but lives here so the
+/// claims-service does not take a hard reference on the engine assembly.
+/// </summary>
+[BsonIgnoreExtraElements]
+public class NcciEditFailureSnapshot
+{
+    /// <summary>NCCI_PAIR or MUE.</summary>
+    [StringLength(20)]
+    public string EditType { get; set; } = string.Empty;
+
+    /// <summary>NE001 (NCCI bundling) or NE002 (MUE).</summary>
+    [StringLength(10)]
+    public string RuleId { get; set; } = string.Empty;
+
+    /// <summary>Human-readable description of the failure.</summary>
+    [StringLength(1000)]
+    public string? Message { get; set; }
+
+    /// <summary>Column 1 procedure code (NCCI pair edits only).</summary>
+    [StringLength(10)]
+    public string? Column1Code { get; set; }
+
+    /// <summary>Column 2 procedure code (NCCI pair edits only).</summary>
+    [StringLength(10)]
+    public string? Column2Code { get; set; }
+
+    /// <summary>Claim line numbers affected by the edit.</summary>
+    public List<int> AffectedLineNumbers { get; set; } = new();
+
+    /// <summary>
+    /// True if a -59/X{EPSU} modifier was already present at submission. The AI examiner
+    /// is only invoked for edits where this is the legal override path; see
+    /// IsModifierAddressable() for the v1 selection rule.
+    /// </summary>
+    public bool ModifierOverridePresent { get; set; }
+
+    /// <summary>For MUE failures: units billed.</summary>
+    public decimal? UnitsBilled { get; set; }
+
+    /// <summary>For MUE failures: MUE max units limit.</summary>
+    public int? MueMaxUnits { get; set; }
+
+    /// <summary>Suggested CARC for the EOB/835.</summary>
+    [StringLength(10)]
+    public string? SuggestedCarc { get; set; }
+
+    /// <summary>Suggested RARC remark code.</summary>
+    [StringLength(10)]
+    public string? SuggestedRarc { get; set; }
+
+    /// <summary>
+    /// True when the edit type is one a modifier could legally override.
+    /// v1 of the AI examiner only acts on NCCI pair edits with ModifierIndicator = 1,
+    /// which the engine surfaces as RuleId NE001 with ModifierOverridePresent reflecting
+    /// what the submitter sent. The examiner reviews whether a -59/X{EPSU} should have
+    /// been billed; MUE/unit-limit edits are out of scope for v1.
+    /// </summary>
+    public bool IsModifierAddressable() =>
+        string.Equals(EditType, "NcciPair", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(RuleId, "NE001", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// Advisory recommendation produced by the AI Claims Examiner service for a pended claim.
+/// Always advisory — the deterministic pipeline remains authoritative and a human
+/// examiner must accept, modify, or override before any payment-impacting action.
+/// </summary>
+[BsonIgnoreExtraElements]
+public class AiExamination
+{
+    /// <summary>
+    /// Recommended disposition: Approve, Deny, RequestInfo, EscalateToHuman.
+    /// EscalateToHuman is the safe default when the model declines to commit.
+    /// </summary>
+    [Required]
+    [StringLength(20)]
+    public string RecommendedDisposition { get; set; } = "EscalateToHuman";
+
+    /// <summary>
+    /// Model self-reported confidence in the recommendation, 0.0–1.0.
+    /// Used by the work queue to band claims for relaxed-threshold experiments
+    /// once override-rate data is available.
+    /// </summary>
+    [Range(0, 1)]
+    public double ConfidenceScore { get; set; }
+
+    /// <summary>
+    /// Plain-English rationale for the disposition. Shown to the examiner alongside
+    /// the claim. Capped at 4000 chars; the model is prompted to be concise.
+    /// </summary>
+    [StringLength(4000)]
+    public string? Rationale { get; set; }
+
+    /// <summary>
+    /// Citations to the policy/rule the model relied on (e.g., "NCCI Manual Ch.1 §F.3",
+    /// "CMS NCCI 2025Q1 column1=27447 column2=27486 modifier_indicator=1").
+    /// Empty when no citation could be produced — that itself is a signal.
+    /// </summary>
+    public List<string> PolicyCitations { get; set; } = new();
+
+    /// <summary>
+    /// Anthropic model ID used to produce this recommendation (e.g., "claude-opus-4-6").
+    /// Pinned per call so we can correlate quality with model version.
+    /// </summary>
+    [StringLength(100)]
+    public string? ModelId { get; set; }
+
+    /// <summary>
+    /// Internal prompt template version (e.g., "ncci-pend-v1"). Lets us A/B prompt
+    /// revisions without losing the ability to attribute outcomes to a specific prompt.
+    /// </summary>
+    [StringLength(50)]
+    public string? PromptVersion { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the recommendation was generated.
+    /// </summary>
+    public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Set when a human examiner acts on the claim. Null while the claim sits in the
+    /// queue. Values: Accepted, Modified, Overridden. This is the feedback signal the
+    /// 90-day override-rate analysis depends on; do not skip writing it on examiner action.
+    /// </summary>
+    [StringLength(20)]
+    public string? ExaminerAgreement { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when ExaminerAgreement was set.
+    /// </summary>
+    public DateTime? ExaminerActedAt { get; set; }
+
+    /// <summary>
+    /// Examiner who acted on the claim (set with ExaminerAgreement).
+    /// </summary>
+    [StringLength(200)]
+    public string? ExaminerUserId { get; set; }
 }
