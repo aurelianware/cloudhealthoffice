@@ -3,6 +3,7 @@ using ClaimsExaminerService.Models;
 using ClaimsExaminerService.Services;
 using ClaimsExaminerService.Services.Anthropic;
 using ClaimsExaminerService.Services.Examiner;
+using CloudHealthOffice.Events;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
