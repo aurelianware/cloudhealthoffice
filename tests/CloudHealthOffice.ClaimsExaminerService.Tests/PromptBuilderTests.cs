@@ -1,5 +1,6 @@
 using ClaimsExaminerService.Models;
 using ClaimsExaminerService.Services.Examiner;
+using CloudHealthOffice.Events;
 using Xunit;
 
 namespace CloudHealthOffice.ClaimsExaminerService.Tests;
