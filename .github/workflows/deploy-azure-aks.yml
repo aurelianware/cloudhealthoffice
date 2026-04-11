@@ -114,6 +114,7 @@ jobs:
           - encounter-service
           - provider-contracts-service
           - ar-service
+          - claims-examiner-service
           - CHO.TerminologyService
           - CloudHealthOffice.PricingApi
         include:
@@ -166,6 +167,8 @@ jobs:
           - service: provider-contracts-service
             build_context: '.'
           - service: ar-service
+            build_context: '.'
+          - service: claims-examiner-service
             build_context: '.'
           - service: CHO.TerminologyService
             build_context: '.'
