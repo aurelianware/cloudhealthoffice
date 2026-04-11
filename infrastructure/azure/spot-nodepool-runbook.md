@@ -17,8 +17,9 @@ az aks nodepool add \
   --eviction-policy Delete \
   --spot-max-price -1 \
   --enable-cluster-autoscaler \
+  --node-count 1 \
   --min-count 0 \
-  --max-count 4 \
+  --max-count 1 \
   --node-vm-size Standard_D2s_v4 \
   --node-taints kubernetes.azure.com/scalesetpriority=spot:NoSchedule \
   --labels workload=spot
@@ -32,6 +33,14 @@ Notes:
   The AMD `_as_` family (e.g. `Standard_D2as_v5`) is blocked in this
   subscription's eastus policy — stick with Intel SKUs from the allowed
   list. Pick a larger SKU if the workload needs more CPU/memory.
+- `--max-count 1` is constrained by the subscription's LowPriorityCores
+  quota, which is 3 vCPUs in eastus at time of writing. One D2s_v4 node =
+  2 vCPUs, fits under the limit. `--node-count 1` is required alongside
+  `--min-count`/`--max-count` — the default `--node-count 3` would exceed
+  the max. Request a quota increase at
+  https://aka.ms/ProdportalCRP/#blade/Microsoft_Azure_Capacity/UsageAndQuota.ReactView
+  (ask for `Low Priority vCPUs` in eastus, 16 is a reasonable ceiling).
+  Once approved, bump with `az aks nodepool update -n userspot --max-count N`.
 - Min-count 0 is what makes savings real: when KEDA scales the pod to 0,
   the cluster autoscaler will drain and remove the spot node within
   ~10 minutes (`scaleDownUnneededTime` from `az aks show`).
