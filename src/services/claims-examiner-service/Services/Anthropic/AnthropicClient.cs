@@ -80,14 +80,8 @@ public class AnthropicClient : IAnthropicClient
         _options = options;
         _logger = logger;
 
-        if (string.IsNullOrEmpty(_options.ApiKey))
-        {
-            _logger.LogWarning("Anthropic API key not configured — AnthropicClient will fail on first call");
-        }
-
         _http.BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/");
         _http.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
-        _http.DefaultRequestHeaders.Add("x-api-key", _options.ApiKey);
         _http.DefaultRequestHeaders.Add("anthropic-version", _options.AnthropicVersion);
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
