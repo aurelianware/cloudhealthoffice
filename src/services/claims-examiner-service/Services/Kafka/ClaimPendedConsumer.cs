@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ClaimsExaminerService.Models;
 using ClaimsExaminerService.Services.Examiner;
+using CloudHealthOffice.Events;
 using Confluent.Kafka;
 
 namespace ClaimsExaminerService.Services.Kafka;

@@ -42,6 +42,7 @@ public class UserContext
         "ProviderRelations" => "Provider Relations",
         "Finance" => "Finance",
         "ComplianceOfficer" => "Compliance Officer",
+        "ComplianceViewer" => "Compliance Viewer",
         "TenantAdmin" => "Tenant Admin",
         "PlatformAdmin" => "Platform Admin",
         _ => PrimaryRole
@@ -327,6 +328,10 @@ public class UserContextService : IUserContextService
         "ComplianceOfficer" => new()
         {
             "*:read", "audit:read", "compliance:read", "reports:compliance"
+        },
+        "ComplianceViewer" => new()
+        {
+            "compliance:read", "authorizations:read", "audit:read"
         },
         "TenantAdmin" => new()
         {

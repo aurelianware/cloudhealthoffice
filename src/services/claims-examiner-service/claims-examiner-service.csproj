@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj" />
+    <ProjectReference Include="../shared/CloudHealthOffice.Events/CloudHealthOffice.Events.csproj" />
   </ItemGroup>
 
   <ItemGroup>
