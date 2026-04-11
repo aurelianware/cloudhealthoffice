@@ -38,6 +38,16 @@ public class ClaimPendedConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Yield to the thread pool immediately so BackgroundService.StartAsync
+        // returns Task.CompletedTask and the generic host can proceed to start
+        // other services (including Kestrel). Without this, the synchronous
+        // librdkafka Consume loop below blocks the calling thread, which is
+        // whatever thread the host was using to invoke StartAsync sequentially,
+        // and Kestrel never gets its turn to bind the HTTP port. Symptom is
+        // probes failing with "connection refused" and Kestrel.BindAsync
+        // eventually throwing TaskCanceledException during host shutdown.
+        await Task.Yield();
+
         var bootstrap = _configuration["Kafka:BootstrapServers"];
         if (string.IsNullOrEmpty(bootstrap))
         {
@@ -83,7 +93,15 @@ public class ClaimPendedConsumer : BackgroundService
                 ConsumeResult<string, string>? result;
                 try
                 {
-                    result = consumer.Consume(stoppingToken);
+                    // Poll with a bounded timeout instead of blocking on the
+                    // cancellation-token overload. The token overload blocks
+                    // the calling thread indefinitely when the topic is empty,
+                    // which (a) makes cancellation laggy and (b) caused the
+                    // host-startup hang symptom when combined with a missing
+                    // await at the top of this method. A 1-second poll keeps
+                    // the while loop iterating so cancellation is checked
+                    // every tick.
+                    result = consumer.Consume(TimeSpan.FromSeconds(1));
                 }
                 catch (OperationCanceledException)
                 {
@@ -97,6 +115,9 @@ public class ClaimPendedConsumer : BackgroundService
 
                 if (result?.Message is null)
                 {
+                    // No message within the poll window — loop back to the
+                    // cancellation check. This is the hot path when the topic
+                    // is idle.
                     continue;
                 }
 
