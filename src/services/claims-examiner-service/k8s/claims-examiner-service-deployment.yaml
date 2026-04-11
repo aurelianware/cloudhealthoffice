@@ -10,6 +10,9 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
+  # Self-hosted Kafka is cluster-internal and plaintext; no SASL in this
+  # environment. Matches claims-scrubbing-service-config.
+  Kafka__BootstrapServers: "kafka.cloudhealthoffice:9092"
   Kafka__ClaimPendedTopic: "claims.pended.v1"
   Kafka__ConsumerGroupId: "claims-examiner-service"
   Services__ClaimsService: "http://claims-service.cloudhealthoffice:8080"
@@ -34,6 +37,26 @@ spec:
         app: claims-examiner-service
         tier: backend
     spec:
+      # Prefer the Spot user pool so KEDA scale-to-zero actually releases
+      # nodes. Falls back to other pools if Spot is unavailable (the
+      # nodeSelector uses a soft label via nodeAffinity, but the toleration
+      # is required to land on tainted spot nodes). See
+      # infrastructure/azure/spot-nodepool-runbook.md for pool setup.
+      tolerations:
+        - key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload
+                    operator: In
+                    values:
+                      - spot
       containers:
       - name: claims-examiner-service
         image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-claims-examiner-service:latest
@@ -55,9 +78,9 @@ spec:
               key: connectionString
         - name: Kafka__BootstrapServers
           valueFrom:
-            secretKeyRef:
-              name: kafka-secret
-              key: bootstrapServers
+            configMapKeyRef:
+              name: claims-examiner-service-config
+              key: Kafka__BootstrapServers
         - name: Kafka__ClaimPendedTopic
           valueFrom:
             configMapKeyRef:
