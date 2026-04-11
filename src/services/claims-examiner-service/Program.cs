@@ -27,7 +27,9 @@ builder.Services.AddChoInfrastructure(builder.Configuration, options =>
 var anthropicOptions = builder.Configuration.GetSection("Anthropic").Get<AnthropicOptions>()
     ?? new AnthropicOptions();
 builder.Services.AddSingleton(anthropicOptions);
+builder.Services.AddTransient<AnthropicAuthHandler>();
 builder.Services.AddHttpClient<IAnthropicClient, AnthropicClient>()
+    .AddHttpMessageHandler<AnthropicAuthHandler>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
 // Claims-service client (typed HttpClient)
