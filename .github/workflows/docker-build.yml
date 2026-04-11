@@ -108,15 +108,24 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      # For fork PRs where ACR credentials are absent, fall back to MCR so the
-      # build-push-action can still pull the base image without credentials.
-      - name: Set effective base-image registry
+      # PR builds must exercise the same ACR path that main deploys do.
+      # The old silent MCR fallback hid commit 71c9d37 for 5 days: PR checks
+      # pulled .NET base images directly from MCR while main deploys tried to
+      # pull from an unpopulated ACR mirror and failed. Fail loudly here
+      # rather than let PR builds and main deploys exercise different
+      # registries — PR-green/main-red regressions must be impossible.
+      - name: Fail if ACR login didn't succeed on PR
+        if: github.event_name == 'pull_request' && steps.acr-pr-login.outcome != 'success'
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.acr-pr-login.outcome }}" != "success" ]; then
-            echo "BUILD_REGISTRY=mcr.microsoft.com" >> $GITHUB_ENV
-          else
-            echo "BUILD_REGISTRY=${{ env.REGISTRY }}" >> $GITHUB_ENV
-          fi
+          echo "::error::PR base-image pulls require the ACR_USERNAME / ACR_PASSWORD repo secrets."
+          echo "::error::Without them, PR builds and main deploys exercise different container"
+          echo "::error::registries, and main-only regressions (like 71c9d37) slip through PR review."
+          echo "::error::Generate a read-only ACR token via 'az acr token create --name cho-ci-readonly"
+          echo "::error::--scope-map cho-ci-dotnet-pull' and store the username/password1 as repo secrets."
+          exit 1
+
+      - name: Set effective base-image registry
+        run: echo "BUILD_REGISTRY=${{ env.REGISTRY }}" >> $GITHUB_ENV
 
       - name: Extract metadata
         id: meta
@@ -194,15 +203,24 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      # For fork PRs where ACR credentials are absent, fall back to MCR so the
-      # build-push-action can still pull the base image without credentials.
-      - name: Set effective base-image registry
+      # PR builds must exercise the same ACR path that main deploys do.
+      # The old silent MCR fallback hid commit 71c9d37 for 5 days: PR checks
+      # pulled .NET base images directly from MCR while main deploys tried to
+      # pull from an unpopulated ACR mirror and failed. Fail loudly here
+      # rather than let PR builds and main deploys exercise different
+      # registries — PR-green/main-red regressions must be impossible.
+      - name: Fail if ACR login didn't succeed on PR
+        if: github.event_name == 'pull_request' && steps.acr-pr-login.outcome != 'success'
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.acr-pr-login.outcome }}" != "success" ]; then
-            echo "BUILD_REGISTRY=mcr.microsoft.com" >> $GITHUB_ENV
-          else
-            echo "BUILD_REGISTRY=${{ env.REGISTRY }}" >> $GITHUB_ENV
-          fi
+          echo "::error::PR base-image pulls require the ACR_USERNAME / ACR_PASSWORD repo secrets."
+          echo "::error::Without them, PR builds and main deploys exercise different container"
+          echo "::error::registries, and main-only regressions (like 71c9d37) slip through PR review."
+          echo "::error::Generate a read-only ACR token via 'az acr token create --name cho-ci-readonly"
+          echo "::error::--scope-map cho-ci-dotnet-pull' and store the username/password1 as repo secrets."
+          exit 1
+
+      - name: Set effective base-image registry
+        run: echo "BUILD_REGISTRY=${{ env.REGISTRY }}" >> $GITHUB_ENV
 
       - name: Extract metadata
         id: meta
