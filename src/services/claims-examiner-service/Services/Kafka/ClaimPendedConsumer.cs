@@ -38,11 +38,17 @@ public class ClaimPendedConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Yield to the thread pool immediately so BackgroundService.StartAsync
-        // returns Task.CompletedTask and the generic host can proceed to start
-        // other services (including Kestrel). Without this, the synchronous
-        // librdkafka Consume loop below blocks the calling thread, which is
-        // whatever thread the host was using to invoke StartAsync sequentially,
+        // Yield execution back to the host/startup sequence before we touch
+        // anything synchronous. Task.Yield() schedules the remainder of this
+        // method as a continuation (on the thread pool when no sync context
+        // is present, which is the case during generic-host startup), so
+        // BackgroundService.StartAsync can finish capturing _executeTask and
+        // return Task.CompletedTask — letting the host proceed to start the
+        // next hosted service (including Kestrel).
+        //
+        // Without this yield, the synchronous librdkafka Consume loop below
+        // runs on whatever thread the host used to invoke our StartAsync
+        // sequentially, blocks it waiting for a message that never arrives,
         // and Kestrel never gets its turn to bind the HTTP port. Symptom is
         // probes failing with "connection refused" and Kestrel.BindAsync
         // eventually throwing TaskCanceledException during host shutdown.
