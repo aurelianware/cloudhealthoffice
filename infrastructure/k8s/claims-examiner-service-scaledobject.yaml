@@ -1,0 +1,48 @@
+---
+# KEDA ScaledObject for claims-examiner-service.
+#
+# Scales the examiner deployment from 0 to N based on consumer-group lag on
+# claims.pended.v1. The pod is a pure background Kafka consumer with no
+# synchronous callers, so scale-to-zero has no cold-start UX cost — the worst
+# case is one event waits ~pod-startup seconds before being processed.
+#
+# IMPORTANT: scale-to-zero only saves money if the pod is scheduled onto a
+# nodepool that can also scale to zero (mode: User, min-count: 0). On the
+# system pool (min=2) the pod terminates but the node stays up. Add a user
+# spot pool first and put a nodeSelector + spot toleration on the deployment,
+# then this scaler does what you want.
+#
+# KAFKA: self-hosted in-cluster at kafka.cloudhealthoffice:9092, plaintext,
+# no SASL, no TLS. Matches the real cluster state (kafka-secret has only
+# SASL creds that nothing actually uses, and the .NET producer only enables
+# SASL when Kafka:SaslUsername is non-empty). If you migrate to a broker
+# that requires auth, reintroduce a TriggerAuthentication.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: claims-examiner-service
+  namespace: cloudhealthoffice
+  labels:
+    app: claims-examiner-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: claims-examiner-service
+  # Scale to zero when the consumer group has caught up. The cooldown period
+  # gates how quickly we tear down after lag drops to zero — 5 minutes is a
+  # reasonable balance between thrash and savings.
+  minReplicaCount: 0
+  maxReplicaCount: 5
+  pollingInterval: 30
+  cooldownPeriod: 300
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: kafka.cloudhealthoffice:9092
+        consumerGroup: claims-examiner-service
+        topic: claims.pended.v1
+        # Scale up when any partition has at least this much lag. Tune based
+        # on observed throughput; 10 is conservative for a low-volume topic.
+        lagThreshold: "10"
+        offsetResetPolicy: latest
