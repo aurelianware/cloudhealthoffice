@@ -37,7 +37,26 @@ public class ClaimsController : ControllerBase
         _logger = logger;
     }
 
-    private string GetTenantId() =>
+    /// <summary>
+    /// Returns the tenant ID or throws if missing. Use on mutation endpoints
+    /// where empty tenant would break multi-tenant isolation.
+    /// </summary>
+    private string GetTenantId()
+    {
+        var tenantId = HttpContext?.Items["TenantId"]?.ToString();
+        if (string.IsNullOrEmpty(tenantId))
+        {
+            throw new InvalidOperationException(
+                "TenantId not found in HttpContext. Ensure tenant middleware is configured.");
+        }
+        return tenantId;
+    }
+
+    /// <summary>
+    /// Returns the tenant ID or empty string. Use on read-only endpoints
+    /// where degraded operation is acceptable.
+    /// </summary>
+    private string TryGetTenantId() =>
         HttpContext?.Items["TenantId"]?.ToString() ?? string.Empty;
 
     /// <summary>
@@ -466,7 +485,7 @@ public class ClaimsController : ControllerBase
     public async Task<ActionResult<IEnumerable<AiExaminationAudit>>> GetAiExaminationAudit(
         string id, CancellationToken ct = default)
     {
-        var history = await _auditRepository.GetByClaimAsync(id, GetTenantId(), ct);
+        var history = await _auditRepository.GetByClaimAsync(id, TryGetTenantId(), ct);
         return Ok(history);
     }
 
