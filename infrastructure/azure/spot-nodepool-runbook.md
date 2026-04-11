@@ -19,7 +19,7 @@ az aks nodepool add \
   --enable-cluster-autoscaler \
   --min-count 0 \
   --max-count 4 \
-  --node-vm-size Standard_D2as_v5 \
+  --node-vm-size Standard_D2s_v4 \
   --node-taints kubernetes.azure.com/scalesetpriority=spot:NoSchedule \
   --labels workload=spot
 ```
@@ -27,9 +27,11 @@ az aks nodepool add \
 Notes:
 - `--spot-max-price -1` means "pay up to the on-demand price" — never get
   evicted on price, only on capacity reclaim.
-- `Standard_D2as_v5` is general-purpose AMD; ~70% cheaper than the system
-  pool's confidential-compute `Standard_DC2s_v3`. Pick a different SKU if
-  the workload needs more CPU/memory.
+- `Standard_D2s_v4` is general-purpose Intel (2 vCPU / 8 GB), significantly
+  cheaper than the system pool's confidential-compute `Standard_DC2s_v3`.
+  The AMD `_as_` family (e.g. `Standard_D2as_v5`) is blocked in this
+  subscription's eastus policy — stick with Intel SKUs from the allowed
+  list. Pick a larger SKU if the workload needs more CPU/memory.
 - Min-count 0 is what makes savings real: when KEDA scales the pod to 0,
   the cluster autoscaler will drain and remove the spot node within
   ~10 minutes (`scaleDownUnneededTime` from `az aks show`).
