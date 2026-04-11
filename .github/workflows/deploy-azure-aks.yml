@@ -30,11 +30,61 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────────────────────
+  # Preflight: mirror .NET base images from MCR into ACR so the
+  # Dockerfile `FROM ${REGISTRY}/dotnet/...` lines resolve. Every
+  # service Dockerfile defaults REGISTRY to the app ACR, which means
+  # the base images must exist in ACR before any build job can run.
+  #
+  # `az acr import --force` is idempotent and server-side (the image
+  # is copied MCR → ACR inside Azure, never pulled through the GitHub
+  # runner), so it's safe and cheap to run on every workflow invocation.
+  # First run on a fresh ACR takes ~10s per image; subsequent runs are
+  # near-instant no-ops.
+  #
+  # Added after a regression in 71c9d37 that repointed 28 Dockerfiles
+  # at the ACR mirror without populating it, breaking every main deploy
+  # from Apr 9 onward with `dotnet/aspnet:8.0: not found`.
+  # ─────────────────────────────────────────────────────────────
+  ensure-base-images:
+    name: Ensure .NET Base Images Mirrored to ACR
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Import .NET 8 base images from MCR
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ACR_NAME:-}" ]; then
+            echo "::error::vars.ACR_NAME is not set; cannot import base images"
+            exit 1
+          fi
+          for img in dotnet/sdk:8.0 dotnet/aspnet:8.0; do
+            echo "::group::Importing mcr.microsoft.com/${img} → ${ACR_NAME}.azurecr.io/${img}"
+            az acr import \
+              --name "$ACR_NAME" \
+              --source "mcr.microsoft.com/${img}" \
+              --image "${img}" \
+              --force
+            echo "::endgroup::"
+          done
+
+  # ─────────────────────────────────────────────────────────────
   # Build all images and push to ACR
   # ─────────────────────────────────────────────────────────────
   build-push-acr:
     name: Build & Push to ACR
     runs-on: ubuntu-latest
+    needs: ensure-base-images
     permissions:
       id-token: write
       contents: read
@@ -82,6 +132,7 @@ jobs:
   build-push-services:
     name: Build & Push Services (${{ matrix.service }})
     runs-on: ubuntu-latest
+    needs: ensure-base-images
     permissions:
       id-token: write
       contents: read
@@ -206,6 +257,7 @@ jobs:
   build-push-containers:
     name: Build & Push Containers (${{ matrix.container }})
     runs-on: ubuntu-latest
+    needs: ensure-base-images
     permissions:
       id-token: write
       contents: read
