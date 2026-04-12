@@ -20,7 +20,7 @@ public interface IClaimTypeRouter
     /// <summary>
     /// Determine how a claim should be routed through the adjudication pipeline.
     /// </summary>
-    ClaimRoutingDecision Route(
+    ClaimTypeRoutingDecision Route(
         OperatingModeConfiguration config,
         string claimType,
         int? lineOfBusiness);
@@ -28,7 +28,7 @@ public interface IClaimTypeRouter
 
 public class ClaimTypeRouter : IClaimTypeRouter
 {
-    public ClaimRoutingDecision Route(
+    public ClaimTypeRoutingDecision Route(
         OperatingModeConfiguration config,
         string claimType,
         int? lineOfBusiness)
@@ -50,7 +50,7 @@ public class ClaimTypeRouter : IClaimTypeRouter
 
         // Fall back to engine-level benefitCalculation mode
         var engineMode = config.GetEngineMode(OperatingModeConfiguration.EngineNames.BenefitCalculation);
-        return new ClaimRoutingDecision
+        return new ClaimTypeRoutingDecision
         {
             Route = engineMode.Mode == EngineOperatingMode.Augment
                 ? AdjudicationRoute.ChoAugment
@@ -60,11 +60,11 @@ public class ClaimTypeRouter : IClaimTypeRouter
         };
     }
 
-    private static ClaimRoutingDecision ParseDecision(string modeStr, string resolvedKey)
+    private static ClaimTypeRoutingDecision ParseDecision(string modeStr, string resolvedKey)
     {
         if (string.Equals(modeStr, "legacy", StringComparison.OrdinalIgnoreCase))
         {
-            return new ClaimRoutingDecision
+            return new ClaimTypeRoutingDecision
             {
                 Route = AdjudicationRoute.LegacyOnly,
                 ResolvedKey = resolvedKey,
@@ -75,7 +75,7 @@ public class ClaimTypeRouter : IClaimTypeRouter
         var isAugment = Enum.TryParse<EngineOperatingMode>(modeStr, ignoreCase: true, out var parsed)
             && parsed == EngineOperatingMode.Augment;
 
-        return new ClaimRoutingDecision
+        return new ClaimTypeRoutingDecision
         {
             Route = isAugment ? AdjudicationRoute.ChoAugment : AdjudicationRoute.ChoReplace,
             ResolvedKey = resolvedKey,
@@ -94,7 +94,7 @@ public class ClaimTypeRouter : IClaimTypeRouter
     };
 }
 
-public record ClaimRoutingDecision
+public record ClaimTypeRoutingDecision
 {
     public AdjudicationRoute Route { get; init; }
     public string ResolvedKey { get; init; } = string.Empty;
