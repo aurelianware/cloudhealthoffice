@@ -153,7 +153,7 @@ public class AdjudicationController : ControllerBase
             _logger.LogInformation(
                 "Claim {ClaimId} routed to legacy system (type={ClaimType}, LOB={Lob}, key={Key})",
                 SanitizeForLog(request.ClaimId), SanitizeForLog(claimTypeCode),
-                request.LineOfBusiness, routingDecision.ResolvedKey);
+                request.LineOfBusiness, SanitizeForLog(routingDecision.ResolvedKey));
 
             return Ok(new AdjudicationResponse
             {
