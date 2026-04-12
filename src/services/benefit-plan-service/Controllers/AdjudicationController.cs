@@ -10,9 +10,14 @@ using CloudHealthOffice.ClaimsScrubEngine.Services;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.OperatingMode;
+using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Domain;
+using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
 using BenefitPlanService.Middleware;
+using BenefitPlanService.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BenefitPlanService.Controllers;
@@ -49,6 +54,11 @@ public class AdjudicationController : ControllerBase
     private readonly IRateResolutionService _rateEngine;
     private readonly INcciEditService _ncciEngine;
     private readonly IEnrollmentDecisionGate _enrollmentGate;
+    private readonly IPriorAuthRuleEngine _priorAuthEngine;
+    private readonly IProviderIntegrityGate _providerIntegrityGate;
+    private readonly ITerminologyCrosswalkClient _terminologyClient;
+    private readonly IOperatingModeProvider _operatingModeProvider;
+    private readonly IClaimTypeRouter _claimTypeRouter;
     private readonly ILogger<AdjudicationController> _logger;
 
     public AdjudicationController(
@@ -57,6 +67,11 @@ public class AdjudicationController : ControllerBase
         IRateResolutionService rateEngine,
         INcciEditService ncciEngine,
         IEnrollmentDecisionGate enrollmentGate,
+        IPriorAuthRuleEngine priorAuthEngine,
+        IProviderIntegrityGate providerIntegrityGate,
+        ITerminologyCrosswalkClient terminologyClient,
+        IOperatingModeProvider operatingModeProvider,
+        IClaimTypeRouter claimTypeRouter,
         ILogger<AdjudicationController> logger)
     {
         _scrubEngine = scrubEngine;
@@ -64,6 +79,11 @@ public class AdjudicationController : ControllerBase
         _rateEngine = rateEngine;
         _ncciEngine = ncciEngine;
         _enrollmentGate = enrollmentGate;
+        _priorAuthEngine = priorAuthEngine;
+        _providerIntegrityGate = providerIntegrityGate;
+        _terminologyClient = terminologyClient;
+        _operatingModeProvider = operatingModeProvider;
+        _claimTypeRouter = claimTypeRouter;
         _logger = logger;
     }
 
@@ -97,22 +117,58 @@ public class AdjudicationController : ControllerBase
         [FromBody] AdjudicationRequest request,
         CancellationToken ct)
     {
+        var claimTypeCode = request.ClaimType == "Institutional" ? "837I" : "837P";
+
         using var adjudicationSpan = ChoActivitySource.StartActivity(
             "claim.adjudication",
             ActivityKind.Internal,
             tenantId: TenantId,
             claimId: request.ClaimId,
-            claimType: "837P",
+            claimType: claimTypeCode,
             memberId: request.MemberId);
 
         adjudicationSpan?.SetTag("cho.benefit_plan_id", request.BenefitPlanId.ToString());
         adjudicationSpan?.SetTag("cho.line_count", request.Lines.Count);
+        adjudicationSpan?.SetTag("cho.claim_type", request.ClaimType);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
+        // ── Routing decision: determine operating mode for this claim type/LOB ──
+        var operatingModeConfig = await _operatingModeProvider.GetConfigurationAsync(TenantId, ct);
+        var routingDecision = _claimTypeRouter.Route(
+            operatingModeConfig, request.ClaimType, request.LineOfBusiness);
+
+        adjudicationSpan?.SetTag("cho.routing.route", routingDecision.Route.ToString());
+        adjudicationSpan?.SetTag("cho.routing.key", routingDecision.ResolvedKey);
+        adjudicationSpan?.SetTag("cho.operating_mode", routingDecision.OperatingMode.Mode.ToString());
+
+        // If routed to legacy only, return immediately — CHO does not process this claim type.
+        if (routingDecision.Route == AdjudicationRoute.LegacyOnly)
+        {
+            RecordLatency(sw, claimTypeCode, "legacy_routed");
+
+            _logger.LogInformation(
+                "Claim {ClaimId} routed to legacy system (type={ClaimType}, LOB={Lob}, key={Key})",
+                SanitizeForLog(request.ClaimId), request.ClaimType,
+                request.LineOfBusiness, routingDecision.ResolvedKey);
+
+            return Ok(new AdjudicationResponse
+            {
+                ClaimId = request.ClaimId,
+                Success = false,
+                DenialReasonCode = "LEGACY_ROUTED",
+                DenialReasonDescription = $"Claim type {request.ClaimType} routed to legacy system per tenant configuration",
+                OperatingMode = "LegacyOnly",
+                RoutingKey = routingDecision.ResolvedKey,
+                IsAuthoritative = false
+            });
+        }
+
         _logger.LogInformation(
-            "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines",
-            SanitizeForLog(request.ClaimId), SanitizeForLog(request.MemberId), request.BenefitPlanId, request.Lines.Count);
+            "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines (type={ClaimType}, mode={Mode})",
+            SanitizeForLog(request.ClaimId), SanitizeForLog(request.MemberId),
+            request.BenefitPlanId, request.Lines.Count, request.ClaimType,
+            routingDecision.OperatingMode.Mode);
 
         // ── Step 0a: Claims scrub validation ──
         ClaimsScrubResponse scrubResponse;
@@ -120,7 +176,7 @@ public class AdjudicationController : ControllerBase
             "claim.scrub",
             tenantId: TenantId,
             claimId: request.ClaimId,
-            claimType: "837P",
+            claimType: claimTypeCode,
             memberId: request.MemberId))
         {
             var scrubClaim = MapToScrubClaim(request);
@@ -137,7 +193,7 @@ public class AdjudicationController : ControllerBase
             adjudicationSpan?.SetTag("cho.outcome", "scrub_failure");
             adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Scrub validation failed");
 
-            RecordLatency(sw, "837P", "scrub_failure");
+            RecordLatency(sw, claimTypeCode, "scrub_failure");
 
             _logger.LogWarning(
                 "Claim {ClaimId} failed scrub validation: {ErrorCount} error(s), {WarningCount} warning(s)",
@@ -162,14 +218,14 @@ public class AdjudicationController : ControllerBase
             "claim.ncci",
             tenantId: TenantId,
             claimId: request.ClaimId,
-            claimType: "837P",
+            claimType: claimTypeCode,
             memberId: request.MemberId))
         {
             var ncciRequest = new NcciScrubRequest
             {
                 TenantId = TenantId,
                 ClaimId = request.ClaimId,
-                ClaimType = "837P",
+                ClaimType = claimTypeCode,
                 EffectiveDate = request.ServiceDate,
                 ServiceLines = request.Lines.Select(l => new ClaimServiceLine
                 {
@@ -193,7 +249,7 @@ public class AdjudicationController : ControllerBase
             adjudicationSpan?.SetTag("cho.outcome", "ncci_failure");
             adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "NCCI/MUE edit failed");
 
-            RecordLatency(sw, "837P", "ncci_failure");
+            RecordLatency(sw, claimTypeCode, "ncci_failure");
 
             _logger.LogWarning(
                 "Claim {ClaimId} failed NCCI/MUE edits: {FailureCount} failure(s)",
@@ -209,19 +265,133 @@ public class AdjudicationController : ControllerBase
             });
         }
 
+        // ── Step 0c: Provider integrity verification (OIG/LEIE/SAM.gov) ──
+        ProviderIntegrityResult? providerIntegrity = null;
+        using (var integritySpan = ChoActivitySource.StartActivity(
+            "claim.provider-integrity",
+            tenantId: TenantId,
+            claimId: request.ClaimId,
+            claimType: claimTypeCode,
+            memberId: request.MemberId))
+        {
+            providerIntegrity = await _providerIntegrityGate.CheckAsync(request.ProviderNpi, ct);
+
+            integritySpan?.SetTag("cho.integrity.passed", providerIntegrity.Passed);
+            integritySpan?.SetTag("cho.integrity.score", providerIntegrity.IntegrityScore ?? -1);
+            integritySpan?.SetTag("cho.integrity.excluded", providerIntegrity.IsExcluded);
+        }
+
+        if (!providerIntegrity.Passed)
+        {
+            adjudicationSpan?.SetTag("cho.outcome", "provider_excluded");
+            adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Provider excluded from federal programs");
+
+            RecordLatency(sw, claimTypeCode, "provider_excluded");
+
+            _logger.LogWarning(
+                "Claim {ClaimId} denied: provider NPI {Npi} excluded from federal programs (integrity score: {Score})",
+                SanitizeForLog(request.ClaimId), SanitizeForLog(request.ProviderNpi),
+                providerIntegrity.IntegrityScore);
+
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = "PROVIDER_EXCLUDED",
+                message = providerIntegrity.DenialReason ?? "Provider excluded from federal healthcare programs",
+                carc = providerIntegrity.DenialCode,
+                integrityScore = providerIntegrity.IntegrityScore,
+                rating = providerIntegrity.Rating,
+            });
+        }
+
+        // ── Step 0d: Prior auth rule evaluation ──
+        // Evaluates whether the procedures on this claim require prior authorization
+        // and whether the provided auth (if any) satisfies the requirement.
+        PaRuleDecision? priorAuthDecision = null;
+        using (var paSpan = ChoActivitySource.StartActivity(
+            "claim.prior-auth-eval",
+            tenantId: TenantId,
+            claimId: request.ClaimId,
+            claimType: claimTypeCode,
+            memberId: request.MemberId))
+        {
+            var paContext = new PaRuleContext
+            {
+                TenantId = TenantId,
+                StateCode = request.StateCode ?? "TX",
+                Lob = MapToPaLineOfBusiness(request.LineOfBusiness),
+                RequestingProviderNpi = request.ProviderNpi,
+                ServicingProviderNpi = request.ProviderNpi,
+                ServicingProviderTaxonomy = request.ProviderTaxonomy,
+                MemberId = request.MemberId,
+                ServiceDate = request.ServiceDate,
+                ProcedureCodes = request.Lines.Select(l => l.ProcedureCode).Distinct().ToList(),
+                DiagnosisCodes = request.Lines.SelectMany(l => l.DiagnosisCodes).Distinct().ToList(),
+                PlaceOfServiceCode = request.Lines.Select(l => l.PlaceOfService).FirstOrDefault(),
+                EstimatedCost = request.Lines.Sum(l => l.BilledAmount),
+            };
+
+            priorAuthDecision = await _priorAuthEngine.EvaluateAsync(paContext, ct);
+
+            paSpan?.SetTag("cho.pa.outcome", priorAuthDecision.Outcome.ToString());
+            paSpan?.SetTag("cho.pa.rule_id", priorAuthDecision.FiringRuleId);
+        }
+
+        // If PA rule engine says Deny (procedure requires auth and none exists),
+        // deny the claim unless the provider already has an authorization on file.
+        if (priorAuthDecision.Outcome == PaDecisionOutcome.Deny
+            && string.IsNullOrEmpty(request.PriorAuthorizationNumber))
+        {
+            adjudicationSpan?.SetTag("cho.outcome", "pa_denied");
+            adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Prior authorization required but not provided");
+
+            RecordLatency(sw, claimTypeCode, "pa_denied");
+
+            _logger.LogWarning(
+                "Claim {ClaimId} denied: prior authorization required by rule {RuleId} ({RuleName})",
+                SanitizeForLog(request.ClaimId),
+                priorAuthDecision.FiringRuleId, priorAuthDecision.FiringRuleName);
+
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = "PRIOR_AUTH_REQUIRED",
+                message = priorAuthDecision.DenialReason ?? "Prior authorization required but not provided",
+                carc = priorAuthDecision.DenialCode ?? "197",
+                firingRule = priorAuthDecision.FiringRuleName,
+                ruleSetKey = priorAuthDecision.ResolvedRuleSetKey,
+            });
+        }
+
+        // ── Step 0e: Terminology crosswalk (plan-specific code mappings) ──
+        // Resolves plan-specific procedure code overrides before pricing.
+        // Essential for TX Medicaid rate accuracy where plan codes differ from standard CPT.
+        var crosswalkResults = await _terminologyClient.TranslateBatchAsync(
+            TenantId,
+            request.Lines.Select(l => new CodeCrosswalkRequest
+            {
+                LineNumber = l.LineNumber,
+                ProcedureCode = l.ProcedureCode,
+                CodeType = l.CodeType ?? "CPT"
+            }).ToList(),
+            ct);
+
+        var crosswalkMap = crosswalkResults.ToDictionary(r => r.LineNumber, r => r.ResolvedCode);
+
         // ── Step 1: Resolve rates (fee schedule engine) ──
+        // Uses crosswalk-resolved codes when available (Gap 4: TerminologyService).
         PricingResultSet pricingResults;
         using (var rateSpan = ChoActivitySource.StartActivity(
             "claim.rate-resolution",
             tenantId: TenantId,
             claimId: request.ClaimId,
-            claimType: "837P",
+            claimType: claimTypeCode,
             memberId: request.MemberId))
         {
             var pricingRequests = request.Lines.Select(line => new PricingRequest
             {
                 TenantId = TenantId,
-                ProcedureCode = line.ProcedureCode,
+                ProcedureCode = crosswalkMap.GetValueOrDefault(line.LineNumber, line.ProcedureCode),
                 Modifiers = line.Modifiers,
                 ProviderNpi = request.ProviderNpi,
                 PlaceOfServiceCode = line.PlaceOfService,
@@ -238,12 +408,14 @@ public class AdjudicationController : ControllerBase
         }
 
         // ── Step 2: Build benefit request with allowed amounts from pricing ──
+        // Uses CalculateWithModeAsync when operating in Augment mode (Gap 1).
         BenefitResolutionResult benefitResult;
+        string[] augmentDiscrepancies = [];
         using (var benefitSpan = ChoActivitySource.StartActivity(
             "claim.benefit-calc",
             tenantId: TenantId,
             claimId: request.ClaimId,
-            claimType: "837P",
+            claimType: claimTypeCode,
             memberId: request.MemberId))
         {
             var benefitLines = request.Lines.Select(line =>
@@ -254,7 +426,7 @@ public class AdjudicationController : ControllerBase
                 return new ClaimLineInput
                 {
                     LineNumber = line.LineNumber,
-                    ProcedureCode = line.ProcedureCode,
+                    ProcedureCode = crosswalkMap.GetValueOrDefault(line.LineNumber, line.ProcedureCode),
                     CodeType = line.CodeType,
                     Modifiers = line.Modifiers,
                     RevenueCode = line.RevenueCode,
@@ -286,9 +458,20 @@ public class AdjudicationController : ControllerBase
                 }
             };
 
-            benefitResult = await _benefitEngine.CalculateAsync(benefitRequest, ct);
+            // Use mode-aware calculation when in Augment mode to capture discrepancies
+            var augmentResult = await _benefitEngine.CalculateWithModeAsync(
+                benefitRequest,
+                routingDecision.OperatingMode,
+                TenantId,
+                legacyResult: null, // Legacy result injected by workflow when available
+                ct);
+
+            benefitResult = augmentResult.ChoResult;
+            augmentDiscrepancies = augmentResult.Discrepancies;
 
             benefitSpan?.SetTag("cho.benefit.success", benefitResult.Success);
+            benefitSpan?.SetTag("cho.benefit.authoritative", augmentResult.Authoritative);
+            benefitSpan?.SetTag("cho.benefit.discrepancy_count", augmentDiscrepancies.Length);
             if (benefitResult.DenialReasonCode is not null)
                 benefitSpan?.SetTag("cho.benefit.denial_code", benefitResult.DenialReasonCode);
         }
@@ -300,7 +483,7 @@ public class AdjudicationController : ControllerBase
                 "claim.cob",
                 tenantId: TenantId,
                 claimId: request.ClaimId,
-                claimType: "837P",
+                claimType: claimTypeCode,
                 memberId: request.MemberId);
 
             cobSpan?.SetTag("cho.cob.payer_sequence", request.Cob.PayerSequence);
@@ -316,6 +499,11 @@ public class AdjudicationController : ControllerBase
             Success = benefitResult.Success,
             DenialReasonCode = benefitResult.DenialReasonCode,
             DenialReasonDescription = benefitResult.DenialReasonDescription,
+            OperatingMode = routingDecision.OperatingMode.Mode.ToString(),
+            RoutingKey = routingDecision.ResolvedKey,
+            IsAuthoritative = routingDecision.OperatingMode.IsAuthoritative,
+            Discrepancies = augmentDiscrepancies.ToList(),
+            ProviderIntegrityScore = providerIntegrity?.IntegrityScore,
             Totals = new AdjudicationTotals
             {
                 BilledAmount = request.Lines.Sum(l => l.BilledAmount),
@@ -361,9 +549,11 @@ public class AdjudicationController : ControllerBase
         adjudicationSpan?.SetTag("cho.outcome", outcome);
         adjudicationSpan?.SetTag("cho.plan_payment", response.Totals.PlanPayment);
 
-        RecordLatency(sw, "837P", outcome);
+        RecordLatency(sw, claimTypeCode, outcome);
         ChoMetrics.AdjudicationOutcome.Add(1,
-            new KeyValuePair<string, object?>("cho.outcome", outcome));
+            new KeyValuePair<string, object?>("cho.outcome", outcome),
+            new KeyValuePair<string, object?>("cho.claim_type", claimTypeCode),
+            new KeyValuePair<string, object?>("cho.operating_mode", routingDecision.OperatingMode.Mode.ToString()));
 
         _logger.LogInformation(
             "Adjudication complete for claim {ClaimId}: allowed={Allowed}, plan={Plan}, member={Member}",
@@ -557,13 +747,27 @@ public class AdjudicationController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // Helper: Map line-of-business int to PaLineOfBusiness enum
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static PaLineOfBusiness MapToPaLineOfBusiness(int? lob) => lob switch
+    {
+        1 => PaLineOfBusiness.Commercial,
+        2 => PaLineOfBusiness.Medicare,
+        3 => PaLineOfBusiness.Medicaid,
+        4 => PaLineOfBusiness.Medicaid,  // CHIP → Medicaid rules
+        5 => PaLineOfBusiness.Exchange,
+        _ => PaLineOfBusiness.Medicaid   // Default to Medicaid for TX PCHP
+    };
+
+    // ═══════════════════════════════════════════════════════════════════
     // Helper: Map AdjudicationRequest → X12837Claim for scrub engine
     // ═══════════════════════════════════════════════════════════════════
 
     private static X12837Claim MapToScrubClaim(AdjudicationRequest request) => new()
     {
         ClaimId = request.ClaimId,
-        ClaimType = ClaimType.Professional,
+        ClaimType = request.ClaimType == "Institutional" ? ClaimType.Institutional : ClaimType.Professional,
         TransactionControlNumber = request.ClaimId,
         InterchangeControlNumber = request.ClaimId,
         TransactionDate = request.ServiceDate.ToString("yyyyMMdd"),
@@ -658,6 +862,31 @@ public record AdjudicationRequest
     /// </summary>
     public int? LineOfBusiness { get; init; }
 
+    /// <summary>
+    /// Claim type: "Professional" (837P), "Institutional" (837I), or "Dental" (837D).
+    /// Determines pipeline routing and pricing method selection.
+    /// Defaults to Professional when not specified for backward compatibility.
+    /// </summary>
+    public string ClaimType { get; init; } = "Professional";
+
+    /// <summary>
+    /// State code for the claim's jurisdiction (e.g., "TX", "FL", "CA").
+    /// Used for state-specific prior auth rules and provider enrollment checks.
+    /// </summary>
+    public string? StateCode { get; init; }
+
+    /// <summary>
+    /// Provider taxonomy code. Used for prior auth rule evaluation
+    /// (e.g., TX gold card exemption by provider type).
+    /// </summary>
+    public string? ProviderTaxonomy { get; init; }
+
+    /// <summary>
+    /// Prior authorization number if one was provided on the claim.
+    /// Cross-referenced during PA rule evaluation.
+    /// </summary>
+    public string? PriorAuthorizationNumber { get; init; }
+
     public List<AdjudicationLineRequest> Lines { get; init; } = [];
 
     /// <summary>
@@ -712,6 +941,35 @@ public record AdjudicationResponse
     public AdjudicationTotals Totals { get; init; } = new();
     public List<AdjudicationLineResponse> Lines { get; init; } = [];
     public List<AccumulatorState>? Accumulators { get; init; }
+
+    /// <summary>
+    /// Operating mode under which this claim was adjudicated.
+    /// "Replace" = CHO is authoritative; "Augment" = shadow mode alongside QNXT.
+    /// </summary>
+    public string? OperatingMode { get; init; }
+
+    /// <summary>
+    /// Routing decision key that determined pipeline behavior for this claim.
+    /// Example: "professional-medicaid", "institutional", "benefitCalculation".
+    /// </summary>
+    public string? RoutingKey { get; init; }
+
+    /// <summary>
+    /// Whether CHO's result is authoritative (true) or advisory (false, augment mode).
+    /// </summary>
+    public bool IsAuthoritative { get; init; } = true;
+
+    /// <summary>
+    /// Discrepancies between CHO and legacy results (augment mode only).
+    /// Empty in Replace mode.
+    /// </summary>
+    public List<string> Discrepancies { get; init; } = [];
+
+    /// <summary>
+    /// Provider integrity score from the ProviderVerificationEngine.
+    /// Null when the verification service was not consulted.
+    /// </summary>
+    public int? ProviderIntegrityScore { get; init; }
 }
 
 public record AdjudicationTotals
