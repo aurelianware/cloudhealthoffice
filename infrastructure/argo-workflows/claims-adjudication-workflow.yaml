@@ -487,6 +487,10 @@ spec:
         if len(service_date) == 8 and '-' not in service_date:
             service_date = f"{service_date[:4]}-{service_date[4:6]}-{service_date[6:]}"
 
+        # Resolve claim type: Professional (837P) or Institutional (837I)
+        raw_claim_type = claim.get('claimType', 'Professional')
+        claim_type = raw_claim_type if raw_claim_type in ('Professional', 'Institutional', 'Dental') else 'Professional'
+
         lines = []
         for i, line in enumerate(claim_lines):
             lines.append({
@@ -514,6 +518,10 @@ spec:
             "providerNpi": provider.get('npi') or claim.get('billingProviderNPI'),
             "networkTier": coverage.get('networkTier', 'InNetwork'),
             "lineOfBusiness": coverage.get('lineOfBusiness'),
+            "claimType": claim_type,
+            "stateCode": claim.get('stateCode') or coverage.get('stateCode', 'TX'),
+            "providerTaxonomy": provider.get('specialty'),
+            "priorAuthorizationNumber": claim.get('priorAuthorizationNumber'),
             "lines": lines
         }
 

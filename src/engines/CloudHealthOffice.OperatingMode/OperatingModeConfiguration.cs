@@ -70,5 +70,8 @@ public class OperatingModeConfiguration
         public const string ClaimsScrubbing = "claimsScrubbing";
         public const string CobCalculation = "cobCalculation";
         public const string RiskAdjustment = "riskAdjustment";
+        public const string PriorAuthRules = "priorAuthRules";
+        public const string ProviderVerification = "providerVerification";
+        public const string TerminologyCrosswalk = "terminologyCrosswalk";
     }
 }

@@ -12,10 +12,11 @@ using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
-using CloudHealthOffice.ProviderEnrollmentService.Configuration;  // ← NEW
-using CloudHealthOffice.ProviderEnrollmentService.Gates;           // ← NEW (passthrough fallback)
-using CloudHealthOffice.ProviderEnrollmentService.Abstractions;    // ← NEW (IEnrollmentDecisionGate)
-using CloudHealthOffice.PriorAuthRuleEngine.Configuration;         // ← NEW
+using CloudHealthOffice.OperatingMode;
+using CloudHealthOffice.ProviderEnrollmentService.Configuration;
+using CloudHealthOffice.ProviderEnrollmentService.Gates;
+using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -123,6 +124,43 @@ else
     builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
         .UseCosmosRepository().WithRedisRuleCache()
         .WithPlatformRules().SeedOnStartup();
+
+// ── Operating Mode Provider ───────────────────────────────────────────────────
+// Fetches per-tenant operating mode configuration from tenant-service.
+// Cached for 5 minutes — mode changes are admin actions, not hot-path.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IOperatingModeProvider, HttpOperatingModeProvider>(client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:TenantServiceUrl"]
+        ?? "http://tenant-service:8080/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+
+// ── Claim Type Router ────────────────────────────────────────────────────────
+// Determines CHO vs. legacy routing per claim type and line of business.
+builder.Services.AddSingleton<IClaimTypeRouter, ClaimTypeRouter>();
+
+// ── Provider Integrity Gate ──────────────────────────────────────────────────
+// Checks provider against OIG/LEIE/SAM.gov exclusion lists via
+// provider-verification-service. Cached 1 hour per NPI.
+builder.Services.AddHttpClient<IProviderIntegrityGate, HttpProviderIntegrityGate>(client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ProviderVerificationServiceUrl"]
+        ?? "http://provider-verification-service:8080/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
+// ── Terminology Crosswalk Client ─────────────────────────────────────────────
+// Resolves plan-specific procedure code mappings before fee schedule pricing.
+builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCrosswalkClient>(client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:TerminologyServiceUrl"]
+        ?? "http://terminology-service:8080/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
