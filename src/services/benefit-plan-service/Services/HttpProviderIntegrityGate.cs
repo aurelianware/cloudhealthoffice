@@ -40,30 +40,32 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 
         try
         {
+            var encodedNpi = Uri.EscapeDataString(npi);
             var response = await _httpClient.GetAsync(
-                $"api/providers/{npi}/verification", ct);
+                $"api/v1/providers/{encodedNpi}/integrity-score", ct);
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
                     "Provider verification service returned {StatusCode} for NPI {Npi}; passing through",
-                    response.StatusCode, npi);
+                    response.StatusCode, SanitizeForLog(npi));
                 return Passthrough();
             }
 
-            var record = await response.Content.ReadFromJsonAsync<VerificationResponse>(ct);
+            var record = await response.Content.ReadFromJsonAsync<IntegrityScoreResponse>(ct);
 
             if (record is null) return Passthrough();
 
+            var isExcluded = record.Status is "Excluded";
             var result = new ProviderIntegrityResult
             {
                 Passed = record.Status is not ("Excluded" or "Failed"),
-                IntegrityScore = record.IntegrityScore,
+                IntegrityScore = record.CompositeScore,
                 Rating = record.Rating,
-                IsExcluded = record.IsExcluded,
-                DenialCode = record.IsExcluded ? "B7" : null,
-                DenialReason = record.IsExcluded
-                    ? $"Provider NPI {npi} is excluded from federal healthcare programs"
+                IsExcluded = isExcluded,
+                DenialCode = isExcluded ? "B7" : null,
+                DenialReason = isExcluded
+                    ? "Provider is excluded from federal healthcare programs"
                     : null
             };
 
@@ -73,9 +75,17 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             _logger.LogWarning(ex,
-                "Provider verification service unreachable for NPI {Npi}; passing through", npi);
+                "Provider verification service unreachable for NPI {Npi}; passing through",
+                SanitizeForLog(npi));
             return Passthrough();
         }
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     private static ProviderIntegrityResult Passthrough() => new()
@@ -84,11 +94,15 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         Rating = "Unknown"
     };
 
-    private record VerificationResponse
+    /// <summary>
+    /// Matches the anonymous object shape returned by
+    /// GET /api/v1/providers/{npi}/integrity-score on provider-verification-service.
+    /// </summary>
+    private record IntegrityScoreResponse
     {
-        public string Status { get; init; } = string.Empty;
-        public int IntegrityScore { get; init; }
+        public int CompositeScore { get; init; }
         public string? Rating { get; init; }
-        public bool IsExcluded { get; init; }
+        public string? Status { get; init; }
+        public DateTimeOffset? VerifiedAt { get; init; }
     }
 }

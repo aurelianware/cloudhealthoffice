@@ -17,7 +17,6 @@ using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.ProviderEnrollmentService.Gates;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
-using BenefitPlanService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 

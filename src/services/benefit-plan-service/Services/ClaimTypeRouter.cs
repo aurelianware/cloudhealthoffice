@@ -11,9 +11,9 @@ namespace BenefitPlanService.Services;
 ///   ChoAugment   — CHO adjudicates in shadow alongside QNXT, QNXT is authoritative
 ///   LegacyOnly   — Route to QNXT (ICoreAdminAdapter), CHO does not process
 ///
-/// The router uses a compound key: "{claimType}:{lineOfBusiness}" to look up
-/// the operating mode. If no specific key is configured, falls back to the
-/// engine-level default.
+/// The router uses a compound key: "{claimType}-{lobName}" to look up
+/// the operating mode (for example, "professional-medicaid"). If no specific
+/// key is configured, falls back to the engine-level default.
 /// </summary>
 public interface IClaimTypeRouter
 {

@@ -117,7 +117,7 @@ public class AdjudicationController : ControllerBase
         [FromBody] AdjudicationRequest request,
         CancellationToken ct)
     {
-        var claimTypeCode = request.ClaimType == "Institutional" ? "837I" : "837P";
+        var claimTypeCode = NormalizeClaimType(request.ClaimType);
 
         using var adjudicationSpan = ChoActivitySource.StartActivity(
             "claim.adjudication",
@@ -140,7 +140,10 @@ public class AdjudicationController : ControllerBase
 
         adjudicationSpan?.SetTag("cho.routing.route", routingDecision.Route.ToString());
         adjudicationSpan?.SetTag("cho.routing.key", routingDecision.ResolvedKey);
-        adjudicationSpan?.SetTag("cho.operating_mode", routingDecision.OperatingMode.Mode.ToString());
+        adjudicationSpan?.SetTag("cho.operating_mode",
+            routingDecision.Route == AdjudicationRoute.LegacyOnly
+                ? "LegacyOnly"
+                : routingDecision.OperatingMode.Mode.ToString());
 
         // If routed to legacy only, return immediately — CHO does not process this claim type.
         if (routingDecision.Route == AdjudicationRoute.LegacyOnly)
@@ -149,7 +152,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogInformation(
                 "Claim {ClaimId} routed to legacy system (type={ClaimType}, LOB={Lob}, key={Key})",
-                SanitizeForLog(request.ClaimId), request.ClaimType,
+                SanitizeForLog(request.ClaimId), SanitizeForLog(claimTypeCode),
                 request.LineOfBusiness, routingDecision.ResolvedKey);
 
             return Ok(new AdjudicationResponse
@@ -167,7 +170,7 @@ public class AdjudicationController : ControllerBase
         _logger.LogInformation(
             "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines (type={ClaimType}, mode={Mode})",
             SanitizeForLog(request.ClaimId), SanitizeForLog(request.MemberId),
-            request.BenefitPlanId, request.Lines.Count, request.ClaimType,
+            request.BenefitPlanId, request.Lines.Count, SanitizeForLog(claimTypeCode),
             routingDecision.OperatingMode.Mode);
 
         // ── Step 0a: Claims scrub validation ──
@@ -747,6 +750,30 @@ public class AdjudicationController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // Helper: Normalize claim type string → X12 transaction code
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static string NormalizeClaimType(string? claimType)
+    {
+        return claimType?.Trim() switch
+        {
+            var t when string.Equals(t, "Institutional", StringComparison.OrdinalIgnoreCase) => "837I",
+            var t when string.Equals(t, "Dental", StringComparison.OrdinalIgnoreCase) => "837D",
+            _ => "837P" // Professional is the default
+        };
+    }
+
+    private static ClaimType ParseScrubClaimType(string claimTypeCode)
+    {
+        return claimTypeCode switch
+        {
+            "837I" => ClaimType.Institutional,
+            "837D" => ClaimType.Dental,
+            _ => ClaimType.Professional
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // Helper: Map line-of-business int to PaLineOfBusiness enum
     // ═══════════════════════════════════════════════════════════════════
 
@@ -767,7 +794,7 @@ public class AdjudicationController : ControllerBase
     private static X12837Claim MapToScrubClaim(AdjudicationRequest request) => new()
     {
         ClaimId = request.ClaimId,
-        ClaimType = request.ClaimType == "Institutional" ? ClaimType.Institutional : ClaimType.Professional,
+        ClaimType = ParseScrubClaimType(NormalizeClaimType(request.ClaimType)),
         TransactionControlNumber = request.ClaimId,
         InterchangeControlNumber = request.ClaimId,
         TransactionDate = request.ServiceDate.ToString("yyyyMMdd"),

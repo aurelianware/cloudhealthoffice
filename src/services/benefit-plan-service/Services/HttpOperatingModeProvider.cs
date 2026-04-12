@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using CloudHealthOffice.OperatingMode;
 using Microsoft.Extensions.Caching.Memory;
@@ -11,7 +12,8 @@ namespace BenefitPlanService.Services;
 ///
 /// Falls back to a default configuration (all engines in Replace mode)
 /// when tenant-service is unreachable, so adjudication is never blocked
-/// by a mode lookup failure.
+/// by a mode lookup failure. A 404 is treated as "no config" (default Replace),
+/// not as an error.
 /// </summary>
 public class HttpOperatingModeProvider : IOperatingModeProvider
 {
@@ -42,9 +44,20 @@ public class HttpOperatingModeProvider : IOperatingModeProvider
 
         try
         {
-            var config = await _httpClient.GetFromJsonAsync<OperatingModeConfiguration>(
-                $"api/tenants/{tenantId}/operating-mode", ct);
+            var response = await _httpClient.GetAsync(
+                $"api/v1/tenants/{Uri.EscapeDataString(tenantId)}/operating-mode", ct);
 
+            // 404 = tenant has no operating mode configured → default (all Replace)
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                var noConfig = new OperatingModeConfiguration { TenantId = tenantId };
+                _cache.Set(cacheKey, noConfig, CacheTtl);
+                return noConfig;
+            }
+
+            response.EnsureSuccessStatusCode();
+
+            var config = await response.Content.ReadFromJsonAsync<OperatingModeConfiguration>(ct);
             config ??= new OperatingModeConfiguration { TenantId = tenantId };
 
             _cache.Set(cacheKey, config, CacheTtl);

@@ -1,8 +1,8 @@
-# CHO Adjudication Platform Overview
+# Cloud Health Office Adjudication Platform Overview
 
 ## For Health Plan Decision Makers
 
-Cloud Health Office adjudicates claims today through a production-ready, multi-engine pipeline that processes professional and institutional claims end-to-end — from pre-payment validation through benefit cost-sharing to provider payment.
+Cloud Health Office (CHO) adjudicates claims today through a production-ready, multi-engine pipeline that processes professional and institutional claims end-to-end — from pre-payment validation through benefit cost-sharing to provider payment.
 
 ---
 
@@ -10,7 +10,7 @@ Cloud Health Office adjudicates claims today through a production-ready, multi-e
 
 ### A Real Adjudication Pipeline, Not a Prototype
 
-CHO processes claims through a 7-step orchestrated workflow that runs nine specialized engines in sequence:
+Cloud Health Office processes claims through a 7-step orchestrated workflow that runs nine specialized engines in sequence:
 
 1. **Pre-payment validation** — Claim scrubbing catches submission errors before any pricing runs
 2. **NCCI/MUE edits** — CMS-standard bundling edits and maximum unit enforcement

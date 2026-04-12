@@ -16,6 +16,11 @@ public class HttpTerminologyCrosswalkClient : ITerminologyCrosswalkClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<HttpTerminologyCrosswalkClient> _logger;
 
+    // Canonical system URIs matching TerminologyController constants
+    private const string CptSystem = "http://www.ama-assn.org/go/cpt";
+    private const string HcpcsSystem = "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets";
+    private const string PlanCodeSystem = "http://cloudhealthoffice.com/plan-codes";
+
     public HttpTerminologyCrosswalkClient(
         HttpClient httpClient,
         ILogger<HttpTerminologyCrosswalkClient> logger)
@@ -34,18 +39,16 @@ public class HttpTerminologyCrosswalkClient : ITerminologyCrosswalkClient
 
         try
         {
-            var translateRequests = requests.Select(r => new
+            var translateRequests = requests.Select(r => new TranslateRequestDto
             {
-                system = r.CodeType == "CPT"
-                    ? "http://www.ama-assn.org/go/cpt"
-                    : "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
-                code = r.ProcedureCode,
-                targetSystem = "http://cloudhealthoffice.com/plan-codes",
-                tenantId
+                System = r.CodeType == "CPT" ? CptSystem : HcpcsSystem,
+                Code = r.ProcedureCode,
+                TargetSystem = PlanCodeSystem,
+                TenantId = tenantId
             }).ToList();
 
             var response = await _httpClient.PostAsJsonAsync(
-                "api/terminology/batch-translate", translateRequests, ct);
+                "fhir/ConceptMap/$batch-translate", translateRequests, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -61,13 +64,17 @@ public class HttpTerminologyCrosswalkClient : ITerminologyCrosswalkClient
             if (translations is null || translations.Count != requests.Count)
                 return Passthrough(requests);
 
-            return requests.Zip(translations, (req, tx) => new CodeCrosswalkResult
+            return requests.Zip(translations, (req, tx) =>
             {
-                LineNumber = req.LineNumber,
-                OriginalCode = req.ProcedureCode,
-                ResolvedCode = tx.Matches?.FirstOrDefault()?.TargetCode ?? req.ProcedureCode,
-                WasTranslated = tx.Result && tx.Matches?.Count > 0,
-                MapVersionId = tx.MapVersionId
+                var match = tx.Matches?.FirstOrDefault();
+                return new CodeCrosswalkResult
+                {
+                    LineNumber = req.LineNumber,
+                    OriginalCode = req.ProcedureCode,
+                    ResolvedCode = match?.Concept?.Code ?? req.ProcedureCode,
+                    WasTranslated = tx.Result && match is not null,
+                    MapVersionId = tx.MapVersionId
+                };
             }).ToList();
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
@@ -88,6 +95,18 @@ public class HttpTerminologyCrosswalkClient : ITerminologyCrosswalkClient
             WasTranslated = false
         }).ToList();
 
+    /// <summary>
+    /// Matches the TranslateRequest DTO expected by
+    /// POST /fhir/ConceptMap/$batch-translate on TerminologyService.
+    /// </summary>
+    private record TranslateRequestDto
+    {
+        public string System { get; init; } = string.Empty;
+        public string Code { get; init; } = string.Empty;
+        public string TargetSystem { get; init; } = string.Empty;
+        public string? TenantId { get; init; }
+    }
+
     private record TranslateResponseDto
     {
         public bool Result { get; init; }
@@ -97,6 +116,11 @@ public class HttpTerminologyCrosswalkClient : ITerminologyCrosswalkClient
 
     private record MatchDto
     {
-        public string TargetCode { get; init; } = string.Empty;
+        public TranslatedCodingDto? Concept { get; init; }
+    }
+
+    private record TranslatedCodingDto
+    {
+        public string Code { get; init; } = string.Empty;
     }
 }
