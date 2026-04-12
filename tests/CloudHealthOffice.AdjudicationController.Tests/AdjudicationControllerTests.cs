@@ -775,7 +775,6 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.Equal(2, result.MueChecked);
         Assert.Empty(result.EditFailures);
     }
-}
 
     // ═══════════════════════════════════════════════════════════════
     // Routing: LegacyOnly returns expected response, no engines invoked
