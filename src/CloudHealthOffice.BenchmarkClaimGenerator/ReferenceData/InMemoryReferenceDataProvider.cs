@@ -1,3 +1,4 @@
+using CloudHealthOffice.BenchmarkClaimGenerator.Generators;
 using CloudHealthOffice.BenchmarkClaimGenerator.Models;
 
 namespace CloudHealthOffice.BenchmarkClaimGenerator.ReferenceData;
@@ -198,25 +199,42 @@ public class InMemoryReferenceDataProvider : IReferenceDataProvider
         var state = States[random.Next(States.Length)];
         var dob = new DateTime(1940 + random.Next(70), 1 + random.Next(12), 1 + random.Next(28));
         var effectiveDate = new DateTime(2023, 1, 1).AddDays(random.Next(365));
+        var seq = random.Next(1, 9_999_999);
+        var relationship = random.Next(4) switch
+        {
+            0 => "Self",
+            1 => "Spouse",
+            2 => "Child",
+            _ => "Self"
+        };
+        var relationshipCode = relationship switch
+        {
+            "Self" => "18",
+            "Spouse" => "01",
+            "Child" => "19",
+            _ => "18"
+        };
 
         return new SyntheticMember
         {
-            MemberId = $"MBR-{random.Next(1, 9_999_999):D7}",
-            SubscriberId = $"SUB-{random.Next(1, 9_999_999):D7}",
+            MemberId = $"MBR-{seq:D7}",
+            SubscriberId = $"SUB-{seq:D7}",
             FirstName = FirstNames[random.Next(FirstNames.Length)],
             LastName = LastNames[random.Next(LastNames.Length)],
             DateOfBirth = dob,
             Gender = random.Next(2) == 0 ? "M" : "F",
-            Relationship = random.Next(4) switch
-            {
-                0 => "Self",
-                1 => "Spouse",
-                2 => "Child",
-                _ => "Self"
-            },
+            Relationship = relationship,
+            RelationshipCode = relationshipCode,
+            IsSubscriber = relationship == "Self",
             CoverageEffectiveDate = effectiveDate,
             CoverageTermDate = null,
             PlanId = BenefitPlanIds[random.Next(BenefitPlanIds.Length)],
+            EnrollmentStatus = "Active",
+            MaintenanceTypeCode = "021",
+            LineOfBusiness = "STAR",
+            GroupNumber = $"MCC-GRP-{random.Next(1, 100):D3}",
+            Address = $"{random.Next(100, 9999)} Main St",
+            City = "Dallas",
             State = state,
             ZipCode = $"{random.Next(10000, 99999)}"
         };
@@ -226,16 +244,28 @@ public class InMemoryReferenceDataProvider : IReferenceDataProvider
     public SyntheticProvider GenerateProvider(Random random, string specialty = "general")
     {
         var state = States[random.Next(States.Length)];
+        var isParticipating = random.Next(100) < 85;
+        var taxonomyCode = Specialties[random.Next(Specialties.Length)];
+
         return new SyntheticProvider
         {
-            Npi = $"{random.Next(1_000_000_000, int.MaxValue)}",
+            Npi = SyntheticProviderGenerator.GenerateLuhnNpi(random),
             TaxId = $"{random.Next(10, 99)}-{random.Next(1_000_000, 9_999_999)}",
+            ProviderType = "Individual",
             FirstName = FirstNames[random.Next(FirstNames.Length)],
             LastName = LastNames[random.Next(LastNames.Length)],
-            SpecialtyCode = Specialties[random.Next(Specialties.Length)],
-            IsParticipating = random.Next(100) < 85, // 85% in-network
+            SpecialtyCode = taxonomyCode,
+            TaxonomyCode = taxonomyCode,
+            IsParticipating = isParticipating,
+            NetworkStatus = isParticipating ? "InNetwork" : "OutOfNetwork",
+            CredentialingStatus = isParticipating ? "Active" : "Expired",
+            Address = $"{random.Next(100, 9999)} Medical Dr",
+            City = "Dallas",
             State = state,
-            ZipCode = $"{random.Next(10000, 99999)}"
+            ZipCode = $"{random.Next(10000, 99999)}",
+            EffectiveDate = DateTime.Today.AddYears(-2),
+            ContractType = "FeeForService",
+            FeeScheduleId = isParticipating ? "FS-MEDICAID" : "FS-OON",
         };
     }
 }
