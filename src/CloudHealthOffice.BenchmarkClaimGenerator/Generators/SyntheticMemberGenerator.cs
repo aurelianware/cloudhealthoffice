@@ -378,12 +378,21 @@ public class SyntheticMemberGenerator
     {
         // Children should be realistic ages relative to parent
         var subscriberAge = (DateTime.Today - subscriberDob).Days / 365;
-        var parentAgeAtBirth = random.Next(18, Math.Min(35, subscriberAge));
-        var childAge = subscriberAge - parentAgeAtBirth;
-        if (childAge < 0) childAge = 0;
-        if (childAge > 25) childAge = random.Next(0, 18);
 
-        return DateTime.Today.AddYears(-childAge).AddDays(-random.Next(0, 365));
+        // If subscriber is too young to realistically have children, generate an infant/toddler
+        if (subscriberAge < 20)
+        {
+            var childAge = random.Next(0, Math.Max(1, subscriberAge));
+            return DateTime.Today.AddYears(-childAge).AddDays(-random.Next(0, 365));
+        }
+
+        var maxParentAge = Math.Min(35, subscriberAge);
+        var parentAgeAtBirth = random.Next(18, maxParentAge + 1);
+        var childAge2 = subscriberAge - parentAgeAtBirth;
+        if (childAge2 < 0) childAge2 = 0;
+        if (childAge2 > 25) childAge2 = random.Next(0, 18);
+
+        return DateTime.Today.AddYears(-childAge2).AddDays(-random.Next(0, 365));
     }
 
     private static DateTime GenerateCoverageStartDate(Random random, DateTime earliest, DateTime latest)
