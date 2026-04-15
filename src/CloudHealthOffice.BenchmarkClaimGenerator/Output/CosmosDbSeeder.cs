@@ -23,29 +23,32 @@ public class CosmosDbSeeder
 
     /// <summary>
     /// Container name constants matching the production service configuration.
+    /// Verified against: member-service MemberRepository, coverage-service CoverageRepository,
+    /// provider-service ProviderRepository, benefit-plan-service BenefitPlanRepository,
+    /// FeeScheduleEngine FeeScheduleRepositoryCosmos, BenefitEngine AccumulatorRepositoryCosmos.
     /// </summary>
     public static class ContainerNames
     {
-        /// <summary>Members container, partitioned by /tenantId.</summary>
-        public const string Members = "members";
+        /// <summary>Members container (member-service), partitioned by /tenantId.</summary>
+        public const string Members = "Members";
 
-        /// <summary>Coverages container, partitioned by /tenantId.</summary>
-        public const string Coverages = "coverages";
+        /// <summary>Coverage container (coverage-service), partitioned by /tenantId.</summary>
+        public const string Coverages = "Coverage";
 
-        /// <summary>Providers container, partitioned by /tenantId.</summary>
-        public const string Providers = "providers";
+        /// <summary>Providers container (provider-service), partitioned by /tenantId.</summary>
+        public const string Providers = "Providers";
 
-        /// <summary>Provider contracts container, partitioned by /tenantId.</summary>
-        public const string ProviderContracts = "provider-contracts";
+        /// <summary>ProviderContracts container (FeeScheduleEngine), partitioned by /tenantId.</summary>
+        public const string ProviderContracts = "ProviderContracts";
 
-        /// <summary>Benefit plans container, partitioned by /tenantId.</summary>
-        public const string BenefitPlans = "benefit-plans";
+        /// <summary>BenefitPlans container (benefit-plan-service), partitioned by /tenantId.</summary>
+        public const string BenefitPlans = "BenefitPlans";
 
-        /// <summary>Fee schedules container, partitioned by /tenantId.</summary>
-        public const string FeeSchedules = "fee-schedules";
+        /// <summary>FeeSchedules container (FeeScheduleEngine), partitioned by /tenantId.</summary>
+        public const string FeeSchedules = "FeeSchedules";
 
-        /// <summary>Accumulators container, partitioned by /memberId.</summary>
-        public const string Accumulators = "accumulators";
+        /// <summary>Accumulators container (BenefitEngine), partitioned by /tenantId.</summary>
+        public const string Accumulators = "Accumulators";
     }
 
     /// <summary>
@@ -286,6 +289,9 @@ public class CosmosDbSeeder
 
     /// <summary>
     /// Seed accumulator records into Cosmos DB.
+    /// Document shape matches BenefitEngine AccumulatorDocument:
+    /// id = "{tenantId}:{scope}:{ownerId}:{benefitPlanId}:{planYear}",
+    /// partitioned by /tenantId, with ownerId, scope, balances[], transactions[], version.
     /// </summary>
     public async Task<int> SeedAccumulatorsAsync(
         List<SyntheticAccumulator> accumulators,
@@ -296,11 +302,12 @@ public class CosmosDbSeeder
         {
             id = a.Id,
             tenantId = a.TenantId,
-            memberId = a.MemberId,
-            subscriberId = a.SubscriberId,
+            ownerId = a.MemberId,
+            scope = a.Scope,
             benefitPlanId = a.BenefitPlanId,
             planYear = a.PlanYear,
-            scope = a.Scope,
+            version = 1L,
+            lastUpdated = a.LastUpdated,
             balances = new[]
             {
                 new { type = "IndividualDeductible", networkTier = a.NetworkTier, limitAmount = a.IndividualDeductibleLimit, accumulatedAmount = a.IndividualDeductibleSpent },
@@ -308,13 +315,18 @@ public class CosmosDbSeeder
                 new { type = "IndividualOutOfPocketMax", networkTier = a.NetworkTier, limitAmount = a.IndividualOopMaxLimit, accumulatedAmount = a.IndividualOopSpent },
                 new { type = "FamilyOutOfPocketMax", networkTier = a.NetworkTier, limitAmount = a.FamilyOopMaxLimit, accumulatedAmount = a.FamilyOopSpent },
             }.Where(b => b.limitAmount > 0).ToArray(),
-            lastUpdated = a.LastUpdated,
-            version = 1,
+            transactions = Array.Empty<object>(),
         }).ToList();
 
         return await WriteBatchesAsync(ContainerNames.Accumulators, documents, cancellationToken);
     }
 
+    /// <summary>
+    /// Create a member document matching the enrollment-import-service Member entity shape.
+    /// Fields: id, tenantId, memberId, subscriberId, firstName, lastName, dateOfBirth, gender,
+    /// address (nested: line1, city, state, zip), status, enrollmentDate, terminationDate,
+    /// groupNumber, relationship, dependentIds.
+    /// </summary>
     private object CreateMemberDocument(SyntheticMember m)
     {
         return new
@@ -324,24 +336,29 @@ public class CosmosDbSeeder
             memberId = m.MemberId,
             subscriberId = m.SubscriberId,
             isSubscriber = true,
-            relationshipCode = m.RelationshipCode,
             firstName = m.FirstName,
             lastName = m.LastName,
             dateOfBirth = m.DateOfBirth,
             gender = m.Gender,
-            address = new { line1 = m.Address, city = m.City, state = m.State, zip = m.ZipCode },
+            ssn = (string?)null,
+            address = new { line1 = m.Address, line2 = (string?)null, city = m.City, state = m.State, zip = m.ZipCode },
             phone = m.Phone,
             status = m.EnrollmentStatus,
             enrollmentDate = m.CoverageEffectiveDate,
             terminationDate = m.CoverageTermDate,
+            sponsorId = (string?)null,
             groupNumber = m.GroupNumber,
+            employeeId = (string?)null,
             relationship = m.RelationshipCode,
-            lineOfBusiness = m.LineOfBusiness,
-            maintenanceTypeCode = m.MaintenanceTypeCode,
             dependentIds = m.Dependents.Select(d => d.MemberId).ToList(),
+            createdAt = DateTime.UtcNow,
+            updatedAt = DateTime.UtcNow,
         };
     }
 
+    /// <summary>
+    /// Create a dependent member document matching the enrollment-import-service Member entity shape.
+    /// </summary>
     private object CreateDependentDocument(SyntheticMember subscriber, SyntheticDependent dep)
     {
         return new
@@ -350,23 +367,29 @@ public class CosmosDbSeeder
             tenantId = _tenantId,
             memberId = dep.MemberId,
             subscriberId = subscriber.SubscriberId,
-            subscriberMemberId = subscriber.MemberId,
             isSubscriber = false,
-            relationshipCode = dep.RelationshipCode,
             firstName = dep.FirstName,
             lastName = dep.LastName,
             dateOfBirth = dep.DateOfBirth,
             gender = dep.Gender,
-            address = new { line1 = dep.Address, city = dep.City, state = dep.State, zip = dep.ZipCode },
+            ssn = (string?)null,
+            address = new { line1 = dep.Address, line2 = (string?)null, city = dep.City, state = dep.State, zip = dep.ZipCode },
             status = dep.EnrollmentStatus,
             enrollmentDate = subscriber.CoverageEffectiveDate,
             terminationDate = subscriber.CoverageTermDate,
             groupNumber = subscriber.GroupNumber,
             relationship = dep.RelationshipCode,
-            lineOfBusiness = subscriber.LineOfBusiness,
+            dependentIds = new List<string>(),
+            createdAt = DateTime.UtcNow,
+            updatedAt = DateTime.UtcNow,
         };
     }
 
+    /// <summary>
+    /// Create a coverage document matching the coverage-service Coverage entity shape.
+    /// Uses <c>insuranceLineCode</c> (coverage-service convention) rather than
+    /// <c>insuranceType</c> (enrollment-import-service convention).
+    /// </summary>
     private object CreateCoverageDocument(SyntheticCoverage cov)
     {
         return new
@@ -374,17 +397,20 @@ public class CosmosDbSeeder
             id = cov.Id,
             tenantId = _tenantId,
             memberId = cov.MemberId,
-            subscriberId = cov.SubscriberId,
-            planId = cov.PlanId,
             groupNumber = cov.GroupNumber,
-            insuranceType = cov.InsuranceLineCode,
+            planId = cov.PlanId,
             coverageLevel = cov.CoverageLevelCode,
+            insuranceLineCode = cov.InsuranceLineCode,
             effectiveDate = cov.EffectiveDate,
             terminationDate = cov.TermDate,
             status = cov.Status,
+            lineOfBusiness = cov.LineOfBusiness,
+            maintenanceTypeCode = cov.MaintenanceTypeCode,
             pcpNpi = cov.PcpNpi,
             pcpName = cov.PcpName,
-            maintenanceTypeCode = cov.MaintenanceTypeCode,
+            pcpAssignmentDate = cov.PcpAssignmentDate,
+            createdDate = DateTime.UtcNow,
+            lastUpdatedDate = DateTime.UtcNow,
         };
     }
 
@@ -412,19 +438,20 @@ public class CosmosDbSeeder
 
     /// <summary>
     /// Write a batch of documents to a Cosmos DB container.
-    /// This is a placeholder implementation that serializes to JSON.
-    /// In production, this would use the Azure.Cosmos SDK bulk executor.
+    /// This is a no-op stub — override in a subclass to provide the actual Azure.Cosmos SDK
+    /// bulk write implementation. The stub exists so the project compiles without the
+    /// Azure.Cosmos package dependency (which is optional).
     /// </summary>
     protected virtual Task WriteDocumentsAsync(
         string containerName,
         List<object> documents,
         CancellationToken cancellationToken)
     {
-        // NOTE: Actual Cosmos DB implementation requires the Azure.Cosmos SDK.
-        // This base implementation is a no-op that allows compilation without the SDK dependency.
-        // The CosmosDbBenchmarkSeeder in the Seeding folder provides the full implementation
-        // when the Azure.Cosmos package is available.
-        _logger.LogDebug("Would write {Count} documents to {Container}", documents.Count, containerName);
+        // No-op: override this method with an Azure.Cosmos SDK implementation to
+        // actually seed a Cosmos DB instance. Without the override, document shapes
+        // are still validated by the caller methods but nothing is persisted.
+        _logger.LogDebug("Stub WriteDocumentsAsync: {Count} documents for {Container} (no-op)",
+            documents.Count, containerName);
         return Task.CompletedTask;
     }
 }

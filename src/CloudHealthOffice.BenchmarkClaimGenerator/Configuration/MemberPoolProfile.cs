@@ -20,11 +20,11 @@ public class MemberPoolProfile
     /// <summary>Group number prefix for sponsors.</summary>
     public string GroupNumberPrefix { get; set; } = "MCC-GRP";
 
-    /// <summary>Percentage of subscribers with Active enrollment status (0.0-1.0). Default: 0.95.</summary>
+    /// <summary>
+    /// Percentage of subscribers with Active enrollment status (0.0-1.0). Default: 0.95.
+    /// The remaining fraction (1.0 - ActiveRate) will be generated as Terminated members.
+    /// </summary>
     public double ActiveRate { get; set; } = 0.95;
-
-    /// <summary>Percentage of subscribers with Terminated enrollment status. Default: 0.05.</summary>
-    public double TerminatedRate { get; set; } = 0.05;
 
     /// <summary>
     /// Dependent distribution: fraction of subscribers with 0, 1, 2-3, 4+ dependents.

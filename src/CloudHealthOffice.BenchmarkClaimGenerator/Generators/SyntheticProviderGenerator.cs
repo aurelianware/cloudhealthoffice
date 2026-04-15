@@ -126,8 +126,18 @@ public class SyntheticProviderGenerator
             }
         }
 
-        // Generate organizational providers
+        // Generate organizational providers — validate that facility counts match the profile total
         var facDist = profile.FacilityDistribution;
+        var facilityTotal = facDist.Hospitals + facDist.Clinics + facDist.SkilledNursingFacilities + facDist.BehavioralHealth;
+        if (facilityTotal != profile.OrganizationalProviderCount)
+        {
+            throw new InvalidOperationException(
+                $"FacilityDistribution total ({facilityTotal}) does not match " +
+                $"OrganizationalProviderCount ({profile.OrganizationalProviderCount}). " +
+                $"Hospitals={facDist.Hospitals}, Clinics={facDist.Clinics}, " +
+                $"SNFs={facDist.SkilledNursingFacilities}, BehavioralHealth={facDist.BehavioralHealth}.");
+        }
+
         int orgSeq = 0;
 
         for (int i = 0; i < facDist.Hospitals; i++)
@@ -326,12 +336,31 @@ public class SyntheticProviderGenerator
     private static (string Status, bool IsParticipating) SelectNetworkStatus(
         Random random, ProviderPoolProfile profile)
     {
+        ValidateNetworkStatusRates(profile);
+
         var roll = random.NextDouble();
         if (roll < profile.InNetworkRate)
             return ("InNetwork", true);
         if (roll < profile.InNetworkRate + profile.OutOfNetworkRate)
             return ("OutOfNetwork", false);
+        if (roll < profile.InNetworkRate + profile.OutOfNetworkRate + profile.TerminatedRate)
+            return ("Terminated", false);
+        // Fallback for floating-point edge cases
         return ("Terminated", false);
+    }
+
+    private static void ValidateNetworkStatusRates(ProviderPoolProfile profile)
+    {
+        const double tolerance = 0.000001d;
+        var total = profile.InNetworkRate + profile.OutOfNetworkRate + profile.TerminatedRate;
+
+        if (Math.Abs(total - 1.0d) > tolerance)
+        {
+            throw new InvalidOperationException(
+                $"ProviderPoolProfile network status rates must sum to 1.0, but got " +
+                $"InNetworkRate={profile.InNetworkRate}, OutOfNetworkRate={profile.OutOfNetworkRate}, " +
+                $"TerminatedRate={profile.TerminatedRate} (total={total}).");
+        }
     }
 
     private static string SelectContractType(Random random, ContractTypeDistribution dist)

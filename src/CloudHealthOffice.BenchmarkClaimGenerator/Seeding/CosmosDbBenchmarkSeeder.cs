@@ -6,9 +6,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace CloudHealthOffice.BenchmarkClaimGenerator.Seeding;
 
 /// <summary>
-/// Cosmos DB implementation of the benchmark data seeder.
-/// Wraps the <see cref="CosmosDbSeeder"/> to implement the <see cref="IBenchmarkDataSeeder"/> interface.
-/// Requires an Azure Cosmos DB connection string at runtime.
+/// Cosmos DB adapter for the benchmark data seeder interface.
+/// Wraps <see cref="CosmosDbSeeder"/>, whose <c>WriteDocumentsAsync</c> is a no-op stub by default.
+/// To actually persist to Cosmos DB, subclass <see cref="CosmosDbSeeder"/> and override
+/// <c>WriteDocumentsAsync</c> with an Azure.Cosmos SDK bulk-write implementation,
+/// then pass that subclass instance here.
 /// </summary>
 public class CosmosDbBenchmarkSeeder : IBenchmarkDataSeeder
 {

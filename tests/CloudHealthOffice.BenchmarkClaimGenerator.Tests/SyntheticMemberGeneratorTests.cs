@@ -148,7 +148,6 @@ public class SyntheticMemberGeneratorTests
             Seed = 42,
             TenantId = "test-tenant",
             ActiveRate = 0.90,
-            TerminatedRate = 0.10,
         };
         var members = _generator.Generate(profile, _plans);
 

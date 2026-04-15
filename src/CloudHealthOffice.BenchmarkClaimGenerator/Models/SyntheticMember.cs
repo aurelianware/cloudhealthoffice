@@ -75,7 +75,7 @@ public class SyntheticMember
     /// <summary>Email address.</summary>
     public string? Email { get; set; }
 
-    /// <summary>SSN placeholder (masked, not real).</summary>
+    /// <summary>Synthetic SSN-formatted identifier for test/benchmark use only; not a real member SSN.</summary>
     public string? SSN { get; set; }
 
     /// <summary>Primary care provider NPI assignment (for HMO-style plans).</summary>

@@ -53,7 +53,7 @@ public class SyntheticDependent
     /// <summary>Phone number.</summary>
     public string? Phone { get; set; }
 
-    /// <summary>SSN placeholder (masked, not real).</summary>
+    /// <summary>Synthetic SSN-formatted identifier for test/benchmark use only; not a real SSN.</summary>
     public string? SSN { get; set; }
 
     /// <summary>Tenant identifier.</summary>

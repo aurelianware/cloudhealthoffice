@@ -8,15 +8,15 @@ namespace CloudHealthOffice.BenchmarkClaimGenerator.Tests;
 public class CosmosDbSeederTests
 {
     [Fact]
-    public void ContainerNames_AreCorrect()
+    public void ContainerNames_MatchProductionServiceConfiguration()
     {
-        Assert.Equal("members", CosmosDbSeeder.ContainerNames.Members);
-        Assert.Equal("coverages", CosmosDbSeeder.ContainerNames.Coverages);
-        Assert.Equal("providers", CosmosDbSeeder.ContainerNames.Providers);
-        Assert.Equal("provider-contracts", CosmosDbSeeder.ContainerNames.ProviderContracts);
-        Assert.Equal("benefit-plans", CosmosDbSeeder.ContainerNames.BenefitPlans);
-        Assert.Equal("fee-schedules", CosmosDbSeeder.ContainerNames.FeeSchedules);
-        Assert.Equal("accumulators", CosmosDbSeeder.ContainerNames.Accumulators);
+        Assert.Equal("Members", CosmosDbSeeder.ContainerNames.Members);
+        Assert.Equal("Coverage", CosmosDbSeeder.ContainerNames.Coverages);
+        Assert.Equal("Providers", CosmosDbSeeder.ContainerNames.Providers);
+        Assert.Equal("ProviderContracts", CosmosDbSeeder.ContainerNames.ProviderContracts);
+        Assert.Equal("BenefitPlans", CosmosDbSeeder.ContainerNames.BenefitPlans);
+        Assert.Equal("FeeSchedules", CosmosDbSeeder.ContainerNames.FeeSchedules);
+        Assert.Equal("Accumulators", CosmosDbSeeder.ContainerNames.Accumulators);
     }
 
     [Fact]
