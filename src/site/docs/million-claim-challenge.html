@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Million Claim Challenge — Open Claims Adjudication Benchmark | Cloud Health Office</title>
   <meta name="description" content="The Million Claim Challenge is an open-source benchmarking tool that generates 1,000,000 synthetic healthcare claims — professional, institutional, dental, and 29 edge case scenarios — with pre-computed expected adjudication outcomes. Benchmark any claims engine against a shared yardstick." />
-  <meta name="keywords" content="million claim challenge, claims adjudication benchmark, synthetic claim generator, healthcare benchmarking, CMS-0057-F testing, cloud health office benchmark, FHIR R4 compliance testing, healthcare claims testing, payer platform benchmark, claims accuracy testing, COB coordination of benefits testing, prior authorization testing, QNXT benchmark, Facets benchmark, HealthEdge benchmark, adjudication engine accuracy, healthcare QA, claims edge cases, DRG grouper testing, dental claims benchmark" />
+  <meta name="keywords" content="million claim challenge, claims adjudication benchmark, synthetic claim generator, healthcare benchmarking, CMS-0057-F testing, cloud health office benchmark, FHIR R4 compliance testing, healthcare claims testing, payer platform benchmark, claims accuracy testing, COB coordination of benefits testing, prior authorization testing, QNXT benchmark, Facets benchmark, HealthEdge benchmark, adjudication engine accuracy, healthcare QA, claims edge cases, DRG grouper testing, dental claims benchmark, synthetic member generation, synthetic provider generation, benefit plan seeding, fee schedule seeding, X12 834 enrollment, benchmark data seeding, Cosmos DB seeding, claims pipeline benchmarking" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/million-claim-challenge" />
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
   <meta name="theme-color" content="#000000" />
@@ -14,11 +14,11 @@
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/million-claim-challenge" />
   <meta property="og:title" content="Million Claim Challenge — Open Claims Adjudication Benchmark" />
-  <meta property="og:description" content="One million synthetic claims. Pre-computed outcomes. Zero excuses. The open benchmark for healthcare adjudication engines. Run it on ours, run it on yours." />
+  <meta property="og:description" content="One million synthetic claims. 75,000 seeded members. 5,500 providers. Pre-computed outcomes. The open benchmark for healthcare adjudication engines. Seed prerequisites, generate claims, score results." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png" />
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="article:published_time" content="2026-04-05T00:00:00Z" />
-  <meta property="article:modified_time" content="2026-04-05T00:00:00Z" />
+  <meta property="article:modified_time" content="2026-04-16T00:00:00Z" />
   <meta property="article:section" content="Testing &amp; Benchmarks" />
   <meta property="article:tag" content="claims adjudication" />
   <meta property="article:tag" content="benchmarking" />
@@ -49,7 +49,7 @@
       "logo": { "@type": "ImageObject", "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" }
     },
     "datePublished": "2026-04-05",
-    "dateModified": "2026-04-05",
+    "dateModified": "2026-04-16",
     "proficiencyLevel": "Intermediate",
     "about": [
       { "@type": "Thing", "name": "Claims Adjudication" },
@@ -140,6 +140,22 @@
           "@type": "Answer",
           "text": "Generate the MCC corpus and provide it to each vendor under evaluation. Ask them to run the full million claims and report back on disposition accuracy, amount accuracy, edge case accuracy, sustained throughput, and cost per claim. Because every vendor runs the same deterministic corpus, the comparison is apples-to-apples. The scoring report serves as a ready-made evaluation artifact for RFP committees, replacing subjective demo impressions with objective, reproducible data."
         }
+      },
+      {
+        "@type": "Question",
+        "name": "What prerequisite data does the Million Claim Challenge need before adjudicating claims?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The MCC SeedingOrchestrator generates all prerequisite data in dependency order: 10 Texas Medicaid benefit plan templates (STAR, CHIP, STAR+PLUS, STAR Kids, STAR Health), 3 fee schedules (Medicaid at 70% of Medicare RBRVS, Out-of-Network at 150% of Medicaid rates, and Capitation PMPM), 5,500 providers (5,000 individual physicians with Luhn-10 valid NPIs and 500 organizational facilities), provider contracts linking in-network providers to fee schedules, 75,000 members (50,000 subscribers plus 25,000 dependents) with coverage records and PCP assignments, and deductible/OOP accumulators. All data is deterministic and production-shaped."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I run the Million Claim Challenge against Cloud Health Office end to end?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Four steps: (1) Run SeedingOrchestrator.GenerateAndSeedAsync() to generate and seed members, providers, benefit plans, fee schedules, and accumulators into Cosmos DB, (2) optionally generate X12 834 EDI enrollment files and provider/fee schedule CSVs for intake pipeline testing, (3) generate the claim corpus with mcc-runner (dotnet run --project src/tools/mcc-runner -- --claims 1000000), (4) submit claims to the CHO adjudication pipeline and compare results against the pre-computed ExpectedOutcome answer key. Use the same seed (default 42) for both seeding and corpus generation to ensure referential integrity."
+        }
       }
     ]
   }
@@ -229,6 +245,10 @@
               <li><a href="#expected-outcomes">Expected Outcomes</a></li>
               <li><a href="#cms-0057f">CMS-0057-F Coverage</a></li>
               <li><a href="#running-the-benchmark">Running the Benchmark</a></li>
+              <li><a href="#seeding-prerequisites">Seeding Prerequisites</a></li>
+              <li><a href="#running-against-cho">Running Against Cloud Health Office</a></li>
+              <li><a href="#output-formats-import">Output Formats &amp; Import</a></li>
+              <li><a href="#benchmarking-methodology">Benchmarking Methodology</a></li>
               <li><a href="#evaluating-a-platform">Platform Evaluation</a></li>
               <li><a href="#scoring">Scoring</a></li>
               <li><a href="#faq">FAQ</a></li>
@@ -603,6 +623,407 @@ Console.WriteLine($"  Edge Cases: {result.EdgeCaseCount:N0}");</code></pre>
           any machine. The default seed is <code>42</code> because of course it is.
         </p>
 
+        <!-- Seeding Prerequisites -->
+        <h2 id="seeding-prerequisites">Seeding Prerequisites</h2>
+
+        <p>
+          Generating a million claims is only half the story. To actually <em>adjudicate</em> them, your
+          claims engine needs reference data: members to look up, providers to pay, benefit plans to
+          apply, fee schedules to price against, and accumulators to track cost-sharing. As of April 2026,
+          MCC ships with a complete synthetic data generation framework that seeds all of these in one shot.
+        </p>
+
+        <h3>What Gets Seeded</h3>
+
+        <p>
+          The <code>SeedingOrchestrator</code> generates seven data pools in strict dependency order.
+          Each pool is production-shaped &mdash; the documents map directly to the Cosmos DB containers
+          used by Cloud Health Office microservices.
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Data Pool</th><th>Default Count</th><th>What It Produces</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td><strong>Benefit Plans</strong></td>
+              <td>10</td>
+              <td>Texas Medicaid plan templates &mdash; STAR, STAR+PLUS, STAR Kids, CHIP (A &amp; B), STAR Health, dental, vision. Realistic cost-sharing rules per program.</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td><strong>Fee Schedules</strong></td>
+              <td>3</td>
+              <td>Medicaid (70% of Medicare RBRVS), Out-of-Network (150% of Medicaid), and Capitation (PMPM by program). 50+ CPT codes and 50 DRG rates each.</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td><strong>Providers</strong></td>
+              <td>5,500</td>
+              <td>5,000 individual + 500 organizational. Luhn-10 valid NPIs, NUCC taxonomy codes, DFW-region addresses. 80% in-network, 10% OON, 10% terminated.</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td><strong>Provider Contracts</strong></td>
+              <td>~4,400</td>
+              <td>One contract per in-network provider. Links to Medicaid or Capitation fee schedule. 80% fee-for-service, 15% capitation, 5% per-diem.</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td><strong>Members</strong></td>
+              <td>75,000</td>
+              <td>50,000 subscribers + ~25,000 dependents. Realistic demographics, DFW addresses, PCP assignments, coverage records with plan year dates.</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td><strong>Coverage</strong></td>
+              <td>~75,000</td>
+              <td>One coverage record per member with plan assignment, coverage tier (EMP/ESP/FAM/ECH), and insurance lines (HLT, DEN, VIS).</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td><strong>Accumulators</strong></td>
+              <td>~71,000</td>
+              <td>Individual and family deductible/OOP tracking per active member. 70% at $0 (Medicaid), 20% partial, 10% near max.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Dependency ordering matters</div>
+          <p>
+            The orchestrator enforces a strict pipeline: plans and fee schedules first (no dependencies),
+            then providers, then contracts (needs providers + fee schedules), then members (needs plans + providers for PCP),
+            then coverage, then accumulators (needs members + plans). Skip a step and the downstream data won&rsquo;t make sense.
+          </p>
+        </div>
+
+        <h3>Configuration</h3>
+
+        <p>
+          Two profile classes control the shape of the generated data. The defaults produce a mid-size
+          Texas Medicaid managed care organization.
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Profile</th><th>Key Setting</th><th>Default</th><th>What It Controls</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td rowspan="5"><strong>MemberPoolProfile</strong></td>
+              <td><code>SubscriberCount</code></td>
+              <td>50,000</td>
+              <td>Primary members (heads of household)</td>
+            </tr>
+            <tr>
+              <td><code>TargetTotalMembers</code></td>
+              <td>75,000</td>
+              <td>Total including dependents</td>
+            </tr>
+            <tr>
+              <td><code>ActiveRate</code></td>
+              <td>0.95</td>
+              <td>Fraction with active enrollment (rest are terminated)</td>
+            </tr>
+            <tr>
+              <td><code>DependentDistribution</code></td>
+              <td>60/20/15/5</td>
+              <td>0, 1, 2&ndash;3, 4+ dependents per subscriber</td>
+            </tr>
+            <tr>
+              <td><code>AgeDistribution</code></td>
+              <td>25/35/30/10</td>
+              <td>&lt;18 / 18&ndash;44 / 45&ndash;64 / 65+ age brackets</td>
+            </tr>
+            <tr>
+              <td rowspan="4"><strong>ProviderPoolProfile</strong></td>
+              <td><code>IndividualProviderCount</code></td>
+              <td>5,000</td>
+              <td>Type 1 NPI physicians (40% are PCPs)</td>
+            </tr>
+            <tr>
+              <td><code>OrganizationalProviderCount</code></td>
+              <td>500</td>
+              <td>Type 2 NPI facilities (hospitals, clinics, SNFs, behavioral health)</td>
+            </tr>
+            <tr>
+              <td><code>InNetworkRate</code></td>
+              <td>0.80</td>
+              <td>Participating providers with contracts</td>
+            </tr>
+            <tr>
+              <td><code>ContractTypes</code></td>
+              <td>80/15/5</td>
+              <td>Fee-for-service / capitation / per-diem split</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Running Against CHO -->
+        <h2 id="running-against-cho">Running Against Cloud Health Office</h2>
+
+        <p>
+          Here&rsquo;s the end-to-end workflow for benchmarking the full Cloud Health Office adjudication pipeline
+          &mdash; from seeding prerequisite data through scoring results.
+        </p>
+
+        <h3>Step 1 &mdash; Seed Prerequisite Data</h3>
+
+        <p>
+          The <code>SeedingOrchestrator</code> generates all reference data in dependency order and optionally
+          persists it to Cosmos DB:
+        </p>
+
+<pre><code><span class="code-comment">// Reference CloudHealthOffice.BenchmarkClaimGenerator</span>
+using CloudHealthOffice.BenchmarkClaimGenerator.Configuration;
+using CloudHealthOffice.BenchmarkClaimGenerator.Seeding;
+
+var orchestrator = new SeedingOrchestrator(logger);
+
+<span class="code-comment">// Configure pool sizes (defaults shown — adjust to taste)</span>
+var memberProfile = new MemberPoolProfile
+{
+    SubscriberCount = 50_000,        <span class="code-comment">// 50K subscribers</span>
+    TargetTotalMembers = 75_000,     <span class="code-comment">// ~75K with dependents</span>
+    Seed = 42
+};
+
+var providerProfile = new ProviderPoolProfile
+{
+    IndividualProviderCount = 5_000, <span class="code-comment">// 5K physicians</span>
+    OrganizationalProviderCount = 500, <span class="code-comment">// 500 facilities</span>
+    Seed = 42
+};
+
+<span class="code-comment">// Option A: Generate in-memory only (for file-based import)</span>
+var result = await orchestrator.GenerateAndSeedAsync(
+    memberProfile, providerProfile, seed: 42);
+
+<span class="code-comment">// Option B: Generate and seed to Cosmos DB</span>
+var seeder = new CosmosDbBenchmarkSeeder(
+    connectionString: "AccountEndpoint=https://...",
+    tenantId: "mcc-benchmark",
+    databaseName: "cloudhealthoffice");
+
+var result = await orchestrator.GenerateAndSeedAsync(
+    memberProfile, providerProfile, seed: 42, seeder: seeder);</code></pre>
+
+        <h3>Step 2 &mdash; Generate Output Files</h3>
+
+        <p>
+          After seeding, generate import-ready files for the enrollment, provider, and fee schedule pipelines:
+        </p>
+
+<pre><code><span class="code-comment">// Generate 834 EDI, provider CSVs, and fee schedule CSVs</span>
+await orchestrator.GenerateOutputFilesAsync(result, "./mcc-seed-output");
+
+<span class="code-comment">// Output structure:</span>
+<span class="code-comment">//   ./mcc-seed-output/834/          ← X12 834 enrollment files (5K members/file)</span>
+<span class="code-comment">//   ./mcc-seed-output/providers/    ← Provider import CSVs</span>
+<span class="code-comment">//   ./mcc-seed-output/fee-schedules/ ← Fee schedule CSVs</span></code></pre>
+
+        <h3>Step 3 &mdash; Generate the Claim Corpus</h3>
+
+        <p>With reference data seeded, generate the claims:</p>
+
+<pre><code><span class="code-comment"># Generate the full million claims</span>
+dotnet run --project src/tools/mcc-runner -- --claims 1000000 --seed 42
+
+<span class="code-comment"># Or a smaller test run first</span>
+dotnet run --project src/tools/mcc-runner -- --claims 10000 --seed 42</code></pre>
+
+        <h3>Step 4 &mdash; Submit Claims &amp; Score</h3>
+
+        <p>
+          Feed the generated claims into the Cloud Health Office adjudication pipeline (via the Claims API or batch import),
+          then compare each result against the pre-computed <code>ExpectedOutcome</code> in the corpus.
+          The scoring tiers are defined in the <a href="#scoring">Scoring</a> section below.
+        </p>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Same seed, same universe</div>
+          <p>
+            Use the same seed (<code>42</code> by default) for both the prerequisite seeding
+            and the claim corpus. This ensures the members, providers, and plans referenced
+            in the claims match exactly what was seeded &mdash; deterministic end to end.
+          </p>
+        </div>
+
+        <!-- Output Formats & Import -->
+        <h2 id="output-formats-import">Output Formats &amp; Import Pipelines</h2>
+
+        <p>
+          The seeding framework produces import-ready files for each Cloud Health Office microservice,
+          so you can benchmark the full intake pipeline &mdash; not just the adjudication engine.
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Writer</th><th>Format</th><th>Target Service</th><th>Details</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>X12_834Writer</code></td>
+              <td>X12 834 EDI files</td>
+              <td>enrollment-import-service</td>
+              <td>Properly formatted ISA/GS/ST envelopes with INS, REF, DTP, NM1, HD, and PCP (LX/NM1 P3) segments. 5,000 members per file.</td>
+            </tr>
+            <tr>
+              <td><code>ProviderImportCsvWriter</code></td>
+              <td>CSV</td>
+              <td>Provider data (Cosmos DB seeding or custom import tooling)</td>
+              <td>NPI, TaxId, taxonomy, network status, credentialing, contract type, fee schedule linkage. Separate files for individuals and organizations. Use with <code>CosmosDbSeeder</code> or a custom loader &mdash; provider-service itself exposes a JSON API, not a CSV endpoint.</td>
+            </tr>
+            <tr>
+              <td><code>FeeScheduleImportCsvWriter</code></td>
+              <td>CSV</td>
+              <td>Fee schedule data (Cosmos DB seeding or custom import tooling)</td>
+              <td>Procedure code, modifier, place of service, allowed amount. One file per fee schedule (Medicaid, OON, Capitation). FeeScheduleEngine is a library consumed by the adjudication pipeline; seed its backing Cosmos DB container directly or use these CSVs with a custom loader.</td>
+            </tr>
+            <tr>
+              <td><code>CosmosDbSeeder</code></td>
+              <td>Cosmos DB documents</td>
+              <td>All microservices</td>
+              <td>Bulk write to Members, Coverage, Providers, ProviderContracts, BenefitPlans, FeeSchedules, and Accumulators containers. <strong>Note:</strong> The base <code>WriteDocumentsAsync</code> is a no-op stub &mdash; subclass <code>CosmosDbSeeder</code> and override it with your Azure.Cosmos SDK bulk-write implementation, then pass that instance to <code>CosmosDbBenchmarkSeeder</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Two paths to seeding</div>
+          <p>
+            <strong>File-based</strong>: Generate 834 EDI and CSV files, then feed them through
+            the enrollment-import-service and provider-service APIs. This benchmarks the full
+            intake pipeline including X12 parsing, validation, and persistence.
+            <br /><br />
+            <strong>Direct Cosmos DB</strong>: Skip the intake pipeline and seed documents directly.
+            This is faster for benchmarking adjudication in isolation, but doesn't exercise the import path.
+          </p>
+        </div>
+
+        <!-- Benchmarking Methodology -->
+        <h2 id="benchmarking-methodology">Benchmarking Methodology</h2>
+
+        <p>
+          Here&rsquo;s the playbook for running a rigorous end-to-end benchmark against Cloud Health Office.
+          The same approach works for any claims engine &mdash; adapt the intake format and API calls.
+        </p>
+
+        <h3>Environment Setup</h3>
+
+        <table>
+          <thead>
+            <tr><th>Component</th><th>Recommendation</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Infrastructure</strong></td>
+              <td>Deploy CHO via <a href="/docs/quickstart-kubernetes">Kubernetes Quick Start</a> or Docker Compose. Use production-equivalent node sizes for meaningful throughput numbers.</td>
+            </tr>
+            <tr>
+              <td><strong>Cosmos DB</strong></td>
+              <td>Provision with sufficient RU/s for the seed volume. 10,000 RU/s handles the default 75K member seed comfortably. Scale to 50,000+ RU/s for load testing the adjudication pipeline.</td>
+            </tr>
+            <tr>
+              <td><strong>Isolation</strong></td>
+              <td>Use a dedicated <code>tenantId</code> (default: <code>mcc-benchmark</code>) to isolate benchmark data from production tenants.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Benchmark Phases</h3>
+
+        <table>
+          <thead>
+            <tr><th>Phase</th><th>Command / Action</th><th>What to Measure</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1. Seed</strong></td>
+              <td>Run <code>SeedingOrchestrator.GenerateAndSeedAsync()</code> with Cosmos DB seeder</td>
+              <td>Seeding throughput (records/sec), total elapsed time, Cosmos DB RU consumption</td>
+            </tr>
+            <tr>
+              <td><strong>2. Generate</strong></td>
+              <td><code>dotnet run --project src/tools/mcc-runner -- -n 1000000</code></td>
+              <td>Corpus generation time (expect &lt; 5 min on M-series, &lt; 10 min on CI)</td>
+            </tr>
+            <tr>
+              <td><strong>3. Ingest</strong></td>
+              <td>POST claims to <code>/api/claims</code> or batch import via 837 EDI</td>
+              <td>Sustained claims/second, P50/P95/P99 ingestion latency, error rate</td>
+            </tr>
+            <tr>
+              <td><strong>4. Adjudicate</strong></td>
+              <td>Monitor claims-examiner-service processing</td>
+              <td>Adjudication throughput, queue depth, autoscaler behavior (KEDA pod count)</td>
+            </tr>
+            <tr>
+              <td><strong>5. Score</strong></td>
+              <td>Compare adjudicated results to <code>ExpectedOutcome</code> answer key</td>
+              <td>Disposition accuracy, amount accuracy, edge case accuracy (see <a href="#scoring">Scoring</a>)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Key Metrics to Capture</h3>
+
+        <table>
+          <thead>
+            <tr><th>Metric</th><th>Target</th><th>How to Capture</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Seeding Time</strong></td>
+              <td>&lt; 5 min (75K members)</td>
+              <td><code>SeedingResult.ElapsedTime</code> + <code>RecordsSeeded</code> dictionary</td>
+            </tr>
+            <tr>
+              <td><strong>Corpus Generation</strong></td>
+              <td>&lt; 5 min (1M claims)</td>
+              <td><code>CorpusResult.ElapsedTime</code></td>
+            </tr>
+            <tr>
+              <td><strong>Claims/Second (sustained)</strong></td>
+              <td>Platform-dependent</td>
+              <td>Total claims / wall-clock time over the full corpus, not burst</td>
+            </tr>
+            <tr>
+              <td><strong>P99 Adjudication Latency</strong></td>
+              <td>&lt; 500ms</td>
+              <td>Per-claim processing time at 99th percentile</td>
+            </tr>
+            <tr>
+              <td><strong>Cost Per Claim</strong></td>
+              <td>Platform-dependent</td>
+              <td>Total Azure spend during benchmark / 1,000,000</td>
+            </tr>
+            <tr>
+              <td><strong>Disposition Accuracy</strong></td>
+              <td>&ge; 99.5%</td>
+              <td>Paid/Denied/Pended match rate</td>
+            </tr>
+            <tr>
+              <td><strong>Edge Case Accuracy</strong></td>
+              <td>&ge; 95.0%</td>
+              <td>Correct disposition + amount on the 50K edge case claims</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Deterministic = repeatable</div>
+          <p>
+            Every generator in the framework is seeded. Same seed, same data, every time.
+            This means you can run the benchmark before and after a code change and get
+            a directly comparable result. No need to control for data variance &mdash;
+            there isn&rsquo;t any.
+          </p>
+        </div>
+
         <!-- Platform Evaluation -->
         <h2 id="evaluating-a-platform">Evaluating a Payer Platform</h2>
 
@@ -775,6 +1196,48 @@ Console.WriteLine($"  Edge Cases: {result.EdgeCaseCount:N0}");</code></pre>
           Yes. We run MCC against CHO on every release and publish the results. We built the benchmark,
           so it would be strange to hide from it. You can find our current scores in the
           <a href="https://github.com/aurelianware/cloudhealthoffice">repository README</a>.
+        </p>
+
+        <h3>What is the SeedingOrchestrator and why do I need it?</h3>
+        <p>
+          The <code>SeedingOrchestrator</code> generates all the prerequisite data a claims engine needs
+          before it can adjudicate: members, providers, benefit plans, fee schedules, provider contracts,
+          coverage records, and accumulators. Without this data, claims have nothing to adjudicate against.
+          The orchestrator enforces dependency ordering (plans before members, providers before contracts)
+          and produces production-shaped documents that map to the Cosmos DB containers CHO uses.
+        </p>
+
+        <h3>How many members/providers does the seeding framework generate?</h3>
+        <p>
+          By default: 50,000 subscribers with ~25,000 dependents (75,000 total members), 5,000 individual
+          providers, and 500 organizational providers (hospitals, clinics, SNFs). Both pools are configurable
+          via <code>MemberPoolProfile</code> and <code>ProviderPoolProfile</code>. Scale down for quick
+          iteration; scale up for production-grade load testing.
+        </p>
+
+        <h3>What output formats does the seeding framework support?</h3>
+        <p>
+          Four writers: <strong>X12 834 EDI</strong> files for the enrollment-import-service (5,000 members
+          per file, properly formatted ISA/GS/ST envelopes), <strong>provider CSV</strong> for the
+          provider-service import endpoint, <strong>fee schedule CSV</strong> for the FeeScheduleEngine,
+          and <strong>direct Cosmos DB</strong> bulk seeding for bypassing intake pipelines. Use file-based
+          import to benchmark the full pipeline; use Cosmos DB seeding to benchmark adjudication in isolation.
+        </p>
+
+        <h3>Can I seed to a database other than Cosmos DB?</h3>
+        <p>
+          Yes. The seeding framework uses an <code>IBenchmarkDataSeeder</code> interface. Implement
+          that interface for your target database (Postgres, SQL Server, DynamoDB, etc.) and pass it
+          to <code>SeedingOrchestrator.GenerateAndSeedAsync()</code>. The built-in
+          <code>CosmosDbBenchmarkSeeder</code> is one implementation; the file-based writers
+          (834, CSV) work with any backend that accepts those formats.
+        </p>
+
+        <h3>Are the generated NPIs valid?</h3>
+        <p>
+          Yes. Every NPI passes Luhn-10 check digit validation with the standard &ldquo;80840&rdquo; prefix.
+          This means provider lookups, NPPES cross-references, and NPI format validators will accept them.
+          The NPIs are synthetic &mdash; they don&rsquo;t map to real providers.
         </p>
 
         <!-- Next Steps -->
