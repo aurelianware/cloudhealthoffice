@@ -17,7 +17,7 @@
   <meta property="og:description" content="One million synthetic claims. 75,000 seeded members. 5,500 providers. Pre-computed outcomes. The open benchmark for healthcare adjudication engines. Seed prerequisites, generate claims, score results." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png" />
   <meta property="og:site_name" content="Cloud Health Office" />
-  <meta property="article:published_time" content="2026-04-16T00:00:00Z" />
+  <meta property="article:published_time" content="2026-04-05T00:00:00Z" />
   <meta property="article:modified_time" content="2026-04-16T00:00:00Z" />
   <meta property="article:section" content="Testing &amp; Benchmarks" />
   <meta property="article:tag" content="claims adjudication" />
@@ -146,7 +146,7 @@
         "name": "What prerequisite data does the Million Claim Challenge need before adjudicating claims?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "The MCC SeedingOrchestrator generates all prerequisite data in dependency order: 10 Texas Medicaid benefit plan templates (STAR, CHIP, STAR+PLUS, STAR Kids, STAR Health), 3 fee schedules (Medicaid at 70% of Medicare RBRVS, Out-of-Network at 150%, and Capitation PMPM), 5,500 providers (5,000 individual physicians with Luhn-10 valid NPIs and 500 organizational facilities), provider contracts linking in-network providers to fee schedules, 75,000 members (50,000 subscribers plus 25,000 dependents) with coverage records and PCP assignments, and deductible/OOP accumulators. All data is deterministic and production-shaped."
+          "text": "The MCC SeedingOrchestrator generates all prerequisite data in dependency order: 10 Texas Medicaid benefit plan templates (STAR, CHIP, STAR+PLUS, STAR Kids, STAR Health), 3 fee schedules (Medicaid at 70% of Medicare RBRVS, Out-of-Network at 150% of Medicaid rates, and Capitation PMPM), 5,500 providers (5,000 individual physicians with Luhn-10 valid NPIs and 500 organizational facilities), provider contracts linking in-network providers to fee schedules, 75,000 members (50,000 subscribers plus 25,000 dependents) with coverage records and PCP assignments, and deductible/OOP accumulators. All data is deterministic and production-shaped."
         }
       },
       {
@@ -246,7 +246,7 @@
               <li><a href="#cms-0057f">CMS-0057-F Coverage</a></li>
               <li><a href="#running-the-benchmark">Running the Benchmark</a></li>
               <li><a href="#seeding-prerequisites">Seeding Prerequisites</a></li>
-              <li><a href="#running-against-cho">Running Against CHO</a></li>
+              <li><a href="#running-against-cho">Running Against Cloud Health Office</a></li>
               <li><a href="#output-formats-import">Output Formats &amp; Import</a></li>
               <li><a href="#benchmarking-methodology">Benchmarking Methodology</a></li>
               <li><a href="#evaluating-a-platform">Platform Evaluation</a></li>
@@ -838,7 +838,7 @@ dotnet run --project src/tools/mcc-runner -- --claims 10000 --seed 42</code></pr
         <h3>Step 4 &mdash; Submit Claims &amp; Score</h3>
 
         <p>
-          Feed the generated claims into the CHO adjudication pipeline (via the Claims API or batch import),
+          Feed the generated claims into the Cloud Health Office adjudication pipeline (via the Claims API or batch import),
           then compare each result against the pre-computed <code>ExpectedOutcome</code> in the corpus.
           The scoring tiers are defined in the <a href="#scoring">Scoring</a> section below.
         </p>
@@ -874,20 +874,20 @@ dotnet run --project src/tools/mcc-runner -- --claims 10000 --seed 42</code></pr
             <tr>
               <td><code>ProviderImportCsvWriter</code></td>
               <td>CSV</td>
-              <td>provider-service</td>
-              <td>NPI, TaxId, taxonomy, network status, credentialing, contract type, fee schedule linkage. Separate files for individuals and organizations.</td>
+              <td>Provider data (Cosmos DB seeding or custom import tooling)</td>
+              <td>NPI, TaxId, taxonomy, network status, credentialing, contract type, fee schedule linkage. Separate files for individuals and organizations. Use with <code>CosmosDbSeeder</code> or a custom loader &mdash; provider-service itself exposes a JSON API, not a CSV endpoint.</td>
             </tr>
             <tr>
               <td><code>FeeScheduleImportCsvWriter</code></td>
               <td>CSV</td>
-              <td>FeeScheduleEngine</td>
-              <td>Procedure code, modifier, place of service, allowed amount. One file per fee schedule (Medicaid, OON, Capitation).</td>
+              <td>Fee schedule data (Cosmos DB seeding or custom import tooling)</td>
+              <td>Procedure code, modifier, place of service, allowed amount. One file per fee schedule (Medicaid, OON, Capitation). FeeScheduleEngine is a library consumed by the adjudication pipeline; seed its backing Cosmos DB container directly or use these CSVs with a custom loader.</td>
             </tr>
             <tr>
               <td><code>CosmosDbSeeder</code></td>
               <td>Cosmos DB documents</td>
               <td>All microservices</td>
-              <td>Direct bulk write to Members, Coverage, Providers, ProviderContracts, BenefitPlans, FeeSchedules, and Accumulators containers.</td>
+              <td>Bulk write to Members, Coverage, Providers, ProviderContracts, BenefitPlans, FeeSchedules, and Accumulators containers. <strong>Note:</strong> The base <code>WriteDocumentsAsync</code> is a no-op stub &mdash; subclass <code>CosmosDbSeeder</code> and override it with your Azure.Cosmos SDK bulk-write implementation, then pass that instance to <code>CosmosDbBenchmarkSeeder</code>.</td>
             </tr>
           </tbody>
         </table>
