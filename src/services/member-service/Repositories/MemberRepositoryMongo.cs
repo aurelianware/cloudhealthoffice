@@ -141,9 +141,20 @@ public class MemberRepositoryMongo : IMemberRepository
 
     public async Task<bool> ExistsAsync(string tenantId, string memberId)
     {
-        var filter = Builders<Member>.Filter.Eq(x => x.MemberId, memberId) & 
+        var filter = Builders<Member>.Filter.Eq(x => x.MemberId, memberId) &
                      Builders<Member>.Filter.Eq(x => x.TenantId, tenantId);
-                     
+
         return await _collection.Find(filter).AnyAsync();
+    }
+
+    public async Task<Member?> GetByIdentifierAsync(string tenantId, string system, string value)
+    {
+        var filter = Builders<Member>.Filter.Eq(x => x.TenantId, tenantId) &
+                     Builders<Member>.Filter.ElemMatch(
+                         x => x.Identifiers,
+                         Builders<MemberIdentifier>.Filter.Eq(i => i.System, system) &
+                         Builders<MemberIdentifier>.Filter.Eq(i => i.Value, value));
+
+        return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 }
