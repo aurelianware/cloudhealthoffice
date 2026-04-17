@@ -2,12 +2,14 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MemberService.Controllers;
+using MemberService.HostedServices;
 using MemberService.Models;
 using MemberService.Repositories;
 using MemberService.Services;
 using MemberService.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -47,9 +49,12 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
                 RemoveAll<MongoDB.Driver.IMongoClient>(services);
                 RemoveAll<MongoDB.Driver.IMongoDatabase>(services);
 
-                // Strip the hosted services that would otherwise try to
-                // create Mongo indexes against the fake host.
-                services.RemoveAll<IHostedService>();
+                // Remove the Mongo index initializers that would try to connect to the
+                // fake MongoDB host at startup. Don't use RemoveAll<IHostedService>() as
+                // that would also remove the Kestrel host service and prevent the test
+                // server from starting.
+                RemoveAll<MemberEventIndexInitializer>(services);
+                RemoveAll<MemberIndexInitializer>(services);
 
                 services.AddSingleton<IMemberRepository>(MemberRepo);
                 services.AddSingleton<IMemberEventRepository>(EventRepo);

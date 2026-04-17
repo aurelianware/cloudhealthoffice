@@ -1,7 +1,11 @@
+extern alias CoverageSvc;
+extern alias EnrollmentSvc;
+
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MemberService.Tests.Integration;
@@ -15,7 +19,7 @@ namespace MemberService.Tests.Integration;
 /// </summary>
 public class DownstreamRouteContractTests
 {
-    private sealed class CoverageFactory : WebApplicationFactory<CoverageService.Controllers.CoverageController>
+    private sealed class CoverageFactory : WebApplicationFactory<CoverageSvc::CoverageService.Controllers.CoverageController>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -33,14 +37,14 @@ public class DownstreamRouteContractTests
             });
             builder.ConfigureServices(services =>
             {
-                RemoveAll<CoverageService.Repositories.ICoverageRepository>(services);
-                services.AddSingleton<CoverageService.Repositories.ICoverageRepository>(
-                    new Mock<CoverageService.Repositories.ICoverageRepository>().Object);
+                RemoveAll<CoverageSvc::CoverageService.Repositories.ICoverageRepository>(services);
+                services.AddSingleton<CoverageSvc::CoverageService.Repositories.ICoverageRepository>(
+                    new Mock<CoverageSvc::CoverageService.Repositories.ICoverageRepository>().Object);
             });
         }
     }
 
-    private sealed class EnrollmentFactory : WebApplicationFactory<EnrollmentImportService.Controllers.EnrollmentController>
+    private sealed class EnrollmentFactory : WebApplicationFactory<EnrollmentSvc::EnrollmentImportService.Controllers.EnrollmentController>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -58,12 +62,12 @@ public class DownstreamRouteContractTests
             });
             builder.ConfigureServices(services =>
             {
-                RemoveAll<EnrollmentImportService.Services.IEnrollmentRepository>(services);
-                RemoveAll<EnrollmentImportService.Services.IEnrollmentTransactionRepository>(services);
-                services.AddSingleton<EnrollmentImportService.Services.IEnrollmentRepository>(
-                    new Mock<EnrollmentImportService.Services.IEnrollmentRepository>().Object);
-                services.AddSingleton<EnrollmentImportService.Services.IEnrollmentTransactionRepository>(
-                    new Mock<EnrollmentImportService.Services.IEnrollmentTransactionRepository>().Object);
+                RemoveAll<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>(services);
+                RemoveAll<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>(services);
+                services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>(
+                    new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>().Object);
+                services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>(
+                    new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>().Object);
             });
         }
 

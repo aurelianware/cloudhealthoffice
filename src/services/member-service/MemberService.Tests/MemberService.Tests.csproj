@@ -33,9 +33,18 @@
       paths baked into HttpCoverageServiceClient / HttpEnrollmentImportServiceClient.
       Catches pluralization / prefix mismatches that would otherwise only
       surface as runtime 404s in prod.
+
+      Aliases isolate each service's global `Program` type so it does not
+      collide with member-service's `Program` in this test assembly.
+      DownstreamRouteContractTests uses `extern alias` to access the types
+      from these assemblies.
     -->
-    <ProjectReference Include="..\..\coverage-service\coverage-service.csproj" />
-    <ProjectReference Include="..\..\enrollment-import-service\EnrollmentImportService.csproj" />
+    <ProjectReference Include="..\..\coverage-service\coverage-service.csproj">
+      <Aliases>CoverageSvc</Aliases>
+    </ProjectReference>
+    <ProjectReference Include="..\..\enrollment-import-service\EnrollmentImportService.csproj">
+      <Aliases>EnrollmentSvc</Aliases>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>

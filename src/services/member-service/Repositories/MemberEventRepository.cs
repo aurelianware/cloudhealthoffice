@@ -72,7 +72,7 @@ public class MemberEventRepository : IMemberEventRepository
             {
                 _logger?.LogWarning(ex,
                     "Unexpected Cosmos 409 SubStatus {SubStatus} on member-events append for {PartitionKey} v{Version}. Treating as idempotent no-op.",
-                    ex.SubStatusCode, evt.PartitionKey, evt.Version);
+                    ex.SubStatusCode, SanitizeForLog(evt.PartitionKey), evt.Version);
             }
 
             var existing = await GetByIdAsync(evt.TenantId, evt.MemberId, evt.EventId, ct);
@@ -151,4 +151,7 @@ public class MemberEventRepository : IMemberEventRepository
         if (string.IsNullOrEmpty(evt.PartitionKey))
             evt.PartitionKey = MemberEvent.BuildPartitionKey(evt.TenantId, evt.MemberId);
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

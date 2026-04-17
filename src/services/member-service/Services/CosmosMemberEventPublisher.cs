@@ -54,7 +54,7 @@ public sealed class CosmosMemberEventPublisher : IMemberEventPublisher
         {
             _logger.LogDebug(
                 "MemberEvent {EventId} already present for {Tenant}:{Member} (idempotent no-op)",
-                evt.EventId, evt.TenantId, evt.MemberId);
+                SanitizeForLog(evt.EventId), SanitizeForLog(evt.TenantId), SanitizeForLog(evt.MemberId));
             return existing;
         }
 
@@ -75,7 +75,7 @@ public sealed class CosmosMemberEventPublisher : IMemberEventPublisher
 
             _logger.LogWarning(
                 "MemberEvent version {Version} conflict for {Tenant}:{Member}; retry {Attempt}/{Max}",
-                evt.Version, evt.TenantId, evt.MemberId, attempt + 1, MaxVersionRetries);
+                evt.Version, SanitizeForLog(evt.TenantId), SanitizeForLog(evt.MemberId), attempt + 1, MaxVersionRetries);
 
             if (attempt + 1 < MaxVersionRetries)
             {
@@ -85,4 +85,7 @@ public sealed class CosmosMemberEventPublisher : IMemberEventPublisher
 
         throw new ConcurrencyException(evt.TenantId, evt.MemberId, MaxVersionRetries);
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
