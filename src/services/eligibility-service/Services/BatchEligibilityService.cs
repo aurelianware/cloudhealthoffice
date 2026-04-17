@@ -118,8 +118,13 @@ public class BatchEligibilityService : IBatchEligibilityService
             return;
         }
 
-        if (job.Status == BatchJobStatus.Completed)
-            return; // resumable: idempotent on completion
+        // Terminal states are idempotent: redelivered Service Bus messages
+        // and accidental double-calls must not double-count rows.
+        if (job.Status == BatchJobStatus.Completed ||
+            job.Status == BatchJobStatus.Cancelled)
+        {
+            return;
+        }
 
         var inputBytes = await _store.GetResultAsync(tenantId, InputKey(jobId), ct);
         if (inputBytes == null)
@@ -130,8 +135,15 @@ public class BatchEligibilityService : IBatchEligibilityService
             return;
         }
 
+        // Atomic-ish claim: reset counters so a restarted run (after Failed
+        // or a mid-flight crash that left us in Running) starts fresh rather
+        // than appending to stale totals.
         job.Status = BatchJobStatus.Running;
         job.StartedDate ??= DateTime.UtcNow;
+        job.ProcessedRows = 0;
+        job.SucceededRows = 0;
+        job.FailedRows = 0;
+        job.Errors.Clear();
         await _store.SaveAsync(job, ct);
 
         var rows = ParseCsv(Encoding.UTF8.GetString(inputBytes));
@@ -251,12 +263,14 @@ public class BatchEligibilityService : IBatchEligibilityService
             if (subIdx >= 0 && subIdx < values.Count)
                 row.SubscriberId = values[subIdx]?.Trim();
 
-            if (dateIdx < values.Count &&
-                DateTime.TryParse(values[dateIdx], CultureInfo.InvariantCulture,
+            if (dateIdx >= values.Count ||
+                !DateTime.TryParse(values[dateIdx], CultureInfo.InvariantCulture,
                     DateTimeStyles.AssumeLocal, out var dt))
             {
-                row.ServiceDate = dt.Date;
+                throw new ArgumentException(
+                    $"Row {rowNumber}: serviceDate missing or not a valid ISO-8601 date.");
             }
+            row.ServiceDate = dt.Date;
 
             if (string.IsNullOrWhiteSpace(row.Identifier)) continue;
             rows.Add(row);
@@ -270,7 +284,12 @@ public class BatchEligibilityService : IBatchEligibilityService
         var raw = JsonSerializer.Deserialize<List<BatchEligibilityRow>>(text, JsonOpts)
                   ?? new List<BatchEligibilityRow>();
         for (var i = 0; i < raw.Count; i++)
+        {
             raw[i].RowNumber = i + 2; // 1 = header analogue
+            if (raw[i].ServiceDate == default)
+                throw new ArgumentException(
+                    $"Row {raw[i].RowNumber}: serviceDate missing or not a valid ISO-8601 date.");
+        }
         return raw.Where(r => !string.IsNullOrWhiteSpace(r.Identifier)).ToList();
     }
 
@@ -298,9 +317,12 @@ public class BatchEligibilityService : IBatchEligibilityService
         sb.AppendLine("rowNumber,memberId,subscriberId,serviceDate");
         foreach (var r in rows)
         {
+            // Escape identifier columns: customer-supplied data can contain
+            // commas or quotes which would otherwise corrupt the stored input
+            // and cause ParseCsv to mis-align columns on re-read.
             sb.Append(r.RowNumber).Append(',')
-              .Append(r.MemberId).Append(',')
-              .Append(r.SubscriberId).Append(',')
+              .Append(Esc(r.MemberId)).Append(',')
+              .Append(Esc(r.SubscriberId)).Append(',')
               .Append(r.ServiceDate.ToString("yyyy-MM-dd"))
               .Append('\n');
         }

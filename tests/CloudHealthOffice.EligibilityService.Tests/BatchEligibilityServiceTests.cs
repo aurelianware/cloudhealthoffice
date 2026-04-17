@@ -157,6 +157,52 @@ public class BatchEligibilityServiceTests
             () => svc.SubmitAsync("tenant-1", body, "text/csv"));
     }
 
+    [Fact]
+    public async Task Submit_RowWithInvalidServiceDate_ThrowsArgumentException()
+    {
+        var adapter = new StubAdapter(_ => true);
+        var svc = CreateService(adapter, out _, out _);
+
+        var csv = "memberId,serviceDate\nMBR-1,not-a-date\n";
+        using var body = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => svc.SubmitAsync("tenant-1", body, "text/csv"));
+    }
+
+    [Fact]
+    public async Task Submit_RowWithBothIds_PassesSubscriberIdToAdapter()
+    {
+        // Identifier precedence: when both memberId and subscriberId are
+        // supplied, the subscriberId is what travels to the adapter.
+        string? capturedSubscriberId = null;
+        var adapter = new CapturingAdapter(req => capturedSubscriberId = req.SubscriberId);
+        var svc = CreateService(adapter, out _, out _);
+
+        var csv = "memberId,subscriberId,serviceDate\nMBR-1,SUB-42,2026-01-15\n";
+        using var body = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        await svc.SubmitAsync("tenant-1", body, "text/csv");
+
+        Assert.Equal("SUB-42", capturedSubscriberId);
+    }
+
+    private class CapturingAdapter : IEligibilityAdapter
+    {
+        private readonly Action<EligibilityAdapterRequest> _capture;
+        public string Platform => "cho";
+        public CapturingAdapter(Action<EligibilityAdapterRequest> capture) { _capture = capture; }
+
+        public Task<EligibilityAdapterResponse> VerifyEligibilityAsync(
+            EligibilityAdapterRequest request, CancellationToken ct = default)
+        {
+            _capture(request);
+            return Task.FromResult(new EligibilityAdapterResponse
+            {
+                IsEligible = true,
+                StatusCode = "1"
+            });
+        }
+    }
+
     // ── Test helpers ──────────────────────────────────────────────────────
 
     private class StubAdapter : IEligibilityAdapter

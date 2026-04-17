@@ -41,6 +41,16 @@ public class BatchEligibilityQueueWorker : BackgroundService
                     "Failed to process batch eligibility job {JobId} for tenant {Tenant}",
                     msg.JobId, msg.TenantId);
             }
+
+            // Opportunistic eviction: when the default in-memory store is in
+            // use, expire old completed jobs so long-running hosts don't leak
+            // memory. No-op for production Cosmos/Mongo-backed stores.
+            if (_services.GetService<IBatchJobStore>() is InMemoryBatchJobStore memStore)
+            {
+                var evicted = memStore.Evict();
+                if (evicted > 0)
+                    _logger.LogDebug("Evicted {Count} completed batch jobs", evicted);
+            }
         }
     }
 }

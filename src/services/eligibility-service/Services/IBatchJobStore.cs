@@ -18,10 +18,21 @@ public interface IBatchJobStore
 
 /// <summary>
 /// Default in-memory implementation. Multi-tenant safe (keyed by
-/// tenantId + jobId) and suitable for tests and single-instance deployments.
+/// tenantId + jobId).
+///
+/// Intended for tests and single-instance / dev deployments — production
+/// should bind IBatchJobStore to a Cosmos, Mongo or blob-backed store so
+/// state survives pod restarts and is visible across replicas.
+///
+/// To avoid unbounded memory growth on long-running hosts, completed jobs and
+/// their result payloads are evicted after <see cref="CompletedRetention"/>
+/// (default 24h) by <see cref="Evict"/>, which the hosted worker calls
+/// opportunistically on every queue poll.
 /// </summary>
 public class InMemoryBatchJobStore : IBatchJobStore
 {
+    public static readonly TimeSpan CompletedRetention = TimeSpan.FromHours(24);
+
     private readonly ConcurrentDictionary<string, BatchEligibilityJob> _jobs = new();
     private readonly ConcurrentDictionary<string, byte[]> _results = new();
 
@@ -49,5 +60,33 @@ public class InMemoryBatchJobStore : IBatchJobStore
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Drops jobs whose <see cref="BatchEligibilityJob.CompletedDate"/> is older
+    /// than <see cref="CompletedRetention"/>, plus their result + input payloads.
+    /// Safe to call from multiple threads.
+    /// </summary>
+    public int Evict(DateTime? now = null)
+    {
+        var cutoff = (now ?? DateTime.UtcNow) - CompletedRetention;
+        var removed = 0;
+        foreach (var kvp in _jobs)
+        {
+            var job = kvp.Value;
+            if (job.CompletedDate is DateTime completed && completed < cutoff)
+            {
+                if (_jobs.TryRemove(kvp.Key, out _))
+                {
+                    _results.TryRemove(kvp.Key, out _);
+                    _results.TryRemove(Key(job.TenantId, BatchInputKey(job.Id)), out _);
+                    removed++;
+                }
+            }
+        }
+        return removed;
+    }
+
     private static string Key(string tenantId, string jobId) => $"{tenantId}::{jobId}";
+
+    // Must stay in sync with BatchEligibilityService.InputKey.
+    private static string BatchInputKey(string jobId) => $"INPUT::{jobId}";
 }

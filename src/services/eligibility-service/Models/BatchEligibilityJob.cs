@@ -80,9 +80,15 @@ public class BatchEligibilityRow
     public string? SubscriberId { get; set; }
     public DateTime ServiceDate { get; set; }
 
-    public string Identifier => !string.IsNullOrWhiteSpace(MemberId)
-        ? MemberId!
-        : SubscriberId ?? string.Empty;
+    /// <summary>
+    /// The value forwarded to the adapter as <c>SubscriberId</c>.
+    /// Prefer the caller-supplied SubscriberId so that memberId != subscriberId
+    /// scenarios round-trip cleanly; fall back to MemberId only when no
+    /// SubscriberId was provided.
+    /// </summary>
+    public string Identifier => !string.IsNullOrWhiteSpace(SubscriberId)
+        ? SubscriberId!
+        : MemberId ?? string.Empty;
 }
 
 public class BatchEligibilityResultRow

@@ -61,10 +61,10 @@ GET  /api/v1/eligibility/batch/{jobId}/result → CSV result download
 
 ### Execution model
 
-| Rows        | Path                                                                 |
-| ----------- | -------------------------------------------------------------------- |
-| ≤ 100       | Inline during the POST. Client still receives a jobId + polling URL. |
-| 100 – 10,000| Queued onto `IBatchQueue`; `BatchEligibilityQueueWorker` drains it.  |
+| Rows         | Path                                                                 |
+| ------------ | -------------------------------------------------------------------- |
+| ≤ 100        | Inline during the POST. Client still receives a jobId + polling URL. |
+| 101 – 10,000 | Queued onto `IBatchQueue`; `BatchEligibilityQueueWorker` drains it.  |
 
 The 100-row threshold is `BatchEligibilityService.InlineThreshold`. In
 production `IBatchQueue` binds to an Azure Service Bus queue; for unit tests

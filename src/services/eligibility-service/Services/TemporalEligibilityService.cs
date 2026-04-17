@@ -59,12 +59,18 @@ public class TemporalEligibilityService : ITemporalEligibilityService
 
         var ordered = OrderForCob(coverages);
 
+        // Fan out accumulator lookups. Once IAccumulatorClient becomes a real
+        // network call this keeps N-coverage latency flat instead of N×RTT.
+        var snapshotTasks = ordered
+            .Select(dto => _accumulators.GetSnapshotAsync(
+                tenantId, memberId, dto.PlanId ?? string.Empty, serviceDate, ct))
+            .ToArray();
+        var snapshots = await Task.WhenAll(snapshotTasks);
+
+        var today = DateTime.UtcNow.Date;
         for (var i = 0; i < ordered.Count; i++)
         {
             var dto = ordered[i];
-            var snapshot = await _accumulators.GetSnapshotAsync(
-                tenantId, memberId, dto.PlanId ?? string.Empty, serviceDate, ct);
-
             result.Coverages.Add(new TemporalCoverage
             {
                 CoverageId = dto.Id ?? string.Empty,
@@ -79,9 +85,14 @@ public class TemporalEligibilityService : ITemporalEligibilityService
                 CobOrder = i + 1,
                 CoverageSequence = SequenceFromOrder(i),
                 IsCOBRA = dto.Status == 5 || dto.IsCOBRA,
-                IsRetroactive = dto.EffectiveDate.Date < DateTime.UtcNow.Date
+                // Retro = coverage was backdated (effective date strictly before
+                // today) and the service date is on-or-before today. A future
+                // service date on a historically-effective coverage is not
+                // retroactive — it's just continuing coverage.
+                IsRetroactive = dto.EffectiveDate.Date < today
+                                && serviceDate.Date <= today
                                 && dto.EffectiveDate.Date <= serviceDate.Date,
-                Accumulators = snapshot
+                Accumulators = snapshots[i]
             });
         }
 
@@ -131,9 +142,13 @@ public class TemporalEligibilityService : ITemporalEligibilityService
 
     /// <summary>
     /// Orders coverages for Coordination of Benefits.
-    /// Primary → Secondary → Tertiary based on <c>OtherInsurance.IsPrimaryPayer</c>
-    /// and <c>MedicareCoverage.IsPrimaryPayer</c>. When no COB data is present
-    /// the earliest <see cref="CoverageDto.EffectiveDate"/> wins primary.
+    ///
+    /// On a <see cref="Coverage"/> record, <c>OtherInsurance.IsPrimaryPayer = true</c>
+    /// means the *other* payer is primary — i.e. THIS coverage is secondary.
+    /// Same for <c>MedicareCoverage.IsPrimaryPayer</c>. So a "true" flag
+    /// demotes the current plan in the stack rather than promoting it.
+    ///
+    /// Tie-break on earliest <see cref="CoverageDto.EffectiveDate"/>.
     /// </summary>
     internal static List<CoverageDto> OrderForCob(List<CoverageDto> coverages)
     {
@@ -145,9 +160,12 @@ public class TemporalEligibilityService : ITemporalEligibilityService
 
     private static int CobRank(CoverageDto c)
     {
-        if (c.MedicareCoverage?.IsPrimaryPayer == true) return 0;
-        if (c.OtherInsurance?.IsPrimaryPayer == true) return 0;
-        if (c.OtherInsurance != null) return 2; // explicit non-primary other insurance
+        // Another payer is explicitly primary → this coverage is secondary.
+        if (c.MedicareCoverage?.IsPrimaryPayer == true) return 2;
+        if (c.OtherInsurance?.IsPrimaryPayer == true) return 2;
+        // Other insurance recorded but NOT primary → this coverage leads.
+        if (c.OtherInsurance != null) return 0;
+        // No COB info — default primary bucket, ordered by effectiveDate below.
         return 1;
     }
 
