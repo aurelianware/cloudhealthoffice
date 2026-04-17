@@ -349,12 +349,197 @@ public class CoverageController : ControllerBase
         return Ok(coverages);
     }
 
+    // ── Member-scoped PCP and termination endpoints ──────────────────
+    //
+    // These are called by member-service via HttpCoverageServiceClient. Coverage
+    // is the authoritative store for PCP assignment; member-service proxies.
+
+    /// <summary>
+    /// Get the member's currently-assigned PCP derived from their active coverage.
+    /// </summary>
+    [HttpGet("member/{memberId}/pcp")]
+    [ProducesResponseType(typeof(MemberPcpResponse), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetMemberPcp(
+        [FromRoute] string memberId,
+        [FromQuery] DateTime? serviceDate = null)
+    {
+        _logger.LogInformation("Fetching PCP for member {MemberId}", SanitizeForLog(memberId));
+
+        var checkDate = serviceDate ?? DateTime.UtcNow.Date;
+        var active = await _coverageRepository.GetActiveCoverageByMemberIdAsync(
+            TenantId, memberId, checkDate);
+
+        var withPcp = active.FirstOrDefault(c => !string.IsNullOrEmpty(c.PcpNpi));
+        if (withPcp == null)
+        {
+            return NotFound(new
+            {
+                MemberId = memberId,
+                Message = "No active coverage with PCP assignment found."
+            });
+        }
+
+        return Ok(new MemberPcpResponse
+        {
+            ProviderId = withPcp.PcpNpi ?? string.Empty,
+            ProviderName = withPcp.PcpName ?? string.Empty,
+            NPI = withPcp.PcpNpi ?? string.Empty,
+            AssignedDate = withPcp.PcpAssignmentDate ?? withPcp.EffectiveDate,
+            NetworkStatus = "In-Network"
+        });
+    }
+
+    /// <summary>
+    /// Assign or change the member's PCP. Writes <c>PcpNpi</c> + <c>PcpAssignmentDate</c>
+    /// on all active coverages for the member and moves the prior <c>PcpNpi</c> into
+    /// <c>PreviousPcpNpi</c>.
+    ///
+    /// TODO(roadmap 5.7 Phase 2): track PCP changes in a dedicated
+    /// <c>PcpAssignmentHistory</c> collection with effective-dated rows rather than
+    /// overwriting. Leaving the overwrite pattern in place for PR #650 per scope.
+    /// </summary>
+    [HttpPut("member/{memberId}/pcp")]
+    [ProducesResponseType(typeof(MemberPcpResponse), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> AssignMemberPcp(
+        [FromRoute] string memberId,
+        [FromBody] AssignPcpBody request)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        if (string.IsNullOrWhiteSpace(request.ProviderId) && string.IsNullOrWhiteSpace(request.ProviderNpi))
+            return BadRequest(new { Message = "providerId or providerNpi is required" });
+
+        var npi = request.ProviderNpi ?? request.ProviderId;
+        if (npi.Length != 10 || !npi.All(char.IsDigit))
+            return BadRequest(new { Message = "providerNpi must be exactly 10 digits" });
+
+        var checkDate = request.EffectiveDate == default ? DateTime.UtcNow.Date : request.EffectiveDate;
+        var active = (await _coverageRepository.GetActiveCoverageByMemberIdAsync(
+            TenantId, memberId, checkDate)).ToList();
+
+        if (active.Count == 0)
+        {
+            return NotFound(new
+            {
+                MemberId = memberId,
+                Message = "No active coverage for member; cannot assign PCP."
+            });
+        }
+
+        foreach (var coverage in active)
+        {
+            if (!string.IsNullOrEmpty(coverage.PcpNpi) && coverage.PcpNpi != npi)
+                coverage.PreviousPcpNpi = coverage.PcpNpi;
+            coverage.PcpNpi = npi;
+            coverage.PcpName = request.ProviderName;
+            coverage.PcpAssignmentDate = checkDate;
+            coverage.PcpAssignmentMethod = PcpAssignmentMethod.MemberSelected;
+            coverage.LastUpdatedDate = DateTime.UtcNow;
+            coverage.LastUpdatedBy = User.Identity?.Name ?? "member-service";
+            await _coverageRepository.UpdateAsync(coverage);
+        }
+
+        return Ok(new MemberPcpResponse
+        {
+            ProviderId = npi,
+            ProviderName = request.ProviderName ?? string.Empty,
+            NPI = npi,
+            AssignedDate = checkDate,
+            NetworkStatus = "In-Network"
+        });
+    }
+
+    /// <summary>
+    /// Terminate all active coverages for a member.
+    /// </summary>
+    [HttpPost("member/{memberId}/terminate")]
+    [ProducesResponseType(typeof(TerminateMemberCoverageResponse), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> TerminateMemberCoverage(
+        [FromRoute] string memberId,
+        [FromBody] TerminateMemberCoverageBody request)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var asOf = request.TerminationDate == default ? DateTime.UtcNow.Date : request.TerminationDate;
+        var active = (await _coverageRepository.GetActiveCoverageByMemberIdAsync(
+            TenantId, memberId, asOf)).ToList();
+
+        if (active.Count == 0)
+        {
+            return NotFound(new
+            {
+                MemberId = memberId,
+                Message = "No active coverage for member."
+            });
+        }
+
+        foreach (var coverage in active)
+        {
+            coverage.Status = CoverageStatus.Terminated;
+            coverage.TerminationDate = asOf;
+            if (!string.IsNullOrEmpty(request.ReasonCode))
+                coverage.MaintenanceReasonCode = request.ReasonCode;
+            coverage.LastUpdatedDate = DateTime.UtcNow;
+            coverage.LastUpdatedBy = User.Identity?.Name ?? "member-service";
+            await _coverageRepository.UpdateAsync(coverage);
+        }
+
+        return Ok(new TerminateMemberCoverageResponse
+        {
+            MemberId = memberId,
+            TerminatedCount = active.Count,
+            TerminationDate = asOf,
+            ReasonCode = request.ReasonCode
+        });
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
             return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
+}
+
+public class AssignPcpBody
+{
+    public string? ProviderId { get; set; }
+    public string? ProviderNpi { get; set; }
+    public string? ProviderName { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class MemberPcpResponse
+{
+    public string ProviderId { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public string NPI { get; set; } = string.Empty;
+    public string Specialty { get; set; } = string.Empty;
+    public string NetworkStatus { get; set; } = string.Empty;
+    public DateTime AssignedDate { get; set; }
+    public string? PracticeName { get; set; }
+    public string? Phone { get; set; }
+}
+
+public class TerminateMemberCoverageBody
+{
+    public DateTime TerminationDate { get; set; }
+    public string? ReasonCode { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class TerminateMemberCoverageResponse
+{
+    public string MemberId { get; set; } = string.Empty;
+    public int TerminatedCount { get; set; }
+    public DateTime TerminationDate { get; set; }
+    public string? ReasonCode { get; set; }
 }
 
 #region Request/Response Models

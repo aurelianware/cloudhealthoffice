@@ -25,26 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\member-service.csproj" />
-    <!--
-      The downstream-route contract tests instantiate WebApplicationFactory
-      against coverage-service and enrollment-import-service so they can
-      enumerate the remote route table at test time and compare it with the
-      paths baked into HttpCoverageServiceClient / HttpEnrollmentImportServiceClient.
-      Catches pluralization / prefix mismatches that would otherwise only
-      surface as runtime 404s in prod.
-
-      Aliases isolate each service's global `Program` type so it does not
-      collide with member-service's `Program` in this test assembly.
-      DownstreamRouteContractTests uses `extern alias` to access the types
-      from these assemblies.
-    -->
-    <ProjectReference Include="..\..\coverage-service\coverage-service.csproj">
-      <Aliases>CoverageSvc</Aliases>
-    </ProjectReference>
-    <ProjectReference Include="..\..\enrollment-import-service\EnrollmentImportService.csproj">
-      <Aliases>EnrollmentSvc</Aliases>
-    </ProjectReference>
+    <ProjectReference Include="..\coverage-service.csproj" />
   </ItemGroup>
 
   <ItemGroup>

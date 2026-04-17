@@ -10,14 +10,19 @@ public interface IEnrollmentImportService
 public class EnrollmentImportService : IEnrollmentImportService
 {
     private readonly IEnrollmentRepository _repository;
+    private readonly IEnrollmentTransactionRepository _transactions;
     private readonly ILogger<EnrollmentImportService> _logger;
-    
-    public EnrollmentImportService(IEnrollmentRepository repository, ILogger<EnrollmentImportService> logger)
+
+    public EnrollmentImportService(
+        IEnrollmentRepository repository,
+        IEnrollmentTransactionRepository transactions,
+        ILogger<EnrollmentImportService> logger)
     {
         _repository = repository;
+        _transactions = transactions;
         _logger = logger;
     }
-    
+
     public async Task<ImportResult> ImportEnrollmentAsync(Enrollment834 enrollment, string tenantId)
     {
         var result = new ImportResult
@@ -25,28 +30,71 @@ public class EnrollmentImportService : IEnrollmentImportService
             FileName = enrollment.FileName,
             StartedAt = DateTime.UtcNow
         };
-        
+
+        var batchId = $"BATCH-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}".Substring(0, 40);
+
         foreach (var memberEnrollment in enrollment.Enrollments)
         {
+            var txnStatus = "Accepted";
             try
             {
                 await ProcessMemberEnrollmentAsync(memberEnrollment, tenantId, result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing enrollment for subscriber {SubscriberId}", 
+                _logger.LogError(ex, "Error processing enrollment for subscriber {SubscriberId}",
                     SanitizeForLog(memberEnrollment.SubscriberId));
                 result.Errors.Add($"Subscriber {memberEnrollment.SubscriberId}: {ex.Message}");
                 result.FailedCount++;
+                txnStatus = "Rejected";
             }
+
+            await RecordTransactionAsync(tenantId, batchId, enrollment, memberEnrollment, txnStatus);
         }
-        
+
         result.CompletedAt = DateTime.UtcNow;
         _logger.LogInformation(
             "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped",
             result.SuccessCount, result.FailedCount, result.SkippedCount);
-        
+
         return result;
+    }
+
+    private async Task RecordTransactionAsync(
+        string tenantId,
+        string batchId,
+        Enrollment834 batch,
+        MemberEnrollment memberEnrollment,
+        string status)
+    {
+        try
+        {
+            var memberId = memberEnrollment.SubscriberId ?? string.Empty;
+            var firstName = memberEnrollment.Demographics?.FirstName ?? string.Empty;
+            var lastName = memberEnrollment.Demographics?.LastName ?? string.Empty;
+
+            await _transactions.CreateAsync(new EnrollmentTransaction
+            {
+                TenantId = tenantId,
+                BatchId = batchId,
+                TransactionId = $"{batchId}-{Guid.NewGuid():N}".Substring(0, 40),
+                MemberId = memberId,
+                SubscriberId = memberEnrollment.SubscriberId,
+                MemberName = $"{firstName} {lastName}".Trim(),
+                MaintenanceTypeCode = memberEnrollment.MaintenanceType ?? string.Empty,
+                TransactionDate = batch.ParsedAt == default ? DateTime.UtcNow : batch.ParsedAt,
+                ReceivedAt = DateTime.UtcNow,
+                Status = status,
+                FileName = batch.FileName
+            });
+        }
+        catch (Exception ex)
+        {
+            // Transaction-log failures must not bring down the import; log and move on.
+            _logger.LogWarning(ex,
+                "Failed to persist EnrollmentTransaction for subscriber {SubscriberId}",
+                SanitizeForLog(memberEnrollment.SubscriberId));
+        }
     }
     
     private async Task ProcessMemberEnrollmentAsync(MemberEnrollment enrollment, string tenantId, ImportResult result)
