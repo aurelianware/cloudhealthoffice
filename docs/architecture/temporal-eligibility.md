@@ -111,12 +111,77 @@ blob storage) and served via `GET /batch/{jobId}/result` once
 - The Service Bus queue message carries `TenantId` so the consumer resolves the
   right adapter before verification.
 
-## 4. Follow-ups
+## 4. Storage modes
 
-- Replace `InMemoryBatchJobStore` with a Cosmos or Mongo-backed store so
-  batches survive pod restarts. Interface (`IBatchJobStore`) is already shaped
-  for it.
+Batch storage is resolved at startup by
+`BatchEligibilityServiceCollectionExtensions.AddBatchEligibilityStorage`
+from the `BatchEligibility:StorageMode` config value:
+
+| Mode       | Job store                                   | Queue                         | Notes                                                                             |
+| ---------- | ------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------- |
+| InMemory   | `InMemoryBatchJobStore`                     | `InMemoryBatchQueue`          | Dev only. Jobs do not survive restarts. No cross-replica visibility. Warn on boot. |
+| Persistent | `CosmosBatchJobStore` (+ Blob for payloads) | `ServiceBusBatchQueue`        | Production. Required connection strings: Cosmos, Blob Storage, Service Bus.       |
+| Auto       | Persistent when all three CS are set; InMemory in dev when they're not; throws at startup otherwise. |
+
+Never registers both in-memory and persistent implementations simultaneously.
+
+### 4.1 Multi-replica behavior
+
+- **InMemory** is single-instance only. `GET /batch/{jobId}` on a different
+  pod returns 404; queued messages stay on the pod that received them.
+- **Persistent** gives true multi-replica semantics:
+  - Job state lives in Cosmos (`batch-jobs` container, partition key
+    `/tenantId`) → any pod can read/write any job.
+  - Queue delivery comes from Service Bus with `MaxConcurrentCalls = 4`,
+    `AutoCompleteMessages = false`. Messages complete on handler success,
+    abandon on failure; Service Bus auto-DLQs after `MaxDeliveryCount = 10`.
+  - Result and input CSVs over `BatchEligibility:InlineMaxBytes` (default
+    1 MB) are written to Azure Blob Storage at
+    `{tenantId}/{jobId}/{kind}.csv`. Reads always go back through the
+    service — no SAS URIs are minted.
+- **TTL**: the Cosmos container is provisioned with `defaultTtl = 7 days`
+  and the blob container with a 7-day lifecycle rule (see
+  `scripts/azure/provision-batch-eligibility.sh`). The in-memory store's
+  24-hour `Evict()` sweep applies only in dev.
+
+### 4.2 Streaming CSV
+
+The queued path (>100 rows) never materializes the full row set in memory:
+
+- **Submit**: `StreamingCsvParser` consumes the incoming request via
+  `TextReader` and, as rows arrive, `StreamingCsvWriter` writes the
+  normalized input CSV directly to `IBatchJobStore.SaveResultStreamAsync`.
+  Input is then stored inline (&lt; `InlineMaxBytes`) or in blob storage.
+- **Process**: `BatchEligibilityService.ProcessJobAsync` opens the input
+  via `OpenResultStreamAsync` and pulls rows through the parser in
+  chunks of 100 (`ProcessingChunkSize`). Each chunk calls through the
+  existing `EligibilityAdapterFactory` adapter and writes one result row
+  at a time via `StreamingCsvWriter`. Peak working set stays bounded by
+  chunk size and the small parser/writer buffers (&lt; 16 KB each).
+- **Inline path** (≤100 rows): unchanged. The small bounded cost is
+  acceptable and keeps the request path simple.
+
+### 4.3 Provisioning
+
+Run `scripts/azure/provision-batch-eligibility.sh` once per environment
+with the following env vars set:
+
+```
+COSMOS_ACCOUNT, COSMOS_DB (default: cho)
+SERVICEBUS_NAMESPACE
+STORAGE_ACCOUNT
+RESOURCE_GROUP
+```
+
+Creates:
+- Cosmos container `batch-jobs`, PK `/tenantId`, TTL 7 days.
+- Service Bus queue `batch-eligibility`, `MaxDeliveryCount=10`, DLQ on expiry.
+- Blob container `batch-eligibility` with a 7-day delete lifecycle rule.
+
+## 5. Follow-ups
+
 - Replace `StubAccumulatorClient` with the real accumulator-service client
   once prompt 5.3 lands.
-- Swap `InMemoryBatchQueue` for an Azure Service Bus implementation
-  (`ServiceBusBatchQueue`) once production infrastructure is provisioned.
+- Promote the `IBatchQueueSender` / `IBatchQueueProcessor` abstractions to
+  `shared/CloudHealthOffice.Infrastructure` if another service adopts
+  Service Bus (currently only batch eligibility uses it).

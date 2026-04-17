@@ -108,20 +108,10 @@ builder.Services.AddScoped<IEdi271Generator, Edi271Generator>();
 builder.Services.AddSingleton<IAccumulatorClient, StubAccumulatorClient>();
 builder.Services.AddScoped<ITemporalEligibilityService, TemporalEligibilityService>();
 
-// Batch eligibility.
-//
-// Default bindings are in-memory and suitable only for single-instance / dev
-// deployments:
-//   - InMemoryBatchJobStore does not survive pod restarts and is not visible
-//     across replicas, so polling GET /batch/{jobId} from another pod will
-//     return 404.
-//   - InMemoryBatchQueue is process-local and cannot coordinate work across
-//     hosts.
-// Production should swap these for Service Bus + a Cosmos/Mongo-backed store
-// when the connection strings are configured. The abstractions are shaped for
-// that drop-in replacement.
-builder.Services.AddSingleton<IBatchJobStore, InMemoryBatchJobStore>();
-builder.Services.AddSingleton<IBatchQueue, InMemoryBatchQueue>();
+// Batch eligibility storage (in-memory for dev, Cosmos+Blob+Service Bus for
+// production). Resolution logic lives in
+// BatchEligibilityServiceCollectionExtensions.
+builder.Services.AddBatchEligibilityStorage(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<IBatchEligibilityService, BatchEligibilityService>();
 builder.Services.AddHostedService<BatchEligibilityQueueWorker>();
 

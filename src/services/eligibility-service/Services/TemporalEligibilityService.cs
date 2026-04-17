@@ -161,6 +161,12 @@ public class TemporalEligibilityService : ITemporalEligibilityService
     private static int CobRank(CoverageDto c)
     {
         // Another payer is explicitly primary → this coverage is secondary.
+        //
+        // TODO(COB): Medicare Secondary Payer (MSP) rules distinguish Medicare-
+        // primary from generic other-payer-primary scenarios (e.g., working
+        // aged, ESRD, workers comp, no-fault). For ordering alone this
+        // collapse is fine; when the COB engine needs true MSP determination
+        // the rank function must split these cases. See roadmap 5.2 Phase 2.
         if (c.MedicareCoverage?.IsPrimaryPayer == true) return 2;
         if (c.OtherInsurance?.IsPrimaryPayer == true) return 2;
         // Other insurance recorded but NOT primary → this coverage leads.

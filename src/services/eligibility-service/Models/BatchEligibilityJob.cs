@@ -51,6 +51,28 @@ public class BatchEligibilityJob
     /// Azure Service Bus for out-of-process processing.
     /// </summary>
     public bool Queued { get; set; }
+
+    /// <summary>
+    /// Where the input + result payloads live. Inline = embedded on the job
+    /// document (or in-memory byte[] for the dev store). Blob = a separate
+    /// Azure Blob object addressed by <see cref="InputBlobUri"/> /
+    /// <see cref="ResultBlobUri"/>. Default Inline preserves existing behavior
+    /// for the in-memory path.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public BatchStorageMode StorageMode { get; set; } = BatchStorageMode.Inline;
+
+    /// <summary>Set when <see cref="StorageMode"/> is Blob.</summary>
+    public string? InputBlobUri { get; set; }
+
+    /// <summary>Set when <see cref="StorageMode"/> is Blob.</summary>
+    public string? ResultBlobUri { get; set; }
+}
+
+public enum BatchStorageMode
+{
+    Inline,
+    Blob
 }
 
 public enum BatchJobStatus

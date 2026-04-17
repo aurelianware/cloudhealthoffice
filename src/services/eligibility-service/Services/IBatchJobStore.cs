@@ -7,6 +7,13 @@ namespace EligibilityService.Services;
 /// Persistence abstraction for BatchEligibilityJob. Kept behind an interface
 /// so tests can use the in-memory store while production can swap in a
 /// Cosmos/Mongo implementation without touching the service.
+///
+/// The byte[]-based Save/Get methods are the stable contract for small
+/// payloads (inline path, tests). The stream-based SaveResultStream /
+/// OpenResultStream methods are used for the large queued path so the
+/// full row set never needs to materialize in memory. Default interface
+/// implementations bridge the two so existing implementations remain
+/// source-compatible.
 /// </summary>
 public interface IBatchJobStore
 {
@@ -14,6 +21,31 @@ public interface IBatchJobStore
     Task<BatchEligibilityJob?> GetAsync(string tenantId, string jobId, CancellationToken ct = default);
     Task<byte[]?> GetResultAsync(string tenantId, string jobId, CancellationToken ct = default);
     Task SaveResultAsync(string tenantId, string jobId, byte[] payload, CancellationToken ct = default);
+
+    /// <summary>
+    /// Streaming write of a result (or input) payload. Default implementation
+    /// buffers into a byte[] and delegates to <see cref="SaveResultAsync"/>
+    /// so in-memory / dev stores keep working. Persistent stores should
+    /// override to stream directly to blob storage.
+    /// </summary>
+    async Task SaveResultStreamAsync(
+        string tenantId, string jobId, Stream source, CancellationToken ct = default)
+    {
+        using var buffer = new MemoryStream();
+        await source.CopyToAsync(buffer, ct);
+        await SaveResultAsync(tenantId, jobId, buffer.ToArray(), ct);
+    }
+
+    /// <summary>
+    /// Streaming read of a result (or input) payload. Default implementation
+    /// wraps the byte[] from <see cref="GetResultAsync"/>.
+    /// </summary>
+    async Task<Stream?> OpenResultStreamAsync(
+        string tenantId, string jobId, CancellationToken ct = default)
+    {
+        var bytes = await GetResultAsync(tenantId, jobId, ct);
+        return bytes == null ? null : new MemoryStream(bytes, writable: false);
+    }
 }
 
 /// <summary>

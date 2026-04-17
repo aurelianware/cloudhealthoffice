@@ -34,6 +34,7 @@ public class BatchEligibilityService : IBatchEligibilityService
 {
     public const int MaxRows = 10_000;
     public const int InlineThreshold = 100;
+    public const int ProcessingChunkSize = 100;
 
     private readonly IBatchJobStore _store;
     private readonly IBatchQueue _queue;
@@ -60,36 +61,57 @@ public class BatchEligibilityService : IBatchEligibilityService
         string contentType,
         CancellationToken ct = default)
     {
-        var rows = await ParseAsync(body, contentType, ct);
-        if (rows.Count == 0)
-            throw new ArgumentException("Batch payload contained zero parseable rows.");
+        var isJson = !string.IsNullOrEmpty(contentType) &&
+                     contentType.Contains("json", StringComparison.OrdinalIgnoreCase);
 
-        if (rows.Count > MaxRows)
-            throw new ArgumentException($"Batch exceeds {MaxRows} row limit (got {rows.Count}).");
+        // Buffer the incoming request into memory to count rows and decide
+        // inline vs queued. We can't stream before we know the row count.
+        // Reading into a string is bounded by ASP.NET Core's request-size
+        // limits; anything larger than that gets rejected before we see it.
+        string text;
+        using (var reader = new StreamReader(body, Encoding.UTF8, leaveOpen: true))
+        {
+            text = await reader.ReadToEndAsync(ct);
+        }
 
         var job = new BatchEligibilityJob
         {
             TenantId = tenantId,
-            TotalRows = rows.Count,
             Status = BatchJobStatus.Queued
         };
-        await _store.SaveAsync(job, ct);
 
-        // Stash input rows alongside the job as CSV in the result slot-prefixed
-        // with "INPUT::" so the processor can pick them up. Keeps the store
-        // abstraction tiny.
-        var inputCsv = SerializeRowsToCsv(rows);
-        await _store.SaveResultAsync(
-            tenantId, InputKey(job.Id), Encoding.UTF8.GetBytes(inputCsv), ct);
+        int totalRows;
+        if (isJson)
+        {
+            var rows = ParseJson(text);
+            totalRows = rows.Count;
+            ValidateRowCount(totalRows);
+            job.TotalRows = totalRows;
+            await _store.SaveAsync(job, ct);
+            await PersistInputRowsAsync(tenantId, job.Id, rows, queued: totalRows > InlineThreshold, ct);
+        }
+        else
+        {
+            // CSV path: stream-parse once to count + normalize straight into storage.
+            totalRows = await PersistInputStreamAsync(tenantId, job.Id, text,
+                queued: /*decided after count*/ false, validateOnly: true, ct);
+            ValidateRowCount(totalRows);
+            job.TotalRows = totalRows;
+            await _store.SaveAsync(job, ct);
+            // Second pass writes the normalized CSV. For inline we buffer; for
+            // queued we stream to the store (blob if available).
+            await PersistInputStreamAsync(tenantId, job.Id, text,
+                queued: totalRows > InlineThreshold, validateOnly: false, ct);
+        }
 
-        if (rows.Count > InlineThreshold)
+        if (totalRows > InlineThreshold)
         {
             job.Queued = true;
             await _store.SaveAsync(job, ct);
             await _queue.EnqueueAsync(new BatchQueueMessage(tenantId, job.Id), ct);
             _logger.LogInformation(
                 "Batch eligibility job {JobId} queued ({RowCount} rows > {Threshold})",
-                job.Id, rows.Count, InlineThreshold);
+                job.Id, totalRows, InlineThreshold);
         }
         else
         {
@@ -118,16 +140,14 @@ public class BatchEligibilityService : IBatchEligibilityService
             return;
         }
 
-        // Terminal states are idempotent: redelivered Service Bus messages
-        // and accidental double-calls must not double-count rows.
         if (job.Status == BatchJobStatus.Completed ||
             job.Status == BatchJobStatus.Cancelled)
         {
             return;
         }
 
-        var inputBytes = await _store.GetResultAsync(tenantId, InputKey(jobId), ct);
-        if (inputBytes == null)
+        var inputStream = await _store.OpenResultStreamAsync(tenantId, InputKey(jobId), ct);
+        if (inputStream == null)
         {
             job.Status = BatchJobStatus.Failed;
             job.CompletedDate = DateTime.UtcNow;
@@ -135,9 +155,6 @@ public class BatchEligibilityService : IBatchEligibilityService
             return;
         }
 
-        // Atomic-ish claim: reset counters so a restarted run (after Failed
-        // or a mid-flight crash that left us in Running) starts fresh rather
-        // than appending to stale totals.
         job.Status = BatchJobStatus.Running;
         job.StartedDate ??= DateTime.UtcNow;
         job.ProcessedRows = 0;
@@ -146,16 +163,68 @@ public class BatchEligibilityService : IBatchEligibilityService
         job.Errors.Clear();
         await _store.SaveAsync(job, ct);
 
-        var rows = ParseCsv(Encoding.UTF8.GetString(inputBytes));
         var adapter = await _adapters.GetAdapterAsync(tenantId, ct);
-        var results = new List<BatchEligibilityResultRow>(rows.Count);
 
-        foreach (var row in rows)
+        // Stream input → verify in fixed-size chunks → stream output.
+        // Nothing proportional to row count stays in memory.
+        using var resultBuffer = new MemoryStream();
+        using (inputStream)
+        await using (var resultWriter = new StreamingCsvWriter(
+            new StreamWriter(resultBuffer, Encoding.UTF8, leaveOpen: true)))
+        {
+            await resultWriter.WriteHeaderAsync(StreamingCsvWriter.ResultHeader, ct);
+
+            using var inputReader = new StreamReader(inputStream, Encoding.UTF8);
+            var chunk = new List<BatchEligibilityRow>(ProcessingChunkSize);
+
+            await foreach (var row in StreamingCsvParser.ParseAsync(inputReader, ct))
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    job.Status = BatchJobStatus.Cancelled;
+                    break;
+                }
+                chunk.Add(row);
+                if (chunk.Count >= ProcessingChunkSize)
+                {
+                    await ProcessChunkAsync(chunk, tenantId, adapter, job, resultWriter, ct);
+                    chunk.Clear();
+                }
+            }
+
+            if (chunk.Count > 0 && job.Status != BatchJobStatus.Cancelled)
+            {
+                await ProcessChunkAsync(chunk, tenantId, adapter, job, resultWriter, ct);
+                chunk.Clear();
+            }
+
+            await resultWriter.FlushAsync(ct);
+        }
+
+        resultBuffer.Position = 0;
+        await _store.SaveResultStreamAsync(tenantId, jobId, resultBuffer, ct);
+
+        if (job.Status != BatchJobStatus.Cancelled)
+            job.Status = BatchJobStatus.Completed;
+        job.CompletedDate = DateTime.UtcNow;
+        job.ResultFileUrl = $"/api/v1/eligibility/batch/{job.Id}/result";
+        await _store.SaveAsync(job, ct);
+    }
+
+    private async Task ProcessChunkAsync(
+        List<BatchEligibilityRow> chunk,
+        string tenantId,
+        IEligibilityAdapter adapter,
+        BatchEligibilityJob job,
+        StreamingCsvWriter writer,
+        CancellationToken ct)
+    {
+        foreach (var row in chunk)
         {
             if (ct.IsCancellationRequested)
             {
                 job.Status = BatchJobStatus.Cancelled;
-                break;
+                return;
             }
 
             var resultRow = new BatchEligibilityResultRow
@@ -201,83 +270,82 @@ public class BatchEligibilityService : IBatchEligibilityService
                     });
             }
 
-            results.Add(resultRow);
+            await writer.WriteResultRowAsync(resultRow, ct);
             job.ProcessedRows++;
         }
-
-        var csv = SerializeResultsToCsv(results);
-        await _store.SaveResultAsync(tenantId, jobId, Encoding.UTF8.GetBytes(csv), ct);
-
-        if (job.Status != BatchJobStatus.Cancelled)
-            job.Status = BatchJobStatus.Completed;
-        job.CompletedDate = DateTime.UtcNow;
-        job.ResultFileUrl = $"/api/v1/eligibility/batch/{job.Id}/result";
-        await _store.SaveAsync(job, ct);
     }
 
-    // ── Parsing ──────────────────────────────────────────────────────────
+    // ── Submission-time persistence ──────────────────────────────────────
 
-    private static async Task<List<BatchEligibilityRow>> ParseAsync(
-        Stream body, string contentType, CancellationToken ct)
+    /// <summary>
+    /// Streams CSV text through the parser and, unless <paramref name="validateOnly"/>
+    /// is true, writes the normalized input CSV to the store. Returns the
+    /// validated row count.
+    /// </summary>
+    private async Task<int> PersistInputStreamAsync(
+        string tenantId, string jobId, string text, bool queued, bool validateOnly, CancellationToken ct)
     {
-        using var reader = new StreamReader(body, Encoding.UTF8, leaveOpen: true);
-        var text = await reader.ReadToEndAsync(ct);
+        var count = 0;
+        using var textReader = new StringReader(text);
 
-        if (!string.IsNullOrEmpty(contentType) &&
-            contentType.Contains("json", StringComparison.OrdinalIgnoreCase))
+        if (validateOnly)
         {
-            return ParseJson(text);
+            await foreach (var _ in StreamingCsvParser.ParseAsync(textReader, ct))
+                count++;
+            return count;
         }
-        return ParseCsv(text);
-    }
 
-    internal static List<BatchEligibilityRow> ParseCsv(string text)
-    {
-        var rows = new List<BatchEligibilityRow>();
-        if (string.IsNullOrWhiteSpace(text)) return rows;
-
-        using var reader = new StringReader(text);
-        string? header = reader.ReadLine();
-        if (header == null) return rows;
-
-        var cols = SplitCsvLine(header).Select(c => c.Trim().ToLowerInvariant()).ToList();
-        var memberIdx = cols.IndexOf("memberid");
-        var subIdx = cols.IndexOf("subscriberid");
-        var dateIdx = cols.IndexOf("servicedate");
-        if (memberIdx < 0 && subIdx < 0)
-            throw new ArgumentException("CSV must include memberId or subscriberId column");
-        if (dateIdx < 0)
-            throw new ArgumentException("CSV must include serviceDate column");
-
-        string? line;
-        var rowNumber = 1;
-        while ((line = reader.ReadLine()) != null)
+        using var memory = new MemoryStream();
+        await using (var writer = new StreamingCsvWriter(
+            new StreamWriter(memory, Encoding.UTF8, leaveOpen: true)))
         {
-            rowNumber++;
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            var values = SplitCsvLine(line);
-
-            var row = new BatchEligibilityRow { RowNumber = rowNumber };
-            if (memberIdx >= 0 && memberIdx < values.Count)
-                row.MemberId = values[memberIdx]?.Trim();
-            if (subIdx >= 0 && subIdx < values.Count)
-                row.SubscriberId = values[subIdx]?.Trim();
-
-            if (dateIdx >= values.Count ||
-                !DateTime.TryParse(values[dateIdx], CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeLocal, out var dt))
+            await writer.WriteHeaderAsync(StreamingCsvWriter.InputHeader, ct);
+            await foreach (var row in StreamingCsvParser.ParseAsync(textReader, ct))
             {
-                throw new ArgumentException(
-                    $"Row {rowNumber}: serviceDate missing or not a valid ISO-8601 date.");
+                await writer.WriteInputRowAsync(row, ct);
+                count++;
             }
-            row.ServiceDate = dt.Date;
-
-            if (string.IsNullOrWhiteSpace(row.Identifier)) continue;
-            rows.Add(row);
+            await writer.FlushAsync(ct);
         }
 
-        return rows;
+        memory.Position = 0;
+        if (queued)
+            await _store.SaveResultStreamAsync(tenantId, InputKey(jobId), memory, ct);
+        else
+            await _store.SaveResultAsync(tenantId, InputKey(jobId), memory.ToArray(), ct);
+
+        return count;
     }
+
+    private async Task PersistInputRowsAsync(
+        string tenantId, string jobId, List<BatchEligibilityRow> rows, bool queued, CancellationToken ct)
+    {
+        using var memory = new MemoryStream();
+        await using (var writer = new StreamingCsvWriter(
+            new StreamWriter(memory, Encoding.UTF8, leaveOpen: true)))
+        {
+            await writer.WriteHeaderAsync(StreamingCsvWriter.InputHeader, ct);
+            foreach (var row in rows)
+                await writer.WriteInputRowAsync(row, ct);
+            await writer.FlushAsync(ct);
+        }
+        memory.Position = 0;
+
+        if (queued)
+            await _store.SaveResultStreamAsync(tenantId, InputKey(jobId), memory, ct);
+        else
+            await _store.SaveResultAsync(tenantId, InputKey(jobId), memory.ToArray(), ct);
+    }
+
+    private static void ValidateRowCount(int totalRows)
+    {
+        if (totalRows == 0)
+            throw new ArgumentException("Batch payload contained zero parseable rows.");
+        if (totalRows > MaxRows)
+            throw new ArgumentException($"Batch exceeds {MaxRows} row limit (got {totalRows}).");
+    }
+
+    // ── JSON parsing (unchanged) ─────────────────────────────────────────
 
     internal static List<BatchEligibilityRow> ParseJson(string text)
     {
@@ -285,7 +353,7 @@ public class BatchEligibilityService : IBatchEligibilityService
                   ?? new List<BatchEligibilityRow>();
         for (var i = 0; i < raw.Count; i++)
         {
-            raw[i].RowNumber = i + 2; // 1 = header analogue
+            raw[i].RowNumber = i + 2;
             if (raw[i].ServiceDate == default)
                 throw new ArgumentException(
                     $"Row {raw[i].RowNumber}: serviceDate missing or not a valid ISO-8601 date.");
@@ -293,70 +361,21 @@ public class BatchEligibilityService : IBatchEligibilityService
         return raw.Where(r => !string.IsNullOrWhiteSpace(r.Identifier)).ToList();
     }
 
-    private static List<string> SplitCsvLine(string line)
-    {
-        // Minimal CSV splitter: handles quoted fields with embedded commas.
-        // Sufficient for the expected payload shape; if customers need the
-        // full RFC 4180 behavior we can swap in CsvHelper later.
-        var result = new List<string>();
-        var sb = new StringBuilder();
-        var inQuotes = false;
-        foreach (var ch in line)
-        {
-            if (ch == '\"') { inQuotes = !inQuotes; continue; }
-            if (ch == ',' && !inQuotes) { result.Add(sb.ToString()); sb.Clear(); continue; }
-            sb.Append(ch);
-        }
-        result.Add(sb.ToString());
-        return result;
-    }
+    // ── Legacy ParseCsv kept internal for any callers / tests still using it.
+    // New code uses StreamingCsvParser.
 
-    internal static string SerializeRowsToCsv(List<BatchEligibilityRow> rows)
+    internal static List<BatchEligibilityRow> ParseCsv(string text)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("rowNumber,memberId,subscriberId,serviceDate");
-        foreach (var r in rows)
+        var rows = new List<BatchEligibilityRow>();
+        if (string.IsNullOrWhiteSpace(text)) return rows;
+        using var reader = new StringReader(text);
+        foreach (var row in StreamingCsvParser
+                    .ParseAsync(reader, CancellationToken.None)
+                    .ToBlockingEnumerable())
         {
-            // Escape identifier columns: customer-supplied data can contain
-            // commas or quotes which would otherwise corrupt the stored input
-            // and cause ParseCsv to mis-align columns on re-read.
-            sb.Append(r.RowNumber).Append(',')
-              .Append(Esc(r.MemberId)).Append(',')
-              .Append(Esc(r.SubscriberId)).Append(',')
-              .Append(r.ServiceDate.ToString("yyyy-MM-dd"))
-              .Append('\n');
+            rows.Add(row);
         }
-        return sb.ToString();
-    }
-
-    private static string SerializeResultsToCsv(List<BatchEligibilityResultRow> rows)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("rowNumber,subscriberId,serviceDate,isEligible,statusCode,planId,groupNumber,coverageLevel,coverageBeginDate,coverageEndDate,error");
-        foreach (var r in rows)
-        {
-            sb.Append(r.RowNumber).Append(',')
-              .Append(Esc(r.SubscriberId)).Append(',')
-              .Append(r.ServiceDate.ToString("yyyy-MM-dd")).Append(',')
-              .Append(r.IsEligible).Append(',')
-              .Append(Esc(r.StatusCode)).Append(',')
-              .Append(Esc(r.PlanId)).Append(',')
-              .Append(Esc(r.GroupNumber)).Append(',')
-              .Append(Esc(r.CoverageLevel)).Append(',')
-              .Append(r.CoverageBeginDate?.ToString("yyyy-MM-dd")).Append(',')
-              .Append(r.CoverageEndDate?.ToString("yyyy-MM-dd")).Append(',')
-              .Append(Esc(r.Error))
-              .Append('\n');
-        }
-        return sb.ToString();
-    }
-
-    private static string Esc(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        if (value.Contains(',') || value.Contains('\"') || value.Contains('\n'))
-            return "\"" + value.Replace("\"", "\"\"") + "\"";
-        return value;
+        return rows;
     }
 
     internal static string InputKey(string jobId) => $"INPUT::{jobId}";
