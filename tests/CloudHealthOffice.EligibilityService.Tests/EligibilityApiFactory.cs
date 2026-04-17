@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using EligibilityService.Adapters;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
 
@@ -45,9 +46,14 @@ public class EligibilityApiFactory : WebApplicationFactory<Program>
             foreach (var descriptor in infraDescriptors)
                 services.Remove(descriptor);
 
-            // Remove eligibility adapter registrations
+            // Remove eligibility adapter registrations.
+            // Narrow to IEligibilityAdapter specifically — a broader substring
+            // match on "EligibilityAdapter" would also strip
+            // EligibilityAdapterFactory, which BatchEligibilityService needs
+            // to construct. The factory itself is harmless in tests because
+            // nothing in these tests exercises it.
             var adapterDescriptors = services
-                .Where(d => d.ServiceType.FullName?.Contains("EligibilityAdapter") == true)
+                .Where(d => d.ServiceType == typeof(IEligibilityAdapter))
                 .ToList();
 
             foreach (var descriptor in adapterDescriptors)
