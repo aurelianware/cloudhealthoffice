@@ -201,9 +201,6 @@ app.MapChoHealthChecks();
 
 app.Run();
 
-// Required so WebApplicationFactory<Program> works in the test project.
-public partial class Program { }
-
 // ── Helpers ──────────────────────────────────────────────────────────
 static void RegisterDownstream<TInterface, THttpClient, TFakeClient>(
     WebApplicationBuilder builder,
@@ -237,3 +234,8 @@ static void RegisterDownstream<TInterface, THttpClient, TFakeClient>(
         });
     }
 }
+
+// Required so WebApplicationFactory<Program> works in the test project.
+// Must appear after all top-level statements (including local functions) —
+// otherwise CS8803.
+public partial class Program { }
