@@ -31,6 +31,7 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 
 // Repositories and services
 builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
+builder.Services.AddScoped<IEnrollmentTransactionRepository, EnrollmentTransactionRepository>();
 builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
 
 // Health checks (MongoDB or Cosmos DB)
@@ -70,3 +71,6 @@ app.MapControllers();
 app.MapChoHealthChecks();
 
 app.Run();
+
+// Required so WebApplicationFactory<Program> works in the test project.
+public partial class Program { }

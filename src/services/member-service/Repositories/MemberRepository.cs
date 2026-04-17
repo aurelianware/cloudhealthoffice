@@ -209,6 +209,32 @@ public class MemberRepository : IMemberRepository
         var member = await GetByMemberIdAsync(tenantId, memberId);
         return member != null;
     }
+
+    public async Task<Member?> GetByIdentifierAsync(string tenantId, string system, string value)
+    {
+        var query = new QueryDefinition(@"
+            SELECT TOP 1 * FROM c
+            WHERE c.tenantId = @tenantId
+              AND EXISTS(
+                SELECT VALUE i FROM i IN c.identifiers
+                WHERE i.system = @system AND i.value = @value
+              )")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@system", system)
+            .WithParameter("@value", value);
+
+        var iterator = _container.GetItemQueryIterator<Member>(query, requestOptions: new QueryRequestOptions
+        {
+            PartitionKey = new PartitionKey(tenantId)
+        });
+
+        if (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            return response.FirstOrDefault();
+        }
+        return null;
+    }
 }
 
 /// <summary>
@@ -233,4 +259,10 @@ public interface IMemberRepository
     Task<Member> UpdateAsync(Member member);
     Task DeleteAsync(string tenantId, string id);
     Task<bool> ExistsAsync(string tenantId, string memberId);
+
+    /// <summary>
+    /// Find a member by typed identifier (system + value). Used for idempotent member
+    /// creation and portal lookups.
+    /// </summary>
+    Task<Member?> GetByIdentifierAsync(string tenantId, string system, string value);
 }
