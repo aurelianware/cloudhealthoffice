@@ -179,7 +179,61 @@ downstreams fall back to `Fake*Client` stand-ins (not used in production).
 - `Members` container — PK `/tenantId` (unchanged).
 - `member-events` container — PK `/partitionKey`
   (`{tenantId}:{memberId}`) so per-member streams remain co-located for
-  future Change Feed consumers.
+  future Change Feed consumers. **Unique-key policy on `/version`** so
+  concurrent writers to the same `(tenantId, memberId)` collide at the
+  index level; the Cosmos repository converts the resulting HTTP 409 with
+  `SubStatusCode=1009` into a version retry
+  (`CosmosMemberEventPublisher`, backoff 2/5/25/100/250 ms, max 5
+  attempts, then `ConcurrencyException`).
+
+### Provisioning script
+
+See `scripts/cosmos/provision-member-events.sh`. Usage:
+
+```bash
+scripts/cosmos/provision-member-events.sh \
+  --account my-cosmos \
+  --resource-group rg-cho \
+  --database CloudHealthOffice
+```
+
+### Sample `az` command (runbook-inline copy)
+
+```bash
+az cosmosdb sql container create \
+  --account-name my-cosmos \
+  --resource-group rg-cho \
+  --database-name CloudHealthOffice \
+  --name member-events \
+  --partition-key-path "/partitionKey" \
+  --unique-key-policy '{"uniqueKeys":[{"paths":["/version"]}]}' \
+  --throughput 400
+```
+
+### Migration
+
+Unique-key policies are immutable after container creation. For **dev /
+staging**: drop and recreate the container (data loss acceptable). For
+**prod**: create a new container with the policy, copy documents via Data
+Migration Tool or a Change-Feed pump, swap reads/writes, then delete the
+old container.
+
+### PII dedupe (HMAC fingerprint)
+
+PII identifier values (SSN, MBI, Medicaid) are encrypted with AES-GCM, so
+two writes of the same plaintext produce different ciphertexts and can't
+be compared by `Value`. To catch duplicates, the controller computes an
+HMAC-SHA256 fingerprint of the NORMALIZED plaintext (dashes, spaces,
+parentheses stripped; uppercased) before encryption, and stores it in
+`MemberIdentifier.ValueFingerprint`.
+
+- Fingerprint HMAC key is a **distinct** Key Vault secret
+  (`Encryption:IdentifierFingerprintKeySecret`) — not reused from the AES
+  data key — so the two secrets can rotate independently.
+- `IdentifierNormalization.Normalize` is the only normalizer; both
+  `Add` and `Remove` flows call it.
+- Dedupe scope is `(system, fingerprint)` within a member.
+- Non-PII identifiers skip fingerprinting and dedupe by `Value`.
 
 ## Future work (explicitly out of scope for this PR)
 

@@ -4,8 +4,10 @@ using MongoDB.Driver;
 namespace MemberService.Repositories;
 
 /// <summary>
-/// MongoDB repository for <see cref="MemberEvent"/>. Enforces idempotency via a
-/// unique compound index on <c>(TenantId, MemberId, EventId)</c>.
+/// MongoDB repository for <see cref="MemberEvent"/>. Idempotency and ordering
+/// are enforced by unique compound indexes created at startup by
+/// <c>MemberEventIndexInitializer</c> (not here — keeping construction
+/// side-effect free so the repository can be registered as a singleton).
 /// </summary>
 public class MemberEventRepositoryMongo : IMemberEventRepository
 {
@@ -14,22 +16,6 @@ public class MemberEventRepositoryMongo : IMemberEventRepository
     public MemberEventRepositoryMongo(IMongoDatabase database, string collectionName = "member-events")
     {
         _collection = database.GetCollection<MemberEvent>(collectionName);
-
-        var idemKeys = Builders<MemberEvent>.IndexKeys
-            .Ascending(x => x.TenantId)
-            .Ascending(x => x.MemberId)
-            .Ascending(x => x.EventId);
-        _collection.Indexes.CreateOne(new CreateIndexModel<MemberEvent>(
-            idemKeys,
-            new CreateIndexOptions { Unique = true, Name = "ux_tenant_member_event" }));
-
-        var orderKeys = Builders<MemberEvent>.IndexKeys
-            .Ascending(x => x.TenantId)
-            .Ascending(x => x.MemberId)
-            .Ascending(x => x.Version);
-        _collection.Indexes.CreateOne(new CreateIndexModel<MemberEvent>(
-            orderKeys,
-            new CreateIndexOptions { Unique = true, Name = "ux_tenant_member_version" }));
     }
 
     public async Task<AppendResult> AppendAsync(MemberEvent evt, CancellationToken ct = default)

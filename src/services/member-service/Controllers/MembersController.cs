@@ -256,11 +256,16 @@ public class MembersController : ControllerBase
 
         await _memberRepository.UpdateAsync(member);
 
+        // Parent event id is the anchor for any sub-events spawned from this update.
+        // Re-posting the same UpdateMemberRequest (same EventId) must produce the same
+        // set of events — so sub-event ids are deterministic suffixes of the parent.
+        var parentEventId = request.EventId ?? Guid.NewGuid().ToString();
+
         await _eventPublisher.PublishAsync(new MemberEvent
         {
             TenantId = TenantId,
             MemberId = member.MemberId,
-            EventId = request.EventId ?? Guid.NewGuid().ToString(),
+            EventId = parentEventId,
             EventType = MemberEventType.MemberUpdated,
             ActorId = User.Identity?.Name,
             CorrelationId = HttpContext.TraceIdentifier,
@@ -273,7 +278,7 @@ public class MembersController : ControllerBase
             {
                 TenantId = TenantId,
                 MemberId = member.MemberId,
-                EventId = Guid.NewGuid().ToString(),
+                EventId = $"{parentEventId}:address",
                 EventType = MemberEventType.AddressChanged,
                 ActorId = User.Identity?.Name,
                 CorrelationId = HttpContext.TraceIdentifier,
@@ -292,12 +297,13 @@ public class MembersController : ControllerBase
         [FromRoute] string memberId,
         [FromQuery] DateTime? terminationDate = null,
         [FromQuery] string? reasonCode = null,
+        [FromQuery] string? eventId = null,
         CancellationToken ct = default)
     {
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
 
-        await TerminateInternal(member, terminationDate ?? DateTime.UtcNow, reasonCode, ct);
+        await TerminateInternal(member, terminationDate ?? DateTime.UtcNow, reasonCode, eventId, ct);
         return NoContent();
     }
 
@@ -314,7 +320,7 @@ public class MembersController : ControllerBase
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
 
-        await TerminateInternal(member, request.TerminationDate, request.ReasonCode, ct);
+        await TerminateInternal(member, request.TerminationDate, request.ReasonCode, request.EventId, ct);
 
         try
         {
@@ -328,7 +334,12 @@ public class MembersController : ControllerBase
         return Ok(new { memberId, terminationDate = request.TerminationDate, reasonCode = request.ReasonCode });
     }
 
-    private async Task TerminateInternal(Member member, DateTime terminationDate, string? reasonCode, CancellationToken ct)
+    private async Task TerminateInternal(
+        Member member,
+        DateTime terminationDate,
+        string? reasonCode,
+        string? eventId,
+        CancellationToken ct)
     {
         member.Status = EnrollmentStatus.Terminated;
         member.TerminationDate = terminationDate;
@@ -348,7 +359,7 @@ public class MembersController : ControllerBase
         {
             TenantId = TenantId,
             MemberId = member.MemberId,
-            EventId = Guid.NewGuid().ToString(),
+            EventId = eventId ?? Guid.NewGuid().ToString(),
             EventType = MemberEventType.MemberTerminated,
             ActorId = User.Identity?.Name,
             CorrelationId = HttpContext.TraceIdentifier,
@@ -487,11 +498,14 @@ public class MembersController : ControllerBase
             return DownstreamUnavailable(ex);
         }
 
+        // PUT /pcp is its own primary event — not a sub-event of an UpdateMember
+        // call — so its EventId comes from the request body (caller-supplied
+        // idempotency key) or a fresh GUID if none was supplied.
         await _eventPublisher.PublishAsync(new MemberEvent
         {
             TenantId = TenantId,
             MemberId = memberId,
-            EventId = Guid.NewGuid().ToString(),
+            EventId = request.EventId ?? Guid.NewGuid().ToString(),
             EventType = MemberEventType.PcpChanged,
             ActorId = User.Identity?.Name,
             CorrelationId = HttpContext.TraceIdentifier,
@@ -734,8 +748,12 @@ public class AssignPcpRequest
 {
     public string MemberId { get; set; } = string.Empty;
     public string ProviderId { get; set; } = string.Empty;
+    public string? ProviderNpi { get; set; }
     public DateTime EffectiveDate { get; set; }
     public string? Reason { get; set; }
+
+    /// <summary>Optional idempotency key for the PcpChanged event.</summary>
+    public string? EventId { get; set; }
 }
 
 public class TerminateMemberRequest
@@ -745,6 +763,9 @@ public class TerminateMemberRequest
     public DateTime TerminationDate { get; set; }
     public string ReasonCode { get; set; } = string.Empty;
     public string? Notes { get; set; }
+
+    /// <summary>Optional idempotency key for the MemberTerminated event.</summary>
+    public string? EventId { get; set; }
 }
 
 #endregion

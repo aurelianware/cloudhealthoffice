@@ -9,6 +9,7 @@ using MemberService.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace MemberService.Tests.Integration;
@@ -45,6 +46,10 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
                 RemoveAll<IMemberEventRepository>(services);
                 RemoveAll<MongoDB.Driver.IMongoClient>(services);
                 RemoveAll<MongoDB.Driver.IMongoDatabase>(services);
+
+                // Strip the hosted services that would otherwise try to
+                // create Mongo indexes against the fake host.
+                services.RemoveAll<IHostedService>();
 
                 services.AddSingleton<IMemberRepository>(MemberRepo);
                 services.AddSingleton<IMemberEventRepository>(EventRepo);

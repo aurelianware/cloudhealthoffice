@@ -1,9 +1,11 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using MemberService.HostedServices;
 using MemberService.Middleware;
 using MemberService.Repositories;
 using MemberService.Services;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,18 +35,28 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(_ =>
         new MongoDB.Driver.MongoClient(mongoConnectionString));
 
-    builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
+    builder.Services.AddSingleton<MongoDB.Driver.IMongoDatabase>(sp =>
     {
         var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
         var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
         return client.GetDatabase(databaseName);
     });
 
-    builder.Services.AddScoped<IMemberRepository, MemberRepositoryMongo>();
-    builder.Services.AddScoped<IMemberEventRepository>(sp =>
+    // Repositories are constructed without I/O side effects; indexes are provisioned
+    // by the hosted services below, which lets us register these as singletons.
+    builder.Services.AddSingleton<IMemberRepository, MemberRepositoryMongo>();
+    builder.Services.AddSingleton<IMemberEventRepository>(sp =>
         new MemberEventRepositoryMongo(
             sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
             eventsCollectionName));
+
+    builder.Services.AddHostedService<MemberIndexInitializer>();
+    builder.Services.AddSingleton<IHostedService>(sp =>
+        new MemberEventIndexInitializer(
+            sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
+            eventsCollectionName,
+            sp.GetRequiredService<ILogger<MemberEventIndexInitializer>>()));
+
     Console.WriteLine("Using MongoDB database provider");
 }
 else
@@ -79,7 +91,11 @@ else
         var cosmosClient = sp.GetRequiredService<CosmosClient>();
         var configuration = sp.GetRequiredService<IConfiguration>();
         var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new MemberEventRepository(cosmosClient, databaseName, eventsContainerName);
+        return new MemberEventRepository(
+            cosmosClient,
+            databaseName,
+            eventsContainerName,
+            sp.GetRequiredService<ILogger<MemberEventRepository>>());
     });
 
     Console.WriteLine($"Using Cosmos DB database provider (events container: {eventsContainerName})");
@@ -110,6 +126,31 @@ else
     }
     builder.Services.AddSingleton<IIdentifierEncryptor, NoOpIdentifierEncryptor>();
     Console.WriteLine("[dev] IIdentifierEncryptor = NoOp (PII stored plaintext). Configure Member:IdentifierEncryption:KeySecretName to enable.");
+}
+
+// Identifier fingerprinting (HMAC-SHA256 keyed by a DISTINCT KV secret from the
+// encryption key). Used to dedupe PII identifiers without comparing ciphertexts
+// (which differ by AES-GCM nonce even for identical plaintext).
+var fingerprintKeySecretName =
+    builder.Configuration["Encryption:IdentifierFingerprintKeySecret"]
+    ?? builder.Configuration["Member:IdentifierFingerprint:KeySecretName"];
+if (!string.IsNullOrWhiteSpace(fingerprintKeySecretName))
+{
+    builder.Services.AddSingleton<IIdentifierFingerprinter>(sp =>
+        new HmacSha256IdentifierFingerprinter(
+            sp.GetRequiredService<ISecretProvider>(),
+            sp.GetRequiredService<ILogger<HmacSha256IdentifierFingerprinter>>(),
+            fingerprintKeySecretName));
+}
+else
+{
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "Encryption:IdentifierFingerprintKeySecret must be configured in non-development environments.");
+    }
+    builder.Services.AddSingleton<IIdentifierFingerprinter, NoOpIdentifierFingerprinter>();
+    Console.WriteLine("[dev] IIdentifierFingerprinter = NoOp (plain SHA-256). Configure Encryption:IdentifierFingerprintKeySecret to enable.");
 }
 
 // ── Downstream typed clients ─────────────────────────────────────────

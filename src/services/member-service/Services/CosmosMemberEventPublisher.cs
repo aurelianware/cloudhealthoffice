@@ -6,14 +6,24 @@ namespace MemberService.Services;
 
 /// <summary>
 /// Default <see cref="IMemberEventPublisher"/>. Writes events to the append-only
-/// Cosmos/Mongo stream via <see cref="IMemberEventRepository"/>. Concurrent writers
-/// are retried on version conflict.
+/// Cosmos/Mongo stream via <see cref="IMemberEventRepository"/>.
+///
+/// Concurrency: repositories surface a version conflict as
+/// <see cref="AppendResult.Appended"/> <c>false</c> with no existing event.
+/// The publisher retries up to <see cref="MaxVersionRetries"/> with exponential
+/// backoff capped at 250 ms before surfacing a <see cref="ConcurrencyException"/>.
+///
+/// Idempotency: if a caller retries with the same <see cref="MemberEvent.EventId"/>,
+/// the repository returns <c>Appended=false</c> with the existing event and the
+/// publisher short-circuits.
 /// </summary>
 public sealed class CosmosMemberEventPublisher : IMemberEventPublisher
 {
+    private const int MaxVersionRetries = 5;
+    private static readonly int[] BackoffMs = { 2, 5, 25, 100, 250 };
+
     private readonly IMemberEventRepository _repository;
     private readonly ILogger<CosmosMemberEventPublisher> _logger;
-    private const int MaxVersionRetries = 5;
 
     public CosmosMemberEventPublisher(
         IMemberEventRepository repository,
@@ -38,32 +48,41 @@ public sealed class CosmosMemberEventPublisher : IMemberEventPublisher
         if (string.IsNullOrEmpty(evt.Id)) evt.Id = evt.EventId;
         if (evt.SchemaVersion <= 0) evt.SchemaVersion = 1;
 
-        // If a prior write with this EventId already exists, short-circuit and return it.
+        // Short-circuit: if a prior write with this EventId exists, return it.
         var existing = await _repository.GetByIdAsync(evt.TenantId, evt.MemberId, evt.EventId, ct);
         if (existing != null)
         {
-            _logger.LogDebug("MemberEvent {EventId} already present for {Tenant}:{Member} (idempotent no-op)",
+            _logger.LogDebug(
+                "MemberEvent {EventId} already present for {Tenant}:{Member} (idempotent no-op)",
                 evt.EventId, evt.TenantId, evt.MemberId);
             return existing;
         }
 
-        for (int attempt = 1; attempt <= MaxVersionRetries; attempt++)
+        for (int attempt = 0; attempt < MaxVersionRetries; attempt++)
         {
             evt.Version = await _repository.GetNextVersionAsync(evt.TenantId, evt.MemberId, ct);
             var result = await _repository.AppendAsync(evt, ct);
             if (result.Appended) return result.Event;
 
-            // Duplicate-key: either same EventId raced us, or a concurrent writer took our version slot.
+            // Appended=false has two causes:
+            //   1. Same EventId already exists → the repository returns it as result.Event.
+            //      Short-circuit with the existing row.
+            //   2. Version slot taken by a concurrent writer (unique-key violation) →
+            //      result.Event is the envelope we just tried. Re-fetch by EventId to
+            //      disambiguate, then either return the existing or retry with a new version.
             var refetch = await _repository.GetByIdAsync(evt.TenantId, evt.MemberId, evt.EventId, ct);
             if (refetch != null) return refetch;
 
             _logger.LogWarning(
-                "MemberEvent version conflict for {Tenant}:{Member} v{Version}; retry {Attempt}/{Max}",
-                evt.TenantId, evt.MemberId, evt.Version, attempt, MaxVersionRetries);
+                "MemberEvent version {Version} conflict for {Tenant}:{Member}; retry {Attempt}/{Max}",
+                evt.Version, evt.TenantId, evt.MemberId, attempt + 1, MaxVersionRetries);
+
+            if (attempt + 1 < MaxVersionRetries)
+            {
+                await Task.Delay(BackoffMs[attempt], ct);
+            }
         }
 
-        throw new InvalidOperationException(
-            $"Failed to append MemberEvent after {MaxVersionRetries} version-retry attempts " +
-            $"for {evt.TenantId}:{evt.MemberId}");
+        throw new ConcurrencyException(evt.TenantId, evt.MemberId, MaxVersionRetries);
     }
 }

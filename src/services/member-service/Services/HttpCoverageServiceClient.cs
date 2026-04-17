@@ -32,7 +32,7 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
     public async Task<MemberPcpResponse> GetPcpAsync(string tenantId, string memberId, CancellationToken ct = default)
     {
         EnsureConfigured();
-        var req = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/coverage/members/{Uri.EscapeDataString(memberId)}/pcp");
+        var req = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/coverage/member/{Uri.EscapeDataString(memberId)}/pcp");
         req.Headers.Add("X-Tenant-ID", tenantId);
         try
         {
@@ -51,7 +51,7 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
         string tenantId, string memberId, AssignPcpRequest request, CancellationToken ct = default)
     {
         EnsureConfigured();
-        var req = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/coverage/members/{Uri.EscapeDataString(memberId)}/pcp")
+        var req = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/coverage/member/{Uri.EscapeDataString(memberId)}/pcp")
         {
             Content = JsonContent.Create(request)
         };
@@ -73,7 +73,7 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
         string tenantId, string memberId, CancellationToken ct = default)
     {
         EnsureConfigured();
-        var req = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/coverage/members/{Uri.EscapeDataString(memberId)}/history");
+        var req = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/coverage/member/{Uri.EscapeDataString(memberId)}/history");
         req.Headers.Add("X-Tenant-ID", tenantId);
         try
         {
@@ -92,7 +92,7 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
         string tenantId, string memberId, TerminateMemberRequest request, CancellationToken ct = default)
     {
         EnsureConfigured();
-        var req = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/coverage/members/{Uri.EscapeDataString(memberId)}/terminate")
+        var req = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/coverage/member/{Uri.EscapeDataString(memberId)}/terminate")
         {
             Content = JsonContent.Create(request)
         };

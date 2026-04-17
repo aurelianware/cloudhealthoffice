@@ -141,7 +141,11 @@ public class MembersControllerTests
         var (ctl, repo, events, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
 
-        var resp = await ctl.TerminateMember("M-001", new DateTime(2024, 12, 31), "25", CancellationToken.None);
+        var resp = await ctl.TerminateMember("M-001",
+            terminationDate: new DateTime(2024, 12, 31),
+            reasonCode: "25",
+            eventId: null,
+            ct: CancellationToken.None);
         resp.Should().BeOfType<NoContentResult>();
 
         repo.Members[0].Status.Should().Be(EnrollmentStatus.Terminated);

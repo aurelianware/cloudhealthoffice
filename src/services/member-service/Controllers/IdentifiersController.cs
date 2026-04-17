@@ -12,7 +12,10 @@ namespace MemberService.Controllers;
 /// Typed identifier management (Medicaid, MBI, Medicare, Exchange, Portal, Legacy).
 ///
 /// PII identifiers (SSN, MBI, Medicaid) are encrypted-at-rest via
-/// <see cref="IIdentifierEncryptor"/> and are returned redacted when listed.
+/// <see cref="IIdentifierEncryptor"/> and carry an HMAC fingerprint
+/// (<see cref="IIdentifierFingerprinter"/>) of the normalized plaintext so we
+/// can detect duplicates across different AES-GCM nonces. Values are redacted
+/// when listed.
 /// </summary>
 [ApiController]
 [Route("api/v1/members/{memberId}/identifiers")]
@@ -22,15 +25,18 @@ public class IdentifiersController : ControllerBase
 
     private readonly IMemberRepository _memberRepository;
     private readonly IIdentifierEncryptor _encryptor;
+    private readonly IIdentifierFingerprinter _fingerprinter;
     private readonly IMemberEventPublisher _eventPublisher;
 
     public IdentifiersController(
         IMemberRepository memberRepository,
         IIdentifierEncryptor encryptor,
+        IIdentifierFingerprinter fingerprinter,
         IMemberEventPublisher eventPublisher)
     {
         _memberRepository = memberRepository;
         _encryptor = encryptor;
+        _fingerprinter = fingerprinter;
         _eventPublisher = eventPublisher;
     }
 
@@ -59,7 +65,16 @@ public class IdentifiersController : ControllerBase
         return Ok(response);
     }
 
-    /// <summary>Add a typed identifier to a member. Idempotent on (system, value).</summary>
+    /// <summary>
+    /// Add a typed identifier to a member.
+    ///
+    /// Dedupe rules (scoped to the same <c>system</c>):
+    ///   - PII types (SSN, MBI, Medicaid): compare <c>ValueFingerprint</c> of the
+    ///     normalized plaintext. Stripping dashes/spaces/case means "123-45-6789"
+    ///     and "123456789" collide; differing AES-GCM nonces on encrypt do NOT
+    ///     defeat the check (fingerprint is computed before encryption).
+    ///   - Non-PII types: compare <c>Value</c> directly.
+    /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(IdentifierResponse), 201)]
     [ProducesResponseType(400)]
@@ -76,14 +91,31 @@ public class IdentifiersController : ControllerBase
         if (member == null) return NotFound();
 
         var system = ResolveSystem(request);
-
         var isPii = IsPii(request.Type);
-        var storedValue = isPii
-            ? await _encryptor.EncryptAsync(request.Value, ct) ?? request.Value
-            : request.Value;
 
-        if (member.Identifiers.Any(i => i.System == system && i.Value == storedValue))
-            return Conflict(new { message = "Identifier already exists on this member." });
+        string? fingerprint = null;
+        string storedValue;
+
+        if (isPii)
+        {
+            var normalized = IdentifierNormalization.Normalize(request.Value);
+            if (string.IsNullOrEmpty(normalized))
+                return BadRequest(new { message = "Identifier value cannot be empty after normalization." });
+
+            fingerprint = await _fingerprinter.FingerprintAsync(normalized, ct);
+
+            if (member.Identifiers.Any(i => i.System == system && i.ValueFingerprint == fingerprint))
+                return Conflict(new { message = "Identifier already exists on this member." });
+
+            storedValue = await _encryptor.EncryptAsync(request.Value, ct) ?? request.Value;
+        }
+        else
+        {
+            storedValue = request.Value;
+
+            if (member.Identifiers.Any(i => i.System == system && i.Value == storedValue))
+                return Conflict(new { message = "Identifier already exists on this member." });
+        }
 
         var identifier = new MemberIdentifier
         {
@@ -94,7 +126,8 @@ public class IdentifiersController : ControllerBase
             PeriodStart = request.PeriodStart,
             PeriodEnd = request.PeriodEnd,
             Assigner = request.Assigner,
-            IsEncrypted = isPii && _encryptor.IsEnabled
+            IsEncrypted = isPii && _encryptor.IsEnabled,
+            ValueFingerprint = fingerprint
         };
         member.Identifiers.Add(identifier);
         member.LastUpdatedDate = DateTime.UtcNow;
@@ -133,7 +166,11 @@ public class IdentifiersController : ControllerBase
         });
     }
 
-    /// <summary>Remove an identifier by (system, value) — value must be plaintext for non-PII.</summary>
+    /// <summary>
+    /// Remove an identifier by (system, value). For PII types the caller
+    /// supplies plaintext; we fingerprint it and match against
+    /// <c>ValueFingerprint</c>. For non-PII we match on <c>Value</c>.
+    /// </summary>
     [HttpDelete]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -146,16 +183,29 @@ public class IdentifiersController : ControllerBase
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
 
+        var normalized = IdentifierNormalization.Normalize(value);
+        var fingerprintLookup = string.IsNullOrEmpty(normalized)
+            ? null
+            : await _fingerprinter.FingerprintAsync(normalized, ct);
+
         var removed = 0;
         var kept = new List<MemberIdentifier>(member.Identifiers.Count);
         foreach (var i in member.Identifiers)
         {
             if (i.System != system) { kept.Add(i); continue; }
 
-            var plain = i.IsEncrypted
-                ? await _encryptor.DecryptAsync(i.Value, ct)
-                : i.Value;
-            if (plain == value) { removed++; continue; }
+            bool match;
+            if (!string.IsNullOrEmpty(i.ValueFingerprint))
+            {
+                match = i.ValueFingerprint == fingerprintLookup;
+            }
+            else
+            {
+                // Non-PII identifier or one stored before fingerprinting was introduced.
+                match = i.Value == value;
+            }
+
+            if (match) { removed++; continue; }
             kept.Add(i);
         }
 

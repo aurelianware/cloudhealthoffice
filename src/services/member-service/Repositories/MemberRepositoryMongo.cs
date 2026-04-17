@@ -16,16 +16,14 @@ public class MemberRepositoryMongo : IMemberRepository
 {
     private readonly IMongoCollection<Member> _collection;
 
+    /// <summary>
+    /// Constructs the repository. Index creation is handled at startup by
+    /// <c>MemberIndexInitializer</c> so the repository can be registered as
+    /// a singleton and constructed without I/O side effects.
+    /// </summary>
     public MemberRepositoryMongo(IMongoDatabase database)
     {
         _collection = database.GetCollection<Member>("Members");
-        
-        // Ensure indexes (fire and forget generally, or on startup)
-        var indexKeys = Builders<Member>.IndexKeys
-            .Ascending(x => x.TenantId)
-            .Ascending(x => x.MemberId);
-        var indexModel = new CreateIndexModel<Member>(indexKeys);
-        _collection.Indexes.CreateOne(indexModel);
     }
 
     public async Task<Member?> GetByIdAsync(string tenantId, string id)

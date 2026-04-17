@@ -1,21 +1,43 @@
 using System.Net;
 using MemberService.Models;
+using MemberService.Services;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
 
 namespace MemberService.Repositories;
 
 /// <summary>
 /// Cosmos DB repository for <see cref="MemberEvent"/>.
-/// Container is provisioned with PK path <c>/partitionKey</c> so per-member streams
-/// remain co-located for Change Feed consumers.
+///
+/// The container MUST be provisioned with:
+///   - Partition key path: <c>/partitionKey</c> (format <c>{tenantId}:{memberId}</c>).
+///   - Unique key policy with path <c>/version</c>. This enforces
+///     uniqueness of <c>(partitionKey, version)</c> so concurrent writers
+///     conflict at the index level, not silently overlap.
+///
+/// See <c>scripts/cosmos/provision-member-events.sh</c>.
 /// </summary>
 public class MemberEventRepository : IMemberEventRepository
 {
-    private readonly Container _container;
+    /// <summary>
+    /// Cosmos sub-status for a unique-key constraint violation on a secondary
+    /// unique-key policy path. An HTTP 409 with this sub-status means a
+    /// concurrent writer already claimed this version slot; the publisher
+    /// should refetch the next version and retry.
+    /// </summary>
+    public const int UniqueKeyViolationSubStatus = 1009;
 
-    public MemberEventRepository(CosmosClient cosmosClient, string databaseName, string containerName)
+    private readonly Container _container;
+    private readonly ILogger<MemberEventRepository>? _logger;
+
+    public MemberEventRepository(
+        CosmosClient cosmosClient,
+        string databaseName,
+        string containerName,
+        ILogger<MemberEventRepository>? logger = null)
     {
         _container = cosmosClient.GetDatabase(databaseName).GetContainer(containerName);
+        _logger = logger;
     }
 
     public async Task<AppendResult> AppendAsync(MemberEvent evt, CancellationToken ct = default)
@@ -32,6 +54,27 @@ public class MemberEventRepository : IMemberEventRepository
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
+            // Two distinct causes of 409 on this container:
+            //   - SubStatus 0: document id collision → client retried with same EventId
+            //     (the id is EventId). Idempotent no-op; return the existing event.
+            //   - SubStatus 1009: unique-key-policy violation on /version → a concurrent
+            //     writer took our version slot. Surface as Appended=false with Event=null
+            //     so the publisher recomputes Version and retries.
+            //   - Any other non-zero sub-status: log and treat as id-collision (idempotent)
+            //     to stay safe, but the log entry lets us notice if Cosmos ever introduces
+            //     a new sub-status we haven't considered.
+            if (ex.SubStatusCode == UniqueKeyViolationSubStatus)
+            {
+                return new AppendResult(evt, Appended: false);
+            }
+
+            if (ex.SubStatusCode != 0)
+            {
+                _logger?.LogWarning(ex,
+                    "Unexpected Cosmos 409 SubStatus {SubStatus} on member-events append for {PartitionKey} v{Version}. Treating as idempotent no-op.",
+                    ex.SubStatusCode, evt.PartitionKey, evt.Version);
+            }
+
             var existing = await GetByIdAsync(evt.TenantId, evt.MemberId, evt.EventId, ct);
             return new AppendResult(existing ?? evt, Appended: false);
         }

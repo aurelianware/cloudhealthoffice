@@ -43,6 +43,15 @@ public class MemberIdentifier
     /// True when <see cref="Value"/> is ciphertext from <c>IIdentifierEncryptor</c>.
     /// </summary>
     public bool IsEncrypted { get; set; }
+
+    /// <summary>
+    /// Keyed HMAC fingerprint of the NORMALIZED plaintext (dashes/spaces/case
+    /// stripped). Populated for PII identifier types (SSN, MBI, Medicaid) to
+    /// enable dedupe without storing plaintext. Null for non-PII types where
+    /// <see cref="Value"/> itself is sufficient for equality comparison.
+    /// </summary>
+    [StringLength(128)]
+    public string? ValueFingerprint { get; set; }
 }
 
 /// <summary>

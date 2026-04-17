@@ -25,17 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\member-service.csproj" />
-    <!--
-      The downstream-route contract tests instantiate WebApplicationFactory
-      against coverage-service and enrollment-import-service so they can
-      enumerate the remote route table at test time and compare it with the
-      paths baked into HttpCoverageServiceClient / HttpEnrollmentImportServiceClient.
-      Catches pluralization / prefix mismatches that would otherwise only
-      surface as runtime 404s in prod.
-    -->
-    <ProjectReference Include="..\..\coverage-service\coverage-service.csproj" />
-    <ProjectReference Include="..\..\enrollment-import-service\EnrollmentImportService.csproj" />
+    <ProjectReference Include="..\coverage-service.csproj" />
   </ItemGroup>
 
   <ItemGroup>
