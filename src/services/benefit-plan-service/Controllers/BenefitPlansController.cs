@@ -6,6 +6,9 @@ using MongoDB.Driver;
 
 namespace BenefitPlanService.Controllers;
 
+// TODO(deprecate-plans-route): Consolidate with BenefitPlanMemberViewController
+// under the hyphenated "api/v1/benefit-plans" root. Tracked as a follow-up
+// issue — the two parallel routes are acceptable short-term but not long-term.
 [ApiController]
 [Route("api/v1/plans")]
 public class BenefitPlansController : ControllerBase

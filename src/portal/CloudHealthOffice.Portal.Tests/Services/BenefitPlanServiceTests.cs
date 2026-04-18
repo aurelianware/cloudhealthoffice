@@ -567,4 +567,96 @@ public class BenefitPlanServiceTests
         var body = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
         body.Should().Contain("Terminated");
     }
+
+    // ── GetMemberViewAsync ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetMemberViewAsync_WhenApiFails_ThrowsServiceUnavailableException()
+    {
+        var sut = CreateService();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetMemberViewAsync("PLN-100", new DateTime(2026, 4, 18)));
+        ex.ServiceName.Should().Be("Benefit Plan Service");
+    }
+
+    [Fact]
+    public async Task GetMemberViewAsync_WhenApiReturns404_ReturnsNull()
+    {
+        var handler = new FakeHandler(HttpStatusCode.NotFound);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetMemberViewAsync("PLN-UNKNOWN", new DateTime(2026, 4, 18));
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetMemberViewAsync_WhenApiReturns200_DeserializesResponseAndBuildsCorrectUrl()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            planId = "PLN-100",
+            planName = "Gold HMO",
+            payer = "CHO",
+            planType = "HMO",
+            metalLevel = "Gold",
+            lineOfBusiness = "Commercial",
+            asOfDate = "2026-04-18T00:00:00Z",
+            effectiveDate = "2026-01-01T00:00:00Z",
+            terminationDate = (string?)null,
+            planVersion = "20260315T120000Z",
+            costSharing = new { individualDeductible = 1500m },
+            categories = new object[]
+            {
+                new
+                {
+                    category = "PrimaryCare",
+                    displayName = "Primary Care Visit",
+                    serviceCategory = "Primary Care",
+                    inNetwork = new { tierName = "Preferred", copay = 25m, coinsurance = (decimal?)null },
+                    deductibleApplies = true,
+                    oopApplies = true,
+                    priorAuthRequired = false,
+                },
+                new
+                {
+                    category = "Pharmacy",
+                    displayName = "Tier 1",
+                    serviceCategory = "Tier 1",
+                    inNetwork = new { tierName = "Preferred", copay = 10m, coinsurance = (decimal?)null },
+                    deductibleApplies = false,
+                    oopApplies = true,
+                    priorAuthRequired = false,
+                    pharmacy = new { tierLabel = "Tier 1", isSpecialty = false },
+                },
+            },
+            documents = new object[]
+            {
+                new
+                {
+                    docType = "SBC",
+                    displayName = "Summary of Benefits and Coverage",
+                    location = "https://cdn.example/sbc-2026.pdf",
+                    contentType = "application/pdf",
+                    size = 182304,
+                    contentHashSha256 = "a1b2c3",
+                    version = "2026.01",
+                    effectiveDate = "2026-01-01T00:00:00Z",
+                },
+            },
+        });
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var view = await sut.GetMemberViewAsync("PLN-100", new DateTime(2026, 4, 18));
+
+        view.Should().NotBeNull();
+        view!.PlanId.Should().Be("PLN-100");
+        view.Categories.Should().HaveCount(2);
+        view.Categories[1].Pharmacy!.TierLabel.Should().Be("Tier 1");
+        view.Documents.Should().ContainSingle(d => d.DocType == "SBC" && d.ContentHashSha256 == "a1b2c3");
+
+        handler.CapturedUrls[0].Should().Contain("/v1/benefit-plans/PLN-100/member-view");
+        handler.CapturedUrls[0].Should().Contain("serviceDate=2026-04-18");
+    }
 }

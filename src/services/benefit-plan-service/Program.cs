@@ -57,6 +57,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 
 // ── Benefit Engine ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
+builder.Services.AddScoped<IBenefitViewService, BenefitViewService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IBenefitEngineTenantContext, HttpContextTenantContext>();
 

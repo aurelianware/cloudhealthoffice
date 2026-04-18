@@ -106,6 +106,86 @@ public interface IBenefitPlanService
     Task UpdateServiceBenefitRulesAsync(UpdateServiceBenefitRulesRequest request);
     Task<AccumulatorConfiguration?> GetAccumulatorConfigAsync(string planId);
     Task UpdateAccumulatorConfigAsync(string planId, AccumulatorConfiguration config);
+
+    /// <summary>
+    /// Returns a categorized member-facing view of the plan as of the given
+    /// service date. Null when the plan is not found (404) or the service
+    /// is unreachable is surfaced as a <see cref="ServiceUnavailableException"/>.
+    /// </summary>
+    Task<MemberBenefitView?> GetMemberViewAsync(string planId, DateTime serviceDate);
+}
+
+public class MemberBenefitView
+{
+    public string PlanId { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string Payer { get; set; } = string.Empty;
+    public string PlanType { get; set; } = string.Empty;
+    public string? MetalLevel { get; set; }
+    public string LineOfBusiness { get; set; } = string.Empty;
+    public DateTime AsOfDate { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public string PlanVersion { get; set; } = string.Empty;
+    public MemberBenefitCostSharing CostSharing { get; set; } = new();
+    public List<CategorizedBenefit> Categories { get; set; } = new();
+    public List<PlanDocumentLink> Documents { get; set; } = new();
+}
+
+public class MemberBenefitCostSharing
+{
+    public decimal IndividualDeductible { get; set; }
+    public decimal FamilyDeductible { get; set; }
+    public decimal IndividualOutOfPocketMax { get; set; }
+    public decimal FamilyOutOfPocketMax { get; set; }
+    public decimal InNetworkDeductible { get; set; }
+    public decimal OutOfNetworkDeductible { get; set; }
+    public decimal InNetworkOutOfPocketMax { get; set; }
+    public decimal OutOfNetworkOutOfPocketMax { get; set; }
+}
+
+public class CategorizedBenefit
+{
+    public string Category { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string ServiceCategory { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public NetworkTierBenefit InNetwork { get; set; } = new();
+    public NetworkTierBenefit? OutOfNetwork { get; set; }
+    public bool DeductibleApplies { get; set; }
+    public bool OopApplies { get; set; }
+    public bool PriorAuthRequired { get; set; }
+    public int? VisitLimit { get; set; }
+    public string? VisitLimitPeriod { get; set; }
+    public decimal? AnnualMaximum { get; set; }
+    public decimal? LifetimeMaximum { get; set; }
+    public string? Limitations { get; set; }
+    public PharmacyDetail? Pharmacy { get; set; }
+}
+
+public class NetworkTierBenefit
+{
+    public string TierName { get; set; } = string.Empty;
+    public decimal? Copay { get; set; }
+    public decimal? Coinsurance { get; set; }
+}
+
+public class PharmacyDetail
+{
+    public string TierLabel { get; set; } = string.Empty;
+    public bool IsSpecialty { get; set; }
+}
+
+public class PlanDocumentLink
+{
+    public string DocType { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Location { get; set; } = string.Empty;
+    public string? ContentType { get; set; }
+    public long? Size { get; set; }
+    public string? ContentHashSha256 { get; set; }
+    public string? Version { get; set; }
+    public DateTime? EffectiveDate { get; set; }
 }
 
 public interface IWorkflowService
