@@ -32,6 +32,9 @@ public class MembersController : ControllerBase
     private readonly ICoverageServiceClient _coverage;
     private readonly IEnrollmentImportServiceClient _enrollment;
     private readonly IAccumulatorServiceClient _accumulators;
+    private readonly IRelationshipShim? _relationshipShim;
+    private readonly IFamilyRelationshipService? _familyRelationships;
+    private readonly ILogger<MembersController>? _logger;
 
     public MembersController(
         IMemberRepository memberRepository,
@@ -41,7 +44,10 @@ public class MembersController : ControllerBase
         IIdentifierEncryptor encryptor,
         ICoverageServiceClient coverage,
         IEnrollmentImportServiceClient enrollment,
-        IAccumulatorServiceClient accumulators)
+        IAccumulatorServiceClient accumulators,
+        IRelationshipShim? relationshipShim = null,
+        IFamilyRelationshipService? familyRelationships = null,
+        ILogger<MembersController>? logger = null)
     {
         _memberRepository = memberRepository;
         _eventPublisher = eventPublisher;
@@ -51,6 +57,9 @@ public class MembersController : ControllerBase
         _coverage = coverage;
         _enrollment = enrollment;
         _accumulators = accumulators;
+        _relationshipShim = relationshipShim;
+        _familyRelationships = familyRelationships;
+        _logger = logger;
     }
 
     // ── Search / read ────────────────────────────────────────────────
@@ -72,6 +81,8 @@ public class MembersController : ControllerBase
         if (!string.IsNullOrEmpty(memberId))
         {
             var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
+            // Drafts are hidden from standard search paths (parity with GetMember).
+            if (member != null && member.IsDraft) member = null;
             return Ok(new MemberListResponse
             {
                 Members = member != null ? new List<Member> { member } : new List<Member>(),
@@ -84,7 +95,7 @@ public class MembersController : ControllerBase
             TenantId, groupNumber, lastName, dateOfBirth,
             activeOnly, subscribersOnly, pageSize, continuationToken);
 
-        var list = items.ToList();
+        var list = items.Where(m => !m.IsDraft).ToList();
         return Ok(new MemberListResponse
         {
             Members = list,
@@ -102,7 +113,7 @@ public class MembersController : ControllerBase
             return await SearchMembers(pageSize: 20);
 
         var byId = await _memberRepository.GetByMemberIdAsync(TenantId, q);
-        if (byId != null)
+        if (byId != null && !byId.IsDraft)
             return Ok(new List<Member> { byId });
 
         return await SearchMembers(
@@ -119,7 +130,39 @@ public class MembersController : ControllerBase
     {
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
+        if (member.IsDraft) return NotFound();
+        await HydrateSubscriberFromGraphAsync(member, HttpContext.RequestAborted);
         return Ok(member);
+    }
+
+    /// <summary>
+    /// Overwrite the legacy <see cref="Member.SubscriberMemberId"/> from the active
+    /// <see cref="FamilyRelationship"/> graph when one is registered. Non-throwing: if
+    /// derivation fails or returns null, the stored legacy value remains.
+    /// </summary>
+    private async Task HydrateSubscriberFromGraphAsync(Member member, CancellationToken ct)
+    {
+        if (_familyRelationships == null) return;
+        if (member.IsSubscriber) return;
+        try
+        {
+            var derived = await _familyRelationships.DeriveSubscriberMemberIdAsync(TenantId, member.MemberId, ct);
+            if (!string.IsNullOrEmpty(derived))
+            {
+#pragma warning disable CS0618
+                member.SubscriberMemberId = derived;
+#pragma warning restore CS0618
+            }
+        }
+        catch (Exception ex)
+        {
+            // Best-effort on the read path — the legacy field still holds the last 834
+            // value, so the GET doesn't need to fail. Log so operators can see when the
+            // graph is unavailable for a given tenant instead of silently falling through.
+            _logger?.LogWarning(ex,
+                "Best-effort SubscriberMemberId derivation failed for tenant {TenantId} member {MemberId}; returning legacy field.",
+                TenantId, member.MemberId);
+        }
     }
 
     // ── Create / update / terminate ──────────────────────────────────
@@ -159,6 +202,7 @@ public class MembersController : ControllerBase
             });
         }
 
+#pragma warning disable CS0618 // write-back to legacy FK preserves 834-shaped payloads; graph is authoritative going forward
         var member = new Member
         {
             TenantId = TenantId,
@@ -194,8 +238,16 @@ public class MembersController : ControllerBase
             LastUpdatedDate = DateTime.UtcNow,
             CreatedBy = User.Identity?.Name ?? "System"
         };
+#pragma warning restore CS0618
 
         await _memberRepository.CreateAsync(member);
+
+        // Shim the legacy FK onto the relationship graph for dependents. No-op when
+        // the shim isn't registered (tests) or the member is a subscriber.
+        if (_relationshipShim != null)
+        {
+            await _relationshipShim.EnsureRelationshipAsync(member, User.Identity?.Name, ct);
+        }
 
         var eventId = !string.IsNullOrEmpty(request.EventId)
             ? request.EventId
@@ -374,7 +426,7 @@ public class MembersController : ControllerBase
     public async Task<IActionResult> GetDependents([FromRoute] string memberId)
     {
         var dependents = await _memberRepository.GetDependentsAsync(TenantId, memberId);
-        return Ok(dependents);
+        return Ok(dependents.Where(d => !d.IsDraft).ToList());
     }
 
     // ── Eligibility ──────────────────────────────────────────────────
@@ -590,7 +642,9 @@ public class MembersController : ControllerBase
         ["tenantId"] = member.TenantId,
         ["groupNumber"] = member.GroupNumber,
         ["isSubscriber"] = member.IsSubscriber,
+#pragma warning disable CS0618
         ["subscriberMemberId"] = member.SubscriberMemberId,
+#pragma warning restore CS0618
         ["firstName"] = member.FirstName,
         ["lastName"] = member.LastName,
         ["middleName"] = member.MiddleName,

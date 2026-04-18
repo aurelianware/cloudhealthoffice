@@ -1,0 +1,173 @@
+@using CloudHealthOffice.Portal.Services
+@inject IFamilyRelationshipService FamilyRelationshipService
+@inject ISnackbar Snackbar
+
+<MudDialog Style="min-width: 680px;">
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-3">
+            Step @(_step + 1) of 3 — @StepTitle
+        </MudText>
+        <MudProgressLinear Color="Color.Primary" Value="@(((_step + 1) * 100.0) / 3.0)" Class="mb-4" />
+
+        @if (_step == 0)
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.MemberId" Label="Dependent Member ID" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_effectiveDate" Label="Effective Date" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.FirstName" Label="First Name" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.LastName" Label="Last Name" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudDatePicker @bind-Date="_dob" Label="Date of Birth" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="string" Label="Gender" @bind-Value="_payload.Member.Gender">
+                        <MudSelectItem Value="@("M")">Male</MudSelectItem>
+                        <MudSelectItem Value="@("F")">Female</MudSelectItem>
+                        <MudSelectItem Value="@("U")">Unknown</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_payload.Member.SSN" Label="SSN (optional)" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.Email" Label="Email" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.Phone" Label="Phone" />
+                </MudItem>
+            </MudGrid>
+        }
+        else if (_step == 1)
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudSelect T="string" Label="Relationship" @bind-Value="_payload.Relationship.RelationshipCode" Required="true">
+                        <MudSelectItem Value="@("19")">Child</MudSelectItem>
+                        <MudSelectItem Value="@("01")">Spouse</MudSelectItem>
+                        <MudSelectItem Value="@("53")">Life Partner / Domestic Partner</MudSelectItem>
+                        <MudSelectItem Value="@("17")">Stepchild</MudSelectItem>
+                        <MudSelectItem Value="@("10")">Foster Child</MudSelectItem>
+                        <MudSelectItem Value="@("22")">Handicapped Dependent</MudSelectItem>
+                        <MudSelectItem Value="@("29")">Significant Other</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_relStartDate" Label="Relationship Start" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudCheckBox T="bool" @bind-Checked="_payload.Relationship.IsCustodial" Label="Custodial (minor / QMCSO)" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Relationship.QmcsoReference" Label="QMCSO Reference (optional)" />
+                </MudItem>
+            </MudGrid>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-3">Review before creating:</MudText>
+            <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                <tbody>
+                    <tr><td>Member ID</td><td><b>@_payload.Member.MemberId</b></td></tr>
+                    <tr><td>Name</td><td>@_payload.Member.FirstName @_payload.Member.LastName</td></tr>
+                    <tr><td>Date of Birth</td><td>@(_dob?.ToString("MM/dd/yyyy") ?? "—")</td></tr>
+                    <tr><td>Relationship</td><td>@_payload.Relationship.RelationshipCode @(_payload.Relationship.IsCustodial ? "(custodial)" : "")</td></tr>
+                    <tr><td>Effective</td><td>@(_effectiveDate?.ToString("MM/dd/yyyy") ?? "—")</td></tr>
+                </tbody>
+            </MudSimpleTable>
+            @if (_error != null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_submitting">Cancel</MudButton>
+        @if (_step > 0)
+        {
+            <MudButton OnClick="Back" Disabled="_submitting">Back</MudButton>
+        }
+        @if (_step < 2)
+        {
+            <MudButton Color="Color.Primary" OnClick="Next" Disabled="@(!CanAdvance())">Next</MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_submitting">
+                @(_submitting ? "Creating..." : "Create")
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string SubscriberMemberId { get; set; } = string.Empty;
+
+    private int _step = 0;
+    private bool _submitting = false;
+    private string? _error;
+
+    private DateTime? _dob;
+    private DateTime? _effectiveDate = DateTime.Today;
+    private DateTime? _relStartDate = DateTime.Today;
+
+    private readonly AddDependentPayload _payload = new()
+    {
+        Relationship = new AddDependentRelationship { RelationshipCode = "19" },
+    };
+
+    private string StepTitle => _step switch
+    {
+        0 => "Dependent info",
+        1 => "Relationship",
+        _ => "Confirm",
+    };
+
+    private bool CanAdvance() => _step switch
+    {
+        0 => !string.IsNullOrWhiteSpace(_payload.Member.MemberId)
+             && !string.IsNullOrWhiteSpace(_payload.Member.FirstName)
+             && !string.IsNullOrWhiteSpace(_payload.Member.LastName)
+             && _dob.HasValue
+             && _effectiveDate.HasValue,
+        1 => !string.IsNullOrWhiteSpace(_payload.Relationship.RelationshipCode)
+             && _relStartDate.HasValue,
+        _ => false,
+    };
+
+    private void Next() { if (CanAdvance()) _step++; }
+    private void Back() { if (_step > 0) _step--; }
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        _error = null;
+        _submitting = true;
+        try
+        {
+            _payload.Member.DateOfBirth = _dob!.Value;
+            _payload.Member.EffectiveDate = _effectiveDate!.Value;
+            _payload.Relationship.StartDate = _relStartDate!.Value;
+
+            await FamilyRelationshipService.AddDependentAsync(SubscriberMemberId, _payload);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}
