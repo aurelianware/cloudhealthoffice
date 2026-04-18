@@ -3,11 +3,17 @@ using EnrollmentImportService.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
+// The production class and the root namespace share a name (`EnrollmentImportService`),
+// which makes `EnrollmentImportService.Services.EnrollmentImportService.Foo(...)` ambiguous
+// in expression position from inside `EnrollmentImportService.Tests.*`. This alias pins
+// the static-call target to the class and keeps the tests readable.
+using ImportSvc = EnrollmentImportService.Services.EnrollmentImportService;
+
 namespace EnrollmentImportService.Tests.Services;
 
 public class EnrollmentImportServiceTests
 {
-    private static (EnrollmentImportService.Services.EnrollmentImportService svc,
+    private static (ImportSvc svc,
         InMemoryEnrollmentEventRepository events,
         Mock<IEnrollmentRepository> repo)
         Build()
@@ -30,9 +36,9 @@ public class EnrollmentImportServiceTests
         var publisher = new EnrollmentEventPublisher(events, NullLogger<EnrollmentEventPublisher>.Instance);
         var validator = new EnrollmentValidator();
 
-        var svc = new EnrollmentImportService.Services.EnrollmentImportService(
+        var svc = new ImportSvc(
             repo.Object, txns.Object, publisher, validator,
-            NullLogger<EnrollmentImportService.Services.EnrollmentImportService>.Instance);
+            NullLogger<ImportSvc>.Instance);
         return (svc, events, repo);
     }
 
@@ -177,7 +183,7 @@ public class EnrollmentImportServiceTests
         e.MaintenanceType = "024";
         e.BenefitStatus = "C";
         e.TerminationDate = "2026-04-01";
-        EnrollmentImportService.Services.EnrollmentImportService.ClassifyEvent(e)
+        ImportSvc.ClassifyEvent(e)
             .Should().Be(EnrollmentEventType.CobraTerminated);
     }
 
@@ -187,7 +193,7 @@ public class EnrollmentImportServiceTests
         var e = NewSubscriber("M-1");
         e.MaintenanceType = "021";
         e.BenefitStatus = "C";
-        EnrollmentImportService.Services.EnrollmentImportService.ClassifyEvent(e)
+        ImportSvc.ClassifyEvent(e)
             .Should().Be(EnrollmentEventType.CobraElected);
     }
 
@@ -196,7 +202,7 @@ public class EnrollmentImportServiceTests
     {
         var e = NewSubscriber("M-1");
         e.MaintenanceType = "025";
-        EnrollmentImportService.Services.EnrollmentImportService.ClassifyEvent(e)
+        ImportSvc.ClassifyEvent(e)
             .Should().Be(EnrollmentEventType.ReinstatementApproved);
     }
 }
