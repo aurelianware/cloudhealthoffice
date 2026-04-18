@@ -78,6 +78,9 @@ public sealed class FakeAccumulatorServiceClient : IAccumulatorServiceClient
         string tenantId, string memberId, CancellationToken ct = default)
         => Task.FromResult(new MemberAccumulatorsResponse
         {
+            MemberId = memberId,
+            PlanYearStart = new DateTime(DateTime.UtcNow.Year, 1, 1),
+            PlanYearEnd = new DateTime(DateTime.UtcNow.Year, 12, 31),
             IndividualDeductibleUsed = 0m,
             IndividualDeductibleLimit = 2000m,
             FamilyDeductibleUsed = 0m,

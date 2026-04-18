@@ -164,6 +164,14 @@ RegisterDownstream<ICoverageServiceClient, HttpCoverageServiceClient, FakeCovera
     builder, coverageBaseUrl);
 RegisterDownstream<IEnrollmentImportServiceClient, HttpEnrollmentImportServiceClient, FakeEnrollmentImportServiceClient>(
     builder, enrollmentBaseUrl);
+// Production must have accumulator-service configured — no silent fallback to a
+// fake projection. Per PR #650 review: fakes are dev-only, and an unset downstream
+// in a non-development environment is a startup error, not a lazy 503 at call time.
+if (!builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(accumulatorBaseUrl))
+{
+    throw new InvalidOperationException(
+        "Downstream:AccumulatorService:BaseUrl must be configured outside Development.");
+}
 RegisterDownstream<IAccumulatorServiceClient, HttpAccumulatorServiceClient, FakeAccumulatorServiceClient>(
     builder, accumulatorBaseUrl);
 
