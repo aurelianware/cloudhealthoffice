@@ -5,6 +5,8 @@ using AccumulatorService.Repositories;
 using AccumulatorService.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CloudHealthOffice.AccumulatorService.Tests;
@@ -27,9 +29,11 @@ public class AccumulatorsControllerTests : IClassFixture<AccumulatorsControllerT
     }
 
     [Fact]
-    public async Task Health_ReturnsOk()
+    public async Task Health_LivenessReturnsOk()
     {
-        var resp = await _client.GetAsync("/health");
+        // /health/live skips DB probes; /health aggregates the mongodb check which
+        // would dial a nonexistent server in the hermetic test harness.
+        var resp = await _client.GetAsync("/health/live");
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
 

@@ -107,7 +107,7 @@ public class InMemoryProcessedClaimStore : IProcessedClaimStore
     }
 }
 
-public class RecordingPublisher : AccumulatorService.Services.IAccumulatorEventPublisher
+public class RecordingPublisher : global::AccumulatorService.Services.IAccumulatorEventPublisher
 {
     public readonly List<CloudHealthOffice.Events.AccumulatorAdjustedEvent> Adjusted = new();
     public readonly List<CloudHealthOffice.Events.OrphanAccumulatorClaimEvent> Orphans = new();
