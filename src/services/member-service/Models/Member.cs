@@ -51,8 +51,16 @@ public class Member
     public bool IsSubscriber { get; set; }
 
     /// <summary>
-    /// For dependents: link to subscriber's MemberId
+    /// For dependents: link to subscriber's MemberId.
     /// </summary>
+    /// <remarks>
+    /// Legacy FK, retained for back-compat with callers that read the Member directly.
+    /// On read, <see cref="MembersController"/> overwrites this from the active
+    /// <c>FamilyRelationship</c> graph (see docs/migrations/family-relationships-backfill.md).
+    /// Slated for removal in a future major version — new write paths should create a
+    /// <c>FamilyRelationship</c> instead of setting this field.
+    /// </remarks>
+    [Obsolete("Derived from FamilyRelationship graph on read. New writes must go through FamilyRelationshipService. See docs/migrations/family-relationships-backfill.md.", error: false)]
     [StringLength(50)]
     public string? SubscriberMemberId { get; set; }
 
@@ -283,6 +291,14 @@ public class Member
     /// Communication channel preferences (opt-in, windows, per-channel language override).
     /// </summary>
     public List<CommunicationPreference> CommunicationPreferences { get; set; } = new();
+
+    /// <summary>
+    /// True while the Member is in a partially-constructed state (e.g., Add-Dependent
+    /// wizard has created the Member but not yet created its <c>FamilyRelationship</c>).
+    /// Drafts are hidden from standard search/read paths. A background reconciler
+    /// promotes or purges drafts after a TTL. See <c>FamilyRelationshipsController.AddDependent</c>.
+    /// </summary>
+    public bool IsDraft { get; set; }
 }
 
 /// <summary>

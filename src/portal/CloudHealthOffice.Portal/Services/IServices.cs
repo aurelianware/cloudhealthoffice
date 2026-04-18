@@ -77,6 +77,65 @@ public interface ICoverageService
     Task<List<Coverage>> GetCoverageByMemberIdAsync(string memberId);
 }
 
+public interface IFamilyRelationshipService
+{
+    Task<List<FamilyRelationshipRow>> ListForMemberAsync(string memberId);
+    Task<FamilyRelationshipRow?> AddDependentAsync(string subscriberMemberId, AddDependentPayload payload);
+    Task EndRelationshipAsync(string memberId, string relationshipId, DateTime? endDate = null);
+    Task<FamilyRelationshipRow?> UpdateRelationshipAsync(string memberId, string relationshipId, UpdateRelationshipPayload payload);
+    Task SoftDeleteAsync(string memberId, string relationshipId, string reason);
+}
+
+public class FamilyRelationshipRow
+{
+    public string Id { get; set; } = string.Empty;
+    public string SubjectMemberId { get; set; } = string.Empty;
+    public string RelatedMemberId { get; set; } = string.Empty;
+    public string RelationshipCode { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public bool IsCustodial { get; set; }
+    public string? QmcsoReference { get; set; }
+    public DateTime? DeletedAt { get; set; }
+}
+
+public class AddDependentPayload
+{
+    public AddDependentMember Member { get; set; } = new();
+    public AddDependentRelationship Relationship { get; set; } = new();
+}
+
+public class AddDependentMember
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? MiddleName { get; set; }
+    public DateTime DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+    public string? SSN { get; set; }
+    public string? Email { get; set; }
+    public string? Phone { get; set; }
+    public DateTime EffectiveDate { get; set; }
+}
+
+public class AddDependentRelationship
+{
+    public string RelationshipCode { get; set; } = "19";
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public bool IsCustodial { get; set; }
+    public string? QmcsoReference { get; set; }
+}
+
+public class UpdateRelationshipPayload
+{
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public bool? IsCustodial { get; set; }
+    public string? QmcsoReference { get; set; }
+}
+
 public interface IAuthorizationService
 {
     Task<List<AuthorizationSummary>> GetAuthorizationsAsync(string? memberId = null);

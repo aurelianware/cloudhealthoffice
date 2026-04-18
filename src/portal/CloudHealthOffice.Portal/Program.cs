@@ -226,6 +226,7 @@ builder.Services.AddScoped<IUserContextService, UserContextService>();
 
 // Register microservice clients
 builder.Services.AddScoped<IMemberService, MemberService>();
+builder.Services.AddScoped<IFamilyRelationshipService, FamilyRelationshipService>();
 builder.Services.AddScoped<ICoverageService, CoverageService>();
 builder.Services.AddScoped<IClaimsService, ClaimsService>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();

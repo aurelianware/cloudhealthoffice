@@ -1,0 +1,60 @@
+@using CloudHealthOffice.Portal.Services
+
+<MudSimpleTable Dense="true" Hover="true" Elevation="1">
+    <thead>
+        <tr>
+            <th>Member ID</th>
+            <th>Relationship</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Custodial</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var row in Rows)
+        {
+            <tr>
+                <td>
+                    <span style="font-family: monospace;">@row.RelatedMemberId</span>
+                </td>
+                <td>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@LabelFor(row.RelationshipCode)</MudChip>
+                    @if (row.IsCustodial)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">Custodial</MudChip>
+                    }
+                </td>
+                <td>@row.StartDate.ToString("MM/dd/yyyy")</td>
+                <td>@(row.EndDate?.ToString("MM/dd/yyyy") ?? "—")</td>
+                <td>@(row.IsCustodial ? "Yes" : "")</td>
+                <td>
+                    @if (row.EndDate == null && row.DeletedAt == null && OnEnd.HasDelegate)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                   OnClick="@(() => OnEnd.InvokeAsync(row))">End</MudButton>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</MudSimpleTable>
+
+@code {
+    [Parameter] public List<FamilyRelationshipRow> Rows { get; set; } = new();
+    [Parameter] public EventCallback<FamilyRelationshipRow> OnEnd { get; set; }
+
+    private static string LabelFor(string code) => code switch
+    {
+        "18" => "Self",
+        "01" => "Spouse",
+        "19" => "Child",
+        "53" => "Life Partner",
+        "17" => "Stepchild",
+        "10" => "Foster Child",
+        "G8" => "Parent / Other",
+        "22" => "Handicapped Dep.",
+        "29" => "Significant Other",
+        _ => code,
+    };
+}

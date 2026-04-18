@@ -11,7 +11,12 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="FluentAssertions" Version="7.2.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <!--
+      Microsoft.Extensions.Logging.Abstractions intentionally not declared.
+      The PricingApi ProjectReference brings it in transitively at a newer
+      version; declaring it here triggers NU1605 (downgrade) which the .NET
+      8 SDK treats as a restore-blocking error.
+    -->
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="xunit" Version="2.9.3" />

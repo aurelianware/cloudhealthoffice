@@ -49,8 +49,10 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
         new MemberEventRepositoryMongo(
             sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
             eventsCollectionName));
+    builder.Services.AddSingleton<IFamilyRelationshipRepository, FamilyRelationshipRepositoryMongo>();
 
     builder.Services.AddHostedService<MemberIndexInitializer>();
+    builder.Services.AddHostedService<FamilyRelationshipIndexInitializer>();
     builder.Services.AddSingleton<IHostedService>(sp =>
         new MemberEventIndexInitializer(
             sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
@@ -98,12 +100,22 @@ else
             sp.GetRequiredService<ILogger<MemberEventRepository>>());
     });
 
+    builder.Services.AddScoped<IFamilyRelationshipRepository>(sp =>
+    {
+        var cosmosClient = sp.GetRequiredService<CosmosClient>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+        return new FamilyRelationshipRepository(cosmosClient, databaseName);
+    });
+
     Console.WriteLine($"Using Cosmos DB database provider (events container: {eventsContainerName})");
 }
 
 // ── Member Service internals ─────────────────────────────────────────
 builder.Services.AddScoped<IMemberEventPublisher, CosmosMemberEventPublisher>();
 builder.Services.AddSingleton<IFhirPatientProjector, FhirPatientProjector>();
+builder.Services.AddScoped<IFamilyRelationshipService, FamilyRelationshipService>();
+builder.Services.AddScoped<IRelationshipShim, RelationshipShim>();
 
 // Identifier encryption. Real KV-backed encryptor when a data-key secret name is
 // configured; otherwise fall through to the no-op shim (dev only).
