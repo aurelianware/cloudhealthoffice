@@ -604,6 +604,39 @@ public class MembersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// List per-member enrollment events. Proxies through to enrollment-import-service so
+    /// consent scope, audit logging, tenant context, and rate limiting all live on this
+    /// member-service boundary instead of being duplicated at every portal client.
+    /// </summary>
+    [HttpGet("{memberId}/enrollment-events")]
+    [ProducesResponseType(typeof(EnrollmentEventListResponse), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(503)]
+    public async Task<IActionResult> GetEnrollmentEvents(
+        [FromRoute] string memberId,
+        [FromQuery] string? type = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] int limit = 50,
+        [FromQuery] string? continuationToken = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(memberId))
+            return BadRequest(new { error = "memberId is required" });
+
+        try
+        {
+            var page = await _enrollment.GetEnrollmentEventsAsync(
+                TenantId, memberId, type, from, to, Math.Clamp(limit, 1, 200), continuationToken, ct);
+            return Ok(page);
+        }
+        catch (DownstreamUnavailableException ex)
+        {
+            return DownstreamUnavailable(ex);
+        }
+    }
+
     [HttpGet("{memberId}/accumulators")]
     [ProducesResponseType(typeof(MemberAccumulatorsResponse), 200)]
     [ProducesResponseType(503)]
@@ -782,6 +815,34 @@ public class Enrollment834Record
     public string MaintenanceTypeCode { get; set; } = string.Empty;
     public DateTime TransactionDate { get; set; }
     public string Status { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Member-service projection of an enrollment-import-service event. Mirrors the
+/// downstream document shape so the portal does not need to know about the underlying
+/// service. Consent / audit / tenant filtering happen on this boundary.
+/// </summary>
+public class EnrollmentEventRecord
+{
+    public string EventId { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    public int Version { get; set; }
+    public DateTime OccurredAt { get; set; }
+    public DateTime? EventDate { get; set; }
+    public DateTime? RetroEffectiveDate { get; set; }
+    public string? SourceBatchId { get; set; }
+    public string? TransactionId { get; set; }
+    public string? MaintenanceType { get; set; }
+    public string? MaintenanceReason { get; set; }
+    public string? Source { get; set; }
+    public System.Text.Json.Nodes.JsonObject? Payload { get; set; }
+    public string? RawSegment { get; set; }
+}
+
+public class EnrollmentEventListResponse
+{
+    public List<EnrollmentEventRecord> Items { get; set; } = new();
+    public string? ContinuationToken { get; set; }
 }
 
 public class MemberAccumulatorsResponse

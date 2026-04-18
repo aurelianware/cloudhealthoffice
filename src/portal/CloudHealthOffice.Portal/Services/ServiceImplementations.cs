@@ -269,6 +269,29 @@ public class MemberService : IMemberService
         }
     }
 
+    public async Task<EnrollmentEventPage> GetEnrollmentEventsAsync(string memberId, EnrollmentEventFilter filter)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        var qs = new List<string> { $"limit={Math.Clamp(filter.Limit, 1, 200)}" };
+        if (!string.IsNullOrWhiteSpace(filter.Type)) qs.Add($"type={Uri.EscapeDataString(filter.Type)}");
+        if (filter.From.HasValue) qs.Add($"from={Uri.EscapeDataString(filter.From.Value.ToString("o"))}");
+        if (filter.To.HasValue) qs.Add($"to={Uri.EscapeDataString(filter.To.Value.ToString("o"))}");
+        if (!string.IsNullOrWhiteSpace(filter.ContinuationToken))
+            qs.Add($"continuationToken={Uri.EscapeDataString(filter.ContinuationToken)}");
+
+        try
+        {
+            var url = $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/enrollment-events?{string.Join("&", qs)}";
+            var page = await _httpClient.GetFromJsonAsync<EnrollmentEventPage>(url);
+            return page ?? new EnrollmentEventPage();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
     public async Task TerminateEnrollmentAsync(TerminateEnrollmentRequest request)
     {
         var baseUrl = _configuration["Services:MemberService"];

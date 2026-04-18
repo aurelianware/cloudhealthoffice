@@ -9,15 +9,26 @@ public class Enrollment834
 {
     [JsonPropertyName("fileName")]
     public string FileName { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("parsedAt")]
     public DateTime ParsedAt { get; set; }
-    
+
     [JsonPropertyName("transactionCount")]
     public int TransactionCount { get; set; }
-    
+
     [JsonPropertyName("enrollments")]
     public List<MemberEnrollment> Enrollments { get; set; } = new();
+
+    /// <summary>
+    /// Optional caller-supplied batch id. When set, replays of the same batch produce
+    /// deterministic event ids and de-duplicate at the event store.
+    /// </summary>
+    [JsonPropertyName("batchId")]
+    public string? BatchId { get; set; }
+
+    /// <summary>True when this batch came from a manual entry endpoint, not an 834 file.</summary>
+    [JsonPropertyName("manualSource")]
+    public bool ManualSource { get; set; }
 }
 
 public class MemberEnrollment
@@ -63,6 +74,21 @@ public class MemberEnrollment
     
     [JsonPropertyName("dependents")]
     public List<Dependent> Dependents { get; set; } = new();
+
+    /// <summary>
+    /// Optional caller-supplied transaction id (834 BGN02 or manual). When omitted the
+    /// import service derives a deterministic id from <c>(BatchId, SubscriberId)</c>.
+    /// </summary>
+    [JsonPropertyName("transactionId")]
+    public string? TransactionId { get; set; }
+
+    /// <summary>
+    /// For manual-source enrollments only: the client-supplied idempotency key for the
+    /// resulting <see cref="EnrollmentEvent"/>. Ignored when <see cref="Enrollment834.ManualSource"/>
+    /// is false. Defaults to a fresh GUID at the controller boundary.
+    /// </summary>
+    [JsonPropertyName("eventId")]
+    public string? EventId { get; set; }
 }
 
 public class Demographics
