@@ -3,6 +3,7 @@
 @inject IMemberService MemberService
 @inject ICoverageService CoverageService
 @inject IBenefitPlanService BenefitPlanService
+@inject IFamilyRelationshipService FamilyRelationshipService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -680,6 +681,63 @@
                         }
                     </div>
                 </MudTabPanel>
+
+                <!-- Family Tab -->
+                <MudTabPanel Text="Family" Icon="@Icons.Material.Filled.FamilyRestroom">
+                    <div>
+                        <div class="d-flex align-center mb-3">
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Class="mr-1" />
+                                Family Relationships
+                            </MudText>
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.PersonAdd"
+                                       OnClick="OpenAddDependentDialog">
+                                Add Dependent
+                            </MudButton>
+                        </div>
+
+                        @if (_loadingFamily)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else
+                        {
+                            @if (_subscriberRows.Any())
+                            {
+                                <MudExpansionPanels MultiExpansion="true" Class="mb-2">
+                                    <MudExpansionPanel Text="Subscriber" IsInitiallyExpanded="true">
+                                        <FamilyRelationshipTable Rows="_subscriberRows" OnEnd="EndRelationshipAsync" />
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+
+                            @if (_dependentRows.Any())
+                            {
+                                <MudExpansionPanels MultiExpansion="true" Class="mb-2">
+                                    <MudExpansionPanel Text="@($"Dependents ({_dependentRows.Count})")" IsInitiallyExpanded="true">
+                                        <FamilyRelationshipTable Rows="_dependentRows" OnEnd="EndRelationshipAsync" />
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+
+                            @if (_otherRows.Any())
+                            {
+                                <MudExpansionPanels MultiExpansion="true" Class="mb-2">
+                                    <MudExpansionPanel Text="@($"Other ({_otherRows.Count})")">
+                                        <FamilyRelationshipTable Rows="_otherRows" OnEnd="EndRelationshipAsync" />
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+
+                            @if (!_subscriberRows.Any() && !_dependentRows.Any() && !_otherRows.Any())
+                            {
+                                <MudAlert Severity="Severity.Info">No family relationships recorded for this member.</MudAlert>
+                            }
+                        }
+                    </div>
+                </MudTabPanel>
             </MudTabs>
         }
         else
@@ -716,8 +774,16 @@
     private bool _loading834 = false;
     private bool _loadingAccumulators = false;
     private bool _loadingBenefits = false;
+    private bool _loadingFamily = false;
     private int _activeTab = 0;
     private string? _serviceError;
+
+    private List<FamilyRelationshipRow> _subscriberRows = new();
+    private List<FamilyRelationshipRow> _dependentRows = new();
+    private List<FamilyRelationshipRow> _otherRows = new();
+
+    // X12 INS02 codes meaning "the counterparty is this member's subscriber"
+    private static readonly HashSet<string> DependentToSubscriberCodes = new() { "19", "17", "10", "01", "53", "22", "29" };
 
     private MudTabPanel? _pcpTab;
     private MudTable<Enrollment834Record>? _834Table;
@@ -769,6 +835,66 @@
         _ = LoadHistoryAsync();
         _ = Load834Async();
         _ = LoadBenefitsForActiveCoverageAsync();
+        _ = LoadFamilyAsync();
+    }
+
+    private async Task LoadFamilyAsync()
+    {
+        _loadingFamily = true;
+        try
+        {
+            var rows = await FamilyRelationshipService.ListForMemberAsync(MemberId);
+
+            // Bucket rows into subscriber / dependents / other based on INS02 direction.
+            // Each row is already subject-perspective (SubjectMemberId == this member).
+            _subscriberRows = rows.Where(r => DependentToSubscriberCodes.Contains(r.RelationshipCode)).ToList();
+            _dependentRows  = rows.Where(r => r.RelationshipCode == "G8").ToList();
+            _otherRows      = rows.Except(_subscriberRows).Except(_dependentRows).ToList();
+        }
+        catch (ServiceUnavailableException) { ResetFamily(); }
+        catch { ResetFamily(); }
+        finally
+        {
+            _loadingFamily = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ResetFamily()
+    {
+        _subscriberRows = new();
+        _dependentRows = new();
+        _otherRows = new();
+    }
+
+    private async Task EndRelationshipAsync(FamilyRelationshipRow row)
+    {
+        try
+        {
+            await FamilyRelationshipService.EndRelationshipAsync(MemberId, row.Id);
+            Snackbar.Add("Relationship ended.", Severity.Success);
+            await LoadFamilyAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to end relationship: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OpenAddDependentDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(AddDependentDialog.SubscriberMemberId)] = MemberId,
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<AddDependentDialog>("Add Dependent", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Dependent added.", Severity.Success);
+            await LoadFamilyAsync();
+        }
     }
 
     private async Task LoadBenefitsForActiveCoverageAsync()

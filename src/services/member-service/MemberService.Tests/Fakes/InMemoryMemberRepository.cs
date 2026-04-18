@@ -34,9 +34,11 @@ public sealed class InMemoryMemberRepository : IMemberRepository
     }
 
     public Task<List<Member>> GetDependentsAsync(string tenantId, string subscriberMemberId)
+#pragma warning disable CS0618
         => Task.FromResult(Members
             .Where(m => m.TenantId == tenantId && m.SubscriberMemberId == subscriberMemberId && !m.IsSubscriber)
             .ToList());
+#pragma warning restore CS0618
 
     public Task<int> GetCountByGroupAsync(string tenantId, string groupNumber)
         => Task.FromResult(Members.Count(m => m.TenantId == tenantId && m.GroupNumber == groupNumber));
