@@ -935,8 +935,13 @@
                 MemberId,
                 new EnrollmentEventFilter(
                     Type: string.IsNullOrWhiteSpace(_eventTypeFilter) ? null : _eventTypeFilter,
-                    From: _eventFromFilter?.ToUniversalTime(),
-                    To: _eventToFilter?.ToUniversalTime(),
+                    // MudDatePicker hands back midnight with DateTimeKind.Unspecified —
+                    // ToUniversalTime() on that would silently shift the intended date
+                    // by the local offset. Instead, treat the picker date as a calendar
+                    // day and extend the window to inclusive end-of-day on the To side
+                    // so events later the same day aren't excluded.
+                    From: NormalizeFilterFromUtc(_eventFromFilter),
+                    To: NormalizeFilterToUtc(_eventToFilter),
                     Limit: 50,
                     ContinuationToken: reset ? null : _eventsContinuationToken));
 
@@ -955,6 +960,16 @@
     }
 
     private Task LoadMoreEventsAsync() => LoadEnrollmentEventsAsync(reset: false);
+
+    private static DateTime? NormalizeFilterFromUtc(DateTime? picked) =>
+        picked.HasValue
+            ? DateTime.SpecifyKind(picked.Value.Date, DateTimeKind.Utc)
+            : null;
+
+    private static DateTime? NormalizeFilterToUtc(DateTime? picked) =>
+        picked.HasValue
+            ? DateTime.SpecifyKind(picked.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc)
+            : null;
 
     private Task OnEventTypeChanged(string value)
     {

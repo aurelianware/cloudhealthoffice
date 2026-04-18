@@ -52,8 +52,9 @@ public class EnrollmentImportService : IEnrollmentImportService
             ? enrollment.BatchId
             : $"BATCH-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}".Substring(0, 40);
 
-        foreach (var memberEnrollment in enrollment.Enrollments)
+        for (int i = 0; i < enrollment.Enrollments.Count; i++)
         {
+            var memberEnrollment = enrollment.Enrollments[i];
             var txnStatus = "Accepted";
             var validation = _validator.Validate(memberEnrollment);
             if (!validation.IsValid)
@@ -72,10 +73,13 @@ public class EnrollmentImportService : IEnrollmentImportService
             }
 
             // Deterministic transaction id keyed on batch + position + subscriber so that
-            // replays of an identical batch produce identical EventIds.
+            // (a) replays of an identical batch produce identical EventIds, and
+            // (b) multiple enrollments for the same subscriber within one batch (e.g.
+            //     two separate life events on the same day) do NOT collapse to the
+            //     same id. The position is 0-based and stable within a batch.
             var transactionId = !string.IsNullOrEmpty(memberEnrollment.TransactionId)
                 ? memberEnrollment.TransactionId
-                : $"{batchId}-{memberEnrollment.SubscriberId ?? "ANON"}";
+                : $"{batchId}-{i:D4}-{memberEnrollment.SubscriberId ?? "ANON"}";
 
             try
             {
@@ -208,9 +212,12 @@ public class EnrollmentImportService : IEnrollmentImportService
         if (e.MaintenanceType == "021")
             return EnrollmentEventType.Enrolled;
 
-        // 001 = Change. Distinguish by the most material change first.
+        // 001 = Change. AddressChanged wins when a demographics delta is present; any
+        // other change (plan, dates, group info) is surfaced as PlanChanged. We don't
+        // have a stronger signal from the 834 payload to split this further, and the
+        // schema keeps the enum stable so callers can widen later without breaking
+        // stored events.
         if (HasAddressChange(e)) return EnrollmentEventType.AddressChanged;
-        if (HasPlanChange(e)) return EnrollmentEventType.PlanChanged;
         return EnrollmentEventType.PlanChanged;
     }
 
@@ -220,9 +227,6 @@ public class EnrollmentImportService : IEnrollmentImportService
             || !string.IsNullOrWhiteSpace(e.Demographics.City)
             || !string.IsNullOrWhiteSpace(e.Demographics.State)
             || !string.IsNullOrWhiteSpace(e.Demographics.Zip));
-
-    private static bool HasPlanChange(MemberEnrollment e) =>
-        e.Coverage != null && e.Coverage.Count > 0;
 
     private static bool IsRetro(MemberEnrollment e, DateTime? eventDate) =>
         eventDate.HasValue && eventDate.Value.Date < DateTime.UtcNow.Date.AddDays(-30);

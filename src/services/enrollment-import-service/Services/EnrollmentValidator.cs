@@ -4,7 +4,7 @@ namespace EnrollmentImportService.Services;
 
 public interface IEnrollmentValidator
 {
-    EnrollmentValidationResult Validate(MemberEnrollment enrollment);
+    EnrollmentValidationResult Validate(MemberEnrollment? enrollment);
 }
 
 /// <summary>
@@ -57,7 +57,7 @@ public sealed class EnrollmentValidator : IEnrollmentValidator
         "A", "C", "T"
     };
 
-    public EnrollmentValidationResult Validate(MemberEnrollment enrollment)
+    public EnrollmentValidationResult Validate(MemberEnrollment? enrollment)
     {
         if (enrollment is null)
         {

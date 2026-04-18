@@ -19,8 +19,10 @@ public interface IEnrollmentEventRepository
     Task<EnrollmentEventAppendResult> AppendAsync(EnrollmentEvent evt, CancellationToken ct = default);
 
     /// <summary>
-    /// List events for a member, ordered by <see cref="EnrollmentEvent.Version"/> ascending,
-    /// optionally filtered by event type and/or occurredAt window.
+    /// List events for a member, ordered by <see cref="EnrollmentEvent.Version"/>
+    /// <b>descending</b> (newest first) — this is what the controller + portal
+    /// timeline consume. Optionally filtered by event type and/or occurredAt window.
+    /// Callers that need chronological replay should reverse the page.
     /// </summary>
     Task<EnrollmentEventPage> ListByMemberAsync(
         string tenantId,

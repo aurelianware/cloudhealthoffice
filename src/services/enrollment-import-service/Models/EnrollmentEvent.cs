@@ -68,11 +68,24 @@ public class EnrollmentEvent
     [JsonPropertyName("retroEffectiveDate")]
     public DateTime? RetroEffectiveDate { get; set; }
 
-    /// <summary>Originating 834 batch id, or "manual:{guid}" for manually-entered events.</summary>
+    /// <summary>
+    /// Originating batch id. For 834 ingestion this is the caller-supplied
+    /// <see cref="Enrollment834.BatchId"/> or a generated <c>BATCH-&lt;ts&gt;-&lt;guid&gt;</c>.
+    /// For manual submissions the controller synthesises <c>MANUAL-&lt;ts&gt;-&lt;guid&gt;</c>.
+    /// It is NOT the source of idempotency on the manual path — see <see cref="EventId"/>
+    /// and <see cref="BuildManualEventId"/>.
+    /// </summary>
     [JsonPropertyName("sourceBatchId")]
     public string? SourceBatchId { get; set; }
 
-    /// <summary>The 834 BGN02 transaction id, or null for manual.</summary>
+    /// <summary>
+    /// Per-transaction identifier. For 834 ingestion this is the 834 BGN02 when the
+    /// caller supplies one, or the service-derived <c>{batchId}-{position}-{subscriberId}</c>
+    /// otherwise. For manual submissions the service sets it to a synthesised id that
+    /// lets transaction-log queries still group by batch; the per-event idempotency key
+    /// on the manual path is the caller-supplied <c>EventId</c> (see
+    /// <see cref="BuildManualEventId"/>), not this field.
+    /// </summary>
     [JsonPropertyName("transactionId")]
     public string? TransactionId { get; set; }
 
