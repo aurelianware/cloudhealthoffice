@@ -397,19 +397,31 @@ public class MemberServiceTests
     {
         var json = JsonSerializer.Serialize(new
         {
+            memberId = "MBR-42",
+            planYearStart = "2026-01-01",
+            planYearEnd = "2026-12-31",
             individualDeductibleUsed = 500m, individualDeductibleLimit = 2000m,
             familyDeductibleUsed = 1200m, familyDeductibleLimit = 4000m,
             individualOopUsed = 1500m, individualOopLimit = 6000m,
             familyOopUsed = 3000m, familyOopLimit = 12000m,
             serviceAccumulators = new[]
             {
-                new { serviceType = "Physical Therapy", used = 8, limit = 20, unitType = "visits" }
+                new { benefitCategory = "Physical Therapy", used = 8m, limit = 20m, unit = "Visits" }
             },
             recentActivity = new[]
             {
-                new { claimId = "CLM-500", serviceDate = "2026-02-15",
-                      deductibleApplied = 100m, copayApplied = 25m,
-                      coinsuranceApplied = 30m, planPaid = 345m }
+                new {
+                    eventId = "evt-1",
+                    eventType = "ClaimApplied",
+                    sourceReference = "CLM-500",
+                    occurredAt = "2026-02-15",
+                    deductibleDelta = 100m,
+                    oopDelta = 155m,
+                    familyDeductibleDelta = 0m,
+                    familyOopDelta = 0m,
+                    reason = (string?)null,
+                    actorId = "system"
+                }
             }
         }, JsonOpts);
 
@@ -421,13 +433,13 @@ public class MemberServiceTests
         result.IndividualDeductibleLimit.Should().Be(2000m);
         result.FamilyOopLimit.Should().Be(12000m);
         result.ServiceAccumulators.Should().ContainSingle();
-        result.ServiceAccumulators[0].ServiceType.Should().Be("Physical Therapy");
-        result.ServiceAccumulators[0].Used.Should().Be(8);
-        result.ServiceAccumulators[0].Limit.Should().Be(20);
+        result.ServiceAccumulators[0].BenefitCategory.Should().Be("Physical Therapy");
+        result.ServiceAccumulators[0].Used.Should().Be(8m);
+        result.ServiceAccumulators[0].Limit.Should().Be(20m);
         result.RecentActivity.Should().ContainSingle();
-        result.RecentActivity[0].ClaimId.Should().Be("CLM-500");
-        result.RecentActivity[0].DeductibleApplied.Should().Be(100m);
-        result.RecentActivity[0].PlanPaid.Should().Be(345m);
+        result.RecentActivity[0].SourceReference.Should().Be("CLM-500");
+        result.RecentActivity[0].DeductibleDelta.Should().Be(100m);
+        result.RecentActivity[0].OopDelta.Should().Be(155m);
     }
 
     // ── CoverageHistoryEvent – remaining properties ────────────────────────────

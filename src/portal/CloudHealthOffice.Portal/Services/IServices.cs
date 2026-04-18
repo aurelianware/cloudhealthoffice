@@ -34,6 +34,10 @@ public interface IMemberService
 
 public class MemberAccumulators
 {
+    public string MemberId { get; set; } = string.Empty;
+    public DateTime PlanYearStart { get; set; }
+    public DateTime PlanYearEnd { get; set; }
+
     public decimal IndividualDeductibleUsed { get; set; }
     public decimal IndividualDeductibleLimit { get; set; }
     public decimal FamilyDeductibleUsed { get; set; }
@@ -48,20 +52,24 @@ public class MemberAccumulators
 
 public class ServiceAccumulator
 {
-    public string ServiceType { get; set; } = string.Empty;
-    public int Used { get; set; }
-    public int Limit { get; set; }
-    public string UnitType { get; set; } = "visits";
+    public string BenefitCategory { get; set; } = string.Empty;
+    public decimal Used { get; set; }
+    public decimal Limit { get; set; }
+    public string Unit { get; set; } = "USD";
 }
 
 public class AccumulatorActivity
 {
-    public string ClaimId { get; set; } = string.Empty;
-    public DateTime ServiceDate { get; set; }
-    public decimal DeductibleApplied { get; set; }
-    public decimal CopayApplied { get; set; }
-    public decimal CoinsuranceApplied { get; set; }
-    public decimal PlanPaid { get; set; }
+    public string EventId { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    public string? SourceReference { get; set; }
+    public DateTime OccurredAt { get; set; }
+    public decimal DeductibleDelta { get; set; }
+    public decimal OopDelta { get; set; }
+    public decimal FamilyDeductibleDelta { get; set; }
+    public decimal FamilyOopDelta { get; set; }
+    public string? Reason { get; set; }
+    public string ActorId { get; set; } = "system";
 }
 
 public interface ICoverageService

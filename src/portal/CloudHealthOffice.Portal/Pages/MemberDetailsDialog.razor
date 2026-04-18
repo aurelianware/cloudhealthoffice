@@ -181,10 +181,10 @@
                                         @foreach (var svc in _accumulators.ServiceAccumulators)
                                         {
                                             <tr>
-                                                <td>@svc.ServiceType</td>
-                                                <td>@svc.Used @svc.UnitType</td>
-                                                <td>@svc.Limit @svc.UnitType</td>
-                                                <td>@(svc.Limit - svc.Used) @svc.UnitType</td>
+                                                <td>@svc.BenefitCategory</td>
+                                                <td>@svc.Used @svc.Unit</td>
+                                                <td>@svc.Limit @svc.Unit</td>
+                                                <td>@(svc.Limit - svc.Used) @svc.Unit</td>
                                                 <td style="min-width: 150px;">
                                                     <MudProgressLinear Value="@GetPercent(svc.Used, svc.Limit)"
                                                                        Color="@GetAccumColor(svc.Used, svc.Limit)"
@@ -206,25 +206,32 @@
                                     <thead>
                                         <tr>
                                             <th>Date</th>
-                                            <th>Claim ID</th>
-                                            <th style="text-align: right;">Deductible</th>
-                                            <th style="text-align: right;">Copay</th>
-                                            <th style="text-align: right;">Coinsurance</th>
-                                            <th style="text-align: right;">Plan Paid</th>
+                                            <th>Event</th>
+                                            <th>Source</th>
+                                            <th style="text-align: right;">Deductible Δ</th>
+                                            <th style="text-align: right;">OOP Δ</th>
+                                            <th>Actor</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         @foreach (var act in _accumulators.RecentActivity)
                                         {
                                             <tr>
-                                                <td>@act.ServiceDate.ToString("MM/dd/yyyy")</td>
+                                                <td>@act.OccurredAt.ToString("MM/dd/yyyy")</td>
+                                                <td>@act.EventType</td>
                                                 <td>
-                                                    <MudLink Href="@($"/claims/{act.ClaimId}")" Typo="Typo.body2" Style="font-family: monospace;">@act.ClaimId</MudLink>
+                                                    @if (act.EventType == "ClaimApplied" && !string.IsNullOrEmpty(act.SourceReference))
+                                                    {
+                                                        <MudLink Href="@($"/claims/{act.SourceReference}")" Typo="Typo.body2" Style="font-family: monospace;">@act.SourceReference</MudLink>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span style="font-family: monospace;">@act.SourceReference</span>
+                                                    }
                                                 </td>
-                                                <td style="text-align: right;">@act.DeductibleApplied.ToString("C")</td>
-                                                <td style="text-align: right;">@act.CopayApplied.ToString("C")</td>
-                                                <td style="text-align: right;">@act.CoinsuranceApplied.ToString("C")</td>
-                                                <td style="text-align: right;">@act.PlanPaid.ToString("C")</td>
+                                                <td style="text-align: right;">@act.DeductibleDelta.ToString("C")</td>
+                                                <td style="text-align: right;">@act.OopDelta.ToString("C")</td>
+                                                <td>@act.ActorId</td>
                                             </tr>
                                         }
                                     </tbody>
