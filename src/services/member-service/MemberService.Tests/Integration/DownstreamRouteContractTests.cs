@@ -64,10 +64,13 @@ public class DownstreamRouteContractTests
             {
                 RemoveAll<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>(services);
                 RemoveAll<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>(services);
+                RemoveAll<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>(services);
                 services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>(
                     new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>().Object);
                 services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>(
                     new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>().Object);
+                services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>(
+                    new Mock<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>().Object);
             });
         }
 
@@ -110,7 +113,16 @@ public class DownstreamRouteContractTests
         using var factory = new EnrollmentFactory();
         var endpoints = GetRegisteredPatterns(factory.Services);
 
-        AssertRouteRegistered(endpoints, "GET", "api/v1/enrollment/transactions");
+        var expected = new (string Verb, string PathTemplate)[]
+        {
+            ("GET", "api/v1/enrollment/transactions"),
+            ("GET", "api/v1/members/{memberId}/enrollment-events"),
+        };
+
+        foreach (var (verb, template) in expected)
+        {
+            AssertRouteRegistered(endpoints, verb, template);
+        }
     }
 
     private static List<(string Verb, string Pattern)> GetRegisteredPatterns(IServiceProvider sp)

@@ -1,4 +1,5 @@
 using EnrollmentImportService;
+using EnrollmentImportService.Repositories;
 using EnrollmentImportService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -10,7 +11,15 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Add services
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+    {
+        // Emit enums as their member names (e.g. "Enrolled") so portal + member-service
+        // DTOs that model EnrollmentEventType as a string can round-trip without a
+        // custom converter on every consumer.
+        o.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -32,6 +41,9 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 // Repositories and services
 builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<IEnrollmentTransactionRepository, EnrollmentTransactionRepository>();
+builder.Services.AddScoped<IEnrollmentEventRepository, EnrollmentEventRepository>();
+builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>();
+builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();
 builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
 
 // Health checks (MongoDB or Cosmos DB)

@@ -28,6 +28,9 @@ public interface IMemberService
     Task AssignPcpAsync(AssignPcpRequest request);
     Task<List<CoverageHistoryEvent>> GetCoverageHistoryAsync(string memberId);
     Task<List<Enrollment834Record>> GetMember834TransactionsAsync(string memberId);
+    Task<EnrollmentEventPage> GetEnrollmentEventsAsync(
+        string memberId,
+        EnrollmentEventFilter filter);
     Task TerminateEnrollmentAsync(TerminateEnrollmentRequest request);
     Task<MemberAccumulators> GetAccumulatorsAsync(string memberId);
 }
@@ -1274,6 +1277,45 @@ public class Enrollment834Record
     public List<string> Errors { get; set; } = new();
     public string? RawSegmentPreview { get; set; }
 }
+
+/// <summary>
+/// Portal projection of enrollment-import-service's <c>EnrollmentEvent</c>. Surfaced via
+/// the member-service proxy at GET /members/{id}/enrollment-events so consent /
+/// audit / tenant filtering happens on the same boundary as every other member read.
+/// </summary>
+public class EnrollmentEvent
+{
+    public string EventId { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    public int Version { get; set; }
+    public DateTime OccurredAt { get; set; }
+    public DateTime? EventDate { get; set; }
+    public DateTime? RetroEffectiveDate { get; set; }
+    public string? SourceBatchId { get; set; }
+    public string? TransactionId { get; set; }
+    public string? MaintenanceType { get; set; }
+    public string? MaintenanceReason { get; set; }
+    public string? Source { get; set; }
+
+    /// <summary>Raw JSON payload (changed fields, plan ids, etc.). Rendered as-is for now.</summary>
+    public System.Text.Json.JsonElement? Payload { get; set; }
+
+    /// <summary>Raw 834 (or manual JSON) snippet captured at write time, for audit display.</summary>
+    public string? RawSegment { get; set; }
+}
+
+public class EnrollmentEventPage
+{
+    public List<EnrollmentEvent> Items { get; set; } = new();
+    public string? ContinuationToken { get; set; }
+}
+
+public sealed record EnrollmentEventFilter(
+    string? Type = null,
+    DateTime? From = null,
+    DateTime? To = null,
+    int Limit = 50,
+    string? ContinuationToken = null);
 
 public class AssignPcpRequest
 {
