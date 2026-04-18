@@ -714,6 +714,27 @@ public class BenefitPlanService : IBenefitPlanService
         }
     }
 
+    public async Task<MemberBenefitView?> GetMemberViewAsync(string planId, DateTime serviceDate)
+    {
+        var baseUrl = _configuration["Services:BenefitPlanService"];
+        var url = $"{baseUrl}/v1/benefit-plans/{Uri.EscapeDataString(planId)}/member-view?serviceDate={serviceDate:yyyy-MM-dd}";
+        try
+        {
+            var response = await _httpClient.GetAsync(url);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MemberBenefitView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Benefit Plan Service");
+            throw new ServiceUnavailableException("Benefit Plan Service", ex);
+        }
+    }
+
     private class CreateBenefitPlanResponse
     {
         public string PlanId { get; set; } = string.Empty;

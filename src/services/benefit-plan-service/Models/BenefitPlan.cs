@@ -61,6 +61,16 @@ public class BenefitPlan
     [JsonPropertyName("costSharing")]
     public CostSharing CostSharing { get; set; } = new();
 
+    /// <summary>
+    /// Plan-level documents (SBC, EOC, Formulary, etc.).
+    /// Inline for now; Phase 2 will migrate to member-document-service via
+    /// FHIR DocumentReference (see PR #650 sibling work). Field shape is
+    /// kept forward-compatible — the migration is then a data-copy.
+    /// TODO(benefits-viewer-phase2): migrate to DocumentReference resources.
+    /// </summary>
+    [JsonPropertyName("documents")]
+    public List<PlanDocumentReference> Documents { get; set; } = new();
+
     [JsonPropertyName("createdAt")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -112,6 +122,14 @@ public class Benefit
 
     [JsonPropertyName("deductibleApplies")]
     public bool DeductibleApplies { get; set; } = true;
+
+    /// <summary>
+    /// Whether patient cost for this benefit accumulates toward the
+    /// out-of-pocket maximum. Most benefits do; some (e.g. non-essential
+    /// services, certain out-of-network services) don't.
+    /// </summary>
+    [JsonPropertyName("oopApplies")]
+    public bool OopApplies { get; set; } = true;
 
     [JsonPropertyName("priorAuthRequired")]
     public bool PriorAuthRequired { get; set; } = false;
@@ -200,6 +218,85 @@ public class CostSharing
 
     [JsonPropertyName("outNetworkFamilyOutOfPocketMax")]
     public decimal? OutNetworkFamilyOutOfPocketMax { get; set; }
+}
+
+/// <summary>
+/// Plan-level document (SBC, EOC, Formulary, ...).
+///
+/// Shape is deliberately forward-compatible with FHIR DocumentReference so
+/// that the planned Phase 2 migration to member-document-service becomes a
+/// data-copy rather than a model redesign. Fields map as follows:
+///   Location         -> DocumentReference.content.attachment.url
+///   ContentType      -> DocumentReference.content.attachment.contentType
+///   Size             -> DocumentReference.content.attachment.size
+///   ContentHashSha256-> DocumentReference.content.attachment.hash (base64 of sha256)
+///   DocType          -> DocumentReference.type.coding
+///   Version          -> DocumentReference.version
+///   EffectiveDate    -> DocumentReference.date
+///
+/// TODO(benefits-viewer-phase2): replace inline list with references to
+/// member-document-service once that lands.
+/// </summary>
+public class PlanDocumentReference
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+
+    [Required]
+    [JsonPropertyName("docType")]
+    public PlanDocumentType DocType { get; set; }
+
+    /// <summary>
+    /// Resolves to the document. Today this is an external HTTPS URL.
+    /// After Phase 2, this may also be an internal reference of the
+    /// form "documentreference/{id}" resolved by member-document-service.
+    /// Consumers must accept both forms.
+    /// </summary>
+    [Required]
+    [JsonPropertyName("location")]
+    public string Location { get; set; } = string.Empty;
+
+    [JsonPropertyName("contentType")]
+    public string? ContentType { get; set; }
+
+    [JsonPropertyName("size")]
+    public long? Size { get; set; }
+
+    /// <summary>
+    /// Base64-encoded SHA-256 of the document contents. Matches FHIR
+    /// <c>DocumentReference.content.attachment.hash</c> exactly so the
+    /// Phase 2 migration is a data-copy.
+    ///
+    /// Optional today; populate when available. Validated at producer
+    /// boundaries (see <c>PlanDocumentValidation.ValidateHash</c>) — the
+    /// setter itself is intentionally unvalidated so Mongo hydration and
+    /// JSON deserialization of historical documents never throws here.
+    /// </summary>
+    [JsonPropertyName("contentHashSha256")]
+    public string? ContentHashSha256 { get; set; }
+
+    [JsonPropertyName("version")]
+    public string? Version { get; set; }
+
+    [JsonPropertyName("effectiveDate")]
+    public DateTime? EffectiveDate { get; set; }
+
+    [JsonPropertyName("displayName")]
+    public string? DisplayName { get; set; }
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum PlanDocumentType
+{
+    /// <summary>Summary of Benefits and Coverage (ACA mandated).</summary>
+    SBC,
+    /// <summary>Evidence of Coverage / Certificate of Coverage.</summary>
+    EOC,
+    /// <summary>Drug formulary.</summary>
+    Formulary,
+    /// <summary>Summary Plan Description (ERISA).</summary>
+    SPD,
+    Other
 }
 
 /// <summary>
