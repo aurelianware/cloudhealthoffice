@@ -90,9 +90,26 @@ public class FamilyRelationshipServiceTests
 
         await svc.CreateAsync(Tenant, Req("DEP-1", "SUB-1", "19"), "tester");
 
+        // Typed exception so shim / backfill idempotency paths don't rely on
+        // brittle error-message matching.
         var act = () => svc.CreateAsync(Tenant, Req("DEP-1", "SUB-1", "19"), "tester");
-        await act.Should().ThrowAsync<FamilyRelationshipValidationException>()
-            .WithMessage("*already exists*");
+        await act.Should().ThrowAsync<DuplicateFamilyRelationshipException>();
+    }
+
+    [Fact]
+    public async Task Create_Rejects_SecondActivePair_EvenWithFutureEndDate()
+    {
+        var (svc, members, _) = Build();
+        await members.CreateAsync(Make("SUB-1"));
+        await members.CreateAsync(Make("DEP-1", isSubscriber: false));
+
+        // First pair has a future EndDate — still "active" per model.IsActive.
+        var req = Req("DEP-1", "SUB-1", "19");
+        req.EndDate = DateTime.UtcNow.AddYears(5);
+        await svc.CreateAsync(Tenant, req, "tester");
+
+        var act = () => svc.CreateAsync(Tenant, Req("DEP-1", "SUB-1", "19"), "tester");
+        await act.Should().ThrowAsync<DuplicateFamilyRelationshipException>();
     }
 
     [Fact]

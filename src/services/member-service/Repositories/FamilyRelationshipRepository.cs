@@ -85,7 +85,10 @@ public class FamilyRelationshipRepository : IFamilyRelationshipRepository
         string tenantId, string subjectMemberId, bool includeDeleted = false, CancellationToken ct = default)
     {
         var queryText = "SELECT * FROM c WHERE c.tenantId = @t AND c.subjectMemberId = @s";
-        if (!includeDeleted) queryText += " AND NOT IS_DEFINED(c.deletedAt)";
+        // System.Text.Json emits missing-nullable as `null`, not as an absent property,
+        // so a strict `NOT IS_DEFINED` filter would hide every non-deleted row. Allow
+        // both cases: the property is missing OR explicitly null.
+        if (!includeDeleted) queryText += " AND (NOT IS_DEFINED(c.deletedAt) OR c.deletedAt = null)";
         var query = new QueryDefinition(queryText)
             .WithParameter("@t", tenantId)
             .WithParameter("@s", subjectMemberId);
@@ -97,7 +100,10 @@ public class FamilyRelationshipRepository : IFamilyRelationshipRepository
         string tenantId, string memberId, bool includeDeleted = false, CancellationToken ct = default)
     {
         var queryText = "SELECT * FROM c WHERE c.tenantId = @t AND (c.subjectMemberId = @m OR c.relatedMemberId = @m)";
-        if (!includeDeleted) queryText += " AND NOT IS_DEFINED(c.deletedAt)";
+        // System.Text.Json emits missing-nullable as `null`, not as an absent property,
+        // so a strict `NOT IS_DEFINED` filter would hide every non-deleted row. Allow
+        // both cases: the property is missing OR explicitly null.
+        if (!includeDeleted) queryText += " AND (NOT IS_DEFINED(c.deletedAt) OR c.deletedAt = null)";
         var query = new QueryDefinition(queryText)
             .WithParameter("@t", tenantId)
             .WithParameter("@m", memberId);
@@ -108,16 +114,20 @@ public class FamilyRelationshipRepository : IFamilyRelationshipRepository
     public async Task<FamilyRelationship?> FindActivePairAsync(
         string tenantId, string subjectMemberId, string relatedMemberId, CancellationToken ct = default)
     {
+        // Active = not soft-deleted AND (no end date OR end date is in the future).
+        // Matches FamilyRelationship.IsActive and DeriveSubscriberMemberIdAsync —
+        // an EndDate in the future must still block duplicate creates.
         var query = new QueryDefinition(@"
                 SELECT TOP 1 * FROM c
                 WHERE c.tenantId = @t
                   AND c.subjectMemberId = @s
                   AND c.relatedMemberId = @r
-                  AND NOT IS_DEFINED(c.deletedAt)
-                  AND (NOT IS_DEFINED(c.endDate) OR c.endDate = null)")
+                  AND (NOT IS_DEFINED(c.deletedAt) OR c.deletedAt = null)
+                  AND (NOT IS_DEFINED(c.endDate) OR c.endDate = null OR c.endDate > @now)")
             .WithParameter("@t", tenantId)
             .WithParameter("@s", subjectMemberId)
-            .WithParameter("@r", relatedMemberId);
+            .WithParameter("@r", relatedMemberId)
+            .WithParameter("@now", DateTime.UtcNow);
 
         var results = await QueryAllAsync(query, tenantId, ct);
         return results.FirstOrDefault();

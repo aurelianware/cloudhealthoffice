@@ -27,8 +27,10 @@ public interface IFamilyRelationshipService
     Task<FamilyRelationship> EndAsync(string tenantId, string id, DateTime endDate, string? actor, CancellationToken ct = default);
 
     /// <summary>
-    /// Soft-delete (data-entry error correction). Requires actor to be an admin and the row
-    /// to have been created within <paramref name="maxAge"/> (default: 24h). Never purges.
+    /// Soft-delete (data-entry error correction). Row must have been created within
+    /// <paramref name="maxAge"/> (default: 24h). Never purges. Authorization of the
+    /// acting user is the caller's responsibility — enforce it at the controller /
+    /// API boundary, not here.
     /// </summary>
     Task<FamilyRelationship> SoftDeleteAsync(string tenantId, string id, string reason, string? actor, TimeSpan? maxAge = null, CancellationToken ct = default);
 
@@ -68,9 +70,22 @@ public class UpdateFamilyRelationshipRequest
 
 /// <summary>
 /// Thrown when a relationship write violates an invariant (symmetric-graph, same-tenant,
-/// duplicate-active, invalid code, member-not-found). Mapped to 400 in the controller.
+/// invalid code, member-not-found). Mapped to 400 in the controller. See
+/// <see cref="DuplicateFamilyRelationshipException"/> for the duplicate-active-pair case
+/// — callers that need to no-op on re-runs (the shim, the backfill) catch that subtype
+/// rather than inspecting error-message text.
 /// </summary>
 public class FamilyRelationshipValidationException : Exception
 {
     public FamilyRelationshipValidationException(string message) : base(message) { }
+}
+
+/// <summary>
+/// Thrown when a create would produce a second active pair between two members. Distinct
+/// type so idempotent callers (shim / backfill) can reliably detect it without
+/// message-matching.
+/// </summary>
+public class DuplicateFamilyRelationshipException : FamilyRelationshipValidationException
+{
+    public DuplicateFamilyRelationshipException(string message) : base(message) { }
 }

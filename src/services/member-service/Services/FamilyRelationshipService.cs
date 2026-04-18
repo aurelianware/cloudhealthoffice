@@ -67,7 +67,7 @@ public class FamilyRelationshipService : IFamilyRelationshipService
         // parallel active pairs, which would break "active" derivation downstream.
         var existing = await _repo.FindActivePairAsync(tenantId, req.SubjectMemberId, req.RelatedMemberId, ct);
         if (existing != null)
-            throw new FamilyRelationshipValidationException(
+            throw new DuplicateFamilyRelationshipException(
                 $"An active relationship already exists between '{req.SubjectMemberId}' and '{req.RelatedMemberId}'.");
 
         if (req.EndDate.HasValue && req.EndDate.Value < req.StartDate)

@@ -72,20 +72,38 @@ public sealed class RelationshipShim : IRelationshipShim
         {
             await _service.CreateAsync(dependent.TenantId, req, actor ?? "834-import", ct);
         }
-        catch (FamilyRelationshipValidationException ex) when (
-            ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+        catch (DuplicateFamilyRelationshipException)
         {
+            // Idempotent re-run: the active pair is already in place.
             _logger.LogDebug(
                 "RelationshipShim no-op: pair already exists for {Dependent} → {Subscriber}",
-                dependent.MemberId, legacySubscriberId);
+                SanitizeForLog(dependent.MemberId), SanitizeForLog(legacySubscriberId));
         }
         catch (FamilyRelationshipValidationException ex)
         {
             // Log and swallow — the shim must never block a legitimate 834 write.
             // Graph-model completeness can be reconciled by the backfill tool.
             _logger.LogWarning(ex,
-                "RelationshipShim: skipped edge for {Dependent} → {Subscriber}: {Reason}",
-                dependent.MemberId, legacySubscriberId, ex.Message);
+                "RelationshipShim: skipped edge for {Dependent} → {Subscriber}",
+                SanitizeForLog(dependent.MemberId), SanitizeForLog(legacySubscriberId));
         }
+    }
+
+    /// <summary>
+    /// Strip control characters (including CR/LF) from user-controlled values before
+    /// they enter a log message. Prevents log-forging / log-injection per CodeQL rule
+    /// cs/log-forging. MemberId and SubscriberMemberId originate from X12 payloads
+    /// processed upstream — never trust them verbatim in logs.
+    /// </summary>
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var buffer = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            buffer.Append(char.IsControl(ch) ? '_' : ch);
+        }
+        if (buffer.Length > 128) buffer.Length = 128;
+        return buffer.ToString();
     }
 }

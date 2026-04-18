@@ -3368,14 +3368,24 @@ public class FamilyRelationshipService : IFamilyRelationshipService
                 var body = await response.Content.ReadAsStringAsync();
                 throw new InvalidOperationException($"Add dependent failed ({(int)response.StatusCode}): {body}");
             }
-            // The API returns {member, subscriberMemberId} — we don't need the full body in the portal
-            return null;
+
+            // Server returns { member, subscriberMemberId, relationship }. Surface the
+            // relationship row so callers can link into the new edge without a re-fetch.
+            var parsed = await response.Content.ReadFromJsonAsync<AddDependentApiResponse>(
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return parsed?.Relationship;
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
             throw new ServiceUnavailableException("Member Service", ex);
         }
+    }
+
+    private class AddDependentApiResponse
+    {
+        public FamilyRelationshipRow? Relationship { get; set; }
+        public string SubscriberMemberId { get; set; } = string.Empty;
     }
 
     public async Task EndRelationshipAsync(string memberId, string relationshipId, DateTime? endDate = null)

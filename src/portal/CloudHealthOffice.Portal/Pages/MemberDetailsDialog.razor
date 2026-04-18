@@ -782,8 +782,11 @@
     private List<FamilyRelationshipRow> _dependentRows = new();
     private List<FamilyRelationshipRow> _otherRows = new();
 
-    // X12 INS02 codes meaning "the counterparty is this member's subscriber"
-    private static readonly HashSet<string> DependentToSubscriberCodes = new() { "19", "17", "10", "01", "53", "22", "29" };
+    // Codes whose inverse is "G8" (Parent / Other) — these are the true
+    // directional dependent→subscriber edges. Self-inverse codes like "01"
+    // (Spouse), "53" (Life Partner), "22" (Handicapped Dep.), "29" (Significant
+    // Other) are symmetric and don't identify a subscriber; they land in "Other".
+    private static readonly HashSet<string> DependentToSubscriberCodes = new() { "19", "17", "10" };
 
     private MudTabPanel? _pcpTab;
     private MudTable<Enrollment834Record>? _834Table;

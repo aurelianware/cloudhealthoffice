@@ -113,12 +113,15 @@ public class FamilyRelationshipRepositoryMongo : IFamilyRelationshipRepository
     public async Task<FamilyRelationship?> FindActivePairAsync(
         string tenantId, string subjectMemberId, string relatedMemberId, CancellationToken ct = default)
     {
+        // Active = not soft-deleted AND (no end date OR end date is still in the future).
+        // Matches FamilyRelationship.IsActive; a future EndDate must still block duplicates.
+        var now = DateTime.UtcNow;
         var fb = Builders<FamilyRelationship>.Filter;
         var f = fb.Eq(x => x.TenantId, tenantId) &
                 fb.Eq(x => x.SubjectMemberId, subjectMemberId) &
                 fb.Eq(x => x.RelatedMemberId, relatedMemberId) &
                 fb.Eq(x => x.DeletedAt, (DateTime?)null) &
-                fb.Eq(x => x.EndDate, (DateTime?)null);
+                (fb.Eq(x => x.EndDate, (DateTime?)null) | fb.Gt(x => x.EndDate, now));
         return await _collection.Find(f).FirstOrDefaultAsync(ct);
     }
 }

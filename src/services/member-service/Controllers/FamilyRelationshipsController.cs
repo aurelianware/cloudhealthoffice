@@ -53,7 +53,9 @@ public class FamilyRelationshipsController : ControllerBase
         CancellationToken ct = default)
     {
         var member = await _memberRepo.GetByMemberIdAsync(TenantId, memberId);
-        if (member == null) return NotFound();
+        // Hide drafts from the relationships endpoint the same way MembersController.GetMember
+        // hides them — a draft Member's edges shouldn't be enumerable until the wizard commits.
+        if (member == null || member.IsDraft) return NotFound();
 
         var rows = await _service.ListForMemberAsync(TenantId, memberId, includeDeleted, ct);
 
@@ -155,9 +157,16 @@ public class FamilyRelationshipsController : ControllerBase
     }
 
     /// <summary>
-    /// Soft-delete (admin-only, data-entry error correction within 24h).
-    /// Hard delete is intentionally not exposed — the relationship may be referenced
-    /// by downstream claims, authorizations, and audit records.
+    /// Soft-delete (data-entry error correction within 24h). Hard delete is
+    /// intentionally not exposed — the relationship may be referenced by downstream
+    /// claims, authorizations, and audit records.
+    ///
+    /// Authorization: this endpoint is intended to be gated to admin actors at the
+    /// API gateway / ingress (no controller-level policy is defined because the
+    /// service stack does not configure <c>AddAuthorization</c> here; policies live
+    /// at the gateway). The 24h creation-window guard inside
+    /// <c>FamilyRelationshipService.SoftDeleteAsync</c> is defense-in-depth but not
+    /// a substitute for the gateway policy.
     /// </summary>
     [HttpDelete("{relId}")]
     [ProducesResponseType(typeof(FamilyRelationship), 200)]
@@ -264,9 +273,10 @@ public class FamilyRelationshipsController : ControllerBase
 
         await _memberRepo.CreateAsync(dependent);
 
+        FamilyRelationship createdRelationship;
         try
         {
-            await _service.CreateAsync(TenantId, new CreateFamilyRelationshipRequest
+            createdRelationship = await _service.CreateAsync(TenantId, new CreateFamilyRelationshipRequest
             {
                 SubjectMemberId = dependent.MemberId,
                 RelatedMemberId = memberId,
@@ -304,12 +314,20 @@ public class FamilyRelationshipsController : ControllerBase
                 ["memberId"] = dependent.MemberId,
                 ["subscriberMemberId"] = memberId,
                 ["relationshipCode"] = request.Relationship.RelationshipCode,
+                ["relationshipId"] = createdRelationship.Id,
             },
         }, ct);
 
+        // Location points at the created relationship row, not the Member. A GET on
+        // api/v1/members/{depMemberId}/relationships/{relId} will resolve it.
         return CreatedAtAction(nameof(Get),
-            new { memberId = dependent.MemberId, relId = dependent.Id },
-            new AddDependentResponse { Member = dependent, SubscriberMemberId = memberId });
+            new { memberId = dependent.MemberId, relId = createdRelationship.Id },
+            new AddDependentResponse
+            {
+                Member = dependent,
+                SubscriberMemberId = memberId,
+                Relationship = createdRelationship,
+            });
     }
 }
 
@@ -371,6 +389,7 @@ public class AddDependentResponse
 {
     public Member Member { get; set; } = new();
     public string SubscriberMemberId { get; set; } = string.Empty;
+    public FamilyRelationship? Relationship { get; set; }
 }
 
 #endregion

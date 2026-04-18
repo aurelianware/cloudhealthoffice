@@ -8,6 +8,7 @@ using MemberService.Repositories;
 using MemberService.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 
 namespace FamilyRelationshipsBackfill;
@@ -75,7 +76,7 @@ public static class Program
         }
 
         var job = await jobs.Find(jobFilter).FirstOrDefaultAsync()
-            ?? new BackfillJob { Id = Guid.NewGuid().ToString(), TenantId = tenant, StartedAt = DateTime.UtcNow };
+            ?? new BackfillJob { TenantId = tenant, StartedAt = DateTime.UtcNow };
 
         if (job.Completed)
         {
@@ -149,8 +150,9 @@ public static class Program
                         created++;
                     }
                 }
-                catch (FamilyRelationshipValidationException ex) when (ex.Message.Contains("already exists"))
+                catch (DuplicateFamilyRelationshipException)
                 {
+                    // Pair is already in place (shim or prior backfill run).
                     skippedAlreadyLinked++;
                 }
                 catch (FamilyRelationshipValidationException ex)
@@ -192,8 +194,14 @@ public static class Program
 
 public sealed class BackfillJob
 {
-    public string Id { get; set; } = string.Empty;
+    /// <summary>
+    /// TenantId IS the document id. That guarantees exactly one checkpoint per tenant
+    /// across concurrent or repeated runs — Mongo rejects a second document with the
+    /// same _id instead of silently creating a parallel checkpoint.
+    /// </summary>
+    [BsonId]
     public string TenantId { get; set; } = string.Empty;
+
     public string? LastProcessedMemberId { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

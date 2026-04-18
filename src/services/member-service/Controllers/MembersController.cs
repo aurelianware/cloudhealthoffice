@@ -34,6 +34,7 @@ public class MembersController : ControllerBase
     private readonly IAccumulatorServiceClient _accumulators;
     private readonly IRelationshipShim? _relationshipShim;
     private readonly IFamilyRelationshipService? _familyRelationships;
+    private readonly ILogger<MembersController>? _logger;
 
     public MembersController(
         IMemberRepository memberRepository,
@@ -45,7 +46,8 @@ public class MembersController : ControllerBase
         IEnrollmentImportServiceClient enrollment,
         IAccumulatorServiceClient accumulators,
         IRelationshipShim? relationshipShim = null,
-        IFamilyRelationshipService? familyRelationships = null)
+        IFamilyRelationshipService? familyRelationships = null,
+        ILogger<MembersController>? logger = null)
     {
         _memberRepository = memberRepository;
         _eventPublisher = eventPublisher;
@@ -57,6 +59,7 @@ public class MembersController : ControllerBase
         _accumulators = accumulators;
         _relationshipShim = relationshipShim;
         _familyRelationships = familyRelationships;
+        _logger = logger;
     }
 
     // ── Search / read ────────────────────────────────────────────────
@@ -78,6 +81,8 @@ public class MembersController : ControllerBase
         if (!string.IsNullOrEmpty(memberId))
         {
             var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
+            // Drafts are hidden from standard search paths (parity with GetMember).
+            if (member != null && member.IsDraft) member = null;
             return Ok(new MemberListResponse
             {
                 Members = member != null ? new List<Member> { member } : new List<Member>(),
@@ -90,7 +95,7 @@ public class MembersController : ControllerBase
             TenantId, groupNumber, lastName, dateOfBirth,
             activeOnly, subscribersOnly, pageSize, continuationToken);
 
-        var list = items.ToList();
+        var list = items.Where(m => !m.IsDraft).ToList();
         return Ok(new MemberListResponse
         {
             Members = list,
@@ -108,7 +113,7 @@ public class MembersController : ControllerBase
             return await SearchMembers(pageSize: 20);
 
         var byId = await _memberRepository.GetByMemberIdAsync(TenantId, q);
-        if (byId != null)
+        if (byId != null && !byId.IsDraft)
             return Ok(new List<Member> { byId });
 
         return await SearchMembers(
@@ -149,10 +154,14 @@ public class MembersController : ControllerBase
 #pragma warning restore CS0618
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Derivation is a read-side best-effort. Never let graph errors break
-            // the member GET — the legacy field still holds the 834-written value.
+            // Best-effort on the read path — the legacy field still holds the last 834
+            // value, so the GET doesn't need to fail. Log so operators can see when the
+            // graph is unavailable for a given tenant instead of silently falling through.
+            _logger?.LogWarning(ex,
+                "Best-effort SubscriberMemberId derivation failed for tenant {TenantId} member {MemberId}; returning legacy field.",
+                TenantId, member.MemberId);
         }
     }
 

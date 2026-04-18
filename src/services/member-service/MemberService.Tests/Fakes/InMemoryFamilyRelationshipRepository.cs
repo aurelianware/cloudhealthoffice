@@ -23,7 +23,12 @@ public sealed class InMemoryFamilyRelationshipRepository : IFamilyRelationshipRe
 
         if (SimulatePairTornWrite)
         {
-            // Write only the forward row, then throw. Tests assert the repo rolls back.
+            // Write only the forward row, then throw. Tests assert the service /
+            // higher-level caller's expectation that a torn write is observable via
+            // the rogue row being left behind — i.e., the repo itself is NOT atomic
+            // when this flag is set. Use this to exercise failure-path code paths
+            // that should clean up or surface the inconsistency.
+            Rows.Add(Clone(forward));
             throw new InvalidOperationException("Simulated transactional failure.");
         }
 
@@ -68,13 +73,17 @@ public sealed class InMemoryFamilyRelationshipRepository : IFamilyRelationshipRe
 
     public Task<FamilyRelationship?> FindActivePairAsync(
         string tenantId, string subjectMemberId, string relatedMemberId, CancellationToken ct = default)
-        => Task.FromResult<FamilyRelationship?>(
+    {
+        // Match production semantics: a future EndDate is still "active".
+        var now = DateTime.UtcNow;
+        return Task.FromResult<FamilyRelationship?>(
             Rows.FirstOrDefault(r =>
                 r.TenantId == tenantId &&
                 r.SubjectMemberId == subjectMemberId &&
                 r.RelatedMemberId == relatedMemberId &&
                 r.DeletedAt == null &&
-                r.EndDate == null));
+                (r.EndDate == null || r.EndDate > now)));
+    }
 
     private void Replace(FamilyRelationship row)
     {
