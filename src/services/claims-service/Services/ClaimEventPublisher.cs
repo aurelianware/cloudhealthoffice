@@ -21,11 +21,20 @@ public interface IClaimEventPublisher
     /// source of truth, not the event stream).
     /// </summary>
     Task PublishClaimPendedAsync(Claim claim, string tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Emit a ClaimFinalizedEvent when a claim reaches a terminal adjudication
+    /// state (Approved, Paid, PartiallyPaid, Denied). Consumed by accumulator-service
+    /// (member deductible/OOP projection) and downstream analytics. Same degraded-mode
+    /// semantics as PublishClaimPendedAsync — claim DB is truth, event is a notification.
+    /// </summary>
+    Task PublishClaimFinalizedAsync(Claim claim, string tenantId, CancellationToken ct = default);
 }
 
 public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncDisposable
 {
     public const string ClaimPendedTopic = "claims.pended.v1";
+    public const string ClaimFinalizedTopic = "claims.finalized.v1";
 
     private readonly ILogger<ClaimEventPublisher> _logger;
     private readonly IConfiguration _configuration;
@@ -153,6 +162,96 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
         {
             _logger.LogError(ex, "Unexpected error publishing ClaimPendedEvent for claim {ClaimId}", claim.Id);
         }
+    }
+
+    public async Task PublishClaimFinalizedAsync(Claim claim, string tenantId, CancellationToken ct = default)
+    {
+        if (!_available || _producer == null)
+        {
+            _logger.LogDebug("Kafka producer unavailable; skipping ClaimFinalizedEvent for claim {ClaimId}", claim.Id);
+            return;
+        }
+
+        var evt = BuildFinalizedEvent(claim, tenantId);
+
+        var message = new Message<string, string>
+        {
+            Key = claim.Id,
+            Value = JsonSerializer.Serialize(evt, JsonOptions),
+            Headers = new Headers
+            {
+                { "tenant-id", Encoding.UTF8.GetBytes(tenantId) },
+                { "event-type", Encoding.UTF8.GetBytes(evt.EventType) },
+                { "event-schema-version", Encoding.UTF8.GetBytes(evt.EventSchemaVersion.ToString()) }
+            }
+        };
+
+        try
+        {
+            await _producer.ProduceAsync(ClaimFinalizedTopic, message, ct);
+            _logger.LogInformation("Published ClaimFinalizedEvent for claim {ClaimId} ({Status}) to {Topic}",
+                claim.Id, claim.Status, ClaimFinalizedTopic);
+        }
+        catch (ProduceException<string, string> ex)
+        {
+            _logger.LogError(ex, "Failed to publish ClaimFinalizedEvent for claim {ClaimId}: {Reason}",
+                claim.Id, ex.Error.Reason);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error publishing ClaimFinalizedEvent for claim {ClaimId}", claim.Id);
+        }
+    }
+
+    private static ClaimFinalizedEvent BuildFinalizedEvent(Claim claim, string tenantId)
+    {
+        var adj = claim.AdjudicationResult;
+        var lines = claim.ClaimLines.Select(l => new ClaimFinalizedLineItem
+        {
+            LineNumber = l.LineNumber,
+            BenefitCategory = l.RevenueCode ?? l.PlaceOfServiceCode ?? string.Empty,
+            ServiceCode = l.ProcedureCode,
+            DeductibleApplied = l.AdjudicationResult?.AdjustmentReasons
+                .Where(r => r.ReasonCode == "1").Sum(r => r.Amount) ?? 0m,
+            CoinsuranceApplied = l.AdjudicationResult?.AdjustmentReasons
+                .Where(r => r.ReasonCode == "2").Sum(r => r.Amount) ?? 0m,
+            CopayApplied = l.AdjudicationResult?.AdjustmentReasons
+                .Where(r => r.ReasonCode == "3").Sum(r => r.Amount) ?? 0m,
+            OopApplied = (l.AdjudicationResult?.PatientResponsibility) ?? 0m,
+            PlanPaid = l.AdjudicationResult?.PaidAmount ?? 0m,
+            MemberResponsibility = l.AdjudicationResult?.PatientResponsibility ?? 0m
+        }).ToList();
+
+        var status = claim.Status switch
+        {
+            ClaimStatus.Paid or ClaimStatus.Approved or ClaimStatus.PartiallyPaid => "Paid",
+            ClaimStatus.Denied => "Denied",
+            ClaimStatus.Voided => "Reversed",
+            _ => claim.Status.ToString()
+        };
+
+        // Family-aggregate determination requires benefit-plan context the claim does
+        // not carry. Default false here; accumulator-service applies individual-only
+        // unless the producer (or a future plan-enrichment step) sets this flag.
+        return new ClaimFinalizedEvent
+        {
+            TenantId = tenantId,
+            ClaimId = claim.Id,
+            ClaimNumber = claim.ClaimNumber,
+            MemberId = claim.MemberId,
+            ServiceDate = claim.ServiceDateFrom,
+            AdjudicationTimestamp = claim.AdjudicatedDate ?? DateTimeOffset.UtcNow,
+            FinalStatus = status,
+            BenefitCategory = claim.PlaceOfServiceCode ?? string.Empty,
+            IsFamilyAggregate = false,
+            DeductibleApplied = adj?.DeductibleAmount ?? 0m,
+            CoinsuranceApplied = adj?.CoinsuranceAmount ?? 0m,
+            CopayApplied = adj?.CopayAmount ?? 0m,
+            OopApplied = adj?.PatientResponsibility ?? 0m,
+            PlanPaid = adj?.PayerPayment ?? 0m,
+            MemberResponsibility = adj?.PatientResponsibility ?? 0m,
+            LineItems = lines
+        };
     }
 
     public async ValueTask DisposeAsync()

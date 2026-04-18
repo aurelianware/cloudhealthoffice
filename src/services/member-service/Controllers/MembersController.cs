@@ -732,6 +732,10 @@ public class Enrollment834Record
 
 public class MemberAccumulatorsResponse
 {
+    public string MemberId { get; set; } = string.Empty;
+    public DateTime PlanYearStart { get; set; }
+    public DateTime PlanYearEnd { get; set; }
+
     public decimal IndividualDeductibleUsed { get; set; }
     public decimal IndividualDeductibleLimit { get; set; }
     public decimal FamilyDeductibleUsed { get; set; }
@@ -740,8 +744,31 @@ public class MemberAccumulatorsResponse
     public decimal IndividualOopLimit { get; set; }
     public decimal FamilyOopUsed { get; set; }
     public decimal FamilyOopLimit { get; set; }
-    public List<object> ServiceAccumulators { get; set; } = new();
-    public List<object> RecentActivity { get; set; } = new();
+
+    public List<MemberServiceAccumulator> ServiceAccumulators { get; set; } = new();
+    public List<MemberAccumulatorActivity> RecentActivity { get; set; } = new();
+}
+
+public class MemberServiceAccumulator
+{
+    public string BenefitCategory { get; set; } = string.Empty;
+    public decimal Used { get; set; }
+    public decimal Limit { get; set; }
+    public string Unit { get; set; } = "USD";
+}
+
+public class MemberAccumulatorActivity
+{
+    public string EventId { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    public string? SourceReference { get; set; }
+    public DateTime OccurredAt { get; set; }
+    public decimal DeductibleDelta { get; set; }
+    public decimal OopDelta { get; set; }
+    public decimal FamilyDeductibleDelta { get; set; }
+    public decimal FamilyOopDelta { get; set; }
+    public string? Reason { get; set; }
+    public string ActorId { get; set; } = "system";
 }
 
 public class AssignPcpRequest
