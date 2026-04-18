@@ -4,83 +4,89 @@
 
 <MudDialog Style="min-width: 680px;">
     <DialogContent>
-        <MudStepper @bind-ActiveIndex="_step" Color="Color.Primary">
-            <MudStep Title="Dependent info">
-                <MudGrid>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_payload.Member.MemberId" Label="Dependent Member ID" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudDatePicker @bind-Date="_effectiveDate" Label="Effective Date" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_payload.Member.FirstName" Label="First Name" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_payload.Member.LastName" Label="Last Name" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudDatePicker @bind-Date="_dob" Label="Date of Birth" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudSelect T="string" Label="Gender" @bind-Value="_payload.Member.Gender">
-                            <MudSelectItem Value="@("M")">Male</MudSelectItem>
-                            <MudSelectItem Value="@("F")">Female</MudSelectItem>
-                            <MudSelectItem Value="@("U")">Unknown</MudSelectItem>
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudTextField @bind-Value="_payload.Member.SSN" Label="SSN (optional)" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_payload.Member.Email" Label="Email" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_payload.Member.Phone" Label="Phone" />
-                    </MudItem>
-                </MudGrid>
-            </MudStep>
+        <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-3">
+            Step @(_step + 1) of 3 — @StepTitle
+        </MudText>
+        <MudProgressLinear Color="Color.Primary" Value="@(((_step + 1) * 100.0) / 3.0)" Class="mb-4" />
 
-            <MudStep Title="Relationship">
-                <MudGrid>
-                    <MudItem xs="12" md="6">
-                        <MudSelect T="string" Label="Relationship" @bind-Value="_payload.Relationship.RelationshipCode" Required="true">
-                            <MudSelectItem Value="@("19")">Child</MudSelectItem>
-                            <MudSelectItem Value="@("01")">Spouse</MudSelectItem>
-                            <MudSelectItem Value="@("53")">Life Partner / Domestic Partner</MudSelectItem>
-                            <MudSelectItem Value="@("17")">Stepchild</MudSelectItem>
-                            <MudSelectItem Value="@("10")">Foster Child</MudSelectItem>
-                            <MudSelectItem Value="@("22")">Handicapped Dependent</MudSelectItem>
-                            <MudSelectItem Value="@("29")">Significant Other</MudSelectItem>
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudDatePicker @bind-Date="_relStartDate" Label="Relationship Start" Required="true" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudCheckBox T="bool" @bind-Value="_payload.Relationship.IsCustodial" Label="Custodial (minor / QMCSO)" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_payload.Relationship.QmcsoReference" Label="QMCSO Reference (optional)" />
-                    </MudItem>
-                </MudGrid>
-            </MudStep>
-
-            <MudStep Title="Confirm">
-                <MudText Typo="Typo.body2" Class="mb-3">Review before creating:</MudText>
-                <MudList T="string" Dense="true">
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.Badge">Member ID: <b>@_payload.Member.MemberId</b></MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.Person">@_payload.Member.FirstName @_payload.Member.LastName</MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.Cake">DOB: @(_dob?.ToString("MM/dd/yyyy") ?? "—")</MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.Link">Relationship: @_payload.Relationship.RelationshipCode @(_payload.Relationship.IsCustodial ? "(custodial)" : "")</MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.CalendarToday">Effective: @(_effectiveDate?.ToString("MM/dd/yyyy") ?? "—")</MudListItem>
-                </MudList>
-                @if (_error != null)
-                {
-                    <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
-                }
-            </MudStep>
-        </MudStepper>
+        @if (_step == 0)
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.MemberId" Label="Dependent Member ID" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_effectiveDate" Label="Effective Date" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.FirstName" Label="First Name" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.LastName" Label="Last Name" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudDatePicker @bind-Date="_dob" Label="Date of Birth" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="string" Label="Gender" @bind-Value="_payload.Member.Gender">
+                        <MudSelectItem Value="@("M")">Male</MudSelectItem>
+                        <MudSelectItem Value="@("F")">Female</MudSelectItem>
+                        <MudSelectItem Value="@("U")">Unknown</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_payload.Member.SSN" Label="SSN (optional)" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.Email" Label="Email" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Member.Phone" Label="Phone" />
+                </MudItem>
+            </MudGrid>
+        }
+        else if (_step == 1)
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudSelect T="string" Label="Relationship" @bind-Value="_payload.Relationship.RelationshipCode" Required="true">
+                        <MudSelectItem Value="@("19")">Child</MudSelectItem>
+                        <MudSelectItem Value="@("01")">Spouse</MudSelectItem>
+                        <MudSelectItem Value="@("53")">Life Partner / Domestic Partner</MudSelectItem>
+                        <MudSelectItem Value="@("17")">Stepchild</MudSelectItem>
+                        <MudSelectItem Value="@("10")">Foster Child</MudSelectItem>
+                        <MudSelectItem Value="@("22")">Handicapped Dependent</MudSelectItem>
+                        <MudSelectItem Value="@("29")">Significant Other</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_relStartDate" Label="Relationship Start" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudCheckBox T="bool" @bind-Checked="_payload.Relationship.IsCustodial" Label="Custodial (minor / QMCSO)" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_payload.Relationship.QmcsoReference" Label="QMCSO Reference (optional)" />
+                </MudItem>
+            </MudGrid>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-3">Review before creating:</MudText>
+            <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                <tbody>
+                    <tr><td>Member ID</td><td><b>@_payload.Member.MemberId</b></td></tr>
+                    <tr><td>Name</td><td>@_payload.Member.FirstName @_payload.Member.LastName</td></tr>
+                    <tr><td>Date of Birth</td><td>@(_dob?.ToString("MM/dd/yyyy") ?? "—")</td></tr>
+                    <tr><td>Relationship</td><td>@_payload.Relationship.RelationshipCode @(_payload.Relationship.IsCustodial ? "(custodial)" : "")</td></tr>
+                    <tr><td>Effective</td><td>@(_effectiveDate?.ToString("MM/dd/yyyy") ?? "—")</td></tr>
+                </tbody>
+            </MudSimpleTable>
+            @if (_error != null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+            }
+        }
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Disabled="_submitting">Cancel</MudButton>
@@ -117,6 +123,13 @@
     private readonly AddDependentPayload _payload = new()
     {
         Relationship = new AddDependentRelationship { RelationshipCode = "19" },
+    };
+
+    private string StepTitle => _step switch
+    {
+        0 => "Dependent info",
+        1 => "Relationship",
+        _ => "Confirm",
     };
 
     private bool CanAdvance() => _step switch
