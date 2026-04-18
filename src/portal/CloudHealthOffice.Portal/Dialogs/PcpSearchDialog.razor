@@ -7,7 +7,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.LocalHospital" Class="mr-2" Style="vertical-align: middle;" />
-            Assign Primary Care Physician
+            Search and Assign Primary Care Physician
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -15,7 +15,8 @@
         {
             <MudAlert Severity="Severity.Info" Class="mb-4" Dense="true">
                 Current PCP: <strong>@_currentPcp.ProviderName</strong> (@_currentPcp.Specialty) —
-                <MudChip T="string" Size="Size.Small" Color="@(_currentPcp.NetworkStatus == "In-Network" ? Color.Success : Color.Warning)">
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(_currentPcp.NetworkStatus == "In-Network" ? Color.Success : Color.Warning)">
                     @_currentPcp.NetworkStatus
                 </MudChip>
             </MudAlert>
@@ -63,21 +64,22 @@
                       SelectedItemChanged="OnProviderSelected"
                       T="ProviderListItem">
                 <HeaderContent>
-                    <MudTh>Provider Name</MudTh>
+                    <MudTh>Provider</MudTh>
                     <MudTh>NPI</MudTh>
                     <MudTh>Specialty</MudTh>
                     <MudTh>Location</MudTh>
                     <MudTh>Network</MudTh>
-                    <MudTh>Credentialing</MudTh>
+                    <MudTh>Panel</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Provider Name">
+                    <MudTd DataLabel="Provider">
                         <div class="d-flex align-center gap-2">
                             @if (_selectedProvider?.ProviderId == context.ProviderId)
                             {
                                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
                             }
-                            <MudText Typo="Typo.body2" Style="@("font-weight: " + (_selectedProvider?.ProviderId == context.ProviderId ? "bold" : "normal"))">
+                            <MudText Typo="Typo.body2"
+                                     Style="@("font-weight: " + (_selectedProvider?.ProviderId == context.ProviderId ? "bold" : "normal"))">
                                 @context.Name
                             </MudText>
                         </div>
@@ -89,15 +91,21 @@
                     <MudTd DataLabel="Location">@context.City, @context.State</MudTd>
                     <MudTd DataLabel="Network">
                         <MudChip T="string" Size="Size.Small"
-                                 Color="@(context.NetworkStatus == "In-Network" ? Color.Success : context.NetworkStatus == "Pending" ? Color.Warning : Color.Error)">
+                                 Color="@NetworkStatusColor(context.NetworkStatus)">
                             @context.NetworkStatus
                         </MudChip>
                     </MudTd>
-                    <MudTd DataLabel="Credentialing">
-                        <MudChip T="string" Size="Size.Small"
-                                 Color="@(context.CredentialingStatus == "Active" ? Color.Success : context.CredentialingStatus == "Pending" ? Color.Warning : Color.Error)">
-                            @context.CredentialingStatus
-                        </MudChip>
+                    <MudTd DataLabel="Panel">
+                        @* Panel availability is sourced from provider-service NetworkParticipation
+                           (PanelLimit + PanelAccepted). Until provider-service exposes a roll-up
+                           field on ProviderListItem we surface the AcceptingNewPatients heuristic
+                           that already drives the row, plus a tooltip explaining the limitation. *@
+                        <MudTooltip Text="Live panel capacity will appear here once provider-service exposes panel counts on the directory list. See docs/architecture/pcp-assignment.md.">
+                            <MudChip T="string" Size="Size.Small"
+                                     Color="@PanelChipColor(context)">
+                                @PanelChipLabel(context)
+                            </MudChip>
+                        </MudTooltip>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -123,12 +131,26 @@
                                    HelperText="Date when PCP assignment takes effect" />
                 </MudItem>
                 <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_source" Label="Assignment Source" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("MemberChoice")">Member choice</MudSelectItem>
+                        <MudSelectItem Value="@("AdminAssigned")">Admin assigned</MudSelectItem>
+                        <MudSelectItem Value="@("AutoAssigned")">Auto assigned</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
                     <MudTextField @bind-Value="_reason"
                                   Label="Reason for Change (optional)"
                                   Variant="Variant.Outlined"
                                   HelperText="e.g., Member request, provider left network" />
                 </MudItem>
             </MudGrid>
+        }
+
+        @if (_validationError != null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4" Variant="Variant.Outlined">
+                <strong>@_validationError.Code</strong>: @_validationError.Message
+            </MudAlert>
         }
     </DialogContent>
     <DialogActions>
@@ -150,15 +172,13 @@
     [CascadingParameter]
     MudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter]
-    public string MemberId { get; set; } = string.Empty;
-
-    [Parameter]
-    public MemberPcp? CurrentPcp { get; set; }
+    [Parameter] public string MemberId { get; set; } = string.Empty;
+    [Parameter] public MemberPcp? CurrentPcp { get; set; }
 
     private MemberPcp? _currentPcp;
     private string _searchTerm = string.Empty;
     private string _specialtyFilter = string.Empty;
+    private string _source = "MemberChoice";
     private List<ProviderListItem> _providers = new();
     private ProviderListItem? _selectedProvider;
     private DateTime? _effectiveDate = DateTime.Today;
@@ -166,6 +186,7 @@
     private bool _searching = false;
     private bool _assigning = false;
     private bool _hasSearched = false;
+    private PcpValidationProblem? _validationError;
 
     protected override void OnInitialized()
     {
@@ -185,9 +206,8 @@
         {
             _providers = await ProviderService.SearchProvidersAsync(
                 specialty: string.IsNullOrEmpty(_specialtyFilter) ? null : _specialtyFilter,
-                networkStatus: "In-Network",
+                networkStatus: null,
                 searchTerm: string.IsNullOrEmpty(_searchTerm) ? null : _searchTerm);
-            // Filter to individual providers (PCPs are individual practitioners)
             _providers = _providers.Where(p => p.PracticeType == "Individual" || p.PracticeType == "").ToList();
         }
         catch (Exception ex)
@@ -204,23 +224,34 @@
     private void OnProviderSelected(ProviderListItem provider)
     {
         _selectedProvider = _selectedProvider?.ProviderId == provider.ProviderId ? null : provider;
+        _validationError = null;
     }
 
     private async Task AssignPcp()
     {
         if (_selectedProvider == null || !_effectiveDate.HasValue) return;
         _assigning = true;
+        _validationError = null;
         try
         {
-            await MemberService.AssignPcpAsync(new AssignPcpRequest
+            var outcome = await MemberService.AssignPcpAsync(new AssignPcpRequest
             {
                 MemberId = MemberId,
                 ProviderId = _selectedProvider.ProviderId,
+                ProviderNpi = _selectedProvider.NPI,
                 EffectiveDate = _effectiveDate.Value,
-                Reason = string.IsNullOrWhiteSpace(_reason) ? null : _reason
+                Reason = string.IsNullOrWhiteSpace(_reason) ? null : _reason,
+                AssignmentSource = _source
             });
 
-            var newPcp = new MemberPcp
+            if (!outcome.IsSuccess)
+            {
+                _validationError = outcome.ValidationError;
+                Snackbar.Add($"PCP assignment rejected: {outcome.ValidationError?.Message}", Severity.Warning);
+                return;
+            }
+
+            var newPcp = outcome.Pcp ?? new MemberPcp
             {
                 ProviderId = _selectedProvider.ProviderId,
                 ProviderName = _selectedProvider.Name,
@@ -245,4 +276,17 @@
     }
 
     private void Cancel() => MudDialog.Cancel();
+
+    private static Color NetworkStatusColor(string status) => status switch
+    {
+        "In-Network" => Color.Success,
+        "Pending" => Color.Warning,
+        _ => Color.Error
+    };
+
+    private static Color PanelChipColor(ProviderListItem p) =>
+        p.CredentialingStatus == "Active" ? Color.Success : Color.Warning;
+
+    private static string PanelChipLabel(ProviderListItem p) =>
+        p.CredentialingStatus == "Active" ? "Open" : "Pending";
 }

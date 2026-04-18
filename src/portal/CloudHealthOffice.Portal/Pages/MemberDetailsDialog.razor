@@ -545,6 +545,48 @@
                                 Assign PCP
                             </MudButton>
                         }
+
+                        <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.subtitle1" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-1" Size="Size.Small" />
+                            Assignment History
+                        </MudText>
+                        @if (_loadingPcpHistory)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
+                        }
+                        else if (_pcpHistory.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No prior PCP assignments recorded.</MudText>
+                        }
+                        else
+                        {
+                            <MudTable Items="_pcpHistory" Dense="true" Hover="true" T="PcpAssignmentHistoryItem">
+                                <HeaderContent>
+                                    <MudTh>Provider</MudTh>
+                                    <MudTh>NPI</MudTh>
+                                    <MudTh>Effective</MudTh>
+                                    <MudTh>End</MudTh>
+                                    <MudTh>Source</MudTh>
+                                    <MudTh>Network @ Assignment</MudTh>
+                                    <MudTh>Reason</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Provider">@(string.IsNullOrEmpty(context.ProviderName) ? context.ProviderNpi : context.ProviderName)</MudTd>
+                                    <MudTd DataLabel="NPI"><span style="font-family: monospace;">@context.ProviderNpi</span></MudTd>
+                                    <MudTd DataLabel="Effective">@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+                                    <MudTd DataLabel="End">@(context.EndDate.HasValue ? context.EndDate.Value.ToString("MM/dd/yyyy") : "—")</MudTd>
+                                    <MudTd DataLabel="Source">
+                                        <MudChip T="string" Size="Size.Small">@context.AssignmentSource</MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Network @ Assignment">
+                                        @* Snapshot value — never updated. Live status is fetched separately. *@
+                                        <MudChip T="string" Size="Size.Small">@context.NetworkStatusAtAssignment</MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Reason">@(context.AssignmentReason ?? "—")</MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
                     </div>
                 </MudTabPanel>
 
@@ -825,6 +867,8 @@
     private MemberDetails? _member;
     private List<Coverage> _coverages = new();
     private MemberPcp? _pcp;
+    private List<PcpAssignmentHistoryItem> _pcpHistory = new();
+    private bool _loadingPcpHistory;
     private List<CoverageHistoryEvent> _coverageHistory = new();
     private List<Enrollment834Record> _transactions834 = new();
     private List<CloudHealthOffice.Portal.Services.EnrollmentEvent> _enrollmentEvents = new();
@@ -1084,6 +1128,7 @@
     private async Task LoadPcpAsync()
     {
         _loadingPcp = true;
+        _loadingPcpHistory = true;
         try
         {
             _pcp = await MemberService.GetMemberPcpAsync(MemberId);
@@ -1092,6 +1137,17 @@
         finally
         {
             _loadingPcp = false;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        try
+        {
+            _pcpHistory = await MemberService.GetMemberPcpHistoryAsync(MemberId);
+        }
+        catch { _pcpHistory = new(); }
+        finally
+        {
+            _loadingPcpHistory = false;
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -1130,15 +1186,17 @@
     {
         var parameters = new DialogParameters
         {
-            [nameof(AssignPcpDialog.MemberId)] = MemberId,
-            [nameof(AssignPcpDialog.CurrentPcp)] = _pcp
+            [nameof(PcpSearchDialog.MemberId)] = MemberId,
+            [nameof(PcpSearchDialog.CurrentPcp)] = _pcp
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<AssignPcpDialog>("Assign PCP", parameters, options);
+        var dialog = await DialogService.ShowAsync<PcpSearchDialog>("Assign PCP", parameters, options);
         var result = await dialog.Result;
         if (!result.Canceled && result.Data is MemberPcp newPcp)
         {
             _pcp = newPcp;
+            // Refresh history so the just-closed prior assignment row appears.
+            _ = LoadPcpAsync();
             StateHasChanged();
         }
     }

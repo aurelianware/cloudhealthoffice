@@ -47,7 +47,7 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
         }
     }
 
-    public async Task<MemberPcpResponse> AssignPcpAsync(
+    public async Task<AssignPcpOutcome> AssignPcpAsync(
         string tenantId, string memberId, AssignPcpRequest request, CancellationToken ct = default)
     {
         EnsureConfigured();
@@ -59,9 +59,46 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
         try
         {
             using var resp = await _http.SendAsync(req, ct);
+            if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                // Coverage-service emits a structured PcpValidationError on 400.
+                // Surface it through AssignPcpOutcome so the controller can
+                // forward it as 400 — do NOT throw, this is a normal validation
+                // outcome, not a downstream failure.
+                var problem = await resp.Content.ReadFromJsonAsync<PcpValidationProblem>(cancellationToken: ct);
+                return new AssignPcpOutcome
+                {
+                    ValidationError = problem ?? new PcpValidationProblem
+                    {
+                        Code = "VALIDATION_FAILED",
+                        Message = "PCP assignment rejected by coverage-service."
+                    }
+                };
+            }
             resp.EnsureSuccessStatusCode();
-            return await resp.Content.ReadFromJsonAsync<MemberPcpResponse>(cancellationToken: ct)
+            var pcp = await resp.Content.ReadFromJsonAsync<MemberPcpResponse>(cancellationToken: ct)
                 ?? throw new DownstreamUnavailableException(ServiceName, "Empty response body");
+            return new AssignPcpOutcome { Pcp = pcp };
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new DownstreamUnavailableException(ServiceName, ex.Message, ex);
+        }
+    }
+
+    public async Task<IReadOnlyList<PcpAssignmentHistoryItem>> GetPcpHistoryAsync(
+        string tenantId, string memberId, CancellationToken ct = default)
+    {
+        EnsureConfigured();
+        var req = new HttpRequestMessage(HttpMethod.Get,
+            $"/api/v1/coverage/member/{Uri.EscapeDataString(memberId)}/pcp/history");
+        req.Headers.Add("X-Tenant-ID", tenantId);
+        try
+        {
+            using var resp = await _http.SendAsync(req, ct);
+            resp.EnsureSuccessStatusCode();
+            return await resp.Content.ReadFromJsonAsync<List<PcpAssignmentHistoryItem>>(cancellationToken: ct)
+                ?? new List<PcpAssignmentHistoryItem>();
         }
         catch (HttpRequestException ex)
         {

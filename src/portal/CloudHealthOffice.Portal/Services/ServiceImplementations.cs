@@ -224,13 +224,43 @@ public class MemberService : IMemberService
         }
     }
 
-    public async Task AssignPcpAsync(AssignPcpRequest request)
+    public async Task<PcpAssignmentOutcome> AssignPcpAsync(AssignPcpRequest request)
     {
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
             var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/members/{request.MemberId}/pcp", request);
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var problem = await response.Content.ReadFromJsonAsync<PcpValidationProblem>();
+                return new PcpAssignmentOutcome
+                {
+                    ValidationError = problem ?? new PcpValidationProblem
+                    {
+                        Code = "VALIDATION_FAILED",
+                        Message = "PCP assignment was rejected."
+                    }
+                };
+            }
             response.EnsureSuccessStatusCode();
+            var pcp = await response.Content.ReadFromJsonAsync<MemberPcp>();
+            return new PcpAssignmentOutcome { Pcp = pcp };
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task<List<PcpAssignmentHistoryItem>> GetMemberPcpHistoryAsync(string memberId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var history = await _httpClient.GetFromJsonAsync<List<PcpAssignmentHistoryItem>>(
+                $"{baseUrl}/members/{memberId}/pcp/history");
+            return history ?? new List<PcpAssignmentHistoryItem>();
         }
         catch (HttpRequestException ex)
         {
