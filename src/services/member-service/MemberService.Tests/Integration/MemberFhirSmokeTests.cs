@@ -46,25 +46,32 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
             {
                 RemoveAll<IMemberRepository>(services);
                 RemoveAll<IMemberEventRepository>(services);
+                RemoveAll<IFamilyRelationshipRepository>(services);
                 RemoveAll<MongoDB.Driver.IMongoClient>(services);
                 RemoveAll<MongoDB.Driver.IMongoDatabase>(services);
 
                 // Remove the Mongo index initializers that would try to connect to the
                 // fake MongoDB host at startup. Don't use RemoveAll<IHostedService>() as
                 // that would also remove the Kestrel host service and prevent the test
-                // server from starting.
+                // server from starting. RemoveAll checks both ServiceType and
+                // ImplementationType so it catches both factory-less AddHostedService<T>
+                // registrations and explicit factory-style AddSingleton<IHostedService>
+                // registrations.
                 RemoveAll<MemberEventIndexInitializer>(services);
                 RemoveAll<MemberIndexInitializer>(services);
+                RemoveAll<FamilyRelationshipIndexInitializer>(services);
 
                 services.AddSingleton<IMemberRepository>(MemberRepo);
                 services.AddSingleton<IMemberEventRepository>(EventRepo);
+                services.AddSingleton<IFamilyRelationshipRepository>(new InMemoryFamilyRelationshipRepository());
             });
             return base.CreateHost(builder);
         }
 
         private static void RemoveAll<T>(IServiceCollection services)
         {
-            var toRemove = services.Where(d => d.ServiceType == typeof(T)).ToList();
+            var toRemove = services.Where(d =>
+                d.ServiceType == typeof(T) || d.ImplementationType == typeof(T)).ToList();
             foreach (var d in toRemove) services.Remove(d);
         }
     }
