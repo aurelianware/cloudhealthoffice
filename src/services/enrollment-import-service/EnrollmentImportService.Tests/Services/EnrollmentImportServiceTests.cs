@@ -3,10 +3,9 @@ using EnrollmentImportService.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
-// The production class and the root namespace share a name (`EnrollmentImportService`),
-// which makes `EnrollmentImportService.Services.EnrollmentImportService.Foo(...)` ambiguous
-// in expression position from inside `EnrollmentImportService.Tests.*`. This alias pins
-// the static-call target to the class and keeps the tests readable.
+// Classification is tested via the dedicated EnrollmentEventClassifier helper so we
+// avoid the "production class shares a name with the root namespace" resolution bug —
+// see EnrollmentEventClassifier for the full rationale.
 using ImportSvc = EnrollmentImportService.Services.EnrollmentImportService;
 
 namespace EnrollmentImportService.Tests.Services;
@@ -183,7 +182,7 @@ public class EnrollmentImportServiceTests
         e.MaintenanceType = "024";
         e.BenefitStatus = "C";
         e.TerminationDate = "2026-04-01";
-        ImportSvc.ClassifyEvent(e)
+        EnrollmentEventClassifier.Classify(e)
             .Should().Be(EnrollmentEventType.CobraTerminated);
     }
 
@@ -193,7 +192,7 @@ public class EnrollmentImportServiceTests
         var e = NewSubscriber("M-1");
         e.MaintenanceType = "021";
         e.BenefitStatus = "C";
-        ImportSvc.ClassifyEvent(e)
+        EnrollmentEventClassifier.Classify(e)
             .Should().Be(EnrollmentEventType.CobraElected);
     }
 
@@ -202,7 +201,7 @@ public class EnrollmentImportServiceTests
     {
         var e = NewSubscriber("M-1");
         e.MaintenanceType = "025";
-        ImportSvc.ClassifyEvent(e)
+        EnrollmentEventClassifier.Classify(e)
             .Should().Be(EnrollmentEventType.ReinstatementApproved);
     }
 }

@@ -117,7 +117,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         var memberId = memberEnrollment.SubscriberId ?? string.Empty;
         if (string.IsNullOrEmpty(memberId)) return;
 
-        var eventType = ClassifyEvent(memberEnrollment);
+        var eventType = EnrollmentEventClassifier.Classify(memberEnrollment);
         var eventDate = ParseDate(
             memberEnrollment.MaintenanceType == "024"
                 ? memberEnrollment.TerminationDate
@@ -189,44 +189,6 @@ public class EnrollmentImportService : IEnrollmentImportService
                 SanitizeForLog(tenantId), SanitizeForLog(memberId), SanitizeForLog(batchId));
         }
     }
-
-    internal static EnrollmentEventType ClassifyEvent(MemberEnrollment e)
-    {
-        // Order matters: most specific reasons first.
-        if (e.MaintenanceType == "024")
-        {
-            return e.BenefitStatus == "C" || e.MaintenanceReason == "EC"
-                ? EnrollmentEventType.CobraTerminated
-                : EnrollmentEventType.Terminated;
-        }
-
-        if (e.MaintenanceType == "025")
-            return EnrollmentEventType.ReinstatementApproved;
-
-        if (e.BenefitStatus == "C" && e.MaintenanceType == "021")
-            return EnrollmentEventType.CobraElected;
-
-        if (e.MaintenanceReason is "EC" or "37")
-            return EnrollmentEventType.SepTriggered;
-
-        if (e.MaintenanceType == "021")
-            return EnrollmentEventType.Enrolled;
-
-        // 001 = Change. AddressChanged wins when a demographics delta is present; any
-        // other change (plan, dates, group info) is surfaced as PlanChanged. We don't
-        // have a stronger signal from the 834 payload to split this further, and the
-        // schema keeps the enum stable so callers can widen later without breaking
-        // stored events.
-        if (HasAddressChange(e)) return EnrollmentEventType.AddressChanged;
-        return EnrollmentEventType.PlanChanged;
-    }
-
-    private static bool HasAddressChange(MemberEnrollment e) =>
-        e.Demographics != null
-        && (!string.IsNullOrWhiteSpace(e.Demographics.Address1)
-            || !string.IsNullOrWhiteSpace(e.Demographics.City)
-            || !string.IsNullOrWhiteSpace(e.Demographics.State)
-            || !string.IsNullOrWhiteSpace(e.Demographics.Zip));
 
     private static bool IsRetro(MemberEnrollment e, DateTime? eventDate) =>
         eventDate.HasValue && eventDate.Value.Date < DateTime.UtcNow.Date.AddDays(-30);
