@@ -18,7 +18,12 @@ public class AccumulatorEvent
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Partition key. Also the MongoDB _id for lookups.</summary>
+    /// <summary>
+    /// Partition key. Every query must include it; uniqueness is enforced on
+    /// <c>(TenantId, EventId)</c> and <c>(TenantId, AggregateId, Version)</c>.
+    /// The document id in Mongo is the GUID in <see cref="Id"/>; in Cosmos the
+    /// partition key is TenantId and the id is also <see cref="Id"/>.
+    /// </summary>
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>Per-event id — matches the inbound event's EventId for ClaimApplied, fresh GUID for manual events.</summary>
@@ -54,8 +59,11 @@ public class AccumulatorEvent
 
     /// <summary>
     /// Non-null only for event rows that originated from a ClaimFinalizedEvent.
-    /// Used together with a unique index on (tenantId, sourceClaimId) to enforce
-    /// idempotent application of the same claim across replayed messages.
+    /// Claim-level idempotency is enforced at the <see cref="ProcessedClaim"/>
+    /// store (unique on <c>(TenantId, ClaimId)</c>), not by a secondary index on
+    /// this column — the processed-claim marker is the single source of truth
+    /// so one claim can legitimately produce multiple event rows (e.g. a future
+    /// reversal). This field exists for audit / debugging queries.
     /// </summary>
     public string? SourceClaimId { get; set; }
 }

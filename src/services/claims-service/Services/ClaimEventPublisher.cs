@@ -230,6 +230,17 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             _ => claim.Status.ToString()
         };
 
+        // Plan-year boundaries: claims-service does not own the plan calendar, so
+        // we default to the calendar year containing ServiceDate. benefit-plan-service
+        // overrides this downstream when a non-calendar plan year applies. Populating
+        // these fields (even as a best-effort default) is what keeps
+        // accumulator-service's ResolveSnapshotAsync off the orphan path when no
+        // snapshot is pre-seeded; without them every first-ever finalize would be
+        // treated as orphaned.
+        var serviceDate = claim.ServiceDateFrom;
+        var planYearStart = new DateTime(serviceDate.Year, 1, 1);
+        var planYearEnd = new DateTime(serviceDate.Year, 12, 31);
+
         // Family-aggregate determination requires benefit-plan context the claim does
         // not carry. Default false here; accumulator-service applies individual-only
         // unless the producer (or a future plan-enrichment step) sets this flag.
@@ -239,7 +250,9 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             ClaimId = claim.Id,
             ClaimNumber = claim.ClaimNumber,
             MemberId = claim.MemberId,
-            ServiceDate = claim.ServiceDateFrom,
+            PlanYearStart = planYearStart,
+            PlanYearEnd = planYearEnd,
+            ServiceDate = serviceDate,
             AdjudicationTimestamp = claim.AdjudicatedDate ?? DateTimeOffset.UtcNow,
             FinalStatus = status,
             BenefitCategory = claim.PlaceOfServiceCode ?? string.Empty,

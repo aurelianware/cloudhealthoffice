@@ -74,14 +74,16 @@ public class AccumulatorService : IAccumulatorService
 
     public async Task<ApplyResult> ApplyClaimFinalizedAsync(ClaimFinalizedEvent evt, CancellationToken ct = default)
     {
-        // Idempotency — upsert-then-check on (tenantId, claimId). The same claimId
-        // is the dedupe key even across regenerated EventIds (re-finalization of
-        // the same claim must not double-count).
-        var claimed = await _processed.TryClaimAsync(evt.TenantId, evt.ClaimId, ct);
-        if (!claimed)
+        // Two-phase idempotency — (tenantId, claimId) is the dedupe key even across
+        // regenerated EventIds (re-finalization must not double-count). A Pending
+        // marker from a crashed prior attempt does NOT block retry: TryBeginAsync
+        // returns Proceed in that case so we don't permanently skip on transient
+        // failures between the begin-marker and the final CompleteAsync.
+        var begin = await _processed.TryBeginAsync(evt.TenantId, evt.ClaimId, ct);
+        if (begin == BeginClaimOutcome.AlreadyApplied)
         {
             _logger.LogInformation(
-                "ClaimFinalizedEvent for claim {ClaimId} tenant {TenantId} is a duplicate; skipping",
+                "ClaimFinalizedEvent for claim {ClaimId} tenant {TenantId} already applied; skipping",
                 SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId));
             return new ApplyResult(ApplyOutcome.Duplicate, null, null, "DuplicateClaim");
         }
@@ -121,10 +123,13 @@ public class AccumulatorService : IAccumulatorService
         ApplyServiceDeltas(snapshot, serviceDeltas);
         snapshot.Version += 1;
 
+        // Fresh EventId per attempt so a retry (Pending-marker replay) does not
+        // collide on the unique (tenantId, eventId) index. Wire-level dedup is
+        // ProcessedClaim's job, not this event row's.
         var auditEvent = new AccumulatorEvent
         {
             TenantId = evt.TenantId,
-            EventId = evt.EventId, // preserve wire id for de-dup
+            EventId = Guid.NewGuid().ToString(),
             AggregateId = snapshot.Id,
             Version = snapshot.Version,
             MemberId = evt.MemberId,
@@ -172,6 +177,31 @@ public class AccumulatorService : IAccumulatorService
 
     public async Task<AccumulatorAdjustmentResponse> AdjustAsync(string tenantId, string memberId, AccumulatorAdjustmentRequest request, CancellationToken ct = default)
     {
+        // Idempotent replay on client-supplied AdjustmentId: if we've seen this
+        // adjustmentId before, return the existing snapshot rather than applying
+        // the delta again. Before this check the duplicate index violation would
+        // surface as a 500 from the event append.
+        if (!string.IsNullOrWhiteSpace(request.AdjustmentId))
+        {
+            var prior = await _repo.GetManualAdjustmentAsync(tenantId, request.AdjustmentId, ct);
+            if (prior is not null)
+            {
+                var existing = await _repo.GetSnapshotAsync(tenantId, memberId, request.PlanYearStart, ct);
+                return new AccumulatorAdjustmentResponse
+                {
+                    AdjustmentId = request.AdjustmentId,
+                    Snapshot = existing ?? new AccumulatorSnapshot
+                    {
+                        Id = AccumulatorSnapshot.BuildId(tenantId, memberId, request.PlanYearStart),
+                        TenantId = tenantId,
+                        MemberId = memberId,
+                        PlanYearStart = request.PlanYearStart,
+                        PlanYearEnd = request.PlanYearEnd
+                    }
+                };
+            }
+        }
+
         var snapshot = await _repo.GetSnapshotAsync(tenantId, memberId, request.PlanYearStart, ct)
             ?? new AccumulatorSnapshot
             {
@@ -197,7 +227,9 @@ public class AccumulatorService : IAccumulatorService
         var auditEvent = new AccumulatorEvent
         {
             TenantId = tenantId,
-            EventId = adjustmentId,
+            // Fresh wire-level EventId; duplicate AdjustmentId handled above by
+            // GetManualAdjustmentAsync lookup keyed on SourceReference.
+            EventId = Guid.NewGuid().ToString(),
             AggregateId = snapshot.Id,
             Version = snapshot.Version,
             MemberId = memberId,

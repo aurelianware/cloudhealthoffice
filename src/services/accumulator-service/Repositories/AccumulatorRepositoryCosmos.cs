@@ -94,6 +94,23 @@ public class AccumulatorRepositoryCosmos : IAccumulatorRepository
         }
         return results;
     }
+
+    public async Task<AccumulatorEvent?> GetManualAdjustmentAsync(string tenantId, string adjustmentId, CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(
+                @"SELECT TOP 1 * FROM c WHERE c.tenantId = @tenantId
+                  AND c.eventType = 'ManualAdjustment' AND c.sourceReference = @adjustmentId")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@adjustmentId", adjustmentId);
+        using var iter = _events.GetItemQueryIterator<AccumulatorEvent>(query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        if (iter.HasMoreResults)
+        {
+            var page = await iter.ReadNextAsync(ct);
+            return page.FirstOrDefault();
+        }
+        return null;
+    }
 }
 
 public class ProcessedClaimStoreCosmos : IProcessedClaimStore
@@ -106,7 +123,7 @@ public class ProcessedClaimStoreCosmos : IProcessedClaimStore
         _col = db.GetContainer("AccumulatorProcessedClaims");
     }
 
-    public async Task<bool> TryClaimAsync(string tenantId, string claimId, CancellationToken ct = default)
+    public async Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
         var marker = new ProcessedClaim
         {
@@ -119,11 +136,18 @@ public class ProcessedClaimStoreCosmos : IProcessedClaimStore
         try
         {
             await _col.CreateItemAsync(marker, new PartitionKey(tenantId), cancellationToken: ct);
-            return true;
+            return BeginClaimOutcome.Proceed;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
         {
-            return false;
+            // See Mongo implementation: Pending marker means a prior attempt
+            // crashed mid-flight and this call should retry the apply, not skip.
+            var existing = await GetAsync(tenantId, claimId, ct);
+            if (existing is null || string.Equals(existing.Outcome, "Pending", StringComparison.Ordinal))
+            {
+                return BeginClaimOutcome.Proceed;
+            }
+            return BeginClaimOutcome.AlreadyApplied;
         }
     }
 

@@ -96,6 +96,15 @@ public class AccumulatorRepositoryMongo : IAccumulatorRepository
             .Limit(take)
             .ToListAsync(ct);
     }
+
+    public async Task<AccumulatorEvent?> GetManualAdjustmentAsync(string tenantId, string adjustmentId, CancellationToken ct = default)
+    {
+        var filter = Builders<AccumulatorEvent>.Filter.And(
+            Builders<AccumulatorEvent>.Filter.Eq(e => e.TenantId, tenantId),
+            Builders<AccumulatorEvent>.Filter.Eq(e => e.EventType, "ManualAdjustment"),
+            Builders<AccumulatorEvent>.Filter.Eq(e => e.SourceReference, adjustmentId));
+        return await _events.Find(filter).FirstOrDefaultAsync(ct);
+    }
 }
 
 public class ProcessedClaimStoreMongo : IProcessedClaimStore
@@ -111,7 +120,7 @@ public class ProcessedClaimStoreMongo : IProcessedClaimStore
             new CreateIndexOptions { Unique = true }));
     }
 
-    public async Task<bool> TryClaimAsync(string tenantId, string claimId, CancellationToken ct = default)
+    public async Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
         var id = ProcessedClaim.BuildId(tenantId, claimId);
         var marker = new ProcessedClaim
@@ -125,11 +134,19 @@ public class ProcessedClaimStoreMongo : IProcessedClaimStore
         try
         {
             await _col.InsertOneAsync(marker, cancellationToken: ct);
-            return true;
+            return BeginClaimOutcome.Proceed;
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
-            return false;
+            // Marker already exists. Only treat as duplicate if a prior attempt
+            // reached a terminal outcome; Pending means an earlier attempt crashed
+            // mid-flight and the caller may retry.
+            var existing = await GetAsync(tenantId, claimId, ct);
+            if (existing is null || string.Equals(existing.Outcome, "Pending", StringComparison.Ordinal))
+            {
+                return BeginClaimOutcome.Proceed;
+            }
+            return BeginClaimOutcome.AlreadyApplied;
         }
     }
 

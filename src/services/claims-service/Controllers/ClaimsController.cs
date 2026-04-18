@@ -688,7 +688,13 @@ public class ClaimsController : ControllerBase
         claim.Status = ClaimStatus.Voided;
         claim.LastUpdatedDate = DateTime.UtcNow;
 
-        await _claimRepository.UpdateAsync(claim);
+        var updated = await _claimRepository.UpdateAsync(claim);
+
+        // Voided is a terminal status — downstream consumers (accumulators,
+        // analytics) need the reversal signal just as they do for paid/denied
+        // transitions. Without this publish a void initiated via DELETE silently
+        // diverges from voids reached through the status-update endpoint.
+        await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
 
         return NoContent();
     }

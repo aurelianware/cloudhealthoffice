@@ -33,7 +33,6 @@ public class AccumulatorsController : ControllerBase
 
     [HttpGet("api/v1/accumulators/{memberId}")]
     [ProducesResponseType(typeof(AccumulatorResponse), 200)]
-    [ProducesResponseType(404)]
     public Task<IActionResult> Get(string memberId, [FromQuery] DateTime? asOfDate, CancellationToken ct)
         => GetCore(memberId, asOfDate, ct);
 
@@ -59,7 +58,10 @@ public class AccumulatorsController : ControllerBase
         var result = await _svc.AdjustAsync(TenantId, memberId, request, ct);
         _logger.LogInformation(
             "Accumulator adjusted: tenant={TenantId} member={MemberId} adjustmentId={AdjustmentId} actor={ActorId}",
-            TenantId, memberId, result.AdjustmentId, request.ActorId);
+            SanitizeForLog(TenantId),
+            SanitizeForLog(memberId),
+            SanitizeForLog(result.AdjustmentId),
+            SanitizeForLog(request.ActorId));
         return Ok(result);
     }
 
@@ -67,7 +69,6 @@ public class AccumulatorsController : ControllerBase
 
     [HttpGet("api/v1/members/{memberId}/accumulators")]
     [ProducesResponseType(typeof(AccumulatorResponse), 200)]
-    [ProducesResponseType(404)]
     public Task<IActionResult> GetForMember(string memberId, [FromQuery] DateTime? asOfDate, CancellationToken ct)
         => GetCore(memberId, asOfDate, ct);
 
@@ -88,5 +89,11 @@ public class AccumulatorsController : ControllerBase
             });
         }
         return Ok(result);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

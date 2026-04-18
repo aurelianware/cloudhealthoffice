@@ -67,16 +67,31 @@ public class InMemoryAccumulatorRepository : IAccumulatorRepository
             .ToList();
         return Task.FromResult(result);
     }
+
+    public Task<AccumulatorEvent?> GetManualAdjustmentAsync(string tenantId, string adjustmentId, CancellationToken ct = default)
+    {
+        var evt = Events.FirstOrDefault(e =>
+            e.TenantId == tenantId &&
+            e.EventType == "ManualAdjustment" &&
+            e.SourceReference == adjustmentId);
+        return Task.FromResult(evt);
+    }
 }
 
 public class InMemoryProcessedClaimStore : IProcessedClaimStore
 {
     private readonly Dictionary<string, ProcessedClaim> _map = new();
 
-    public Task<bool> TryClaimAsync(string tenantId, string claimId, CancellationToken ct = default)
+    public Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
         var key = $"{tenantId}:{claimId}";
-        if (_map.ContainsKey(key)) return Task.FromResult(false);
+        if (_map.TryGetValue(key, out var existing))
+        {
+            // Pending = crashed mid-flight; allow retry.
+            if (string.Equals(existing.Outcome, "Pending", StringComparison.Ordinal))
+                return Task.FromResult(BeginClaimOutcome.Proceed);
+            return Task.FromResult(BeginClaimOutcome.AlreadyApplied);
+        }
         _map[key] = new ProcessedClaim
         {
             Id = key,
@@ -85,7 +100,7 @@ public class InMemoryProcessedClaimStore : IProcessedClaimStore
             ProcessedAt = DateTime.UtcNow,
             Outcome = "Pending"
         };
-        return Task.FromResult(true);
+        return Task.FromResult(BeginClaimOutcome.Proceed);
     }
 
     public Task CompleteAsync(string tenantId, string claimId, string resultingEventId, string outcome, CancellationToken ct = default)

@@ -101,7 +101,9 @@ public class AccumulatorServiceTests
         var audit = repo.Events[0];
         Assert.Equal("ClaimApplied", audit.EventType);
         Assert.Equal("CLM-1", audit.SourceClaimId);
-        Assert.Equal(evt.EventId, audit.EventId);
+        // Audit row gets a fresh EventId per attempt (not the wire id) so a retry
+        // after a transient failure doesn't collide on (tenantId, eventId).
+        Assert.False(string.IsNullOrWhiteSpace(audit.EventId));
         Assert.Equal(audit.Version, result.Snapshot.Version);
 
         Assert.Single(pub.Adjusted);
@@ -208,6 +210,57 @@ public class AccumulatorServiceTests
         Assert.Equal(2, snap.ServiceAccumulators.Count);
         Assert.Contains(snap.ServiceAccumulators, s => s.BenefitCategory == "PrimaryCare" && s.Used == 25m);
         Assert.Contains(snap.ServiceAccumulators, s => s.BenefitCategory == "Lab" && s.Used == 12m);
+    }
+
+    [Fact]
+    public async Task Apply_PendingMarkerFromPriorCrash_IsRetriedNotSkipped()
+    {
+        // Simulate: a prior attempt inserted the Pending marker but crashed before
+        // CompleteAsync. The next delivery must re-enter the apply path, not treat
+        // the claim as already applied.
+        var sut = BuildSut(out var repo, out var processed, out _);
+        SeedSnapshot(repo, 2026);
+
+        // Pre-seed a Pending marker as if a crash occurred.
+        await processed.TryBeginAsync("t1", "CLM-CRASH");
+        var marker = await processed.GetAsync("t1", "CLM-CRASH");
+        Assert.Equal("Pending", marker!.Outcome);
+
+        var evt = MakeClaim("CLM-CRASH", new DateTime(2026, 6, 1), deductible: 120m);
+        var result = await sut.ApplyClaimFinalizedAsync(evt);
+
+        Assert.Equal(ApplyOutcome.Applied, result.Outcome);
+        var snap = await repo.GetSnapshotAsync("t1", "m-100", new DateTime(2026, 1, 1));
+        Assert.Equal(120m, snap!.IndividualDeductibleUsed);
+
+        var final = await processed.GetAsync("t1", "CLM-CRASH");
+        Assert.Equal("Applied", final!.Outcome);
+    }
+
+    [Fact]
+    public async Task Adjust_SameAdjustmentId_IsIdempotentAndReturnsExistingSnapshot()
+    {
+        var sut = BuildSut(out var repo, out _, out var pub);
+        SeedSnapshot(repo, 2026);
+
+        var req = new AccumulatorAdjustmentRequest
+        {
+            AdjustmentId = "adj-42",
+            PlanYearStart = new DateTime(2026, 1, 1),
+            PlanYearEnd = new DateTime(2026, 12, 31),
+            ActorId = "ops-user@cho",
+            Reason = "Out-of-system payment posted manually",
+            DeductibleDelta = 200m
+        };
+        var first = await sut.AdjustAsync("t1", "m-100", req);
+        var second = await sut.AdjustAsync("t1", "m-100", req);
+
+        Assert.Equal("adj-42", first.AdjustmentId);
+        Assert.Equal("adj-42", second.AdjustmentId);
+        Assert.Equal(first.Snapshot.Version, second.Snapshot.Version);
+        Assert.Equal(200m, second.Snapshot.IndividualDeductibleUsed);
+        Assert.Single(repo.Events); // only one ManualAdjustment row
+        Assert.Single(pub.Adjusted); // only one publish
     }
 
     [Fact]
