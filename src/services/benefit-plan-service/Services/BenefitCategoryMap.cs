@@ -117,22 +117,62 @@ public static class BenefitCategoryMap
     }
 
     /// <summary>
-    /// Heuristic for classifying pharmacy tier labels when the benefit is
-    /// in the Pharmacy category. Returns the raw tier label verbatim;
-    /// callers render it directly. Extensible — no hard enum.
+    /// Return the plan's original <c>ServiceCategory</c> string, trimmed
+    /// only, when it looks like a pharmacy tier label; <c>null</c> otherwise.
+    ///
+    /// This is the value the UI displays. It is deliberately <em>not</em>
+    /// normalized, re-cased, or collapsed — a plan that configures
+    /// "Specialty Drug" must render as "Specialty Drug", not "Specialty".
+    /// For a normalized bucket suitable for grouping or analytics, use
+    /// <see cref="ExtractCanonicalTier"/>.
     /// </summary>
-    public static string? ExtractPharmacyTier(string? serviceCategory)
+    public static string? ExtractTierLabel(string? serviceCategory)
     {
         if (string.IsNullOrWhiteSpace(serviceCategory))
             return null;
 
         var s = serviceCategory.Trim();
-        // Keep original casing when it's already a clean tier label.
         if (s.StartsWith("Tier ", StringComparison.OrdinalIgnoreCase)) return s;
+        if (s.Equals("Generic", StringComparison.OrdinalIgnoreCase)) return s;
+        if (s.Equals("Preferred Brand", StringComparison.OrdinalIgnoreCase)) return s;
+        if (s.Equals("Non-Preferred Brand", StringComparison.OrdinalIgnoreCase)) return s;
+        if (s.Contains("specialty", StringComparison.OrdinalIgnoreCase)) return s;
+        return null;
+    }
+
+    /// <summary>
+    /// Normalize a pharmacy-tier <c>ServiceCategory</c> to a stable bucket
+    /// key for grouping and downstream analytics: <c>Tier1</c>, <c>Tier2</c>,
+    /// <c>Tier3</c>, <c>Tier4</c>, <c>Generic</c>, <c>PreferredBrand</c>,
+    /// <c>NonPreferredBrand</c>, or <c>Specialty</c>. Returns <c>null</c>
+    /// when the input does not match a known tier shape.
+    ///
+    /// Callers MUST NOT display this value — it is lossy by design (e.g.
+    /// "Specialty Drug" → "Specialty"). Display <see cref="ExtractTierLabel"/>
+    /// instead.
+    /// </summary>
+    public static string? ExtractCanonicalTier(string? serviceCategory)
+    {
+        if (string.IsNullOrWhiteSpace(serviceCategory))
+            return null;
+
+        var s = serviceCategory.Trim();
+        if (s.StartsWith("Tier 1", StringComparison.OrdinalIgnoreCase)) return "Tier1";
+        if (s.StartsWith("Tier 2", StringComparison.OrdinalIgnoreCase)) return "Tier2";
+        if (s.StartsWith("Tier 3", StringComparison.OrdinalIgnoreCase)) return "Tier3";
+        if (s.StartsWith("Tier 4", StringComparison.OrdinalIgnoreCase)) return "Tier4";
         if (s.Equals("Generic", StringComparison.OrdinalIgnoreCase)) return "Generic";
-        if (s.Equals("Preferred Brand", StringComparison.OrdinalIgnoreCase)) return "Preferred Brand";
-        if (s.Equals("Non-Preferred Brand", StringComparison.OrdinalIgnoreCase)) return "Non-Preferred Brand";
+        if (s.Equals("Preferred Brand", StringComparison.OrdinalIgnoreCase)) return "PreferredBrand";
+        if (s.Equals("Non-Preferred Brand", StringComparison.OrdinalIgnoreCase)) return "NonPreferredBrand";
         if (s.Contains("specialty", StringComparison.OrdinalIgnoreCase)) return "Specialty";
         return null;
     }
+
+    /// <summary>
+    /// Return true if the raw <c>ServiceCategory</c> denotes a specialty
+    /// pharmacy benefit — a case-insensitive contains-check for "specialty".
+    /// </summary>
+    public static bool IsSpecialty(string? serviceCategory) =>
+        !string.IsNullOrWhiteSpace(serviceCategory)
+        && serviceCategory.Contains("specialty", StringComparison.OrdinalIgnoreCase);
 }

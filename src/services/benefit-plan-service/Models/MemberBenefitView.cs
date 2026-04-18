@@ -128,10 +128,28 @@ public class NetworkTierBenefit
 
 public class PharmacyDetail
 {
-    /// <summary>Raw tier label as defined on the plan (e.g. "Tier 2", "Generic").</summary>
+    /// <summary>
+    /// The plan's original <c>ServiceCategory</c> string, trimmed only.
+    /// This is the display label — never normalized, never collapsed.
+    /// Null when the benefit's service category does not look like a
+    /// pharmacy tier.
+    /// </summary>
     [JsonPropertyName("tierLabel")]
-    public string TierLabel { get; set; } = string.Empty;
+    public string? TierLabel { get; set; }
 
+    /// <summary>
+    /// Normalized bucket for grouping and analytics (<c>Tier1</c>,
+    /// <c>Tier2</c>, <c>Tier3</c>, <c>Tier4</c>, <c>Generic</c>,
+    /// <c>PreferredBrand</c>, <c>NonPreferredBrand</c>, <c>Specialty</c>).
+    /// Not for UI display — lossy by design.
+    /// </summary>
+    [JsonPropertyName("canonicalTier")]
+    public string? CanonicalTier { get; set; }
+
+    /// <summary>
+    /// True when the raw service category matched "specialty"
+    /// (case-insensitive).
+    /// </summary>
     [JsonPropertyName("isSpecialty")]
     public bool IsSpecialty { get; set; }
 }

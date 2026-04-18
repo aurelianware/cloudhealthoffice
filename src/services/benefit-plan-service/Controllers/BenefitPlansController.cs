@@ -74,6 +74,15 @@ public class BenefitPlansController : ControllerBase
             return BadRequest(ModelState);
         }
 
+        try
+        {
+            PlanDocumentValidation.ValidateDocuments(plan.Documents);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { field = ex.ParamName, message = ex.Message });
+        }
+
         var created = await _service.CreatePlanAsync(plan, TenantId);
         return CreatedAtAction(nameof(GetPlan), new { id = created.Id }, created);
     }
@@ -84,11 +93,21 @@ public class BenefitPlansController : ControllerBase
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BenefitPlan>> UpdatePlan(string id, [FromBody] BenefitPlan plan)
     {
         if (id != plan.Id)
         {
             return BadRequest(new { message = "ID mismatch" });
+        }
+
+        try
+        {
+            PlanDocumentValidation.ValidateDocuments(plan.Documents);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { field = ex.ParamName, message = ex.Message });
         }
 
         var updated = await _service.UpdatePlanAsync(plan, TenantId);

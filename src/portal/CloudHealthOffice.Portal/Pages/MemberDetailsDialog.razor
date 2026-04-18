@@ -1,4 +1,5 @@
 @using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Formatters
 @inject IMemberService MemberService
 @inject ICoverageService CoverageService
 @inject IBenefitPlanService BenefitPlanService
@@ -408,8 +409,8 @@
                                                             <MudText Typo="Typo.caption" Color="Color.Secondary">@cat.Description</MudText>
                                                         }
                                                     </td>
-                                                    <td>@FormatCostShare(cat.InNetwork)</td>
-                                                    <td>@(cat.OutOfNetwork != null ? FormatCostShare(cat.OutOfNetwork) : "—")</td>
+                                                    <td>@BenefitCostShareFormatter.Format(cat.InNetwork)</td>
+                                                    <td>@(cat.OutOfNetwork != null ? BenefitCostShareFormatter.Format(cat.OutOfNetwork) : "—")</td>
                                                     <td>@(cat.DeductibleApplies ? "Applies" : "Waived")</td>
                                                     <td>@(cat.OopApplies ? "Applies" : "Excluded")</td>
                                                     <td>
@@ -969,21 +970,6 @@
             _loadingBenefits = false;
             StateHasChanged();
         }
-    }
-
-    private static string FormatCostShare(NetworkTierBenefit tier)
-    {
-        var parts = new List<string>();
-        if (tier.Copay.HasValue && tier.Copay.Value > 0)
-        {
-            parts.Add($"${tier.Copay.Value:F0} copay");
-        }
-        if (tier.Coinsurance.HasValue && tier.Coinsurance.Value > 0)
-        {
-            var pct = tier.Coinsurance.Value <= 1m ? tier.Coinsurance.Value * 100m : tier.Coinsurance.Value;
-            parts.Add($"{pct:F0}% coinsurance");
-        }
-        return parts.Count == 0 ? "—" : string.Join(" · ", parts);
     }
 
     private static string FormatLimits(CategorizedBenefit cat)

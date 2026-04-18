@@ -639,7 +639,7 @@ public class BenefitPlanServiceTests
                     location = "https://cdn.example/sbc-2026.pdf",
                     contentType = "application/pdf",
                     size = 182304,
-                    contentHashSha256 = "a1b2c3",
+                    contentHashSha256 = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
                     version = "2026.01",
                     effectiveDate = "2026-01-01T00:00:00Z",
                 },
@@ -654,7 +654,7 @@ public class BenefitPlanServiceTests
         view!.PlanId.Should().Be("PLN-100");
         view.Categories.Should().HaveCount(2);
         view.Categories[1].Pharmacy!.TierLabel.Should().Be("Tier 1");
-        view.Documents.Should().ContainSingle(d => d.DocType == "SBC" && d.ContentHashSha256 == "a1b2c3");
+        view.Documents.Should().ContainSingle(d => d.DocType == "SBC" && d.ContentHashSha256 == "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=");
 
         handler.CapturedUrls[0].Should().Contain("/v1/benefit-plans/PLN-100/member-view");
         handler.CapturedUrls[0].Should().Contain("serviceDate=2026-04-18");

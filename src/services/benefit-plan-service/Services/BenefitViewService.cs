@@ -101,13 +101,17 @@ public class BenefitViewService : IBenefitViewService
 
         if (category == BenefitCategoryMap.Pharmacy)
         {
-            var tier = BenefitCategoryMap.ExtractPharmacyTier(benefit.ServiceCategory);
-            if (tier != null)
+            var tierLabel = BenefitCategoryMap.ExtractTierLabel(benefit.ServiceCategory);
+            var canonicalTier = BenefitCategoryMap.ExtractCanonicalTier(benefit.ServiceCategory);
+            var isSpecialty = BenefitCategoryMap.IsSpecialty(benefit.ServiceCategory);
+
+            if (tierLabel != null || canonicalTier != null || isSpecialty)
             {
                 result.Pharmacy = new PharmacyDetail
                 {
-                    TierLabel = tier,
-                    IsSpecialty = tier.Contains("Specialty", StringComparison.OrdinalIgnoreCase),
+                    TierLabel = tierLabel,
+                    CanonicalTier = canonicalTier,
+                    IsSpecialty = isSpecialty,
                 };
             }
         }

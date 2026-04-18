@@ -263,8 +263,14 @@ public class PlanDocumentReference
     public long? Size { get; set; }
 
     /// <summary>
-    /// SHA-256 of the document contents, hex-encoded. Optional today;
-    /// required by the FHIR migration so populate when available.
+    /// Base64-encoded SHA-256 of the document contents. Matches FHIR
+    /// <c>DocumentReference.content.attachment.hash</c> exactly so the
+    /// Phase 2 migration is a data-copy.
+    ///
+    /// Optional today; populate when available. Validated at producer
+    /// boundaries (see <c>PlanDocumentValidation.ValidateHash</c>) — the
+    /// setter itself is intentionally unvalidated so Mongo hydration and
+    /// JSON deserialization of historical documents never throws here.
     /// </summary>
     [JsonPropertyName("contentHashSha256")]
     public string? ContentHashSha256 { get; set; }

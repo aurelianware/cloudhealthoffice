@@ -58,10 +58,22 @@ past ~100 entries, promote it to `config/benefit-category-map.json`.
 
 Plans vary: some expose `Tier 1/2/3/4`, some use
 `Generic / Preferred Brand / Non-Preferred Brand / Specialty`. The response
-models this by:
+assigns every pharmacy benefit to the single `Pharmacy` category and
+carries three separate pieces of information on
+`CategorizedBenefit.pharmacy`:
 
-- assigning every pharmacy benefit to the single `Pharmacy` category, and
-- carrying the raw tier string verbatim in `CategorizedBenefit.pharmacy.tierLabel`.
+| Field           | Purpose                                       | Example input → value   |
+|-----------------|-----------------------------------------------|--------------------------|
+| `tierLabel`     | **Verbatim** from the plan; what the UI shows | `"Specialty Drug"` → `"Specialty Drug"` |
+| `canonicalTier` | Normalized bucket for grouping / analytics    | `"Specialty Drug"` → `"Specialty"`       |
+| `isSpecialty`   | Case-insensitive `contains("specialty")`      | `"Specialty Drug"` → `true`              |
+
+> **Pharmacy tier semantics.** `tierLabel` is always the plan's original
+> `ServiceCategory` string, trimmed only — never normalized, never
+> collapsed. Display this. `canonicalTier` is lossy by design (for
+> analytics); never render it in the UI. Splitting the two avoids the
+> old trap where `"Specialty Drug"` silently became `"Specialty"` in
+> downstream reports.
 
 The `category` field is deliberately a string (not an enum) so new pharmacy
 buckets can be introduced without a wire-format break.
@@ -77,13 +89,22 @@ the FHIR `DocumentReference.content.attachment`:
 | `Location`          | `content.attachment.url`                     |
 | `ContentType`       | `content.attachment.contentType`             |
 | `Size`              | `content.attachment.size`                    |
-| `ContentHashSha256` | `content.attachment.hash` (base64 of sha256) |
+| `ContentHashSha256` | `content.attachment.hash` — **Base64-encoded SHA-256 digest (32 decoded bytes)** |
 | `DocType`           | `type.coding`                                |
 | `Version`           | `version`                                    |
 | `EffectiveDate`     | `date`                                       |
 
 `Location` accepts both external HTTPS URLs and internal references of the
 form `documentreference/{id}`. Consumers must accept both.
+
+> **Hash encoding.** `ContentHashSha256` is Base64-encoded — 32 decoded
+> bytes, matching FHIR exactly. Validation runs at producer boundaries
+> only (`BenefitPlansController` create/update) via
+> `PlanDocumentValidation.ValidateHash`, which throws `ArgumentException`
+> (the controller translates to a 400 with the field name). The model
+> property itself is deliberately unvalidated so Mongo hydration and JSON
+> deserialization of historical documents never throw from inside the
+> pipeline — data that can't be read can't be corrected.
 
 > **Phase 2.** `TODO(benefits-viewer-phase2)`: migrate documents into
 > `member-document-service` (PR #650 sibling work) and retire the inline
@@ -108,6 +129,23 @@ form `documentreference/{id}`. Consumers must accept both.
 The portal client method is `IBenefitPlanService.GetMemberViewAsync(planId, serviceDate)`.
 On 404 it returns `null` (no configured view); on transport failure it
 throws `ServiceUnavailableException`, matching the rest of the portal.
+
+### Zero cost-share display
+
+`$0` values are meaningful (ACA preventive benefits, tier-1 generics,
+plan-level waivers) and must be shown — not hidden as if absent.
+`Formatters/BenefitCostShareFormatter.Format` uses `HasValue`-based display:
+
+| `copay`    | `coinsurance` | rendered             |
+|------------|---------------|----------------------|
+| `null`     | `null`        | `—`                  |
+| `0`        | `null`        | `No copay`           |
+| `null`     | `0`           | `No coinsurance`     |
+| `0`        | `0`           | `No charge`          |
+| `25`       | `null`        | `$25 copay`          |
+| `null`     | `0.2`         | `20% coinsurance`    |
+| `25`       | `0.2`         | `$25 copay · 20% coinsurance` |
+| `0`        | `0.2`         | `No copay · 20% coinsurance`  |
 
 ## Testing
 

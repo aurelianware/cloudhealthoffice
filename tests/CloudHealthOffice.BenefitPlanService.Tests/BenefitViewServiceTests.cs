@@ -97,23 +97,38 @@ public class BenefitViewServiceTests
     }
 
     [Fact]
-    public async Task Pharmacy_tier_detail_is_populated_for_pharmacy_benefits()
+    public async Task Pharmacy_tier_detail_preserves_verbatim_label_for_non_specialty()
     {
-        var plan = SamplePlan(
-            new Benefit { ServiceCategory = "Tier 1", InNetworkCopay = 10m },
-            new Benefit { ServiceCategory = "Specialty Drug", InNetworkCoinsurance = 0.30m });
+        var plan = SamplePlan(new Benefit { ServiceCategory = "Tier 1", InNetworkCopay = 10m });
         _plans.GetPlanAsync("plan-guid", Tenant).Returns(plan);
 
         var view = await BuildService().GetMemberViewAsync("plan-guid", Tenant, new DateTime(2026, 4, 18));
 
-        var tier1 = view!.Categories.Single(c => c.ServiceCategory == "Tier 1");
+        var tier1 = Assert.Single(view!.Categories);
         Assert.Equal(BenefitCategoryMap.Pharmacy, tier1.Category);
         Assert.NotNull(tier1.Pharmacy);
+        // TierLabel is the plan's original string, trimmed only.
         Assert.Equal("Tier 1", tier1.Pharmacy!.TierLabel);
+        // CanonicalTier is the normalized bucket for analytics.
+        Assert.Equal("Tier1", tier1.Pharmacy.CanonicalTier);
         Assert.False(tier1.Pharmacy.IsSpecialty);
+    }
 
-        var specialty = view.Categories.Single(c => c.ServiceCategory == "Specialty Drug");
-        Assert.True(specialty.Pharmacy!.IsSpecialty);
+    [Fact]
+    public async Task Pharmacy_tier_detail_preserves_original_label_for_specialty_drug()
+    {
+        // The original "Specialty Drug" label must survive — it used to be
+        // collapsed to just "Specialty", which silently lost plan wording.
+        var plan = SamplePlan(new Benefit { ServiceCategory = "Specialty Drug", InNetworkCoinsurance = 0.30m });
+        _plans.GetPlanAsync("plan-guid", Tenant).Returns(plan);
+
+        var view = await BuildService().GetMemberViewAsync("plan-guid", Tenant, new DateTime(2026, 4, 18));
+
+        var specialty = Assert.Single(view!.Categories);
+        Assert.NotNull(specialty.Pharmacy);
+        Assert.Equal("Specialty Drug", specialty.Pharmacy!.TierLabel);
+        Assert.Equal("Specialty", specialty.Pharmacy.CanonicalTier);
+        Assert.True(specialty.Pharmacy.IsSpecialty);
     }
 
     [Fact]
@@ -134,6 +149,10 @@ public class BenefitViewServiceTests
         Assert.Equal(0.40m, cat.OutOfNetwork!.Coinsurance);
     }
 
+    // Base64 SHA-256 of the empty string — recognizable, deterministic,
+    // exactly 32 decoded bytes.
+    private const string EmptyStringSha256Base64 = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=";
+
     [Fact]
     public async Task Documents_are_projected_with_forward_compatible_fields()
     {
@@ -144,7 +163,7 @@ public class BenefitViewServiceTests
             Location = "https://cdn.example/sbc-2026.pdf",
             ContentType = "application/pdf",
             Size = 182_304,
-            ContentHashSha256 = "a1b2c3",
+            ContentHashSha256 = EmptyStringSha256Base64,
             Version = "2026.01",
             EffectiveDate = new DateTime(2026, 1, 1),
             DisplayName = "Summary of Benefits and Coverage",
@@ -158,7 +177,7 @@ public class BenefitViewServiceTests
         Assert.Equal("https://cdn.example/sbc-2026.pdf", doc.Location);
         Assert.Equal("application/pdf", doc.ContentType);
         Assert.Equal(182_304, doc.Size);
-        Assert.Equal("a1b2c3", doc.ContentHashSha256);
+        Assert.Equal(EmptyStringSha256Base64, doc.ContentHashSha256);
     }
 
     [Fact]
