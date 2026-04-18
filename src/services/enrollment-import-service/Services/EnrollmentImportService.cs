@@ -1,4 +1,7 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using EnrollmentImportService.Models;
+using EnrollmentImportService.Repositories;
 
 namespace EnrollmentImportService.Services;
 
@@ -9,17 +12,29 @@ public interface IEnrollmentImportService
 
 public class EnrollmentImportService : IEnrollmentImportService
 {
+    private static readonly JsonSerializerOptions RawSegmentJsonOptions = new()
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly IEnrollmentRepository _repository;
     private readonly IEnrollmentTransactionRepository _transactions;
+    private readonly IEnrollmentEventPublisher _eventPublisher;
+    private readonly IEnrollmentValidator _validator;
     private readonly ILogger<EnrollmentImportService> _logger;
 
     public EnrollmentImportService(
         IEnrollmentRepository repository,
         IEnrollmentTransactionRepository transactions,
+        IEnrollmentEventPublisher eventPublisher,
+        IEnrollmentValidator validator,
         ILogger<EnrollmentImportService> logger)
     {
         _repository = repository;
         _transactions = transactions;
+        _eventPublisher = eventPublisher;
+        _validator = validator;
         _logger = logger;
     }
 
@@ -31,14 +46,41 @@ public class EnrollmentImportService : IEnrollmentImportService
             StartedAt = DateTime.UtcNow
         };
 
-        var batchId = $"BATCH-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}".Substring(0, 40);
+        // Stable batch id when a caller pre-supplies it (manual enrollment, replay tests),
+        // otherwise generate. A stable batchId keeps replay event-ids deterministic.
+        var batchId = !string.IsNullOrEmpty(enrollment.BatchId)
+            ? enrollment.BatchId
+            : $"BATCH-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}".Substring(0, 40);
 
         foreach (var memberEnrollment in enrollment.Enrollments)
         {
             var txnStatus = "Accepted";
+            var validation = _validator.Validate(memberEnrollment);
+            if (!validation.IsValid)
+            {
+                var flat = string.Join("; ", validation.ToFlatStrings());
+                _logger.LogWarning(
+                    "Validation failed for subscriber {SubscriberId}: {Errors}",
+                    SanitizeForLog(memberEnrollment.SubscriberId), flat);
+                result.Errors.AddRange(
+                    validation.Errors.Select(e =>
+                        $"Subscriber {memberEnrollment.SubscriberId}: [{e.Code}] {e.Field} — {e.Message}"));
+                result.FailedCount++;
+                txnStatus = "Rejected";
+                await RecordTransactionAsync(tenantId, batchId, enrollment, memberEnrollment, txnStatus);
+                continue;
+            }
+
+            // Deterministic transaction id keyed on batch + position + subscriber so that
+            // replays of an identical batch produce identical EventIds.
+            var transactionId = !string.IsNullOrEmpty(memberEnrollment.TransactionId)
+                ? memberEnrollment.TransactionId
+                : $"{batchId}-{memberEnrollment.SubscriberId ?? "ANON"}";
+
             try
             {
                 await ProcessMemberEnrollmentAsync(memberEnrollment, tenantId, result);
+                await PublishEnrollmentEventAsync(tenantId, batchId, transactionId, enrollment, memberEnrollment);
             }
             catch (Exception ex)
             {
@@ -53,11 +95,154 @@ public class EnrollmentImportService : IEnrollmentImportService
         }
 
         result.CompletedAt = DateTime.UtcNow;
+        result.BatchId = batchId;
         _logger.LogInformation(
             "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped",
             result.SuccessCount, result.FailedCount, result.SkippedCount);
 
         return result;
+    }
+
+    private async Task PublishEnrollmentEventAsync(
+        string tenantId,
+        string batchId,
+        string transactionId,
+        Enrollment834 batch,
+        MemberEnrollment memberEnrollment)
+    {
+        var memberId = memberEnrollment.SubscriberId ?? string.Empty;
+        if (string.IsNullOrEmpty(memberId)) return;
+
+        var eventType = ClassifyEvent(memberEnrollment);
+        var eventDate = ParseDate(
+            memberEnrollment.MaintenanceType == "024"
+                ? memberEnrollment.TerminationDate
+                : memberEnrollment.EnrollmentDate);
+
+        var retroEffectiveDate = IsRetro(memberEnrollment, eventDate)
+            ? eventDate
+            : (DateTime?)null;
+
+        var payload = new JsonObject
+        {
+            ["benefitStatus"] = memberEnrollment.BenefitStatus,
+            ["relationship"] = memberEnrollment.Relationship,
+            ["groupNumber"] = memberEnrollment.GroupNumber,
+            ["enrollmentDate"] = memberEnrollment.EnrollmentDate,
+            ["terminationDate"] = memberEnrollment.TerminationDate,
+            ["coverageCount"] = memberEnrollment.Coverage?.Count ?? 0,
+            ["dependentCount"] = memberEnrollment.Dependents?.Count ?? 0
+        };
+
+        var rawSegment = SerializeRawSegment(memberEnrollment);
+
+        // EventId construction differs by source so 834 replays are deterministic
+        // (idempotent dedup) while back-to-back manual POSTs from the same batch wrapper
+        // never accidentally collide. Manual callers either supply their own EventId for
+        // retry safety or get a fresh GUID per POST.
+        string eventId;
+        if (batch.ManualSource)
+        {
+            var requestEventId = string.IsNullOrWhiteSpace(memberEnrollment.EventId)
+                ? Guid.NewGuid().ToString("N")
+                : memberEnrollment.EventId;
+            eventId = EnrollmentEvent.BuildManualEventId(requestEventId, memberId);
+        }
+        else
+        {
+            eventId = EnrollmentEvent.BuildIngestEventId(batchId, transactionId, memberId);
+        }
+
+        var evt = new EnrollmentEvent
+        {
+            TenantId = tenantId,
+            MemberId = memberId,
+            EventId = eventId,
+            EventType = eventType,
+            OccurredAt = DateTime.UtcNow,
+            EventDate = eventDate,
+            RetroEffectiveDate = retroEffectiveDate,
+            SourceBatchId = batchId,
+            TransactionId = transactionId,
+            MaintenanceType = memberEnrollment.MaintenanceType,
+            MaintenanceReason = memberEnrollment.MaintenanceReason,
+            Source = batch.ManualSource ? "manual" : "edi834",
+            CorrelationId = batch.FileName,
+            Payload = payload,
+            RawSegment = rawSegment
+        };
+
+        try
+        {
+            await _eventPublisher.PublishAsync(evt);
+        }
+        catch (Exception ex)
+        {
+            // Event publication is not allowed to break the import — the transaction log
+            // still records the txn. Surface as a warning so it shows up in dashboards.
+            _logger.LogWarning(ex,
+                "Failed to publish EnrollmentEvent for {Tenant}:{Member} batch {BatchId}",
+                SanitizeForLog(tenantId), SanitizeForLog(memberId), SanitizeForLog(batchId));
+        }
+    }
+
+    internal static EnrollmentEventType ClassifyEvent(MemberEnrollment e)
+    {
+        // Order matters: most specific reasons first.
+        if (e.MaintenanceType == "024")
+        {
+            return e.BenefitStatus == "C" || e.MaintenanceReason == "EC"
+                ? EnrollmentEventType.CobraTerminated
+                : EnrollmentEventType.Terminated;
+        }
+
+        if (e.MaintenanceType == "025")
+            return EnrollmentEventType.ReinstatementApproved;
+
+        if (e.BenefitStatus == "C" && e.MaintenanceType == "021")
+            return EnrollmentEventType.CobraElected;
+
+        if (e.MaintenanceReason is "EC" or "37")
+            return EnrollmentEventType.SepTriggered;
+
+        if (e.MaintenanceType == "021")
+            return EnrollmentEventType.Enrolled;
+
+        // 001 = Change. Distinguish by the most material change first.
+        if (HasAddressChange(e)) return EnrollmentEventType.AddressChanged;
+        if (HasPlanChange(e)) return EnrollmentEventType.PlanChanged;
+        return EnrollmentEventType.PlanChanged;
+    }
+
+    private static bool HasAddressChange(MemberEnrollment e) =>
+        e.Demographics != null
+        && (!string.IsNullOrWhiteSpace(e.Demographics.Address1)
+            || !string.IsNullOrWhiteSpace(e.Demographics.City)
+            || !string.IsNullOrWhiteSpace(e.Demographics.State)
+            || !string.IsNullOrWhiteSpace(e.Demographics.Zip));
+
+    private static bool HasPlanChange(MemberEnrollment e) =>
+        e.Coverage != null && e.Coverage.Count > 0;
+
+    private static bool IsRetro(MemberEnrollment e, DateTime? eventDate) =>
+        eventDate.HasValue && eventDate.Value.Date < DateTime.UtcNow.Date.AddDays(-30);
+
+    private static string SerializeRawSegment(MemberEnrollment e)
+    {
+        // PHI lives in here (names, addresses, optionally SSN). Persistence relies on
+        // container-level encryption-at-rest — do NOT also re-encrypt at the field level.
+        // Telemetry exporters that read this field MUST scrub it the same way they scrub
+        // span attributes.
+        try
+        {
+            var raw = JsonSerializer.Serialize(e, RawSegmentJsonOptions);
+            // Cap raw snippet so we don't blow Cosmos's 2MB doc limit on huge dependents.
+            return raw.Length > 8000 ? raw.Substring(0, 8000) : raw;
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     private async Task RecordTransactionAsync(
@@ -396,6 +581,7 @@ public class EnrollmentImportService : IEnrollmentImportService
 public class ImportResult
 {
     public string FileName { get; set; } = string.Empty;
+    public string BatchId { get; set; } = string.Empty;
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public int SuccessCount { get; set; }

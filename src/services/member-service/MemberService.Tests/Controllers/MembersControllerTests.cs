@@ -268,6 +268,38 @@ public class MembersControllerTests
     }
 
     [Fact]
+    public async Task GetEnrollmentEvents_ProxiesToDownstream()
+    {
+        var (ctl, _, _, _, enrollment, _) = Build();
+        enrollment.Setup(e => e.GetEnrollmentEventsAsync(
+                Tenant, "M-001", null, null, null, 50, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EnrollmentEventListResponse
+            {
+                Items = new()
+                {
+                    new EnrollmentEventRecord { EventId = "e1", EventType = "Enrolled", Version = 1 }
+                }
+            });
+
+        var resp = await ctl.GetEnrollmentEvents("M-001", null, null, null, 50, null, CancellationToken.None);
+        var ok = resp.Should().BeOfType<OkObjectResult>().Subject;
+        var page = ok.Value.Should().BeOfType<EnrollmentEventListResponse>().Subject;
+        page.Items.Should().ContainSingle().Which.EventId.Should().Be("e1");
+    }
+
+    [Fact]
+    public async Task GetEnrollmentEvents_WhenDownstreamDown_Returns503()
+    {
+        var (ctl, _, _, _, enrollment, _) = Build();
+        enrollment.Setup(e => e.GetEnrollmentEventsAsync(
+                Tenant, "M-001", null, null, null, 50, null, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DownstreamUnavailableException("enrollment-import-service"));
+
+        var resp = await ctl.GetEnrollmentEvents("M-001", null, null, null, 50, null, CancellationToken.None);
+        ((ObjectResult)resp).StatusCode.Should().Be(503);
+    }
+
+    [Fact]
     public async Task GetAccumulators_WhenUnavailable_Returns503()
     {
         var (ctl, _, _, _, _, accu) = Build();

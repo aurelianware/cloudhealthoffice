@@ -548,52 +548,117 @@
                     </div>
                 </MudTabPanel>
 
-                <!-- Enrollment History Tab -->
+                <!-- Enrollment History Tab — backed by the per-member EnrollmentEvent stream -->
                 <MudTabPanel Text="Enrollment History" Icon="@Icons.Material.Filled.Timeline">
                     <div>
-                        @if (_loadingHistory)
+                        <MudGrid Class="mb-3">
+                            <MudItem xs="12" md="4">
+                                <MudSelect T="string" Label="Event type" Dense="true" Variant="Variant.Outlined"
+                                           Value="@_eventTypeFilter" ValueChanged="OnEventTypeChanged" Clearable="true">
+                                    <MudSelectItem T="string" Value="@(string.Empty)">All</MudSelectItem>
+                                    @foreach (var t in EnrollmentEventTypes)
+                                    {
+                                        <MudSelectItem T="string" Value="@t">@t</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="6" md="4">
+                                <MudDatePicker Label="From" Date="_eventFromFilter" DateChanged="OnEventFromChanged"
+                                               Variant="Variant.Outlined" Clearable="true" />
+                            </MudItem>
+                            <MudItem xs="6" md="4">
+                                <MudDatePicker Label="To" Date="_eventToFilter" DateChanged="OnEventToChanged"
+                                               Variant="Variant.Outlined" Clearable="true" />
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_loadingEvents)
                         {
                             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
                         }
-                        else if (_coverageHistory.Any())
+                        else if (_enrollmentEvents.Any())
                         {
-                            <MudTimeline TimelinePosition="TimelinePosition.Start">
-                                @foreach (var evt in _coverageHistory.OrderByDescending(e => e.EventDate))
+                            <MudExpansionPanels MultiExpansion="true" Dense="true">
+                                @foreach (var evt in _enrollmentEvents)
                                 {
-                                    <MudTimelineItem Color="@GetEventColor(evt.EventType)" Size="Size.Small">
-                                        <ItemContent>
-                                            <MudCard Elevation="1" Class="mb-1" Style="border: 1px solid rgba(0,255,255,0.1);">
-                                                <MudCardContent Class="py-2">
-                                                    <div class="d-flex justify-space-between align-center">
-                                                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@evt.Description</MudText>
-                                                        <MudChip T="string" Size="Size.Small" Color="@GetEventColor(evt.EventType)">@evt.EventType</MudChip>
-                                                    </div>
-                                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                                        @evt.EventDate.ToString("MMM dd, yyyy") @if (!string.IsNullOrEmpty(evt.ChangedBy)) { <text>— @evt.ChangedBy</text> }
+                                    <MudExpansionPanel>
+                                        <TitleContent>
+                                            <div class="d-flex align-center" style="width:100%;">
+                                                <MudChip T="string" Size="Size.Small"
+                                                         Color="@GetEventColor(evt.EventType)" Class="mr-2">
+                                                    @evt.EventType
+                                                </MudChip>
+                                                <MudText Typo="Typo.body2" Style="font-weight:500;">
+                                                    @(evt.EventDate?.ToString("MMM dd, yyyy") ?? evt.OccurredAt.ToString("MMM dd, yyyy HH:mm"))
+                                                </MudText>
+                                                <MudSpacer />
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                                         Style="font-family: monospace;">
+                                                    v@(evt.Version) · @(evt.Source ?? "edi834")
+                                                </MudText>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            <MudGrid>
+                                                <MudItem xs="6" md="3">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Maintenance type</MudText>
+                                                    <MudText Typo="Typo.body2">@(evt.MaintenanceType ?? "—")</MudText>
+                                                </MudItem>
+                                                <MudItem xs="6" md="3">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Maintenance reason</MudText>
+                                                    <MudText Typo="Typo.body2">@(evt.MaintenanceReason ?? "—")</MudText>
+                                                </MudItem>
+                                                <MudItem xs="6" md="3">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Batch ID</MudText>
+                                                    <MudText Typo="Typo.body2" Style="font-family: monospace;">
+                                                        @(evt.SourceBatchId ?? "—")
                                                     </MudText>
-                                                    @if (!string.IsNullOrEmpty(evt.OldValue) || !string.IsNullOrEmpty(evt.NewValue))
-                                                    {
-                                                        <div class="mt-1">
-                                                            @if (!string.IsNullOrEmpty(evt.OldValue))
-                                                            {
-                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">From: @evt.OldValue</MudText>
-                                                            }
-                                                            @if (!string.IsNullOrEmpty(evt.NewValue))
-                                                            {
-                                                                <MudText Typo="Typo.caption" Color="Color.Primary">To: @evt.NewValue</MudText>
-                                                            }
-                                                        </div>
-                                                    }
-                                                </MudCardContent>
-                                            </MudCard>
-                                        </ItemContent>
-                                    </MudTimelineItem>
+                                                </MudItem>
+                                                <MudItem xs="6" md="3">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Transaction ID</MudText>
+                                                    <MudText Typo="Typo.body2" Style="font-family: monospace;">
+                                                        @(evt.TransactionId ?? "—")
+                                                    </MudText>
+                                                </MudItem>
+                                                @if (evt.RetroEffectiveDate.HasValue)
+                                                {
+                                                    <MudItem xs="12">
+                                                        <MudAlert Severity="Severity.Warning" Dense="true">
+                                                            Retro-adjusted to @evt.RetroEffectiveDate.Value.ToString("MMM dd, yyyy")
+                                                        </MudAlert>
+                                                    </MudItem>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(evt.RawSegment))
+                                                {
+                                                    <MudItem xs="12">
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">
+                                                            Raw 834 / manual snippet
+                                                        </MudText>
+                                                        <pre style="white-space: pre-wrap; word-break: break-word;
+                                                                    background: rgba(0,0,0,0.4); padding: 8px;
+                                                                    border-radius: 4px; font-size: 0.75rem; max-height: 240px;
+                                                                    overflow: auto;">@evt.RawSegment</pre>
+                                                    </MudItem>
+                                                }
+                                            </MudGrid>
+                                        </ChildContent>
+                                    </MudExpansionPanel>
                                 }
-                            </MudTimeline>
+                            </MudExpansionPanels>
+
+                            @if (!string.IsNullOrEmpty(_eventsContinuationToken))
+                            {
+                                <div class="d-flex justify-center mt-3">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                               OnClick="LoadMoreEventsAsync">
+                                        Load more
+                                    </MudButton>
+                                </div>
+                            }
                         }
                         else
                         {
-                            <MudAlert Severity="Severity.Info">No enrollment history available.</MudAlert>
+                            <MudAlert Severity="Severity.Info">No enrollment events found for the selected filters.</MudAlert>
                         }
                     </div>
                 </MudTabPanel>
@@ -762,16 +827,28 @@
     private MemberPcp? _pcp;
     private List<CoverageHistoryEvent> _coverageHistory = new();
     private List<Enrollment834Record> _transactions834 = new();
+    private List<CloudHealthOffice.Portal.Services.EnrollmentEvent> _enrollmentEvents = new();
+    private string? _eventsContinuationToken;
+    private string _eventTypeFilter = string.Empty;
+    private DateTime? _eventFromFilter;
+    private DateTime? _eventToFilter;
     private MemberAccumulators? _accumulators;
     private MemberBenefitView? _benefitView;
     private string? _selectedBenefitPlanId;
     private string? _benefitsError;
+
+    private static readonly string[] EnrollmentEventTypes =
+    {
+        "Enrolled", "Terminated", "PlanChanged", "AddressChanged", "PcpChanged",
+        "SepTriggered", "CobraElected", "CobraTerminated", "RetroAdjusted", "ReinstatementApproved"
+    };
 
     private bool _loading = true;
     private bool _loadingCoverage = true;
     private bool _loadingPcp = false;
     private bool _loadingHistory = false;
     private bool _loading834 = false;
+    private bool _loadingEvents = false;
     private bool _loadingAccumulators = false;
     private bool _loadingBenefits = false;
     private bool _loadingFamily = false;
@@ -837,8 +914,64 @@
         _ = LoadPcpAsync();
         _ = LoadHistoryAsync();
         _ = Load834Async();
+        _ = LoadEnrollmentEventsAsync(reset: true);
         _ = LoadBenefitsForActiveCoverageAsync();
         _ = LoadFamilyAsync();
+    }
+
+    private async Task LoadEnrollmentEventsAsync(bool reset)
+    {
+        _loadingEvents = true;
+        if (reset)
+        {
+            _enrollmentEvents = new();
+            _eventsContinuationToken = null;
+        }
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var page = await MemberService.GetEnrollmentEventsAsync(
+                MemberId,
+                new EnrollmentEventFilter(
+                    Type: string.IsNullOrWhiteSpace(_eventTypeFilter) ? null : _eventTypeFilter,
+                    From: _eventFromFilter?.ToUniversalTime(),
+                    To: _eventToFilter?.ToUniversalTime(),
+                    Limit: 50,
+                    ContinuationToken: reset ? null : _eventsContinuationToken));
+
+            _enrollmentEvents.AddRange(page.Items);
+            _eventsContinuationToken = page.ContinuationToken;
+        }
+        catch
+        {
+            if (reset) _enrollmentEvents = new();
+        }
+        finally
+        {
+            _loadingEvents = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task LoadMoreEventsAsync() => LoadEnrollmentEventsAsync(reset: false);
+
+    private Task OnEventTypeChanged(string value)
+    {
+        _eventTypeFilter = value ?? string.Empty;
+        return LoadEnrollmentEventsAsync(reset: true);
+    }
+
+    private Task OnEventFromChanged(DateTime? value)
+    {
+        _eventFromFilter = value;
+        return LoadEnrollmentEventsAsync(reset: true);
+    }
+
+    private Task OnEventToChanged(DateTime? value)
+    {
+        _eventToFilter = value;
+        return LoadEnrollmentEventsAsync(reset: true);
     }
 
     private async Task LoadFamilyAsync()
@@ -1040,10 +1173,18 @@
         eventType switch
         {
             "Enrolled" => Color.Success,
+            "ReinstatementApproved" => Color.Success,
             "Reinstated" => Color.Success,
+            "PlanChanged" => Color.Info,
             "PlanChange" => Color.Info,
+            "PcpChanged" => Color.Primary,
             "PcpChange" => Color.Primary,
+            "AddressChanged" => Color.Tertiary,
+            "SepTriggered" => Color.Warning,
+            "CobraElected" => Color.Warning,
+            "CobraTerminated" => Color.Error,
             "Terminated" => Color.Error,
+            "RetroAdjusted" => Color.Warning,
             _ => Color.Default
         };
 

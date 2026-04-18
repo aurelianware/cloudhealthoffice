@@ -1,4 +1,5 @@
 using EnrollmentImportService;
+using EnrollmentImportService.Repositories;
 using EnrollmentImportService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -32,6 +33,9 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 // Repositories and services
 builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<IEnrollmentTransactionRepository, EnrollmentTransactionRepository>();
+builder.Services.AddScoped<IEnrollmentEventRepository, EnrollmentEventRepository>();
+builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>();
+builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();
 builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
 
 // Health checks (MongoDB or Cosmos DB)

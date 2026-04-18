@@ -70,6 +70,35 @@ public sealed class FakeEnrollmentImportServiceClient : IEnrollmentImportService
                 Status = "Accepted"
             }
         });
+
+    public Task<EnrollmentEventListResponse> GetEnrollmentEventsAsync(
+        string tenantId,
+        string memberId,
+        string? type = null,
+        DateTime? from = null,
+        DateTime? to = null,
+        int limit = 50,
+        string? continuationToken = null,
+        CancellationToken ct = default)
+        => Task.FromResult(new EnrollmentEventListResponse
+        {
+            Items = new List<EnrollmentEventRecord>
+            {
+                new()
+                {
+                    EventId = "834-DEV-BATCH-001:DEV-TXN-001:" + memberId,
+                    EventType = "Enrolled",
+                    Version = 1,
+                    OccurredAt = DateTime.UtcNow.AddMonths(-6),
+                    EventDate = DateTime.UtcNow.AddMonths(-6),
+                    SourceBatchId = "DEV-BATCH-001",
+                    TransactionId = "DEV-TXN-001",
+                    MaintenanceType = "021",
+                    Source = "edi834"
+                }
+            },
+            ContinuationToken = null
+        });
 }
 
 public sealed class FakeAccumulatorServiceClient : IAccumulatorServiceClient
