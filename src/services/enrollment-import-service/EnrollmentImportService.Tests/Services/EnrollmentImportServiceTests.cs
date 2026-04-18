@@ -3,9 +3,9 @@ using EnrollmentImportService.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
-// Classification is tested via the dedicated EnrollmentEventClassifier helper so we
-// avoid the "production class shares a name with the root namespace" resolution bug —
-// see EnrollmentEventClassifier for the full rationale.
+// Classification is tested via the dedicated EnrollmentEventClassifier helper to avoid
+// the name-shadowing issue between the root namespace and the production import-service
+// class — see EnrollmentEventClassifier's XML doc for the full rationale.
 using ImportSvc = EnrollmentImportService.Services.EnrollmentImportService;
 
 namespace EnrollmentImportService.Tests.Services;

@@ -32,9 +32,10 @@ public static class EnrollmentEventClassifier
         if (e.MaintenanceType == "021")
             return EnrollmentEventType.Enrolled;
 
-        // 001 = Change. AddressChanged wins when a demographics delta is present; any
-        // other change (plan, dates, group info) is surfaced as PlanChanged. The schema
-        // keeps the enum stable so callers can widen later without breaking stored events.
+        // Fallback for all other maintenance types (commonly 001 = Change).
+        // AddressChanged wins when a demographics delta is present; any other change
+        // (plan, dates, group info) is surfaced as PlanChanged. The schema keeps the
+        // enum stable so callers can widen later without breaking stored events.
         if (HasAddressChange(e)) return EnrollmentEventType.AddressChanged;
         return EnrollmentEventType.PlanChanged;
     }
