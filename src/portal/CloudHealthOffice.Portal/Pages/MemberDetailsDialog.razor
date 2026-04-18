@@ -1,6 +1,8 @@
 @using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Formatters
 @inject IMemberService MemberService
 @inject ICoverageService CoverageService
+@inject IBenefitPlanService BenefitPlanService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -317,6 +319,147 @@
                     </div>
                 </MudTabPanel>
 
+                <!-- Benefits Tab -->
+                <MudTabPanel Text="Benefits" Icon="@Icons.Material.Filled.MedicalInformation">
+                    <div>
+                        @{
+                            var eligibleCoverages = _coverages
+                                .Where(c => !string.IsNullOrEmpty(c.PlanId)
+                                            && c.StatusText == "Active"
+                                            && c.EffectiveDate <= DateTime.Today
+                                            && (c.TerminationDate == null || c.TerminationDate >= DateTime.Today))
+                                .ToList();
+                        }
+
+                        @if (_loadingCoverage)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (!eligibleCoverages.Any())
+                        {
+                            <MudAlert Severity="Severity.Info">
+                                No active coverage as of @DateTime.Today.ToString("MM/dd/yyyy") — benefits cannot be resolved.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            @if (eligibleCoverages.Count > 1)
+                            {
+                                <MudSelect T="string" Label="Coverage"
+                                           Value="_selectedBenefitPlanId"
+                                           ValueChanged="OnCoverageSelectionChanged"
+                                           Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                                    @foreach (var cov in eligibleCoverages)
+                                    {
+                                        <MudSelectItem T="string" Value="@cov.PlanId">
+                                            @cov.PlanName (@cov.EffectiveDate.ToString("MM/dd/yyyy")
+                                            — @(cov.TerminationDate?.ToString("MM/dd/yyyy") ?? "present"))
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+
+                            @if (_loadingBenefits)
+                            {
+                                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                            }
+                            else if (_benefitView != null)
+                            {
+                                <div class="d-flex align-center gap-2 mb-2">
+                                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@_benefitView.PlanName</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@_benefitView.PlanType</MudChip>
+                                    @if (!string.IsNullOrEmpty(_benefitView.MetalLevel))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@_benefitView.MetalLevel</MudChip>
+                                    }
+                                    <MudSpacer />
+                                    <MudTooltip Text="@($"Plan version {_benefitView.PlanVersion}")">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            As of @_benefitView.AsOfDate.ToString("MM/dd/yyyy") · v@_benefitView.PlanVersion
+                                        </MudText>
+                                    </MudTooltip>
+                                </div>
+
+                                @if (_benefitView.Categories.Any())
+                                {
+                                    <MudSimpleTable Dense="true" Hover="true" Elevation="1" Class="mb-3">
+                                        <thead>
+                                            <tr>
+                                                <th>Benefit</th>
+                                                <th>In-Network</th>
+                                                <th>Out-of-Network</th>
+                                                <th>Deductible</th>
+                                                <th>OOP</th>
+                                                <th>Prior Auth</th>
+                                                <th>Limits</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var cat in _benefitView.Categories)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div style="font-weight: 500;">@cat.DisplayName</div>
+                                                        @if (cat.Pharmacy != null)
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@cat.Pharmacy.TierLabel@(cat.Pharmacy.IsSpecialty ? " (specialty)" : "")</MudText>
+                                                        }
+                                                        else if (!string.IsNullOrEmpty(cat.Description))
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@cat.Description</MudText>
+                                                        }
+                                                    </td>
+                                                    <td>@BenefitCostShareFormatter.Format(cat.InNetwork)</td>
+                                                    <td>@(cat.OutOfNetwork != null ? BenefitCostShareFormatter.Format(cat.OutOfNetwork) : "—")</td>
+                                                    <td>@(cat.DeductibleApplies ? "Applies" : "Waived")</td>
+                                                    <td>@(cat.OopApplies ? "Applies" : "Excluded")</td>
+                                                    <td>
+                                                        @if (cat.PriorAuthRequired)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Required</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <text>—</text>
+                                                        }
+                                                    </td>
+                                                    <td>@FormatLimits(cat)</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </MudSimpleTable>
+                                }
+                                else
+                                {
+                                    <MudAlert Severity="Severity.Info">This plan has no configured benefits.</MudAlert>
+                                }
+
+                                @if (_benefitView.Documents.Any())
+                                {
+                                    <MudText Typo="Typo.subtitle2" Class="mt-3 mb-2" Style="font-weight: 600;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Class="mr-1" />
+                                        Plan Documents
+                                    </MudText>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var doc in _benefitView.Documents)
+                                        {
+                                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                       Href="@doc.Location" Target="_blank">
+                                                @(string.IsNullOrEmpty(doc.DisplayName) ? doc.DocType : doc.DisplayName)
+                                            </MudButton>
+                                        }
+                                    </div>
+                                }
+                            }
+                            else if (_benefitsError != null)
+                            {
+                                <MudAlert Severity="Severity.Warning">@_benefitsError</MudAlert>
+                            }
+                        }
+                    </div>
+                </MudTabPanel>
+
                 <!-- PCP Tab -->
                 <MudTabPanel Text="Primary Care Physician" Icon="@Icons.Material.Filled.MedicalServices"
                              @ref="_pcpTab">
@@ -555,6 +698,9 @@
     private List<CoverageHistoryEvent> _coverageHistory = new();
     private List<Enrollment834Record> _transactions834 = new();
     private MemberAccumulators? _accumulators;
+    private MemberBenefitView? _benefitView;
+    private string? _selectedBenefitPlanId;
+    private string? _benefitsError;
 
     private bool _loading = true;
     private bool _loadingCoverage = true;
@@ -562,6 +708,7 @@
     private bool _loadingHistory = false;
     private bool _loading834 = false;
     private bool _loadingAccumulators = false;
+    private bool _loadingBenefits = false;
     private int _activeTab = 0;
     private string? _serviceError;
 
@@ -614,6 +761,25 @@
         _ = LoadPcpAsync();
         _ = LoadHistoryAsync();
         _ = Load834Async();
+        _ = LoadBenefitsForActiveCoverageAsync();
+    }
+
+    private async Task LoadBenefitsForActiveCoverageAsync()
+    {
+        var eligible = _coverages
+            .Where(c => !string.IsNullOrEmpty(c.PlanId)
+                        && c.StatusText == "Active"
+                        && c.EffectiveDate <= DateTime.Today
+                        && (c.TerminationDate == null || c.TerminationDate >= DateTime.Today))
+            .ToList();
+
+        if (!eligible.Any())
+        {
+            return;
+        }
+
+        _selectedBenefitPlanId = eligible.First().PlanId;
+        await LoadBenefitsAsync();
     }
 
     private async Task LoadAccumulatorsAsync()
@@ -763,6 +929,69 @@
         if (limit == 0) return Color.Default;
         var pct = (double)used / limit;
         return pct >= 1.0 ? Color.Success : pct >= 0.9 ? Color.Warning : Color.Primary;
+    }
+
+    private async Task OnCoverageSelectionChanged(string planId)
+    {
+        _selectedBenefitPlanId = planId;
+        await LoadBenefitsAsync();
+    }
+
+    private async Task LoadBenefitsAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedBenefitPlanId))
+        {
+            return;
+        }
+
+        _loadingBenefits = true;
+        _benefitsError = null;
+        StateHasChanged();
+        try
+        {
+            _benefitView = await BenefitPlanService.GetMemberViewAsync(_selectedBenefitPlanId, DateTime.Today);
+            if (_benefitView == null)
+            {
+                _benefitsError = $"No plan configuration found for {_selectedBenefitPlanId}.";
+            }
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _benefitView = null;
+            _benefitsError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _benefitView = null;
+            _benefitsError = $"Failed to load benefits: {ex.Message}";
+        }
+        finally
+        {
+            _loadingBenefits = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatLimits(CategorizedBenefit cat)
+    {
+        var parts = new List<string>();
+        if (cat.VisitLimit.HasValue)
+        {
+            parts.Add($"{cat.VisitLimit} visits" + (string.IsNullOrEmpty(cat.VisitLimitPeriod) ? "" : $"/{cat.VisitLimitPeriod}"));
+        }
+        if (cat.AnnualMaximum.HasValue)
+        {
+            parts.Add($"${cat.AnnualMaximum.Value:N0}/yr");
+        }
+        if (cat.LifetimeMaximum.HasValue)
+        {
+            parts.Add($"${cat.LifetimeMaximum.Value:N0} lifetime");
+        }
+        if (!string.IsNullOrEmpty(cat.Limitations))
+        {
+            parts.Add(cat.Limitations!);
+        }
+        return parts.Count == 0 ? "—" : string.Join(" · ", parts);
     }
 
     private void Close() => MudDialog.Close();
