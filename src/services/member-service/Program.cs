@@ -50,6 +50,8 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
             sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
             eventsCollectionName));
     builder.Services.AddSingleton<IFamilyRelationshipRepository, FamilyRelationshipRepositoryMongo>();
+    builder.Services.AddSingleton<IMemberAlertRepository, MemberAlertRepositoryMongo>();
+    builder.Services.AddSingleton<IMemberNoteRepository, MemberNoteRepositoryMongo>();
 
     builder.Services.AddHostedService<MemberIndexInitializer>();
     builder.Services.AddHostedService<FamilyRelationshipIndexInitializer>();
@@ -108,14 +110,32 @@ else
         return new FamilyRelationshipRepository(cosmosClient, databaseName);
     });
 
+    builder.Services.AddScoped<IMemberAlertRepository>(sp =>
+    {
+        var cosmosClient = sp.GetRequiredService<CosmosClient>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+        return new MemberAlertRepository(cosmosClient, databaseName);
+    });
+
+    builder.Services.AddScoped<IMemberNoteRepository>(sp =>
+    {
+        var cosmosClient = sp.GetRequiredService<CosmosClient>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+        return new MemberNoteRepository(cosmosClient, databaseName);
+    });
+
     Console.WriteLine($"Using Cosmos DB database provider (events container: {eventsContainerName})");
 }
 
 // ── Member Service internals ─────────────────────────────────────────
 builder.Services.AddScoped<IMemberEventPublisher, CosmosMemberEventPublisher>();
 builder.Services.AddSingleton<IFhirPatientProjector, FhirPatientProjector>();
+builder.Services.AddSingleton<IFhirFlagProjector, FhirFlagProjector>();
 builder.Services.AddScoped<IFamilyRelationshipService, FamilyRelationshipService>();
 builder.Services.AddScoped<IRelationshipShim, RelationshipShim>();
+builder.Services.AddScoped<IMemberAlertGuard, MemberAlertGuard>();
 
 // Identifier encryption. Real KV-backed encryptor when a data-key secret name is
 // configured; otherwise fall through to the no-op shim (dev only).

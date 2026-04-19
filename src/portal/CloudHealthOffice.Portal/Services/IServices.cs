@@ -88,6 +88,81 @@ public interface ICoverageService
     Task<List<Coverage>> GetCoverageByMemberIdAsync(string memberId);
 }
 
+public interface IMemberAlertService
+{
+    Task<List<MemberAlertView>> ListAsync(string memberId, bool activeOnly);
+    Task<MemberAlertView?> CreateAsync(string memberId, CreateMemberAlertPayload payload);
+    Task<MemberAlertView?> EndAsync(string memberId, string alertId);
+}
+
+public interface IMemberNoteService
+{
+    Task<MemberNotePage> ListAsync(string memberId, MemberNoteFilter filter);
+    Task<MemberNoteView?> CreateAsync(string memberId, CreateMemberNotePayload payload);
+}
+
+public class MemberAlertView
+{
+    public string Id { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string AlertType { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Info";
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? RequiredAction { get; set; }
+    public string CreatedBy { get; set; } = string.Empty;
+    public DateTime CreatedDate { get; set; }
+    public string? EndedBy { get; set; }
+
+    public bool IsActive(DateTime? asOf = null)
+    {
+        var t = asOf ?? DateTime.UtcNow;
+        return StartDate <= t && (!EndDate.HasValue || EndDate.Value > t);
+    }
+}
+
+public class CreateMemberAlertPayload
+{
+    public string AlertType { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Info";
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? RequiredAction { get; set; }
+}
+
+public class MemberNoteView
+{
+    public string Id { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string Category { get; set; } = "CustomerService";
+    public string Subject { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public string Author { get; set; } = string.Empty;
+    public DateTime CreatedDate { get; set; }
+    public string? LinkedResourceType { get; set; }
+    public string? LinkedResourceId { get; set; }
+}
+
+public class CreateMemberNotePayload
+{
+    public string Category { get; set; } = "CustomerService";
+    public string Subject { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public string? Author { get; set; }
+    public string? LinkedResourceType { get; set; }
+    public string? LinkedResourceId { get; set; }
+}
+
+public sealed record MemberNoteFilter(string? Category, int Limit, string? ContinuationToken);
+
+public class MemberNotePage
+{
+    public List<MemberNoteView> Items { get; set; } = new();
+    public string? ContinuationToken { get; set; }
+}
+
 public interface IFamilyRelationshipService
 {
     Task<List<FamilyRelationshipRow>> ListForMemberAsync(string memberId);
