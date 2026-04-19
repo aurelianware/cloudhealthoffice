@@ -1196,8 +1196,9 @@
         {
             _pcp = newPcp;
             // Refresh history so the just-closed prior assignment row appears.
-            _ = LoadPcpAsync();
-            StateHasChanged();
+            // Awaited rather than fire-and-forget: fire-and-forget swallows
+            // exceptions and can StateHasChanged after dialog disposal.
+            await LoadPcpAsync();
         }
     }
 

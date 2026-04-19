@@ -100,9 +100,16 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
         }
 
         // Pick the canonical coverage to validate against — if a member has
-        // multiple active coverages (e.g., Medical + Dental), the medical one
-        // (LineOfBusiness != Dental) drives PCP rules.
-        var primary = coverages.OrderBy(c => (int)c.LineOfBusiness).First();
+        // multiple active coverages (e.g., Medical + Dental), the Health line
+        // drives PCP rules. `LineOfBusiness` is Commercial/Medicare/etc., it
+        // does NOT distinguish Health from Dental; the discriminator lives on
+        // `InsuranceLineCode` (HLT/DEN/VIS/LIF). Fall back to LOB ordering only
+        // when no Health-coded row exists (legacy data).
+        var primary = coverages
+            .Where(c => c.InsuranceLineCode == InsuranceLineCodes.Health)
+            .OrderBy(c => (int)c.LineOfBusiness)
+            .FirstOrDefault()
+            ?? coverages.OrderBy(c => (int)c.LineOfBusiness).First();
 
         // ── Validation ladder ─────────────────────────────────────────────
         // Order matters; first failure wins. Do NOT reorder without a portal+API
@@ -231,9 +238,15 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
 
         _logger.LogInformation(
             "PCP assigned tenant={TenantId} member={MemberId} npi={Npi} source={Source}",
-            tenantId, memberId, cmd.ProviderNpi, cmd.Source);
+            Sanitize(tenantId), Sanitize(memberId), Sanitize(cmd.ProviderNpi), cmd.Source);
 
         return PcpAssignmentResult.Ok(assignment);
+    }
+
+    private static string Sanitize(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     private static NetworkParticipationDto? SelectParticipation(ProviderDto provider, Coverage coverage, DateTime asOf)

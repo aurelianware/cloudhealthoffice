@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using MemberService.Controllers;
 using Microsoft.Extensions.Options;
 
@@ -64,8 +65,17 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
                 // Coverage-service emits a structured PcpValidationError on 400.
                 // Surface it through AssignPcpOutcome so the controller can
                 // forward it as 400 — do NOT throw, this is a normal validation
-                // outcome, not a downstream failure.
-                var problem = await resp.Content.ReadFromJsonAsync<PcpValidationProblem>(cancellationToken: ct);
+                // outcome, not a downstream failure. If the body is missing or
+                // non-JSON (unexpected) we still degrade to a generic error
+                // rather than raising a 500.
+                PcpValidationProblem? problem = null;
+                try
+                {
+                    problem = await resp.Content.ReadFromJsonAsync<PcpValidationProblem>(cancellationToken: ct);
+                }
+                catch (JsonException) { /* fall through to default */ }
+                catch (NotSupportedException) { /* non-JSON content-type */ }
+
                 return new AssignPcpOutcome
                 {
                     ValidationError = problem ?? new PcpValidationProblem
@@ -82,6 +92,11 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
         }
         catch (HttpRequestException ex)
         {
+            throw new DownstreamUnavailableException(ServiceName, ex.Message, ex);
+        }
+        catch (JsonException ex)
+        {
+            // Success body that didn't match the expected shape → treat as 503.
             throw new DownstreamUnavailableException(ServiceName, ex.Message, ex);
         }
     }
@@ -103,6 +118,12 @@ public sealed class HttpCoverageServiceClient : ICoverageServiceClient
         catch (HttpRequestException ex)
         {
             throw new DownstreamUnavailableException(ServiceName, ex.Message, ex);
+        }
+        catch (JsonException ex)
+        {
+            // Coverage-service wire shape drift — better to 503 than to leak a 500.
+            throw new DownstreamUnavailableException(
+                ServiceName, $"PCP history response deserialization failed: {ex.Message}", ex);
         }
     }
 

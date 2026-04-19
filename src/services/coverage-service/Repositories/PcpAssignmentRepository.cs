@@ -59,7 +59,7 @@ public sealed class PcpAssignmentRepository : IPcpAssignmentRepository
     public async Task<int> EndOpenAssignmentsAsync(string tenantId, string memberId, DateTime endDate)
     {
         var query = new QueryDefinition(
-                "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.memberId = @memberId AND (NOT IS_DEFINED(c.endDate) OR c.endDate = null)")
+                "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.memberId = @memberId AND (NOT IS_DEFINED(c.endDate) OR IS_NULL(c.endDate))")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@memberId", memberId);
 
@@ -83,7 +83,7 @@ public sealed class PcpAssignmentRepository : IPcpAssignmentRepository
     public async Task<PcpAssignment?> GetCurrentAsync(string tenantId, string memberId)
     {
         var query = new QueryDefinition(
-                "SELECT TOP 1 * FROM c WHERE c.tenantId = @tenantId AND c.memberId = @memberId AND (NOT IS_DEFINED(c.endDate) OR c.endDate = null) ORDER BY c.effectiveDate DESC")
+                "SELECT TOP 1 * FROM c WHERE c.tenantId = @tenantId AND c.memberId = @memberId AND (NOT IS_DEFINED(c.endDate) OR IS_NULL(c.endDate)) ORDER BY c.effectiveDate DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@memberId", memberId);
 
@@ -121,7 +121,7 @@ public sealed class PcpAssignmentRepository : IPcpAssignmentRepository
     public async Task<int> CountOpenByNpiAsync(string tenantId, string providerNpi)
     {
         var query = new QueryDefinition(
-                "SELECT VALUE COUNT(1) FROM c WHERE c.tenantId = @tenantId AND c.providerNpi = @npi AND (NOT IS_DEFINED(c.endDate) OR c.endDate = null)")
+                "SELECT VALUE COUNT(1) FROM c WHERE c.tenantId = @tenantId AND c.providerNpi = @npi AND (NOT IS_DEFINED(c.endDate) OR IS_NULL(c.endDate))")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@npi", providerNpi);
 

@@ -493,7 +493,7 @@ public class MembersController : ControllerBase
         }
         catch (DownstreamUnavailableException ex)
         {
-            _logger?.LogDebug(ex, "PCP lookup unavailable while projecting FHIR Patient for {MemberId}; emitting without generalPractitioner.", memberId);
+            _logger?.LogDebug(ex, "PCP lookup unavailable while projecting FHIR Patient for {MemberId}; emitting without generalPractitioner.", SanitizeForLog(memberId));
         }
 
         var patient = _fhirProjector.Project(member, pcp);
@@ -709,6 +709,12 @@ public class MembersController : ControllerBase
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
 
     private IActionResult DownstreamUnavailable(DownstreamUnavailableException ex)
     {

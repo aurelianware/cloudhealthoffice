@@ -56,21 +56,26 @@ public sealed class HttpProviderServiceClient : IProviderServiceClient
 /// roster endpoint already exposed by coverage-service itself
 /// (GET /api/v1/coverage/by-pcp/{npi}) — but only counts active rows, which is
 /// the same population panel limits gate against.
+///
+/// Enabled/disabled via <see cref="HttpClient.BaseAddress"/>: when the endpoint
+/// URL is not configured in Program.cs we leave BaseAddress null and this
+/// counter short-circuits to 0. That is deliberately decoupled from
+/// <see cref="ProviderServiceOptions"/>, which belongs to
+/// <see cref="HttpProviderServiceClient"/> only — the counter hits a different
+/// service (capitation / coverage) and must not inherit provider-service config.
 /// </summary>
 public sealed class HttpPanelCounter : IPanelCounter
 {
     private readonly HttpClient _http;
-    private readonly ProviderServiceOptions _options;
 
-    public HttpPanelCounter(HttpClient http, IOptions<ProviderServiceOptions> options)
+    public HttpPanelCounter(HttpClient http)
     {
         _http = http;
-        _options = options.Value;
     }
 
     public async Task<int> CurrentPanelCountAsync(string tenantId, string providerNpi, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.BaseUrl)) return 0;
+        if (_http.BaseAddress is null) return 0;
 
         try
         {

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CoverageService.Models;
 
 /// <summary>
@@ -29,6 +31,11 @@ public sealed class PcpValidationError
     public PcpValidationSeverity Severity { get; }
 }
 
+/// <summary>
+/// Severity of a PCP validation failure. Serialized as a string on the wire —
+/// downstream clients (member-service + portal) expect "Error"/"Warning".
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PcpValidationSeverity
 {
     Warning = 0,

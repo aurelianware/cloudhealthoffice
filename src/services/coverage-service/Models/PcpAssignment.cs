@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace CoverageService.Models;
 
@@ -84,7 +85,12 @@ public class PcpAssignment
 /// <summary>
 /// Origin of a PCP assignment. Drives downstream reporting (auto-assignment rate,
 /// member-choice rate) and regulatory reporting for Medicaid/Medicare.
+///
+/// Serialized as a string on the wire — member-service and the portal
+/// deserialize into string-typed DTOs, and the value is part of the PCP
+/// history API contract. Do not remove the converter.
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PcpAssignmentSource
 {
     /// <summary>Member actively chose the PCP (portal, phone, paper form).</summary>
