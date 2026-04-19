@@ -482,7 +482,21 @@ public class MembersController : ControllerBase
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
 
-        var patient = _fhirProjector.Project(member);
+        // Best-effort PCP fetch so Patient.generalPractitioner is populated when
+        // available. Failures (downstream unavailable, no PCP yet) silently
+        // degrade to a Patient resource without generalPractitioner — that's
+        // valid US Core; we don't 503 the FHIR read for a missing optional.
+        MemberPcpResponse? pcp = null;
+        try
+        {
+            pcp = await _coverage.GetPcpAsync(TenantId, memberId, HttpContext.RequestAborted);
+        }
+        catch (DownstreamUnavailableException ex)
+        {
+            _logger?.LogDebug(ex, "PCP lookup unavailable while projecting FHIR Patient for {MemberId}; emitting without generalPractitioner.", SanitizeForLog(memberId));
+        }
+
+        var patient = _fhirProjector.Project(member, pcp);
         return new ContentResult
         {
             ContentType = "application/fhir+json",
@@ -529,7 +543,8 @@ public class MembersController : ControllerBase
     }
 
     [HttpPut("{memberId}/pcp")]
-    [ProducesResponseType(200)]
+    [ProducesResponseType(typeof(MemberPcpResponse), 200)]
+    [ProducesResponseType(typeof(PcpValidationProblem), 400)]
     [ProducesResponseType(404)]
     [ProducesResponseType(503)]
     public async Task<IActionResult> AssignPcp(
@@ -540,15 +555,28 @@ public class MembersController : ControllerBase
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
 
-        MemberPcpResponse result;
+        // Forward the member's DOB so coverage-service can enforce age-range
+        // panels (pediatric vs adult) without an extra round-trip.
+        if (request.MemberDateOfBirth == null) request.MemberDateOfBirth = member.DateOfBirth;
+
+        AssignPcpOutcome outcome;
         try
         {
-            result = await _coverage.AssignPcpAsync(TenantId, memberId, request, ct);
+            outcome = await _coverage.AssignPcpAsync(TenantId, memberId, request, ct);
         }
         catch (DownstreamUnavailableException ex)
         {
             return DownstreamUnavailable(ex);
         }
+
+        // Validation rejection — surface the structured error verbatim so the
+        // portal can localize off the code. Do NOT publish a PcpChanged event.
+        if (!outcome.IsSuccess)
+        {
+            return BadRequest(outcome.ValidationError);
+        }
+
+        var result = outcome.Pcp!;
 
         // PUT /pcp is its own primary event — not a sub-event of an UpdateMember
         // call — so its EventId comes from the request body (caller-supplied
@@ -564,12 +592,39 @@ public class MembersController : ControllerBase
             Payload = new JsonObject
             {
                 ["providerId"] = request.ProviderId,
+                ["providerNpi"] = request.ProviderNpi,
                 ["effectiveDate"] = request.EffectiveDate.ToString("o"),
-                ["reason"] = request.Reason
+                ["reason"] = request.Reason,
+                ["assignmentSource"] = request.AssignmentSource
             }
         }, ct);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Full PCP assignment history for a member, newest first. Proxies through to
+    /// coverage-service so portal / consent / audit stay on the member-service
+    /// boundary.
+    /// </summary>
+    [HttpGet("{memberId}/pcp/history")]
+    [ProducesResponseType(typeof(IReadOnlyList<PcpAssignmentHistoryItem>), 200)]
+    [ProducesResponseType(404)]
+    [ProducesResponseType(503)]
+    public async Task<IActionResult> GetMemberPcpHistory([FromRoute] string memberId, CancellationToken ct)
+    {
+        var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
+        if (member == null) return NotFound();
+
+        try
+        {
+            var history = await _coverage.GetPcpHistoryAsync(TenantId, memberId, ct);
+            return Ok(history);
+        }
+        catch (DownstreamUnavailableException ex)
+        {
+            return DownstreamUnavailable(ex);
+        }
     }
 
     [HttpGet("{memberId}/coverage-history")]
@@ -654,6 +709,12 @@ public class MembersController : ControllerBase
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
 
     private IActionResult DownstreamUnavailable(DownstreamUnavailableException ex)
     {
@@ -893,6 +954,19 @@ public class AssignPcpRequest
     public string? ProviderNpi { get; set; }
     public DateTime EffectiveDate { get; set; }
     public string? Reason { get; set; }
+
+    /// <summary>
+    /// Origin of the assignment: <c>MemberChoice</c> (default), <c>AutoAssigned</c>,
+    /// or <c>AdminAssigned</c>. Forwarded to coverage-service and recorded on the
+    /// PcpAssignment history row + PcpChanged event payload.
+    /// </summary>
+    public string? AssignmentSource { get; set; }
+
+    /// <summary>
+    /// Member DOB forwarded to coverage-service for age-range panel validation.
+    /// Auto-populated from the member record when omitted.
+    /// </summary>
+    public DateTime? MemberDateOfBirth { get; set; }
 
     /// <summary>Optional idempotency key for the PcpChanged event.</summary>
     public string? EventId { get; set; }

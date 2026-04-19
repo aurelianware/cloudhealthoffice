@@ -236,7 +236,7 @@ public class MembersControllerTests
         var (ctl, _, events, coverage, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
         coverage.Setup(c => c.AssignPcpAsync(Tenant, "M-001", It.IsAny<AssignPcpRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new MemberPcpResponse { ProviderId = "prov-1" });
+            .ReturnsAsync(new AssignPcpOutcome { Pcp = new MemberPcpResponse { ProviderId = "prov-1" } });
 
         var resp = await ctl.AssignPcp("M-001",
             new AssignPcpRequest { ProviderId = "prov-1", EffectiveDate = DateTime.UtcNow },

@@ -23,16 +23,37 @@ public sealed class FakeCoverageServiceClient : ICoverageServiceClient
             Phone = "555-555-0100"
         });
 
-    public Task<MemberPcpResponse> AssignPcpAsync(
+    public Task<AssignPcpOutcome> AssignPcpAsync(
         string tenantId, string memberId, AssignPcpRequest request, CancellationToken ct = default)
-        => Task.FromResult(new MemberPcpResponse
+        => Task.FromResult(new AssignPcpOutcome
         {
-            ProviderId = request.ProviderId,
-            ProviderName = "Dr. Dev Fixture, MD",
-            NPI = "1234567890",
-            Specialty = "Internal Medicine",
-            NetworkStatus = "In-Network",
-            AssignedDate = request.EffectiveDate
+            Pcp = new MemberPcpResponse
+            {
+                ProviderId = request.ProviderId,
+                ProviderName = "Dr. Dev Fixture, MD",
+                NPI = "1234567890",
+                Specialty = "Internal Medicine",
+                NetworkStatus = "In-Network",
+                AssignedDate = request.EffectiveDate
+            }
+        });
+
+    public Task<IReadOnlyList<PcpAssignmentHistoryItem>> GetPcpHistoryAsync(
+        string tenantId, string memberId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<PcpAssignmentHistoryItem>>(new List<PcpAssignmentHistoryItem>
+        {
+            new()
+            {
+                Id = "dev-pcp-history-1",
+                MemberId = memberId,
+                CoverageId = "dev-coverage",
+                ProviderNpi = "1234567890",
+                ProviderName = "Dr. Dev Fixture, MD",
+                EffectiveDate = DateTime.UtcNow.AddMonths(-6),
+                AssignmentSource = "MemberChoice",
+                NetworkStatusAtAssignment = "InNetwork",
+                CreatedDate = DateTime.UtcNow.AddMonths(-6)
+            }
         });
 
     public Task<IReadOnlyList<CoverageHistoryEvent>> GetCoverageHistoryAsync(
