@@ -213,9 +213,29 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
             AssignedBy = cmd.AssignedBy
         });
 
-        // Update denormalized PCP fields on every active coverage (read-path
-        // optimization preserved from the prior implementation).
-        foreach (var cov in coverages)
+        // Update denormalized PCP fields only on PCP-eligible medical coverage
+        // rows. Dental / Vision / Life / etc. rows never carry a PCP — stamping
+        // them produces nonsense for downstream readers. This mirrors the
+        // validation-side filter above (primary = Health-coded row). See PR #656
+        // cleanup pass.
+        //
+        // Legacy fallback: rows loaded before InsuranceLineCode was required may
+        // have a null/empty line code. When no Health row exists, stamp all
+        // active rows as before so existing tenants don't regress silently.
+        var denormTargets = coverages
+            .Where(c => c.InsuranceLineCode == InsuranceLineCodes.Health)
+            .ToList();
+        if (denormTargets.Count == 0) denormTargets = coverages.ToList();
+
+        var method = cmd.Source switch
+        {
+            PcpAssignmentSource.MemberChoice => PcpAssignmentMethod.MemberSelected,
+            PcpAssignmentSource.AutoAssigned => PcpAssignmentMethod.AutoAssigned,
+            PcpAssignmentSource.AdminAssigned => PcpAssignmentMethod.Administrative,
+            _ => PcpAssignmentMethod.MemberSelected
+        };
+
+        foreach (var cov in denormTargets)
         {
             if (!string.IsNullOrEmpty(cov.PcpNpi) && cov.PcpNpi != cmd.ProviderNpi)
             {
@@ -224,13 +244,7 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
             cov.PcpNpi = cmd.ProviderNpi;
             cov.PcpName = provider.FullName;
             cov.PcpAssignmentDate = effective;
-            cov.PcpAssignmentMethod = cmd.Source switch
-            {
-                PcpAssignmentSource.MemberChoice => PcpAssignmentMethod.MemberSelected,
-                PcpAssignmentSource.AutoAssigned => PcpAssignmentMethod.AutoAssigned,
-                PcpAssignmentSource.AdminAssigned => PcpAssignmentMethod.MemberSelected,
-                _ => PcpAssignmentMethod.MemberSelected
-            };
+            cov.PcpAssignmentMethod = method;
             cov.LastUpdatedDate = DateTime.UtcNow;
             cov.LastUpdatedBy = cmd.AssignedBy ?? "pcp-assignment-service";
             await _coverage.UpdateAsync(cov);

@@ -313,9 +313,15 @@ public class NetworkParticipation
     // "panel open, all LOBs on the participation, no age limits" to preserve
     // existing behavior until network ops backfills real values.
     //
-    // TODO(provider-service): populate these on every NetworkParticipation write
-    // (ProvidersController.AddNetworkParticipation, any bulk import path, and
-    // future CreateEditProviderDialog edits). See docs/architecture/pcp-assignment.md.
+    // TODO(provider-service): populate these on every NetworkParticipation write.
+    // Every path that materializes a NetworkParticipation must set the panel-gating
+    // fields (or leave them null = legacy unconstrained). Current write surfaces:
+    //   - ProvidersController.CreateProvider  — accepts NetworkParticipations in the Provider body
+    //   - ProvidersController.UpdateProvider  — overwrites the whole Provider (including participations)
+    //   - ProvidersController.AddNetworkParticipation — appends a single participation
+    //   - Any bulk import / CAQH-sync path that materializes participations
+    //   - Portal CreateEditProviderDialog edits (once the UI surfaces these fields)
+    // See docs/architecture/pcp-assignment.md "Provider-service contract changes".
 
     /// <summary>
     /// Maximum number of members that may be assigned to this provider under this

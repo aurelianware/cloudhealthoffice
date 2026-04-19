@@ -230,4 +230,121 @@ public class PcpAssignmentServiceTests
         result.Error!.Code.Should().Be(PcpValidationCodes.InvalidNpi);
         providers.Verify(p => p.GetByNpiAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    // ── PR #656 cleanup: denormalization scope + AdminAssigned mapping ──
+
+    [Fact]
+    public async Task HealthAndDentalCoverage_DenormStampsHealthRowOnly()
+    {
+        var coverageRepo = new Mock<ICoverageRepository>();
+        var assignments = new Mock<IPcpAssignmentRepository>();
+        var providers = new Mock<IProviderServiceClient>();
+        var panel = new Mock<IPanelCounter>();
+
+        var health = new Coverage
+        {
+            TenantId = Tenant,
+            Id = "cov-health",
+            MemberId = Member,
+            GroupNumber = "G",
+            PlanId = "Plan-A",
+            LineOfBusiness = LineOfBusiness.Commercial,
+            InsuranceLineCode = InsuranceLineCodes.Health,
+            EffectiveDate = DateTime.UtcNow.AddMonths(-6),
+            Status = CoverageStatus.Active
+        };
+        var dental = new Coverage
+        {
+            TenantId = Tenant,
+            Id = "cov-dental",
+            MemberId = Member,
+            GroupNumber = "G",
+            PlanId = "Plan-A",
+            LineOfBusiness = LineOfBusiness.Commercial,
+            InsuranceLineCode = InsuranceLineCodes.Dental,
+            EffectiveDate = DateTime.UtcNow.AddMonths(-6),
+            Status = CoverageStatus.Active
+        };
+
+        coverageRepo.Setup(c => c.GetActiveCoverageByMemberIdAsync(Tenant, Member, It.IsAny<DateTime>(), null))
+            .ReturnsAsync(new List<Coverage> { health, dental });
+        coverageRepo.Setup(c => c.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+        assignments.Setup(a => a.AddAsync(It.IsAny<PcpAssignment>())).ReturnsAsync((PcpAssignment a) => a);
+        assignments.Setup(a => a.EndOpenAssignmentsAsync(Tenant, Member, It.IsAny<DateTime>())).ReturnsAsync(0);
+        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
+
+        var svc = new PcpAssignmentService(
+            coverageRepo.Object, assignments.Object, providers.Object, panel.Object,
+            NullLogger<PcpAssignmentService>.Instance);
+
+        var result = await svc.AssignAsync(Tenant, Member, Cmd());
+
+        result.IsSuccess.Should().BeTrue();
+        health.PcpNpi.Should().Be(Npi);
+        health.PcpName.Should().NotBeNullOrEmpty();
+        dental.PcpNpi.Should().BeNull("dental coverage must never be stamped with a PCP");
+        dental.PcpName.Should().BeNull();
+        coverageRepo.Verify(c => c.UpdateAsync(It.Is<Coverage>(x => x.Id == "cov-health")), Times.Once);
+        coverageRepo.Verify(c => c.UpdateAsync(It.Is<Coverage>(x => x.Id == "cov-dental")), Times.Never);
+    }
+
+    [Fact]
+    public async Task NoHealthCodedCoverage_LegacyFallbackStampsActive()
+    {
+        // Coverage with null InsuranceLineCode (loaded before the field was
+        // populated). The medical-only filter returns zero targets, so the
+        // service falls back to stamping the active row — preserving legacy
+        // behavior for tenants that haven't backfilled InsuranceLineCode.
+        var (svc, coverage, _, providers, _) = Build();
+        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
+
+        var result = await svc.AssignAsync(Tenant, Member, Cmd());
+
+        result.IsSuccess.Should().BeTrue();
+        coverage.Verify(c => c.UpdateAsync(It.IsAny<Coverage>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AdminAssignedSource_MapsToAdministrativeMethod()
+    {
+        var coverageRepo = new Mock<ICoverageRepository>();
+        var assignments = new Mock<IPcpAssignmentRepository>();
+        var providers = new Mock<IProviderServiceClient>();
+        var panel = new Mock<IPanelCounter>();
+
+        var health = new Coverage
+        {
+            TenantId = Tenant,
+            Id = "cov-health",
+            MemberId = Member,
+            GroupNumber = "G",
+            PlanId = "Plan-A",
+            LineOfBusiness = LineOfBusiness.Commercial,
+            InsuranceLineCode = InsuranceLineCodes.Health,
+            EffectiveDate = DateTime.UtcNow.AddMonths(-6),
+            Status = CoverageStatus.Active
+        };
+        coverageRepo.Setup(c => c.GetActiveCoverageByMemberIdAsync(Tenant, Member, It.IsAny<DateTime>(), null))
+            .ReturnsAsync(new List<Coverage> { health });
+        coverageRepo.Setup(c => c.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+        assignments.Setup(a => a.AddAsync(It.IsAny<PcpAssignment>())).ReturnsAsync((PcpAssignment a) => a);
+        assignments.Setup(a => a.EndOpenAssignmentsAsync(Tenant, Member, It.IsAny<DateTime>())).ReturnsAsync(0);
+        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
+
+        var svc = new PcpAssignmentService(
+            coverageRepo.Object, assignments.Object, providers.Object, panel.Object,
+            NullLogger<PcpAssignmentService>.Instance);
+
+        var cmd = new AssignPcpCommand
+        {
+            ProviderNpi = Npi,
+            EffectiveDate = DateTime.UtcNow.Date,
+            Source = PcpAssignmentSource.AdminAssigned
+        };
+
+        var result = await svc.AssignAsync(Tenant, Member, cmd);
+
+        result.IsSuccess.Should().BeTrue();
+        health.PcpAssignmentMethod.Should().Be(PcpAssignmentMethod.Administrative);
+    }
 }
