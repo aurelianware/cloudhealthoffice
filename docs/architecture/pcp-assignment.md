@@ -208,7 +208,7 @@ coverage-service `member/{id}/pcp/history` endpoint.
 - The PCP tab in `MemberDetailsDialog.razor` now shows an "Assignment
   History" subsection backed by the new history endpoint, with a column
   for `NetworkStatusAtAssignment` (rendered as a chip and labeled
-  "Network @ Assignment" so it does not get confused with live status).
+  "Network at Assignment" so it does not get confused with live status).
 
 ## FHIR
 
