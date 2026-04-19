@@ -2,10 +2,12 @@ using Microsoft.AspNetCore.Mvc;
 using CoverageService.Middleware;
 using CoverageService.Models;
 using CoverageService.Repositories;
+using CoverageService.Services;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace CoverageService.Controllers;
@@ -20,14 +22,22 @@ namespace CoverageService.Controllers;
 public class CoverageController : ControllerBase
 {
     private readonly ICoverageRepository _coverageRepository;
+    private readonly IPcpAssignmentService? _pcpService;
+    private readonly ICareTeamProjector? _careTeamProjector;
     private readonly ILogger<CoverageController> _logger;
 
     // Tenant context from middleware
     private string TenantId => HttpContext.GetTenantId();
 
-    public CoverageController(ICoverageRepository coverageRepository, ILogger<CoverageController> logger)
+    public CoverageController(
+        ICoverageRepository coverageRepository,
+        ILogger<CoverageController> logger,
+        IPcpAssignmentService? pcpService = null,
+        ICareTeamProjector? careTeamProjector = null)
     {
         _coverageRepository = coverageRepository;
+        _pcpService = pcpService;
+        _careTeamProjector = careTeamProjector;
         _logger = logger;
     }
 
@@ -391,66 +401,142 @@ public class CoverageController : ControllerBase
     }
 
     /// <summary>
-    /// Assign or change the member's PCP. Writes <c>PcpNpi</c> + <c>PcpAssignmentDate</c>
-    /// on all active coverages for the member and moves the prior <c>PcpNpi</c> into
-    /// <c>PreviousPcpNpi</c>.
-    ///
-    /// TODO(roadmap 5.7 Phase 2): track PCP changes in a dedicated
-    /// <c>PcpAssignmentHistory</c> collection with effective-dated rows rather than
-    /// overwriting. Leaving the overwrite pattern in place for PR #650 per scope.
+    /// Assign or change the member's PCP. Validation is performed by
+    /// <see cref="IPcpAssignmentService"/> in a fail-fast ordered ladder; the
+    /// first failure is returned as 400 with a structured
+    /// <see cref="PcpValidationError"/> body so the portal can localize and
+    /// pick a remediation flow off <c>code</c>.
     /// </summary>
     [HttpPut("member/{memberId}/pcp")]
     [ProducesResponseType(typeof(MemberPcpResponse), 200)]
-    [ProducesResponseType(400)]
+    [ProducesResponseType(typeof(PcpValidationError), 400)]
     [ProducesResponseType(404)]
+    [ProducesResponseType(503)]
     public async Task<IActionResult> AssignMemberPcp(
         [FromRoute] string memberId,
-        [FromBody] AssignPcpBody request)
+        [FromBody] AssignPcpBody request,
+        CancellationToken ct)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        if (string.IsNullOrWhiteSpace(request.ProviderId) && string.IsNullOrWhiteSpace(request.ProviderNpi))
-            return BadRequest(new { Message = "providerId or providerNpi is required" });
-
-        var npi = request.ProviderNpi ?? request.ProviderId;
-        if (npi.Length != 10 || !npi.All(char.IsDigit))
-            return BadRequest(new { Message = "providerNpi must be exactly 10 digits" });
-
-        var checkDate = request.EffectiveDate == default ? DateTime.UtcNow.Date : request.EffectiveDate;
-        var active = (await _coverageRepository.GetActiveCoverageByMemberIdAsync(
-            TenantId, memberId, checkDate)).ToList();
-
-        if (active.Count == 0)
+        if (_pcpService == null)
         {
-            return NotFound(new
-            {
-                MemberId = memberId,
-                Message = "No active coverage for member; cannot assign PCP."
-            });
+            return StatusCode(503, new { Message = "PCP assignment service not configured." });
         }
 
-        foreach (var coverage in active)
+        var npi = request.ProviderNpi ?? request.ProviderId ?? string.Empty;
+        var cmd = new AssignPcpCommand
         {
-            if (!string.IsNullOrEmpty(coverage.PcpNpi) && coverage.PcpNpi != npi)
-                coverage.PreviousPcpNpi = coverage.PcpNpi;
-            coverage.PcpNpi = npi;
-            coverage.PcpName = request.ProviderName;
-            coverage.PcpAssignmentDate = checkDate;
-            coverage.PcpAssignmentMethod = PcpAssignmentMethod.MemberSelected;
-            coverage.LastUpdatedDate = DateTime.UtcNow;
-            coverage.LastUpdatedBy = User.Identity?.Name ?? "member-service";
-            await _coverageRepository.UpdateAsync(coverage);
+            ProviderNpi = npi,
+            ProviderId = request.ProviderId,
+            EffectiveDate = request.EffectiveDate,
+            Reason = request.Reason,
+            Source = ParseSource(request.AssignmentSource),
+            MemberDateOfBirth = request.MemberDateOfBirth,
+            AssignedBy = User.Identity?.Name ?? "member-service"
+        };
+
+        var result = await _pcpService.AssignAsync(TenantId, memberId, cmd, ct);
+        if (!result.IsSuccess)
+        {
+            var err = result.Error!;
+            // NoActiveCoverage is the one preflight failure that's a 404 (the
+            // member has no coverage to attach a PCP to). Everything else is a
+            // 400 on the assignment request.
+            if (err.Code == PcpValidationCodes.NoActiveCoverage)
+                return NotFound(err);
+            return BadRequest(err);
         }
 
+        var assignment = result.Assignment!;
         return Ok(new MemberPcpResponse
         {
-            ProviderId = npi,
-            ProviderName = request.ProviderName ?? string.Empty,
-            NPI = npi,
-            AssignedDate = checkDate,
-            NetworkStatus = "In-Network"
+            ProviderId = assignment.ProviderId ?? assignment.ProviderNpi,
+            ProviderName = assignment.ProviderName ?? string.Empty,
+            NPI = assignment.ProviderNpi,
+            AssignedDate = assignment.EffectiveDate,
+            // Wire the display-shaped network status ("In-Network" / "Out-of-Network")
+            // — NOT the raw snapshot ("Tier1") which lives on the history row. The
+            // portal colors off this value and assignment is only allowed when the
+            // provider has an active participation, so success implies In-Network.
+            NetworkStatus = ToDisplayNetworkStatus(assignment.NetworkStatusAtAssignment)
         });
     }
+
+    private static string ToDisplayNetworkStatus(string? snapshot)
+    {
+        if (string.IsNullOrWhiteSpace(snapshot)) return "In-Network";
+        if (snapshot.Equals("Out-of-Network", StringComparison.OrdinalIgnoreCase)
+            || snapshot.Equals("OutOfNetwork", StringComparison.OrdinalIgnoreCase)
+            || snapshot.Equals("OON", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Out-of-Network";
+        }
+        // Tier1/Tier2/Tier3 + anything else from an active participation ⇒ In-Network
+        return "In-Network";
+    }
+
+    /// <summary>
+    /// Full PCP assignment history for a member, newest first. The currently-open
+    /// row (EndDate = null) is what <c>GetMemberPcp</c> reflects; older rows are
+    /// closed by EndDate when superseded.
+    /// </summary>
+    [HttpGet("member/{memberId}/pcp/history")]
+    [ProducesResponseType(typeof(IReadOnlyList<PcpAssignmentHistoryResponse>), 200)]
+    [ProducesResponseType(503)]
+    public async Task<IActionResult> GetMemberPcpHistory([FromRoute] string memberId, CancellationToken ct)
+    {
+        if (_pcpService == null) return StatusCode(503, new { Message = "PCP assignment service not configured." });
+        var history = await _pcpService.GetHistoryAsync(TenantId, memberId, ct);
+        return Ok(history.Select(PcpAssignmentHistoryResponse.From).ToList());
+    }
+
+    /// <summary>
+    /// FHIR R4 CareTeam projection for a member. Today only the PCP role is
+    /// populated; specialist / care-manager participants will be added by
+    /// roadmap 5.7 Phase 2 work without changing the projector's contract.
+    /// </summary>
+    [HttpGet("member/{memberId}/care-team")]
+    [Produces("application/fhir+json", "application/json")]
+    [ProducesResponseType(200)]
+    [ProducesResponseType(503)]
+    public async Task<IActionResult> GetMemberCareTeam([FromRoute] string memberId, CancellationToken ct)
+    {
+        if (_pcpService == null || _careTeamProjector == null)
+            return StatusCode(503, new { Message = "Care team projector not configured." });
+
+        var current = await _pcpService.GetCurrentAsync(TenantId, memberId, ct);
+
+        // CareTeam.status depends on the underlying coverage's lifecycle, including
+        // termination — so we read coverage HISTORY here (includes terminated rows)
+        // rather than active-only, otherwise the "inactive" branch in
+        // CareTeamProjector.MapStatus is unreachable for terminated members.
+        var history = await _coverageRepository.GetCoverageHistoryAsync(TenantId, memberId, includeTerminated: true);
+        var primaryCoverage = history
+            .Where(c => c.InsuranceLineCode == InsuranceLineCodes.Health)
+            .OrderByDescending(c => c.EffectiveDate)
+            .FirstOrDefault()
+            ?? history.OrderByDescending(c => c.EffectiveDate).FirstOrDefault();
+
+        var members = current != null
+            ? new[] { CareTeamMember.FromPcp(current) }
+            : Array.Empty<CareTeamMember>();
+
+        var resource = _careTeamProjector.Project(memberId, primaryCoverage, members);
+        return new ContentResult
+        {
+            ContentType = "application/fhir+json",
+            Content = resource.ToJsonString(),
+            StatusCode = 200
+        };
+    }
+
+    private static PcpAssignmentSource ParseSource(string? raw) => raw switch
+    {
+        "AutoAssigned" => PcpAssignmentSource.AutoAssigned,
+        "AdminAssigned" => PcpAssignmentSource.AdminAssigned,
+        _ => PcpAssignmentSource.MemberChoice
+    };
 
     /// <summary>
     /// Terminate all active coverages for a member.
@@ -513,6 +599,19 @@ public class AssignPcpBody
     public string? ProviderName { get; set; }
     public DateTime EffectiveDate { get; set; }
     public string? Reason { get; set; }
+
+    /// <summary>
+    /// Origin of the assignment. Accepted values: <c>MemberChoice</c> (default),
+    /// <c>AutoAssigned</c>, <c>AdminAssigned</c>. See <see cref="PcpAssignmentSource"/>.
+    /// </summary>
+    public string? AssignmentSource { get; set; }
+
+    /// <summary>
+    /// Optional member DOB so the assignment service can enforce age-range
+    /// participations (pediatric vs adult). When omitted the AGE_OUT_OF_RANGE
+    /// check is skipped — caller is responsible for enforcing if needed.
+    /// </summary>
+    public DateTime? MemberDateOfBirth { get; set; }
 }
 
 public class MemberPcpResponse
@@ -525,6 +624,47 @@ public class MemberPcpResponse
     public DateTime AssignedDate { get; set; }
     public string? PracticeName { get; set; }
     public string? Phone { get; set; }
+}
+
+/// <summary>
+/// Wire-shaped projection of <see cref="PcpAssignment"/> for the history endpoint.
+/// Keeping a dedicated DTO (instead of returning the model directly) pins the
+/// on-wire shape: every enum is a string, internal fields (tenantId) are dropped,
+/// and downstream clients can rely on this contract across coverage-service
+/// refactors.
+/// </summary>
+public class PcpAssignmentHistoryResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string CoverageId { get; set; } = string.Empty;
+    public string ProviderNpi { get; set; } = string.Empty;
+    public string? ProviderId { get; set; }
+    public string? ProviderName { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public string? AssignmentReason { get; set; }
+    public string AssignmentSource { get; set; } = "MemberChoice";
+    public string NetworkStatusAtAssignment { get; set; } = "Unknown";
+    public string? AssignedBy { get; set; }
+    public DateTime CreatedDate { get; set; }
+
+    public static PcpAssignmentHistoryResponse From(PcpAssignment a) => new()
+    {
+        Id = a.Id,
+        MemberId = a.MemberId,
+        CoverageId = a.CoverageId,
+        ProviderNpi = a.ProviderNpi,
+        ProviderId = a.ProviderId,
+        ProviderName = a.ProviderName,
+        EffectiveDate = a.EffectiveDate,
+        EndDate = a.EndDate,
+        AssignmentReason = a.AssignmentReason,
+        AssignmentSource = a.AssignmentSource.ToString(),
+        NetworkStatusAtAssignment = a.NetworkStatusAtAssignment,
+        AssignedBy = a.AssignedBy,
+        CreatedDate = a.CreatedDate
+    };
 }
 
 public class TerminateMemberCoverageBody

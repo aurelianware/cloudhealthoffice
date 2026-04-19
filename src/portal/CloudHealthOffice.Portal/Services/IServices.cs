@@ -25,7 +25,15 @@ public interface IMemberService
     Task<List<MemberSummary>> SearchMembersAsync(string searchTerm);
     Task<MemberDetails?> GetMemberByIdAsync(string memberId);
     Task<MemberPcp?> GetMemberPcpAsync(string memberId);
-    Task AssignPcpAsync(AssignPcpRequest request);
+
+    /// <summary>
+    /// Assign a PCP. Returns a populated <see cref="PcpAssignmentOutcome"/> — on
+    /// validation failure (400), <see cref="PcpAssignmentOutcome.ValidationError"/>
+    /// is set with the structured error code from coverage-service.
+    /// </summary>
+    Task<PcpAssignmentOutcome> AssignPcpAsync(AssignPcpRequest request);
+
+    Task<List<PcpAssignmentHistoryItem>> GetMemberPcpHistoryAsync(string memberId);
     Task<List<CoverageHistoryEvent>> GetCoverageHistoryAsync(string memberId);
     Task<List<Enrollment834Record>> GetMember834TransactionsAsync(string memberId);
     Task<EnrollmentEventPage> GetEnrollmentEventsAsync(
@@ -1321,8 +1329,49 @@ public class AssignPcpRequest
 {
     public string MemberId { get; set; } = string.Empty;
     public string ProviderId { get; set; } = string.Empty;
+    public string? ProviderNpi { get; set; }
     public DateTime EffectiveDate { get; set; }
     public string? Reason { get; set; }
+
+    /// <summary>MemberChoice (default), AutoAssigned, or AdminAssigned.</summary>
+    public string? AssignmentSource { get; set; }
+}
+
+public class PcpAssignmentOutcome
+{
+    public MemberPcp? Pcp { get; set; }
+    public PcpValidationProblem? ValidationError { get; set; }
+    public bool IsSuccess => Pcp != null;
+}
+
+/// <summary>
+/// Mirror of coverage-service's <c>PcpValidationError</c>. <see cref="Code"/>
+/// values are stable — see docs/architecture/pcp-assignment.md "Validation
+/// ladder" for the canonical list.
+/// </summary>
+public class PcpValidationProblem
+{
+    public string Code { get; set; } = string.Empty;
+    public string Field { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Error";
+}
+
+public class PcpAssignmentHistoryItem
+{
+    public string Id { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string CoverageId { get; set; } = string.Empty;
+    public string ProviderNpi { get; set; } = string.Empty;
+    public string? ProviderId { get; set; }
+    public string? ProviderName { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public string? AssignmentReason { get; set; }
+    public string AssignmentSource { get; set; } = "MemberChoice";
+    public string NetworkStatusAtAssignment { get; set; } = "Unknown";
+    public string? AssignedBy { get; set; }
+    public DateTime CreatedDate { get; set; }
 }
 
 public class TerminateEnrollmentRequest

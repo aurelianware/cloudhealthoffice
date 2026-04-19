@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using MemberService.Controllers;
 using MemberService.Models;
 using static MemberService.Services.FhirExtensionBuilder;
 
@@ -16,7 +17,11 @@ namespace MemberService.Services;
 /// </summary>
 public sealed class FhirPatientProjector : IFhirPatientProjector
 {
-    public JsonObject Project(Member member)
+    private const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
+
+    public JsonObject Project(Member member) => Project(member, null);
+
+    public JsonObject Project(Member member, MemberPcpResponse? pcp)
     {
         ArgumentNullException.ThrowIfNull(member);
 
@@ -192,6 +197,29 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
             });
         }
         if (communications.Count > 0) patient["communication"] = communications;
+
+        // ── General Practitioner (PCP) ───────────────────────────────
+        // Emitted only when caller supplied PCP context — projection should
+        // remain pure (no side-effecting fetches). NPI is the stable external
+        // id, so the reference uses an identifier-shaped Reference; consumers
+        // that have a Practitioner record already can swap it for a logical
+        // Practitioner/{id} reference.
+        if (pcp != null && !string.IsNullOrEmpty(pcp.NPI))
+        {
+            patient["generalPractitioner"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "Practitioner",
+                    ["identifier"] = new JsonObject
+                    {
+                        ["system"] = NpiSystem,
+                        ["value"] = pcp.NPI
+                    },
+                    ["display"] = string.IsNullOrEmpty(pcp.ProviderName) ? pcp.NPI : pcp.ProviderName
+                }
+            };
+        }
 
         // ── Meta ─────────────────────────────────────────────────────
         patient["meta"] = new JsonObject

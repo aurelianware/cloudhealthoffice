@@ -348,5 +348,13 @@ public enum PcpAssignmentMethod
     /// <summary>
     /// Plan-level default PCP assignment
     /// </summary>
-    PlanDefault = 3
+    PlanDefault = 3,
+
+    /// <summary>
+    /// Admin / back-office override (CSR, network ops). Distinct from
+    /// <see cref="MemberSelected"/> for reporting — did the member choose or
+    /// did an admin override? — and mirrors
+    /// <c>PcpAssignmentSource.AdminAssigned</c> on the history row.
+    /// </summary>
+    Administrative = 4
 }

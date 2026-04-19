@@ -305,6 +305,57 @@ public class NetworkParticipation
     /// Contracted rates (optional - for fee schedule reference)
     /// </summary>
     public ContractedRates? Rates { get; set; }
+
+    // ── PCP panel controls (roadmap 5.7) ───────────────────────────────
+    //
+    // These gate PCP assignment in coverage-service. Null = legacy / unconstrained:
+    // historical participations loaded before this migration landed default to
+    // "panel open, all LOBs on the participation, no age limits" to preserve
+    // existing behavior until network ops backfills real values.
+    //
+    // TODO(provider-service): populate these on every NetworkParticipation write.
+    // Every path that materializes a NetworkParticipation must set the panel-gating
+    // fields (or leave them null = legacy unconstrained). Current write surfaces:
+    //   - ProvidersController.CreateProvider  — accepts NetworkParticipations in the Provider body
+    //   - ProvidersController.UpdateProvider  — overwrites the whole Provider (including participations)
+    //   - ProvidersController.AddNetworkParticipation — appends a single participation
+    //   - Any bulk import / CAQH-sync path that materializes participations
+    //   - Portal CreateEditProviderDialog edits (once the UI surfaces these fields)
+    // See docs/architecture/pcp-assignment.md "Provider-service contract changes".
+
+    /// <summary>
+    /// Maximum number of members that may be assigned to this provider under this
+    /// participation. Null = unlimited / not yet backfilled.
+    /// </summary>
+    public int? PanelLimit { get; set; }
+
+    /// <summary>
+    /// Whether this provider accepts new PCP assignments for this participation.
+    /// Distinct from <see cref="AcceptingNewPatients"/> (any new patient) — a panel
+    /// may be closed to new PCP members while still seeing referrals.
+    /// Null = treated as <see cref="AcceptingNewPatients"/>.
+    /// </summary>
+    public bool? PanelAccepted { get; set; }
+
+    /// <summary>
+    /// LOBs this participation will accept as a PCP (subset of / equal to
+    /// <see cref="LineOfBusiness"/>). Empty = accept any LOB covered by this
+    /// participation. Used by coverage-service to enforce Medicaid/Medicare/etc.
+    /// PCP rules without proliferating separate participations per LOB.
+    /// </summary>
+    public List<LineOfBusiness> AcceptedLobs { get; set; } = new();
+
+    /// <summary>
+    /// Minimum member age (years) accepted on this panel. Null = no floor.
+    /// Example: Internal Medicine participation with MinAcceptedAgeYears=18.
+    /// </summary>
+    public int? MinAcceptedAgeYears { get; set; }
+
+    /// <summary>
+    /// Maximum member age (years) accepted on this panel. Null = no ceiling.
+    /// Example: Pediatrics participation with MaxAcceptedAgeYears=21.
+    /// </summary>
+    public int? MaxAcceptedAgeYears { get; set; }
 }
 
 /// <summary>

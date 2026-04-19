@@ -169,4 +169,32 @@ public class FhirPatientProjectorTests
         json["resourceType"]!.ToString().Should().Be("Patient");
         json["identifier"]!.AsArray().Should().ContainSingle();
     }
+
+    [Fact]
+    public void Project_WithPcp_EmitsGeneralPractitionerWithNpiIdentifier()
+    {
+        var json = new FhirPatientProjector().Project(BuildMember(), new MemberService.Controllers.MemberPcpResponse
+        {
+            ProviderId = "prov-1",
+            ProviderName = "Dr. Test, MD",
+            NPI = "1234567890",
+            Specialty = "Internal Medicine",
+            NetworkStatus = "In-Network",
+            AssignedDate = DateTime.UtcNow
+        });
+
+        var gp = json["generalPractitioner"]!.AsArray();
+        gp.Count.Should().Be(1);
+        gp[0]!["type"]!.ToString().Should().Be("Practitioner");
+        gp[0]!["identifier"]!["system"]!.ToString().Should().Be("http://hl7.org/fhir/sid/us-npi");
+        gp[0]!["identifier"]!["value"]!.ToString().Should().Be("1234567890");
+        gp[0]!["display"]!.ToString().Should().Be("Dr. Test, MD");
+    }
+
+    [Fact]
+    public void Project_WithoutPcp_OmitsGeneralPractitioner()
+    {
+        var json = new FhirPatientProjector().Project(BuildMember(), null);
+        json.ContainsKey("generalPractitioner").Should().BeFalse();
+    }
 }

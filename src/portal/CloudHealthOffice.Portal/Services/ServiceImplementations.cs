@@ -224,13 +224,62 @@ public class MemberService : IMemberService
         }
     }
 
-    public async Task AssignPcpAsync(AssignPcpRequest request)
+    public async Task<PcpAssignmentOutcome> AssignPcpAsync(AssignPcpRequest request)
     {
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
             var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/members/{request.MemberId}/pcp", request);
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                PcpValidationProblem? problem = null;
+                try
+                {
+                    problem = await response.Content.ReadFromJsonAsync<PcpValidationProblem>();
+                }
+                catch (JsonException) { /* malformed body → fall through to default */ }
+
+                return new PcpAssignmentOutcome
+                {
+                    ValidationError = problem ?? new PcpValidationProblem
+                    {
+                        Code = "VALIDATION_FAILED",
+                        Message = "PCP assignment was rejected."
+                    }
+                };
+            }
             response.EnsureSuccessStatusCode();
+            var pcp = await response.Content.ReadFromJsonAsync<MemberPcp>();
+            if (pcp is null)
+            {
+                // 2xx with empty/invalid body is a contract break — surface as
+                // unavailable so the UI gets a deterministic failure path
+                // rather than a warning with an empty message.
+                throw new ServiceUnavailableException("Member Service",
+                    new HttpRequestException("Member Service returned an empty PCP assignment response."));
+            }
+            return new PcpAssignmentOutcome { Pcp = pcp };
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task<List<PcpAssignmentHistoryItem>> GetMemberPcpHistoryAsync(string memberId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var history = await _httpClient.GetFromJsonAsync<List<PcpAssignmentHistoryItem>>(
+                $"{baseUrl}/members/{memberId}/pcp/history");
+            return history ?? new List<PcpAssignmentHistoryItem>();
         }
         catch (HttpRequestException ex)
         {
