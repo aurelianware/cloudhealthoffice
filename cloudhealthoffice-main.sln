@@ -47,6 +47,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "coverage-service", "src\ser
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "member-service", "src\services\member-service\member-service.csproj", "{B32F4B80-6BB4-2ABD-DBBF-3255AD12C571}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "member-document-service", "src\services\member-document-service\member-document-service.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MemberDocumentService.Tests", "src\services\member-document-service\MemberDocumentService.Tests\MemberDocumentService.Tests.csproj", "{B2C3D4E5-F6A7-8901-BCDE-F12345678901}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "provider-service", "src\services\provider-service\provider-service.csproj", "{D46CDE63-9107-A0BA-2FDC-1DC93EAC9265}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "shared", "shared", "{A5EA1F1E-CB03-3F21-7936-AD93D9E269C9}"
