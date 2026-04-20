@@ -1,9 +1,11 @@
 @using CloudHealthOffice.Portal.Services
 @using CloudHealthOffice.Portal.Formatters
+@using CloudHealthOffice.Portal.Shared
 @inject IMemberService MemberService
 @inject ICoverageService CoverageService
 @inject IBenefitPlanService BenefitPlanService
 @inject IFamilyRelationshipService FamilyRelationshipService
+@inject IMemberNoteService MemberNoteService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -42,6 +44,8 @@
                     View Claims
                 </MudButton>
             </div>
+
+            <MemberAlertBanner MemberId="@MemberId" OnAlertCountChanged="OnAlertCountChanged" />
 
             <MudTabs Elevation="0" ApplyEffectsToContainer="true" PanelClass="pt-4"
                      @bind-ActivePanelIndex="_activeTab">
@@ -845,6 +849,109 @@
                         }
                     </div>
                 </MudTabPanel>
+
+                <!-- Notes Tab -->
+                <MudTabPanel Text="Notes" Icon="@Icons.Material.Filled.Notes" OnClick="@(_ => OnNotesTabActivated())">
+                    <div>
+                        <MudGrid Spacing="2" Class="mb-3">
+                            <MudItem xs="12" md="4">
+                                <MudSelect T="string" Label="Category"
+                                           Value="_noteCategoryFilter"
+                                           ValueChanged="OnNoteCategoryChanged"
+                                           Variant="Variant.Outlined" Dense="true">
+                                    <MudSelectItem Value="@string.Empty">All</MudSelectItem>
+                                    @foreach (var cat in NoteCategories)
+                                    {
+                                        <MudSelectItem Value="@cat">@cat</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="8" Class="d-flex align-center justify-end">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.NoteAdd"
+                                           OnClick="ToggleNoteEntry">
+                                    @(_showNoteEntry ? "Cancel" : "Add Note")
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_showNoteEntry)
+                        {
+                            <MudPaper Class="pa-3 mb-3" Elevation="1">
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" md="4">
+                                        <MudSelect T="string" Label="Category"
+                                                   @bind-Value="_newNoteCategory"
+                                                   Variant="Variant.Outlined" Dense="true">
+                                            @foreach (var cat in NoteCategories)
+                                            {
+                                                <MudSelectItem Value="@cat">@cat</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" md="8">
+                                        <MudTextField @bind-Value="_newNoteSubject"
+                                                      Label="Subject" Variant="Variant.Outlined"
+                                                      MaxLength="200" Required="true" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudTextField @bind-Value="_newNoteBody"
+                                                      Label="Body" Variant="Variant.Outlined"
+                                                      Lines="4" MaxLength="8000" Required="true" />
+                                    </MudItem>
+                                    <MudItem xs="12" Class="d-flex justify-end">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Success"
+                                                   Disabled="@(_savingNote || string.IsNullOrWhiteSpace(_newNoteSubject) || string.IsNullOrWhiteSpace(_newNoteBody))"
+                                                   OnClick="SubmitNoteAsync">
+                                            @(_savingNote ? "Saving…" : "Save Note")
+                                        </MudButton>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        }
+
+                        @if (_loadingNotes)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
+                        }
+                        else if (!_notes.Any())
+                        {
+                            <MudAlert Severity="Severity.Info">No notes recorded for this member.</MudAlert>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column">
+                                @foreach (var note in _notes)
+                                {
+                                    <MudPaper Class="pa-3 mb-2" Elevation="1">
+                                        <div class="d-flex align-center gap-2 mb-1">
+                                            <MudChip T="string" Size="Size.Small" Color="@GetNoteCategoryColor(note.Category)">@note.Category</MudChip>
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@note.Subject</MudText>
+                                            <MudSpacer />
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @note.Author · @note.CreatedDate.ToLocalTime().ToString("MM/dd/yyyy HH:mm")
+                                            </MudText>
+                                        </div>
+                                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@note.Body</MudText>
+                                        @if (!string.IsNullOrEmpty(note.LinkedResourceType))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                                Linked: @note.LinkedResourceType / @note.LinkedResourceId
+                                            </MudText>
+                                        }
+                                    </MudPaper>
+                                }
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(_notesContinuationToken))
+                            {
+                                <div class="d-flex justify-center mt-2">
+                                    <MudButton Variant="Variant.Outlined" OnClick="LoadMoreNotesAsync">Load more</MudButton>
+                                </div>
+                            }
+                        }
+                    </div>
+                </MudTabPanel>
             </MudTabs>
         }
         else
@@ -898,6 +1005,27 @@
     private bool _loadingFamily = false;
     private int _activeTab = 0;
     private string? _serviceError;
+
+    // Alerts banner — count is bubbled up so other UI can react (e.g.,
+    // disable terminate when LitigationHold is active). Counted, not enumerated,
+    // because the banner owns the alert content rendering.
+    private int _activeAlertCount;
+
+    // Notes tab state
+    private static readonly string[] NoteCategories =
+    {
+        "CustomerService", "CareManagement", "Appeals", "Billing", "Clinical"
+    };
+    private List<MemberNoteView> _notes = new();
+    private string? _notesContinuationToken;
+    private string _noteCategoryFilter = string.Empty;
+    private bool _loadingNotes;
+    private bool _notesLoadedOnce;
+    private bool _showNoteEntry;
+    private bool _savingNote;
+    private string _newNoteCategory = "CustomerService";
+    private string _newNoteSubject = string.Empty;
+    private string _newNoteBody = string.Empty;
 
     private List<FamilyRelationshipRow> _subscriberRows = new();
     private List<FamilyRelationshipRow> _dependentRows = new();
@@ -1346,4 +1474,113 @@
     }
 
     private void Close() => MudDialog.Close();
+
+    // ── Alerts banner integration ────────────────────────────────────────
+    private Task OnAlertCountChanged(int count)
+    {
+        _activeAlertCount = count;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // ── Notes tab ────────────────────────────────────────────────────────
+    private async Task OnNotesTabActivated()
+    {
+        if (_notesLoadedOnce) return;
+        _notesLoadedOnce = true;
+        await LoadNotesAsync(reset: true);
+    }
+
+    private async Task OnNoteCategoryChanged(string value)
+    {
+        _noteCategoryFilter = value ?? string.Empty;
+        await LoadNotesAsync(reset: true);
+    }
+
+    private async Task LoadNotesAsync(bool reset)
+    {
+        _loadingNotes = true;
+        if (reset)
+        {
+            _notes = new();
+            _notesContinuationToken = null;
+        }
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var page = await MemberNoteService.ListAsync(MemberId,
+                new MemberNoteFilter(
+                    Category: string.IsNullOrEmpty(_noteCategoryFilter) ? null : _noteCategoryFilter,
+                    Limit: 20,
+                    ContinuationToken: reset ? null : _notesContinuationToken));
+            _notes.AddRange(page.Items);
+            _notesContinuationToken = page.ContinuationToken;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load notes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingNotes = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task LoadMoreNotesAsync() => LoadNotesAsync(reset: false);
+
+    private void ToggleNoteEntry()
+    {
+        _showNoteEntry = !_showNoteEntry;
+        if (!_showNoteEntry)
+        {
+            _newNoteSubject = string.Empty;
+            _newNoteBody = string.Empty;
+            _newNoteCategory = "CustomerService";
+        }
+    }
+
+    private async Task SubmitNoteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newNoteSubject) || string.IsNullOrWhiteSpace(_newNoteBody)) return;
+
+        _savingNote = true;
+        StateHasChanged();
+        try
+        {
+            var created = await MemberNoteService.CreateAsync(MemberId, new CreateMemberNotePayload
+            {
+                Category = _newNoteCategory,
+                Subject = _newNoteSubject.Trim(),
+                Body = _newNoteBody.Trim()
+            });
+            if (created != null)
+            {
+                Snackbar.Add("Note added.", Severity.Success);
+                _showNoteEntry = false;
+                _newNoteSubject = string.Empty;
+                _newNoteBody = string.Empty;
+                await LoadNotesAsync(reset: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save note: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingNote = false;
+            StateHasChanged();
+        }
+    }
+
+    private static Color GetNoteCategoryColor(string category) => category switch
+    {
+        "CustomerService" => Color.Primary,
+        "CareManagement" => Color.Success,
+        "Appeals" => Color.Warning,
+        "Billing" => Color.Info,
+        "Clinical" => Color.Tertiary,
+        _ => Color.Default
+    };
 }
