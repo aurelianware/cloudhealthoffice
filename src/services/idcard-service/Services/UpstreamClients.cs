@@ -4,6 +4,29 @@ using System.Net.Http.Json;
 
 namespace IdCardService.Services;
 
+/// <summary>
+/// Strips CR/LF/NUL and other control characters from values that flow
+/// into log messages. All caller-supplied identifiers are routed through
+/// this helper before being logged so an attacker can't inject forged log
+/// entries via newline-bearing request fields.
+/// </summary>
+internal static class LogSafe
+{
+    public static string Of(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        const int maxLen = 256;
+        var sb = new System.Text.StringBuilder(Math.Min(value.Length, maxLen));
+        var limit = Math.Min(value.Length, maxLen);
+        for (var i = 0; i < limit; i++)
+        {
+            var c = value[i];
+            if (!char.IsControl(c)) sb.Append(c);
+        }
+        return sb.ToString();
+    }
+}
+
 public class MemberDto
 {
     public string MemberId { get; set; } = string.Empty;
@@ -101,7 +124,7 @@ public class MemberClient : IMemberClient
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
         {
-            _logger.LogWarning("member-service responded {Status} for member {MemberId}", (int)resp.StatusCode, memberId);
+            _logger.LogWarning("member-service responded {Status} for member {MemberId}", (int)resp.StatusCode, LogSafe.Of(memberId));
             resp.EnsureSuccessStatusCode();
         }
         return await resp.Content.ReadFromJsonAsync<MemberDto>(cancellationToken: ct);
@@ -128,7 +151,7 @@ public class CoverageClient : ICoverageClient
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (!resp.IsSuccessStatusCode)
         {
-            _logger.LogDebug("coverage-service returned {Status} for member {MemberId}", (int)resp.StatusCode, memberId);
+            _logger.LogDebug("coverage-service returned {Status} for member {MemberId}", (int)resp.StatusCode, LogSafe.Of(memberId));
             return null;
         }
         var list = await resp.Content.ReadFromJsonAsync<List<CoverageDto>>(cancellationToken: ct);
@@ -155,7 +178,7 @@ public class SponsorClient : ISponsorClient
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (!resp.IsSuccessStatusCode)
         {
-            _logger.LogDebug("sponsor-service returned {Status} for group {Group}", (int)resp.StatusCode, groupNumber);
+            _logger.LogDebug("sponsor-service returned {Status} for group {Group}", (int)resp.StatusCode, LogSafe.Of(groupNumber));
             return null;
         }
         return await resp.Content.ReadFromJsonAsync<SponsorDto>(cancellationToken: ct);
@@ -181,7 +204,7 @@ public class BenefitPlanClient : IBenefitPlanClient
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (!resp.IsSuccessStatusCode)
         {
-            _logger.LogDebug("benefit-plan-service returned {Status} for plan {Plan}", (int)resp.StatusCode, planId);
+            _logger.LogDebug("benefit-plan-service returned {Status} for plan {Plan}", (int)resp.StatusCode, LogSafe.Of(planId));
             return null;
         }
         return await resp.Content.ReadFromJsonAsync<BenefitPlanDto>(cancellationToken: ct);

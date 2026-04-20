@@ -52,7 +52,7 @@ public class IdCardAdapterFactory
         if (adapter == null)
         {
             _logger.LogWarning(
-                "No id-card adapter found for platform '{Platform}', falling back to 'cho'", platform);
+                "No id-card adapter found for platform '{Platform}', falling back to 'cho'", Sanitize(platform));
             adapter = _adapters.First(a =>
                 string.Equals(a.Platform, "cho", StringComparison.OrdinalIgnoreCase));
         }
