@@ -23,6 +23,7 @@
 #   Capitation service:         http://localhost:5012
 #   Appeals service:            http://localhost:5013
 #   Attachment service:         http://localhost:5014
+#   Member-document service:    http://localhost:5026
 #   Sponsor service:            http://localhost:5015
 #   Reference-data service:     http://localhost:5016
 #   Pricing API:                http://localhost:5017
@@ -314,6 +315,21 @@ services:
         condition: service_healthy
     healthcheck: *service-healthcheck
 
+  member-document-service:
+    build:
+      context: .
+      dockerfile: src/services/member-document-service/Dockerfile
+    ports:
+      - "5026:8080"
+    environment:
+      <<: *common-env
+      BlobStorage__ConnectionString: UseDevelopmentStorage=true
+      BlobStorage__ContainerName: member-documents
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
   sponsor-service:
     build:
       context: .
@@ -495,6 +511,7 @@ services:
       Services__RfaiService: http://rfai-service:8080/api
       Services__AppealsService: http://appeals-service:8080/api
       Services__AttachmentService: http://attachment-service:8080/api
+      Services__MemberDocumentService: http://member-document-service:8080
       Services__SponsorService: http://sponsor-service:8080/api/v1
       Services__ReferenceDataService: http://reference-data-service:8080/api/ReferenceData
       Services__CapitationService: http://capitation-service:8080/api
