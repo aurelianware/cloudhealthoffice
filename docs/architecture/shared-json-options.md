@@ -86,14 +86,8 @@ person scaffolding doesn't "fix" the unexplained absence.
 
 Every touched service has a `SharedJsonOptionsSmokeTests` class that
 asserts `JsonStringEnumConverter` is present in the MVC JSON options.
-Two services additionally assert an end-to-end round-trip with an enum
-serialized as a string — these would have failed before this change:
-
-- `tests/CloudHealthOffice.AuthorizationService.Tests` — GET returns
-  `"status":"Approved"` (not `4`).
-- `tests/CloudHealthOffice.EligibilityService.Tests` — POST
-  `{"status":"Processing"}` deserializes to
-  `EligibilityInquiryStatus.Processing`.
+Each test introspects `IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>`
+from the service's DI container and verifies the converter is registered.
 
 ## Follow-ups
 
