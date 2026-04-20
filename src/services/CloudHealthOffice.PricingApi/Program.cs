@@ -51,6 +51,12 @@ try
     builder.Services.AddSingleton<IFeeScheduleLoaderService, FeeScheduleLoaderService>();
 
     // ── Controllers + JSON ──
+    // NOTE: PricingApi intentionally does NOT call AddCloudHealthOfficeJsonOptions().
+    // Its published wire format is CamelCase + WhenWritingNull with CamelCase-cased
+    // enum strings (e.g. "medicareFeeSchedule"); the shared helper registers an
+    // unnamed JsonStringEnumConverter that would emit PascalCase names and break
+    // existing consumers. Harmonizing casing is tracked as a follow-up.
+    // See docs/architecture/shared-json-options.md.
     builder.Services.AddControllers()
         .AddJsonOptions(opts =>
         {

@@ -7,6 +7,7 @@ using SmartAuthService.Workers;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -147,7 +148,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddHostedService<OpenIddictSeedWorker>();
 
 // ── MVC + Swagger ─────────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddChoHealthChecks(options =>

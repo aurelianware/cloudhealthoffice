@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using BenefitPlanService.Controllers;
 using BenefitPlanService.Services;
 using CloudHealthOffice.BenefitEngine.Domain;
@@ -33,6 +35,13 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
 {
     private const string TenantId = "test-tenant-001";
     private static readonly Guid PlanId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
+    // Match the server's wire format (string enums via JsonStringEnumConverter
+    // registered by AddCloudHealthOfficeJsonOptions).
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     private readonly Factory _factory;
 
@@ -343,7 +352,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>(Json);
         Assert.NotNull(result);
         Assert.True(result.Success);
         Assert.Equal("CLM-001", result.ClaimId);
@@ -413,7 +422,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         // Assert
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<NcciErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<NcciErrorResponse>(Json);
         Assert.NotNull(body);
         Assert.Equal("NCCI_MUE_EDIT_FAILURE", body.Error);
         Assert.NotNull(body.EditFailures);
@@ -529,7 +538,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<BenefitResolutionResult>();
+        var result = await response.Content.ReadFromJsonAsync<BenefitResolutionResult>(Json);
         Assert.NotNull(result);
         Assert.True(result.Success);
 
@@ -598,7 +607,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PricingResultSet>();
+        var result = await response.Content.ReadFromJsonAsync<PricingResultSet>(Json);
         Assert.NotNull(result);
 
         var line = Assert.Single(result.LineResults);
@@ -665,7 +674,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PricingResultSet>();
+        var result = await response.Content.ReadFromJsonAsync<PricingResultSet>(Json);
         Assert.NotNull(result);
 
         var line = Assert.Single(result.LineResults);
@@ -779,7 +788,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<NcciScrubResult>();
+        var result = await response.Content.ReadFromJsonAsync<NcciScrubResult>(Json);
         Assert.NotNull(result);
         Assert.True(result.Passed);
         Assert.Equal("CLM-NCCI-01", result.ClaimId);
@@ -817,7 +826,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>(Json);
         Assert.NotNull(result);
         Assert.False(result.Success);
         Assert.Equal("LEGACY_ROUTED", result.DenialReasonCode);
@@ -851,7 +860,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>(Json);
         Assert.NotNull(result);
         Assert.True(result.IsAuthoritative);
         Assert.Equal("Replace", result.OperatingMode);
@@ -918,7 +927,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>(Json);
         Assert.NotNull(result);
         Assert.False(result.IsAuthoritative);
         Assert.Equal("Augment", result.OperatingMode);

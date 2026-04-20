@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Json;
 using MemberService.HostedServices;
 using MemberService.Middleware;
 using MemberService.Repositories;
@@ -14,15 +15,7 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        // Serialize enums as strings so portal clients can POST / read
-        // "LitigationHold", "CustomerService", etc. Without this the default
-        // numeric serialization would 400 on the string payloads used by
-        // MemberAlertsController / MemberNotesController.
-        options.JsonSerializerOptions.Converters.Add(
-            new System.Text.Json.Serialization.JsonStringEnumConverter());
-    });
+    .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {

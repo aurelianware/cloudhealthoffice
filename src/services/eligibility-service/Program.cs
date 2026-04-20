@@ -7,6 +7,7 @@ using EligibilityService.Repositories;
 using EligibilityService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -17,7 +18,7 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<TenantActionFilter>();
-});
+}).AddCloudHealthOfficeJsonOptions();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>

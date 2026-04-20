@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using NSubstitute;
 using PaymentService.Controllers;
 using PaymentService.Models;
@@ -10,6 +12,13 @@ namespace CloudHealthOffice.PaymentService.Tests;
 
 public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
 {
+    // Match the server's wire format (string enums via JsonStringEnumConverter
+    // registered by AddCloudHealthOfficeJsonOptions).
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private readonly HttpClient _client;
     private readonly IPaymentRunService _runService;
 
@@ -63,7 +72,7 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.PostAsJsonAsync("/api/paymentruns", request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var created = await response.Content.ReadFromJsonAsync<PaymentRun>();
+        var created = await response.Content.ReadFromJsonAsync<PaymentRun>(Json);
         Assert.NotNull(created);
         Assert.NotEmpty(created.Id);
         Assert.Equal(PaymentRunStatus.Pending, created.Status);
@@ -87,7 +96,7 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.PostAsync($"/api/paymentruns/{run.Id}/execute", null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var executed = await response.Content.ReadFromJsonAsync<PaymentRun>();
+        var executed = await response.Content.ReadFromJsonAsync<PaymentRun>(Json);
         Assert.NotNull(executed);
         Assert.Equal(PaymentRunStatus.Completed, executed.Status);
         Assert.Equal(5, executed.TotalClaims);
@@ -133,7 +142,7 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.PostAsJsonAsync("/api/paymentruns/execute", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<PaymentRun>();
+        var result = await response.Content.ReadFromJsonAsync<PaymentRun>(Json);
         Assert.NotNull(result);
         Assert.Equal(PaymentRunStatus.Completed, result.Status);
         Assert.NotEmpty(result.PaymentIds);
@@ -159,7 +168,7 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.PostAsync($"/api/paymentruns/{run.Id}/execute", null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<PaymentRun>();
+        var result = await response.Content.ReadFromJsonAsync<PaymentRun>(Json);
         Assert.NotNull(result);
         Assert.Equal(PaymentRunStatus.Completed, result.Status);
         Assert.Equal(0, result.TotalClaims);
@@ -180,7 +189,7 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.GetAsync($"/api/paymentruns/{run.Id}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var returned = await response.Content.ReadFromJsonAsync<PaymentRun>();
+        var returned = await response.Content.ReadFromJsonAsync<PaymentRun>(Json);
         Assert.NotNull(returned);
         Assert.Equal(run.Id, returned.Id);
         Assert.Equal(PaymentRunStatus.Pending, returned.Status);
@@ -210,7 +219,7 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.GetAsync("/api/paymentruns");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var results = await response.Content.ReadFromJsonAsync<List<PaymentRun>>();
+        var results = await response.Content.ReadFromJsonAsync<List<PaymentRun>>(Json);
         Assert.NotNull(results);
         Assert.Equal(2, results.Count);
     }

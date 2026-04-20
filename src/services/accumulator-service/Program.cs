@@ -3,6 +3,7 @@ using AccumulatorService.Repositories;
 using AccumulatorService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Json;
 using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
@@ -14,7 +15,7 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<TenantActionFilter>();
-});
+}).AddCloudHealthOfficeJsonOptions();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
