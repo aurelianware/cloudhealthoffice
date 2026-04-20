@@ -7,6 +7,7 @@
 @inject IFamilyRelationshipService FamilyRelationshipService
 @inject IMemberNoteService MemberNoteService
 @inject IMemberDocumentService MemberDocumentService
+@inject IIdCardService IdCardService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -671,6 +672,88 @@
                     </div>
                 </MudTabPanel>
 
+                <MudTabPanel Text="ID Cards" Icon="@Icons.Material.Filled.Badge">
+                    <div>
+                        <div class="d-flex align-center gap-2 mb-3">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddCard"
+                                       OnClick="OpenIdCardOrderDialogAsync">
+                                Order New Card
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh"
+                                       OnClick="LoadIdCardsAsync" Disabled="_loadingIdCards">
+                                Refresh
+                            </MudButton>
+                        </div>
+
+                        @if (_loadingIdCards)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (_idCards.Any())
+                        {
+                            <MudTable Items="_idCards" Dense="true" Hover="true" T="IdCardHistoryView">
+                                <HeaderContent>
+                                    <MudTh>Issued</MudTh>
+                                    <MudTh>Card ID</MudTh>
+                                    <MudTh>Plan</MudTh>
+                                    <MudTh>Sponsor</MudTh>
+                                    <MudTh>Lang</MudTh>
+                                    <MudTh>Status</MudTh>
+                                    <MudTh style="text-align: right;">Scans</MudTh>
+                                    <MudTh>Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Issued">
+                                        <MudText Typo="Typo.body2">@context.IssuedAt.ToLocalTime().ToString("MM/dd/yyyy")</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Card ID">
+                                        <MudText Typo="Typo.caption">@context.CardId</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Plan">@(context.PlanId ?? "-")</MudTd>
+                                    <MudTd DataLabel="Sponsor">@(context.SponsorId ?? "-")</MudTd>
+                                    <MudTd DataLabel="Lang">@(context.LanguageCode ?? "en-US")</MudTd>
+                                    <MudTd DataLabel="Status">
+                                        @if (context.RevokedAt.HasValue)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">
+                                                Revoked (@context.RevocationReason)
+                                            </MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Scans" Style="text-align: right;">@context.ScanCount</MudTd>
+                                    <MudTd DataLabel="Actions">
+                                        <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(context.DocumentId)" Target="_blank">
+                                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.PictureAsPdf">PDF</MudButton>
+                                        </MudLink>
+                                        @if (!string.IsNullOrEmpty(context.PreviewDocumentId))
+                                        {
+                                            <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(context.PreviewDocumentId!)" Target="_blank">
+                                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Image">PNG</MudButton>
+                                            </MudLink>
+                                        }
+                                        @if (!context.RevokedAt.HasValue)
+                                        {
+                                            <MudButton Size="Size.Small" Color="Color.Warning"
+                                                       StartIcon="@Icons.Material.Filled.Block"
+                                                       OnClick="@(() => RevokeIdCardAsync(context))">
+                                                Revoke
+                                            </MudButton>
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No ID cards have been issued for this member yet.</MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
+
                 <!-- Enrollment History Tab — backed by the per-member EnrollmentEvent stream -->
                 <MudTabPanel Text="Enrollment History" Icon="@Icons.Material.Filled.Timeline">
                     <div>
@@ -1056,6 +1139,8 @@
     private List<CoverageHistoryEvent> _coverageHistory = new();
     private List<Enrollment834Record> _transactions834 = new();
     private List<MemberDocumentSummary> _memberDocuments = new();
+    private List<IdCardHistoryView> _idCards = new();
+    private bool _loadingIdCards;
     private List<CloudHealthOffice.Portal.Services.EnrollmentEvent> _enrollmentEvents = new();
     private string? _eventsContinuationToken;
     private string _eventTypeFilter = string.Empty;
@@ -1170,6 +1255,58 @@
         _ = LoadBenefitsForActiveCoverageAsync();
         _ = LoadFamilyAsync();
         _ = LoadDocumentsAsync();
+        _ = LoadIdCardsAsync();
+    }
+
+    private async Task LoadIdCardsAsync()
+    {
+        _loadingIdCards = true;
+        try
+        {
+            _idCards = await IdCardService.ListForMemberAsync(MemberId);
+        }
+        catch (Exception)
+        {
+            _idCards = new();
+        }
+        finally
+        {
+            _loadingIdCards = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OpenIdCardOrderDialogAsync()
+    {
+        var parameters = new DialogParameters { ["MemberId"] = MemberId };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<IdCardOrderDialog>("Order ID Card", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            await LoadIdCardsAsync();
+        }
+    }
+
+    private async Task RevokeIdCardAsync(IdCardHistoryView card)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            title: "Revoke ID Card",
+            message: $"Revoke card {card.CardId}? This cannot be undone.",
+            yesText: "Revoke",
+            cancelText: "Cancel");
+        if (confirmed != true) return;
+
+        try
+        {
+            await IdCardService.RevokeAsync(card.CardId, "Replaced");
+            Snackbar.Add("Card revoked", Severity.Success);
+            await LoadIdCardsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Revoke failed: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task LoadEnrollmentEventsAsync(bool reset)

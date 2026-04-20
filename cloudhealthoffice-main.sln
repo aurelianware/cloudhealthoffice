@@ -17,6 +17,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.Portal", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eligibility-service", "src\services\eligibility-service\eligibility-service.csproj", "{1A3B2777-B67E-8D86-1107-02B79E27AA84}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "idcard-service", "src\services\idcard-service\idcard-service.csproj", "{7F2A1E9D-4B8C-4C61-9D22-1E4F35CA6B01}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.IdCardService.Tests", "tests\CloudHealthOffice.IdCardService.Tests\CloudHealthOffice.IdCardService.Tests.csproj", "{8A5D2C7B-1F0E-4A93-B6C4-2D3F48A9E0F2}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "reference-data-service", "src\services\reference-data-service\reference-data-service.csproj", "{B9C981D0-07A6-5841-641D-4E6AC5E0D21F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "trading-partner-service", "src\services\trading-partner-service\trading-partner-service.csproj", "{49CA620C-E7AD-11F6-F0EA-F40D85387CAF}"

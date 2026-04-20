@@ -1,0 +1,4 @@
+# Alias manifest: the authoritative copy lives in /k8s/idcard-service.yaml.
+# This file keeps parity with the eligibility-service layout where each
+# service also publishes its deployment under src/services/<svc>/k8s/.
+# When copying between the two, always edit /k8s/idcard-service.yaml.

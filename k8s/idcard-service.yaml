@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: idcard-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "cloudhealthoffice"
+  Services__MemberService: "http://member-service.cloudhealthoffice/api/v1"
+  Services__CoverageService: "http://coverage-service.cloudhealthoffice/api/v1"
+  Services__SponsorService: "http://sponsor-service.cloudhealthoffice/api/v1"
+  Services__BenefitPlanService: "http://benefit-plan-service.cloudhealthoffice/api/v1"
+  Services__MemberDocumentService: "http://member-document-service.cloudhealthoffice/api/v1"
+  Services__EligibilityService: "http://eligibility-service.cloudhealthoffice/api"
+  Services__TenantService: "http://tenant-service.cloudhealthoffice/api/v1"
+  IdCard__SigningKeySecretPrefix: "idcard-signing-key"
+  IdCard__CurrentKeyVersion: "v1"
+  IdCard__AcceptedKeyVersions__0: "v1"
+  IdCard__QnxtMirror__Enabled: "false"
+  IdCard__QnxtMirror__QueueName: "qnxt-idcard-requests"
+  IdCard__Reconciliation__IntervalHours: "24"
+  IdCard__ScanRateLimit__PerTenantPerMinute: "600"
+  IdCard__ScanRateLimit__PerProviderPerMinute: "120"
+  IdCard__ScanRateLimit__PerCardPerMinute: "30"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idcard-service
+  namespace: cloudhealthoffice
+  labels:
+    app: idcard-service
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: idcard-service
+  template:
+    metadata:
+      labels:
+        app: idcard-service
+        tier: backend
+    spec:
+      containers:
+      - name: idcard-service
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-idcard-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: idcard-service-config
+        env:
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: IdCard__QnxtMirror__ServiceBusConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: servicebus-secret
+              key: idcard-mirror-connection-string
+              optional: true
+        - name: SecretProvider__Provider
+          value: "AzureKeyVault"
+        - name: SecretProvider__AzureKeyVaultUri
+          valueFrom:
+            configMapKeyRef:
+              name: keyvault-config
+              key: uri
+              optional: true
+        - name: ProviderJwt__Authority
+          valueFrom:
+            configMapKeyRef:
+              name: provider-jwt-config
+              key: authority
+              optional: true
+        - name: ProviderJwt__Audience
+          valueFrom:
+            configMapKeyRef:
+              name: provider-jwt-config
+              key: audience
+              optional: true
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 750m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: idcard-service
+  namespace: cloudhealthoffice
+  labels:
+    app: idcard-service
+spec:
+  type: ClusterIP
+  selector:
+    app: idcard-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
