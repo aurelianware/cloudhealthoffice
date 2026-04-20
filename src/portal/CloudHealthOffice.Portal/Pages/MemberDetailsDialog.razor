@@ -602,12 +602,12 @@
                             <MudSelect T="string" Label="Category Filter" Dense="true" Variant="Variant.Outlined"
                                        Value="_documentCategoryFilter" ValueChanged="OnDocumentCategoryChanged"
                                        Style="min-width: 220px;">
-                                <MudSelectItem Value="">All Categories</MudSelectItem>
-                                <MudSelectItem Value="Lab">Lab</MudSelectItem>
-                                <MudSelectItem Value="Authorization">Authorization</MudSelectItem>
-                                <MudSelectItem Value="Appeal">Appeal</MudSelectItem>
-                                <MudSelectItem Value="EOB">EOB</MudSelectItem>
-                                <MudSelectItem Value="Eligibility">Eligibility</MudSelectItem>
+                                <MudSelectItem Value="@string.Empty">All Categories</MudSelectItem>
+                                <MudSelectItem Value="@("Lab")">Lab</MudSelectItem>
+                                <MudSelectItem Value="@("Authorization")">Authorization</MudSelectItem>
+                                <MudSelectItem Value="@("Appeal")">Appeal</MudSelectItem>
+                                <MudSelectItem Value="@("EOB")">EOB</MudSelectItem>
+                                <MudSelectItem Value="@("Eligibility")">Eligibility</MudSelectItem>
                             </MudSelect>
                             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh"
                                        OnClick="LoadDocumentsAsync" Disabled="_loadingDocuments">
@@ -1560,7 +1560,7 @@
         StateHasChanged();
         try
         {
-            _memberDocuments = await MemberDocumentService.ListDocumentsAsync(
+            _memberDocuments = await MemberDocumentService.GetDocumentsAsync(
                 MemberId,
                 string.IsNullOrWhiteSpace(_documentCategoryFilter) ? null : _documentCategoryFilter);
         }
@@ -1585,7 +1585,7 @@
     {
         try
         {
-            await MemberDocumentService.SetLegalHoldAsync(doc.DocumentId, !doc.LegalHold);
+            await MemberDocumentService.ToggleLegalHoldAsync(doc.Id, !doc.LegalHold);
             await LoadDocumentsAsync();
         }
         catch (Exception ex)
