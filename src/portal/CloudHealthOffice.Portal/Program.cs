@@ -234,6 +234,7 @@ builder.Services.AddScoped<IClaimsService, ClaimsService>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
+builder.Services.AddScoped<IMemberDocumentService, MemberDocumentService>();
 builder.Services.AddScoped<IProviderService, ProviderService>();
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();

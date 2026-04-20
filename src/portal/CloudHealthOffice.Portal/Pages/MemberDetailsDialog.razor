@@ -6,6 +6,7 @@
 @inject IBenefitPlanService BenefitPlanService
 @inject IFamilyRelationshipService FamilyRelationshipService
 @inject IMemberNoteService MemberNoteService
+@inject IMemberDocumentService MemberDocumentService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -594,6 +595,82 @@
                     </div>
                 </MudTabPanel>
 
+                <!-- Documents Tab -->
+                <MudTabPanel Text="Documents" Icon="@Icons.Material.Filled.Description">
+                    <div>
+                        <div class="d-flex align-center gap-2 mb-3">
+                            <MudSelect T="string" Label="Category Filter" Dense="true" Variant="Variant.Outlined"
+                                       Value="_documentCategoryFilter" ValueChanged="OnDocumentCategoryChanged"
+                                       Style="min-width: 220px;">
+                                <MudSelectItem Value="@string.Empty">All Categories</MudSelectItem>
+                                <MudSelectItem Value="@("Lab")">Lab</MudSelectItem>
+                                <MudSelectItem Value="@("Authorization")">Authorization</MudSelectItem>
+                                <MudSelectItem Value="@("Appeal")">Appeal</MudSelectItem>
+                                <MudSelectItem Value="@("EOB")">EOB</MudSelectItem>
+                                <MudSelectItem Value="@("Eligibility")">Eligibility</MudSelectItem>
+                            </MudSelect>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh"
+                                       OnClick="LoadDocumentsAsync" Disabled="_loadingDocuments">
+                                Refresh
+                            </MudButton>
+                        </div>
+
+                        @if (_loadingDocuments)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (_memberDocuments.Any())
+                        {
+                            <MudTable Items="_memberDocuments" Dense="true" Hover="true" T="MemberDocumentSummary">
+                                <HeaderContent>
+                                    <MudTh>Uploaded</MudTh>
+                                    <MudTh>Category</MudTh>
+                                    <MudTh>Subtype</MudTh>
+                                    <MudTh>Type</MudTh>
+                                    <MudTh style="text-align: right;">Size</MudTh>
+                                    <MudTh>Retention Until</MudTh>
+                                    <MudTh>Legal Hold</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Uploaded">
+                                        <MudText Typo="Typo.body2">@context.UploadedDate.ToLocalTime().ToString("MM/dd/yyyy HH:mm")</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.UploadedBy</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Category">
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.Category</MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Subtype">
+                                        <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(context.Subcategory) ? "-" : context.Subcategory)</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Type">
+                                        <MudText Typo="Typo.body2">@context.ContentType</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Size" Style="text-align: right;">
+                                        <MudText Typo="Typo.body2">@FormatBytes(context.SizeBytes)</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Retention Until">
+                                        <MudText Typo="Typo.body2">@context.RetentionUntilDate.ToString("MM/dd/yyyy")</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.RetentionPolicyId</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Legal Hold">
+                                        <MudButton Size="Size.Small"
+                                                   Variant="Variant.Outlined"
+                                                   Color="@(context.LegalHold ? Color.Warning : Color.Default)"
+                                                   StartIcon="@(context.LegalHold ? Icons.Material.Filled.Lock : Icons.Material.Filled.LockOpen)"
+                                                   OnClick="@(() => ToggleLegalHoldAsync(context))">
+                                            @(context.LegalHold ? "Held" : "Not Held")
+                                        </MudButton>
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No member documents found for this member.</MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
+
                 <!-- Enrollment History Tab — backed by the per-member EnrollmentEvent stream -->
                 <MudTabPanel Text="Enrollment History" Icon="@Icons.Material.Filled.Timeline">
                     <div>
@@ -978,6 +1055,7 @@
     private bool _loadingPcpHistory;
     private List<CoverageHistoryEvent> _coverageHistory = new();
     private List<Enrollment834Record> _transactions834 = new();
+    private List<MemberDocumentSummary> _memberDocuments = new();
     private List<CloudHealthOffice.Portal.Services.EnrollmentEvent> _enrollmentEvents = new();
     private string? _eventsContinuationToken;
     private string _eventTypeFilter = string.Empty;
@@ -1003,7 +1081,9 @@
     private bool _loadingAccumulators = false;
     private bool _loadingBenefits = false;
     private bool _loadingFamily = false;
+    private bool _loadingDocuments = false;
     private int _activeTab = 0;
+    private string _documentCategoryFilter = string.Empty;
     private string? _serviceError;
 
     // Alerts banner — count is bubbled up so other UI can react (e.g.,
@@ -1089,6 +1169,7 @@
         _ = LoadEnrollmentEventsAsync(reset: true);
         _ = LoadBenefitsForActiveCoverageAsync();
         _ = LoadFamilyAsync();
+        _ = LoadDocumentsAsync();
     }
 
     private async Task LoadEnrollmentEventsAsync(bool reset)
@@ -1471,6 +1552,54 @@
             parts.Add(cat.Limitations!);
         }
         return parts.Count == 0 ? "—" : string.Join(" · ", parts);
+    }
+
+    private async Task LoadDocumentsAsync()
+    {
+        _loadingDocuments = true;
+        StateHasChanged();
+        try
+        {
+            _memberDocuments = await MemberDocumentService.GetDocumentsAsync(
+                MemberId,
+                string.IsNullOrWhiteSpace(_documentCategoryFilter) ? null : _documentCategoryFilter);
+        }
+        catch
+        {
+            _memberDocuments = new();
+        }
+        finally
+        {
+            _loadingDocuments = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task OnDocumentCategoryChanged(string value)
+    {
+        _documentCategoryFilter = value;
+        return LoadDocumentsAsync();
+    }
+
+    private async Task ToggleLegalHoldAsync(MemberDocumentSummary doc)
+    {
+        try
+        {
+            await MemberDocumentService.ToggleLegalHoldAsync(doc.Id, !doc.LegalHold);
+            await LoadDocumentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to update legal hold: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024d:F1} KB";
+        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024d * 1024d):F1} MB";
+        return $"{bytes / (1024d * 1024d * 1024d):F1} GB";
     }
 
     private void Close() => MudDialog.Close();
