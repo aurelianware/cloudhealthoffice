@@ -197,19 +197,25 @@ public class MemberDocumentClient : IMemberDocumentClient
         var baseUrl = _cfg["Services:MemberDocumentService"] ?? "http://member-document-service.cloudhealthoffice/api/v1";
         var url = $"{baseUrl}/member-documents";
 
+        // Strip control characters from caller-supplied strings before they go
+        // into multipart form fields. These values are parsed server-side as
+        // form data, not HTML — but a stray CR/LF would corrupt the multipart
+        // encoding and CodeQL flags them as tainted text sinks without this
+        // explicit cleansing step.
         using var form = new MultipartFormDataContent();
-        form.Add(new StringContent(memberId), "MemberId");
-        form.Add(new StringContent(category), "Category");
-        if (!string.IsNullOrEmpty(subcategory)) form.Add(new StringContent(subcategory), "Subcategory");
+        form.Add(new StringContent(SanitizeFormValue(memberId)), "MemberId");
+        form.Add(new StringContent(SanitizeFormValue(category)), "Category");
+        if (!string.IsNullOrEmpty(subcategory))
+            form.Add(new StringContent(SanitizeFormValue(subcategory)), "Subcategory");
         form.Add(new StringContent("Generated"), "Source");
-        form.Add(new StringContent(uploadedBy), "UploadedBy");
+        form.Add(new StringContent(SanitizeFormValue(uploadedBy)), "UploadedBy");
 
         var fileContent = new ByteArrayContent(body);
         fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        form.Add(fileContent, "File", fileName);
+        form.Add(fileContent, "File", SanitizeFormValue(fileName));
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
-        req.Headers.Add("X-Tenant-ID", tenantId);
+        req.Headers.Add("X-Tenant-ID", SanitizeFormValue(tenantId));
 
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         resp.EnsureSuccessStatusCode();
@@ -225,6 +231,25 @@ public class MemberDocumentClient : IMemberDocumentClient
     private class MemberDocumentResponse
     {
         public string Id { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Strips CR/LF/NUL and other control characters and caps length so
+    /// caller-supplied strings can't corrupt the multipart envelope or the
+    /// HTTP headers they're also used in. Treats null as empty.
+    /// </summary>
+    private static string SanitizeFormValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        const int maxLen = 512;
+        var sb = new System.Text.StringBuilder(Math.Min(value.Length, maxLen));
+        var limit = Math.Min(value.Length, maxLen);
+        for (var i = 0; i < limit; i++)
+        {
+            var c = value[i];
+            if (!char.IsControl(c)) sb.Append(c);
+        }
+        return sb.ToString();
     }
 }
 
