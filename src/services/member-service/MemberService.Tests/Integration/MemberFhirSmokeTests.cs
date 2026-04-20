@@ -68,6 +68,14 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
                 RemoveAll<MemberIndexInitializer>(services);
                 RemoveAll<FamilyRelationshipIndexInitializer>(services);
 
+                // Alert/note repositories are only registered on the Cosmos branch
+                // in Program.cs. If the test happens to land on the Cosmos branch,
+                // resolving IMemberAlertGuard cascades into a CosmosClient factory
+                // that requires CosmosDb:Endpoint (not configured in tests). Drop
+                // the guard entirely; MembersController's IMemberAlertGuard parameter
+                // is optional and falls through to null.
+                RemoveAll<IMemberAlertGuard>(services);
+
                 services.AddSingleton<IMemberRepository>(MemberRepo);
                 services.AddSingleton<IMemberEventRepository>(EventRepo);
                 services.AddSingleton<IFamilyRelationshipRepository>(new InMemoryFamilyRelationshipRepository());
