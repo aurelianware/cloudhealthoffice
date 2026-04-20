@@ -12,6 +12,7 @@ using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.OperatingMode;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.ProviderEnrollmentService.Gates;
@@ -57,6 +58,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 
 // ── Benefit Engine ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
+builder.Services.AddScoped<IBenefitViewService, BenefitViewService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IBenefitEngineTenantContext, HttpContextTenantContext>();
 
@@ -163,7 +165,8 @@ builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCross
 });
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

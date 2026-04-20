@@ -9,6 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="EnrollmentImportService.Tests/**" />
+    <Content Remove="EnrollmentImportService.Tests/**" />
+    <None Remove="EnrollmentImportService.Tests/**" />
+    <EmbeddedResource Remove="EnrollmentImportService.Tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.58.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />

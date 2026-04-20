@@ -1,6 +1,11 @@
 @using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Formatters
+@using CloudHealthOffice.Portal.Shared
 @inject IMemberService MemberService
 @inject ICoverageService CoverageService
+@inject IBenefitPlanService BenefitPlanService
+@inject IFamilyRelationshipService FamilyRelationshipService
+@inject IMemberNoteService MemberNoteService
 @inject IMemberDocumentService MemberDocumentService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -40,6 +45,8 @@
                     View Claims
                 </MudButton>
             </div>
+
+            <MemberAlertBanner MemberId="@MemberId" OnAlertCountChanged="OnAlertCountChanged" />
 
             <MudTabs Elevation="0" ApplyEffectsToContainer="true" PanelClass="pt-4"
                      @bind-ActivePanelIndex="_activeTab">
@@ -180,10 +187,10 @@
                                         @foreach (var svc in _accumulators.ServiceAccumulators)
                                         {
                                             <tr>
-                                                <td>@svc.ServiceType</td>
-                                                <td>@svc.Used @svc.UnitType</td>
-                                                <td>@svc.Limit @svc.UnitType</td>
-                                                <td>@(svc.Limit - svc.Used) @svc.UnitType</td>
+                                                <td>@svc.BenefitCategory</td>
+                                                <td>@svc.Used @svc.Unit</td>
+                                                <td>@svc.Limit @svc.Unit</td>
+                                                <td>@(svc.Limit - svc.Used) @svc.Unit</td>
                                                 <td style="min-width: 150px;">
                                                     <MudProgressLinear Value="@GetPercent(svc.Used, svc.Limit)"
                                                                        Color="@GetAccumColor(svc.Used, svc.Limit)"
@@ -205,25 +212,32 @@
                                     <thead>
                                         <tr>
                                             <th>Date</th>
-                                            <th>Claim ID</th>
-                                            <th style="text-align: right;">Deductible</th>
-                                            <th style="text-align: right;">Copay</th>
-                                            <th style="text-align: right;">Coinsurance</th>
-                                            <th style="text-align: right;">Plan Paid</th>
+                                            <th>Event</th>
+                                            <th>Source</th>
+                                            <th style="text-align: right;">Deductible Δ</th>
+                                            <th style="text-align: right;">OOP Δ</th>
+                                            <th>Actor</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         @foreach (var act in _accumulators.RecentActivity)
                                         {
                                             <tr>
-                                                <td>@act.ServiceDate.ToString("MM/dd/yyyy")</td>
+                                                <td>@act.OccurredAt.ToString("MM/dd/yyyy")</td>
+                                                <td>@act.EventType</td>
                                                 <td>
-                                                    <MudLink Href="@($"/claims/{act.ClaimId}")" Typo="Typo.body2" Style="font-family: monospace;">@act.ClaimId</MudLink>
+                                                    @if (act.EventType == "ClaimApplied" && !string.IsNullOrEmpty(act.SourceReference))
+                                                    {
+                                                        <MudLink Href="@($"/claims/{act.SourceReference}")" Typo="Typo.body2" Style="font-family: monospace;">@act.SourceReference</MudLink>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span style="font-family: monospace;">@act.SourceReference</span>
+                                                    }
                                                 </td>
-                                                <td style="text-align: right;">@act.DeductibleApplied.ToString("C")</td>
-                                                <td style="text-align: right;">@act.CopayApplied.ToString("C")</td>
-                                                <td style="text-align: right;">@act.CoinsuranceApplied.ToString("C")</td>
-                                                <td style="text-align: right;">@act.PlanPaid.ToString("C")</td>
+                                                <td style="text-align: right;">@act.DeductibleDelta.ToString("C")</td>
+                                                <td style="text-align: right;">@act.OopDelta.ToString("C")</td>
+                                                <td>@act.ActorId</td>
                                             </tr>
                                         }
                                     </tbody>
@@ -318,6 +332,147 @@
                     </div>
                 </MudTabPanel>
 
+                <!-- Benefits Tab -->
+                <MudTabPanel Text="Benefits" Icon="@Icons.Material.Filled.MedicalInformation">
+                    <div>
+                        @{
+                            var eligibleCoverages = _coverages
+                                .Where(c => !string.IsNullOrEmpty(c.PlanId)
+                                            && c.StatusText == "Active"
+                                            && c.EffectiveDate <= DateTime.Today
+                                            && (c.TerminationDate == null || c.TerminationDate >= DateTime.Today))
+                                .ToList();
+                        }
+
+                        @if (_loadingCoverage)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (!eligibleCoverages.Any())
+                        {
+                            <MudAlert Severity="Severity.Info">
+                                No active coverage as of @DateTime.Today.ToString("MM/dd/yyyy") — benefits cannot be resolved.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            @if (eligibleCoverages.Count > 1)
+                            {
+                                <MudSelect T="string" Label="Coverage"
+                                           Value="_selectedBenefitPlanId"
+                                           ValueChanged="OnCoverageSelectionChanged"
+                                           Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                                    @foreach (var cov in eligibleCoverages)
+                                    {
+                                        <MudSelectItem T="string" Value="@cov.PlanId">
+                                            @cov.PlanName (@cov.EffectiveDate.ToString("MM/dd/yyyy")
+                                            — @(cov.TerminationDate?.ToString("MM/dd/yyyy") ?? "present"))
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+
+                            @if (_loadingBenefits)
+                            {
+                                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                            }
+                            else if (_benefitView != null)
+                            {
+                                <div class="d-flex align-center gap-2 mb-2">
+                                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@_benefitView.PlanName</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@_benefitView.PlanType</MudChip>
+                                    @if (!string.IsNullOrEmpty(_benefitView.MetalLevel))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@_benefitView.MetalLevel</MudChip>
+                                    }
+                                    <MudSpacer />
+                                    <MudTooltip Text="@($"Plan version {_benefitView.PlanVersion}")">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            As of @_benefitView.AsOfDate.ToString("MM/dd/yyyy") · v@_benefitView.PlanVersion
+                                        </MudText>
+                                    </MudTooltip>
+                                </div>
+
+                                @if (_benefitView.Categories.Any())
+                                {
+                                    <MudSimpleTable Dense="true" Hover="true" Elevation="1" Class="mb-3">
+                                        <thead>
+                                            <tr>
+                                                <th>Benefit</th>
+                                                <th>In-Network</th>
+                                                <th>Out-of-Network</th>
+                                                <th>Deductible</th>
+                                                <th>OOP</th>
+                                                <th>Prior Auth</th>
+                                                <th>Limits</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var cat in _benefitView.Categories)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div style="font-weight: 500;">@cat.DisplayName</div>
+                                                        @if (cat.Pharmacy != null)
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@cat.Pharmacy.TierLabel@(cat.Pharmacy.IsSpecialty ? " (specialty)" : "")</MudText>
+                                                        }
+                                                        else if (!string.IsNullOrEmpty(cat.Description))
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@cat.Description</MudText>
+                                                        }
+                                                    </td>
+                                                    <td>@BenefitCostShareFormatter.Format(cat.InNetwork)</td>
+                                                    <td>@(cat.OutOfNetwork != null ? BenefitCostShareFormatter.Format(cat.OutOfNetwork) : "—")</td>
+                                                    <td>@(cat.DeductibleApplies ? "Applies" : "Waived")</td>
+                                                    <td>@(cat.OopApplies ? "Applies" : "Excluded")</td>
+                                                    <td>
+                                                        @if (cat.PriorAuthRequired)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Required</MudChip>
+                                                        }
+                                                        else
+                                                        {
+                                                            <text>—</text>
+                                                        }
+                                                    </td>
+                                                    <td>@FormatLimits(cat)</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </MudSimpleTable>
+                                }
+                                else
+                                {
+                                    <MudAlert Severity="Severity.Info">This plan has no configured benefits.</MudAlert>
+                                }
+
+                                @if (_benefitView.Documents.Any())
+                                {
+                                    <MudText Typo="Typo.subtitle2" Class="mt-3 mb-2" Style="font-weight: 600;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Class="mr-1" />
+                                        Plan Documents
+                                    </MudText>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var doc in _benefitView.Documents)
+                                        {
+                                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                       Href="@doc.Location" Target="_blank">
+                                                @(string.IsNullOrEmpty(doc.DisplayName) ? doc.DocType : doc.DisplayName)
+                                            </MudButton>
+                                        }
+                                    </div>
+                                }
+                            }
+                            else if (_benefitsError != null)
+                            {
+                                <MudAlert Severity="Severity.Warning">@_benefitsError</MudAlert>
+                            }
+                        }
+                    </div>
+                </MudTabPanel>
+
                 <!-- PCP Tab -->
                 <MudTabPanel Text="Primary Care Physician" Icon="@Icons.Material.Filled.MedicalServices"
                              @ref="_pcpTab">
@@ -394,6 +549,48 @@
                                        OnClick="OpenChangePcpDialog">
                                 Assign PCP
                             </MudButton>
+                        }
+
+                        <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.subtitle1" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-1" Size="Size.Small" />
+                            Assignment History
+                        </MudText>
+                        @if (_loadingPcpHistory)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
+                        }
+                        else if (_pcpHistory.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No prior PCP assignments recorded.</MudText>
+                        }
+                        else
+                        {
+                            <MudTable Items="_pcpHistory" Dense="true" Hover="true" T="PcpAssignmentHistoryItem">
+                                <HeaderContent>
+                                    <MudTh>Provider</MudTh>
+                                    <MudTh>NPI</MudTh>
+                                    <MudTh>Effective</MudTh>
+                                    <MudTh>End</MudTh>
+                                    <MudTh>Source</MudTh>
+                                    <MudTh>Network at Assignment</MudTh>
+                                    <MudTh>Reason</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Provider">@(string.IsNullOrEmpty(context.ProviderName) ? context.ProviderNpi : context.ProviderName)</MudTd>
+                                    <MudTd DataLabel="NPI"><span style="font-family: monospace;">@context.ProviderNpi</span></MudTd>
+                                    <MudTd DataLabel="Effective">@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+                                    <MudTd DataLabel="End">@(context.EndDate.HasValue ? context.EndDate.Value.ToString("MM/dd/yyyy") : "—")</MudTd>
+                                    <MudTd DataLabel="Source">
+                                        <MudChip T="string" Size="Size.Small">@context.AssignmentSource</MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Network at Assignment">
+                                        @* Snapshot value — never updated. Live status is fetched separately. *@
+                                        <MudChip T="string" Size="Size.Small">@context.NetworkStatusAtAssignment</MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Reason">@(context.AssignmentReason ?? "—")</MudTd>
+                                </RowTemplate>
+                            </MudTable>
                         }
                     </div>
                 </MudTabPanel>
@@ -474,52 +671,117 @@
                     </div>
                 </MudTabPanel>
 
-                <!-- Enrollment History Tab -->
+                <!-- Enrollment History Tab — backed by the per-member EnrollmentEvent stream -->
                 <MudTabPanel Text="Enrollment History" Icon="@Icons.Material.Filled.Timeline">
                     <div>
-                        @if (_loadingHistory)
+                        <MudGrid Class="mb-3">
+                            <MudItem xs="12" md="4">
+                                <MudSelect T="string" Label="Event type" Dense="true" Variant="Variant.Outlined"
+                                           Value="@_eventTypeFilter" ValueChanged="OnEventTypeChanged" Clearable="true">
+                                    <MudSelectItem T="string" Value="@(string.Empty)">All</MudSelectItem>
+                                    @foreach (var t in EnrollmentEventTypes)
+                                    {
+                                        <MudSelectItem T="string" Value="@t">@t</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="6" md="4">
+                                <MudDatePicker Label="From" Date="_eventFromFilter" DateChanged="OnEventFromChanged"
+                                               Variant="Variant.Outlined" Clearable="true" />
+                            </MudItem>
+                            <MudItem xs="6" md="4">
+                                <MudDatePicker Label="To" Date="_eventToFilter" DateChanged="OnEventToChanged"
+                                               Variant="Variant.Outlined" Clearable="true" />
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_loadingEvents)
                         {
                             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
                         }
-                        else if (_coverageHistory.Any())
+                        else if (_enrollmentEvents.Any())
                         {
-                            <MudTimeline TimelinePosition="TimelinePosition.Start">
-                                @foreach (var evt in _coverageHistory.OrderByDescending(e => e.EventDate))
+                            <MudExpansionPanels MultiExpansion="true" Dense="true">
+                                @foreach (var evt in _enrollmentEvents)
                                 {
-                                    <MudTimelineItem Color="@GetEventColor(evt.EventType)" Size="Size.Small">
-                                        <ItemContent>
-                                            <MudCard Elevation="1" Class="mb-1" Style="border: 1px solid rgba(0,255,255,0.1);">
-                                                <MudCardContent Class="py-2">
-                                                    <div class="d-flex justify-space-between align-center">
-                                                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@evt.Description</MudText>
-                                                        <MudChip T="string" Size="Size.Small" Color="@GetEventColor(evt.EventType)">@evt.EventType</MudChip>
-                                                    </div>
-                                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                                        @evt.EventDate.ToString("MMM dd, yyyy") @if (!string.IsNullOrEmpty(evt.ChangedBy)) { <text>— @evt.ChangedBy</text> }
+                                    <MudExpansionPanel>
+                                        <TitleContent>
+                                            <div class="d-flex align-center" style="width:100%;">
+                                                <MudChip T="string" Size="Size.Small"
+                                                         Color="@GetEventColor(evt.EventType)" Class="mr-2">
+                                                    @evt.EventType
+                                                </MudChip>
+                                                <MudText Typo="Typo.body2" Style="font-weight:500;">
+                                                    @(evt.EventDate?.ToString("MMM dd, yyyy") ?? evt.OccurredAt.ToString("MMM dd, yyyy HH:mm"))
+                                                </MudText>
+                                                <MudSpacer />
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                                         Style="font-family: monospace;">
+                                                    v@(evt.Version) · @(evt.Source ?? "edi834")
+                                                </MudText>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            <MudGrid>
+                                                <MudItem xs="6" md="3">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Maintenance type</MudText>
+                                                    <MudText Typo="Typo.body2">@(evt.MaintenanceType ?? "—")</MudText>
+                                                </MudItem>
+                                                <MudItem xs="6" md="3">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Maintenance reason</MudText>
+                                                    <MudText Typo="Typo.body2">@(evt.MaintenanceReason ?? "—")</MudText>
+                                                </MudItem>
+                                                <MudItem xs="6" md="3">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Batch ID</MudText>
+                                                    <MudText Typo="Typo.body2" Style="font-family: monospace;">
+                                                        @(evt.SourceBatchId ?? "—")
                                                     </MudText>
-                                                    @if (!string.IsNullOrEmpty(evt.OldValue) || !string.IsNullOrEmpty(evt.NewValue))
-                                                    {
-                                                        <div class="mt-1">
-                                                            @if (!string.IsNullOrEmpty(evt.OldValue))
-                                                            {
-                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">From: @evt.OldValue</MudText>
-                                                            }
-                                                            @if (!string.IsNullOrEmpty(evt.NewValue))
-                                                            {
-                                                                <MudText Typo="Typo.caption" Color="Color.Primary">To: @evt.NewValue</MudText>
-                                                            }
-                                                        </div>
-                                                    }
-                                                </MudCardContent>
-                                            </MudCard>
-                                        </ItemContent>
-                                    </MudTimelineItem>
+                                                </MudItem>
+                                                <MudItem xs="6" md="3">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Transaction ID</MudText>
+                                                    <MudText Typo="Typo.body2" Style="font-family: monospace;">
+                                                        @(evt.TransactionId ?? "—")
+                                                    </MudText>
+                                                </MudItem>
+                                                @if (evt.RetroEffectiveDate.HasValue)
+                                                {
+                                                    <MudItem xs="12">
+                                                        <MudAlert Severity="Severity.Warning" Dense="true">
+                                                            Retro-adjusted to @evt.RetroEffectiveDate.Value.ToString("MMM dd, yyyy")
+                                                        </MudAlert>
+                                                    </MudItem>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(evt.RawSegment))
+                                                {
+                                                    <MudItem xs="12">
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">
+                                                            Raw 834 / manual snippet
+                                                        </MudText>
+                                                        <pre style="white-space: pre-wrap; word-break: break-word;
+                                                                    background: rgba(0,0,0,0.4); padding: 8px;
+                                                                    border-radius: 4px; font-size: 0.75rem; max-height: 240px;
+                                                                    overflow: auto;">@evt.RawSegment</pre>
+                                                    </MudItem>
+                                                }
+                                            </MudGrid>
+                                        </ChildContent>
+                                    </MudExpansionPanel>
                                 }
-                            </MudTimeline>
+                            </MudExpansionPanels>
+
+                            @if (!string.IsNullOrEmpty(_eventsContinuationToken))
+                            {
+                                <div class="d-flex justify-center mt-3">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                               OnClick="LoadMoreEventsAsync">
+                                        Load more
+                                    </MudButton>
+                                </div>
+                            }
                         }
                         else
                         {
-                            <MudAlert Severity="Severity.Info">No enrollment history available.</MudAlert>
+                            <MudAlert Severity="Severity.Info">No enrollment events found for the selected filters.</MudAlert>
                         }
                     </div>
                 </MudTabPanel>
@@ -607,6 +869,166 @@
                         }
                     </div>
                 </MudTabPanel>
+
+                <!-- Family Tab -->
+                <MudTabPanel Text="Family" Icon="@Icons.Material.Filled.FamilyRestroom">
+                    <div>
+                        <div class="d-flex align-center mb-3">
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Class="mr-1" />
+                                Family Relationships
+                            </MudText>
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.PersonAdd"
+                                       OnClick="OpenAddDependentDialog">
+                                Add Dependent
+                            </MudButton>
+                        </div>
+
+                        @if (_loadingFamily)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else
+                        {
+                            @if (_subscriberRows.Any())
+                            {
+                                <MudExpansionPanels MultiExpansion="true" Class="mb-2">
+                                    <MudExpansionPanel Text="Subscriber" IsInitiallyExpanded="true">
+                                        <FamilyRelationshipTable Rows="_subscriberRows" OnEnd="EndRelationshipAsync" />
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+
+                            @if (_dependentRows.Any())
+                            {
+                                <MudExpansionPanels MultiExpansion="true" Class="mb-2">
+                                    <MudExpansionPanel Text="@($"Dependents ({_dependentRows.Count})")" IsInitiallyExpanded="true">
+                                        <FamilyRelationshipTable Rows="_dependentRows" OnEnd="EndRelationshipAsync" />
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+
+                            @if (_otherRows.Any())
+                            {
+                                <MudExpansionPanels MultiExpansion="true" Class="mb-2">
+                                    <MudExpansionPanel Text="@($"Other ({_otherRows.Count})")">
+                                        <FamilyRelationshipTable Rows="_otherRows" OnEnd="EndRelationshipAsync" />
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+
+                            @if (!_subscriberRows.Any() && !_dependentRows.Any() && !_otherRows.Any())
+                            {
+                                <MudAlert Severity="Severity.Info">No family relationships recorded for this member.</MudAlert>
+                            }
+                        }
+                    </div>
+                </MudTabPanel>
+
+                <!-- Notes Tab -->
+                <MudTabPanel Text="Notes" Icon="@Icons.Material.Filled.Notes" OnClick="@(_ => OnNotesTabActivated())">
+                    <div>
+                        <MudGrid Spacing="2" Class="mb-3">
+                            <MudItem xs="12" md="4">
+                                <MudSelect T="string" Label="Category"
+                                           Value="_noteCategoryFilter"
+                                           ValueChanged="OnNoteCategoryChanged"
+                                           Variant="Variant.Outlined" Dense="true">
+                                    <MudSelectItem Value="@string.Empty">All</MudSelectItem>
+                                    @foreach (var cat in NoteCategories)
+                                    {
+                                        <MudSelectItem Value="@cat">@cat</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="8" Class="d-flex align-center justify-end">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.NoteAdd"
+                                           OnClick="ToggleNoteEntry">
+                                    @(_showNoteEntry ? "Cancel" : "Add Note")
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_showNoteEntry)
+                        {
+                            <MudPaper Class="pa-3 mb-3" Elevation="1">
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" md="4">
+                                        <MudSelect T="string" Label="Category"
+                                                   @bind-Value="_newNoteCategory"
+                                                   Variant="Variant.Outlined" Dense="true">
+                                            @foreach (var cat in NoteCategories)
+                                            {
+                                                <MudSelectItem Value="@cat">@cat</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" md="8">
+                                        <MudTextField @bind-Value="_newNoteSubject"
+                                                      Label="Subject" Variant="Variant.Outlined"
+                                                      MaxLength="200" Required="true" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudTextField @bind-Value="_newNoteBody"
+                                                      Label="Body" Variant="Variant.Outlined"
+                                                      Lines="4" MaxLength="8000" Required="true" />
+                                    </MudItem>
+                                    <MudItem xs="12" Class="d-flex justify-end">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Success"
+                                                   Disabled="@(_savingNote || string.IsNullOrWhiteSpace(_newNoteSubject) || string.IsNullOrWhiteSpace(_newNoteBody))"
+                                                   OnClick="SubmitNoteAsync">
+                                            @(_savingNote ? "Saving…" : "Save Note")
+                                        </MudButton>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        }
+
+                        @if (_loadingNotes)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
+                        }
+                        else if (!_notes.Any())
+                        {
+                            <MudAlert Severity="Severity.Info">No notes recorded for this member.</MudAlert>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column">
+                                @foreach (var note in _notes)
+                                {
+                                    <MudPaper Class="pa-3 mb-2" Elevation="1">
+                                        <div class="d-flex align-center gap-2 mb-1">
+                                            <MudChip T="string" Size="Size.Small" Color="@GetNoteCategoryColor(note.Category)">@note.Category</MudChip>
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@note.Subject</MudText>
+                                            <MudSpacer />
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @note.Author · @note.CreatedDate.ToLocalTime().ToString("MM/dd/yyyy HH:mm")
+                                            </MudText>
+                                        </div>
+                                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@note.Body</MudText>
+                                        @if (!string.IsNullOrEmpty(note.LinkedResourceType))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                                Linked: @note.LinkedResourceType / @note.LinkedResourceId
+                                            </MudText>
+                                        }
+                                    </MudPaper>
+                                }
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(_notesContinuationToken))
+                            {
+                                <div class="d-flex justify-center mt-2">
+                                    <MudButton Variant="Variant.Outlined" OnClick="LoadMoreNotesAsync">Load more</MudButton>
+                                </div>
+                            }
+                        }
+                    </div>
+                </MudTabPanel>
             </MudTabs>
         }
         else
@@ -629,21 +1051,71 @@
     private MemberDetails? _member;
     private List<Coverage> _coverages = new();
     private MemberPcp? _pcp;
+    private List<PcpAssignmentHistoryItem> _pcpHistory = new();
+    private bool _loadingPcpHistory;
     private List<CoverageHistoryEvent> _coverageHistory = new();
     private List<Enrollment834Record> _transactions834 = new();
     private List<MemberDocumentSummary> _memberDocuments = new();
+    private List<CloudHealthOffice.Portal.Services.EnrollmentEvent> _enrollmentEvents = new();
+    private string? _eventsContinuationToken;
+    private string _eventTypeFilter = string.Empty;
+    private DateTime? _eventFromFilter;
+    private DateTime? _eventToFilter;
     private MemberAccumulators? _accumulators;
+    private MemberBenefitView? _benefitView;
+    private string? _selectedBenefitPlanId;
+    private string? _benefitsError;
+
+    private static readonly string[] EnrollmentEventTypes =
+    {
+        "Enrolled", "Terminated", "PlanChanged", "AddressChanged", "PcpChanged",
+        "SepTriggered", "CobraElected", "CobraTerminated", "RetroAdjusted", "ReinstatementApproved"
+    };
 
     private bool _loading = true;
     private bool _loadingCoverage = true;
     private bool _loadingPcp = false;
     private bool _loadingHistory = false;
     private bool _loading834 = false;
+    private bool _loadingEvents = false;
     private bool _loadingAccumulators = false;
+    private bool _loadingBenefits = false;
+    private bool _loadingFamily = false;
     private bool _loadingDocuments = false;
     private int _activeTab = 0;
     private string _documentCategoryFilter = string.Empty;
     private string? _serviceError;
+
+    // Alerts banner — count is bubbled up so other UI can react (e.g.,
+    // disable terminate when LitigationHold is active). Counted, not enumerated,
+    // because the banner owns the alert content rendering.
+    private int _activeAlertCount;
+
+    // Notes tab state
+    private static readonly string[] NoteCategories =
+    {
+        "CustomerService", "CareManagement", "Appeals", "Billing", "Clinical"
+    };
+    private List<MemberNoteView> _notes = new();
+    private string? _notesContinuationToken;
+    private string _noteCategoryFilter = string.Empty;
+    private bool _loadingNotes;
+    private bool _notesLoadedOnce;
+    private bool _showNoteEntry;
+    private bool _savingNote;
+    private string _newNoteCategory = "CustomerService";
+    private string _newNoteSubject = string.Empty;
+    private string _newNoteBody = string.Empty;
+
+    private List<FamilyRelationshipRow> _subscriberRows = new();
+    private List<FamilyRelationshipRow> _dependentRows = new();
+    private List<FamilyRelationshipRow> _otherRows = new();
+
+    // Codes whose inverse is "G8" (Parent / Other) — these are the true
+    // directional dependent→subscriber edges. Self-inverse codes like "01"
+    // (Spouse), "53" (Life Partner), "22" (Handicapped Dep.), "29" (Significant
+    // Other) are symmetric and don't identify a subscriber; they land in "Other".
+    private static readonly HashSet<string> DependentToSubscriberCodes = new() { "19", "17", "10" };
 
     private MudTabPanel? _pcpTab;
     private MudTable<Enrollment834Record>? _834Table;
@@ -694,7 +1166,157 @@
         _ = LoadPcpAsync();
         _ = LoadHistoryAsync();
         _ = Load834Async();
+        _ = LoadEnrollmentEventsAsync(reset: true);
+        _ = LoadBenefitsForActiveCoverageAsync();
+        _ = LoadFamilyAsync();
         _ = LoadDocumentsAsync();
+    }
+
+    private async Task LoadEnrollmentEventsAsync(bool reset)
+    {
+        _loadingEvents = true;
+        if (reset)
+        {
+            _enrollmentEvents = new();
+            _eventsContinuationToken = null;
+        }
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var page = await MemberService.GetEnrollmentEventsAsync(
+                MemberId,
+                new EnrollmentEventFilter(
+                    Type: string.IsNullOrWhiteSpace(_eventTypeFilter) ? null : _eventTypeFilter,
+                    // MudDatePicker hands back midnight with DateTimeKind.Unspecified —
+                    // ToUniversalTime() on that would silently shift the intended date
+                    // by the local offset. Instead, treat the picker date as a calendar
+                    // day and extend the window to inclusive end-of-day on the To side
+                    // so events later the same day aren't excluded.
+                    From: NormalizeFilterFromUtc(_eventFromFilter),
+                    To: NormalizeFilterToUtc(_eventToFilter),
+                    Limit: 50,
+                    ContinuationToken: reset ? null : _eventsContinuationToken));
+
+            _enrollmentEvents.AddRange(page.Items);
+            _eventsContinuationToken = page.ContinuationToken;
+        }
+        catch
+        {
+            if (reset) _enrollmentEvents = new();
+        }
+        finally
+        {
+            _loadingEvents = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task LoadMoreEventsAsync() => LoadEnrollmentEventsAsync(reset: false);
+
+    private static DateTime? NormalizeFilterFromUtc(DateTime? picked) =>
+        picked.HasValue
+            ? DateTime.SpecifyKind(picked.Value.Date, DateTimeKind.Utc)
+            : null;
+
+    private static DateTime? NormalizeFilterToUtc(DateTime? picked) =>
+        picked.HasValue
+            ? DateTime.SpecifyKind(picked.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc)
+            : null;
+
+    private Task OnEventTypeChanged(string value)
+    {
+        _eventTypeFilter = value ?? string.Empty;
+        return LoadEnrollmentEventsAsync(reset: true);
+    }
+
+    private Task OnEventFromChanged(DateTime? value)
+    {
+        _eventFromFilter = value;
+        return LoadEnrollmentEventsAsync(reset: true);
+    }
+
+    private Task OnEventToChanged(DateTime? value)
+    {
+        _eventToFilter = value;
+        return LoadEnrollmentEventsAsync(reset: true);
+    }
+
+    private async Task LoadFamilyAsync()
+    {
+        _loadingFamily = true;
+        try
+        {
+            var rows = await FamilyRelationshipService.ListForMemberAsync(MemberId);
+
+            // Bucket rows into subscriber / dependents / other based on INS02 direction.
+            // Each row is already subject-perspective (SubjectMemberId == this member).
+            _subscriberRows = rows.Where(r => DependentToSubscriberCodes.Contains(r.RelationshipCode)).ToList();
+            _dependentRows  = rows.Where(r => r.RelationshipCode == "G8").ToList();
+            _otherRows      = rows.Except(_subscriberRows).Except(_dependentRows).ToList();
+        }
+        catch (ServiceUnavailableException) { ResetFamily(); }
+        catch { ResetFamily(); }
+        finally
+        {
+            _loadingFamily = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ResetFamily()
+    {
+        _subscriberRows = new();
+        _dependentRows = new();
+        _otherRows = new();
+    }
+
+    private async Task EndRelationshipAsync(FamilyRelationshipRow row)
+    {
+        try
+        {
+            await FamilyRelationshipService.EndRelationshipAsync(MemberId, row.Id);
+            Snackbar.Add("Relationship ended.", Severity.Success);
+            await LoadFamilyAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to end relationship: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OpenAddDependentDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(AddDependentDialog.SubscriberMemberId)] = MemberId,
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<AddDependentDialog>("Add Dependent", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Dependent added.", Severity.Success);
+            await LoadFamilyAsync();
+        }
+    }
+
+    private async Task LoadBenefitsForActiveCoverageAsync()
+    {
+        var eligible = _coverages
+            .Where(c => !string.IsNullOrEmpty(c.PlanId)
+                        && c.StatusText == "Active"
+                        && c.EffectiveDate <= DateTime.Today
+                        && (c.TerminationDate == null || c.TerminationDate >= DateTime.Today))
+            .ToList();
+
+        if (!eligible.Any())
+        {
+            return;
+        }
+
+        _selectedBenefitPlanId = eligible.First().PlanId;
+        await LoadBenefitsAsync();
     }
 
     private async Task LoadAccumulatorsAsync()
@@ -715,6 +1337,7 @@
     private async Task LoadPcpAsync()
     {
         _loadingPcp = true;
+        _loadingPcpHistory = true;
         try
         {
             _pcp = await MemberService.GetMemberPcpAsync(MemberId);
@@ -723,6 +1346,17 @@
         finally
         {
             _loadingPcp = false;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        try
+        {
+            _pcpHistory = await MemberService.GetMemberPcpHistoryAsync(MemberId);
+        }
+        catch { _pcpHistory = new(); }
+        finally
+        {
+            _loadingPcpHistory = false;
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -757,68 +1391,23 @@
         }
     }
 
-    private async Task LoadDocumentsAsync()
-    {
-        _loadingDocuments = true;
-        try
-        {
-            _memberDocuments = await MemberDocumentService.GetDocumentsAsync(
-                MemberId,
-                string.IsNullOrWhiteSpace(_documentCategoryFilter) ? null : _documentCategoryFilter);
-        }
-        catch
-        {
-            _memberDocuments = new();
-        }
-        finally
-        {
-            _loadingDocuments = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private async Task OnDocumentCategoryChanged(string value)
-    {
-        _documentCategoryFilter = value;
-        await LoadDocumentsAsync();
-    }
-
-    private async Task ToggleLegalHoldAsync(MemberDocumentSummary document)
-    {
-        try
-        {
-            await MemberDocumentService.ToggleLegalHoldAsync(document.Id, !document.LegalHold);
-            document.LegalHold = !document.LegalHold;
-            Snackbar.Add(
-                document.LegalHold ? "Legal hold enabled." : "Legal hold removed.",
-                Severity.Success);
-        }
-        catch (ServiceUnavailableException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
-        }
-        catch
-        {
-            Snackbar.Add("Failed to update legal hold.", Severity.Error);
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
     private async Task OpenChangePcpDialog()
     {
         var parameters = new DialogParameters
         {
-            [nameof(AssignPcpDialog.MemberId)] = MemberId,
-            [nameof(AssignPcpDialog.CurrentPcp)] = _pcp
+            [nameof(PcpSearchDialog.MemberId)] = MemberId,
+            [nameof(PcpSearchDialog.CurrentPcp)] = _pcp
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<AssignPcpDialog>("Assign PCP", parameters, options);
+        var dialog = await DialogService.ShowAsync<PcpSearchDialog>("Assign PCP", parameters, options);
         var result = await dialog.Result;
         if (!result.Canceled && result.Data is MemberPcp newPcp)
         {
             _pcp = newPcp;
-            StateHasChanged();
+            // Refresh history so the just-closed prior assignment row appears.
+            // Awaited rather than fire-and-forget: fire-and-forget swallows
+            // exceptions and can StateHasChanged after dialog disposal.
+            await LoadPcpAsync();
         }
     }
 
@@ -867,10 +1456,18 @@
         eventType switch
         {
             "Enrolled" => Color.Success,
+            "ReinstatementApproved" => Color.Success,
             "Reinstated" => Color.Success,
+            "PlanChanged" => Color.Info,
             "PlanChange" => Color.Info,
+            "PcpChanged" => Color.Primary,
             "PcpChange" => Color.Primary,
+            "AddressChanged" => Color.Tertiary,
+            "SepTriggered" => Color.Warning,
+            "CobraElected" => Color.Warning,
+            "CobraTerminated" => Color.Error,
             "Terminated" => Color.Error,
+            "RetroAdjusted" => Color.Warning,
             _ => Color.Default
         };
 
@@ -894,6 +1491,109 @@
         return pct >= 1.0 ? Color.Success : pct >= 0.9 ? Color.Warning : Color.Primary;
     }
 
+    private async Task OnCoverageSelectionChanged(string planId)
+    {
+        _selectedBenefitPlanId = planId;
+        await LoadBenefitsAsync();
+    }
+
+    private async Task LoadBenefitsAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedBenefitPlanId))
+        {
+            return;
+        }
+
+        _loadingBenefits = true;
+        _benefitsError = null;
+        StateHasChanged();
+        try
+        {
+            _benefitView = await BenefitPlanService.GetMemberViewAsync(_selectedBenefitPlanId, DateTime.Today);
+            if (_benefitView == null)
+            {
+                _benefitsError = $"No plan configuration found for {_selectedBenefitPlanId}.";
+            }
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _benefitView = null;
+            _benefitsError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _benefitView = null;
+            _benefitsError = $"Failed to load benefits: {ex.Message}";
+        }
+        finally
+        {
+            _loadingBenefits = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatLimits(CategorizedBenefit cat)
+    {
+        var parts = new List<string>();
+        if (cat.VisitLimit.HasValue)
+        {
+            parts.Add($"{cat.VisitLimit} visits" + (string.IsNullOrEmpty(cat.VisitLimitPeriod) ? "" : $"/{cat.VisitLimitPeriod}"));
+        }
+        if (cat.AnnualMaximum.HasValue)
+        {
+            parts.Add($"${cat.AnnualMaximum.Value:N0}/yr");
+        }
+        if (cat.LifetimeMaximum.HasValue)
+        {
+            parts.Add($"${cat.LifetimeMaximum.Value:N0} lifetime");
+        }
+        if (!string.IsNullOrEmpty(cat.Limitations))
+        {
+            parts.Add(cat.Limitations!);
+        }
+        return parts.Count == 0 ? "—" : string.Join(" · ", parts);
+    }
+
+    private async Task LoadDocumentsAsync()
+    {
+        _loadingDocuments = true;
+        StateHasChanged();
+        try
+        {
+            _memberDocuments = await MemberDocumentService.ListDocumentsAsync(
+                MemberId,
+                string.IsNullOrWhiteSpace(_documentCategoryFilter) ? null : _documentCategoryFilter);
+        }
+        catch
+        {
+            _memberDocuments = new();
+        }
+        finally
+        {
+            _loadingDocuments = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task OnDocumentCategoryChanged(string value)
+    {
+        _documentCategoryFilter = value;
+        return LoadDocumentsAsync();
+    }
+
+    private async Task ToggleLegalHoldAsync(MemberDocumentSummary doc)
+    {
+        try
+        {
+            await MemberDocumentService.SetLegalHoldAsync(doc.DocumentId, !doc.LegalHold);
+            await LoadDocumentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to update legal hold: {ex.Message}", Severity.Error);
+        }
+    }
+
     private static string FormatBytes(long bytes)
     {
         if (bytes < 1024) return $"{bytes} B";
@@ -903,4 +1603,113 @@
     }
 
     private void Close() => MudDialog.Close();
+
+    // ── Alerts banner integration ────────────────────────────────────────
+    private Task OnAlertCountChanged(int count)
+    {
+        _activeAlertCount = count;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // ── Notes tab ────────────────────────────────────────────────────────
+    private async Task OnNotesTabActivated()
+    {
+        if (_notesLoadedOnce) return;
+        _notesLoadedOnce = true;
+        await LoadNotesAsync(reset: true);
+    }
+
+    private async Task OnNoteCategoryChanged(string value)
+    {
+        _noteCategoryFilter = value ?? string.Empty;
+        await LoadNotesAsync(reset: true);
+    }
+
+    private async Task LoadNotesAsync(bool reset)
+    {
+        _loadingNotes = true;
+        if (reset)
+        {
+            _notes = new();
+            _notesContinuationToken = null;
+        }
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var page = await MemberNoteService.ListAsync(MemberId,
+                new MemberNoteFilter(
+                    Category: string.IsNullOrEmpty(_noteCategoryFilter) ? null : _noteCategoryFilter,
+                    Limit: 20,
+                    ContinuationToken: reset ? null : _notesContinuationToken));
+            _notes.AddRange(page.Items);
+            _notesContinuationToken = page.ContinuationToken;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load notes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingNotes = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task LoadMoreNotesAsync() => LoadNotesAsync(reset: false);
+
+    private void ToggleNoteEntry()
+    {
+        _showNoteEntry = !_showNoteEntry;
+        if (!_showNoteEntry)
+        {
+            _newNoteSubject = string.Empty;
+            _newNoteBody = string.Empty;
+            _newNoteCategory = "CustomerService";
+        }
+    }
+
+    private async Task SubmitNoteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newNoteSubject) || string.IsNullOrWhiteSpace(_newNoteBody)) return;
+
+        _savingNote = true;
+        StateHasChanged();
+        try
+        {
+            var created = await MemberNoteService.CreateAsync(MemberId, new CreateMemberNotePayload
+            {
+                Category = _newNoteCategory,
+                Subject = _newNoteSubject.Trim(),
+                Body = _newNoteBody.Trim()
+            });
+            if (created != null)
+            {
+                Snackbar.Add("Note added.", Severity.Success);
+                _showNoteEntry = false;
+                _newNoteSubject = string.Empty;
+                _newNoteBody = string.Empty;
+                await LoadNotesAsync(reset: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save note: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingNote = false;
+            StateHasChanged();
+        }
+    }
+
+    private static Color GetNoteCategoryColor(string category) => category switch
+    {
+        "CustomerService" => Color.Primary,
+        "CareManagement" => Color.Success,
+        "Appeals" => Color.Warning,
+        "Billing" => Color.Info,
+        "Clinical" => Color.Tertiary,
+        _ => Color.Default
+    };
 }

@@ -322,10 +322,9 @@ public class CosmosDbSeeder
     }
 
     /// <summary>
-    /// Create a member document matching the enrollment-import-service Member entity shape.
-    /// Fields: id, tenantId, memberId, subscriberId, firstName, lastName, dateOfBirth, gender,
-    /// address (nested: line1, city, state, zip), status, enrollmentDate, terminationDate,
-    /// groupNumber, relationship, dependentIds.
+    /// Create a member document matching the member-service Member entity shape.
+    /// Uses flat address fields (address, city, state, zipCode) and effectiveDate/terminationDate
+    /// per the member-service model.
     /// </summary>
     private object CreateMemberDocument(SyntheticMember m)
     {
@@ -336,28 +335,31 @@ public class CosmosDbSeeder
             memberId = m.MemberId,
             subscriberId = m.SubscriberId,
             isSubscriber = true,
+            relationshipCode = m.RelationshipCode,
             firstName = m.FirstName,
             lastName = m.LastName,
             dateOfBirth = m.DateOfBirth,
             gender = m.Gender,
-            ssn = (string?)null,
-            address = new { line1 = m.Address, line2 = (string?)null, city = m.City, state = m.State, zip = m.ZipCode },
+            address = m.Address,
+            city = m.City,
+            state = m.State,
+            zipCode = m.ZipCode,
             phone = m.Phone,
             status = m.EnrollmentStatus,
-            enrollmentDate = m.CoverageEffectiveDate,
+            lineOfBusiness = m.LineOfBusiness,
+            effectiveDate = m.CoverageEffectiveDate,
             terminationDate = m.CoverageTermDate,
-            sponsorId = (string?)null,
+            maintenanceTypeCode = m.MaintenanceTypeCode,
             groupNumber = m.GroupNumber,
-            employeeId = (string?)null,
             relationship = m.RelationshipCode,
             dependentIds = m.Dependents.Select(d => d.MemberId).ToList(),
-            createdAt = DateTime.UtcNow,
-            updatedAt = DateTime.UtcNow,
+            createdDate = DateTime.UtcNow,
+            lastUpdatedDate = DateTime.UtcNow,
         };
     }
 
     /// <summary>
-    /// Create a dependent member document matching the enrollment-import-service Member entity shape.
+    /// Create a dependent member document matching the member-service Member entity shape.
     /// </summary>
     private object CreateDependentDocument(SyntheticMember subscriber, SyntheticDependent dep)
     {
@@ -367,21 +369,26 @@ public class CosmosDbSeeder
             tenantId = _tenantId,
             memberId = dep.MemberId,
             subscriberId = subscriber.SubscriberId,
+            subscriberMemberId = subscriber.MemberId,
             isSubscriber = false,
+            relationshipCode = dep.RelationshipCode,
             firstName = dep.FirstName,
             lastName = dep.LastName,
             dateOfBirth = dep.DateOfBirth,
             gender = dep.Gender,
-            ssn = (string?)null,
-            address = new { line1 = dep.Address, line2 = (string?)null, city = dep.City, state = dep.State, zip = dep.ZipCode },
+            address = dep.Address,
+            city = dep.City,
+            state = dep.State,
+            zipCode = dep.ZipCode,
             status = dep.EnrollmentStatus,
-            enrollmentDate = subscriber.CoverageEffectiveDate,
+            lineOfBusiness = subscriber.LineOfBusiness,
+            effectiveDate = subscriber.CoverageEffectiveDate,
             terminationDate = subscriber.CoverageTermDate,
             groupNumber = subscriber.GroupNumber,
             relationship = dep.RelationshipCode,
             dependentIds = new List<string>(),
-            createdAt = DateTime.UtcNow,
-            updatedAt = DateTime.UtcNow,
+            createdDate = DateTime.UtcNow,
+            lastUpdatedDate = DateTime.UtcNow,
         };
     }
 

@@ -25,15 +25,30 @@ public interface IMemberService
     Task<List<MemberSummary>> SearchMembersAsync(string searchTerm);
     Task<MemberDetails?> GetMemberByIdAsync(string memberId);
     Task<MemberPcp?> GetMemberPcpAsync(string memberId);
-    Task AssignPcpAsync(AssignPcpRequest request);
+
+    /// <summary>
+    /// Assign a PCP. Returns a populated <see cref="PcpAssignmentOutcome"/> — on
+    /// validation failure (400), <see cref="PcpAssignmentOutcome.ValidationError"/>
+    /// is set with the structured error code from coverage-service.
+    /// </summary>
+    Task<PcpAssignmentOutcome> AssignPcpAsync(AssignPcpRequest request);
+
+    Task<List<PcpAssignmentHistoryItem>> GetMemberPcpHistoryAsync(string memberId);
     Task<List<CoverageHistoryEvent>> GetCoverageHistoryAsync(string memberId);
     Task<List<Enrollment834Record>> GetMember834TransactionsAsync(string memberId);
+    Task<EnrollmentEventPage> GetEnrollmentEventsAsync(
+        string memberId,
+        EnrollmentEventFilter filter);
     Task TerminateEnrollmentAsync(TerminateEnrollmentRequest request);
     Task<MemberAccumulators> GetAccumulatorsAsync(string memberId);
 }
 
 public class MemberAccumulators
 {
+    public string MemberId { get; set; } = string.Empty;
+    public DateTime PlanYearStart { get; set; }
+    public DateTime PlanYearEnd { get; set; }
+
     public decimal IndividualDeductibleUsed { get; set; }
     public decimal IndividualDeductibleLimit { get; set; }
     public decimal FamilyDeductibleUsed { get; set; }
@@ -48,25 +63,163 @@ public class MemberAccumulators
 
 public class ServiceAccumulator
 {
-    public string ServiceType { get; set; } = string.Empty;
-    public int Used { get; set; }
-    public int Limit { get; set; }
-    public string UnitType { get; set; } = "visits";
+    public string BenefitCategory { get; set; } = string.Empty;
+    public decimal Used { get; set; }
+    public decimal Limit { get; set; }
+    public string Unit { get; set; } = "USD";
 }
 
 public class AccumulatorActivity
 {
-    public string ClaimId { get; set; } = string.Empty;
-    public DateTime ServiceDate { get; set; }
-    public decimal DeductibleApplied { get; set; }
-    public decimal CopayApplied { get; set; }
-    public decimal CoinsuranceApplied { get; set; }
-    public decimal PlanPaid { get; set; }
+    public string EventId { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    public string? SourceReference { get; set; }
+    public DateTime OccurredAt { get; set; }
+    public decimal DeductibleDelta { get; set; }
+    public decimal OopDelta { get; set; }
+    public decimal FamilyDeductibleDelta { get; set; }
+    public decimal FamilyOopDelta { get; set; }
+    public string? Reason { get; set; }
+    public string ActorId { get; set; } = "system";
 }
 
 public interface ICoverageService
 {
     Task<List<Coverage>> GetCoverageByMemberIdAsync(string memberId);
+}
+
+public interface IMemberAlertService
+{
+    Task<List<MemberAlertView>> ListAsync(string memberId, bool activeOnly);
+    Task<MemberAlertView?> CreateAsync(string memberId, CreateMemberAlertPayload payload);
+    Task<MemberAlertView?> EndAsync(string memberId, string alertId);
+}
+
+public interface IMemberNoteService
+{
+    Task<MemberNotePage> ListAsync(string memberId, MemberNoteFilter filter);
+    Task<MemberNoteView?> CreateAsync(string memberId, CreateMemberNotePayload payload);
+}
+
+public class MemberAlertView
+{
+    public string Id { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string AlertType { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Info";
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? RequiredAction { get; set; }
+    public string CreatedBy { get; set; } = string.Empty;
+    public DateTime CreatedDate { get; set; }
+    public string? EndedBy { get; set; }
+
+    public bool IsActive(DateTime? asOf = null)
+    {
+        var t = asOf ?? DateTime.UtcNow;
+        return StartDate <= t && (!EndDate.HasValue || EndDate.Value > t);
+    }
+}
+
+public class CreateMemberAlertPayload
+{
+    public string AlertType { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Info";
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? RequiredAction { get; set; }
+}
+
+public class MemberNoteView
+{
+    public string Id { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string Category { get; set; } = "CustomerService";
+    public string Subject { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public string Author { get; set; } = string.Empty;
+    public DateTime CreatedDate { get; set; }
+    public string? LinkedResourceType { get; set; }
+    public string? LinkedResourceId { get; set; }
+}
+
+public class CreateMemberNotePayload
+{
+    public string Category { get; set; } = "CustomerService";
+    public string Subject { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public string? Author { get; set; }
+    public string? LinkedResourceType { get; set; }
+    public string? LinkedResourceId { get; set; }
+}
+
+public sealed record MemberNoteFilter(string? Category, int Limit, string? ContinuationToken);
+
+public class MemberNotePage
+{
+    public List<MemberNoteView> Items { get; set; } = new();
+    public string? ContinuationToken { get; set; }
+}
+
+public interface IFamilyRelationshipService
+{
+    Task<List<FamilyRelationshipRow>> ListForMemberAsync(string memberId);
+    Task<FamilyRelationshipRow?> AddDependentAsync(string subscriberMemberId, AddDependentPayload payload);
+    Task EndRelationshipAsync(string memberId, string relationshipId, DateTime? endDate = null);
+    Task<FamilyRelationshipRow?> UpdateRelationshipAsync(string memberId, string relationshipId, UpdateRelationshipPayload payload);
+    Task SoftDeleteAsync(string memberId, string relationshipId, string reason);
+}
+
+public class FamilyRelationshipRow
+{
+    public string Id { get; set; } = string.Empty;
+    public string SubjectMemberId { get; set; } = string.Empty;
+    public string RelatedMemberId { get; set; } = string.Empty;
+    public string RelationshipCode { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public bool IsCustodial { get; set; }
+    public string? QmcsoReference { get; set; }
+    public DateTime? DeletedAt { get; set; }
+}
+
+public class AddDependentPayload
+{
+    public AddDependentMember Member { get; set; } = new();
+    public AddDependentRelationship Relationship { get; set; } = new();
+}
+
+public class AddDependentMember
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? MiddleName { get; set; }
+    public DateTime DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+    public string? SSN { get; set; }
+    public string? Email { get; set; }
+    public string? Phone { get; set; }
+    public DateTime EffectiveDate { get; set; }
+}
+
+public class AddDependentRelationship
+{
+    public string RelationshipCode { get; set; } = "19";
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public bool IsCustodial { get; set; }
+    public string? QmcsoReference { get; set; }
+}
+
+public class UpdateRelationshipPayload
+{
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public bool? IsCustodial { get; set; }
+    public string? QmcsoReference { get; set; }
 }
 
 public interface IAuthorizationService
@@ -106,6 +259,91 @@ public interface IBenefitPlanService
     Task UpdateServiceBenefitRulesAsync(UpdateServiceBenefitRulesRequest request);
     Task<AccumulatorConfiguration?> GetAccumulatorConfigAsync(string planId);
     Task UpdateAccumulatorConfigAsync(string planId, AccumulatorConfiguration config);
+
+    /// <summary>
+    /// Returns a categorized member-facing view of the plan as of the given
+    /// service date. Null when the plan is not found (404) or the service
+    /// is unreachable is surfaced as a <see cref="ServiceUnavailableException"/>.
+    /// </summary>
+    Task<MemberBenefitView?> GetMemberViewAsync(string planId, DateTime serviceDate);
+}
+
+public class MemberBenefitView
+{
+    public string PlanId { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string Payer { get; set; } = string.Empty;
+    public string PlanType { get; set; } = string.Empty;
+    public string? MetalLevel { get; set; }
+    public string LineOfBusiness { get; set; } = string.Empty;
+    public DateTime AsOfDate { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public string PlanVersion { get; set; } = string.Empty;
+    public MemberBenefitCostSharing CostSharing { get; set; } = new();
+    public List<CategorizedBenefit> Categories { get; set; } = new();
+    public List<PlanDocumentLink> Documents { get; set; } = new();
+}
+
+public class MemberBenefitCostSharing
+{
+    public decimal IndividualDeductible { get; set; }
+    public decimal FamilyDeductible { get; set; }
+    public decimal IndividualOutOfPocketMax { get; set; }
+    public decimal FamilyOutOfPocketMax { get; set; }
+    public decimal InNetworkDeductible { get; set; }
+    public decimal OutOfNetworkDeductible { get; set; }
+    public decimal InNetworkOutOfPocketMax { get; set; }
+    public decimal OutOfNetworkOutOfPocketMax { get; set; }
+}
+
+public class CategorizedBenefit
+{
+    public string Category { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string ServiceCategory { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public NetworkTierBenefit InNetwork { get; set; } = new();
+    public NetworkTierBenefit? OutOfNetwork { get; set; }
+    public bool DeductibleApplies { get; set; }
+    public bool OopApplies { get; set; }
+    public bool PriorAuthRequired { get; set; }
+    public int? VisitLimit { get; set; }
+    public string? VisitLimitPeriod { get; set; }
+    public decimal? AnnualMaximum { get; set; }
+    public decimal? LifetimeMaximum { get; set; }
+    public string? Limitations { get; set; }
+    public PharmacyDetail? Pharmacy { get; set; }
+}
+
+public class NetworkTierBenefit
+{
+    public string TierName { get; set; } = string.Empty;
+    public decimal? Copay { get; set; }
+    public decimal? Coinsurance { get; set; }
+}
+
+public class PharmacyDetail
+{
+    /// <summary>Verbatim plan ServiceCategory. Display this in the UI.</summary>
+    public string? TierLabel { get; set; }
+
+    /// <summary>Normalized bucket for analytics (Tier1/Tier2/.../Specialty). Do not display.</summary>
+    public string? CanonicalTier { get; set; }
+
+    public bool IsSpecialty { get; set; }
+}
+
+public class PlanDocumentLink
+{
+    public string DocType { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Location { get; set; } = string.Empty;
+    public string? ContentType { get; set; }
+    public long? Size { get; set; }
+    public string? ContentHashSha256 { get; set; }
+    public string? Version { get; set; }
+    public DateTime? EffectiveDate { get; set; }
 }
 
 public interface IWorkflowService
@@ -1123,12 +1361,92 @@ public class Enrollment834Record
     public string? RawSegmentPreview { get; set; }
 }
 
+/// <summary>
+/// Portal projection of enrollment-import-service's <c>EnrollmentEvent</c>. Surfaced via
+/// the member-service proxy at GET /members/{id}/enrollment-events so consent /
+/// audit / tenant filtering happens on the same boundary as every other member read.
+/// </summary>
+public class EnrollmentEvent
+{
+    public string EventId { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    public int Version { get; set; }
+    public DateTime OccurredAt { get; set; }
+    public DateTime? EventDate { get; set; }
+    public DateTime? RetroEffectiveDate { get; set; }
+    public string? SourceBatchId { get; set; }
+    public string? TransactionId { get; set; }
+    public string? MaintenanceType { get; set; }
+    public string? MaintenanceReason { get; set; }
+    public string? Source { get; set; }
+
+    /// <summary>Raw JSON payload (changed fields, plan ids, etc.). Rendered as-is for now.</summary>
+    public System.Text.Json.JsonElement? Payload { get; set; }
+
+    /// <summary>Raw 834 (or manual JSON) snippet captured at write time, for audit display.</summary>
+    public string? RawSegment { get; set; }
+}
+
+public class EnrollmentEventPage
+{
+    public List<EnrollmentEvent> Items { get; set; } = new();
+    public string? ContinuationToken { get; set; }
+}
+
+public sealed record EnrollmentEventFilter(
+    string? Type = null,
+    DateTime? From = null,
+    DateTime? To = null,
+    int Limit = 50,
+    string? ContinuationToken = null);
+
 public class AssignPcpRequest
 {
     public string MemberId { get; set; } = string.Empty;
     public string ProviderId { get; set; } = string.Empty;
+    public string? ProviderNpi { get; set; }
     public DateTime EffectiveDate { get; set; }
     public string? Reason { get; set; }
+
+    /// <summary>MemberChoice (default), AutoAssigned, or AdminAssigned.</summary>
+    public string? AssignmentSource { get; set; }
+}
+
+public class PcpAssignmentOutcome
+{
+    public MemberPcp? Pcp { get; set; }
+    public PcpValidationProblem? ValidationError { get; set; }
+    public bool IsSuccess => Pcp != null;
+}
+
+/// <summary>
+/// Mirror of coverage-service's <c>PcpValidationError</c>. <see cref="Code"/>
+/// values are stable — see docs/architecture/pcp-assignment.md "Validation
+/// ladder" for the canonical list.
+/// </summary>
+public class PcpValidationProblem
+{
+    public string Code { get; set; } = string.Empty;
+    public string Field { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Error";
+}
+
+public class PcpAssignmentHistoryItem
+{
+    public string Id { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string CoverageId { get; set; } = string.Empty;
+    public string ProviderNpi { get; set; } = string.Empty;
+    public string? ProviderId { get; set; }
+    public string? ProviderName { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public string? AssignmentReason { get; set; }
+    public string AssignmentSource { get; set; } = "MemberChoice";
+    public string NetworkStatusAtAssignment { get; set; } = "Unknown";
+    public string? AssignedBy { get; set; }
+    public DateTime CreatedDate { get; set; }
 }
 
 public class TerminateEnrollmentRequest

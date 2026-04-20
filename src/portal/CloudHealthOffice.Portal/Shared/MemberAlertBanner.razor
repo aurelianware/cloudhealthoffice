@@ -1,0 +1,93 @@
+@using CloudHealthOffice.Portal.Services
+@inject IMemberAlertService MemberAlertService
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
+}
+else if (_alerts.Any())
+{
+    <div class="d-flex flex-column gap-2 mb-3">
+        @foreach (var alert in _alerts)
+        {
+            <MudAlert Severity="@MapSeverity(alert.Severity)"
+                      Variant="Variant.Filled"
+                      ContentAlignment="HorizontalAlignment.Left">
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
+                    @Humanize(alert.AlertType) — @alert.Severity
+                </MudText>
+                <MudText Typo="Typo.body2">@alert.Reason</MudText>
+                @if (!string.IsNullOrEmpty(alert.RequiredAction))
+                {
+                    <MudText Typo="Typo.caption" Style="font-style: italic;">
+                        Required action: @alert.RequiredAction
+                    </MudText>
+                }
+            </MudAlert>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string MemberId { get; set; } = string.Empty;
+
+    /// <summary>Bubble up the active alert count so the host can drive a tab badge or block buttons.</summary>
+    [Parameter]
+    public EventCallback<int> OnAlertCountChanged { get; set; }
+
+    private List<MemberAlertView> _alerts = new();
+    private bool _loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrEmpty(MemberId)) return;
+        await ReloadAsync();
+    }
+
+    public async Task ReloadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            // activeOnly=true — banner shows only in-effect alerts; expired ones
+            // belong in the (future) full Alerts tab, not in the persistent banner.
+            _alerts = await MemberAlertService.ListAsync(MemberId, activeOnly: true);
+        }
+        catch
+        {
+            // Banner is informational; a service failure should not block the
+            // dialog from rendering. Surface as empty banner.
+            _alerts = new();
+        }
+        finally
+        {
+            _loading = false;
+            await OnAlertCountChanged.InvokeAsync(_alerts.Count);
+            StateHasChanged();
+        }
+    }
+
+    private static Severity MapSeverity(string severity) => severity switch
+    {
+        "Critical" => Severity.Error,
+        "Warning" => Severity.Warning,
+        _ => Severity.Info
+    };
+
+    private static string Humanize(string alertType) => alertType switch
+    {
+        "HighRisk" => "High Risk",
+        "LitigationHold" => "Litigation Hold",
+        "DoNotContact" => "Do Not Contact",
+        "VIP" => "VIP",
+        "CustodyDispute" => "Custody Dispute",
+        "LanguageRequirement" => "Language Requirement",
+        "AccessibilityNeed" => "Accessibility Need",
+        "SecurityFreeze" => "Security Freeze",
+        "KnownFraudRisk" => "Known Fraud Risk",
+        "EligibilityDispute" => "Eligibility Dispute",
+        _ => alertType
+    };
+}

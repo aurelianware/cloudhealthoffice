@@ -54,7 +54,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal((int)AuthorizationStatus.Approved, result.GetProperty("status").GetInt32());
+        Assert.Equal(AuthorizationStatus.Approved.ToString(), result.GetProperty("status").GetString());
         Assert.Equal("A1", result.GetProperty("reviewDecision").GetString());
         Assert.Equal(3, result.GetProperty("approvedUnits").GetDecimal());
     }
@@ -76,7 +76,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal((int)AuthorizationStatus.Modified, result.GetProperty("status").GetInt32());
+        Assert.Equal(AuthorizationStatus.Modified.ToString(), result.GetProperty("status").GetString());
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal((int)AuthorizationStatus.Denied, result.GetProperty("status").GetInt32());
+        Assert.Equal(AuthorizationStatus.Denied.ToString(), result.GetProperty("status").GetString());
         Assert.Equal("NOTMEDNEC", result.GetProperty("denialReasonCode").GetString());
     }
 
@@ -115,7 +115,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal((int)AuthorizationStatus.Pended, result.GetProperty("status").GetInt32());
+        Assert.Equal(AuthorizationStatus.Pended.ToString(), result.GetProperty("status").GetString());
         Assert.Equal("Additional clinical documentation required", result.GetProperty("pendReason").GetString());
     }
 
@@ -133,7 +133,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal((int)AuthorizationStatus.InReview, result.GetProperty("status").GetInt32());
+        Assert.Equal(AuthorizationStatus.InReview.ToString(), result.GetProperty("status").GetString());
     }
 
     [Fact]
@@ -317,7 +317,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal((int)AuthorizationStatus.Approved, result.GetProperty("status").GetInt32());
+        Assert.Equal(AuthorizationStatus.Approved.ToString(), result.GetProperty("status").GetString());
         Assert.True(result.TryGetProperty("reviewedDate", out var reviewed));
         Assert.NotEqual(JsonValueKind.Null, reviewed.ValueKind);
     }
@@ -346,7 +346,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal((int)AuthorizationStatus.Pended, result.GetProperty("status").GetInt32());
+        Assert.Equal(AuthorizationStatus.Pended.ToString(), result.GetProperty("status").GetString());
     }
 
     [Fact]

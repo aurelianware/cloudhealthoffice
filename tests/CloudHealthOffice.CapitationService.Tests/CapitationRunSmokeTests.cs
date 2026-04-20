@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using NSubstitute;
 using CapitationService.Models;
 using CapitationService.Services;
@@ -18,6 +20,15 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
 {
     private readonly CapitationApiFactory _factory;
     private readonly HttpClient _client;
+
+    // Match the server's wire format (string enums via JsonStringEnumConverter
+    // registered by AddCloudHealthOfficeJsonOptions). Without this, deserializing
+    // responses whose DTOs contain enum fields (CapitationRun.Status,
+    // CapitationContract.ProviderType, etc.) fails with a JsonException.
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     public CapitationRunSmokeTests(CapitationApiFactory factory)
     {
@@ -150,14 +161,14 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
             createdBy = "smoke-test"
         });
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
-        var createdRun = await createResponse.Content.ReadFromJsonAsync<CapitationRun>();
+        var createdRun = await createResponse.Content.ReadFromJsonAsync<CapitationRun>(Json);
         Assert.NotNull(createdRun);
         Assert.Equal("CAPRUN-2026-03-SMKE", createdRun!.RunNumber);
 
         // Step 2: Execute run
         var executeResponse = await _client.PostAsync("/api/v1/capitation/runs/run-smoke-1/execute", null);
         Assert.Equal(HttpStatusCode.OK, executeResponse.StatusCode);
-        var executedRun = await executeResponse.Content.ReadFromJsonAsync<CapitationRun>();
+        var executedRun = await executeResponse.Content.ReadFromJsonAsync<CapitationRun>(Json);
         Assert.NotNull(executedRun);
         Assert.Equal(CapitationRunStatus.Completed, executedRun!.Status);
         Assert.Equal(1, executedRun.TotalStatements);
@@ -166,7 +177,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         // Step 3: View statements for the run
         var statementsResponse = await _client.GetAsync("/api/v1/capitation/runs/run-smoke-done/statements");
         Assert.Equal(HttpStatusCode.OK, statementsResponse.StatusCode);
-        var statements = await statementsResponse.Content.ReadFromJsonAsync<List<CapitationStatement>>();
+        var statements = await statementsResponse.Content.ReadFromJsonAsync<List<CapitationStatement>>(Json);
         Assert.NotNull(statements);
         Assert.Single(statements!);
         Assert.Equal("CAPSTMT-1234567890-2026-03", statements[0].StatementNumber);
@@ -207,7 +218,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         // Read
         var getResponse = await _client.GetAsync("/api/v1/capitation/contracts/contract-smoke-1");
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
-        var fetched = await getResponse.Content.ReadFromJsonAsync<CapitationContract>();
+        var fetched = await getResponse.Content.ReadFromJsonAsync<CapitationContract>(Json);
         Assert.NotNull(fetched);
         Assert.Equal("1234567890", fetched!.ProviderNPI);
 
@@ -230,7 +241,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         var response = await _client.GetAsync("/api/v1/capitation/statements/stmt-smoke-1");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<CapitationStatement>();
+        var result = await response.Content.ReadFromJsonAsync<CapitationStatement>(Json);
         Assert.NotNull(result);
         Assert.Equal(5, result!.MemberMonths);
         Assert.Equal(140.00m, result.GrossCapitation);
@@ -293,7 +304,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         });
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var created = await response.Content.ReadFromJsonAsync<CapitationDisbursement>();
+        var created = await response.Content.ReadFromJsonAsync<CapitationDisbursement>(Json);
         Assert.NotNull(created);
         Assert.Equal(126.00m, created!.Amount);
         Assert.Equal(DisbursementMethod.NachaCredit, created.Method);
@@ -328,7 +339,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<BatchDisbursementResult>();
+        var result = await response.Content.ReadFromJsonAsync<BatchDisbursementResult>(Json);
         Assert.NotNull(result);
         Assert.Equal(3, result!.DisbursementsInitiated);
         Assert.Equal(15000.00m, result.TotalAmount);
@@ -413,7 +424,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         var response = await _client.GetAsync("/api/v1/capitation/statements/unpaid");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<List<CapitationStatement>>();
+        var result = await response.Content.ReadFromJsonAsync<List<CapitationStatement>>(Json);
         Assert.NotNull(result);
         Assert.Equal(2, result!.Count);
     }
@@ -437,7 +448,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         var response = await _client.GetAsync("/api/v1/capitation/statements/summary?period=2026-03-01");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<CapitationPeriodSummary>();
+        var result = await response.Content.ReadFromJsonAsync<CapitationPeriodSummary>(Json);
         Assert.NotNull(result);
         Assert.Equal(3, result!.TotalProviders);
         Assert.Equal(4500m, result.TotalNetPayable);

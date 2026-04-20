@@ -251,8 +251,20 @@ public class ClaimsController : ControllerBase
             await _eventPublisher.PublishClaimPendedAsync(updated, GetTenantId());
         }
 
+        if (IsTerminalStatus(updated.Status))
+        {
+            await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
+        }
+
         return Ok(updated);
     }
+
+    private static bool IsTerminalStatus(ClaimStatus status) =>
+        status is ClaimStatus.Paid
+            or ClaimStatus.Approved
+            or ClaimStatus.PartiallyPaid
+            or ClaimStatus.Denied
+            or ClaimStatus.Voided;
 
     /// <summary>
     /// Pend a claim with structured pend details and emit a ClaimPendedEvent.
@@ -350,6 +362,12 @@ public class ClaimsController : ControllerBase
         }
 
         var updated = await _claimRepository.UpdateAsync(claim);
+
+        if (IsTerminalStatus(updated.Status))
+        {
+            await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
+        }
+
         return Ok(updated);
     }
 
@@ -584,6 +602,12 @@ public class ClaimsController : ControllerBase
         claim.AdjudicationResult.PayerPayment = remittance.PaymentAmount;
 
         var updated = await _claimRepository.UpdateAsync(claim);
+
+        if (IsTerminalStatus(updated.Status))
+        {
+            await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
+        }
+
         return Ok(updated);
     }
 
@@ -664,7 +688,13 @@ public class ClaimsController : ControllerBase
         claim.Status = ClaimStatus.Voided;
         claim.LastUpdatedDate = DateTime.UtcNow;
 
-        await _claimRepository.UpdateAsync(claim);
+        var updated = await _claimRepository.UpdateAsync(claim);
+
+        // Voided is a terminal status — downstream consumers (accumulators,
+        // analytics) need the reversal signal just as they do for paid/denied
+        // transitions. Without this publish a void initiated via DELETE silently
+        // diverges from voids reached through the status-update endpoint.
+        await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
 
         return NoContent();
     }

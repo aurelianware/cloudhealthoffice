@@ -61,6 +61,11 @@ builder.Services.AddMapSyndication();
 // ──────────────────────────────────────────────────────
 // ASP.NET Core
 // ──────────────────────────────────────────────────────
+// NOTE: CHO.TerminologyService intentionally does NOT call
+// AddCloudHealthOfficeJsonOptions(). This is a FHIR ConceptMap/$translate
+// service whose wire format follows FHIR conventions (numeric enum coding,
+// CamelCase + WhenWritingNull) rather than the platform default.
+// See docs/architecture/shared-json-options.md.
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {

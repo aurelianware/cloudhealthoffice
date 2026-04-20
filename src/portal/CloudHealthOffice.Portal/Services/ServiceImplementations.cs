@@ -224,13 +224,62 @@ public class MemberService : IMemberService
         }
     }
 
-    public async Task AssignPcpAsync(AssignPcpRequest request)
+    public async Task<PcpAssignmentOutcome> AssignPcpAsync(AssignPcpRequest request)
     {
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
             var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/members/{request.MemberId}/pcp", request);
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                PcpValidationProblem? problem = null;
+                try
+                {
+                    problem = await response.Content.ReadFromJsonAsync<PcpValidationProblem>();
+                }
+                catch (JsonException) { /* malformed body → fall through to default */ }
+
+                return new PcpAssignmentOutcome
+                {
+                    ValidationError = problem ?? new PcpValidationProblem
+                    {
+                        Code = "VALIDATION_FAILED",
+                        Message = "PCP assignment was rejected."
+                    }
+                };
+            }
             response.EnsureSuccessStatusCode();
+            var pcp = await response.Content.ReadFromJsonAsync<MemberPcp>();
+            if (pcp is null)
+            {
+                // 2xx with empty/invalid body is a contract break — surface as
+                // unavailable so the UI gets a deterministic failure path
+                // rather than a warning with an empty message.
+                throw new ServiceUnavailableException("Member Service",
+                    new HttpRequestException("Member Service returned an empty PCP assignment response."));
+            }
+            return new PcpAssignmentOutcome { Pcp = pcp };
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task<List<PcpAssignmentHistoryItem>> GetMemberPcpHistoryAsync(string memberId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var history = await _httpClient.GetFromJsonAsync<List<PcpAssignmentHistoryItem>>(
+                $"{baseUrl}/members/{memberId}/pcp/history");
+            return history ?? new List<PcpAssignmentHistoryItem>();
         }
         catch (HttpRequestException ex)
         {
@@ -269,6 +318,29 @@ public class MemberService : IMemberService
         }
     }
 
+    public async Task<EnrollmentEventPage> GetEnrollmentEventsAsync(string memberId, EnrollmentEventFilter filter)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        var qs = new List<string> { $"limit={Math.Clamp(filter.Limit, 1, 200)}" };
+        if (!string.IsNullOrWhiteSpace(filter.Type)) qs.Add($"type={Uri.EscapeDataString(filter.Type)}");
+        if (filter.From.HasValue) qs.Add($"from={Uri.EscapeDataString(filter.From.Value.ToString("o"))}");
+        if (filter.To.HasValue) qs.Add($"to={Uri.EscapeDataString(filter.To.Value.ToString("o"))}");
+        if (!string.IsNullOrWhiteSpace(filter.ContinuationToken))
+            qs.Add($"continuationToken={Uri.EscapeDataString(filter.ContinuationToken)}");
+
+        try
+        {
+            var url = $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/enrollment-events?{string.Join("&", qs)}";
+            var page = await _httpClient.GetFromJsonAsync<EnrollmentEventPage>(url);
+            return page ?? new EnrollmentEventPage();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
     public async Task TerminateEnrollmentAsync(TerminateEnrollmentRequest request)
     {
         var baseUrl = _configuration["Services:MemberService"];
@@ -291,6 +363,129 @@ public class MemberService : IMemberService
         {
             var accums = await _httpClient.GetFromJsonAsync<MemberAccumulators>($"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/accumulators");
             return accums ?? new MemberAccumulators();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+}
+
+public class MemberAlertService : IMemberAlertService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<MemberAlertService> _logger;
+
+    public MemberAlertService(HttpClient httpClient, IConfiguration configuration, ILogger<MemberAlertService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<List<MemberAlertView>> ListAsync(string memberId, bool activeOnly)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        var url = $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/alerts";
+        if (activeOnly) url += "?status=active";
+        try
+        {
+            var page = await _httpClient.GetFromJsonAsync<MemberAlertListEnvelope>(url);
+            return page?.Items ?? new List<MemberAlertView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task<MemberAlertView?> CreateAsync(string memberId, CreateMemberAlertPayload payload)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/alerts", payload);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MemberAlertView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task<MemberAlertView?> EndAsync(string memberId, string alertId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/alerts/{Uri.EscapeDataString(alertId)}/end",
+                new { });
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MemberAlertView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    private sealed class MemberAlertListEnvelope
+    {
+        public List<MemberAlertView> Items { get; set; } = new();
+    }
+}
+
+public class MemberNoteService : IMemberNoteService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<MemberNoteService> _logger;
+
+    public MemberNoteService(HttpClient httpClient, IConfiguration configuration, ILogger<MemberNoteService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<MemberNotePage> ListAsync(string memberId, MemberNoteFilter filter)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        var qs = new List<string> { $"pageSize={Math.Clamp(filter.Limit, 1, 100)}" };
+        if (!string.IsNullOrWhiteSpace(filter.Category)) qs.Add($"category={Uri.EscapeDataString(filter.Category)}");
+        if (!string.IsNullOrWhiteSpace(filter.ContinuationToken))
+            qs.Add($"continuationToken={Uri.EscapeDataString(filter.ContinuationToken)}");
+
+        try
+        {
+            var url = $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/notes?{string.Join("&", qs)}";
+            var page = await _httpClient.GetFromJsonAsync<MemberNotePage>(url);
+            return page ?? new MemberNotePage();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task<MemberNoteView?> CreateAsync(string memberId, CreateMemberNotePayload payload)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/notes", payload);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MemberNoteView>();
         }
         catch (HttpRequestException ex)
         {
@@ -706,6 +901,27 @@ public class BenefitPlanService : IBenefitPlanService
         {
             var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/v1/plans/{planId}/accumulators", config);
             response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Benefit Plan Service");
+            throw new ServiceUnavailableException("Benefit Plan Service", ex);
+        }
+    }
+
+    public async Task<MemberBenefitView?> GetMemberViewAsync(string planId, DateTime serviceDate)
+    {
+        var baseUrl = _configuration["Services:BenefitPlanService"];
+        var url = $"{baseUrl}/v1/benefit-plans/{Uri.EscapeDataString(planId)}/member-view?serviceDate={serviceDate:yyyy-MM-dd}";
+        try
+        {
+            var response = await _httpClient.GetAsync(url);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MemberBenefitView>();
         }
         catch (HttpRequestException ex)
         {
@@ -3302,5 +3518,123 @@ public class TerminologyServiceImpl : ITerminologyService
     {
         try { return await _httpClient.GetFromJsonAsync<TermHealthStatus>($"{BaseUrl}/health") ?? new(); }
         catch (HttpRequestException ex) { _logger.LogError(ex, "Terminology Service unavailable"); throw new ServiceUnavailableException("Terminology Service", ex); }
+    }
+}
+
+public class FamilyRelationshipService : IFamilyRelationshipService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<FamilyRelationshipService> _logger;
+
+    public FamilyRelationshipService(HttpClient httpClient, IConfiguration configuration, ILogger<FamilyRelationshipService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    private string BaseUrl => _configuration["Services:MemberService"] ?? string.Empty;
+
+    public async Task<List<FamilyRelationshipRow>> ListForMemberAsync(string memberId)
+    {
+        try
+        {
+            var payload = await _httpClient.GetFromJsonAsync<FamilyRelationshipListResponse>(
+                $"{BaseUrl}/members/{Uri.EscapeDataString(memberId)}/relationships");
+            return payload?.Relationships ?? new List<FamilyRelationshipRow>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task<FamilyRelationshipRow?> AddDependentAsync(string subscriberMemberId, AddDependentPayload payload)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{BaseUrl}/members/{Uri.EscapeDataString(subscriberMemberId)}/dependents",
+                payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                throw new InvalidOperationException($"Add dependent failed ({(int)response.StatusCode}): {body}");
+            }
+
+            // Server returns { member, subscriberMemberId, relationship }. Surface the
+            // relationship row so callers can link into the new edge without a re-fetch.
+            var parsed = await response.Content.ReadFromJsonAsync<AddDependentApiResponse>(
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return parsed?.Relationship;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    private class AddDependentApiResponse
+    {
+        public FamilyRelationshipRow? Relationship { get; set; }
+        public string SubscriberMemberId { get; set; } = string.Empty;
+    }
+
+    public async Task EndRelationshipAsync(string memberId, string relationshipId, DateTime? endDate = null)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{BaseUrl}/members/{Uri.EscapeDataString(memberId)}/relationships/{Uri.EscapeDataString(relationshipId)}/end",
+                new { endDate });
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task<FamilyRelationshipRow?> UpdateRelationshipAsync(string memberId, string relationshipId, UpdateRelationshipPayload payload)
+    {
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync(
+                $"{BaseUrl}/members/{Uri.EscapeDataString(memberId)}/relationships/{Uri.EscapeDataString(relationshipId)}",
+                payload);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<FamilyRelationshipRow>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    public async Task SoftDeleteAsync(string memberId, string relationshipId, string reason)
+    {
+        try
+        {
+            var url = $"{BaseUrl}/members/{Uri.EscapeDataString(memberId)}/relationships/{Uri.EscapeDataString(relationshipId)}?reason={Uri.EscapeDataString(reason)}";
+            var response = await _httpClient.DeleteAsync(url);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Service");
+            throw new ServiceUnavailableException("Member Service", ex);
+        }
+    }
+
+    private class FamilyRelationshipListResponse
+    {
+        public string MemberId { get; set; } = string.Empty;
+        public List<FamilyRelationshipRow> Relationships { get; set; } = new();
+        public int TotalCount { get; set; }
     }
 }

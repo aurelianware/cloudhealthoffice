@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -50,8 +51,16 @@ public class Member
     public bool IsSubscriber { get; set; }
 
     /// <summary>
-    /// For dependents: link to subscriber's MemberId
+    /// For dependents: link to subscriber's MemberId.
     /// </summary>
+    /// <remarks>
+    /// Legacy FK, retained for back-compat with callers that read the Member directly.
+    /// On read, <see cref="MembersController"/> overwrites this from the active
+    /// <c>FamilyRelationship</c> graph (see docs/migrations/family-relationships-backfill.md).
+    /// Slated for removal in a future major version — new write paths should create a
+    /// <c>FamilyRelationship</c> instead of setting this field.
+    /// </remarks>
+    [Obsolete("Derived from FamilyRelationship graph on read. New writes must go through FamilyRelationshipService. See docs/migrations/family-relationships-backfill.md.", error: false)]
     [StringLength(50)]
     public string? SubscriberMemberId { get; set; }
 
@@ -211,6 +220,85 @@ public class Member
     /// Full name helper property
     /// </summary>
     public string FullName => $"{FirstName} {MiddleName} {LastName}".Replace("  ", " ").Trim();
+
+    // ── FHIR Patient projection fields (US Core) ─────────────────────
+
+    /// <summary>
+    /// Typed identifiers (Medicaid, MBI, Exchange, Portal, Legacy, etc.).
+    /// PII identifiers (SSN/MBI/Medicaid) should be stored encrypted-at-rest.
+    /// </summary>
+    public List<MemberIdentifier> Identifiers { get; set; } = new();
+
+    /// <summary>
+    /// BCP-47 preferred language (e.g. "en-US"). Projects to FHIR Patient.communication.preferred=true.
+    /// </summary>
+    [StringLength(16)]
+    public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Additional BCP-47 languages the member speaks.
+    /// </summary>
+    public List<string> Languages { get; set; } = new();
+
+    /// <summary>
+    /// OMB race category (US Core us-core-race extension, ombCategory).
+    /// System: urn:oid:2.16.840.1.113883.6.238
+    /// </summary>
+    public CodedConcept? Race { get; set; }
+
+    /// <summary>
+    /// Detailed race codes beyond the five OMB buckets.
+    /// </summary>
+    public List<CodedConcept> RaceDetail { get; set; } = new();
+
+    /// <summary>
+    /// OMB ethnicity (us-core-ethnicity, ombCategory).
+    /// </summary>
+    public CodedConcept? Ethnicity { get; set; }
+
+    public List<CodedConcept> EthnicityDetail { get; set; } = new();
+
+    /// <summary>
+    /// Self-reported gender identity (us-core-genderIdentity extension).
+    /// </summary>
+    public CodedConcept? GenderIdentity { get; set; }
+
+    [StringLength(100)]
+    public string? Pronouns { get; set; }
+
+    /// <summary>
+    /// MaritalStatus (HL7 v3 MaritalStatus code system).
+    /// </summary>
+    public CodedConcept? MaritalStatus { get; set; }
+
+    /// <summary>
+    /// Deceased indicator (FHIR Patient.deceasedBoolean). True when the member is deceased.
+    /// </summary>
+    public bool Deceased { get; set; }
+
+    /// <summary>
+    /// Date of death (FHIR Patient.deceasedDateTime) when known.
+    /// </summary>
+    public DateTime? DeceasedDate { get; set; }
+
+    /// <summary>
+    /// Sex assigned at birth (us-core-birthsex extension). M | F | UNK.
+    /// </summary>
+    [StringLength(3)]
+    public string? BirthSex { get; set; }
+
+    /// <summary>
+    /// Communication channel preferences (opt-in, windows, per-channel language override).
+    /// </summary>
+    public List<CommunicationPreference> CommunicationPreferences { get; set; } = new();
+
+    /// <summary>
+    /// True while the Member is in a partially-constructed state (e.g., Add-Dependent
+    /// wizard has created the Member but not yet created its <c>FamilyRelationship</c>).
+    /// Drafts are hidden from standard search/read paths. A background reconciler
+    /// promotes or purges drafts after a TTL. See <c>FamilyRelationshipsController.AddDependent</c>.
+    /// </summary>
+    public bool IsDraft { get; set; }
 }
 
 /// <summary>

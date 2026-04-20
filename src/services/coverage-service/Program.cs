@@ -1,15 +1,18 @@
 using Microsoft.Azure.Cosmos;
 using CoverageService.Middleware;
 using CoverageService.Repositories;
+using CoverageService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -40,6 +43,7 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     });
 
     builder.Services.AddScoped<ICoverageRepository, CoverageRepositoryMongo>();
+    builder.Services.AddScoped<IPcpAssignmentRepository, PcpAssignmentRepositoryMongo>();
     Console.WriteLine("Using MongoDB database provider");
 }
 else
@@ -68,7 +72,43 @@ else
         var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
         return new CoverageRepository(cosmosClient, databaseName);
     });
+
+    builder.Services.AddScoped<IPcpAssignmentRepository>(sp =>
+    {
+        var cosmosClient = sp.GetRequiredService<CosmosClient>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+        return new PcpAssignmentRepository(cosmosClient, databaseName);
+    });
 }
+
+// PCP assignment + provider client + care team projector
+builder.Services.Configure<ProviderServiceOptions>(opts =>
+{
+    opts.BaseUrl = builder.Configuration["Downstream:ProviderService:BaseUrl"];
+});
+builder.Services.AddHttpClient<IProviderServiceClient, HttpProviderServiceClient>((sp, client) =>
+{
+    var baseUrl = builder.Configuration["Downstream:ProviderService:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl)) client.BaseAddress = new Uri(baseUrl);
+});
+builder.Services.AddHttpClient<IPanelCounter, HttpPanelCounter>((sp, client) =>
+{
+    // Panel counter reads the capitation-style /by-pcp roster. Prefer the
+    // capitation-service URL when set; fall back to the coverage-service URL
+    // (since coverage itself exposes /by-pcp). If neither is configured, leave
+    // BaseAddress null — HttpPanelCounter short-circuits to 0 in that case so
+    // panel-limit checks degrade gracefully rather than gating every assignment.
+    var baseUrl = builder.Configuration["Downstream:CapitationService:BaseUrl"]
+                 ?? builder.Configuration["Downstream:CoverageService:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+    {
+        client.BaseAddress = new Uri(baseUrl);
+    }
+});
+builder.Services.AddScoped<IPcpAssignmentService, PcpAssignmentService>();
+builder.Services.AddSingleton<ICareTeamProjector, CareTeamProjector>();
+builder.Services.AddScoped<PcpPanelReconciliationJob>();
 
 builder.Services.AddCors(options =>
 {

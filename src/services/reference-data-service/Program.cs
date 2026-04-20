@@ -5,6 +5,7 @@ using Microsoft.Identity.Web;
 using ReferenceDataService.Repositories;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -79,7 +80,8 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddMemoryCache();
 
 // Add controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddCloudHealthOfficeJsonOptions();
 
 // Add Swagger
 builder.Services.AddEndpointsApiExplorer();
