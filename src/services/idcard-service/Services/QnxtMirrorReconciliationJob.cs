@@ -70,7 +70,12 @@ public class QnxtMirrorReconciliationJob : BackgroundService
         var since = DateTime.UtcNow - TimeSpan.FromHours(intervalHours + 6);
 
         var recent = await records.ListIssuedSinceAsync(since, ct);
-        var candidates = recent.Where(r => r.RevokedAt == null).ToList();
+        // Filter to QNXT-issued, non-revoked records. Other platforms don't
+        // have a mirror queue to reconcile with.
+        var candidates = recent
+            .Where(r => r.RevokedAt == null
+                && string.Equals(r.Platform, "qnxt", StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         var replayed = 0;
         foreach (var record in candidates)

@@ -2,9 +2,11 @@ namespace IdCardService.Models;
 
 /// <summary>
 /// Visual + copy template for an ID card, resolved per (sponsor, plan) pair.
-/// <see cref="LayoutSvg"/> is an SVG document containing token placeholders
-/// (e.g. {{MemberName}}, {{PlanName}}, {{QrImage}}) that the renderer
-/// substitutes before rasterizing to PDF/PNG.
+/// <see cref="LayoutSvg"/> is an SVG document containing text token
+/// placeholders (e.g. <c>{{MemberName}}</c>, <c>{{PlanName}}</c>,
+/// <c>{{IssuedAt}}</c>) that the renderer substitutes before rasterizing
+/// to PDF/PNG. QR imagery is <em>not</em> a template token; it is drawn
+/// onto the PDF/PNG canvas separately by <see cref="IdCardService.Services.IdCardGenerator"/>.
 /// </summary>
 public class IdCardTemplate
 {

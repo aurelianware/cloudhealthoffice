@@ -14,6 +14,9 @@ public class IdCardRecord
     public string MemberId { get; set; } = string.Empty;
     public string OrderId { get; set; } = string.Empty;
 
+    /// <summary>Adapter platform that issued the card (cho, qnxt, fulfillment-vendor).</summary>
+    public string Platform { get; set; } = "cho";
+
     /// <summary>Opaque card identifier embedded in the QR payload.</summary>
     public string CardId { get; set; } = Guid.NewGuid().ToString("N");
 
@@ -38,7 +41,11 @@ public class IdCardRecord
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public IdCardRevocationReason? RevocationReason { get; set; }
 
+    /// <summary>Actor that triggered revocation (user id, service account).</summary>
     public string? RevokedBy { get; set; }
+
+    /// <summary>Free-form operator notes captured at revocation time.</summary>
+    public string? RevocationNotes { get; set; }
 
     public long ScanCount { get; set; }
     public DateTime? LastScannedAt { get; set; }

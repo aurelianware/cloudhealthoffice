@@ -81,12 +81,19 @@ public class MongoIdCardTemplateRepository : IIdCardTemplateRepository
     public MongoIdCardTemplateRepository(IMongoDatabase db)
     {
         _collection = db.GetCollection<IdCardTemplate>("idcard_templates");
+        // Compound unique index: template ids only have to be unique within
+        // a tenant. Without the tenant in the filter/index, two tenants
+        // seeding the same well-known id (e.g. "global-default") would
+        // overwrite each other on upsert.
+        _collection.Indexes.CreateOne(new CreateIndexModel<IdCardTemplate>(
+            Builders<IdCardTemplate>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.Id),
+            new CreateIndexOptions { Unique = true, Name = "ix_tenant_id" }));
     }
 
     public Task UpsertAsync(IdCardTemplate template, CancellationToken ct = default)
     {
         return _collection.ReplaceOneAsync(
-            x => x.Id == template.Id,
+            x => x.TenantId == template.TenantId && x.Id == template.Id,
             template,
             new ReplaceOptions { IsUpsert = true },
             ct);

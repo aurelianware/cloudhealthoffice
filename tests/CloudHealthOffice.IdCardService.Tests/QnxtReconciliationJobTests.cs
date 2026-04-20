@@ -21,6 +21,7 @@ public class QnxtReconciliationJobTests
             MemberId = TestFixtures.MemberId,
             OrderId = "o1",
             CardId = "card-live",
+            Platform = "qnxt",
             IssuedAt = DateTime.UtcNow.AddHours(-2)
         });
         await records.UpsertAsync(new IdCardRecord
@@ -29,9 +30,20 @@ public class QnxtReconciliationJobTests
             MemberId = TestFixtures.MemberId,
             OrderId = "o2",
             CardId = "card-revoked",
+            Platform = "qnxt",
             IssuedAt = DateTime.UtcNow.AddHours(-3),
             RevokedAt = DateTime.UtcNow.AddHours(-1),
             RevocationReason = IdCardRevocationReason.Replaced
+        });
+        // CHO-issued record — reconciliation must skip it.
+        await records.UpsertAsync(new IdCardRecord
+        {
+            TenantId = TestFixtures.TenantId,
+            MemberId = TestFixtures.MemberId,
+            OrderId = "o3",
+            CardId = "card-cho",
+            Platform = "cho",
+            IssuedAt = DateTime.UtcNow.AddHours(-2)
         });
 
         var services = new ServiceCollection()

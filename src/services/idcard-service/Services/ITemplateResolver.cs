@@ -63,7 +63,11 @@ public class TemplateResolver : ITemplateResolver
     {
         if (template == null) return false;
         if (string.IsNullOrEmpty(languageCode)) return true;
-        if (template.SupportedLanguages.Count == 0) return true; // assume en-US
+        // An empty SupportedLanguages list is treated as "no language
+        // restriction" — the template's copy is language-neutral (logos,
+        // numeric plan codes, etc.). Templates that only target a specific
+        // locale must populate SupportedLanguages explicitly.
+        if (template.SupportedLanguages.Count == 0) return true;
         return template.SupportedLanguages.Contains(languageCode, StringComparer.OrdinalIgnoreCase);
     }
 

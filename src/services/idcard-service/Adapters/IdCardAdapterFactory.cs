@@ -81,23 +81,40 @@ public class IdCardAdapterFactory
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
-                if (root.TryGetProperty("configuration", out var config) &&
-                    config.TryGetProperty("idCardPlatform", out var idcConfig) &&
-                    idcConfig.TryGetProperty("platform", out var platformProp))
+                // Two shapes are accepted for the platform selector — the
+                // canonical `configuration.idCardPlatform.*` block (added
+                // when QNXT or vendor onboarding requires it) and the
+                // pass-through `configuration.customSettings.idCardPlatform`
+                // key supported by the current tenant-service schema. When
+                // neither is present we default to "cho" below.
+                if (root.TryGetProperty("configuration", out var config))
                 {
-                    var platform = platformProp.GetString() ?? "cho";
-                    var settings = new Dictionary<string, string>();
-
-                    if (idcConfig.TryGetProperty("platformSettings", out var settingsProp))
+                    if (config.TryGetProperty("idCardPlatform", out var idcConfig) &&
+                        idcConfig.TryGetProperty("platform", out var platformProp))
                     {
-                        foreach (var prop in settingsProp.EnumerateObject())
+                        var platform = platformProp.GetString() ?? "cho";
+                        var settings = new Dictionary<string, string>();
+
+                        if (idcConfig.TryGetProperty("platformSettings", out var settingsProp))
                         {
-                            settings[prop.Name] = prop.Value.GetString() ?? string.Empty;
+                            foreach (var prop in settingsProp.EnumerateObject())
+                            {
+                                settings[prop.Name] = prop.Value.GetString() ?? string.Empty;
+                            }
                         }
+
+                        _cache[tenantId] = (platform, settings, DateTime.UtcNow.Add(CacheDuration));
+                        return (platform, settings);
                     }
 
-                    _cache[tenantId] = (platform, settings, DateTime.UtcNow.Add(CacheDuration));
-                    return (platform, settings);
+                    if (config.TryGetProperty("customSettings", out var customSettings) &&
+                        customSettings.TryGetProperty("idCardPlatform", out var customPlatform))
+                    {
+                        var platform = customPlatform.GetString() ?? "cho";
+                        var settings = new Dictionary<string, string>();
+                        _cache[tenantId] = (platform, settings, DateTime.UtcNow.Add(CacheDuration));
+                        return (platform, settings);
+                    }
                 }
             }
         }

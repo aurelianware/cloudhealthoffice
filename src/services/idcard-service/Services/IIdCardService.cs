@@ -82,6 +82,9 @@ public class IdCardOrchestrator : IIdCardOrchestrator
 
             if (result.Success && result.Record != null)
             {
+                // Stamp the platform on the record so the QNXT mirror
+                // reconciliation job can filter to QNXT-issued cards only.
+                result.Record.Platform = adapter.Platform;
                 await _records.UpsertAsync(result.Record, ct);
 
                 order.CardId = result.Record.CardId;
@@ -135,13 +138,21 @@ public class IdCardOrchestrator : IIdCardOrchestrator
 
         record.RevokedAt = DateTime.UtcNow;
         record.RevocationReason = request.Reason;
-        record.RevokedBy = request.Notes;
+        record.RevocationNotes = request.Notes;
+        // RevokedBy is intentionally left to the actor identity wiring
+        // in a subsequent PR (reads from the authenticated principal).
         await _records.UpsertAsync(record, ct);
         return record;
     }
 
     public async Task<IdCardRecord?> RecordScanAsync(string tenantId, string cardId, CancellationToken ct = default)
     {
+        // Phase 1 uses read-modify-write on ScanCount; under concurrent
+        // scans a small number of increments can be lost. The counter is
+        // for analytics / "is this card still in use" heuristics, not a
+        // billing or security control, so exact accuracy isn't required.
+        // Phase 2 will switch to Mongo $inc / Cosmos patch when the
+        // repository abstraction grows atomic-increment support.
         var record = await _records.FindByCardIdAsync(tenantId, cardId, ct);
         if (record == null) return null;
         record.ScanCount += 1;

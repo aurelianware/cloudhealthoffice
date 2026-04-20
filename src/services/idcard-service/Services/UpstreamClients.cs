@@ -99,7 +99,11 @@ public class MemberClient : IMemberClient
         req.Headers.Add("X-Tenant-ID", tenantId);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("member-service responded {Status} for member {MemberId}", (int)resp.StatusCode, memberId);
+            resp.EnsureSuccessStatusCode();
+        }
         return await resp.Content.ReadFromJsonAsync<MemberDto>(cancellationToken: ct);
     }
 }
@@ -122,7 +126,11 @@ public class CoverageClient : ICoverageClient
             $"{baseUrl}/coverage/member/{Uri.EscapeDataString(memberId)}/active");
         req.Headers.Add("X-Tenant-ID", tenantId);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
-        if (!resp.IsSuccessStatusCode) return null;
+        if (!resp.IsSuccessStatusCode)
+        {
+            _logger.LogDebug("coverage-service returned {Status} for member {MemberId}", (int)resp.StatusCode, memberId);
+            return null;
+        }
         var list = await resp.Content.ReadFromJsonAsync<List<CoverageDto>>(cancellationToken: ct);
         return list?.FirstOrDefault(c => c.IsActive);
     }
@@ -145,7 +153,11 @@ public class SponsorClient : ISponsorClient
         var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/sponsors/{Uri.EscapeDataString(groupNumber)}");
         req.Headers.Add("X-Tenant-ID", tenantId);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
-        if (!resp.IsSuccessStatusCode) return null;
+        if (!resp.IsSuccessStatusCode)
+        {
+            _logger.LogDebug("sponsor-service returned {Status} for group {Group}", (int)resp.StatusCode, groupNumber);
+            return null;
+        }
         return await resp.Content.ReadFromJsonAsync<SponsorDto>(cancellationToken: ct);
     }
 }
@@ -167,7 +179,11 @@ public class BenefitPlanClient : IBenefitPlanClient
         var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/plans/{Uri.EscapeDataString(planId)}");
         req.Headers.Add("X-Tenant-ID", tenantId);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
-        if (!resp.IsSuccessStatusCode) return null;
+        if (!resp.IsSuccessStatusCode)
+        {
+            _logger.LogDebug("benefit-plan-service returned {Status} for plan {Plan}", (int)resp.StatusCode, planId);
+            return null;
+        }
         return await resp.Content.ReadFromJsonAsync<BenefitPlanDto>(cancellationToken: ct);
     }
 }

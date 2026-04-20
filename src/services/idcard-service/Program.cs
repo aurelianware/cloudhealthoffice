@@ -105,10 +105,14 @@ builder.Services.AddScoped<IIdCardAdapter, QnxtIdCardAdapter>();
 builder.Services.AddScoped<IIdCardAdapter, FulfillmentVendorAdapter>();
 builder.Services.AddScoped<IdCardAdapterFactory>();
 
-// QNXT mirror queue — Service Bus in production, in-memory otherwise.
+// QNXT mirror queue — Service Bus is only wired when the feature flag is
+// explicitly enabled *and* a connection string is supplied. Either being
+// unset falls back to the in-memory queue used by dev/test and by the
+// reconciliation job's tests.
+var qnxtMirrorEnabled = builder.Configuration.GetValue<bool>("IdCard:QnxtMirror:Enabled");
 var sbConn = builder.Configuration["IdCard:QnxtMirror:ServiceBusConnectionString"];
 var queueName = builder.Configuration["IdCard:QnxtMirror:QueueName"] ?? "qnxt-idcard-requests";
-if (!string.IsNullOrEmpty(sbConn))
+if (qnxtMirrorEnabled && !string.IsNullOrEmpty(sbConn))
 {
     builder.Services.AddSingleton<IQnxtMirrorQueue>(_ => new ServiceBusQnxtMirrorQueue(sbConn, queueName));
 }
@@ -121,9 +125,10 @@ builder.Services.AddHostedService<QnxtMirrorReconciliationJob>();
 
 builder.Services.AddScoped<IIdCardOrchestrator, IdCardOrchestrator>();
 
-// Provider JWT for the /scan endpoint. When no authority configured, fall
-// back to a permissive policy so dev/test environments can still exercise
-// the endpoint without a real IdP.
+// Provider JWT for the /scan endpoint. Production requires ProviderJwt:Authority —
+// the permissive dev scheme is *only* wired when we're running in the
+// Development environment. In every other environment, missing Authority
+// is a startup failure so a misconfiguration can't silently disable auth.
 var jwtAuthority = builder.Configuration["ProviderJwt:Authority"];
 var jwtAudience = builder.Configuration["ProviderJwt:Audience"];
 if (!string.IsNullOrEmpty(jwtAuthority))
@@ -140,7 +145,7 @@ if (!string.IsNullOrEmpty(jwtAuthority))
         options.AddPolicy("ProviderJwt", p => p.RequireAuthenticatedUser());
     });
 }
-else
+else if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddAuthentication("ProviderJwt-Dev")
         .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, DevProviderAuthHandler>(
@@ -151,18 +156,39 @@ else
             p.RequireAuthenticatedUser().AddAuthenticationSchemes("ProviderJwt-Dev"));
     });
 }
+else
+{
+    throw new InvalidOperationException(
+        "ProviderJwt:Authority is not configured. The permissive dev auth handler is only enabled in the Development environment; "
+        + "configure ProviderJwt:Authority (and optionally Audience) for non-development deployments.");
+}
 
-// Rate limiter for /scan: partition the same policy on three dimensions —
-// per-tenant, per-provider, per-cardId — so any one of them blowing past
-// the threshold trips the limiter without starving the others.
+// Rate limiter for /scan. The ASP.NET RateLimiter middleware runs before
+// the MVC action, so we can't key on cardId (the QR payload lives in the
+// POST body and parsing it pre-action would consume the stream). Phase 1
+// partitions on (tenant, provider) with the stricter per-provider cap
+// applied; per-card enforcement is a Phase-2 follow-up that will require
+// either a dedicated pre-MVC middleware that buffers + parses the body
+// or a route shape like /scan/{cardId}.
 var scanCfg = builder.Configuration.GetSection("IdCard:ScanRateLimit");
 var perTenant = scanCfg.GetValue("PerTenantPerMinute", 600);
 var perProvider = scanCfg.GetValue("PerProviderPerMinute", 120);
-var perCard = scanCfg.GetValue("PerCardPerMinute", 30);
 
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, ct) =>
+    {
+        var resp = context.HttpContext.Response;
+        resp.StatusCode = StatusCodes.Status429TooManyRequests;
+        resp.ContentType = "application/json";
+        var payload = new
+        {
+            code = IdCardService.Models.ScanErrorCodes.RateLimited,
+            message = "Too many scan requests. Please retry shortly."
+        };
+        await JsonSerializer.SerializeAsync(resp.Body, payload, cancellationToken: ct);
+    };
     options.AddPolicy("card-scan", httpContext =>
     {
         var tenantId = httpContext.Items["TenantId"]?.ToString() ?? "unknown";
@@ -170,9 +196,13 @@ builder.Services.AddRateLimiter(options =>
             ?? httpContext.User.FindFirst("sub")?.Value
             ?? httpContext.Connection.RemoteIpAddress?.ToString()
             ?? "unknown";
-        var cardId = httpContext.Items["RateLimit:CardId"]?.ToString() ?? "pre-verify";
-        var key = $"t:{tenantId}|p:{providerId}|c:{cardId}";
-        var limit = Math.Min(Math.Min(perTenant, perProvider), perCard);
+        // Key the bucket on (tenant, provider) so the same provider hitting
+        // multiple tenants gets independent buckets, and use the stricter
+        // of the two configured caps as the per-bucket limit. An overall
+        // per-tenant cap (summed across providers) is enforced via the
+        // max-concurrent-providers guardrail in the service mesh.
+        var key = $"t:{tenantId}|p:{providerId}";
+        var limit = Math.Min(perTenant, perProvider);
         return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = limit,

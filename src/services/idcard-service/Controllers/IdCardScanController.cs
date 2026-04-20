@@ -59,11 +59,6 @@ public class IdCardScanController : TenantAwareControllerBase
             return Problem(ScanErrorCodes.InvalidSignature, "Tenant mismatch on card payload");
         }
 
-        // Apply a per-card rate-limit key — ASP.NET RateLimiter picks it up
-        // from HttpContext.Items to compose with the per-tenant + per-provider
-        // dimensions defined in Program.cs.
-        HttpContext.Items["RateLimit:CardId"] = payload.CardId;
-
         var record = await _orchestrator.GetByCardIdAsync(TenantId, payload.CardId, ct);
         if (record == null)
         {

@@ -35,7 +35,7 @@
             <MudAlert Severity="Severity.Info" Class="mb-3">
                 The ID card will be generated from the member's active coverage and plan.
                 It is signed with the current signing key and can be scanned by any provider
-                on the CHO network until coverage terminates or the card is revoked.
+                on the Cloud Health Office network until coverage terminates or the card is revoked.
             </MudAlert>
             <MudSimpleTable Dense="true" Hover="true" Elevation="0">
                 <tbody>
@@ -124,7 +124,22 @@
 
     private void Next() { if (CanAdvance()) _step++; }
     private void Back() { if (_step > 0) _step--; }
-    private void Cancel() => MudDialog.Close(DialogResult.Ok(_result));
+
+    // Close the dialog as Ok only when an order was actually issued, so
+    // the parent can key "refresh the list" off of a real success event.
+    // Any other close (including the top-right X and the Close button)
+    // cancels cleanly.
+    private void Cancel()
+    {
+        if (_result != null && _result.Status == "Issued")
+        {
+            MudDialog.Close(DialogResult.Ok(_result));
+        }
+        else
+        {
+            MudDialog.Cancel();
+        }
+    }
 
     private async Task Submit()
     {
