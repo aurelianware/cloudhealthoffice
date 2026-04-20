@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MemberService.Controllers;
 using MemberService.HostedServices;
 using MemberService.Models;
@@ -23,6 +24,12 @@ namespace MemberService.Tests.Integration;
 /// </summary>
 public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
 {
+    // Match the server's wire format (string enums via JsonStringEnumConverter
+    // registered by AddCloudHealthOfficeJsonOptions).
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
     public sealed class Factory : WebApplicationFactory<Program>
     {
         public InMemoryMemberRepository MemberRepo { get; } = new();
@@ -120,7 +127,7 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
         // Events stream contains MemberCreated with Version=1.
         var eventsResp = await client.GetAsync("/api/v1/members/INT-001/events");
         eventsResp.IsSuccessStatusCode.Should().BeTrue();
-        var events = await eventsResp.Content.ReadFromJsonAsync<List<MemberEvent>>();
+        var events = await eventsResp.Content.ReadFromJsonAsync<List<MemberEvent>>(Json);
         events.Should().NotBeNull();
         events!.Should().ContainSingle(e => e.EventType == MemberEventType.MemberCreated && e.Version == 1);
     }
