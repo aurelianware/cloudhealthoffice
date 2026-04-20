@@ -18,7 +18,8 @@ public class MembersControllerTests
                     InMemoryMemberEventRepository events,
                     Mock<ICoverageServiceClient> coverage,
                     Mock<IEnrollmentImportServiceClient> enrollment,
-                    Mock<IAccumulatorServiceClient> acc) Build()
+                    Mock<IAccumulatorServiceClient> acc,
+                    InMemoryMemberAlertRepository alerts) Build()
     {
         var repo = new InMemoryMemberRepository();
         var events = new InMemoryMemberEventRepository();
@@ -28,14 +29,17 @@ public class MembersControllerTests
         var coverage = new Mock<ICoverageServiceClient>();
         var enrollment = new Mock<IEnrollmentImportServiceClient>();
         var acc = new Mock<IAccumulatorServiceClient>();
+        var alerts = new InMemoryMemberAlertRepository();
+        var guard = new MemberAlertGuard(alerts);
 
         var ctl = new MembersController(repo, publisher, events, projector, enc,
-            coverage.Object, enrollment.Object, acc.Object);
+            coverage.Object, enrollment.Object, acc.Object,
+            relationshipShim: null, familyRelationships: null, alertGuard: guard);
 
         var http = new DefaultHttpContext();
         http.Items["TenantId"] = Tenant;
         ctl.ControllerContext = new ControllerContext { HttpContext = http };
-        return (ctl, repo, events, coverage, enrollment, acc);
+        return (ctl, repo, events, coverage, enrollment, acc, alerts);
     }
 
     private static CreateMemberRequest CreateReq(string memberId = "M-001") => new()
@@ -58,7 +62,7 @@ public class MembersControllerTests
     [Fact]
     public async Task CreateMember_Persists_AndEmitsMemberCreatedWithSnapshot()
     {
-        var (ctl, repo, events, _, _, _) = Build();
+        var (ctl, repo, events, _, _, _, _) = Build();
         var resp = await ctl.CreateMember(CreateReq(), CancellationToken.None);
 
         resp.Should().BeOfType<CreatedAtActionResult>();
@@ -81,7 +85,7 @@ public class MembersControllerTests
     [Fact]
     public async Task CreateMember_DuplicateMemberId_Returns409()
     {
-        var (ctl, _, _, _, _, _) = Build();
+        var (ctl, _, _, _, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
         var second = await ctl.CreateMember(CreateReq(), CancellationToken.None);
         second.Should().BeOfType<ConflictObjectResult>();
@@ -90,7 +94,7 @@ public class MembersControllerTests
     [Fact]
     public async Task CreateMember_DependentWithUnknownSubscriber_ReturnsBadRequest()
     {
-        var (ctl, _, _, _, _, _) = Build();
+        var (ctl, _, _, _, _, _, _) = Build();
         var req = CreateReq("D-001");
         req.IsSubscriber = false;
         req.SubscriberMemberId = "DOES-NOT-EXIST";
@@ -101,7 +105,7 @@ public class MembersControllerTests
     [Fact]
     public async Task UpdateMember_AddressChange_EmitsAddressChangedAndMemberUpdated()
     {
-        var (ctl, _, events, _, _, _) = Build();
+        var (ctl, _, events, _, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
 
         var resp = await ctl.UpdateMember("M-001",
@@ -118,7 +122,7 @@ public class MembersControllerTests
     [Fact]
     public async Task UpdateMember_NoChanges_IsNoOp()
     {
-        var (ctl, repo, events, _, _, _) = Build();
+        var (ctl, repo, events, _, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
         var baselineCount = events.All.Count;
 
@@ -130,7 +134,7 @@ public class MembersControllerTests
     [Fact]
     public async Task UpdateMember_NotFound_Returns404()
     {
-        var (ctl, _, _, _, _, _) = Build();
+        var (ctl, _, _, _, _, _, _) = Build();
         var resp = await ctl.UpdateMember("MISSING", new UpdateMemberRequest { City = "X" }, CancellationToken.None);
         resp.Should().BeOfType<NotFoundResult>();
     }
@@ -138,7 +142,7 @@ public class MembersControllerTests
     [Fact]
     public async Task TerminateMember_Delete_MarksTerminatedAndEmits()
     {
-        var (ctl, repo, events, _, _, _) = Build();
+        var (ctl, repo, events, _, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
 
         var resp = await ctl.TerminateMember("M-001",
@@ -155,7 +159,7 @@ public class MembersControllerTests
     [Fact]
     public async Task CheckEligibility_ActiveMember_ReturnsEligible()
     {
-        var (ctl, repo, _, _, _, _) = Build();
+        var (ctl, repo, _, _, _, _, _) = Build();
         var req = CreateReq();
         req.EffectiveDate = DateTime.UtcNow.AddMonths(-1);
         await ctl.CreateMember(req, CancellationToken.None);
@@ -170,7 +174,7 @@ public class MembersControllerTests
     [Fact]
     public async Task CheckEligibility_Terminated_ReturnsNotEligible()
     {
-        var (ctl, repo, _, _, _, _) = Build();
+        var (ctl, repo, _, _, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
         repo.Members[0].Status = EnrollmentStatus.Terminated;
 
@@ -183,14 +187,14 @@ public class MembersControllerTests
     [Fact]
     public async Task CheckEligibility_Missing_Returns404()
     {
-        var (ctl, _, _, _, _, _) = Build();
+        var (ctl, _, _, _, _, _, _) = Build();
         (await ctl.CheckEligibility("nope", null)).Should().BeOfType<NotFoundResult>();
     }
 
     [Fact]
     public async Task GetFhirPatient_ReturnsFhirContentType_And_PatientResource()
     {
-        var (ctl, _, _, _, _, _) = Build();
+        var (ctl, _, _, _, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
 
         var resp = await ctl.GetFhirPatient("M-001");
@@ -202,7 +206,7 @@ public class MembersControllerTests
     [Fact]
     public async Task GetEvents_ReturnsOrderedStream()
     {
-        var (ctl, _, _, _, _, _) = Build();
+        var (ctl, _, _, _, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
         await ctl.UpdateMember("M-001", new UpdateMemberRequest { City = "Houston" }, CancellationToken.None);
 
@@ -216,7 +220,7 @@ public class MembersControllerTests
     [Fact]
     public async Task GetMemberPcp_WhenCoverageUnavailable_Returns503ProblemDetails()
     {
-        var (ctl, _, _, coverage, _, _) = Build();
+        var (ctl, _, _, coverage, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
 
         coverage.Setup(c => c.GetPcpAsync(Tenant, "M-001", It.IsAny<CancellationToken>()))
@@ -233,7 +237,7 @@ public class MembersControllerTests
     [Fact]
     public async Task AssignPcp_EmitsPcpChangedEvent()
     {
-        var (ctl, _, events, coverage, _, _) = Build();
+        var (ctl, _, events, coverage, _, _, _) = Build();
         await ctl.CreateMember(CreateReq(), CancellationToken.None);
         coverage.Setup(c => c.AssignPcpAsync(Tenant, "M-001", It.IsAny<AssignPcpRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AssignPcpOutcome { Pcp = new MemberPcpResponse { ProviderId = "prov-1" } });
@@ -248,7 +252,7 @@ public class MembersControllerTests
     [Fact]
     public async Task GetCoverageHistory_WhenUnavailable_Returns503()
     {
-        var (ctl, _, _, coverage, _, _) = Build();
+        var (ctl, _, _, coverage, _, _, _) = Build();
         coverage.Setup(c => c.GetCoverageHistoryAsync(Tenant, "M-001", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DownstreamUnavailableException("coverage-service"));
 
@@ -259,7 +263,7 @@ public class MembersControllerTests
     [Fact]
     public async Task Get834Transactions_WhenUnavailable_Returns503()
     {
-        var (ctl, _, _, _, enrollment, _) = Build();
+        var (ctl, _, _, _, enrollment, _, _) = Build();
         enrollment.Setup(e => e.Get834TransactionsAsync(Tenant, "M-001", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DownstreamUnavailableException("enrollment-import-service"));
 
@@ -270,7 +274,7 @@ public class MembersControllerTests
     [Fact]
     public async Task GetEnrollmentEvents_ProxiesToDownstream()
     {
-        var (ctl, _, _, _, enrollment, _) = Build();
+        var (ctl, _, _, _, enrollment, _, _) = Build();
         enrollment.Setup(e => e.GetEnrollmentEventsAsync(
                 Tenant, "M-001", null, null, null, 50, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EnrollmentEventListResponse
@@ -290,7 +294,7 @@ public class MembersControllerTests
     [Fact]
     public async Task GetEnrollmentEvents_WhenDownstreamDown_Returns503()
     {
-        var (ctl, _, _, _, enrollment, _) = Build();
+        var (ctl, _, _, _, enrollment, _, _) = Build();
         enrollment.Setup(e => e.GetEnrollmentEventsAsync(
                 Tenant, "M-001", null, null, null, 50, null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DownstreamUnavailableException("enrollment-import-service"));
@@ -302,7 +306,7 @@ public class MembersControllerTests
     [Fact]
     public async Task GetAccumulators_WhenUnavailable_Returns503()
     {
-        var (ctl, _, _, _, _, accu) = Build();
+        var (ctl, _, _, _, _, accu, _) = Build();
         accu.Setup(a => a.GetAccumulatorsAsync(Tenant, "M-001", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DownstreamUnavailableException("accumulator-service"));
 
@@ -311,9 +315,95 @@ public class MembersControllerTests
     }
 
     [Fact]
+    public async Task TerminateMember_Delete_BlockedByActiveLitigationHold_Returns409()
+    {
+        var (ctl, _, _, _, _, _, alerts) = Build();
+        await ctl.CreateMember(CreateReq(), CancellationToken.None);
+
+        alerts.Alerts.Add(new MemberAlert
+        {
+            TenantId = Tenant, MemberId = "M-001", Id = Guid.NewGuid().ToString(),
+            AlertType = MemberAlertType.LitigationHold,
+            Severity = MemberAlertSeverity.Critical,
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            Reason = "Outside counsel notice 2024-04",
+            RequiredAction = "Route through legal",
+            CreatedBy = "legal-ops"
+        });
+
+        var resp = await ctl.TerminateMember("M-001",
+            terminationDate: DateTime.UtcNow,
+            reasonCode: "25",
+            eventId: null,
+            ct: CancellationToken.None);
+
+        var status = resp.Should().BeOfType<ObjectResult>().Subject;
+        status.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        var problem = status.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Status.Should().Be(409);
+        problem.Extensions["alertType"].Should().Be("LitigationHold");
+        problem.Extensions["action"].Should().Be("Terminate");
+    }
+
+    [Fact]
+    public async Task TerminateMember_Body_BlockedByActiveLitigationHold_Returns409()
+    {
+        var (ctl, _, events, _, _, _, alerts) = Build();
+        await ctl.CreateMember(CreateReq(), CancellationToken.None);
+
+        alerts.Alerts.Add(new MemberAlert
+        {
+            TenantId = Tenant, MemberId = "M-001", Id = Guid.NewGuid().ToString(),
+            AlertType = MemberAlertType.LitigationHold,
+            Severity = MemberAlertSeverity.Critical,
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            Reason = "Hold",
+            CreatedBy = "legal-ops"
+        });
+        var preTerminateEvents = events.All.Count(e => e.EventType == MemberEventType.MemberTerminated);
+
+        var resp = await ctl.TerminateMember("M-001", new TerminateMemberRequest
+        {
+            MemberId = "M-001",
+            TerminationDate = DateTime.UtcNow,
+            ReasonCode = "25"
+        }, CancellationToken.None);
+
+        ((ObjectResult)resp).StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        events.All.Count(e => e.EventType == MemberEventType.MemberTerminated)
+            .Should().Be(preTerminateEvents, "termination must not have been recorded");
+    }
+
+    [Fact]
+    public async Task TerminateMember_EndedLitigationHold_AllowsTermination()
+    {
+        var (ctl, repo, _, _, _, _, alerts) = Build();
+        await ctl.CreateMember(CreateReq(), CancellationToken.None);
+
+        alerts.Alerts.Add(new MemberAlert
+        {
+            TenantId = Tenant, MemberId = "M-001", Id = Guid.NewGuid().ToString(),
+            AlertType = MemberAlertType.LitigationHold,
+            Severity = MemberAlertSeverity.Critical,
+            StartDate = DateTime.UtcNow.AddDays(-10),
+            EndDate = DateTime.UtcNow.AddMinutes(-1),  // already ended
+            Reason = "Hold",
+            CreatedBy = "legal-ops"
+        });
+
+        var resp = await ctl.TerminateMember("M-001",
+            terminationDate: DateTime.UtcNow,
+            reasonCode: "25",
+            eventId: null,
+            ct: CancellationToken.None);
+        resp.Should().BeOfType<NoContentResult>();
+        repo.Members[0].Status.Should().Be(EnrollmentStatus.Terminated);
+    }
+
+    [Fact]
     public async Task GetDependents_ReturnsOnlyNonSubscribersLinked()
     {
-        var (ctl, repo, _, _, _, _) = Build();
+        var (ctl, repo, _, _, _, _, _) = Build();
         var sub = CreateReq("SUB-1");
         await ctl.CreateMember(sub, CancellationToken.None);
 

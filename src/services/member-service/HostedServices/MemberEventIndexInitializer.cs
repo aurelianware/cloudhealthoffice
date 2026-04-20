@@ -84,7 +84,27 @@ public sealed class MemberIndexInitializer : IHostedService
             new CreateIndexModel<Member>(keys, new CreateIndexOptions { Name = "ix_tenant_member" }),
             cancellationToken: cancellationToken);
 
-        _logger.LogInformation("Member indexes ensured.");
+        var alerts = _db.GetCollection<MemberAlert>("MemberAlerts");
+        alerts.Indexes.CreateOne(
+            new CreateIndexModel<MemberAlert>(
+                Builders<MemberAlert>.IndexKeys
+                    .Ascending(x => x.TenantId)
+                    .Ascending(x => x.MemberId)
+                    .Descending(x => x.StartDate),
+                new CreateIndexOptions { Name = "ix_tenant_member_start" }),
+            cancellationToken: cancellationToken);
+
+        var notes = _db.GetCollection<MemberNote>("MemberNotes");
+        notes.Indexes.CreateOne(
+            new CreateIndexModel<MemberNote>(
+                Builders<MemberNote>.IndexKeys
+                    .Ascending(x => x.TenantId)
+                    .Ascending(x => x.MemberId)
+                    .Descending(x => x.CreatedDate),
+                new CreateIndexOptions { Name = "ix_tenant_member_created" }),
+            cancellationToken: cancellationToken);
+
+        _logger.LogInformation("Member, MemberAlert, MemberNote indexes ensured.");
         return Task.CompletedTask;
     }
 

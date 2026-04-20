@@ -34,6 +34,7 @@ public class MembersController : ControllerBase
     private readonly IAccumulatorServiceClient _accumulators;
     private readonly IRelationshipShim? _relationshipShim;
     private readonly IFamilyRelationshipService? _familyRelationships;
+    private readonly IMemberAlertGuard? _alertGuard;
     private readonly ILogger<MembersController>? _logger;
 
     public MembersController(
@@ -47,6 +48,7 @@ public class MembersController : ControllerBase
         IAccumulatorServiceClient accumulators,
         IRelationshipShim? relationshipShim = null,
         IFamilyRelationshipService? familyRelationships = null,
+        IMemberAlertGuard? alertGuard = null,
         ILogger<MembersController>? logger = null)
     {
         _memberRepository = memberRepository;
@@ -59,6 +61,7 @@ public class MembersController : ControllerBase
         _accumulators = accumulators;
         _relationshipShim = relationshipShim;
         _familyRelationships = familyRelationships;
+        _alertGuard = alertGuard;
         _logger = logger;
     }
 
@@ -345,6 +348,7 @@ public class MembersController : ControllerBase
     [HttpDelete("{memberId}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 409)]
     public async Task<IActionResult> TerminateMember(
         [FromRoute] string memberId,
         [FromQuery] DateTime? terminationDate = null,
@@ -355,6 +359,9 @@ public class MembersController : ControllerBase
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
 
+        var block = await EvaluateTerminationGuardAsync(memberId, ct);
+        if (block != null) return AlertBlocked(block);
+
         await TerminateInternal(member, terminationDate ?? DateTime.UtcNow, reasonCode, eventId, ct);
         return NoContent();
     }
@@ -363,6 +370,7 @@ public class MembersController : ControllerBase
     [HttpPost("{memberId}/terminate")]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(ProblemDetails), 409)]
     [ProducesResponseType(503)]
     public async Task<IActionResult> TerminateMember(
         [FromRoute] string memberId,
@@ -371,6 +379,9 @@ public class MembersController : ControllerBase
     {
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
+
+        var block = await EvaluateTerminationGuardAsync(memberId, ct);
+        if (block != null) return AlertBlocked(block);
 
         await TerminateInternal(member, request.TerminationDate, request.ReasonCode, request.EventId, ct);
 
@@ -384,6 +395,32 @@ public class MembersController : ControllerBase
         }
 
         return Ok(new { memberId, terminationDate = request.TerminationDate, reasonCode = request.ReasonCode });
+    }
+
+    private async Task<MemberAlertBlock?> EvaluateTerminationGuardAsync(string memberId, CancellationToken ct)
+    {
+        if (_alertGuard == null) return null;
+        return await _alertGuard.EvaluateAsync(TenantId, memberId, MemberAlertAction.Terminate, ct);
+    }
+
+    private IActionResult AlertBlocked(MemberAlertBlock block)
+    {
+        var problem = new ProblemDetails
+        {
+            Type = "https://cloudhealthoffice.com/problems/member-alert-block",
+            Title = "Action blocked by active member alert",
+            Status = StatusCodes.Status409Conflict,
+            Detail = block.Reason
+        };
+        problem.Extensions["alertId"] = block.Alert.Id;
+        problem.Extensions["alertType"] = block.Alert.AlertType.ToString();
+        problem.Extensions["severity"] = block.Alert.Severity.ToString();
+        problem.Extensions["action"] = block.Action.ToString();
+        if (!string.IsNullOrEmpty(block.Alert.RequiredAction))
+        {
+            problem.Extensions["requiredAction"] = block.Alert.RequiredAction;
+        }
+        return StatusCode(StatusCodes.Status409Conflict, problem);
     }
 
     private async Task TerminateInternal(

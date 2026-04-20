@@ -112,5 +112,16 @@ public enum MemberEventType
     MemberUpdated = 2,
     MemberTerminated = 3,
     AddressChanged = 4,
-    PcpChanged = 5
+    PcpChanged = 5,
+
+    // Alerts (FHIR Flag) — view events provide the access audit trail required
+    // for protected member context like LitigationHold, CustodyDispute, etc.
+    MemberAlertCreated = 6,
+    MemberAlertEnded = 7,
+    MemberAlertViewed = 8,
+
+    // Notes (FHIR Communication) — immutable, audited on read for the same
+    // PHI-access reason as alerts.
+    MemberNoteCreated = 9,
+    MemberNoteViewed = 10
 }
