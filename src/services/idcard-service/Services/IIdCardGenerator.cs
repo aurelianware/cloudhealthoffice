@@ -4,7 +4,6 @@ using IdCardService.Models;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
-using SkiaSharp;
 
 namespace IdCardService.Services;
 
@@ -12,7 +11,8 @@ public interface IIdCardGenerator
 {
     /// <summary>
     /// Renders the template with the supplied bindings + QR PNG bytes and
-    /// returns the PDF and a PNG preview.
+    /// returns the PDF. A PNG preview is reserved for Phase 2 (Wallet /
+    /// thumbnail rendering) and is null in Phase 1.
     /// </summary>
     Task<RenderedCard> RenderAsync(IdCardTemplate template, CardBindings bindings, byte[] qrPng, CancellationToken ct = default);
 }
@@ -20,13 +20,16 @@ public interface IIdCardGenerator
 public class RenderedCard
 {
     public byte[] Pdf { get; set; } = Array.Empty<byte>();
+
+    /// <summary>Reserved for the Phase-2 PNG preview / Wallet thumbnail pipeline. Null in Phase 1.</summary>
     public byte[]? Png { get; set; }
 }
 
 /// <summary>
-/// Performs token substitution on the template SVG, rasterizes it to a PNG via
-/// SkiaSharp (Svg.Skia) for a preview image, and lays the card out in a PDF
-/// via QuestPDF with the same data and the embedded QR.
+/// Performs token substitution on the template SVG (for audit / future
+/// preview rendering) and lays out the card as a PDF via QuestPDF with the
+/// bound data and the embedded QR image. PNG preview rasterization is
+/// deferred to Phase 2 when the Wallet / thumbnail pipeline is specified.
 /// </summary>
 public class IdCardGenerator : IIdCardGenerator
 {
@@ -43,22 +46,14 @@ public class IdCardGenerator : IIdCardGenerator
 
     public Task<RenderedCard> RenderAsync(IdCardTemplate template, CardBindings bindings, byte[] qrPng, CancellationToken ct = default)
     {
-        var svg = SubstituteTokens(template.LayoutSvg, bindings);
-
-        byte[]? png = null;
-        try
-        {
-            png = RasterizeSvgToPng(svg, qrPng);
-        }
-        catch (Exception ex)
-        {
-            // Preview is best-effort — a broken SVG shouldn't fail issuance.
-            _logger.LogWarning(ex, "PNG preview rasterization failed for template {TemplateId}", template.Id);
-        }
+        // Exercise the token substitution now so upstream observability can
+        // tell the difference between a missing token and a runtime render
+        // bug. The substituted SVG isn't persisted in Phase 1; it'll be the
+        // input to the PNG rasterizer in Phase 2.
+        _ = SubstituteTokens(template.LayoutSvg, bindings);
 
         var pdf = BuildPdf(template, bindings, qrPng);
-
-        return Task.FromResult(new RenderedCard { Pdf = pdf, Png = png });
+        return Task.FromResult(new RenderedCard { Pdf = pdf, Png = null });
     }
 
     public static string SubstituteTokens(string svg, CardBindings b)
@@ -100,40 +95,11 @@ public class IdCardGenerator : IIdCardGenerator
         return sb.ToString();
     }
 
-    private static byte[] RasterizeSvgToPng(string svg, byte[] qrPng)
-    {
-        using var svgDoc = new Svg.Skia.SKSvg();
-        using var ms = new MemoryStream(Encoding.UTF8.GetBytes(svg));
-        svgDoc.Load(ms);
-
-        if (svgDoc.Picture == null)
-        {
-            throw new InvalidOperationException("SVG parse yielded no picture");
-        }
-
-        var bounds = svgDoc.Picture.CullRect;
-        var width = Math.Max(320, (int)Math.Ceiling(bounds.Width));
-        var height = Math.Max(200, (int)Math.Ceiling(bounds.Height));
-
-        using var surface = SKSurface.Create(new SKImageInfo(width, height));
-        var canvas = surface.Canvas;
-        canvas.Clear(SKColors.White);
-        canvas.DrawPicture(svgDoc.Picture);
-
-        if (qrPng is { Length: > 0 })
-        {
-            using var qrImage = SKImage.FromEncodedData(qrPng);
-            if (qrImage != null)
-            {
-                var qrSize = Math.Min(width, height) / 3f;
-                canvas.DrawImage(qrImage, new SKRect(width - qrSize - 12, height - qrSize - 12, width - 12, height - 12));
-            }
-        }
-
-        using var image = surface.Snapshot();
-        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-        return data.ToArray();
-    }
+    // PNG preview rasterization intentionally omitted in Phase 1. Phase 2
+    // will reintroduce SVG → PNG rendering when the Wallet + thumbnail
+    // pipeline is specified; for now the PDF produced by QuestPDF is the
+    // sole rendered deliverable.
+    private static byte[]? RasterizeSvgToPng(string svg, byte[] qrPng) => null;
 
     private static byte[] BuildPdf(IdCardTemplate template, CardBindings b, byte[] qrPng)
     {
