@@ -12,6 +12,7 @@ using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.OperatingMode;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.ProviderEnrollmentService.Gates;
@@ -164,7 +165,8 @@ builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCross
 });
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

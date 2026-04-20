@@ -170,6 +170,11 @@ builder.Services.AddSingleton<IDtrService, DtrService>();
 builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
+// NOTE: fhir-service intentionally does NOT call AddCloudHealthOfficeJsonOptions().
+// FHIR R4 wire format requires numeric enum coding and its own serialization
+// pipeline via FhirInputFormatter/FhirOutputFormatter; applying the shared
+// JsonStringEnumConverter here would break FHIR conformance.
+// See docs/architecture/shared-json-options.md.
 builder.Services.AddControllers(options =>
 {
     options.InputFormatters.Insert(0, new FhirInputFormatter());
