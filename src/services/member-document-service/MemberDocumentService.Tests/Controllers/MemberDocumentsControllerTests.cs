@@ -125,4 +125,55 @@ public class MemberDocumentsControllerTests
             It.Is<IDictionary<string, string>>(tags => tags["legalHold"] == "true"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task FinalizeUpload_ReturnsNotFound_WhenDocumentMissing()
+    {
+        _repositoryMock.Setup(r => r.GetByIdAsync("test-tenant", "missing"))
+            .ReturnsAsync((MemberDocument?)null);
+
+        var controller = CreateController();
+        var result = await controller.FinalizeUpload("missing", CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task FinalizeUpload_AppliesBlobTagsAndSyncsSize()
+    {
+        var doc = new MemberDocument
+        {
+            Id = "doc2",
+            TenantId = "test-tenant",
+            MemberId = "m2",
+            Category = "EOB",
+            BlobPath = "members/m2/doc2.pdf",
+            BlobContainer = "member-documents",
+            RetentionPolicyId = "DEFAULT-10Y",
+            LegalHold = false,
+            SizeBytes = 0
+        };
+        _repositoryMock.Setup(r => r.GetByIdAsync("test-tenant", "doc2")).ReturnsAsync(doc);
+        _repositoryMock.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>())).ReturnsAsync((MemberDocument d) => d);
+        _blobServiceMock.Setup(b => b.SetTagsAsync(
+            It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _blobServiceMock.Setup(b => b.GetBlobSizeAsync("member-documents", "members/m2/doc2.pdf", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4096L);
+
+        var controller = CreateController();
+        var result = await controller.FinalizeUpload("doc2", CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var updated = ok.Value.Should().BeOfType<MemberDocument>().Subject;
+        updated.SizeBytes.Should().Be(4096L);
+
+        _blobServiceMock.Verify(b => b.SetTagsAsync(
+            "member-documents",
+            "members/m2/doc2.pdf",
+            It.Is<IDictionary<string, string>>(tags =>
+                tags.ContainsKey("retentionPolicyId") && tags.ContainsKey("legalHold")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

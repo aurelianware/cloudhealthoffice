@@ -36,8 +36,12 @@ public class RetentionPolicyService : IRetentionPolicyService
         }
 
         years = Math.Max(years, HipaaMinimumYears);
+
+        // Generate a canonical PolicyId: only emit a state-scoped id for states
+        // that are explicitly overridden in the matrix (TX/CA/NY). All other states
+        // — including unknown codes — use DEFAULT-10Y so policy IDs remain canonical.
         var policyId = string.IsNullOrWhiteSpace(requestedPolicyId)
-            ? (string.IsNullOrWhiteSpace(normalizedState) ? "DEFAULT-10Y" : $"{normalizedState}-{years}Y")
+            ? (StateYears.ContainsKey(normalizedState) ? $"{normalizedState}-{years}Y" : "DEFAULT-10Y")
             : requestedPolicyId.Trim();
 
         return new RetentionPolicyResult

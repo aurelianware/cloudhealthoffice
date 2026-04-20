@@ -167,6 +167,33 @@ public class MemberDocumentsController : ControllerBase
         return Ok(updated);
     }
 
+    /// <summary>
+    /// Finalizes a pre-signed upload by applying blob lifecycle tags (retention/legalHold)
+    /// and updating the DB record with the actual blob size.  Call this endpoint after the
+    /// client has completed the direct-to-blob PUT using the SAS URL returned by the
+    /// pre-signed upload flow.
+    /// </summary>
+    [HttpPost("api/v1/member-documents/{id}/finalize")]
+    public async Task<IActionResult> FinalizeUpload(string id, CancellationToken ct)
+    {
+        var doc = await _repository.GetByIdAsync(TenantId, id);
+        if (doc == null)
+        {
+            return NotFound();
+        }
+
+        // Apply lifecycle tags that were deferred because the blob didn't exist yet.
+        var retention = _retentionPolicyService.ResolvePolicy(doc.StateCode, doc.CoverageTerminationDate, doc.RetentionPolicyId);
+        var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, doc.LegalHold);
+        await _blobService.SetTagsAsync(doc.BlobContainer, doc.BlobPath, tags, ct);
+
+        // Sync the blob size into the metadata record.
+        doc.SizeBytes = await _blobService.GetBlobSizeAsync(doc.BlobContainer, doc.BlobPath, ct);
+        var updated = await _repository.UpdateAsync(doc);
+
+        return Ok(updated);
+    }
+
     [HttpGet("api/v1/members/{memberId}/fhir/DocumentReference")]
     public async Task<IActionResult> GetDocumentReferences(string memberId, [FromQuery] string? category = null)
     {
@@ -198,7 +225,9 @@ public class MemberDocumentsController : ControllerBase
                             url = $"/api/v1/member-documents/{d.Id}/content",
                             title = d.Category,
                             size = d.SizeBytes,
-                            hash = d.ContentHashSha256
+                            // FHIR R4 Attachment.hash is base64Binary; we store SHA-256 as hex
+                            // and convert here. The digest algorithm is SHA-256.
+                            hash = ConvertHexHashToBase64(d.ContentHashSha256)
                         }
                     }
                 },
@@ -295,6 +324,23 @@ public class MemberDocumentsController : ControllerBase
         using var sha = SHA256.Create();
         var hash = await sha.ComputeHashAsync(stream, ct);
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string? ConvertHexHashToBase64(string? hexHash)
+    {
+        if (string.IsNullOrEmpty(hexHash))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Convert.ToBase64String(Convert.FromHexString(hexHash));
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 
     private string ResolveUploadedBy(string? uploadedBy)

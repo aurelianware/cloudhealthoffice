@@ -15,8 +15,8 @@ metadata:
   namespace: cloudhealthoffice
 type: Opaque
 stringData:
-  MongoDb__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
-  BlobStorage__ConnectionString: "UseDevelopmentStorage=true"
+  MongoDb__ConnectionString: "__SET_VIA_KUBERNETES_SECRET_OR_KEY_VAULT__"
+  BlobStorage__ConnectionString: "__SET_VIA_KUBERNETES_SECRET_OR_KEY_VAULT__"
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -27,6 +27,27 @@ public class RetentionPolicyServiceTests
         result.YearsToRetain.Should().BeGreaterThanOrEqualTo(expectedYears);
     }
 
+    [Theory]
+    [InlineData("TX", "TX-10Y")]
+    [InlineData("CA", "CA-10Y")]
+    [InlineData("NY", "NY-10Y")]
+    public void OverrideState_ProducesStateSpecificPolicyId(string stateCode, string expectedPolicyId)
+    {
+        var result = _service.ResolvePolicy(stateCode, null, null);
+        result.PolicyId.Should().Be(expectedPolicyId);
+    }
+
+    [Theory]
+    [InlineData("FL")]   // not in override matrix
+    [InlineData("ZZ")]   // unknown state code
+    [InlineData("")]     // empty state
+    [InlineData(null)]   // no state
+    public void NonOverrideState_ProducesDefaultPolicyId(string? stateCode)
+    {
+        var result = _service.ResolvePolicy(stateCode, null, null);
+        result.PolicyId.Should().Be("DEFAULT-10Y");
+    }
+
     [Fact]
     public void CoverageTerminationDate_UsedAsBase()
     {

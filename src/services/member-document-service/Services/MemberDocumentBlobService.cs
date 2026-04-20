@@ -9,6 +9,7 @@ public interface IMemberDocumentBlobService
     Task<long> UploadAsync(string container, string blobPath, Stream content, string contentType, IDictionary<string, string> tags, CancellationToken ct = default);
     Task<Stream> DownloadAsync(string container, string blobPath, CancellationToken ct = default);
     Task SetTagsAsync(string container, string blobPath, IDictionary<string, string> tags, CancellationToken ct = default);
+    Task<long> GetBlobSizeAsync(string container, string blobPath, CancellationToken ct = default);
     Uri GetBlobUri(string container, string blobPath);
     Uri? GenerateUploadSasUri(string container, string blobPath, string contentType, DateTimeOffset expiresAtUtc);
 }
@@ -53,6 +54,13 @@ public class MemberDocumentBlobService : IMemberDocumentBlobService
     {
         var blobClient = _blobServiceClient.GetBlobContainerClient(container).GetBlobClient(blobPath);
         await blobClient.SetTagsAsync(tags, cancellationToken: ct);
+    }
+
+    public async Task<long> GetBlobSizeAsync(string container, string blobPath, CancellationToken ct = default)
+    {
+        var blobClient = _blobServiceClient.GetBlobContainerClient(container).GetBlobClient(blobPath);
+        var props = await blobClient.GetPropertiesAsync(cancellationToken: ct);
+        return props.Value.ContentLength;
     }
 
     public Uri GetBlobUri(string container, string blobPath)
