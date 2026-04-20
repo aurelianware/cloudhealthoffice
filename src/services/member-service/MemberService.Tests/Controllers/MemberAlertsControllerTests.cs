@@ -167,6 +167,46 @@ public class MemberAlertsControllerTests
     }
 
     [Fact]
+    public async Task ListAlerts_AuditPublisherFailure_DoesNotFailRead()
+    {
+        // View audit is best-effort. Simulate publisher throwing and verify
+        // the list endpoint still returns 200 with the persisted alerts.
+        var members = new InMemoryMemberRepository();
+        members.Members.Add(new Member
+        {
+            TenantId = Tenant, MemberId = MemberId,
+            FirstName = "A", LastName = "B",
+            DateOfBirth = DateTime.UtcNow.AddYears(-30),
+            EffectiveDate = DateTime.UtcNow.AddYears(-1),
+            GroupNumber = "GRP", IsSubscriber = true
+        });
+        var alerts = new InMemoryMemberAlertRepository();
+        alerts.Alerts.Add(new MemberAlert
+        {
+            TenantId = Tenant, MemberId = MemberId, Id = "a1",
+            AlertType = MemberAlertType.VIP, Severity = MemberAlertSeverity.Info,
+            StartDate = DateTime.UtcNow.AddDays(-1), Reason = "r", CreatedBy = "csr"
+        });
+
+        var throwingPublisher = new Mock<MemberService.Services.IMemberEventPublisher>();
+        throwingPublisher
+            .Setup(p => p.PublishAsync(It.IsAny<MemberEvent>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("downstream audit store unavailable"));
+
+        var ctl = new MemberAlertsController(members, alerts, throwingPublisher.Object,
+            new FhirFlagProjector(), NullLogger<MemberAlertsController>.Instance);
+        var http = new DefaultHttpContext();
+        http.Items["TenantId"] = Tenant;
+        ctl.ControllerContext = new ControllerContext { HttpContext = http };
+
+        var resp = await ctl.ListAlerts(MemberId, status: "active", CancellationToken.None);
+
+        var ok = resp.Should().BeOfType<OkObjectResult>().Subject;
+        var body = ok.Value.Should().BeOfType<MemberAlertListResponse>().Subject;
+        body.Items.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task GetFhirFlags_ReturnsBundleWithFhirContentType()
     {
         var (ctl, _, _, _) = Build();

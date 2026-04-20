@@ -95,8 +95,11 @@ public enum MemberAlertType
 
 /// <summary>
 /// Severity drives color in the portal banner and the FHIR Flag.category.
-/// Critical alerts may also enforce service-layer block rules
-/// (see <see cref="MemberService.Services.IMemberAlertGuard"/>).
+/// Severity is also compared against a per-rule minimum in
+/// <see cref="MemberService.Services.IMemberAlertGuard"/> — e.g., Terminate
+/// is blocked by a LitigationHold at Critical severity, and by an
+/// EligibilityDispute at Warning or higher. Numeric order is significant:
+/// the evaluator uses <c>severity &gt;= minSeverity</c>.
 /// </summary>
 public enum MemberAlertSeverity
 {

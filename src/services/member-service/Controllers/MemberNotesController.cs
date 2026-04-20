@@ -27,14 +27,18 @@ public class MemberNotesController : ControllerBase
     private readonly IMemberNoteRepository _notes;
     private readonly IMemberEventPublisher _events;
 
+    private readonly ILogger<MemberNotesController>? _logger;
+
     public MemberNotesController(
         IMemberRepository members,
         IMemberNoteRepository notes,
-        IMemberEventPublisher events)
+        IMemberEventPublisher events,
+        ILogger<MemberNotesController>? logger = null)
     {
         _members = members;
         _notes = notes;
         _events = events;
+        _logger = logger;
     }
 
     /// <summary>List notes for a member, newest first. Filter by category, paged.</summary>
@@ -138,22 +142,37 @@ public class MemberNotesController : ControllerBase
             new { memberId, noteId = created.Id }, created);
     }
 
-    private Task PublishViewedAsync(string memberId, string scope, int count, CancellationToken ct)
+    private async Task PublishViewedAsync(string memberId, string scope, int count, CancellationToken ct)
     {
-        return _events.PublishAsync(new MemberEvent
+        // Best-effort audit; failures must not fail the read. See the
+        // analogous comment on MemberAlertsController.PublishViewedAsync.
+        try
         {
-            TenantId = TenantId,
-            MemberId = memberId,
-            EventId = Guid.NewGuid().ToString(),
-            EventType = MemberEventType.MemberNoteViewed,
-            ActorId = User.Identity?.Name ?? "System",
-            CorrelationId = HttpContext.TraceIdentifier,
-            Payload = new JsonObject
+            await _events.PublishAsync(new MemberEvent
             {
-                ["scope"] = scope,
-                ["count"] = count
-            }
-        }, ct);
+                TenantId = TenantId,
+                MemberId = memberId,
+                EventId = Guid.NewGuid().ToString(),
+                EventType = MemberEventType.MemberNoteViewed,
+                ActorId = User.Identity?.Name ?? "System",
+                CorrelationId = HttpContext.TraceIdentifier,
+                Payload = new JsonObject
+                {
+                    ["scope"] = scope,
+                    ["count"] = count
+                }
+            }, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex,
+                "Best-effort audit for MemberNoteViewed failed for {MemberId} scope={Scope}",
+                memberId, scope);
+        }
     }
 }
 

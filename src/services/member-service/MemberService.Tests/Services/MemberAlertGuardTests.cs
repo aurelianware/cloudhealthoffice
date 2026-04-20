@@ -96,4 +96,69 @@ public class MemberAlertGuardTests
         var block = await guard.EvaluateAsync(Tenant, MemberId, MemberAlertAction.OutboundCommunication);
         block!.Alert.AlertType.Should().Be(MemberAlertType.DoNotContact);
     }
+
+    [Fact]
+    public async Task Terminate_LitigationHoldAtWarning_DoesNotBlock()
+    {
+        // LitigationHold's minimum severity for Terminate is Critical; a
+        // Warning-severity hold is informational and must not block.
+        var (guard, repo) = Build();
+        var warn = Active(MemberAlertType.LitigationHold);
+        warn.Severity = MemberAlertSeverity.Warning;
+        repo.Alerts.Add(warn);
+
+        var block = await guard.EvaluateAsync(Tenant, MemberId, MemberAlertAction.Terminate);
+        block.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Terminate_EligibilityDisputeAtInfo_DoesNotBlock()
+    {
+        // EligibilityDispute's minimum for Terminate is Warning; Info is too low.
+        var (guard, repo) = Build();
+        var info = Active(MemberAlertType.EligibilityDispute);
+        info.Severity = MemberAlertSeverity.Info;
+        repo.Alerts.Add(info);
+
+        var block = await guard.EvaluateAsync(Tenant, MemberId, MemberAlertAction.Terminate);
+        block.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Terminate_EligibilityDisputeAtWarning_Blocks()
+    {
+        var (guard, repo) = Build();
+        var warn = Active(MemberAlertType.EligibilityDispute);
+        warn.Severity = MemberAlertSeverity.Warning;
+        repo.Alerts.Add(warn);
+
+        var block = await guard.EvaluateAsync(Tenant, MemberId, MemberAlertAction.Terminate);
+        block!.Alert.AlertType.Should().Be(MemberAlertType.EligibilityDispute);
+    }
+
+    [Fact]
+    public async Task Terminate_EligibilityDisputeAtCritical_AlsoBlocks()
+    {
+        // Critical >= Warning, so higher severity also triggers.
+        var (guard, repo) = Build();
+        var crit = Active(MemberAlertType.EligibilityDispute);
+        crit.Severity = MemberAlertSeverity.Critical;
+        repo.Alerts.Add(crit);
+
+        var block = await guard.EvaluateAsync(Tenant, MemberId, MemberAlertAction.Terminate);
+        block.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_CancelledToken_Throws()
+    {
+        var (guard, repo) = Build();
+        repo.Alerts.Add(Active(MemberAlertType.LitigationHold));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = async () => await guard.EvaluateAsync(
+            Tenant, MemberId, MemberAlertAction.Terminate, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
 }

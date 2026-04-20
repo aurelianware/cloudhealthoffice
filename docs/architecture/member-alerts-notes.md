@@ -18,6 +18,9 @@ Adds two member-bound resources to the member-service:
 - `IMemberAlertGuard` enforcing service-layer block rules; wired into
   `MembersController.TerminateMember`.
 - New `MemberEventType` values for create/view audit on both resources.
+- `JsonStringEnumConverter` registered on the MVC pipeline so enum payloads
+  (`alertType`, `severity`, `category`) are sent and received as strings
+  ("LitigationHold", "Critical", "CustomerService") rather than numbers.
 - Portal: persistent `MemberAlertBanner` above member tabs; new `Notes`
   `MudTabPanel` with category filter, paged log, entry form.
 
@@ -83,27 +86,42 @@ mechanism per `member-foundation.md`. Five new event types are emitted:
 View events carry `{ scope, count }` so an auditor can reconstruct what was
 displayed without storing the full payload.
 
+View audit is **best-effort**: `PublishViewedAsync` in both controllers
+catches non-cancellation exceptions so a failing audit sink does not turn
+`GET /alerts` or `GET /notes` into a 5xx. The integrity-critical audit
+events (`*Created` and `MemberAlertEnded`) continue to surface publisher
+failures to the caller.
+
 ## Block rules
 
-Critical alerts can prevent specific actions. The rules table is the single
+Active alerts can prevent specific actions. The rules table is the single
 source of truth in code (`Services/MemberAlertGuard.cs`); changes here MUST
 be mirrored in code, and vice versa.
 
-| Alert (active)      | Severity | Blocks action          | Surfaced as              |
-|---------------------|----------|------------------------|--------------------------|
-| `LitigationHold`    | Critical | `Terminate`, `HardDelete` | `409 ProblemDetails` (`type=member-alert-block`) |
-| `EligibilityDispute`| Warning  | `Terminate`            | `409 ProblemDetails`     |
-| `SecurityFreeze`    | Critical | `UpdatePii`            | `409 ProblemDetails`     |
-| `KnownFraudRisk`    | Critical | `UpdatePii`, `NewEnrollment` | `409 ProblemDetails` |
-| `DoNotContact`      | Warning  | `OutboundCommunication`| `409 ProblemDetails` (enforced by comms-service) |
-| `HighRisk`          | any      | _informational only_   | banner only              |
-| `VIP`               | any      | _informational only_   | banner only              |
-| `CustodyDispute`    | any      | _informational only_   | banner only              |
-| `LanguageRequirement` | any    | _informational only_   | banner only              |
-| `AccessibilityNeed` | any      | _informational only_   | banner only              |
+A rule fires when an alert is (a) active, (b) of the matching type, and
+(c) at severity **≥** `Min severity`. Lowering an alert's severity below the
+threshold effectively informs-only without unblocking the portal hard
+path — operators downgrade rather than end when they want the banner to
+stay visible but want to permit an action.
+
+| Alert type            | Min severity | Blocks action               | Surfaced as                                        |
+|-----------------------|--------------|-----------------------------|----------------------------------------------------|
+| `LitigationHold`      | Critical     | `Terminate`, `HardDelete`   | `409 ProblemDetails` (`type=member-alert-block`)   |
+| `EligibilityDispute`  | Warning      | `Terminate`                 | `409 ProblemDetails`                               |
+| `SecurityFreeze`      | Critical     | `UpdatePii`                 | `409 ProblemDetails`                               |
+| `KnownFraudRisk`      | Critical     | `UpdatePii`, `NewEnrollment`| `409 ProblemDetails`                               |
+| `DoNotContact`        | Warning      | `OutboundCommunication`     | `409 ProblemDetails` (enforced by comms-service)   |
+| `HighRisk`            | —            | _informational only_        | banner only                                        |
+| `VIP`                 | —            | _informational only_        | banner only                                        |
+| `CustodyDispute`      | —            | _informational only_        | banner only                                        |
+| `LanguageRequirement` | —            | _informational only_        | banner only                                        |
+| `AccessibilityNeed`   | —            | _informational only_        | banner only                                        |
 
 Block enforcement is centralised in `IMemberAlertGuard.EvaluateAsync` so
-every action that needs to be guarded asks the same service.
+every action that needs to be guarded asks the same service. The evaluator
+calls `ct.ThrowIfCancellationRequested()` before and after the repository
+lookup so a cancelled caller surfaces as `OperationCanceledException`
+rather than running a wasted query.
 
 In this PR the only wired block is `Terminate` from `MembersController` —
 both the DELETE and POST `/terminate` variants call the guard before
@@ -175,3 +193,7 @@ banner is informational and must not block the dialog from rendering.
 | Note view records audit event                                      | `MemberNotesControllerTests.ListNotes_EmitsViewedAuditEvent`               |
 | FHIR Flag projection returns Bundle of Flag resources              | `MemberAlertsControllerTests.GetFhirFlags_ReturnsBundleWithFhirContentType`, `FhirFlagProjectorTests.ProjectBundle_*` |
 | End-dated LitigationHold no longer blocks termination              | `MembersControllerTests.TerminateMember_EndedLitigationHold_AllowsTermination` |
+| LitigationHold at Warning severity does not block termination      | `MemberAlertGuardTests.Terminate_LitigationHoldAtWarning_DoesNotBlock`      |
+| EligibilityDispute at Warning blocks, at Info does not             | `MemberAlertGuardTests.Terminate_EligibilityDisputeAtWarning_Blocks`, `..._AtInfo_DoesNotBlock` |
+| `EvaluateAsync` honors cancellation                                | `MemberAlertGuardTests.EvaluateAsync_CancelledToken_Throws`                |
+| Audit publisher failure does not fail `GET /alerts`                | `MemberAlertsControllerTests.ListAlerts_AuditPublisherFailure_DoesNotFailRead` |

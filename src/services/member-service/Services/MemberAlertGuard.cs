@@ -43,35 +43,44 @@ public sealed record MemberAlertBlock(
     MemberAlertAction Action,
     string Reason);
 
+/// <summary>
+/// A (type, minimum severity) pair. An alert triggers the rule when its type
+/// matches and its severity is at least the minimum — so a LitigationHold
+/// downgraded to Warning won't block terminate, and a DoNotContact raised at
+/// Info won't gate outbound comms.
+/// </summary>
+internal sealed record MemberAlertRule(MemberAlertType Type, MemberAlertSeverity MinSeverity);
+
 public sealed class MemberAlertGuard : IMemberAlertGuard
 {
     private readonly IMemberAlertRepository _alerts;
 
     // Block rules table — single source of truth.
     // Keep in sync with docs/architecture/member-alerts-notes.md#block-rules.
-    private static readonly Dictionary<MemberAlertAction, MemberAlertType[]> Rules = new()
+    // MinSeverity is inclusive: severity >= MinSeverity triggers the block.
+    private static readonly Dictionary<MemberAlertAction, MemberAlertRule[]> Rules = new()
     {
         [MemberAlertAction.Terminate] = new[]
         {
-            MemberAlertType.LitigationHold,
-            MemberAlertType.EligibilityDispute
+            new MemberAlertRule(MemberAlertType.LitigationHold, MemberAlertSeverity.Critical),
+            new MemberAlertRule(MemberAlertType.EligibilityDispute, MemberAlertSeverity.Warning)
         },
         [MemberAlertAction.HardDelete] = new[]
         {
-            MemberAlertType.LitigationHold
+            new MemberAlertRule(MemberAlertType.LitigationHold, MemberAlertSeverity.Critical)
         },
         [MemberAlertAction.UpdatePii] = new[]
         {
-            MemberAlertType.SecurityFreeze,
-            MemberAlertType.KnownFraudRisk
+            new MemberAlertRule(MemberAlertType.SecurityFreeze, MemberAlertSeverity.Critical),
+            new MemberAlertRule(MemberAlertType.KnownFraudRisk, MemberAlertSeverity.Critical)
         },
         [MemberAlertAction.NewEnrollment] = new[]
         {
-            MemberAlertType.KnownFraudRisk
+            new MemberAlertRule(MemberAlertType.KnownFraudRisk, MemberAlertSeverity.Critical)
         },
         [MemberAlertAction.OutboundCommunication] = new[]
         {
-            MemberAlertType.DoNotContact
+            new MemberAlertRule(MemberAlertType.DoNotContact, MemberAlertSeverity.Warning)
         }
     };
 
@@ -86,13 +95,19 @@ public sealed class MemberAlertGuard : IMemberAlertGuard
         MemberAlertAction action,
         CancellationToken ct = default)
     {
-        if (!Rules.TryGetValue(action, out var blockingTypes)) return null;
+        ct.ThrowIfCancellationRequested();
+
+        if (!Rules.TryGetValue(action, out var blockingRules)) return null;
 
         var active = await _alerts.ListByMemberAsync(tenantId, memberId, activeOnly: true);
-        var hit = active.FirstOrDefault(a => blockingTypes.Contains(a.AlertType));
+
+        ct.ThrowIfCancellationRequested();
+
+        var hit = active.FirstOrDefault(a =>
+            blockingRules.Any(r => r.Type == a.AlertType && a.Severity >= r.MinSeverity));
         if (hit == null) return null;
 
-        var reason = $"Action '{action}' blocked by active {hit.AlertType} alert: {hit.Reason}";
+        var reason = $"Action '{action}' blocked by active {hit.AlertType} alert ({hit.Severity}): {hit.Reason}";
         return new MemberAlertBlock(hit, action, reason);
     }
 }

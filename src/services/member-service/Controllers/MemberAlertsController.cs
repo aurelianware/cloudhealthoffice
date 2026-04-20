@@ -29,16 +29,20 @@ public class MemberAlertsController : ControllerBase
     private readonly IMemberEventPublisher _events;
     private readonly IFhirFlagProjector _flagProjector;
 
+    private readonly ILogger<MemberAlertsController>? _logger;
+
     public MemberAlertsController(
         IMemberRepository members,
         IMemberAlertRepository alerts,
         IMemberEventPublisher events,
-        IFhirFlagProjector flagProjector)
+        IFhirFlagProjector flagProjector,
+        ILogger<MemberAlertsController>? logger = null)
     {
         _members = members;
         _alerts = alerts;
         _events = events;
         _flagProjector = flagProjector;
+        _logger = logger;
     }
 
     /// <summary>List alerts for a member. Set <c>status=active</c> to filter to in-effect alerts.</summary>
@@ -211,23 +215,41 @@ public class MemberAlertsController : ControllerBase
         };
     }
 
-    private Task PublishViewedAsync(string memberId, string scope, int count, CancellationToken ct)
+    private async Task PublishViewedAsync(string memberId, string scope, int count, CancellationToken ct)
     {
-        // View events are best-effort audit; failures shouldn't fail the read.
-        return _events.PublishAsync(new MemberEvent
+        // Best-effort audit: a failure in the event publisher (downstream
+        // Cosmos/Mongo hiccup, concurrency retries exhausted) must not fail
+        // the read. The tradeoff is a potentially missing audit row; the
+        // repository-level audit on Create/End is the primary integrity
+        // guarantee, so missing Viewed rows degrade rather than break.
+        try
         {
-            TenantId = TenantId,
-            MemberId = memberId,
-            EventId = Guid.NewGuid().ToString(),
-            EventType = MemberEventType.MemberAlertViewed,
-            ActorId = User.Identity?.Name ?? "System",
-            CorrelationId = HttpContext.TraceIdentifier,
-            Payload = new JsonObject
+            await _events.PublishAsync(new MemberEvent
             {
-                ["scope"] = scope,
-                ["count"] = count
-            }
-        }, ct);
+                TenantId = TenantId,
+                MemberId = memberId,
+                EventId = Guid.NewGuid().ToString(),
+                EventType = MemberEventType.MemberAlertViewed,
+                ActorId = User.Identity?.Name ?? "System",
+                CorrelationId = HttpContext.TraceIdentifier,
+                Payload = new JsonObject
+                {
+                    ["scope"] = scope,
+                    ["count"] = count
+                }
+            }, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Caller cancelled — propagate cleanly.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex,
+                "Best-effort audit for MemberAlertViewed failed for {MemberId} scope={Scope}",
+                memberId, scope);
+        }
     }
 }
 

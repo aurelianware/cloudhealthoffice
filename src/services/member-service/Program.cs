@@ -13,7 +13,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Serialize enums as strings so portal clients can POST / read
+        // "LitigationHold", "CustomerService", etc. Without this the default
+        // numeric serialization would 400 on the string payloads used by
+        // MemberAlertsController / MemberNotesController.
+        options.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
