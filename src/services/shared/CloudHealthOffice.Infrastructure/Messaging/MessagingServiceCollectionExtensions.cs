@@ -52,6 +52,21 @@ public static class MessagingServiceCollectionExtensions
                 "IMessageBus={Backend} ({Reason})",
                 decision.Backend, decision.Reason);
 
+            // Auto-resolving to InMemory outside Development is almost always
+            // a misconfiguration: messages go into a process-local channel
+            // and are lost on restart. Emit at Warning so it shows up in any
+            // routine log triage.
+            if (decision.Backend == MessagingBackend.InMemory &&
+                !environment.IsDevelopment() &&
+                string.Equals((options.Backend ?? "Auto").Trim(), "Auto",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogWarning(
+                    "IMessageBus resolved to InMemory in {Environment}. " +
+                    "Configure Messaging:ServiceBusConnectionString for durable delivery.",
+                    environment.EnvironmentName);
+            }
+
             if (deprecatedKey is not null)
             {
                 logger.LogWarning(

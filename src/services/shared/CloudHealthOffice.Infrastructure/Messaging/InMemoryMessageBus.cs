@@ -122,6 +122,11 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
             foreach (var (k, v) in options.Properties) properties[k] = v;
         }
 
+        // Capture the ambient activity before starting the producer span so
+        // CorrelationId mirrors ServiceBusMessageBus: fall back to the
+        // caller's activity id, not the producer span we're about to start.
+        var correlationId = options?.CorrelationId ?? Activity.Current?.Id;
+
         using var producerSpan = ChoActivitySource.Instance.StartActivity(
             $"{queueOrTopic} send",
             ActivityKind.Producer);
@@ -139,7 +144,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
         return new Envelope(
             message,
             messageId,
-            options?.CorrelationId,
+            correlationId,
             properties);
     }
 
@@ -188,6 +193,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
         private readonly Func<Envelope, Task> _dispatch;
         private readonly ILogger _logger;
         private readonly CancellationTokenSource _internalCts = new();
+        private CancellationTokenSource? _linkedCts;
         private Task? _pump;
         private int _started;
         private int _disposed;
@@ -208,8 +214,9 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
         {
             if (Volatile.Read(ref _disposed) == 1) return Task.CompletedTask;
             if (Interlocked.Exchange(ref _started, 1) == 1) return Task.CompletedTask;
-            var linked = CancellationTokenSource.CreateLinkedTokenSource(_internalCts.Token, ct);
-            _pump = Task.Run(() => PumpAsync(linked.Token), linked.Token);
+            _linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_internalCts.Token, ct);
+            var pumpToken = _linkedCts.Token;
+            _pump = Task.Run(() => PumpAsync(pumpToken), pumpToken);
             return Task.CompletedTask;
         }
 
@@ -218,8 +225,13 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
             if (_pump is null) return;
             try { _internalCts.Cancel(); }
             catch (ObjectDisposedException) { return; }
-            try { await _pump.ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* expected */ }
+            try
+            {
+                // Honour the caller's cancellation — don't let a hung handler
+                // block StopAsync past the provided token's lifetime.
+                await _pump.WaitAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { /* expected on stop or caller cancel */ }
         }
 
         private async Task PumpAsync(CancellationToken ct)
@@ -266,6 +278,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
             if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
             await StopAsync(CancellationToken.None).ConfigureAwait(false);
             _internalCts.Dispose();
+            _linkedCts?.Dispose();
         }
     }
 }
