@@ -17,6 +17,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\eligibility-service\eligibility-service.csproj" />
+    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

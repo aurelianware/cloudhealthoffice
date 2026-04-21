@@ -22,6 +22,7 @@
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
     <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" />
+    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
 
 </Project>

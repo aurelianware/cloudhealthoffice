@@ -16,6 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\authorization-service\authorization-service.csproj" />
+    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

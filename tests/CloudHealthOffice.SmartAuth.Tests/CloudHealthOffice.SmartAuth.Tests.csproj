@@ -29,6 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" />
     <ProjectReference Include="..\..\src\services\smart-auth-service\smart-auth-service.csproj" />
+    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
 
 </Project>
