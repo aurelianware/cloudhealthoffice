@@ -17,6 +17,15 @@ public interface IPremiumInvoiceRepository
         int page = 1,
         int pageSize = 50);
     Task<IEnumerable<PremiumInvoice>> GetOverdueAsync();
+
+    /// <summary>
+    /// Return invoices whose <c>LineItems</c> include at least one line for
+    /// the given <paramref name="memberId"/>, newest first. Limited to
+    /// <paramref name="take"/> invoices — the portal Member Details Premium
+    /// tab shows the last 12 billing periods.
+    /// </summary>
+    Task<IEnumerable<PremiumInvoice>> ListByMemberAsync(string memberId, int take = 12);
+
     Task<PremiumInvoice> CreateAsync(PremiumInvoice invoice);
     Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice);
     Task DeleteAsync(string id);
@@ -150,6 +159,25 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
             .WithParameter("@voided", (int)InvoiceStatus.Voided)
             .WithParameter("@writeOff", (int)InvoiceStatus.WriteOff)
             .WithParameter("@paid", (int)InvoiceStatus.Paid);
+
+        return await ExecuteQueryAsync(query);
+    }
+
+    public async Task<IEnumerable<PremiumInvoice>> ListByMemberAsync(string memberId, int take = 12)
+    {
+        var tenantId = GetTenantId();
+        // EXISTS over a JOINed sub-query into LineItems to keep the predicate
+        // on the indexed (tenantId, memberId) path. Cosmos can't index inside
+        // arrays without explicit composite indexes, so pull recent invoices
+        // for the tenant and filter to those that mention the member.
+        var query = new QueryDefinition(
+            "SELECT TOP @take * FROM c " +
+            "WHERE c.tenantId = @tenantId " +
+            "AND EXISTS(SELECT VALUE l FROM l IN c.lineItems WHERE l.memberId = @memberId) " +
+            "ORDER BY c.billingPeriodStart DESC")
+            .WithParameter("@take", take)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@memberId", memberId);
 
         return await ExecuteQueryAsync(query);
     }

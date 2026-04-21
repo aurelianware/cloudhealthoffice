@@ -128,6 +128,51 @@ public class ClaimRepositoryMongo : IClaimRepository
             .ToListAsync();
     }
 
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchForMemberAsync(
+        string memberId,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        string? providerNPI,
+        ClaimType? claimType,
+        decimal? amountMin,
+        decimal? amountMax,
+        int page,
+        int pageSize)
+    {
+        var tenantId = GetTenantId();
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.MemberId, memberId));
+
+        if (serviceDateFrom.HasValue)
+            filter &= b.Gte(c => c.ServiceDateFrom, serviceDateFrom.Value);
+        if (serviceDateTo.HasValue)
+            filter &= b.Lte(c => c.ServiceDateTo, serviceDateTo.Value);
+        if (status.HasValue)
+            filter &= b.Eq(c => c.Status, status.Value);
+        if (!string.IsNullOrEmpty(providerNPI))
+            filter &= b.Or(
+                b.Eq(c => c.BillingProviderNPI, providerNPI),
+                b.Eq(c => c.RenderingProviderNPI, providerNPI));
+        if (claimType.HasValue)
+            filter &= b.Eq(c => c.ClaimType, claimType.Value);
+        if (amountMin.HasValue)
+            filter &= b.Gte(c => c.TotalChargeAmount, amountMin.Value);
+        if (amountMax.HasValue)
+            filter &= b.Lte(c => c.TotalChargeAmount, amountMax.Value);
+
+        var totalCount = (int)await _collection.CountDocumentsAsync(filter);
+        var items = await _collection.Find(filter)
+            .SortByDescending(c => c.SubmittedDate)
+            .Skip((page - 1) * pageSize)
+            .Limit(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
     public async Task<ClaimsSummary> GetClaimsSummaryAsync(
         DateTime from,
         DateTime to,

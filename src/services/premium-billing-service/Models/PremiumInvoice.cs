@@ -121,9 +121,30 @@ public class PremiumInvoice
     public int GracePeriodDays { get; set; } = 30;
 
     /// <summary>
-    /// Date when grace period expires (DueDate + GracePeriodDays)
+    /// Date when grace period expires (DueDate + GracePeriodDays for
+    /// Standard, DueDate + 90 days for ACA APTC-subsidized invoices).
     /// </summary>
     public DateTime? GracePeriodExpires { get; set; }
+
+    /// <summary>
+    /// True when the member on this invoice receives an ACA Advance Premium
+    /// Tax Credit subsidy. APTC-subsidized members have a statutory 3-month
+    /// grace period (45 CFR §156.270(d)) that differs from the standard
+    /// commercial grace window — this flag drives that distinction.
+    /// </summary>
+    public bool IsAptcSubsidized { get; set; }
+
+    /// <summary>
+    /// Advance Premium Tax Credit amount applied to the subscriber's monthly
+    /// premium. Populated only when <see cref="IsAptcSubsidized"/> is true.
+    /// </summary>
+    public decimal AptcMonthlyAmount { get; set; }
+
+    /// <summary>
+    /// Which grace-period regime applies to this invoice. Drives the portal
+    /// grace banner copy (APTC 3-month message vs. standard grace message).
+    /// </summary>
+    public GraceType GraceType { get; set; } = GraceType.Standard;
 
     /// <summary>
     /// Record creation timestamp
@@ -327,6 +348,21 @@ public enum InvoiceStatus
     Delinquent,
     Voided,
     WriteOff
+}
+
+/// <summary>
+/// Grace-period regime that applies to an invoice.
+/// </summary>
+public enum GraceType
+{
+    /// <summary>Standard commercial grace window (see sponsor BillingInfo).</summary>
+    Standard = 0,
+
+    /// <summary>
+    /// ACA APTC 3-month statutory grace for Exchange QHP enrollees receiving
+    /// an advance premium tax credit (45 CFR §156.270(d)).
+    /// </summary>
+    AptcThreeMonth = 1
 }
 
 public enum AdjustmentType

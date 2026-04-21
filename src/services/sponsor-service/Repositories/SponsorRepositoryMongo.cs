@@ -40,6 +40,7 @@ public class SponsorRepositoryMongo : ISponsorRepository
         string tenantId,
         SponsorStatus? status = null,
         bool activeOnly = false,
+        LineOfBusiness? lineOfBusiness = null,
         int pageSize = 20,
         string? continuationToken = null)
     {
@@ -53,6 +54,11 @@ public class SponsorRepositoryMongo : ISponsorRepository
         else if (status.HasValue)
         {
             filter &= builder.Eq(x => x.Status, status.Value);
+        }
+
+        if (lineOfBusiness.HasValue)
+        {
+            filter &= builder.Eq(x => x.LineOfBusiness, lineOfBusiness.Value);
         }
 
         int skip = 0;

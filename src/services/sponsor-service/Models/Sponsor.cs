@@ -114,6 +114,20 @@ public class Sponsor
     public BillingInfo? BillingInfo { get; set; }
 
     /// <summary>
+    /// Broker of record for this sponsor. Null when the sponsor purchased
+    /// direct (no broker). Surfaced in the portal Coverage tab's Sponsor
+    /// sub-section so reps can route broker-specific questions.
+    /// </summary>
+    public BrokerInfo? Broker { get; set; }
+
+    /// <summary>
+    /// Current/upcoming open enrollment window. Populated by the onboarding
+    /// flow (commercial) or derived from regulatory calendars (Exchange,
+    /// Medicare). Null when there's no active or scheduled OE period.
+    /// </summary>
+    public OpenEnrollmentWindow? OpenEnrollment { get; set; }
+
+    /// <summary>
     /// Total count of active members under this sponsor (calculated field)
     /// </summary>
     public int TotalMembers { get; set; }
@@ -210,6 +224,63 @@ public class BillingInfo
     /// </summary>
     [Range(0, 90)]
     public int GracePeriodDays { get; set; } = 30;
+}
+
+/// <summary>
+/// Broker/producer tied to the sponsor contract.
+/// </summary>
+public class BrokerInfo
+{
+    [StringLength(200)]
+    public string? AgencyName { get; set; }
+
+    [StringLength(200)]
+    public string? Name { get; set; }
+
+    [Phone]
+    [StringLength(20)]
+    public string? Phone { get; set; }
+
+    [EmailAddress]
+    [StringLength(200)]
+    public string? Email { get; set; }
+
+    /// <summary>Producer National Producer Number (optional).</summary>
+    [StringLength(20)]
+    public string? Npn { get; set; }
+}
+
+/// <summary>
+/// Open enrollment window for the sponsor. For commercial groups this is the
+/// annual OE window from the sponsor's onboarding config; for Exchange it's
+/// the federal/state OE period for the current plan year.
+/// </summary>
+public class OpenEnrollmentWindow
+{
+    /// <summary>Inclusive start of the OE window.</summary>
+    public DateTime Start { get; set; }
+
+    /// <summary>Inclusive end of the OE window.</summary>
+    public DateTime End { get; set; }
+
+    /// <summary>
+    /// Display-oriented status. Computed fresh by callers rather than
+    /// persisted, so a stale document never claims "Open" past the end date.
+    /// </summary>
+    public OpenEnrollmentStatus Status(DateTime? asOf = null)
+    {
+        var now = asOf ?? DateTime.UtcNow;
+        if (now < Start) return OpenEnrollmentStatus.Upcoming;
+        if (now > End)   return OpenEnrollmentStatus.Closed;
+        return OpenEnrollmentStatus.Open;
+    }
+}
+
+public enum OpenEnrollmentStatus
+{
+    Upcoming = 0,
+    Open = 1,
+    Closed = 2
 }
 
 /// <summary>

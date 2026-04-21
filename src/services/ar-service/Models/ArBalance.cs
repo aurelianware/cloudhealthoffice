@@ -76,6 +76,13 @@ public class ArPostingEntry
     public DateTime PostedAt { get; set; } = DateTime.UtcNow;
     public string? PostedBy { get; set; }
     public string? Memo { get; set; }
+
+    /// <summary>
+    /// Member this posting applies to (null for sponsor-level postings).
+    /// Populated so <c>/api/v1/members/{memberId}/ar-summary</c> can aggregate
+    /// charges/payments without cross-referencing claims or invoices.
+    /// </summary>
+    public string? MemberId { get; set; }
 }
 
 public enum ArPostingSource

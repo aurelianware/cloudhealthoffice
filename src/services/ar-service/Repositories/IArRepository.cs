@@ -19,6 +19,15 @@ public interface IArBalanceRepository
     Task<IEnumerable<ArBalance>> GetByAccountIdAsync(string accountId);
     Task<ArBalance> CreateAsync(ArBalance balance);
     Task<ArBalance> UpdateAsync(ArBalance balance);
+
+    /// <summary>
+    /// Return every balance whose <c>PostingEntries</c> contains at least one
+    /// entry tagged to <paramref name="memberId"/>. The controller aggregates
+    /// these in memory — volumes are small (balances keyed by account+period
+    /// intersected with a single member) so this is fine. Scales to tens of
+    /// balances per member per plan year.
+    /// </summary>
+    Task<IEnumerable<ArBalance>> GetBalancesContainingMemberAsync(string memberId);
 }
 
 public interface ICashPostingRepository

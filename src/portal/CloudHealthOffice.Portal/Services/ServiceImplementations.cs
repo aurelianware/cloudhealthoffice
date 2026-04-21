@@ -131,6 +131,40 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<EobSearchResponse> SearchClaimsByMemberAsync(string memberId, MemberClaimsFilter filter)
+    {
+        // The claims-service v1 route lives at the service root (not under
+        // /claims), because the controller registers [Route("api/v1/claims")].
+        // Build an absolute URL from Services:ClaimsService; strip a trailing
+        // /claims if the config value accidentally includes it.
+        var baseUrl = (_configuration["Services:ClaimsService"] ?? string.Empty).TrimEnd('/');
+        if (baseUrl.EndsWith("/claims", StringComparison.OrdinalIgnoreCase))
+            baseUrl = baseUrl[..^"/claims".Length];
+
+        var qs = new List<string> { $"memberId={Uri.EscapeDataString(memberId)}" };
+        if (filter.ServiceDateFrom.HasValue) qs.Add($"serviceDateFrom={filter.ServiceDateFrom:yyyy-MM-dd}");
+        if (filter.ServiceDateTo.HasValue)   qs.Add($"serviceDateTo={filter.ServiceDateTo:yyyy-MM-dd}");
+        if (!string.IsNullOrEmpty(filter.Status))      qs.Add($"status={filter.Status}");
+        if (!string.IsNullOrEmpty(filter.ProviderNPI)) qs.Add($"providerNPI={filter.ProviderNPI}");
+        if (!string.IsNullOrEmpty(filter.ClaimType))   qs.Add($"claimType={filter.ClaimType}");
+        if (filter.AmountMin.HasValue) qs.Add($"amountMin={filter.AmountMin}");
+        if (filter.AmountMax.HasValue) qs.Add($"amountMax={filter.AmountMax}");
+        qs.Add($"page={filter.Page}");
+        qs.Add($"pageSize={filter.PageSize}");
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<EobSearchResponse>(
+                $"{baseUrl}/api/v1/claims?{string.Join("&", qs)}")
+                ?? new EobSearchResponse();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
     private class SubmitClaimResponse
     {
         public string ClaimId { get; set; } = string.Empty;
@@ -1290,6 +1324,23 @@ public class SponsorService : ISponsorService
         }
     }
 
+    public async Task<SponsorMemberView?> GetSponsorMemberViewAsync(string groupNumber)
+    {
+        var baseUrl = _configuration["Services:SponsorService"];
+        try
+        {
+            var response = await _httpClient.GetAsync($"{baseUrl}/sponsors/{Uri.EscapeDataString(groupNumber)}/member-view");
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<SponsorMemberView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Sponsor Service");
+            throw new ServiceUnavailableException("Sponsor Service", ex);
+        }
+    }
+
     private class CreateSponsorResponse
     {
         public string SponsorId { get; set; } = string.Empty;
@@ -2323,6 +2374,23 @@ public class PremiumBillingService : IPremiumBillingService
         try
         {
             return await _httpClient.GetStreamAsync($"{baseUrl}/v1/billing-runs/{cycleId}/invoice");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
+            throw new ServiceUnavailableException("Billing Service", ex);
+        }
+    }
+
+    public async Task<MemberPremiumSummary?> GetMemberPremiumSummaryAsync(string memberId)
+    {
+        var baseUrl = _configuration["Services:BillingService"];
+        try
+        {
+            var response = await _httpClient.GetAsync($"{baseUrl}/v1/members/{Uri.EscapeDataString(memberId)}/premium-summary");
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MemberPremiumSummary>();
         }
         catch (HttpRequestException ex)
         {
@@ -3465,6 +3533,22 @@ public class ArServiceImpl : IArService
             return await r.Content.ReadFromJsonAsync<ArBatchRuleTestResult>() ?? new();
         }
         catch (HttpRequestException ex) { _logger.LogError(ex, "AR Service unavailable"); throw new ServiceUnavailableException("AR Service", ex); }
+    }
+
+    public async Task<MemberArSummary?> GetMemberArSummaryAsync(string memberId)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"{BaseUrl}/v1/members/{Uri.EscapeDataString(memberId)}/ar-summary");
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MemberArSummary>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "AR Service unavailable");
+            throw new ServiceUnavailableException("AR Service", ex);
+        }
     }
 }
 

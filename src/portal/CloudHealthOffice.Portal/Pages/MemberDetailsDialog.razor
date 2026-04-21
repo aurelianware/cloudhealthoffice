@@ -8,6 +8,10 @@
 @inject IMemberNoteService MemberNoteService
 @inject IMemberDocumentService MemberDocumentService
 @inject IIdCardService IdCardService
+@inject IClaimsService ClaimsService
+@inject IArService ArService
+@inject IPremiumBillingService PremiumBillingService
+@inject ISponsorService SponsorService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -322,6 +326,63 @@
                                                 </MudText>
                                             </MudItem>
                                         </MudGrid>
+
+                                        @if (!string.IsNullOrWhiteSpace(coverage.GroupNumber))
+                                        {
+                                            <MudExpansionPanels Elevation="0" Class="mt-3">
+                                                <MudExpansionPanel Text="Sponsor"
+                                                                    Icon="@Icons.Material.Filled.Business"
+                                                                    IsExpandedChanged="@(expanded => OnSponsorPanelToggled(coverage.GroupNumber!, expanded))">
+                                                    @if (_loadingSponsor.Contains(coverage.GroupNumber!))
+                                                    {
+                                                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
+                                                    }
+                                                    else if (_sponsorByGroup.TryGetValue(coverage.GroupNumber!, out var sponsor) && sponsor != null)
+                                                    {
+                                                        <MudGrid>
+                                                            <MudItem xs="12" md="6">
+                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">SPONSOR</MudText>
+                                                                <MudText Typo="Typo.body2">@sponsor.SponsorName</MudText>
+                                                            </MudItem>
+                                                            <MudItem xs="12" md="6">
+                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">TYPE</MudText>
+                                                                <MudText Typo="Typo.body2">@sponsor.LineOfBusiness · @sponsor.Status</MudText>
+                                                            </MudItem>
+                                                            @if (sponsor.PrimaryContact != null)
+                                                            {
+                                                                <MudItem xs="12" md="6">
+                                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">CONTACT</MudText>
+                                                                    <MudText Typo="Typo.body2">@sponsor.PrimaryContact.Name</MudText>
+                                                                    <MudText Typo="Typo.caption">@sponsor.PrimaryContact.Phone · @sponsor.PrimaryContact.Email</MudText>
+                                                                </MudItem>
+                                                            }
+                                                            @if (sponsor.Broker != null)
+                                                            {
+                                                                <MudItem xs="12" md="6">
+                                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">BROKER</MudText>
+                                                                    <MudText Typo="Typo.body2">@sponsor.Broker.Name @(string.IsNullOrEmpty(sponsor.Broker.AgencyName) ? "" : $"· {sponsor.Broker.AgencyName}")</MudText>
+                                                                    <MudText Typo="Typo.caption">@sponsor.Broker.Phone · @sponsor.Broker.Email</MudText>
+                                                                </MudItem>
+                                                            }
+                                                            @if (sponsor.OpenEnrollment != null)
+                                                            {
+                                                                <MudItem xs="12">
+                                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">OPEN ENROLLMENT</MudText>
+                                                                    <MudText Typo="Typo.body2">
+                                                                        @sponsor.OpenEnrollment.Start.ToString("MM/dd/yyyy") – @sponsor.OpenEnrollment.End.ToString("MM/dd/yyyy")
+                                                                        <MudChip T="string" Size="Size.Small" Color="@GetOeStatusColor(sponsor.OpenEnrollment.Status)" Class="ml-2">@sponsor.OpenEnrollment.Status</MudChip>
+                                                                    </MudText>
+                                                                </MudItem>
+                                                            }
+                                                        </MudGrid>
+                                                    }
+                                                    else if (_sponsorLoadedOnce.Contains(coverage.GroupNumber!))
+                                                    {
+                                                        <MudAlert Severity="Severity.Info" Dense="true">Sponsor details unavailable.</MudAlert>
+                                                    }
+                                                </MudExpansionPanel>
+                                            </MudExpansionPanels>
+                                        }
                                     </MudCardContent>
                                 </MudCard>
                             }
@@ -1112,6 +1173,247 @@
                         }
                     </div>
                 </MudTabPanel>
+
+                <!-- Claims Tab — summary counts only; full grid lives on /claims?memberId=X -->
+                <MudTabPanel Text="Claims" Icon="@Icons.Material.Filled.Receipt" OnClick="@(_ => OnClaimsTabActivated())">
+                    <div>
+                        @if (_loadingClaims)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (_claimsError != null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="my-2">Claims service unavailable: @_claimsError</MudAlert>
+                        }
+                        else if (_memberClaimsSummary != null)
+                        {
+                            <MudGrid>
+                                <MudItem xs="12" md="4">
+                                    <MudCard Elevation="1">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">TOTAL CLAIMS</MudText>
+                                            <MudText Typo="Typo.h4" Style="font-weight: 600;">@_memberClaimsSummary.Total</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="4">
+                                    <MudCard Elevation="1">
+                                        <MudCardContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">SHOWING</MudText>
+                                            <MudText Typo="Typo.h6">@_memberClaimsSummary.Resources.Count of @_memberClaimsSummary.Total</MudText>
+                                            <MudText Typo="Typo.caption">page @_memberClaimsSummary.Page · pageSize @_memberClaimsSummary.PageSize</MudText>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudItem>
+                                <MudItem xs="12" md="4" Class="d-flex align-center justify-end">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.OpenInNew"
+                                               OnClick="@(() => Navigation.NavigateTo($"/claims?memberId={MemberId}"))">
+                                        View all claims
+                                    </MudButton>
+                                </MudItem>
+                            </MudGrid>
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                                Claims grid intentionally lives on <strong>/claims</strong>; this tab links out to avoid duplicate rendering.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No claims activity for this member.</MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
+
+                <!-- AR Tab — read-only, no payment actions -->
+                <MudTabPanel Text="AR" Icon="@Icons.Material.Filled.AccountBalance" OnClick="@(_ => OnArTabActivated())">
+                    <div>
+                        @if (_loadingAr)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (_arError != null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="my-2">AR service unavailable: @_arError</MudAlert>
+                        }
+                        else if (_arSummary != null)
+                        {
+                            <MudCard Elevation="1" Class="mb-3">
+                                <MudCardContent>
+                                    <MudGrid>
+                                        <MudItem xs="12" md="4">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">CURRENT BALANCE</MudText>
+                                            <MudText Typo="Typo.h4" Color="@(_arSummary.CurrentBalance > 0 ? Color.Warning : Color.Success)">
+                                                @_arSummary.CurrentBalance.ToString("C")
+                                            </MudText>
+                                        </MudItem>
+                                        <MudItem xs="12" md="8">
+                                            <MudSimpleTable Dense="true" Hover="false" Bordered="true">
+                                                <thead>
+                                                    <tr>
+                                                        <th>0-30</th><th>31-60</th><th>61-90</th><th>91+</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr>
+                                                        <td>@_arSummary.Aged.Bucket0_30.ToString("C")</td>
+                                                        <td>@_arSummary.Aged.Bucket31_60.ToString("C")</td>
+                                                        <td>@_arSummary.Aged.Bucket61_90.ToString("C")</td>
+                                                        <td>@_arSummary.Aged.Bucket91Plus.ToString("C")</td>
+                                                    </tr>
+                                                </tbody>
+                                            </MudSimpleTable>
+                                        </MudItem>
+                                    </MudGrid>
+                                </MudCardContent>
+                            </MudCard>
+
+                            <MudGrid>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.h6" Class="mb-2">Recent charges</MudText>
+                                    @if (_arSummary.RecentCharges.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">None</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudTable Items="_arSummary.RecentCharges" Dense="true" Hover="true">
+                                            <HeaderContent>
+                                                <MudTh>Posted</MudTh><MudTh>Source</MudTh><MudTh>Reference</MudTh><MudTh Style="text-align:right">Amount</MudTh>
+                                            </HeaderContent>
+                                            <RowTemplate>
+                                                <MudTd>@context.PostedAt.ToLocalTime().ToString("MM/dd/yyyy")</MudTd>
+                                                <MudTd>@context.Source</MudTd>
+                                                <MudTd>@context.SourceReferenceNumber</MudTd>
+                                                <MudTd Style="text-align:right">@context.Amount.ToString("C")</MudTd>
+                                            </RowTemplate>
+                                        </MudTable>
+                                    }
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.h6" Class="mb-2">Recent payments</MudText>
+                                    @if (_arSummary.RecentPayments.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">None</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudTable Items="_arSummary.RecentPayments" Dense="true" Hover="true">
+                                            <HeaderContent>
+                                                <MudTh>Posted</MudTh><MudTh>Source</MudTh><MudTh>Reference</MudTh><MudTh Style="text-align:right">Amount</MudTh>
+                                            </HeaderContent>
+                                            <RowTemplate>
+                                                <MudTd>@context.PostedAt.ToLocalTime().ToString("MM/dd/yyyy")</MudTd>
+                                                <MudTd>@context.Source</MudTd>
+                                                <MudTd>@context.SourceReferenceNumber</MudTd>
+                                                <MudTd Style="text-align:right">@context.Amount.ToString("C")</MudTd>
+                                            </RowTemplate>
+                                        </MudTable>
+                                    }
+                                </MudItem>
+                            </MudGrid>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No AR activity for this member.</MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
+
+                <!-- Premium Tab — current invoice, next bill, APTC-aware grace banner, last 12 -->
+                <MudTabPanel Text="Premium" Icon="@Icons.Material.Filled.CreditCard" OnClick="@(_ => OnPremiumTabActivated())">
+                    <div>
+                        @if (_loadingPremium)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (_premiumError != null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="my-2">Premium billing service unavailable: @_premiumError</MudAlert>
+                        }
+                        else if (_premiumSummary?.CurrentInvoice != null)
+                        {
+                            @if (_premiumSummary.Grace.IsInGrace)
+                            {
+                                <MudAlert Severity="Severity.Warning" Class="mb-3">
+                                    @if (_premiumSummary.Grace.GraceType == "AptcThreeMonth")
+                                    {
+                                        <text><strong>ACA APTC 3-month grace</strong> — @_premiumSummary.Grace.DaysRemaining days remaining (expires @_premiumSummary.Grace.ExpiresOn?.ToString("MM/dd/yyyy")).</text>
+                                    }
+                                    else
+                                    {
+                                        <text><strong>Grace period</strong> — @_premiumSummary.Grace.DaysRemaining days remaining (expires @_premiumSummary.Grace.ExpiresOn?.ToString("MM/dd/yyyy")).</text>
+                                    }
+                                </MudAlert>
+                            }
+
+                            <MudCard Elevation="1" Class="mb-3">
+                                <MudCardHeader>
+                                    <CardHeaderContent>
+                                        <MudText Typo="Typo.h6">Current invoice · @_premiumSummary.CurrentInvoice.InvoiceNumber</MudText>
+                                    </CardHeaderContent>
+                                    <CardHeaderActions>
+                                        <MudChip T="string" Size="Size.Small">@_premiumSummary.CurrentInvoice.Status</MudChip>
+                                        @if (_premiumSummary.CurrentInvoice.IsAptcSubsidized)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Info">APTC</MudChip>
+                                        }
+                                        @if (_premiumSummary.AutopayEnabled)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Autopay</MudChip>
+                                        }
+                                    </CardHeaderActions>
+                                </MudCardHeader>
+                                <MudCardContent>
+                                    <MudGrid>
+                                        <MudItem xs="6" md="3">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">PERIOD</MudText>
+                                            <MudText Typo="Typo.body2">@_premiumSummary.CurrentInvoice.BillingPeriodStart.ToString("MM/dd/yyyy") – @_premiumSummary.CurrentInvoice.BillingPeriodEnd.ToString("MM/dd/yyyy")</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6" md="3">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">DUE DATE</MudText>
+                                            <MudText Typo="Typo.body2">@_premiumSummary.CurrentInvoice.DueDate.ToString("MM/dd/yyyy")</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6" md="3">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">NEXT BILL</MudText>
+                                            <MudText Typo="Typo.body2">@(_premiumSummary.NextBillDate?.ToString("MM/dd/yyyy") ?? "–")</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6" md="3">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">BALANCE DUE</MudText>
+                                            <MudText Typo="Typo.h6" Color="@(_premiumSummary.CurrentInvoice.BalanceDue > 0 ? Color.Warning : Color.Success)">
+                                                @_premiumSummary.CurrentInvoice.BalanceDue.ToString("C")
+                                            </MudText>
+                                        </MudItem>
+                                    </MudGrid>
+                                </MudCardContent>
+                            </MudCard>
+
+                            <MudExpansionPanels Elevation="0">
+                                <MudExpansionPanel Text="Last 12 invoices">
+                                    <MudTable Items="_premiumSummary.Last12" Dense="true" Hover="true">
+                                        <HeaderContent>
+                                            <MudTh>Invoice</MudTh><MudTh>Period</MudTh><MudTh>Due</MudTh>
+                                            <MudTh>Status</MudTh><MudTh Style="text-align:right">Total</MudTh>
+                                            <MudTh Style="text-align:right">Paid</MudTh><MudTh Style="text-align:right">Balance</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd Style="font-family:monospace">@context.InvoiceNumber</MudTd>
+                                            <MudTd>@context.BillingPeriodStart.ToString("MM/yyyy")</MudTd>
+                                            <MudTd>@context.DueDate.ToString("MM/dd/yyyy")</MudTd>
+                                            <MudTd>@context.Status</MudTd>
+                                            <MudTd Style="text-align:right">@context.TotalAmount.ToString("C")</MudTd>
+                                            <MudTd Style="text-align:right">@context.TotalPaid.ToString("C")</MudTd>
+                                            <MudTd Style="text-align:right">@context.BalanceDue.ToString("C")</MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                </MudExpansionPanel>
+                            </MudExpansionPanels>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No premium invoices for this member.</MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
             </MudTabs>
         }
         else
@@ -1191,6 +1493,24 @@
     private string _newNoteCategory = "CustomerService";
     private string _newNoteSubject = string.Empty;
     private string _newNoteBody = string.Empty;
+
+    // Member-linkage tabs (Claims / AR / Premium) — lazy loaded on first
+    // activation, cached for the lifetime of the dialog. "LoadedOnce" flags
+    // prevent redundant fetches when the user clicks between tabs. An
+    // explicit error flag per tab lets the UI distinguish "service failed"
+    // from "no data" — otherwise both render the same empty-state alert.
+    private EobSearchResponse? _memberClaimsSummary;
+    private MemberArSummary? _arSummary;
+    private MemberPremiumSummary? _premiumSummary;
+    private bool _loadingClaims, _loadingAr, _loadingPremium;
+    private bool _claimsLoadedOnce, _arLoadedOnce, _premiumLoadedOnce;
+    private string? _claimsError, _arError, _premiumError;
+
+    // Coverage tab Sponsor sub-section — one fetch per distinct group number
+    // on first panel expansion. _loadingSponsor is a set of in-flight keys.
+    private readonly Dictionary<string, SponsorMemberView?> _sponsorByGroup = new();
+    private readonly HashSet<string> _loadingSponsor = new();
+    private readonly HashSet<string> _sponsorLoadedOnce = new();
 
     private List<FamilyRelationshipRow> _subscriberRows = new();
     private List<FamilyRelationshipRow> _dependentRows = new();
@@ -1847,6 +2167,136 @@
         "Appeals" => Color.Warning,
         "Billing" => Color.Info,
         "Clinical" => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    // ── Member-linkage tab loaders ──────────────────────────────────────
+
+    private async Task OnClaimsTabActivated()
+    {
+        if (_claimsLoadedOnce) return;
+        _claimsLoadedOnce = true;
+        _loadingClaims = true;
+        _claimsError = null;
+        StateHasChanged();
+        try
+        {
+            _memberClaimsSummary = await ClaimsService.SearchClaimsByMemberAsync(
+                MemberId, new MemberClaimsFilter { Page = 1, PageSize = 20 });
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            // Service outage — distinct from "member has no claims". Render
+            // as an error banner so operators don't mistake it for empty data.
+            _memberClaimsSummary = null;
+            _claimsError = ex.Message;
+            Snackbar.Add($"Claims service: {ex.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            _memberClaimsSummary = null;
+            _claimsError = ex.Message;
+        }
+        finally
+        {
+            _loadingClaims = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnArTabActivated()
+    {
+        if (_arLoadedOnce) return;
+        _arLoadedOnce = true;
+        _loadingAr = true;
+        _arError = null;
+        StateHasChanged();
+        try
+        {
+            _arSummary = await ArService.GetMemberArSummaryAsync(MemberId);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _arSummary = null;
+            _arError = ex.Message;
+            Snackbar.Add($"AR service: {ex.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            _arSummary = null;
+            _arError = ex.Message;
+        }
+        finally
+        {
+            _loadingAr = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnPremiumTabActivated()
+    {
+        if (_premiumLoadedOnce) return;
+        _premiumLoadedOnce = true;
+        _loadingPremium = true;
+        _premiumError = null;
+        StateHasChanged();
+        try
+        {
+            _premiumSummary = await PremiumBillingService.GetMemberPremiumSummaryAsync(MemberId);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _premiumSummary = null;
+            _premiumError = ex.Message;
+            Snackbar.Add($"Premium billing service: {ex.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            _premiumSummary = null;
+            _premiumError = ex.Message;
+        }
+        finally
+        {
+            _loadingPremium = false;
+            StateHasChanged();
+        }
+    }
+
+    // Coverage tab Sponsor sub-section — lazy per group number on panel
+    // expansion. The expanded-changed event fires on both expand and
+    // collapse, so we only fetch when opening and dedupe with
+    // _sponsorLoadedOnce to avoid refetching on re-expand.
+    private async Task OnSponsorPanelToggled(string groupNumber, bool expanded)
+    {
+        if (!expanded) return;
+        if (string.IsNullOrWhiteSpace(groupNumber)) return;
+        if (_sponsorLoadedOnce.Contains(groupNumber)) return;
+        if (_loadingSponsor.Contains(groupNumber)) return;
+
+        _loadingSponsor.Add(groupNumber);
+        StateHasChanged();
+        try
+        {
+            var view = await SponsorService.GetSponsorMemberViewAsync(groupNumber);
+            _sponsorByGroup[groupNumber] = view;
+        }
+        catch (Exception)
+        {
+            _sponsorByGroup[groupNumber] = null;
+        }
+        finally
+        {
+            _loadingSponsor.Remove(groupNumber);
+            _sponsorLoadedOnce.Add(groupNumber);
+            StateHasChanged();
+        }
+    }
+
+    private static Color GetOeStatusColor(string status) => status switch
+    {
+        "Open" => Color.Success,
+        "Upcoming" => Color.Info,
+        "Closed" => Color.Default,
         _ => Color.Default
     };
 }

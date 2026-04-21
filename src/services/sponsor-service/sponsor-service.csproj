@@ -9,6 +9,15 @@
     <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
+  <!-- Co-located test project; the Web SDK would otherwise pull its .cs
+       files into the service compilation. Mirrors ar-service.csproj. -->
+  <ItemGroup>
+    <Compile Remove="SponsorService.Tests/**" />
+    <Content Remove="SponsorService.Tests/**" />
+    <None Remove="SponsorService.Tests/**" />
+    <EmbeddedResource Remove="SponsorService.Tests/**" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
