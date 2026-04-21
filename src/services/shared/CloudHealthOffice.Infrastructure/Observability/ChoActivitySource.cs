@@ -33,21 +33,23 @@ public static class ChoActivitySource
         if (tenantId is not null)
             activity.SetTag("cho.tenant_id", tenantId);
         if (claimId is not null)
-            activity.SetTag("cho.claim_id", claimId);
+            activity.SetTag("cho.claim_id_hash", HashIdentifier(claimId));
         if (claimType is not null)
             activity.SetTag("cho.claim_type", claimType);
         if (memberId is not null)
-            activity.SetTag("cho.member_id_hash", HashMemberId(memberId));
+            activity.SetTag("cho.member_id_hash", HashIdentifier(memberId));
 
         return activity;
     }
 
     /// <summary>
-    /// One-way SHA-256 hash of member ID to avoid leaking PHI into traces.
+    /// One-way SHA-256 hash of an identifier to avoid leaking PHI into traces.
+    /// Used for member IDs, claim IDs, and any other identifier that could
+    /// be joined back to a member.
     /// </summary>
-    public static string HashMemberId(string memberId)
+    public static string HashIdentifier(string identifier)
     {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(memberId));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(identifier));
         return Convert.ToHexString(hash)[..16].ToLowerInvariant();
     }
 

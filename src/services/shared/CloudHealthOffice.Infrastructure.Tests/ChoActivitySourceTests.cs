@@ -24,36 +24,36 @@ public class ChoActivitySourceTests
     }
 
     [Fact]
-    public void HashMemberId_ReturnsConsistentHash()
+    public void HashIdentifier_ReturnsConsistentHash()
     {
-        var hash1 = ChoActivitySource.HashMemberId("member-123");
-        var hash2 = ChoActivitySource.HashMemberId("member-123");
+        var hash1 = ChoActivitySource.HashIdentifier("member-123");
+        var hash2 = ChoActivitySource.HashIdentifier("member-123");
 
         hash1.Should().Be(hash2);
     }
 
     [Fact]
-    public void HashMemberId_ReturnsDifferentHashForDifferentIds()
+    public void HashIdentifier_ReturnsDifferentHashForDifferentIds()
     {
-        var hash1 = ChoActivitySource.HashMemberId("member-123");
-        var hash2 = ChoActivitySource.HashMemberId("member-456");
+        var hash1 = ChoActivitySource.HashIdentifier("member-123");
+        var hash2 = ChoActivitySource.HashIdentifier("member-456");
 
         hash1.Should().NotBe(hash2);
     }
 
     [Fact]
-    public void HashMemberId_Returns16CharacterHex()
+    public void HashIdentifier_Returns16CharacterHex()
     {
-        var hash = ChoActivitySource.HashMemberId("any-member-id");
+        var hash = ChoActivitySource.HashIdentifier("any-member-id");
 
         hash.Should().HaveLength(16);
         hash.Should().MatchRegex("^[0-9a-f]{16}$");
     }
 
     [Fact]
-    public void HashMemberId_ReturnsLowercase()
+    public void HashIdentifier_ReturnsLowercase()
     {
-        var hash = ChoActivitySource.HashMemberId("TEST-MEMBER");
+        var hash = ChoActivitySource.HashIdentifier("TEST-MEMBER");
 
         hash.Should().Be(hash.ToLowerInvariant());
     }
@@ -75,7 +75,7 @@ public class ChoActivitySourceTests
     }
 
     [Fact]
-    public void StartActivity_WithListener_SetsClaimTags()
+    public void StartActivity_WithListener_HashesClaimIdAndSetsClaimType()
     {
         using var listener = new ActivityListener
         {
@@ -90,7 +90,8 @@ public class ChoActivitySourceTests
             claimType: "professional");
 
         activity.Should().NotBeNull();
-        activity!.GetTagItem("cho.claim_id").Should().Be("CLM-001");
+        activity!.GetTagItem("cho.claim_id").Should().BeNull("raw claim IDs must not be exported");
+        activity.GetTagItem("cho.claim_id_hash").Should().Be(ChoActivitySource.HashIdentifier("CLM-001"));
         activity.GetTagItem("cho.claim_type").Should().Be("professional");
     }
 
@@ -110,7 +111,7 @@ public class ChoActivitySourceTests
         var tagValue = activity!.GetTagItem("cho.member_id_hash")?.ToString();
         tagValue.Should().NotBeNull();
         tagValue.Should().NotBe("MBR-12345", "member ID should be hashed, not stored as plaintext");
-        tagValue.Should().Be(ChoActivitySource.HashMemberId("MBR-12345"));
+        tagValue.Should().Be(ChoActivitySource.HashIdentifier("MBR-12345"));
     }
 
     [Fact]
@@ -128,6 +129,7 @@ public class ChoActivitySourceTests
         activity.Should().NotBeNull();
         activity!.GetTagItem("cho.tenant_id").Should().BeNull();
         activity.GetTagItem("cho.claim_id").Should().BeNull();
+        activity.GetTagItem("cho.claim_id_hash").Should().BeNull();
         activity.GetTagItem("cho.claim_type").Should().BeNull();
         activity.GetTagItem("cho.member_id_hash").Should().BeNull();
     }

@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
+using CloudHealthOffice.Infrastructure.Observability;
 using ClaimsService.EDI.Florida;
 using ClaimsService.Fhir;
 using ClaimsService.Repositories;
@@ -89,7 +90,11 @@ builder.Services.AddSingleton<ClaimEventPublisher>();
 builder.Services.AddSingleton<IClaimEventPublisher>(sp => sp.GetRequiredService<ClaimEventPublisher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ClaimEventPublisher>());
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
+
+app.UseChoObservability();
 
 // Shared middleware pipeline: exception handling, Swagger (dev), tenant middleware, CORS, health checks
 app.UseChoInfrastructure(builder.Configuration);

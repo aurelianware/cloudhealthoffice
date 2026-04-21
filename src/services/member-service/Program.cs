@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
+using CloudHealthOffice.Infrastructure.Observability;
 using MemberService.HostedServices;
 using MemberService.Middleware;
 using MemberService.Repositories;
@@ -227,7 +228,11 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
+
+app.UseChoObservability();
 
 if (app.Environment.IsDevelopment())
 {

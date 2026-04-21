@@ -4,6 +4,7 @@ using ClaimsExaminerService.Services.Examiner;
 using ClaimsExaminerService.Services.Kafka;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
+using CloudHealthOffice.Infrastructure.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,7 +58,11 @@ builder.Services.AddSingleton<IProviderRfaiHistoryClient, NoOpProviderRfaiHistor
 // without Kafka still come up.
 builder.Services.AddHostedService<ClaimPendedConsumer>();
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
+
+app.UseChoObservability();
 
 // Shared middleware pipeline
 app.UseChoInfrastructure(builder.Configuration);

@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\accumulator-service\accumulator-service.csproj" />
     <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Events\CloudHealthOffice.Events.csproj" />
+    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

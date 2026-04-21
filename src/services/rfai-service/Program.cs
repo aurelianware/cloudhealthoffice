@@ -6,6 +6,7 @@ using RfaiService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
+using CloudHealthOffice.Infrastructure.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -87,9 +88,13 @@ builder.Services.AddCors(options =>
         policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 });
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 
 var app = builder.Build();
+
+app.UseChoObservability();
 
 if (app.Environment.IsDevelopment())
 {

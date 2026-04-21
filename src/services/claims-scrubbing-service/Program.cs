@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Observability;
 using ClaimsScrubbingService.Repositories;
 using ClaimsScrubbingService.Services;
 
@@ -50,8 +51,11 @@ if (!string.IsNullOrEmpty(storageConnection) || !string.IsNullOrEmpty(storageAcc
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
 
+app.UseChoObservability();
 app.UseChoInfrastructure(builder.Configuration);
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();

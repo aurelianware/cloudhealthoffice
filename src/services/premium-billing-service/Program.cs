@@ -7,6 +7,7 @@ using PremiumBillingService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
+using CloudHealthOffice.Infrastructure.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -113,7 +114,11 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
+
+app.UseChoObservability();
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
