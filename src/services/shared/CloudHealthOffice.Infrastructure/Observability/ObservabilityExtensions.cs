@@ -92,7 +92,8 @@ public static class ObservabilityExtensions
                     })
                     .AddHttpClientInstrumentation()
                     .AddRedisInstrumentation()
-                    .AddSource("MongoDB.Driver.Core.Extensions.DiagnosticSources");
+                    .AddSource("MongoDB.Driver.Core.Extensions.DiagnosticSources")
+                    .AddProcessor(new PhiScrubbingSpanProcessor(serviceName));
 
                 if (!string.IsNullOrEmpty(otlpEndpoint))
                 {

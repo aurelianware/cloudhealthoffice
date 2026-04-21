@@ -5,6 +5,7 @@ using TenantService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
+using CloudHealthOffice.Infrastructure.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -72,6 +73,8 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
 
 // Seed admin TenantUser and standard roles on startup.
@@ -126,6 +129,8 @@ using (var scope = app.Services.CreateScope())
         logger.LogWarning(ex, "Failed to seed standard roles on startup.");
     }
 }
+
+app.UseChoObservability();
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())

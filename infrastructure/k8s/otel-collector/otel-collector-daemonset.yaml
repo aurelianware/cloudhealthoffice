@@ -1,0 +1,157 @@
+# OpenTelemetry Collector DaemonSet — SCAFFOLD, NOT DEPLOYED
+#
+# This manifest is a starting point for CHO's OTel collector rollout. It is
+# intentionally NOT referenced by any existing service Deployment — services
+# run fine without it because AddChoObservability only wires the OTLP exporter
+# when Observability:OtlpEndpoint is configured.
+#
+# Next steps (follow-up work, out of scope for A.7.4):
+#   - Replace the `debug` exporter with Azure Monitor / Tempo / your backend
+#   - Tighten resource requests/limits based on observed volume
+#   - Add a ServiceMonitor (if using Prometheus Operator) so /metrics is scraped
+#   - Add RBAC for k8sattributes processor (node/pod/service discovery)
+#
+# To deploy later:
+#   kubectl apply -f infrastructure/k8s/otel-collector/otel-collector-daemonset.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: observability
+data:
+  config.yaml: |
+    extensions:
+      # Exposes /health (200 when the collector pipelines are running) on 13133.
+      # Wired below in service.extensions and targeted by the container probes.
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+
+    exporters:
+      # Placeholder. Replace with azuremonitor / otlp / prometheusremotewrite
+      # / tempo as appropriate once a production backend is selected.
+      debug:
+        verbosity: normal
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-collector
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/component: observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-collector
+        app.kubernetes.io/component: observability
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+        - name: otel-collector
+          # Pinned for reproducibility. Bump to a current stable tag at deploy time
+          # and keep it pinned — never float on :latest in production.
+          image: otel/opentelemetry-collector-contrib:0.102.1
+          args:
+            - --config=/etc/otel/config.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+  namespace: observability
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: otel-collector
+spec:
+  selector:
+    app.kubernetes.io/name: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP

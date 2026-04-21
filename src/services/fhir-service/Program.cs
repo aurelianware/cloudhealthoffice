@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 using Microsoft.Azure.Cosmos;
@@ -193,7 +194,11 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddCors(options => options.AddPolicy("AllowAll",
     p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
+
+app.UseChoObservability();
 
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
