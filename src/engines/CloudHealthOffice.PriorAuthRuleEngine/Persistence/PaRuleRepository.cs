@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using Microsoft.Azure.Cosmos;
@@ -7,7 +8,6 @@ using Microsoft.Extensions.Options;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 using StackExchange.Redis;
-using System.Text.Json;
 
 namespace CloudHealthOffice.PriorAuthRuleEngine.Persistence;
 
@@ -311,85 +311,98 @@ public sealed class PaRuleRepositoryMongo : IPaRuleRepository
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Redis caching decorator
+// Cache-wrapped rule repository
 // ─────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Redis read-through cache for PA rule sets.
+/// Read-through cache for PA rule sets.
 ///
-/// Cache key:  pa-rules:{stateCode}:{lob}:{program ?? "any"}:{tenantId ?? "platform"}
-/// TTL:        15 minutes (PriorAuthRuleEngineOptions.RuleSetCacheTtl)
-/// Invalidation: UpsertAsync and DeleteAsync delete affected cache keys.
+/// Cache key:   pa-rules:{stateCode}:{lob}:{program ?? "any"}:{tenantId ?? "platform"}
+/// TTL:         15 minutes (PriorAuthRuleEngineOptions.RuleSetCacheTtl)
+/// Invalidation: UpsertAsync + BulkUpsertAsync invalidate exact keys;
+///               DeleteAsync flushes every key under pa-rules:{state}:* via SCAN.
 ///
-/// Rule sets change only at onboarding or admin update — 15-minute TTL
-/// provides a good balance between freshness and Redis pressure.
+/// ── Why this class still depends on IConnectionMultiplexer ────────
+///
+/// This repository is one of two deliberate exceptions to the shared
+/// <see cref="ICacheProvider"/> abstraction (the other is
+/// <c>RedisAccumulatorService</c> in BenefitEngine). The K/V
+/// operations (read, set, single-key delete, bulk delete) flow through
+/// <see cref="ICacheProvider"/> and benefit from its guard layer,
+/// serialization, and coalescing. The exception is the
+/// <see cref="DeleteAsync"/> invalidation path: a single rule delete
+/// cannot reconstruct the cache key set because the cache is keyed on
+/// <c>(stateCode, lob, program, tenantId)</c> and the caller only
+/// supplies <c>(ruleId, stateCode)</c>. The conservative-but-correct
+/// fix is a Redis <c>SCAN</c> for <c>pa-rules:{state}:*</c> — an
+/// operation that <see cref="ICacheProvider"/> deliberately does NOT
+/// expose (pattern deletion is expensive on large key spaces and
+/// leaks Redis semantics into a neutral abstraction).
+///
+/// We therefore accept a second, bounded dependency on
+/// <see cref="IConnectionMultiplexer"/> rather than either (a) bending
+/// the shared interface to accommodate a pattern-delete that nobody
+/// else needs, or (b) changing the rule-delete semantics to force
+/// callers into state-level invalidation. See
+/// <c>docs/architecture/shared-cache.md</c> and Addendum A.7.2.
 /// </summary>
 public sealed class RedisPaRuleRepository : IPaRuleRepository
 {
     private readonly IPaRuleRepository _inner;
-    private readonly IDatabase _db;
+    private readonly ICacheProvider _cache;
+    private readonly IConnectionMultiplexer _multiplexer;
     private readonly TimeSpan _ttl;
     private readonly ILogger<RedisPaRuleRepository> _logger;
 
-    private static readonly JsonSerializerOptions _json = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     public RedisPaRuleRepository(
         IPaRuleRepository inner,
-        IConnectionMultiplexer redis,
+        ICacheProvider cache,
+        IConnectionMultiplexer multiplexer,
         IOptions<PriorAuthRuleEngineOptions> options,
         ILogger<RedisPaRuleRepository> logger)
     {
-        _inner  = inner;
-        _db     = redis.GetDatabase();
-        _ttl    = options.Value.RuleSetCacheTtl;
-        _logger = logger;
+        _inner       = inner;
+        _cache       = cache;
+        _multiplexer = multiplexer;
+        _ttl         = options.Value.RuleSetCacheTtl;
+        _logger      = logger;
     }
 
     public async Task<IReadOnlyList<PaRuleDocument>> GetRulesAsync(
         RuleSetKey key, CancellationToken ct = default)
     {
-        var cacheKey = MakeCacheKey(key);
-
-        try
-        {
-            var cached = await _db.StringGetAsync(cacheKey);
-            if (cached.HasValue)
+        // Rule sets are serialized as CachedRuleSet (a list wrapper) because
+        // ICacheProvider.GetOrSetAsync<T> requires T : class. The wrapper is
+        // stable over time and adds a trivial allocation per read.
+        var result = await _cache.GetOrSetAsync<CachedRuleSet>(
+            MakeCacheKey(key),
+            async token =>
             {
-                var rules = JsonSerializer.Deserialize<List<PaRuleDocument>>(cached!, _json);
-                if (rules is not null)
-                {
-                    _logger.LogDebug("PA rule cache hit: {Key}", cacheKey);
-                    return rules;
-                }
-            }
-        }
-        catch (RedisException ex)
-        {
-            _logger.LogWarning(ex, "Redis unavailable for PA rule read — falling through");
-        }
+                var rules = await _inner.GetRulesAsync(key, token);
+                return new CachedRuleSet(rules.ToList());
+            },
+            _ttl,
+            // Rule sets straddle tenant/platform data. Keying includes the
+            // tenant (or "platform" sentinel), but the tenant scope on the
+            // guard requires an HttpContext. Platform rules are legitimately
+            // global — so we use Global here and rely on the embedded
+            // tenantId in the logical key for multi-tenant uniqueness.
+            CacheScope.Global,
+            ct);
 
-        var fresh = await _inner.GetRulesAsync(key, ct);
-
-        try
-        {
-            var payload = JsonSerializer.Serialize(fresh, _json);
-            await _db.StringSetAsync(cacheKey, payload, _ttl);
-        }
-        catch (RedisException ex)
-        {
-            _logger.LogWarning(ex, "Failed to cache PA rules for key {Key}", cacheKey);
-        }
-
-        return fresh;
+        return (IReadOnlyList<PaRuleDocument>?)result?.Rules ?? Array.Empty<PaRuleDocument>();
     }
 
     public async Task UpsertAsync(PaRuleDocument rule, CancellationToken ct = default)
     {
         await _inner.UpsertAsync(rule, ct);
-        await TryInvalidateAsync(rule);
+        await _cache.RemoveAsync(MakeCacheKey(new RuleSetKey
+        {
+            StateCode = rule.StateCode,
+            Lob       = rule.Lob,
+            Program   = rule.Program,
+            TenantId  = rule.TenantId
+        }), CacheScope.Global, ct);
     }
 
     public async Task BulkUpsertAsync(
@@ -398,7 +411,6 @@ public sealed class RedisPaRuleRepository : IPaRuleRepository
         var list = rules.ToList();
         await _inner.BulkUpsertAsync(list, ct);
 
-        // Invalidate all unique cache keys touched by the bulk write
         var keys = list
             .Select(r => MakeCacheKey(new RuleSetKey
             {
@@ -408,18 +420,21 @@ public sealed class RedisPaRuleRepository : IPaRuleRepository
                 TenantId  = r.TenantId
             }))
             .Distinct()
-            .ToArray();
+            .ToList();
 
-        try { await _db.KeyDeleteAsync(keys.Select(k => (RedisKey)k).ToArray()); }
-        catch (RedisException ex) { _logger.LogWarning(ex, "Failed to invalidate PA rule cache"); }
+        if (keys.Count > 0)
+            await _cache.RemoveAsync(keys, CacheScope.Global, ct);
     }
 
     public async Task DeleteAsync(string ruleId, string stateCode, CancellationToken ct = default)
     {
         await _inner.DeleteAsync(ruleId, stateCode, ct);
-        // Cannot derive a precise cache key without knowing lob/program/tenantId,
-        // so flush all keys for this state — conservative but safe.
-        await TryFlushStateAsync(stateCode);
+        // The cache key cannot be reconstructed from (ruleId, stateCode) alone,
+        // so flush every pa-rules:{state}:* key via SCAN. Uses the direct
+        // multiplexer because pattern deletion is not exposed on
+        // ICacheProvider by design — see class remarks above and
+        // docs/architecture/shared-cache.md.
+        await FlushStateViaScanAsync(stateCode);
     }
 
     public Task<IReadOnlyList<PaRuleDocument>> ListAsync(
@@ -429,30 +444,41 @@ public sealed class RedisPaRuleRepository : IPaRuleRepository
     private static string MakeCacheKey(RuleSetKey key) =>
         $"pa-rules:{key.StateCode}:{(int)key.Lob}:{key.Program ?? "any"}:{key.TenantId ?? "platform"}";
 
-    private async Task TryInvalidateAsync(PaRuleDocument rule)
+    private async Task FlushStateViaScanAsync(string stateCode)
     {
-        var key = MakeCacheKey(new RuleSetKey
-        {
-            StateCode = rule.StateCode,
-            Lob       = rule.Lob,
-            Program   = rule.Program,
-            TenantId  = rule.TenantId
-        });
-        try { await _db.KeyDeleteAsync(key); }
-        catch (RedisException ex) { _logger.LogWarning(ex, "Failed to invalidate {Key}", key); }
-    }
-
-    private async Task TryFlushStateAsync(string stateCode)
-    {
-        // Scan for all pa-rules:{stateCode}:* keys and delete them
-        // Use SCAN — never KEYS in production
-        var server  = _db.Multiplexer.GetServer(_db.Multiplexer.GetEndPoints().First());
-        var pattern = $"pa-rules:{stateCode}:*";
+        // TODO(scale): SCAN across every pa-rules:{state}:* key is fine at
+        // today's rule cardinality (~hundreds of keys per state) but becomes
+        // expensive once a state carries thousands of (lob, program, tenant)
+        // combinations. If this shows up in Redis SLOWLOG, switch to an
+        // explicit per-state index set (SADD pa-rules:{state}:index on write;
+        // SMEMBERS + DEL on flush). Tracked as a follow-up.
+        //
+        // SCAN returns RAW Redis keys (already carrying CacheKeyGuard's
+        // {env}:_global: prefix from prior writes) so DEL must run against
+        // the multiplexer directly; routing back through ICacheProvider
+        // would double-prefix. The SCAN pattern matches every tenant's
+        // entry for this state because the prefix precedes the
+        // "pa-rules:{state}:" portion only on the guard's side — the
+        // wildcard "*pa-rules:{state}:*" (with leading * to skip the
+        // guard prefix) covers every env/scope combination in one sweep.
         try
         {
-            var keys = server.Keys(pattern: pattern).Select(k => (RedisKey)k.ToString()).ToArray();
-            if (keys.Length > 0) await _db.KeyDeleteAsync(keys);
+            var server  = _multiplexer.GetServer(_multiplexer.GetEndPoints().First());
+            var pattern = $"*pa-rules:{stateCode}:*";
+            var keys    = server.Keys(pattern: pattern).ToArray();
+            if (keys.Length > 0)
+                await _multiplexer.GetDatabase().KeyDeleteAsync(keys);
         }
-        catch (RedisException ex) { _logger.LogWarning(ex, "Failed to flush state {State} from cache", stateCode); }
+        catch (RedisException ex)
+        {
+            _logger.LogWarning(ex, "Failed to flush state {State} from PA rule cache", stateCode);
+        }
     }
+
+    /// <summary>
+    /// Serialization wrapper — <see cref="ICacheProvider.GetOrSetAsync{T}"/>
+    /// requires T : class, and <see cref="IReadOnlyList{T}"/> is not a
+    /// reference type the JSON serializer can round-trip without help.
+    /// </summary>
+    private sealed record CachedRuleSet(List<PaRuleDocument> Rules);
 }
