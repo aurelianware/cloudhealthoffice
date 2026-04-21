@@ -1,25 +1,21 @@
-using System.Text.Json;
-using Azure.Messaging.ServiceBus;
+using CloudHealthOffice.Infrastructure.Messaging;
 
 namespace EligibilityService.Services;
 
 /// <summary>
 /// Drives queue consumption. Has two implementations:
-///   ChannelBatchQueueProcessor — drains the in-process channel used by
-///     <see cref="InMemoryBatchQueue"/> (dev / single-instance).
-///   ServiceBusBatchQueueProcessor — wraps <see cref="ServiceBusProcessor"/>
-///     with push delivery, complete-on-success / abandon-on-failure, and
-///     lets Service Bus DLQ after MaxDeliveryCount.
+///   <see cref="ChannelBatchQueueProcessor"/> — drains the in-process channel
+///     used by <see cref="InMemoryBatchQueue"/> (dev / single-instance).
+///   <see cref="MessageBusBatchQueueProcessor"/> — subscribes to the shared
+///     <see cref="IMessageBus"/>, which preserves the complete-on-success /
+///     abandon-on-failure / dead-letter-on-deserialize pattern that lived
+///     here previously as a direct <c>ServiceBusProcessor</c> wrapper.
 ///
 /// <see cref="BatchEligibilityQueueWorker"/> resolves this from DI and
 /// delegates; it does not know which backend it's on.
 /// </summary>
 public interface IBatchQueueProcessor
 {
-    /// <summary>
-    /// Run until <paramref name="stopping"/> is cancelled, dispatching each
-    /// received message to <paramref name="handler"/>.
-    /// </summary>
     Task RunAsync(
         Func<BatchQueueMessage, CancellationToken, Task> handler,
         CancellationToken stopping);
@@ -27,7 +23,8 @@ public interface IBatchQueueProcessor
 
 /// <summary>
 /// Channel-based processor that drains an <see cref="InMemoryBatchQueue"/>.
-/// Used in dev and in unit tests.
+/// TODO(addendum-a-7-1): fold into IMessageBus once the tests that depend
+/// on IBatchQueue.ReadAllAsync are rewritten to subscribe-and-drain.
 /// </summary>
 public class ChannelBatchQueueProcessor : IBatchQueueProcessor
 {
@@ -50,68 +47,31 @@ public class ChannelBatchQueueProcessor : IBatchQueueProcessor
 }
 
 /// <summary>
-/// Service Bus processor. Completes messages on handler success, abandons
-/// on failure (redelivery up to MaxDeliveryCount, then queue DLQ).
+/// Processor that subscribes to <see cref="IMessageBus"/>. Behaviour
+/// (complete / abandon / dead-letter) lives in the bus implementation;
+/// this class just plumbs the typed handler through.
 /// </summary>
-public class ServiceBusBatchQueueProcessor : IBatchQueueProcessor, IAsyncDisposable
+public class MessageBusBatchQueueProcessor : IBatchQueueProcessor
 {
-    private readonly ServiceBusProcessor _processor;
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+    private readonly IMessageBus _bus;
+    private readonly string _queueName;
 
-    public ServiceBusBatchQueueProcessor(ServiceBusClient client, string queueName, int maxConcurrentCalls = 4)
+    public MessageBusBatchQueueProcessor(IMessageBus bus, string queueName)
     {
-        _processor = client.CreateProcessor(queueName, new ServiceBusProcessorOptions
-        {
-            MaxConcurrentCalls = maxConcurrentCalls,
-            AutoCompleteMessages = false
-        });
+        _bus = bus ?? throw new ArgumentNullException(nameof(bus));
+        _queueName = queueName ?? throw new ArgumentNullException(nameof(queueName));
     }
 
     public async Task RunAsync(
         Func<BatchQueueMessage, CancellationToken, Task> handler,
         CancellationToken stopping)
     {
-        _processor.ProcessMessageAsync += async args =>
-        {
-            BatchQueueMessage? msg;
-            try
-            {
-                msg = JsonSerializer.Deserialize<BatchQueueMessage>(
-                    args.Message.Body.ToString(), JsonOpts);
-            }
-            catch
-            {
-                // Malformed payload — let SB auto-DLQ.
-                await args.DeadLetterMessageAsync(args.Message,
-                    deadLetterReason: "DeserializeFailed",
-                    cancellationToken: args.CancellationToken);
-                return;
-            }
+        await using var subscription = _bus.Subscribe<BatchQueueMessage>(
+            _queueName,
+            (msg, _, ct) => handler(msg, ct),
+            new SubscriptionOptions(MaxConcurrentCalls: 4, AutoComplete: false));
 
-            if (msg == null)
-            {
-                await args.DeadLetterMessageAsync(args.Message,
-                    deadLetterReason: "NullPayload",
-                    cancellationToken: args.CancellationToken);
-                return;
-            }
-
-            try
-            {
-                await handler(msg, args.CancellationToken);
-                await args.CompleteMessageAsync(args.Message, args.CancellationToken);
-            }
-            catch
-            {
-                await args.AbandonMessageAsync(args.Message,
-                    cancellationToken: args.CancellationToken);
-                throw;
-            }
-        };
-
-        _processor.ProcessErrorAsync += _ => Task.CompletedTask;
-
-        await _processor.StartProcessingAsync(stopping);
+        await subscription.StartAsync(stopping);
         try
         {
             await Task.Delay(Timeout.Infinite, stopping);
@@ -120,11 +80,6 @@ public class ServiceBusBatchQueueProcessor : IBatchQueueProcessor, IAsyncDisposa
         {
             // expected on shutdown
         }
-        finally
-        {
-            await _processor.StopProcessingAsync(CancellationToken.None);
-        }
+        await subscription.StopAsync(CancellationToken.None);
     }
-
-    public async ValueTask DisposeAsync() => await _processor.DisposeAsync();
 }
