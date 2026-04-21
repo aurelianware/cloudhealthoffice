@@ -108,6 +108,20 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         return await _collection.Find(filter).SortBy(x => x.DueDate).ToListAsync();
     }
 
+    public async Task<IEnumerable<PremiumInvoice>> ListByMemberAsync(string memberId, int take = 12)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<PremiumInvoice>.Filter.And(
+            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<PremiumInvoice>.Filter.ElemMatch(
+                x => x.LineItems,
+                li => li.MemberId == memberId));
+        return await _collection.Find(filter)
+            .SortByDescending(x => x.BillingPeriodStart)
+            .Limit(take)
+            .ToListAsync();
+    }
+
     public async Task<PremiumInvoice> CreateAsync(PremiumInvoice invoice)
     {
         invoice.TenantId = GetTenantId();

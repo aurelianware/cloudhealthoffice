@@ -16,6 +16,28 @@ public interface IClaimRepository
         LineOfBusiness? lineOfBusiness,
         int page,
         int pageSize);
+
+    /// <summary>
+    /// Member-scoped search with the filters the portal Member Details dialog
+    /// exposes: date range, status, provider, claim type, amount range. Always
+    /// requires a memberId — this method exists so the v1 member endpoint has a
+    /// single repository path and so amountRange/claimType filters don't force
+    /// a signature change on the wider SearchAsync.
+    /// Returns (matching page, totalCount) where totalCount reflects the full
+    /// result set across all pages so the portal can paginate.
+    /// </summary>
+    Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchForMemberAsync(
+        string memberId,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        string? providerNPI,
+        ClaimType? claimType,
+        decimal? amountMin,
+        decimal? amountMax,
+        int page,
+        int pageSize);
+
     Task<ClaimsSummary> GetClaimsSummaryAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness);
 
     /// <summary>
@@ -188,6 +210,97 @@ public class ClaimRepository : IClaimRepository
         }
 
         return results;
+    }
+
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchForMemberAsync(
+        string memberId,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        string? providerNPI,
+        ClaimType? claimType,
+        decimal? amountMin,
+        decimal? amountMax,
+        int page,
+        int pageSize)
+    {
+        var tenantId = GetTenantId();
+
+        var conditions = new List<string>
+        {
+            "c.tenantId = @tenantId",
+            "c.memberId = @memberId"
+        };
+        var parameters = new Dictionary<string, object>
+        {
+            ["@tenantId"] = tenantId,
+            ["@memberId"] = memberId
+        };
+
+        if (serviceDateFrom.HasValue)
+        {
+            conditions.Add("c.serviceDateFrom >= @serviceDateFrom");
+            parameters["@serviceDateFrom"] = serviceDateFrom.Value;
+        }
+        if (serviceDateTo.HasValue)
+        {
+            conditions.Add("c.serviceDateTo <= @serviceDateTo");
+            parameters["@serviceDateTo"] = serviceDateTo.Value;
+        }
+        if (status.HasValue)
+        {
+            conditions.Add("c.status = @status");
+            parameters["@status"] = status.Value.ToString();
+        }
+        if (!string.IsNullOrEmpty(providerNPI))
+        {
+            conditions.Add("(c.billingProviderNPI = @providerNPI OR c.renderingProviderNPI = @providerNPI)");
+            parameters["@providerNPI"] = providerNPI;
+        }
+        if (claimType.HasValue)
+        {
+            conditions.Add("c.claimType = @claimType");
+            parameters["@claimType"] = claimType.Value.ToString();
+        }
+        if (amountMin.HasValue)
+        {
+            conditions.Add("c.totalChargeAmount >= @amountMin");
+            parameters["@amountMin"] = amountMin.Value;
+        }
+        if (amountMax.HasValue)
+        {
+            conditions.Add("c.totalChargeAmount <= @amountMax");
+            parameters["@amountMax"] = amountMax.Value;
+        }
+
+        var where = string.Join(" AND ", conditions);
+
+        var countQuery = new QueryDefinition($"SELECT VALUE COUNT(1) FROM c WHERE {where}");
+        foreach (var (k, v) in parameters) countQuery.WithParameter(k, v);
+
+        var totalCount = 0;
+        var countIterator = _container.GetItemQueryIterator<int>(countQuery);
+        while (countIterator.HasMoreResults)
+        {
+            var response = await countIterator.ReadNextAsync();
+            totalCount += response.FirstOrDefault();
+        }
+
+        var pageQuery = new QueryDefinition(
+            $"SELECT * FROM c WHERE {where} " +
+            $"ORDER BY c.submittedDate DESC " +
+            $"OFFSET {(page - 1) * pageSize} LIMIT {pageSize}");
+        foreach (var (k, v) in parameters) pageQuery.WithParameter(k, v);
+
+        var items = new List<Claim>();
+        var iterator = _container.GetItemQueryIterator<Claim>(pageQuery);
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            items.AddRange(response);
+        }
+
+        return (items, totalCount);
     }
 
     public async Task<ClaimsSummary> GetClaimsSummaryAsync(

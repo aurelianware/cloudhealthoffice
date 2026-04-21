@@ -153,7 +153,10 @@ public class MongoArBalanceRepository : IArBalanceRepository
         {
             new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending(x => x.GlAccountId)),
             new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending(x => x.Period)),
-            new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending(x => x.IsReconciled))
+            new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending(x => x.IsReconciled)),
+            // Member-scoped lookup path — backs GetBalancesContainingMemberAsync
+            // and the /members/{id}/ar-summary endpoint.
+            new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending("postingEntries.memberId"))
         };
         _collection.Indexes.CreateMany(models);
     }
@@ -232,6 +235,20 @@ public class MongoArBalanceRepository : IArBalanceRepository
         await _collection.ReplaceOneAsync(filter, balance);
         _logger.LogInformation("Updated AR balance {BalanceId}", SanitizeForLog(balance.Id));
         return balance;
+    }
+
+    public async Task<IEnumerable<ArBalance>> GetBalancesContainingMemberAsync(string memberId)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<ArBalance>.Filter.And(
+            Builders<ArBalance>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<ArBalance>.Filter.ElemMatch(
+                x => x.PostingEntries,
+                e => e.MemberId == memberId));
+
+        return await _collection.Find(filter)
+            .SortByDescending(b => b.Period)
+            .ToListAsync();
     }
 
     private static string SanitizeForLog(string? value)
