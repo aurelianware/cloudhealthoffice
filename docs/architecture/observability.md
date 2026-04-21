@@ -85,9 +85,19 @@ opt out.
 
 ### What's allowed
 
-- Standard OTel namespaces: `http.*`, `db.*`, `net.*`, `rpc.*`, `messaging.*`
-- The `cho.*` namespace, except where a prohibited suffix matches
-  (e.g. `cho.member_id` is stripped; `cho.member_id_hash` passes through)
+Everything that doesn't match the prohibited list — either by exact name or
+by the segment after the final `.`. Standard OTel namespaces (`http.*`,
+`db.*`, `net.*`, `rpc.*`, `messaging.*`) are NOT blanket-allowed: a prohibited
+suffix always wins. Concretely:
+
+- `http.method` / `http.status_code` / `db.statement` → pass through.
+- `http.request.header.authorization` → stripped, suffix `authorization` is prohibited.
+- `db.user.password` → stripped, suffix `password` is prohibited.
+- `cho.tenant_id` → pass through.
+- `cho.member_id` → stripped; `cho.member_id_hash` → pass through (its
+  suffix is `member_id_hash`, not in the list).
+
+Comparisons are case-insensitive.
 
 ### Hashed identifiers
 

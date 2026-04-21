@@ -6,9 +6,19 @@ namespace CloudHealthOffice.Infrastructure.Observability;
 /// <summary>
 /// Mandatory PHI-scrubbing SpanProcessor. Runs on <see cref="OnEnd"/> and
 /// removes prohibited attributes from every exported Activity before it
-/// reaches any exporter. Enforced as a positive list: any attribute whose
-/// name matches a prohibited pattern is dropped and counted via
-/// <c>cho.telemetry.scrub.total</c>.
+/// reaches any exporter.
+///
+/// Enforced as a denylist: an attribute is dropped if its name exactly
+/// matches one on the prohibited list, OR if the segment after the final
+/// '.' matches one on the list (so <c>http.request.header.authorization</c>
+/// is scrubbed because the suffix <c>authorization</c> is prohibited, even
+/// though <c>http.*</c> is otherwise a standard OTel namespace). Everything
+/// not matching is allowed through. Comparisons are case-insensitive.
+///
+/// Drops are counted via <c>cho.telemetry.scrub.total</c> with
+/// <c>attribute_name</c> and <c>service_name</c> labels so the rate can be
+/// alerted on — a non-zero rate in production means a raw PHI attribute is
+/// being written somewhere.
 ///
 /// This processor cannot be disabled by configuration — it is a compliance
 /// control. Callers wanting different scrubbing rules must fork the shared
@@ -29,11 +39,6 @@ public sealed class PhiScrubbingSpanProcessor : BaseProcessor<Activity>
         "address", "streetAddress", "street",
         "first_name", "firstName", "last_name", "lastName", "full_name", "fullName",
         "password", "api_key", "apiKey", "token", "secret", "authorization",
-    };
-
-    private static readonly string[] AlwaysAllowedPrefixes =
-    {
-        "http.", "db.", "net.", "rpc.", "messaging.",
     };
 
     private readonly string _serviceName;
@@ -70,12 +75,6 @@ public sealed class PhiScrubbingSpanProcessor : BaseProcessor<Activity>
 
     private static bool IsProhibited(string attributeName)
     {
-        foreach (var prefix in AlwaysAllowedPrefixes)
-        {
-            if (attributeName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return false;
-        }
-
         if (ProhibitedAttributes.Contains(attributeName))
             return true;
 
