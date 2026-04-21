@@ -26,6 +26,12 @@ metadata:
   namespace: observability
 data:
   config.yaml: |
+    extensions:
+      # Exposes /health (200 when the collector pipelines are running) on 13133.
+      # Wired below in service.extensions and targeted by the container probes.
+      health_check:
+        endpoint: 0.0.0.0:13133
+
     receivers:
       otlp:
         protocols:
@@ -51,6 +57,7 @@ data:
         verbosity: normal
 
     service:
+      extensions: [health_check]
       pipelines:
         traces:
           receivers: [otlp]
@@ -82,7 +89,9 @@ spec:
       serviceAccountName: otel-collector
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:latest
+          # Pinned for reproducibility. Bump to a current stable tag at deploy time
+          # and keep it pinned — never float on :latest in production.
+          image: otel/opentelemetry-collector-contrib:0.102.1
           args:
             - --config=/etc/otel/config.yaml
           ports:
@@ -91,6 +100,9 @@ spec:
               protocol: TCP
             - name: otlp-http
               containerPort: 4318
+              protocol: TCP
+            - name: health
+              containerPort: 13133
               protocol: TCP
           volumeMounts:
             - name: config
@@ -106,12 +118,12 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 13133
+              port: health
             initialDelaySeconds: 5
           livenessProbe:
             httpGet:
               path: /
-              port: 13133
+              port: health
             initialDelaySeconds: 10
       volumes:
         - name: config
