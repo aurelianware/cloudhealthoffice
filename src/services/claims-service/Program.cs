@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using ClaimsService.EDI.Florida;
+using ClaimsService.Fhir;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 
@@ -42,6 +43,10 @@ else
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryCosmos>();
 }
+
+// FHIR R4 ExplanationOfBenefit projector — hand-built JsonObject to avoid
+// the Hl7.Fhir.R4 transitive dep; used by the v1 member-scoped claims endpoint.
+builder.Services.AddSingleton<IExplanationOfBenefitProjector, ExplanationOfBenefitProjector>();
 
 // 277CA acknowledgment generator
 builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();

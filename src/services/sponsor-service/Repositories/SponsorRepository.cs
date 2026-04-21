@@ -63,26 +63,36 @@ public class SponsorRepository : ISponsorRepository
         string tenantId,
         SponsorStatus? status = null,
         bool activeOnly = false,
+        LineOfBusiness? lineOfBusiness = null,
         int pageSize = 20,
         string? continuationToken = null)
     {
-        var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId";
-        var queryDef = new QueryDefinition(queryText).WithParameter("@tenantId", tenantId);
+        // Build the query predicate incrementally so the LOB filter is applied
+        // by Cosmos rather than in-memory after paging (preserves correct
+        // TotalCount + continuation semantics under a LOB filter).
+        var conditions = new List<string> { "c.tenantId = @tenantId" };
+        var parameters = new Dictionary<string, object> { ["@tenantId"] = tenantId };
 
         if (activeOnly)
         {
-            queryText += " AND c.status = @status";
-            queryDef = new QueryDefinition(queryText)
-                .WithParameter("@tenantId", tenantId)
-                .WithParameter("@status", (int)SponsorStatus.Active);
+            conditions.Add("c.status = @status");
+            parameters["@status"] = (int)SponsorStatus.Active;
         }
         else if (status.HasValue)
         {
-            queryText += " AND c.status = @status";
-            queryDef = new QueryDefinition(queryText)
-                .WithParameter("@tenantId", tenantId)
-                .WithParameter("@status", (int)status.Value);
+            conditions.Add("c.status = @status");
+            parameters["@status"] = (int)status.Value;
         }
+
+        if (lineOfBusiness.HasValue)
+        {
+            conditions.Add("c.lineOfBusiness = @lineOfBusiness");
+            parameters["@lineOfBusiness"] = (int)lineOfBusiness.Value;
+        }
+
+        var queryText = "SELECT * FROM c WHERE " + string.Join(" AND ", conditions);
+        var queryDef = new QueryDefinition(queryText);
+        foreach (var (k, v) in parameters) queryDef.WithParameter(k, v);
 
         var iterator = _container.GetItemQueryIterator<Sponsor>(
             queryDef,
@@ -188,6 +198,7 @@ public interface ISponsorRepository
         string tenantId,
         SponsorStatus? status = null,
         bool activeOnly = false,
+        LineOfBusiness? lineOfBusiness = null,
         int pageSize = 20,
         string? continuationToken = null);
     Task<Sponsor> CreateAsync(Sponsor sponsor);

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SponsorService.Middleware;
 using SponsorService.Models;
+using SponsorService.Repositories;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -20,21 +21,20 @@ public class SponsorsController : ControllerBase
     // Tenant context from middleware
     private string TenantId => HttpContext.GetTenantId();
 
-    // TODO: Replace with actual repository/service injection
-    // private readonly ISponsorRepository _sponsorRepository;
-    // public SponsorsController(ISponsorRepository sponsorRepository)
-    // {
-    //     _sponsorRepository = sponsorRepository;
-    // }
+    private readonly ISponsorRepository _sponsorRepository;
+    private readonly ILogger<SponsorsController> _logger;
+
+    public SponsorsController(
+        ISponsorRepository sponsorRepository,
+        ILogger<SponsorsController> logger)
+    {
+        _sponsorRepository = sponsorRepository;
+        _logger = logger;
+    }
 
     /// <summary>
     /// List all sponsors for the current tenant
     /// </summary>
-    /// <param name="status">Filter by sponsor status</param>
-    /// <param name="lineOfBusiness">Filter by line of business</param>
-    /// <param name="activeOnly">Return only active sponsors</param>
-    /// <param name="pageSize">Page size (max 100)</param>
-    /// <param name="continuationToken">Continuation token for pagination</param>
     [HttpGet]
     [ProducesResponseType(typeof(SponsorListResponse), 200)]
     public async Task<IActionResult> GetSponsors(
@@ -44,106 +44,99 @@ public class SponsorsController : ControllerBase
         [FromQuery][Range(1, 100)] int pageSize = 20,
         [FromQuery] string? continuationToken = null)
     {
-        // TODO: Implement with Cosmos DB query
-        // var query = _sponsorRepository.Query()
-        //     .Where(s => s.TenantId == TenantId);
-        //
-        // if (activeOnly)
-        //     query = query.Where(s => s.Status == SponsorStatus.Active);
-        //
-        // if (status.HasValue)
-        //     query = query.Where(s => s.Status == status.Value);
-        //
-        // var result = await _sponsorRepository.GetPagedAsync(query, pageSize, continuationToken);
-
-        // Mock response for now
-        var mockSponsors = new List<Sponsor>
-        {
-            new Sponsor
-            {
-                TenantId = TenantId,
-                Id = "sponsor-001",
-                GroupNumber = "GRP-12345",
-                EmployerName = "Acme Corporation",
-                TaxId = "12-3456789",
-                EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-                Status = SponsorStatus.Active,
-                TotalMembers = 150,
-                TotalDependents = 220
-            }
-        };
+        // lineOfBusiness is pushed into the repo query (not filtered in-memory
+        // after paging) so TotalCount and ContinuationToken reflect the
+        // filtered set and pagination produces stable, correctly-sized pages.
+        var (items, token, total) = await _sponsorRepository.GetPagedAsync(
+            TenantId, status, activeOnly, lineOfBusiness, pageSize, continuationToken);
 
         return Ok(new SponsorListResponse
         {
-            Sponsors = mockSponsors,
-            ContinuationToken = null,
-            TotalCount = 1
+            Sponsors = items.ToList(),
+            ContinuationToken = token,
+            TotalCount = total
         });
     }
 
     /// <summary>
     /// Get sponsor details by group number
     /// </summary>
-    /// <param name="groupNumber">Sponsor group number (834 REF*1L)</param>
     [HttpGet("{groupNumber}")]
     [ProducesResponseType(typeof(Sponsor), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetSponsor([FromRoute] string groupNumber)
     {
-        // TODO: Implement with Cosmos DB query
-        // var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
-        // if (sponsor == null)
-        //     return NotFound($"Sponsor with group number '{groupNumber}' not found");
-
-        // Mock response
-        var sponsor = new Sponsor
-        {
-            TenantId = TenantId,
-            Id = "sponsor-001",
-            GroupNumber = groupNumber,
-            EmployerName = "Acme Corporation",
-            TaxId = "12-3456789",
-            Address = "123 Main St",
-            City = "Dallas",
-            State = "TX",
-            ZipCode = "75201",
-            ContactName = "Jane Smith",
-            ContactPhone = "214-555-0100",
-            ContactEmail = "benefits@acme.com",
-            EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-            Status = SponsorStatus.Active,
-            TotalMembers = 150,
-            TotalDependents = 220,
-            BillingInfo = new BillingInfo
-            {
-                PremiumAmount = 75000.00m,
-                Frequency = BillingFrequency.Monthly,
-                BillingDay = 1,
-                BillingAccountNumber = "ACH-98765",
-                PaymentMethod = "ACH",
-                GracePeriodDays = 30
-            }
-        };
-
+        var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
+        if (sponsor == null)
+            return NotFound(new { error = $"Sponsor with group number '{groupNumber}' not found" });
         return Ok(sponsor);
     }
 
     /// <summary>
+    /// Compact sponsor view for the portal Member Details dialog — Coverage
+    /// tab's Sponsor sub-section. Returns sponsor name, type, primary contact,
+    /// broker, and open-enrollment window.
+    /// </summary>
+    [HttpGet("{groupNumber}/member-view")]
+    [ProducesResponseType(typeof(SponsorMemberView), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetMemberView([FromRoute] string groupNumber)
+    {
+        var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
+        if (sponsor == null)
+            return NotFound(new { error = $"Sponsor with group number '{groupNumber}' not found" });
+
+        return Ok(ProjectMemberView(sponsor, DateTime.UtcNow));
+    }
+
+    /// <summary>
+    /// Build the compact member view. Public + static so unit tests can
+    /// project without hitting Cosmos/Mongo.
+    /// </summary>
+    public static SponsorMemberView ProjectMemberView(Sponsor sponsor, DateTime asOfUtc) => new()
+    {
+        GroupNumber = sponsor.GroupNumber,
+        SponsorName = sponsor.EmployerName,
+        LineOfBusiness = sponsor.LineOfBusiness,
+        Status = sponsor.Status,
+        PrimaryContact = (sponsor.ContactName is null && sponsor.ContactPhone is null && sponsor.ContactEmail is null)
+            ? null
+            : new ContactCard
+            {
+                Name = sponsor.ContactName,
+                Phone = sponsor.ContactPhone,
+                Email = sponsor.ContactEmail
+            },
+        Broker = sponsor.Broker is null ? null : new BrokerCard
+        {
+            AgencyName = sponsor.Broker.AgencyName,
+            Name = sponsor.Broker.Name,
+            Phone = sponsor.Broker.Phone,
+            Email = sponsor.Broker.Email,
+            Npn = sponsor.Broker.Npn
+        },
+        OpenEnrollment = sponsor.OpenEnrollment is null ? null : new OpenEnrollmentCard
+        {
+            Start = sponsor.OpenEnrollment.Start,
+            End = sponsor.OpenEnrollment.End,
+            Status = sponsor.OpenEnrollment.Status(asOfUtc).ToString()
+        }
+    };
+
+    /// <summary>
     /// Create a new sponsor (typically from 834 transaction)
     /// </summary>
-    /// <param name="request">Sponsor creation request</param>
     [HttpPost]
     [ProducesResponseType(typeof(Sponsor), 201)]
     [ProducesResponseType(400)]
+    [ProducesResponseType(409)]
     public async Task<IActionResult> CreateSponsor([FromBody] CreateSponsorRequest request)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        // TODO: Check for duplicate group number
-        // var exists = await _sponsorRepository.ExistsByGroupNumberAsync(TenantId, request.GroupNumber);
-        // if (exists)
-        //     return Conflict($"Sponsor with group number '{request.GroupNumber}' already exists");
+        if (await _sponsorRepository.ExistsAsync(TenantId, request.GroupNumber))
+            return Conflict(new { error = $"Sponsor with group number '{request.GroupNumber}' already exists" });
 
         var sponsor = new Sponsor
         {
@@ -162,22 +155,20 @@ public class SponsorsController : ControllerBase
             TerminationDate = request.TerminationDate,
             Status = SponsorStatus.PendingActivation,
             BillingInfo = request.BillingInfo,
-            CreatedDate = DateTime.UtcNow,
-            LastUpdatedDate = DateTime.UtcNow,
+            Broker = request.Broker,
+            OpenEnrollment = request.OpenEnrollment,
             CreatedBy = User.Identity?.Name ?? "System"
         };
 
-        // TODO: Save to Cosmos DB
-        // await _sponsorRepository.CreateAsync(sponsor);
-
-        return CreatedAtAction(nameof(GetSponsor), new { groupNumber = sponsor.GroupNumber }, sponsor);
+        var created = await _sponsorRepository.CreateAsync(sponsor);
+        _logger.LogInformation("Created sponsor {GroupNumber} ({EmployerName})",
+            SanitizeForLog(created.GroupNumber), SanitizeForLog(created.EmployerName));
+        return CreatedAtAction(nameof(GetSponsor), new { groupNumber = created.GroupNumber }, created);
     }
 
     /// <summary>
     /// Update sponsor information
     /// </summary>
-    /// <param name="groupNumber">Sponsor group number</param>
-    /// <param name="request">Update request</param>
     [HttpPut("{groupNumber}")]
     [ProducesResponseType(typeof(Sponsor), 200)]
     [ProducesResponseType(404)]
@@ -188,36 +179,28 @@ public class SponsorsController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        // TODO: Fetch existing sponsor
-        // var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
-        // if (sponsor == null)
-        //     return NotFound();
+        var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
+        if (sponsor == null)
+            return NotFound(new { error = $"Sponsor with group number '{groupNumber}' not found" });
 
-        // Mock existing sponsor
-        var sponsor = new Sponsor { TenantId = TenantId, GroupNumber = groupNumber };
-
-        // Update fields
         if (request.EmployerName != null) sponsor.EmployerName = request.EmployerName;
         if (request.ContactName != null) sponsor.ContactName = request.ContactName;
         if (request.ContactPhone != null) sponsor.ContactPhone = request.ContactPhone;
         if (request.ContactEmail != null) sponsor.ContactEmail = request.ContactEmail;
         if (request.Status.HasValue) sponsor.Status = request.Status.Value;
         if (request.BillingInfo != null) sponsor.BillingInfo = request.BillingInfo;
+        if (request.Broker != null) sponsor.Broker = request.Broker;
+        if (request.OpenEnrollment != null) sponsor.OpenEnrollment = request.OpenEnrollment;
 
-        sponsor.LastUpdatedDate = DateTime.UtcNow;
         sponsor.LastUpdatedBy = User.Identity?.Name ?? "System";
-
-        // TODO: Save to Cosmos DB
-        // await _sponsorRepository.UpdateAsync(sponsor);
-
-        return Ok(sponsor);
+        var updated = await _sponsorRepository.UpdateAsync(sponsor);
+        _logger.LogInformation("Updated sponsor {GroupNumber}", SanitizeForLog(updated.GroupNumber));
+        return Ok(updated);
     }
 
     /// <summary>
     /// Terminate sponsor (soft delete)
     /// </summary>
-    /// <param name="groupNumber">Sponsor group number</param>
-    /// <param name="terminationDate">Termination effective date</param>
     [HttpDelete("{groupNumber}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -225,43 +208,49 @@ public class SponsorsController : ControllerBase
         [FromRoute] string groupNumber,
         [FromQuery] DateTime? terminationDate = null)
     {
-        // TODO: Fetch sponsor and update status
-        // var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
-        // if (sponsor == null)
-        //     return NotFound();
-        //
-        // sponsor.Status = SponsorStatus.Terminated;
-        // sponsor.TerminationDate = terminationDate ?? DateTime.UtcNow;
-        // sponsor.LastUpdatedDate = DateTime.UtcNow;
-        // await _sponsorRepository.UpdateAsync(sponsor);
+        var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
+        if (sponsor == null)
+            return NotFound(new { error = $"Sponsor with group number '{groupNumber}' not found" });
 
+        sponsor.Status = SponsorStatus.Terminated;
+        sponsor.TerminationDate = terminationDate ?? DateTime.UtcNow;
+        await _sponsorRepository.UpdateAsync(sponsor);
+        _logger.LogInformation("Terminated sponsor {GroupNumber} (effective {TerminationDate:O})",
+            SanitizeForLog(groupNumber), sponsor.TerminationDate);
         return NoContent();
     }
 
     /// <summary>
-    /// Get coverage summary for a sponsor (member counts, premium totals)
+    /// Get coverage summary for a sponsor (member counts, premium totals).
+    /// Member counts are denormalized onto the Sponsor document by the 834
+    /// ingestion pipeline; premium total comes from BillingInfo.
     /// </summary>
-    /// <param name="groupNumber">Sponsor group number</param>
     [HttpGet("{groupNumber}/coverage-summary")]
     [ProducesResponseType(typeof(CoverageSummary), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetCoverageSummary([FromRoute] string groupNumber)
     {
-        // TODO: Query Coverage Service API for member counts
-        // var summary = await _coverageService.GetSponsorSummaryAsync(TenantId, groupNumber);
+        var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
+        if (sponsor == null)
+            return NotFound(new { error = $"Sponsor with group number '{groupNumber}' not found" });
 
         var summary = new CoverageSummary
         {
-            GroupNumber = groupNumber,
-            TotalMembers = 150,
-            TotalDependents = 220,
-            TotalCovered = 370,
-            ActiveSubscribers = 150,
-            TerminatedMembers = 12,
-            MonthlyPremium = 75000.00m
+            GroupNumber = sponsor.GroupNumber,
+            TotalMembers = sponsor.TotalMembers,
+            TotalDependents = sponsor.TotalDependents,
+            TotalCovered = sponsor.TotalMembers + sponsor.TotalDependents,
+            ActiveSubscribers = sponsor.Status == SponsorStatus.Active ? sponsor.TotalMembers : 0,
+            TerminatedMembers = 0,
+            MonthlyPremium = sponsor.BillingInfo?.PremiumAmount ?? 0m
         };
-
         return Ok(summary);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 
@@ -293,6 +282,8 @@ public class CreateSponsorRequest
 
     public DateTime? TerminationDate { get; set; }
     public BillingInfo? BillingInfo { get; set; }
+    public BrokerInfo? Broker { get; set; }
+    public OpenEnrollmentWindow? OpenEnrollment { get; set; }
 }
 
 public class UpdateSponsorRequest
@@ -303,6 +294,8 @@ public class UpdateSponsorRequest
     public string? ContactEmail { get; set; }
     public SponsorStatus? Status { get; set; }
     public BillingInfo? BillingInfo { get; set; }
+    public BrokerInfo? Broker { get; set; }
+    public OpenEnrollmentWindow? OpenEnrollment { get; set; }
 }
 
 public class SponsorListResponse

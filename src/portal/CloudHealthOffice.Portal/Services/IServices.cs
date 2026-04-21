@@ -13,6 +13,14 @@ public interface IClaimsService
     Task<string> SubmitClaimAsync(SubmitClaimRequest request);
     Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null);
     Task<AdjudicationTransparencyData?> GetAdjudicationDataAsync(string claimId);
+
+    /// <summary>
+    /// Search the claims-service v1 endpoint for a member; returns FHIR
+    /// ExplanationOfBenefit resources wrapped with pagination metadata. Used
+    /// by the portal Member Details dialog Claims tab; the dialog only shows
+    /// counts and links out — the full grid stays on /claims.
+    /// </summary>
+    Task<EobSearchResponse> SearchClaimsByMemberAsync(string memberId, MemberClaimsFilter filter);
 }
 
 public interface IEligibilityService
@@ -391,6 +399,12 @@ public interface ISponsorService
     Task<SponsorDetails?> GetSponsorByIdAsync(string sponsorId);
     Task<string> CreateSponsorAsync(CreateSponsorRequest request);
     Task UpdateSponsorAsync(string sponsorId, UpdateSponsorRequest request);
+
+    /// <summary>
+    /// Compact sponsor projection consumed by the portal Coverage tab's
+    /// Sponsor sub-section in MemberDetailsDialog. Returns null on 404.
+    /// </summary>
+    Task<SponsorMemberView?> GetSponsorMemberViewAsync(string groupNumber);
 }
 
 public interface ITenantService
@@ -1331,6 +1345,12 @@ public interface IPremiumBillingService
     Task UpdatePremiumRateAsync(string rateId, decimal newRate, DateTime effectiveDate);
     Task MarkCycleAsPaidAsync(string cycleId, DateTime paidDate);
     Task<Stream> DownloadInvoiceAsync(string cycleId);
+
+    /// <summary>
+    /// Member-scoped premium rollup consumed by the portal Member Details
+    /// dialog (Premium tab). Returns null if the member has no invoices.
+    /// </summary>
+    Task<MemberPremiumSummary?> GetMemberPremiumSummaryAsync(string memberId);
 }
 
 // Reporting
@@ -2540,6 +2560,165 @@ public interface IArService
     Task<string> CreateBatchRuleAsync(ArBatchRuleSummary rule);
     Task UpdateBatchRuleAsync(string id, ArBatchRuleSummary rule);
     Task<ArBatchRuleTestResult> TestBatchRuleAsync(string id, decimal sampleAmount);
+
+    /// <summary>
+    /// Member-scoped AR rollup consumed by the portal Member Details dialog
+    /// (AR tab). Read-only; no payments initiated from this surface.
+    /// </summary>
+    Task<MemberArSummary?> GetMemberArSummaryAsync(string memberId);
+}
+
+// ── Member-Linkage DTOs (consumed by MemberDetailsDialog) ────────────────────
+
+/// <summary>
+/// Filter the Claims tab can apply when calling
+/// <see cref="IClaimsService.SearchClaimsByMemberAsync"/>. Mirrors the
+/// claims-service v1 query string so it serializes 1:1 to the wire.
+/// </summary>
+public class MemberClaimsFilter
+{
+    public DateTime? ServiceDateFrom { get; set; }
+    public DateTime? ServiceDateTo { get; set; }
+    /// <summary>One of the ClaimStatus enum names (e.g., "Approved").</summary>
+    public string? Status { get; set; }
+    public string? ProviderNPI { get; set; }
+    /// <summary>One of the ClaimType enum names (e.g., "Professional").</summary>
+    public string? ClaimType { get; set; }
+    public decimal? AmountMin { get; set; }
+    public decimal? AmountMax { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
+}
+
+/// <summary>
+/// Wire shape returned by claims-service <c>/api/v1/claims</c> — the
+/// resources array is FHIR ExplanationOfBenefit JSON and stays opaque to the
+/// portal (which only renders count + drill-out link).
+/// </summary>
+public class EobSearchResponse
+{
+    public int Total { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    /// <summary>FHIR ExplanationOfBenefit resources, untyped on this side.</summary>
+    public List<System.Text.Json.JsonElement> Resources { get; set; } = new();
+}
+
+public class MemberArSummary
+{
+    public string MemberId { get; set; } = string.Empty;
+    public decimal CurrentBalance { get; set; }
+    public AgedBuckets Aged { get; set; } = new();
+    public List<ArChargeRow> RecentCharges { get; set; } = new();
+    public List<ArPaymentRow> RecentPayments { get; set; } = new();
+    public DateTime AsOfUtc { get; set; }
+}
+
+public class AgedBuckets
+{
+    public decimal Bucket0_30 { get; set; }
+    public decimal Bucket31_60 { get; set; }
+    public decimal Bucket61_90 { get; set; }
+    public decimal Bucket91Plus { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public decimal Total => Bucket0_30 + Bucket31_60 + Bucket61_90 + Bucket91Plus;
+}
+
+public class ArChargeRow
+{
+    public string EntryId { get; set; } = string.Empty;
+    public DateTime PostedAt { get; set; }
+    public decimal Amount { get; set; }
+    /// <summary>ar-service ArPostingSource enum name.</summary>
+    public string Source { get; set; } = string.Empty;
+    public string? SourceReferenceNumber { get; set; }
+    public string? Memo { get; set; }
+}
+
+public class ArPaymentRow
+{
+    public string EntryId { get; set; } = string.Empty;
+    public DateTime PostedAt { get; set; }
+    public decimal Amount { get; set; }
+    public string Source { get; set; } = string.Empty;
+    public string? SourceReferenceNumber { get; set; }
+    public string? Memo { get; set; }
+}
+
+public class MemberPremiumSummary
+{
+    public string MemberId { get; set; } = string.Empty;
+    public PremiumInvoiceView? CurrentInvoice { get; set; }
+    public DateTime? NextBillDate { get; set; }
+    public bool AutopayEnabled { get; set; }
+    public GracePeriodState Grace { get; set; } = new();
+    public List<PremiumInvoiceView> Last12 { get; set; } = new();
+}
+
+public class PremiumInvoiceView
+{
+    public string Id { get; set; } = string.Empty;
+    public string InvoiceNumber { get; set; } = string.Empty;
+    public string GroupNumber { get; set; } = string.Empty;
+    public string SponsorName { get; set; } = string.Empty;
+    public DateTime BillingPeriodStart { get; set; }
+    public DateTime BillingPeriodEnd { get; set; }
+    public DateTime DueDate { get; set; }
+    /// <summary>InvoiceStatus enum name.</summary>
+    public string Status { get; set; } = string.Empty;
+    public decimal TotalAmount { get; set; }
+    public decimal TotalPaid { get; set; }
+    public decimal BalanceDue { get; set; }
+    public bool IsAptcSubsidized { get; set; }
+    public decimal AptcMonthlyAmount { get; set; }
+    /// <summary>"Standard" or "AptcThreeMonth".</summary>
+    public string GraceType { get; set; } = "Standard";
+}
+
+public class GracePeriodState
+{
+    public bool IsInGrace { get; set; }
+    /// <summary>"Standard" or "AptcThreeMonth".</summary>
+    public string GraceType { get; set; } = "Standard";
+    public int DaysRemaining { get; set; }
+    public DateTime? ExpiresOn { get; set; }
+}
+
+public class SponsorMemberView
+{
+    public string GroupNumber { get; set; } = string.Empty;
+    public string SponsorName { get; set; } = string.Empty;
+    /// <summary>LineOfBusiness enum name.</summary>
+    public string LineOfBusiness { get; set; } = string.Empty;
+    /// <summary>SponsorStatus enum name.</summary>
+    public string Status { get; set; } = string.Empty;
+    public ContactCard? PrimaryContact { get; set; }
+    public BrokerCard? Broker { get; set; }
+    public OpenEnrollmentCard? OpenEnrollment { get; set; }
+}
+
+public class ContactCard
+{
+    public string? Name { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+}
+
+public class BrokerCard
+{
+    public string? AgencyName { get; set; }
+    public string? Name { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? Npn { get; set; }
+}
+
+public class OpenEnrollmentCard
+{
+    public DateTime Start { get; set; }
+    public DateTime End { get; set; }
+    /// <summary>"Upcoming" / "Open" / "Closed" — server-computed.</summary>
+    public string Status { get; set; } = "Closed";
 }
 
 // ── AR DTOs ─────────────────────────────────────────────────────────────────
