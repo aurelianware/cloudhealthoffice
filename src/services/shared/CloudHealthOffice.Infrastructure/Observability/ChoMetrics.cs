@@ -74,6 +74,16 @@ public static class ChoMetrics
             unit: "{decision}",
             description: "PAS $submit decisions by type");
 
+    /// <summary>
+    /// Counter tracking span attributes dropped by the PHI-scrubbing SpanProcessor.
+    /// Dimensions: attribute_name, service_name.
+    /// </summary>
+    public static readonly Counter<long> TelemetryScrubCount =
+        Meter.CreateCounter<long>(
+            "cho.telemetry.scrub.total",
+            unit: "{attribute}",
+            description: "Span attributes scrubbed by the PHI SpanProcessor");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly
