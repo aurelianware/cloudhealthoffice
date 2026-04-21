@@ -1,0 +1,173 @@
+@using CloudHealthOffice.Portal.Services
+@inject IIdCardService IdCardService
+@inject ISnackbar Snackbar
+
+<MudDialog Style="min-width: 560px;">
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-3">
+            Step @(_step + 1) of 3 — @StepTitle
+        </MudText>
+        <MudProgressLinear Color="Color.Primary" Value="@(((_step + 1) * 100.0) / 3.0)" Class="mb-4" />
+
+        @if (_step == 0)
+        {
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="MemberId" Label="Member ID" Required="true" ReadOnly="@_memberLocked" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect T="string" Label="Delivery Channel" @bind-Value="_channel">
+                        <MudSelectItem Value="@("Digital")">Digital (PDF + PNG)</MudSelectItem>
+                        <MudSelectItem Value="@("Wallet")" Disabled="true">Wallet (Phase 2)</MudSelectItem>
+                        <MudSelectItem Value="@("Physical")" Disabled="true">Physical mail (Phase 2)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect T="string" Label="Language" @bind-Value="_language">
+                        <MudSelectItem Value="@("en-US")">English (en-US)</MudSelectItem>
+                        <MudSelectItem Value="@("es-US")">Spanish (es-US)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        }
+        else if (_step == 1)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-3">
+                The ID card will be generated from the member's active coverage and plan.
+                It is signed with the current signing key and can be scanned by any provider
+                on the Cloud Health Office network until coverage terminates or the card is revoked.
+            </MudAlert>
+            <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                <tbody>
+                    <tr><td>Member ID</td><td><b>@MemberId</b></td></tr>
+                    <tr><td>Channel</td><td>@_channel</td></tr>
+                    <tr><td>Language</td><td>@_language</td></tr>
+                </tbody>
+            </MudSimpleTable>
+        }
+        else
+        {
+            if (_submitting)
+            {
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                <MudText Class="mt-3">Issuing card…</MudText>
+            }
+            else if (_result != null)
+            {
+                if (_result.Status == "Issued" && !string.IsNullOrEmpty(_result.DocumentId))
+                {
+                    <MudAlert Severity="Severity.Success" Class="mb-3">
+                        Card issued: @_result.CardId
+                    </MudAlert>
+                    <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(_result.DocumentId!)" Target="_blank">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                            Download PDF
+                        </MudButton>
+                    </MudLink>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Error">
+                        @(_result.FailureReason ?? "Order failed")
+                        @if (!string.IsNullOrEmpty(_result.FailureCode))
+                        {
+                            <MudText Typo="Typo.caption">Code: @_result.FailureCode</MudText>
+                        }
+                    </MudAlert>
+                }
+            }
+            @if (_error != null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_submitting">Close</MudButton>
+        @if (_step > 0 && _result == null)
+        {
+            <MudButton OnClick="Back" Disabled="_submitting">Back</MudButton>
+        }
+        @if (_step < 1)
+        {
+            <MudButton Color="Color.Primary" OnClick="Next" Disabled="@(!CanAdvance())">Next</MudButton>
+        }
+        else if (_step == 1)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_submitting">
+                @(_submitting ? "Ordering..." : "Order Card")
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string MemberId { get; set; } = string.Empty;
+
+    private int _step = 0;
+    private string _channel = "Digital";
+    private string _language = "en-US";
+    private bool _submitting = false;
+    private bool _memberLocked => !string.IsNullOrEmpty(MemberId);
+    private string? _error;
+    private IdCardOrderView? _result;
+
+    private string StepTitle => _step switch
+    {
+        0 => "Choose member and options",
+        1 => "Review",
+        _ => "Result"
+    };
+
+    private bool CanAdvance() => !string.IsNullOrWhiteSpace(MemberId);
+
+    private void Next() { if (CanAdvance()) _step++; }
+    private void Back() { if (_step > 0) _step--; }
+
+    // Close the dialog as Ok only when an order was actually issued, so
+    // the parent can key "refresh the list" off of a real success event.
+    // Any other close (including the top-right X and the Close button)
+    // cancels cleanly.
+    private void Cancel()
+    {
+        if (_result != null && _result.Status == "Issued")
+        {
+            MudDialog.Close(DialogResult.Ok(_result));
+        }
+        else
+        {
+            MudDialog.Cancel();
+        }
+    }
+
+    private async Task Submit()
+    {
+        if (!CanAdvance()) return;
+        _submitting = true;
+        _error = null;
+        _step = 2;
+
+        try
+        {
+            _result = await IdCardService.OrderAsync(MemberId, _language);
+            if (_result.Status == "Issued")
+            {
+                Snackbar.Add($"ID card issued ({_result.CardId})", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Order failed: {_result.FailureReason}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Snackbar.Add("Order failed", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}
