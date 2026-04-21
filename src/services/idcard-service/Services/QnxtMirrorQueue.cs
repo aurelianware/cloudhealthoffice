@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
-using Azure.Messaging.ServiceBus;
+using CloudHealthOffice.Infrastructure.Messaging;
 
 namespace IdCardService.Services;
 
@@ -39,29 +38,26 @@ public class InMemoryQnxtMirrorQueue : IQnxtMirrorQueue
     public IReadOnlyCollection<QnxtMirrorMessage> PeekEnqueued() => _messages.ToArray();
 }
 
-/// <summary>Azure Service Bus implementation for production.</summary>
-public class ServiceBusQnxtMirrorQueue : IQnxtMirrorQueue, IAsyncDisposable
+/// <summary>
+/// Production implementation that forwards onto the shared
+/// <see cref="IMessageBus"/>. The bus owns the <c>ServiceBusClient</c>
+/// lifecycle, which also fixes a handle-leak on shutdown: the previous
+/// direct-ownership class implemented <see cref="IAsyncDisposable"/> but
+/// Program.cs never disposed it.
+/// </summary>
+public class ServiceBusQnxtMirrorQueue : IQnxtMirrorQueue
 {
-    private readonly ServiceBusClient _client;
-    private readonly ServiceBusSender _sender;
+    private readonly IMessageBus _bus;
+    private readonly string _queueName;
 
-    public ServiceBusQnxtMirrorQueue(string connectionString, string queueName)
+    public ServiceBusQnxtMirrorQueue(IMessageBus bus, string queueName)
     {
-        _client = new ServiceBusClient(connectionString);
-        _sender = _client.CreateSender(queueName);
+        _bus = bus ?? throw new ArgumentNullException(nameof(bus));
+        _queueName = queueName ?? throw new ArgumentNullException(nameof(queueName));
     }
 
-    public async Task EnqueueMirrorAsync(QnxtMirrorMessage message, CancellationToken ct = default)
-    {
-        var json = JsonSerializer.Serialize(message);
-        await _sender.SendMessageAsync(new ServiceBusMessage(json), ct);
-    }
+    public Task EnqueueMirrorAsync(QnxtMirrorMessage message, CancellationToken ct = default)
+        => _bus.SendAsync(_queueName, message, options: null, ct);
 
     public IReadOnlyCollection<QnxtMirrorMessage> PeekEnqueued() => Array.Empty<QnxtMirrorMessage>();
-
-    public async ValueTask DisposeAsync()
-    {
-        await _sender.DisposeAsync();
-        await _client.DisposeAsync();
-    }
 }

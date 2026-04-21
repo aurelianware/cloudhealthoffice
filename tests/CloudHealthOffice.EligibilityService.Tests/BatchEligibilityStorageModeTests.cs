@@ -21,18 +21,17 @@ public class BatchEligibilityStorageModeTests
     }
 
     [Fact]
-    public void Persistent_WithFullConfig_RegistersCosmosAndServiceBus()
+    public void Persistent_WithFullConfig_RegistersCosmosAndMessageBusQueue()
     {
         var services = new ServiceCollection();
         services.AddBatchEligibilityStorage(Config("Persistent", full: true), ProdEnvironment());
-        // Do NOT BuildServiceProvider: the ServiceBus/Cosmos clients would
-        // attempt real network lookups. Instead inspect the registrations.
+        // Do NOT BuildServiceProvider: the Cosmos client would attempt real
+        // network lookups. Inspect the registrations instead.
 
         Assert.Contains(services, d =>
             d.ServiceType == typeof(IBatchJobStore) && d.ImplementationFactory != null);
         Assert.Contains(services, d =>
-            d.ServiceType == typeof(IBatchQueue) &&
-            d.ImplementationType == typeof(ServiceBusBatchQueue));
+            d.ServiceType == typeof(IBatchQueue) && d.ImplementationFactory != null);
         Assert.Contains(services, d =>
             d.ServiceType == typeof(IBatchQueueProcessor) && d.ImplementationFactory != null);
     }
@@ -61,7 +60,7 @@ public class BatchEligibilityStorageModeTests
         var services = new ServiceCollection();
         Assert.Throws<InvalidOperationException>(() =>
             services.AddBatchEligibilityStorage(
-                Config("Persistent", full: false, withBlob: true, withServiceBus: true),
+                Config("Persistent", full: false, withBlob: true),
                 ProdEnvironment()));
     }
 
@@ -69,7 +68,7 @@ public class BatchEligibilityStorageModeTests
 
     private static IConfiguration Config(
         string mode, bool full = false,
-        bool withCosmos = false, bool withBlob = false, bool withServiceBus = false)
+        bool withCosmos = false, bool withBlob = false)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -82,10 +81,6 @@ public class BatchEligibilityStorageModeTests
             dict["BatchEligibility:BlobStorage:ConnectionString"] =
                 "DefaultEndpointsProtocol=https;AccountName=fake;AccountKey=ZmFrZQ==;" +
                 "EndpointSuffix=core.windows.net";
-        if (full || withServiceBus)
-            dict["BatchEligibility:ServiceBus:ConnectionString"] =
-                "Endpoint=sb://fake.servicebus.windows.net/;SharedAccessKeyName=root;" +
-                "SharedAccessKey=ZmFrZQ==";
 
         return new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
     }

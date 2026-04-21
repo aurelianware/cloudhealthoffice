@@ -1,5 +1,4 @@
-using System.Text;
-using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Messaging;
 using EligibilityService.Services;
 
 namespace CloudHealthOffice.EligibilityService.Tests;
@@ -7,44 +6,53 @@ namespace CloudHealthOffice.EligibilityService.Tests;
 public class ServiceBusBatchQueueTests
 {
     [Fact]
-    public async Task Enqueue_JsonSerializesWithCorrelationId()
+    public async Task Enqueue_SendsMessageToBusWithJobIdCorrelation()
     {
-        var fake = new FakeSender();
-        var queue = new ServiceBusBatchQueue(fake);
+        await using var bus = new InMemoryMessageBus();
+        var queue = new ServiceBusBatchQueue(bus, "batch-eligibility");
+
+        BatchQueueMessage? received = null;
+        MessageContext? receivedCtx = null;
+        var gate = new TaskCompletionSource();
+
+        await using var subscription = bus.Subscribe<BatchQueueMessage>(
+            "batch-eligibility",
+            (msg, ctx, _) =>
+            {
+                received = msg;
+                receivedCtx = ctx;
+                gate.TrySetResult();
+                return Task.CompletedTask;
+            });
+        await subscription.StartAsync(CancellationToken.None);
 
         await queue.EnqueueAsync(new BatchQueueMessage("tenant-X", "JOB-1"));
 
-        Assert.Single(fake.Sent);
-        Assert.Equal("JOB-1", fake.Sent[0].CorrelationId);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-        var body = Encoding.UTF8.GetString(fake.Sent[0].Body);
-        using var doc = JsonDocument.Parse(body);
-        Assert.Equal("tenant-X", doc.RootElement.GetProperty("tenantId").GetString());
-        Assert.Equal("JOB-1", doc.RootElement.GetProperty("jobId").GetString());
+        Assert.NotNull(received);
+        Assert.Equal("tenant-X", received!.TenantId);
+        Assert.Equal("JOB-1", received.JobId);
+        Assert.Equal("JOB-1", receivedCtx!.CorrelationId);
     }
 
     [Fact]
     public void ReadAllAsync_Unsupported()
     {
-        var queue = new ServiceBusBatchQueue(new FakeSender());
+        var queue = new ServiceBusBatchQueue(new NullMessageBus(), "batch-eligibility");
         using var cts = new CancellationTokenSource();
         Assert.Throws<NotSupportedException>(() => queue.ReadAllAsync(cts.Token));
     }
 
     [Fact]
-    public void NullSender_Throws()
+    public void NullBus_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new ServiceBusBatchQueue(null!));
+        Assert.Throws<ArgumentNullException>(() => new ServiceBusBatchQueue(null!, "q"));
     }
 
-    private class FakeSender : IBatchQueueSender
+    [Fact]
+    public void NullQueueName_Throws()
     {
-        public List<(byte[] Body, string CorrelationId)> Sent { get; } = new();
-
-        public Task SendAsync(byte[] body, string correlationId, CancellationToken ct)
-        {
-            Sent.Add((body, correlationId));
-            return Task.CompletedTask;
-        }
+        Assert.Throws<ArgumentNullException>(() => new ServiceBusBatchQueue(new NullMessageBus(), null!));
     }
 }

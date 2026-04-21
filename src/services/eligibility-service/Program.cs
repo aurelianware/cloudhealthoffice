@@ -8,6 +8,7 @@ using EligibilityService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
+using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -110,7 +111,11 @@ builder.Services.AddScoped<IEdi271Generator, Edi271Generator>();
 builder.Services.AddSingleton<IAccumulatorClient, StubAccumulatorClient>();
 builder.Services.AddScoped<ITemporalEligibilityService, TemporalEligibilityService>();
 
-// Batch eligibility storage (in-memory for dev, Cosmos+Blob+Service Bus for
+// Shared messaging bus. Backend (ServiceBus / InMemory / Null) is resolved
+// from Messaging:* config + environment by AddChoMessaging.
+builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
+
+// Batch eligibility storage (in-memory for dev, Cosmos+Blob+IMessageBus for
 // production). Resolution logic lives in
 // BatchEligibilityServiceCollectionExtensions.
 builder.Services.AddBatchEligibilityStorage(builder.Configuration, builder.Environment);

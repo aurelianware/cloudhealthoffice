@@ -8,6 +8,7 @@ using IdCardService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
+using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -106,16 +107,20 @@ builder.Services.AddScoped<IIdCardAdapter, QnxtIdCardAdapter>();
 builder.Services.AddScoped<IIdCardAdapter, FulfillmentVendorAdapter>();
 builder.Services.AddScoped<IdCardAdapterFactory>();
 
-// QNXT mirror queue — Service Bus is only wired when the feature flag is
-// explicitly enabled *and* a connection string is supplied. Either being
-// unset falls back to the in-memory queue used by dev/test and by the
-// reconciliation job's tests.
+// Shared messaging bus. Backend (ServiceBus / InMemory / Null) is resolved
+// from Messaging:* config + environment by AddChoMessaging.
+builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
+
+// QNXT mirror queue — when the feature flag is enabled we route through
+// IMessageBus (Service Bus in prod, in-memory in dev). When disabled we
+// keep the stand-alone InMemoryQnxtMirrorQueue because tests and the
+// reconciliation job rely on its PeekEnqueued inspection method.
 var qnxtMirrorEnabled = builder.Configuration.GetValue<bool>("IdCard:QnxtMirror:Enabled");
-var sbConn = builder.Configuration["IdCard:QnxtMirror:ServiceBusConnectionString"];
-var queueName = builder.Configuration["IdCard:QnxtMirror:QueueName"] ?? "qnxt-idcard-requests";
-if (qnxtMirrorEnabled && !string.IsNullOrEmpty(sbConn))
+var qnxtQueueName = builder.Configuration["IdCard:QnxtMirror:QueueName"] ?? "qnxt-idcard-requests";
+if (qnxtMirrorEnabled)
 {
-    builder.Services.AddSingleton<IQnxtMirrorQueue>(_ => new ServiceBusQnxtMirrorQueue(sbConn, queueName));
+    builder.Services.AddSingleton<IQnxtMirrorQueue>(sp =>
+        new ServiceBusQnxtMirrorQueue(sp.GetRequiredService<IMessageBus>(), qnxtQueueName));
 }
 else
 {
