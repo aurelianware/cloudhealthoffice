@@ -4,11 +4,11 @@ using Xunit;
 
 namespace CloudHealthOffice.BenefitPlanService.Tests;
 
-public class ObservabilityTests : IClassFixture<WebApplicationFactory<Program>>
+public class ObservabilityTests : IClassFixture<ObservabilityTestFactory<Program>>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ObservabilityTestFactory<Program> _factory;
 
-    public ObservabilityTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public ObservabilityTests(ObservabilityTestFactory<Program> factory) => _factory = factory;
 
     [Fact]
     public Task ObservabilityWiring_SatisfiesStandardContract() =>
