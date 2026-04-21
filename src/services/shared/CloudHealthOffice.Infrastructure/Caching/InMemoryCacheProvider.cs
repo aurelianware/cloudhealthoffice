@@ -11,6 +11,10 @@ namespace CloudHealthOffice.Infrastructure.Caching;
 /// across calls on the same key. Production code should always use a
 /// consistent type per key; the Redis implementation would raise a
 /// JsonException on the mismatch.
+///
+/// The <see cref="CacheScope"/> parameter is ignored here — scope-based
+/// prefixing happens in <see cref="GuardedCacheProvider"/>, which wraps
+/// this class in the production composition.
 /// </summary>
 internal sealed class InMemoryCacheProvider : ICacheProvider
 {
@@ -23,13 +27,13 @@ internal sealed class InMemoryCacheProvider : ICacheProvider
         _singleFlight = singleFlight;
     }
 
-    public Task<T?> GetAsync<T>(string key, CancellationToken ct = default)
+    public Task<T?> GetAsync<T>(string key, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
         where T : class
     {
         return Task.FromResult(_cache.TryGetValue<T>(key, out var value) ? value : null);
     }
 
-    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct = default)
+    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
     {
         _cache.Set(key, value, new MemoryCacheEntryOptions
         {
@@ -38,13 +42,13 @@ internal sealed class InMemoryCacheProvider : ICacheProvider
         return Task.CompletedTask;
     }
 
-    public Task RemoveAsync(string key, CancellationToken ct = default)
+    public Task RemoveAsync(string key, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
     {
         _cache.Remove(key);
         return Task.CompletedTask;
     }
 
-    public Task RemoveAsync(IReadOnlyCollection<string> keys, CancellationToken ct = default)
+    public Task RemoveAsync(IReadOnlyCollection<string> keys, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
     {
         foreach (var k in keys) _cache.Remove(k);
         return Task.CompletedTask;
@@ -54,6 +58,7 @@ internal sealed class InMemoryCacheProvider : ICacheProvider
         string key,
         Func<CancellationToken, Task<T?>> factory,
         TimeSpan ttl,
+        CacheScope scope = CacheScope.Tenant,
         CancellationToken ct = default)
         where T : class
     {
@@ -63,7 +68,7 @@ internal sealed class InMemoryCacheProvider : ICacheProvider
                 return cached;
 
             var fresh = await factory(token).ConfigureAwait(false);
-            if (fresh is not null) await SetAsync(key, fresh, ttl, token).ConfigureAwait(false);
+            if (fresh is not null) await SetAsync(key, fresh, ttl, scope, token).ConfigureAwait(false);
             return fresh;
         }, ct);
     }

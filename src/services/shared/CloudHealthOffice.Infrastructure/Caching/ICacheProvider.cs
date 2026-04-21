@@ -18,6 +18,12 @@ namespace CloudHealthOffice.Infrastructure.Caching;
 /// that need Redis-native semantics (hashes, counters, pub/sub, locks,
 /// pattern deletion) own their own multiplexer and document the reason.
 ///
+/// All operations route through <c>CacheKeyGuard</c> in the production
+/// composition — keys are tenant-prefixed and screened for PHI tokens
+/// before they reach the backend. The <paramref name="scope"/> parameter
+/// defaults to <see cref="CacheScope.Tenant"/>; pass
+/// <see cref="CacheScope.Global"/> deliberately for platform-wide entries.
+///
 /// See <c>docs/architecture/shared-cache.md</c> for the decision tree.
 /// </summary>
 public interface ICacheProvider
@@ -27,7 +33,9 @@ public interface ICacheProvider
     /// Deserialization failures are treated as misses — the corrupted entry
     /// is best-effort deleted and <c>null</c> returned.
     /// </summary>
-    Task<T?> GetAsync<T>(string key, CancellationToken ct = default)
+    Task<T?> GetAsync<T>(string key,
+                         CacheScope scope = CacheScope.Tenant,
+                         CancellationToken ct = default)
         where T : class;
 
     /// <summary>
@@ -35,10 +43,13 @@ public interface ICacheProvider
     /// the same key.
     /// </summary>
     Task SetAsync<T>(string key, T value, TimeSpan ttl,
+                     CacheScope scope = CacheScope.Tenant,
                      CancellationToken ct = default);
 
     /// <summary>Delete by key. No-op if the key does not exist.</summary>
-    Task RemoveAsync(string key, CancellationToken ct = default);
+    Task RemoveAsync(string key,
+                     CacheScope scope = CacheScope.Tenant,
+                     CancellationToken ct = default);
 
     /// <summary>
     /// Delete many keys in one round trip. Used by
@@ -46,6 +57,7 @@ public interface ICacheProvider
     /// distinct cache key touched by a bulk write.
     /// </summary>
     Task RemoveAsync(IReadOnlyCollection<string> keys,
+                     CacheScope scope = CacheScope.Tenant,
                      CancellationToken ct = default);
 
     /// <summary>
@@ -62,6 +74,7 @@ public interface ICacheProvider
     Task<T?> GetOrSetAsync<T>(string key,
                               Func<CancellationToken, Task<T?>> factory,
                               TimeSpan ttl,
+                              CacheScope scope = CacheScope.Tenant,
                               CancellationToken ct = default)
         where T : class;
 }

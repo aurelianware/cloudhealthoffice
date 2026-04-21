@@ -15,7 +15,9 @@ namespace CloudHealthOffice.Infrastructure.Caching;
 ///
 /// This provider treats keys as opaque strings — tenant prefixing and PHI
 /// rejection are applied by <see cref="GuardedCacheProvider"/>, which wraps
-/// this type in the production composition in <c>AddChoCaching</c>.
+/// this type in the production composition in <c>AddChoCaching</c>. The
+/// <see cref="CacheScope"/> parameter is intentionally ignored here for
+/// the same reason.
 ///
 /// Redis connectivity failures degrade to cache misses (read path) or
 /// best-effort no-ops (write/invalidate path) so a Redis incident does not
@@ -37,7 +39,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         _logger       = logger;
     }
 
-    public async Task<T?> GetAsync<T>(string key, CancellationToken ct = default)
+    public async Task<T?> GetAsync<T>(string key, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
         where T : class
     {
         try
@@ -65,7 +67,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         }
     }
 
-    public async Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct = default)
+    public async Task SetAsync<T>(string key, T value, TimeSpan ttl, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
     {
         try
         {
@@ -79,7 +81,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         }
     }
 
-    public async Task RemoveAsync(string key, CancellationToken ct = default)
+    public async Task RemoveAsync(string key, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
     {
         try
         {
@@ -92,7 +94,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         }
     }
 
-    public async Task RemoveAsync(IReadOnlyCollection<string> keys, CancellationToken ct = default)
+    public async Task RemoveAsync(IReadOnlyCollection<string> keys, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
     {
         if (keys.Count == 0) return;
         try
@@ -111,17 +113,18 @@ internal sealed class RedisCacheProvider : ICacheProvider
         string key,
         Func<CancellationToken, Task<T?>> factory,
         TimeSpan ttl,
+        CacheScope scope = CacheScope.Tenant,
         CancellationToken ct = default)
         where T : class
     {
         return _singleFlight.RunAsync<T>(key, async token =>
         {
-            var cached = await GetAsync<T>(key, token).ConfigureAwait(false);
+            var cached = await GetAsync<T>(key, scope, token).ConfigureAwait(false);
             if (cached is not null) return cached;
 
             var fresh = await factory(token).ConfigureAwait(false);
             if (fresh is not null)
-                await SetAsync(key, fresh, ttl, token).ConfigureAwait(false);
+                await SetAsync(key, fresh, ttl, scope, token).ConfigureAwait(false);
 
             return fresh;
         }, ct);
