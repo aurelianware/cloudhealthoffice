@@ -260,13 +260,13 @@ cloudhealthoffice/
 
 |Category         |Lines    |Breakdown                                                       |
 |-----------------|---------|----------------------------------------------------------------|
-|Application Code |139,000  |C# 86.8K, TypeScript 24.4K, Razor 19.8K, Python 6.7K, JS 2.6K |
+|Application Code |300,000  |C# 86.8K, TypeScript 24.4K, Razor 19.8K, Python 6.7K, JS 2.6K |
 |Web / UI         |9,500    |HTML/CSHTML 6.2K, CSS 3.4K                                     |
 |Infrastructure   |55,000   |YAML 27.2K, JSON 15.4K, Shell 8.3K, PowerShell 3.2K, Docker 1.3K|
-|Documentation    |111,000  |Architecture, ADRs, deployment guides, features, security, sales|
-|**Total**        |**~315,000**|                                                             |
+|Documentation    |150,000  |Architecture, ADRs, deployment guides, features, security, sales|
+|**Total**        |**~500,000+**|                                                             |
 
-973 automated tests across C# (xUnit), TypeScript (Jest), and Python (pytest).
+3K+ automated tests across C# (xUnit), TypeScript (Jest), and Python (pytest).
 Built by a solo founder with 25+ years of payer IT experience and AI-assisted development.
 
 ## Deployment Options
