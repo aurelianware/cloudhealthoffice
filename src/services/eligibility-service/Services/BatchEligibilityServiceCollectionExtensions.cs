@@ -1,5 +1,5 @@
-using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
+using CloudHealthOffice.Infrastructure.Messaging;
 using Microsoft.Azure.Cosmos;
 
 namespace EligibilityService.Services;
@@ -8,12 +8,14 @@ namespace EligibilityService.Services;
 /// Resolves BatchEligibility storage bindings from configuration.
 ///
 /// Config section <c>BatchEligibility:StorageMode</c>:
-///   InMemory   — in-process channel + in-memory job store (dev only).
-///   Persistent — Cosmos job store + Blob payload store + Service Bus queue.
-///   Auto       — Persistent when both Cosmos and Service Bus are configured;
-///                 InMemory + warn in dev when they're not; throws otherwise.
+///   <c>InMemory</c>   — in-process channel + in-memory job store (dev only).
+///   <c>Persistent</c> — Cosmos job store + Blob payload store + IMessageBus queue.
+///   <c>Auto</c>       — Persistent when both Cosmos and Blob are configured;
+///                        InMemory in Development; throws otherwise.
 ///
-/// Never registers both in-memory and persistent implementations.
+/// The queue transport itself is owned by <see cref="IMessageBus"/>
+/// (register via <c>AddChoMessaging</c>). Service Bus vs in-process channel
+/// is decided there, not here.
 /// </summary>
 public static class BatchEligibilityServiceCollectionExtensions
 {
@@ -25,12 +27,10 @@ public static class BatchEligibilityServiceCollectionExtensions
         var requestedMode = configuration["BatchEligibility:StorageMode"] ?? "Auto";
         var cosmosCs = configuration["BatchEligibility:CosmosDb:ConnectionString"];
         var blobCs = configuration["BatchEligibility:BlobStorage:ConnectionString"];
-        var serviceBusCs = configuration["BatchEligibility:ServiceBus:ConnectionString"];
 
         var hasPersistentConfig =
             !string.IsNullOrWhiteSpace(cosmosCs) &&
-            !string.IsNullOrWhiteSpace(blobCs) &&
-            !string.IsNullOrWhiteSpace(serviceBusCs);
+            !string.IsNullOrWhiteSpace(blobCs);
 
         var effectiveMode = ResolveMode(requestedMode, environment, hasPersistentConfig);
 
@@ -40,14 +40,14 @@ public static class BatchEligibilityServiceCollectionExtensions
             {
                 throw new InvalidOperationException(
                     "BatchEligibility:StorageMode resolved to InMemory outside Development. " +
-                    "Configure BatchEligibility:CosmosDb, BatchEligibility:BlobStorage and " +
-                    "BatchEligibility:ServiceBus, or set StorageMode=Persistent explicitly.");
+                    "Configure BatchEligibility:CosmosDb and BatchEligibility:BlobStorage, " +
+                    "or set StorageMode=Persistent explicitly.");
             }
 
             Console.WriteLine(
                 "[dev] BatchEligibility storage = InMemory. Jobs do NOT survive restarts " +
-                "and are not visible across replicas. Configure Cosmos + Blob + Service Bus " +
-                "for production.");
+                "and are not visible across replicas. Configure Cosmos + Blob + a Service Bus " +
+                "connection string under Messaging:ServiceBusConnectionString for production.");
 
             services.AddSingleton<IBatchJobStore, InMemoryBatchJobStore>();
             services.AddSingleton<IBatchQueue, InMemoryBatchQueue>();
@@ -58,7 +58,6 @@ public static class BatchEligibilityServiceCollectionExtensions
         // Persistent
         RequireConfig(cosmosCs, "BatchEligibility:CosmosDb:ConnectionString");
         RequireConfig(blobCs, "BatchEligibility:BlobStorage:ConnectionString");
-        RequireConfig(serviceBusCs, "BatchEligibility:ServiceBus:ConnectionString");
 
         var cosmosDb = configuration["BatchEligibility:CosmosDb:Database"] ?? "cho";
         var cosmosContainer = configuration["BatchEligibility:CosmosDb:Container"] ?? "batch-jobs";
@@ -81,12 +80,10 @@ public static class BatchEligibilityServiceCollectionExtensions
                 inlineMax);
         });
 
-        services.AddSingleton<ServiceBusClient>(_ => new ServiceBusClient(serviceBusCs));
-        services.AddSingleton<IBatchQueueSender>(sp =>
-            new ServiceBusSenderAdapter(sp.GetRequiredService<ServiceBusClient>(), sbQueueName));
-        services.AddSingleton<IBatchQueue, ServiceBusBatchQueue>();
+        services.AddSingleton<IBatchQueue>(sp =>
+            new ServiceBusBatchQueue(sp.GetRequiredService<IMessageBus>(), sbQueueName));
         services.AddSingleton<IBatchQueueProcessor>(sp =>
-            new ServiceBusBatchQueueProcessor(sp.GetRequiredService<ServiceBusClient>(), sbQueueName));
+            new MessageBusBatchQueueProcessor(sp.GetRequiredService<IMessageBus>(), sbQueueName));
 
         return services;
     }
@@ -101,9 +98,9 @@ public static class BatchEligibilityServiceCollectionExtensions
             _ when hasPersistentConfig => BatchStorageBackend.Persistent,
             _ when env.IsDevelopment() => BatchStorageBackend.InMemory,
             _ => throw new InvalidOperationException(
-                "BatchEligibility:StorageMode=Auto could not resolve: no Cosmos/Blob/Service Bus " +
-                "config and not running in Development. Set StorageMode explicitly or provide " +
-                "the required connection strings.")
+                "BatchEligibility:StorageMode=Auto could not resolve: no Cosmos/Blob config and " +
+                "not running in Development. Set StorageMode explicitly or provide the required " +
+                "connection strings.")
         };
     }
 

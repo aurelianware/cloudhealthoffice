@@ -190,6 +190,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
         private readonly CancellationTokenSource _internalCts = new();
         private Task? _pump;
         private int _started;
+        private int _disposed;
 
         public InMemorySubscription(
             string queueOrTopic,
@@ -205,6 +206,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
 
         public Task StartAsync(CancellationToken ct)
         {
+            if (Volatile.Read(ref _disposed) == 1) return Task.CompletedTask;
             if (Interlocked.Exchange(ref _started, 1) == 1) return Task.CompletedTask;
             var linked = CancellationTokenSource.CreateLinkedTokenSource(_internalCts.Token, ct);
             _pump = Task.Run(() => PumpAsync(linked.Token), linked.Token);
@@ -214,7 +216,8 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
         public async Task StopAsync(CancellationToken ct)
         {
             if (_pump is null) return;
-            _internalCts.Cancel();
+            try { _internalCts.Cancel(); }
+            catch (ObjectDisposedException) { return; }
             try { await _pump.ConfigureAwait(false); }
             catch (OperationCanceledException) { /* expected */ }
         }
@@ -260,6 +263,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
 
         public async ValueTask DisposeAsync()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
             await StopAsync(CancellationToken.None).ConfigureAwait(false);
             _internalCts.Dispose();
         }
