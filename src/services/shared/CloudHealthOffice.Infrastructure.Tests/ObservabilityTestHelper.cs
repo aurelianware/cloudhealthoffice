@@ -21,22 +21,31 @@ public static class ObservabilityTestHelper
 {
     /// <summary>
     /// Runs both smoke assertions against a service's test host.
-    /// Records a single sample on <see cref="ChoMetrics.RequestDuration"/> so
-    /// the Prometheus exporter has something to emit under the CHO histogram
-    /// name (the /metrics endpoint itself is filtered out of AspNetCore
-    /// instrumentation and can't self-populate the counter).
+    ///
+    /// Ordering matters here: <c>CreateClient</c> is called first because that
+    /// is what forces WebApplicationFactory to build the app, which in turn
+    /// subscribes the OTel MeterProvider to the <c>CloudHealthOffice</c> meter.
+    /// Any <c>ChoMetrics.RequestDuration.Record</c> call made *before* the
+    /// subscription is dropped (no listener yet) and the sample never reaches
+    /// the Prometheus exporter — a latent failure that only shows up under
+    /// certain xUnit test-class orderings. The single sample we record after
+    /// build ensures <c>/metrics</c> always has a cho_http_request_duration
+    /// series to assert on, regardless of which tests ran before this one.
+    /// The /metrics endpoint itself is filtered out of AspNetCore
+    /// instrumentation, so it can't self-populate the counter.
     /// </summary>
     public static async Task AssertStandardContract<TProgram>(
         WebApplicationFactory<TProgram> factory)
         where TProgram : class
     {
+        using var client = factory.CreateClient();
+
         ChoMetrics.RequestDuration.Record(
             0.001,
             new KeyValuePair<string, object?>("http.method", "GET"),
             new KeyValuePair<string, object?>("http.route", "/__smoke-test"),
             new KeyValuePair<string, object?>("http.status_code", 200));
 
-        using var client = factory.CreateClient();
         var response = await client.GetAsync("/metrics");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK,
