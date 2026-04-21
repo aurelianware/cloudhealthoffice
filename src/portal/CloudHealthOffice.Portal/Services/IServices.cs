@@ -423,6 +423,44 @@ public interface IEmailNotificationService
     Task SendSalesInquiryNotificationAsync(SalesInquiry inquiry);
 }
 
+public interface IIdCardService
+{
+    Task<IdCardOrderView> OrderAsync(string memberId, string? languageCode = null, string? requestedBy = null);
+    Task<IdCardOrderView?> GetOrderAsync(string orderId);
+    Task<List<IdCardHistoryView>> ListForMemberAsync(string memberId);
+    string BuildDocumentDownloadUrl(string documentId);
+    Task RevokeAsync(string cardId, string reason, string? notes = null);
+}
+
+public class IdCardOrderView
+{
+    public string OrderId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string? CardId { get; set; }
+    public string? DocumentId { get; set; }
+    public string? PreviewDocumentId { get; set; }
+    public string? FailureReason { get; set; }
+    public string? FailureCode { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public DateTime? IssuedAt { get; set; }
+}
+
+public class IdCardHistoryView
+{
+    public string CardId { get; set; } = string.Empty;
+    public string OrderId { get; set; } = string.Empty;
+    public string DocumentId { get; set; } = string.Empty;
+    public string? PreviewDocumentId { get; set; }
+    public string? PlanId { get; set; }
+    public string? SponsorId { get; set; }
+    public string? LanguageCode { get; set; }
+    public DateTime IssuedAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public string? RevocationReason { get; set; }
+    public long ScanCount { get; set; }
+}
+
 // DTOs
 public class ClaimSummary
 {
