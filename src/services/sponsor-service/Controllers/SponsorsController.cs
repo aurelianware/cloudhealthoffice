@@ -44,16 +44,15 @@ public class SponsorsController : ControllerBase
         [FromQuery][Range(1, 100)] int pageSize = 20,
         [FromQuery] string? continuationToken = null)
     {
+        // lineOfBusiness is pushed into the repo query (not filtered in-memory
+        // after paging) so TotalCount and ContinuationToken reflect the
+        // filtered set and pagination produces stable, correctly-sized pages.
         var (items, token, total) = await _sponsorRepository.GetPagedAsync(
-            TenantId, status, activeOnly, pageSize, continuationToken);
-
-        var list = items.ToList();
-        if (lineOfBusiness.HasValue)
-            list = list.Where(s => s.LineOfBusiness == lineOfBusiness.Value).ToList();
+            TenantId, status, activeOnly, lineOfBusiness, pageSize, continuationToken);
 
         return Ok(new SponsorListResponse
         {
-            Sponsors = list,
+            Sponsors = items.ToList(),
             ContinuationToken = token,
             TotalCount = total
         });
@@ -162,6 +161,8 @@ public class SponsorsController : ControllerBase
         };
 
         var created = await _sponsorRepository.CreateAsync(sponsor);
+        _logger.LogInformation("Created sponsor {GroupNumber} ({EmployerName})",
+            SanitizeForLog(created.GroupNumber), SanitizeForLog(created.EmployerName));
         return CreatedAtAction(nameof(GetSponsor), new { groupNumber = created.GroupNumber }, created);
     }
 
@@ -193,6 +194,7 @@ public class SponsorsController : ControllerBase
 
         sponsor.LastUpdatedBy = User.Identity?.Name ?? "System";
         var updated = await _sponsorRepository.UpdateAsync(sponsor);
+        _logger.LogInformation("Updated sponsor {GroupNumber}", SanitizeForLog(updated.GroupNumber));
         return Ok(updated);
     }
 
@@ -213,6 +215,8 @@ public class SponsorsController : ControllerBase
         sponsor.Status = SponsorStatus.Terminated;
         sponsor.TerminationDate = terminationDate ?? DateTime.UtcNow;
         await _sponsorRepository.UpdateAsync(sponsor);
+        _logger.LogInformation("Terminated sponsor {GroupNumber} (effective {TerminationDate:O})",
+            SanitizeForLog(groupNumber), sponsor.TerminationDate);
         return NoContent();
     }
 
@@ -241,6 +245,12 @@ public class SponsorsController : ControllerBase
             MonthlyPremium = sponsor.BillingInfo?.PremiumAmount ?? 0m
         };
         return Ok(summary);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

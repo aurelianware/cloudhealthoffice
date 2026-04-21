@@ -1181,6 +1181,10 @@
                         {
                             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
                         }
+                        else if (_claimsError != null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="my-2">Claims service unavailable: @_claimsError</MudAlert>
+                        }
                         else if (_memberClaimsSummary != null)
                         {
                             <MudGrid>
@@ -1226,6 +1230,10 @@
                         @if (_loadingAr)
                         {
                             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (_arError != null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="my-2">AR service unavailable: @_arError</MudAlert>
                         }
                         else if (_arSummary != null)
                         {
@@ -1317,6 +1325,10 @@
                         @if (_loadingPremium)
                         {
                             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (_premiumError != null)
+                        {
+                            <MudAlert Severity="Severity.Error" Class="my-2">Premium billing service unavailable: @_premiumError</MudAlert>
                         }
                         else if (_premiumSummary?.CurrentInvoice != null)
                         {
@@ -1484,12 +1496,15 @@
 
     // Member-linkage tabs (Claims / AR / Premium) — lazy loaded on first
     // activation, cached for the lifetime of the dialog. "LoadedOnce" flags
-    // prevent redundant fetches when the user clicks between tabs.
+    // prevent redundant fetches when the user clicks between tabs. An
+    // explicit error flag per tab lets the UI distinguish "service failed"
+    // from "no data" — otherwise both render the same empty-state alert.
     private EobSearchResponse? _memberClaimsSummary;
     private MemberArSummary? _arSummary;
     private MemberPremiumSummary? _premiumSummary;
     private bool _loadingClaims, _loadingAr, _loadingPremium;
     private bool _claimsLoadedOnce, _arLoadedOnce, _premiumLoadedOnce;
+    private string? _claimsError, _arError, _premiumError;
 
     // Coverage tab Sponsor sub-section — one fetch per distinct group number
     // on first panel expansion. _loadingSponsor is a set of in-flight keys.
@@ -2162,15 +2177,25 @@
         if (_claimsLoadedOnce) return;
         _claimsLoadedOnce = true;
         _loadingClaims = true;
+        _claimsError = null;
         StateHasChanged();
         try
         {
             _memberClaimsSummary = await ClaimsService.SearchClaimsByMemberAsync(
                 MemberId, new MemberClaimsFilter { Page = 1, PageSize = 20 });
         }
-        catch (Exception)
+        catch (ServiceUnavailableException ex)
+        {
+            // Service outage — distinct from "member has no claims". Render
+            // as an error banner so operators don't mistake it for empty data.
+            _memberClaimsSummary = null;
+            _claimsError = ex.Message;
+            Snackbar.Add($"Claims service: {ex.Message}", Severity.Error);
+        }
+        catch (Exception ex)
         {
             _memberClaimsSummary = null;
+            _claimsError = ex.Message;
         }
         finally
         {
@@ -2184,14 +2209,22 @@
         if (_arLoadedOnce) return;
         _arLoadedOnce = true;
         _loadingAr = true;
+        _arError = null;
         StateHasChanged();
         try
         {
             _arSummary = await ArService.GetMemberArSummaryAsync(MemberId);
         }
-        catch (Exception)
+        catch (ServiceUnavailableException ex)
         {
             _arSummary = null;
+            _arError = ex.Message;
+            Snackbar.Add($"AR service: {ex.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            _arSummary = null;
+            _arError = ex.Message;
         }
         finally
         {
@@ -2205,14 +2238,22 @@
         if (_premiumLoadedOnce) return;
         _premiumLoadedOnce = true;
         _loadingPremium = true;
+        _premiumError = null;
         StateHasChanged();
         try
         {
             _premiumSummary = await PremiumBillingService.GetMemberPremiumSummaryAsync(MemberId);
         }
-        catch (Exception)
+        catch (ServiceUnavailableException ex)
         {
             _premiumSummary = null;
+            _premiumError = ex.Message;
+            Snackbar.Add($"Premium billing service: {ex.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            _premiumSummary = null;
+            _premiumError = ex.Message;
         }
         finally
         {

@@ -13,9 +13,11 @@ public class MemberPremiumSummary
     public InvoiceView? CurrentInvoice { get; set; }
 
     /// <summary>
-    /// Projected next bill date. If a newer invoice has been generated, we
-    /// use its BillingPeriodStart; otherwise we project
-    /// <c>CurrentInvoice.BillingPeriodEnd + 1 day</c>.
+    /// Projected next bill date, derived from the current invoice as
+    /// <c>CurrentInvoice.BillingPeriodEnd + 1 day</c>. When a future-dated
+    /// invoice has already been generated, it will be the newest invoice and
+    /// therefore already the <see cref="CurrentInvoice"/>, so this rule
+    /// covers both cases.
     /// </summary>
     public DateTime? NextBillDate { get; set; }
 

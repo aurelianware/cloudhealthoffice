@@ -15,13 +15,18 @@ namespace CloudHealthOffice.Portal.Tests.Services;
 /// </summary>
 public class MemberLinkageTests
 {
+    // Mirrors prod appsettings.json: each Services:* base URL includes the
+    // version prefix the service mounts its controllers under, so call sites
+    // only append the resource segment. Sponsor specifically lives under
+    // /api/v1; asserting against that prod-shape base avoids locking in a
+    // less-realistic URL in the test.
     private readonly IConfiguration _configuration = new ConfigurationBuilder()
         .AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Services:ClaimsService"] = "http://claims-svc/claims",
             ["Services:ArService"] = "http://ar-svc/api",
             ["Services:BillingService"] = "http://billing-svc/api",
-            ["Services:SponsorService"] = "http://sponsor-svc/api"
+            ["Services:SponsorService"] = "http://sponsor-svc/api/v1"
         })
         .Build();
 
@@ -88,6 +93,6 @@ public class MemberLinkageTests
 
         var result = await sut.GetSponsorMemberViewAsync("GRP-1");
         result!.GroupNumber.Should().Be("GRP-1");
-        handler.CapturedUrls[0].Should().Be("http://sponsor-svc/api/sponsors/GRP-1/member-view");
+        handler.CapturedUrls[0].Should().Be("http://sponsor-svc/api/v1/sponsors/GRP-1/member-view");
     }
 }

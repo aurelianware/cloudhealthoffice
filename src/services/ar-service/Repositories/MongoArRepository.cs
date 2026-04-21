@@ -155,8 +155,10 @@ public class MongoArBalanceRepository : IArBalanceRepository
             new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending(x => x.Period)),
             new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending(x => x.IsReconciled)),
             // Member-scoped lookup path — backs GetBalancesContainingMemberAsync
-            // and the /members/{id}/ar-summary endpoint.
-            new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending("postingEntries.memberId"))
+            // and the /members/{id}/ar-summary endpoint. The field path uses
+            // the default Mongo C# driver serialization (PascalCase property
+            // names) so ElemMatch queries land on this index.
+            new CreateIndexModel<ArBalance>(keys.Ascending(x => x.TenantId).Ascending("PostingEntries.MemberId"))
         };
         _collection.Indexes.CreateMany(models);
     }
