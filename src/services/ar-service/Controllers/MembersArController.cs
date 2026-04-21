@@ -46,10 +46,10 @@ public class MembersArController : ControllerBase
     }
 
     /// <summary>
-    /// Build a <see cref="MemberArSummary"/> from the raw balances. Public-ish
-    /// (internal) and static so tests can drive it without MongoDB.
+    /// Build a <see cref="MemberArSummary"/> from the raw balances. Public
+    /// and static so unit tests can drive it without MongoDB.
     /// </summary>
-    internal static MemberArSummary BuildSummary(
+    public static MemberArSummary BuildSummary(
         string memberId,
         IReadOnlyList<ArBalance> balances,
         DateTime asOfUtc)

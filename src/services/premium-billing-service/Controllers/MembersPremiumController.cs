@@ -45,10 +45,10 @@ public class MembersPremiumController : ControllerBase
     }
 
     /// <summary>
-    /// Shape the raw invoices into a summary. Extracted so tests can exercise
-    /// the grace-period math without MongoDB.
+    /// Shape the raw invoices into a summary. Public and static so unit tests
+    /// can exercise the grace-period math without MongoDB.
     /// </summary>
-    internal static MemberPremiumSummary Build(
+    public static MemberPremiumSummary Build(
         string memberId,
         IReadOnlyList<PremiumInvoice> invoices,
         DateTime nowUtc)
@@ -79,7 +79,7 @@ public class MembersPremiumController : ControllerBase
         return summary;
     }
 
-    internal static GracePeriodState ComputeGrace(PremiumInvoice invoice, DateTime nowUtc)
+    public static GracePeriodState ComputeGrace(PremiumInvoice invoice, DateTime nowUtc)
     {
         var state = new GracePeriodState { GraceType = invoice.GraceType };
 

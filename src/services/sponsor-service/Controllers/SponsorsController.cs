@@ -90,10 +90,10 @@ public class SponsorsController : ControllerBase
     }
 
     /// <summary>
-    /// Build the compact member view. Internal + static so tests can project
-    /// without hitting Cosmos/Mongo.
+    /// Build the compact member view. Public + static so unit tests can
+    /// project without hitting Cosmos/Mongo.
     /// </summary>
-    internal static SponsorMemberView ProjectMemberView(Sponsor sponsor, DateTime asOfUtc) => new()
+    public static SponsorMemberView ProjectMemberView(Sponsor sponsor, DateTime asOfUtc) => new()
     {
         GroupNumber = sponsor.GroupNumber,
         SponsorName = sponsor.EmployerName,
