@@ -6,6 +6,7 @@ using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Middleware;
 using CloudHealthOffice.PricingApi.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Observability;
 using MongoDB.Driver;
 using Serilog;
 
@@ -154,7 +155,11 @@ try
     // ── Health Checks ──
     builder.Services.AddHealthChecks();
 
+    builder.Services.AddChoObservability(builder.Configuration);
+
     var app = builder.Build();
+
+    app.UseChoObservability();
 
     // ── Middleware Pipeline ──
     app.UseSerilogRequestLogging();

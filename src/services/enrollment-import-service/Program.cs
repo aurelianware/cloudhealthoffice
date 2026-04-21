@@ -4,6 +4,7 @@ using EnrollmentImportService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
+using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Azure.Cosmos;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -60,7 +61,11 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
+
+app.UseChoObservability();
 
 // Configure pipeline
 if (app.Environment.IsDevelopment())

@@ -8,6 +8,7 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
+using CloudHealthOffice.Infrastructure.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -159,7 +160,11 @@ builder.Services.AddChoHealthChecks(options =>
 builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
+builder.Services.AddChoObservability(builder.Configuration);
+
 var app = builder.Build();
+
+app.UseChoObservability();
 
 if (app.Environment.IsDevelopment())
 {
