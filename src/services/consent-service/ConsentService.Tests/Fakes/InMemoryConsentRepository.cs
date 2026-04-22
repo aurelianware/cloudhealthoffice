@@ -54,9 +54,27 @@ public sealed class InMemoryConsentRepository : IConsentRepository, IConsentEven
 
     public Task<Consent> TransitionStatusAsync(Consent consent, ConsentEvent auditEvent)
     {
+        // Mirror the Cosmos + Mongo contract: only persist when the
+        // caller-supplied from-status matches the currently persisted
+        // status. A mismatch means a concurrent writer won the race.
+        if (!auditEvent.FromStatus.HasValue)
+        {
+            throw new ArgumentException(
+                "TransitionStatusAsync requires auditEvent.FromStatus to be set.",
+                nameof(auditEvent));
+        }
+        var expectedFromStatus = auditEvent.FromStatus.Value;
+
         lock (_sync)
         {
-            _consents[Key(consent.TenantId, consent.Id)] = Clone(consent);
+            var key = Key(consent.TenantId, consent.Id);
+            if (!_consents.TryGetValue(key, out var current) || current.Status != expectedFromStatus)
+            {
+                var actual = current?.Status ?? consent.Status;
+                throw new Models.InvalidConsentTransitionException(actual, consent.Status);
+            }
+
+            _consents[key] = Clone(consent);
             AppendEvent(auditEvent);
         }
         return Task.FromResult(Clone(consent));

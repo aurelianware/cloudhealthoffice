@@ -24,11 +24,11 @@ public sealed class ConsentIndexInitializer : IHostedService
         _logger = logger;
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         var consents = _db.GetCollection<Consent>(ConsentRepositoryMongo.ConsentsCollectionName);
 
-        consents.Indexes.CreateOne(
+        await consents.Indexes.CreateOneAsync(
             new CreateIndexModel<Consent>(
                 Builders<Consent>.IndexKeys
                     .Ascending(x => x.TenantId)
@@ -37,7 +37,7 @@ public sealed class ConsentIndexInitializer : IHostedService
                 new CreateIndexOptions { Name = "ix_tenant_member_created" }),
             cancellationToken: cancellationToken);
 
-        consents.Indexes.CreateOne(
+        await consents.Indexes.CreateOneAsync(
             new CreateIndexModel<Consent>(
                 Builders<Consent>.IndexKeys
                     .Ascending(x => x.TenantId)
@@ -47,7 +47,7 @@ public sealed class ConsentIndexInitializer : IHostedService
 
         var events = _db.GetCollection<ConsentEvent>(ConsentEventRepositoryMongo.ConsentEventsCollectionName);
 
-        events.Indexes.CreateOne(
+        await events.Indexes.CreateOneAsync(
             new CreateIndexModel<ConsentEvent>(
                 Builders<ConsentEvent>.IndexKeys
                     .Ascending(x => x.TenantId)
@@ -56,7 +56,7 @@ public sealed class ConsentIndexInitializer : IHostedService
                 new CreateIndexOptions { Name = "ux_tenant_consent_event", Unique = true }),
             cancellationToken: cancellationToken);
 
-        events.Indexes.CreateOne(
+        await events.Indexes.CreateOneAsync(
             new CreateIndexModel<ConsentEvent>(
                 Builders<ConsentEvent>.IndexKeys
                     .Ascending(x => x.TenantId)
@@ -66,7 +66,6 @@ public sealed class ConsentIndexInitializer : IHostedService
             cancellationToken: cancellationToken);
 
         _logger.LogInformation("Consent, ConsentEvent indexes ensured.");
-        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

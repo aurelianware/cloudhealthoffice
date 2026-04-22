@@ -50,20 +50,50 @@ public class ConsentRepositoryMongo : IConsentRepository
     {
         var filter = Builders<Consent>.Filter.Eq(c => c.TenantId, tenantId)
                    & Builders<Consent>.Filter.Eq(c => c.MemberId, memberId);
-        var results = await _consents.Find(filter).ToListAsync();
+
+        // Server-side sort by createdAt desc — backed by the
+        // (tenantId, memberId, createdAt desc) index from
+        // ConsentIndexInitializer. activeOnly is computed in-memory
+        // because ObservedStatus depends on ExpiresAt vs now and cannot
+        // be expressed as a stable Mongo query.
+        var results = await _consents.Find(filter)
+            .SortByDescending(c => c.CreatedAt)
+            .ToListAsync();
 
         var t = asOf ?? DateTime.UtcNow;
         if (activeOnly)
             results = results.Where(c => c.ObservedStatus(t) == ConsentStatus.Active).ToList();
 
-        return results.OrderByDescending(c => c.CreatedAt).ToList();
+        return results;
     }
 
     public async Task<Consent> TransitionStatusAsync(Consent consent, ConsentEvent auditEvent)
     {
+        // Conditional on persisted Status still matching the expected
+        // from-status. Closes the TOCTOU window between the controller's
+        // GetByIdAsync and this write: a concurrent writer that
+        // transitioned the record first causes MatchedCount == 0, and we
+        // surface the lost race as InvalidConsentTransitionException
+        // (mapped to 409 by the controller layer). Audit event is only
+        // appended on success.
+        if (!auditEvent.FromStatus.HasValue)
+        {
+            throw new ArgumentException(
+                "TransitionStatusAsync requires auditEvent.FromStatus to be set.",
+                nameof(auditEvent));
+        }
+        var expectedFromStatus = auditEvent.FromStatus.Value;
+
         var filter = Builders<Consent>.Filter.Eq(c => c.TenantId, consent.TenantId)
-                   & Builders<Consent>.Filter.Eq(c => c.Id, consent.Id);
-        await _consents.ReplaceOneAsync(filter, consent);
+                   & Builders<Consent>.Filter.Eq(c => c.Id, consent.Id)
+                   & Builders<Consent>.Filter.Eq(c => c.Status, expectedFromStatus);
+
+        var replaceResult = await _consents.ReplaceOneAsync(filter, consent);
+        if (replaceResult.MatchedCount == 0)
+        {
+            throw new InvalidConsentTransitionException(expectedFromStatus, consent.Status);
+        }
+
         await _events.AppendAsync(auditEvent);
         return consent;
     }

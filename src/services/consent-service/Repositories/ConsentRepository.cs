@@ -63,7 +63,14 @@ public class ConsentRepository : IConsentRepository
     public async Task<IReadOnlyList<Consent>> ListByMemberAsync(
         string tenantId, string memberId, bool activeOnly, DateTime? asOf = null)
     {
-        var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.memberId = @memberId";
+        // Server-side ORDER BY keeps the sort cost on Cosmos' index rather
+        // than paying for it in RU + client memory for long member
+        // histories. activeOnly still filters in-memory because
+        // ObservedStatus depends on ExpiresAt vs now and cannot be
+        // expressed cheaply at the SQL layer.
+        var queryText = "SELECT * FROM c " +
+                        "WHERE c.tenantId = @tenantId AND c.memberId = @memberId " +
+                        "ORDER BY c.createdAt DESC";
         var query = new QueryDefinition(queryText)
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@memberId", memberId);
@@ -82,15 +89,50 @@ public class ConsentRepository : IConsentRepository
         var t = asOf ?? DateTime.UtcNow;
         if (activeOnly) results = results.Where(c => c.ObservedStatus(t) == ConsentStatus.Active).ToList();
 
-        return results.OrderByDescending(c => c.CreatedAt).ToList();
+        return results;
     }
 
     public async Task<Consent> TransitionStatusAsync(Consent consent, ConsentEvent auditEvent)
     {
-        var response = await _consents.ReplaceItemAsync(
-            consent, consent.Id, new PartitionKey(consent.TenantId));
-        await _events.AppendAsync(auditEvent);
-        return response.Resource;
+        // Close the TOCTOU window between the controller's GetByIdAsync
+        // and this ReplaceItemAsync: re-read fresh to capture the current
+        // ETag + persisted status, verify it matches the expected
+        // from-status on the audit event, and chain IfMatchEtag so a
+        // concurrent writer either wins cleanly or we surface the
+        // conflict as an InvalidConsentTransitionException mapped to 409
+        // by the controller layer. Audit row is only appended when the
+        // conditional replace succeeds.
+        if (!auditEvent.FromStatus.HasValue)
+        {
+            throw new ArgumentException(
+                "TransitionStatusAsync requires auditEvent.FromStatus to be set.",
+                nameof(auditEvent));
+        }
+        var expectedFromStatus = auditEvent.FromStatus.Value;
+
+        try
+        {
+            var fresh = await _consents.ReadItemAsync<Consent>(
+                consent.Id, new PartitionKey(consent.TenantId));
+
+            if (fresh.Resource.Status != expectedFromStatus)
+            {
+                throw new InvalidConsentTransitionException(
+                    fresh.Resource.Status, consent.Status);
+            }
+
+            var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+            var response = await _consents.ReplaceItemAsync(
+                consent, consent.Id, new PartitionKey(consent.TenantId), options);
+
+            await _events.AppendAsync(auditEvent);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            throw new InvalidConsentTransitionException(
+                expectedFromStatus, consent.Status);
+        }
     }
 
     public async Task<bool> TryTransitionToExpiredAsync(Consent consent, ConsentEvent auditEvent)

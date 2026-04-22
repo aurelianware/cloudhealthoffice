@@ -96,7 +96,7 @@ public class ConsentsController : ControllerBase
         var consent = await _consents.GetByIdAsync(TenantId, memberId, consentId);
         if (consent == null) return NotFound();
 
-        await MaybeObserveExpiryAsync(consent, ct);
+        consent = await MaybeObserveExpiryAsync(consent, ct);
 
         var view = await DecryptForResponseAsync(consent, ct);
         return Ok(view);
@@ -112,12 +112,12 @@ public class ConsentsController : ControllerBase
         var activeOnly = string.Equals(status, "active", StringComparison.OrdinalIgnoreCase);
         var items = await _consents.ListByMemberAsync(TenantId, memberId, activeOnly);
 
-        // Decrypt in parallel — per-consent decrypts are independent and
-        // hit the same in-memory key cache after the first miss.
-        var decrypted = new List<Consent>(items.Count);
-        foreach (var c in items) decrypted.Add(await DecryptForResponseAsync(c, ct));
+        // Per-consent decrypts are independent and hit the same in-memory
+        // key cache after the first miss — fan out via Task.WhenAll so a
+        // large list does not pay N sequential round-trips.
+        var decrypted = await Task.WhenAll(items.Select(c => DecryptForResponseAsync(c, ct)));
 
-        return Ok(new ConsentListResponse { Items = decrypted });
+        return Ok(new ConsentListResponse { Items = decrypted.ToList() });
     }
 
     [HttpGet("{consentId}/history")]
@@ -148,6 +148,12 @@ public class ConsentsController : ControllerBase
         var consent = await _consents.GetByIdAsync(TenantId, memberId, consentId);
         if (consent == null) return NotFound();
 
+        // Observe read-time expiry BEFORE the idempotency/state-machine
+        // checks so an Active record whose ExpiresAt has passed is
+        // persisted as Expired and correctly rejected here rather than
+        // silently transitioning Active -> Active.
+        consent = await MaybeObserveExpiryAsync(consent, ct);
+
         // Idempotent no-op when already Active. No second event, no second Kafka.
         if (consent.Status == ConsentStatus.Active)
         {
@@ -175,7 +181,18 @@ public class ConsentsController : ControllerBase
         var auditEvent = BuildEvent(consent, ConsentEventType.ConsentActivated,
             fromStatus: from, toStatus: ConsentStatus.Active, actor, request?.EventId);
 
-        var updated = await _consents.TransitionStatusAsync(consent, auditEvent);
+        Consent updated;
+        try
+        {
+            updated = await _consents.TransitionStatusAsync(consent, auditEvent);
+        }
+        catch (InvalidConsentTransitionException ex)
+        {
+            // Repository detected that another writer transitioned this
+            // record first between our read and write — surface as 409.
+            return ConflictTransition(ex);
+        }
+
         await _publisher.PublishStatusChangedAsync(
             updated, fromStatus: from, toStatus: ConsentStatus.Active, actor, HttpContext.TraceIdentifier, ct);
 
@@ -195,6 +212,12 @@ public class ConsentsController : ControllerBase
     {
         var consent = await _consents.GetByIdAsync(TenantId, memberId, consentId);
         if (consent == null) return NotFound();
+
+        // Observe read-time expiry BEFORE the idempotency/state-machine
+        // checks. Without this, an Active record whose ExpiresAt has passed
+        // would be silently revoked and the ConsentExpired audit row would
+        // never be written — Expired is supposed to be terminal.
+        consent = await MaybeObserveExpiryAsync(consent, ct);
 
         // Idempotent no-op when already Revoked. Second call = 200, no
         // second event, no second Kafka.
@@ -223,7 +246,18 @@ public class ConsentsController : ControllerBase
         var auditEvent = BuildEvent(consent, ConsentEventType.ConsentRevoked,
             fromStatus: from, toStatus: ConsentStatus.Revoked, actor, request?.EventId);
 
-        var updated = await _consents.TransitionStatusAsync(consent, auditEvent);
+        Consent updated;
+        try
+        {
+            updated = await _consents.TransitionStatusAsync(consent, auditEvent);
+        }
+        catch (InvalidConsentTransitionException ex)
+        {
+            // Repository detected that another writer transitioned this
+            // record first between our read and write — surface as 409.
+            return ConflictTransition(ex);
+        }
+
         await _publisher.PublishStatusChangedAsync(
             updated, fromStatus: from, toStatus: ConsentStatus.Revoked, actor, HttpContext.TraceIdentifier, ct);
 
@@ -237,11 +271,15 @@ public class ConsentsController : ControllerBase
     /// the <c>ConsentExpired</c> audit event — exactly once even under
     /// concurrent reads. A lost race (someone else expired it first) is a
     /// silent no-op; the audit trail still gets exactly one event.
+    ///
+    /// Returns the (possibly-mutated) consent so callers that need to
+    /// base idempotency / state-machine checks on the post-expiry state
+    /// can do so with a single chained call.
     /// </summary>
-    private async Task MaybeObserveExpiryAsync(Consent consent, CancellationToken ct)
+    private async Task<Consent> MaybeObserveExpiryAsync(Consent consent, CancellationToken ct)
     {
-        if (consent.ObservedStatus() != ConsentStatus.Expired) return;
-        if (consent.Status != ConsentStatus.Active) return;
+        if (consent.ObservedStatus() != ConsentStatus.Expired) return consent;
+        if (consent.Status != ConsentStatus.Active) return consent;
 
         var actor = "System";
         var auditEvent = BuildEvent(consent, ConsentEventType.ConsentExpired,
@@ -250,12 +288,18 @@ public class ConsentsController : ControllerBase
         var persisted = await _consents.TryTransitionToExpiredAsync(consent, auditEvent);
         if (persisted)
         {
-            consent.Status = ConsentStatus.Expired;
-            consent.RevocationReasonCode = ConsentRevocationReasonCode.Expired;
             await _publisher.PublishStatusChangedAsync(
                 consent, fromStatus: ConsentStatus.Active, toStatus: ConsentStatus.Expired,
                 actor, HttpContext.TraceIdentifier, ct);
         }
+
+        // Reflect the observed terminal state on the caller's local copy
+        // regardless of who won the race — the record IS Expired from the
+        // caller's perspective, and the idempotency / state-machine checks
+        // below must see that, not the pre-expiry Active snapshot.
+        consent.Status = ConsentStatus.Expired;
+        consent.RevocationReasonCode = ConsentRevocationReasonCode.Expired;
+        return consent;
     }
 
     private static ConsentEvent BuildEvent(
