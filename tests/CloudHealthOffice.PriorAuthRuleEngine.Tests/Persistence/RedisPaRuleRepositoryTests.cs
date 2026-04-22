@@ -69,13 +69,16 @@ public class RedisPaRuleRepositoryTests
     [Fact]
     public async Task GetRulesAsync_DelegatesToCacheProvider_WithGlobalScope()
     {
-        _cache.GetOrSetAsync<object>(
+        // Match on the exact generic instantiation the SUT invokes —
+        // NSubstitute matches generic methods per-T, so a setup for
+        // GetOrSetAsync<object> does NOT intercept GetOrSetAsync<CachedRuleSet>.
+        _cache.GetOrSetAsync<CachedRuleSet>(
             Arg.Any<string>(),
-            Arg.Any<Func<CancellationToken, Task<object?>>>(),
+            Arg.Any<Func<CancellationToken, Task<CachedRuleSet?>>>(),
             Arg.Any<TimeSpan>(),
             Arg.Any<CacheScope>(),
             Arg.Any<CancellationToken>())
-            .ReturnsForAnyArgs(Task.FromResult<object?>(null));
+            .ReturnsForAnyArgs(Task.FromResult<CachedRuleSet?>(null));
 
         await _sut.GetRulesAsync(TxStarKey);
 
@@ -99,17 +102,16 @@ public class RedisPaRuleRepositoryTests
 
         // Invoke the factory the SUT passes in — verify it hits the inner
         // repo and that the SUT unwraps the CachedRuleSet shape correctly.
-        _cache.GetOrSetAsync(
+        _cache.GetOrSetAsync<CachedRuleSet>(
                 Arg.Any<string>(),
-                Arg.Any<Func<CancellationToken, Task<object?>>>(),
+                Arg.Any<Func<CancellationToken, Task<CachedRuleSet?>>>(),
                 Arg.Any<TimeSpan>(),
                 Arg.Any<CacheScope>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(async ci =>
             {
-                var factory = (Delegate)ci.ArgAt<object>(1);
-                var result = await (Task<object?>)factory.DynamicInvoke(CancellationToken.None)!;
-                return result;
+                var factory = ci.ArgAt<Func<CancellationToken, Task<CachedRuleSet?>>>(1);
+                return await factory(CancellationToken.None);
             });
 
         var result = await _sut.GetRulesAsync(TxStarKey);
