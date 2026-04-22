@@ -140,8 +140,13 @@ public class ConsentFieldEncryptorTests
             s => s.Secrets[$"{Prefix}-v1"] = Key32Base64(0x33));
 
         var ct = await enc.EncryptAsync("hello");
-        // Flip one character in the base64url envelope — invalidates the GCM tag.
-        var tampered = ct![..^1] + (ct[^1] == 'A' ? 'B' : 'A');
+        // Flip a character in the middle of the base64url envelope — NOT the
+        // last char, which encodes padding bits that some base64 decoders
+        // silently accept alternative encodings for (the "flip 'A' to 'B' at
+        // the tail" approach can decode to identical bytes and leave AES-GCM
+        // authentication intact).
+        var mid = ct!.Length / 2;
+        var tampered = ct[..mid] + (ct[mid] == 'A' ? 'B' : 'A') + ct[(mid + 1)..];
 
         var act = async () => await enc.DecryptAsync(tampered);
         await act.Should().ThrowAsync<CryptographicException>();
