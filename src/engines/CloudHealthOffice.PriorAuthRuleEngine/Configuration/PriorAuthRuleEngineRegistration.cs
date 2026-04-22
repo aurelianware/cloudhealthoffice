@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.PriorAuthRuleEngine.Persistence;
@@ -105,15 +106,28 @@ public sealed class PriorAuthRuleEngineBuilder
     }
 
     /// <summary>
-    /// Add a Redis read-through cache in front of the rule repository.
+    /// Add a read-through cache in front of the rule repository.
     /// Call AFTER UseCosmosRepository() or UseMongoRepository().
-    /// Requires IConnectionMultiplexer registered by the host.
+    ///
+    /// Requires:
+    ///   • <see cref="ICacheProvider"/> + <see cref="CacheKeyGuard"/> —
+    ///     for K/V reads, writes, and exact-key invalidation. Registered
+    ///     by the host via <c>AddChoCaching(IConfiguration, IHostEnvironment)</c>.
+    ///   • <see cref="IConnectionMultiplexer"/> — OPTIONAL. Used by the
+    ///     state-level <c>SCAN</c> path on
+    ///     <see cref="RedisPaRuleRepository.DeleteAsync"/>. Registered
+    ///     automatically by <c>AddChoCaching</c> when the cache backend
+    ///     resolves to Redis; absent when it resolves to InMemory / Null.
+    ///     When absent, the state-flush degrades to a debug log and
+    ///     InMemory entries rely on TTL. Exact-key invalidation on
+    ///     Upsert / BulkUpsert continues to work via
+    ///     <see cref="ICacheProvider"/>.
     ///
     /// Cache key: pa-rules:{stateCode}:{lob}:{program}:{tenantId}
     /// Default TTL: 15 minutes (PriorAuthRuleEngineOptions.RuleSetCacheTtl)
-    /// Invalidated on every UpsertAsync and DeleteAsync.
+    /// Invalidated on every UpsertAsync, BulkUpsertAsync, and DeleteAsync.
     /// </summary>
-    public PriorAuthRuleEngineBuilder WithRedisRuleCache()
+    public PriorAuthRuleEngineBuilder WithRuleCache()
     {
         _services.AddScoped<IPaRuleRepository>(sp =>
         {
@@ -121,18 +135,29 @@ public sealed class PriorAuthRuleEngineBuilder
                 (IPaRuleRepository?)sp.GetService<PaRuleRepositoryCosmos>()
              ?? sp.GetService<PaRuleRepositoryMongo>()
              ?? throw new InvalidOperationException(
-                    "WithRedisRuleCache() must be called after UseCosmosRepository() " +
+                    "WithRuleCache() must be called after UseCosmosRepository() " +
                     "or UseMongoRepository().");
 
             return new RedisPaRuleRepository(
                 inner,
-                sp.GetRequiredService<IConnectionMultiplexer>(),
+                sp.GetRequiredService<ICacheProvider>(),
+                sp.GetService<IConnectionMultiplexer>(),
+                sp.GetRequiredService<CacheKeyGuard>(),
                 sp.GetRequiredService<IOptions<PriorAuthRuleEngineOptions>>(),
                 sp.GetRequiredService<ILogger<RedisPaRuleRepository>>());
         });
 
         return this;
     }
+
+    /// <summary>
+    /// Deprecated alias for <see cref="WithRuleCache"/>. The backend is
+    /// now selected by <c>AddChoCaching</c>, not by this method name.
+    /// Kept for one release so host services can migrate the rename
+    /// separately from the ICacheProvider cutover.
+    /// </summary>
+    [Obsolete("Renamed to WithRuleCache — the backend (Redis / InMemory / Null) is selected by AddChoCaching.")]
+    public PriorAuthRuleEngineBuilder WithRedisRuleCache() => WithRuleCache();
 
     // ── Rule implementations ──────────────────────────────────────
 

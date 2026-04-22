@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Azure -->
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.58.0" />
     <!-- MongoDB -->
@@ -27,8 +31,9 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
-    <!-- Redis -->
-    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+    <!-- Cache is consumed through ICacheProvider from CloudHealthOffice.Infrastructure.
+         StackExchange.Redis lives there and arrives transitively. See Addendum A.7.2
+         and docs/architecture/shared-cache.md. -->
     <!-- Polly (resilience) -->
     <PackageReference Include="Polly.Extensions" Version="8.5.0" />
     <!-- SFTP for batch file pulls -->

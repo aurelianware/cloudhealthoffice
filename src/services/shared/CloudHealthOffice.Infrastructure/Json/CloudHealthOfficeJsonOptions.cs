@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -38,5 +39,33 @@ public static class CloudHealthOfficeJsonOptions
         {
             o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
         });
+    }
+
+    /// <summary>
+    /// Default <see cref="JsonSerializerOptions"/> for non-MVC serialization paths —
+    /// Redis cache payloads, Service Bus envelopes, Cosmos document bodies that
+    /// round-trip through the app. camelCase on the wire, omit-null-on-write
+    /// (smaller payloads, cheaper Redis), and the same string-enum convention
+    /// the MVC pipeline uses.
+    ///
+    /// PascalCase-on-the-wire surfaces must continue to use their own local
+    /// <c>JsonSerializerOptions</c> — see docs/architecture/shared-json-options.md.
+    /// </summary>
+    public static JsonSerializerOptions DefaultOptions { get; } = CreateDefault();
+
+    private static JsonSerializerOptions CreateDefault()
+    {
+        var opts = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy   = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+        opts.Converters.Add(new JsonStringEnumConverter());
+        // Freeze. A mutable singleton surfaces as a subtle global: any
+        // caller adding a Converter here would reshape serialization for
+        // every sibling service that consumes this property. MakeReadOnly
+        // converts future mutation into a clear InvalidOperationException.
+        opts.MakeReadOnly();
+        return opts;
     }
 }

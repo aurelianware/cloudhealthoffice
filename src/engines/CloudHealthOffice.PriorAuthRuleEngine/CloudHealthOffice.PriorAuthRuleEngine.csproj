@@ -17,9 +17,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- StackExchange.Redis arrives transitively from CloudHealthOffice.Infrastructure.
+         RedisPaRuleRepository still touches IConnectionMultiplexer/IServer directly
+         for the state-level SCAN invalidation path — a deliberate exception documented
+         on the class. See docs/architecture/shared-cache.md and Addendum A.7.2. -->
+    <ProjectReference Include="..\..\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+
     <PackageReference Include="Microsoft.Azure.Cosmos"              Version="3.58.0" />
     <PackageReference Include="MongoDB.Driver"                      Version="3.7.1" />
-    <PackageReference Include="StackExchange.Redis"                 Version="2.8.16" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />

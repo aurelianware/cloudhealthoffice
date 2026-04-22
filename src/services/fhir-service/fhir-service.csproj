@@ -14,7 +14,10 @@
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.PriorAuthRuleEngine\CloudHealthOffice.PriorAuthRuleEngine.csproj" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.58.0" />
-    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+    <!-- StackExchange.Redis is pulled in transitively via
+         CloudHealthOffice.Infrastructure. fhir-service has no direct
+         IConnectionMultiplexer consumer after A.7.2 — the Redis client is
+         opened and owned by AddChoCaching. -->
     <PackageReference Include="Hl7.Fhir.R4" Version="5.10.2" />
     <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
     <!-- Standard JWT Bearer validation — tokens issued by smart-auth-service with

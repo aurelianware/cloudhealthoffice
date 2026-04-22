@@ -6,12 +6,12 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
-using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,12 +40,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // ── Shared infrastructure ─────────────────────────────────────────────────────
-// Redis — shared by ProviderEnrollmentService and PriorAuthRuleEngine caches
-if (!string.IsNullOrEmpty(builder.Configuration["Redis:ConnectionString"]))
-{
-    builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
-        ConnectionMultiplexer.Connect(builder.Configuration["Redis:ConnectionString"]!));
-}
+// ICacheProvider (via AddChoCaching) backs the tenant-config and rule-set
+// K/V caches. On the Redis backend path it also registers a shared
+// IConnectionMultiplexer in DI so RedisPaRuleRepository's SCAN-based
+// state-flush — a deliberate exception to ICacheProvider — can inject
+// it. See docs/architecture/shared-cache.md.
+builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 
 var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);
 
@@ -76,22 +76,24 @@ else if (!string.IsNullOrEmpty(builder.Configuration["CosmosDb:Endpoint"]))
 //     "Caqh": { "Username": "...", "Password": "...(from AKV)" }
 //   }
 var hasDb = useMongo || !string.IsNullOrEmpty(builder.Configuration["CosmosDb:Endpoint"]);
-var hasRedis = !string.IsNullOrEmpty(builder.Configuration["Redis:ConnectionString"]);
-
-if (hasDb && hasRedis)
+// Cache backend presence is decided by AddChoCaching (Redis when a
+// connection string is configured AND env is Production; InMemory
+// otherwise). Either resolves to a working ICacheProvider, so the
+// engine wiring no longer hinges on "hasRedis" — only on "hasDb".
+if (hasDb)
 {
     if (useMongo)
         builder.Services.AddProviderEnrollmentService(builder.Configuration)
-            .UseMongoRepositories().WithRedisTenantConfigCache()
+            .UseMongoRepositories().WithTenantConfigCache()
             .WithTexasSource().WithCaqhSource();
     else
         builder.Services.AddProviderEnrollmentService(builder.Configuration)
-            .UseCosmosRepositories().WithRedisTenantConfigCache()
+            .UseCosmosRepositories().WithTenantConfigCache()
             .WithTexasSource().WithCaqhSource();
 
     // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
     // Supplies IPriorAuthRuleEngine → PasAutoAdjudicator Rule 5.
-    // Rule sets cached in Redis (15 min TTL, invalidated on admin write).
+    // Rule sets cached via ICacheProvider (15 min TTL, invalidated on admin write).
     // Seeds TX platform rules (STAR / STARPlus / STARKids) on first deployment.
     //
     // Required appsettings.json:
@@ -102,11 +104,11 @@ if (hasDb && hasRedis)
     //   }
     if (useMongo)
         builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-            .UseMongoRepository().WithRedisRuleCache()
+            .UseMongoRepository().WithRuleCache()
             .WithPlatformRules().SeedOnStartup();
     else
         builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-            .UseCosmosRepository().WithRedisRuleCache()
+            .UseCosmosRepository().WithRuleCache()
             .WithPlatformRules().SeedOnStartup();
 }
 else

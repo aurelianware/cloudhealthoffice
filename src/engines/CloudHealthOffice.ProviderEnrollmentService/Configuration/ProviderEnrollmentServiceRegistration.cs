@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.ProviderEnrollmentService.Aggregator;
 using CloudHealthOffice.ProviderEnrollmentService.Cache;
@@ -14,7 +15,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using StackExchange.Redis;
 
 namespace CloudHealthOffice.ProviderEnrollmentService.Configuration;
 
@@ -150,21 +150,21 @@ public sealed class ProviderEnrollmentServiceBuilder
     }
 
     /// <summary>
-    /// Wrap ITenantEnrollmentConfigRepository with a Redis read-through cache.
+    /// Wrap ITenantEnrollmentConfigRepository with a read-through cache
+    /// backed by the shared <see cref="ICacheProvider"/>.
     ///
-    /// Call AFTER UseCosmosRepositories() or UseMongoRepositories().
-    /// Requires IConnectionMultiplexer to already be registered by the host
-    /// (benefit-plan-service and fhir-service both do this).
+    /// Call AFTER UseCosmosRepositories() or UseMongoRepositories(). The
+    /// host service must register <see cref="ICacheProvider"/> via
+    /// <c>AddChoCaching(IConfiguration, IHostEnvironment)</c> before this
+    /// method resolves — benefit-plan-service and fhir-service both do.
     ///
-    /// The decorator re-registers ITenantEnrollmentConfigRepository, replacing
-    /// the raw Cosmos/Mongo binding with the Redis-wrapped version.
-    /// The concrete Cosmos/Mongo type remains registered for the decorator
-    /// to resolve as its inner dependency.
+    /// The decorator re-registers ITenantEnrollmentConfigRepository,
+    /// replacing the raw Cosmos/Mongo binding with the cache-wrapped
+    /// version. The concrete Cosmos/Mongo type remains registered for the
+    /// decorator to resolve as its inner dependency.
     /// </summary>
-    public ProviderEnrollmentServiceBuilder WithRedisTenantConfigCache()
+    public ProviderEnrollmentServiceBuilder WithTenantConfigCache()
     {
-        // Re-register ITenantEnrollmentConfigRepository as the Redis decorator.
-        // The concrete Cosmos/Mongo types registered above are used as the inner.
         _services.AddScoped<ITenantEnrollmentConfigRepository>(sp =>
         {
             ITenantEnrollmentConfigRepository inner =
@@ -172,18 +172,28 @@ public sealed class ProviderEnrollmentServiceBuilder
                     sp.GetService<TenantEnrollmentConfigRepositoryCosmos>()
              ?? sp.GetService<TenantEnrollmentConfigRepositoryMongo>()
              ?? throw new InvalidOperationException(
-                    "WithRedisTenantConfigCache() must be called after " +
+                    "WithTenantConfigCache() must be called after " +
                     "UseCosmosRepositories() or UseMongoRepositories().");
 
             return new RedisTenantEnrollmentConfigRepository(
                 inner,
-                sp.GetRequiredService<IConnectionMultiplexer>(),
+                sp.GetRequiredService<ICacheProvider>(),
                 sp.GetRequiredService<IOptions<ProviderEnrollmentOptions>>(),
                 sp.GetRequiredService<ILogger<RedisTenantEnrollmentConfigRepository>>());
         });
 
         return this;
     }
+
+    /// <summary>
+    /// Deprecated alias for <see cref="WithTenantConfigCache"/>. Backend is
+    /// now selected by <c>AddChoCaching</c>, not by this extension method.
+    /// Kept for one release so host services can migrate without coupling
+    /// the rename to the ICacheProvider cutover.
+    /// </summary>
+    [Obsolete("Renamed to WithTenantConfigCache — the backend (Redis / InMemory / Null) is selected by AddChoCaching.")]
+    public ProviderEnrollmentServiceBuilder WithRedisTenantConfigCache() =>
+        WithTenantConfigCache();
 
     // ── State source registration ─────────────────────────────────
 
