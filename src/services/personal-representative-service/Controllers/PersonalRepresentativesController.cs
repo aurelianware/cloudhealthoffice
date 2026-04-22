@@ -375,20 +375,20 @@ public class PersonalRepresentativesController : ControllerBase
             fromStatus: PersonalRepStatus.Active, toStatus: PersonalRepStatus.Inactive,
             actor, eventId: null, memberId: null);
 
-        var persisted = await _reps.TryTransitionToInactiveAsync(rep, auditEvent);
-        if (persisted)
+        var persistedRep = await _reps.TryTransitionToInactiveAsync(rep, auditEvent);
+        if (persistedRep != null)
         {
-            var memberIds = (await _reps.ListAssociationsForRepAsync(TenantId, rep.Id, activeOnly: false, ct: ct))
+            var memberIds = (await _reps.ListAssociationsForRepAsync(TenantId, persistedRep.Id, activeOnly: false, ct: ct))
                 .Select(a => a.MemberId).Distinct().ToList();
             await _publisher.PublishStatusChangedAsync(
-                rep, fromStatus: PersonalRepStatus.Active, toStatus: PersonalRepStatus.Inactive,
+                persistedRep, fromStatus: PersonalRepStatus.Active, toStatus: PersonalRepStatus.Inactive,
                 associatedMemberIds: memberIds,
                 actor, HttpContext.TraceIdentifier, ct);
         }
 
         rep.Status = PersonalRepStatus.Inactive;
         rep.InactivationReasonCode = PersonalRepInactivationReasonCode.Expired;
-        return rep;
+        return persistedRep ?? rep;
     }
 
     private static PersonalRepEvent BuildRepEvent(

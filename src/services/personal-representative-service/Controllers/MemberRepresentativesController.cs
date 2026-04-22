@@ -115,10 +115,15 @@ public class MemberRepresentativesController : ControllerBase
     {
         var t = asOf ?? DateTime.UtcNow;
         var summaries = new List<PersonalRepSummary>(associations.Count);
+
+        // Batch-fetch all reps in one round-trip instead of N individual reads.
+        var repIds = associations.Select(a => a.RepId).Distinct().ToList();
+        var repMap = (await _reps.GetByIdsAsync(TenantId, repIds, ct))
+            .ToDictionary(r => r.Id);
+
         foreach (var a in associations)
         {
-            var rep = await _reps.GetByIdAsync(TenantId, a.RepId, ct);
-            if (rep is null) continue;
+            if (!repMap.TryGetValue(a.RepId, out var rep)) continue;
 
             // Uses the same IPersonalRepFieldEncryptor.DecryptAsync call
             // the primary controller uses — no partial-decrypt shortcut.

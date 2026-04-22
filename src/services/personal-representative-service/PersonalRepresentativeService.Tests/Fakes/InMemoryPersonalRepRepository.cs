@@ -33,7 +33,7 @@ public sealed class InMemoryPersonalRepRepository
 
     private static string RepKey(string tenantId, string repId) => $"{tenantId}:{repId}";
 
-    public Task<PersonalRepresentative> CreateAsync(PersonalRepresentative rep, PersonalRepEvent genesisEvent)
+    public Task<PersonalRepresentative> CreateAsync(PersonalRepresentative rep, PersonalRepEvent genesisEvent, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(rep.Id)) rep.Id = Guid.NewGuid().ToString();
         if (rep.CreatedAt == default) rep.CreatedAt = DateTime.UtcNow;
@@ -65,8 +65,19 @@ public sealed class InMemoryPersonalRepRepository
             rows.OrderByDescending(r => r.CreatedAt).ToList());
     }
 
+    public Task<IReadOnlyList<PersonalRepresentative>> GetByIdsAsync(
+        string tenantId, IReadOnlyList<string> repIds, CancellationToken ct = default)
+    {
+        var set = new HashSet<string>(repIds);
+        var rows = _reps.Values
+            .Where(r => r.TenantId == tenantId && !r.IsDeleted && set.Contains(r.Id))
+            .Select(CloneRep)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<PersonalRepresentative>>(rows);
+    }
+
     public Task<PersonalRepresentative> TransitionStatusAsync(
-        PersonalRepresentative rep, PersonalRepEvent auditEvent)
+        PersonalRepresentative rep, PersonalRepEvent auditEvent, CancellationToken ct = default)
     {
         if (!auditEvent.FromStatus.HasValue)
         {
@@ -91,7 +102,7 @@ public sealed class InMemoryPersonalRepRepository
         return Task.FromResult(CloneRep(rep));
     }
 
-    public Task<bool> TryTransitionToInactiveAsync(
+    public Task<PersonalRepresentative?> TryTransitionToInactiveAsync(
         PersonalRepresentative rep, PersonalRepEvent auditEvent)
     {
         lock (_sync)
@@ -99,7 +110,7 @@ public sealed class InMemoryPersonalRepRepository
             var key = RepKey(rep.TenantId, rep.Id);
             if (!_reps.TryGetValue(key, out var current) || current.Status != PersonalRepStatus.Active)
             {
-                return Task.FromResult(false);
+                return Task.FromResult<PersonalRepresentative?>(null);
             }
 
             current.Status = PersonalRepStatus.Inactive;
@@ -107,7 +118,7 @@ public sealed class InMemoryPersonalRepRepository
             current.InactivatedAt = DateTime.UtcNow;
             _reps[key] = current;
             AppendEventInternal(auditEvent);
-            return Task.FromResult(true);
+            return Task.FromResult<PersonalRepresentative?>(CloneRep(current));
         }
     }
 

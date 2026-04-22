@@ -1,4 +1,5 @@
 using PersonalRepresentativeService.Models;
+using PersonalRepresentativeService.Services;
 using MongoDB.Driver;
 using Microsoft.Extensions.Logging;
 
@@ -53,11 +54,11 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
     }
 
     public async Task<PersonalRepresentative> CreateAsync(
-        PersonalRepresentative rep, PersonalRepEvent genesisEvent)
+        PersonalRepresentative rep, PersonalRepEvent genesisEvent, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(rep.Id)) rep.Id = Guid.NewGuid().ToString();
         if (rep.CreatedAt == default) rep.CreatedAt = DateTime.UtcNow;
-        await _reps.InsertOneAsync(rep);
+        await _reps.InsertOneAsync(rep, cancellationToken: ct);
         await _events.AppendAsync(genesisEvent);
         return rep;
     }
@@ -69,6 +70,18 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
                    & Builders<PersonalRepresentative>.Filter.Eq(r => r.Id, repId)
                    & Builders<PersonalRepresentative>.Filter.Eq(r => r.DeletedAt, (DateTime?)null);
         return await _reps.Find(filter).FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<PersonalRepresentative>> GetByIdsAsync(
+        string tenantId, IReadOnlyList<string> repIds, CancellationToken ct = default)
+    {
+        if (repIds.Count == 0) return Array.Empty<PersonalRepresentative>();
+
+        var deduped = repIds.Distinct().ToList();
+        var filter = Builders<PersonalRepresentative>.Filter.Eq(r => r.TenantId, tenantId)
+                   & Builders<PersonalRepresentative>.Filter.In(r => r.Id, deduped)
+                   & Builders<PersonalRepresentative>.Filter.Eq(r => r.DeletedAt, (DateTime?)null);
+        return await _reps.Find(filter).ToListAsync(ct);
     }
 
     public async Task<IReadOnlyList<PersonalRepresentative>> ListByTenantAsync(
@@ -89,7 +102,7 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
     }
 
     public async Task<PersonalRepresentative> TransitionStatusAsync(
-        PersonalRepresentative rep, PersonalRepEvent auditEvent)
+        PersonalRepresentative rep, PersonalRepEvent auditEvent, CancellationToken ct = default)
     {
         if (!auditEvent.FromStatus.HasValue)
         {
@@ -103,7 +116,7 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
                    & Builders<PersonalRepresentative>.Filter.Eq(r => r.Id, rep.Id)
                    & Builders<PersonalRepresentative>.Filter.Eq(r => r.Status, expectedFromStatus);
 
-        var replaceResult = await _reps.ReplaceOneAsync(filter, rep);
+        var replaceResult = await _reps.ReplaceOneAsync(filter, rep, cancellationToken: ct);
         if (replaceResult.MatchedCount == 0)
         {
             throw new InvalidPersonalRepTransitionException(expectedFromStatus, rep.Status);
@@ -113,7 +126,7 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
         return rep;
     }
 
-    public async Task<bool> TryTransitionToInactiveAsync(
+    public async Task<PersonalRepresentative?> TryTransitionToInactiveAsync(
         PersonalRepresentative rep, PersonalRepEvent auditEvent)
     {
         var filter = Builders<PersonalRepresentative>.Filter.Eq(r => r.TenantId, rep.TenantId)
@@ -133,11 +146,11 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
         var updated = await _reps.FindOneAndUpdateAsync(filter, update, options);
         if (updated is null)
         {
-            return false;
+            return null;
         }
 
         await _events.AppendAsync(auditEvent);
-        return true;
+        return updated;
     }
 
     public async Task AddAssociationPairAsync(
@@ -175,7 +188,10 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
                 "Personal Rep association pair committed but audit append failed " +
                 "(tenantId={TenantId}, pairId={PairId}, eventId={EventId}, correlationId={CorrelationId}). " +
                 "Pair persisted; audit row missing — manual reconciliation required.",
-                forward.TenantId, forward.PairId, auditEvent.EventId, auditEvent.CorrelationId);
+                LogSanitizer.SafeForLog(forward.TenantId),
+                LogSanitizer.SafeForLog(forward.PairId),
+                LogSanitizer.SafeForLog(auditEvent.EventId),
+                LogSanitizer.SafeForLog(auditEvent.CorrelationId));
             throw;
         }
     }
@@ -225,7 +241,10 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
                 "Personal Rep association pair removed but audit append failed " +
                 "(tenantId={TenantId}, pairId={PairId}, eventId={EventId}, correlationId={CorrelationId}). " +
                 "Pair soft-deleted; audit row missing — manual reconciliation required.",
-                tenantId, pairId, auditEvent.EventId, auditEvent.CorrelationId);
+                LogSanitizer.SafeForLog(tenantId),
+                LogSanitizer.SafeForLog(pairId),
+                LogSanitizer.SafeForLog(auditEvent.EventId),
+                LogSanitizer.SafeForLog(auditEvent.CorrelationId));
             throw;
         }
     }

@@ -17,9 +17,16 @@ namespace PersonalRepresentativeService.Repositories;
 /// </summary>
 public interface IPersonalRepRepository
 {
-    Task<PersonalRepresentative> CreateAsync(PersonalRepresentative rep, PersonalRepEvent genesisEvent);
+    Task<PersonalRepresentative> CreateAsync(PersonalRepresentative rep, PersonalRepEvent genesisEvent, CancellationToken ct = default);
 
     Task<PersonalRepresentative?> GetByIdAsync(string tenantId, string repId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Batch-fetch reps by id list. Duplicates in <paramref name="repIds"/>
+    /// are deduplicated; records not found are silently omitted.
+    /// </summary>
+    Task<IReadOnlyList<PersonalRepresentative>> GetByIdsAsync(
+        string tenantId, IReadOnlyList<string> repIds, CancellationToken ct = default);
 
     Task<IReadOnlyList<PersonalRepresentative>> ListByTenantAsync(
         string tenantId, bool activeOnly = false, DateTime? asOf = null, CancellationToken ct = default);
@@ -32,17 +39,18 @@ public interface IPersonalRepRepository
     /// the transition via <c>PersonalRepStateMachine</c>.
     /// </summary>
     Task<PersonalRepresentative> TransitionStatusAsync(
-        PersonalRepresentative rep, PersonalRepEvent auditEvent);
+        PersonalRepresentative rep, PersonalRepEvent auditEvent, CancellationToken ct = default);
 
     /// <summary>
     /// Race-safe Active → Inactive persistence for the read-time expiry
-    /// observer. Returns <c>true</c> iff this caller won the race to
-    /// persist the transition (and the audit event was appended).
-    /// Returns <c>false</c> if the record was no longer Active at write
-    /// time — another caller already inactivated it. Callers that get
-    /// <c>false</c> must NOT retry with a different event.
+    /// observer. Returns the updated <see cref="PersonalRepresentative"/>
+    /// (with <c>Status=Inactive</c>, <c>InactivationReasonCode=Expired</c>,
+    /// and <c>InactivatedAt</c> set) if this caller won the race and the
+    /// audit event was appended. Returns <c>null</c> if the record was no
+    /// longer Active at write time — another caller already inactivated it.
+    /// Callers that receive <c>null</c> must NOT retry with a different event.
     /// </summary>
-    Task<bool> TryTransitionToInactiveAsync(
+    Task<PersonalRepresentative?> TryTransitionToInactiveAsync(
         PersonalRepresentative rep, PersonalRepEvent auditEvent);
 
     /// <summary>

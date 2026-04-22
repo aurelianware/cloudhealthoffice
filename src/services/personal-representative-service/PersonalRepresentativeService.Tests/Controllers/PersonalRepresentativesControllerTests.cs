@@ -350,7 +350,7 @@ public class PersonalRepresentativesControllerTests
         };
         repo.Setup(r => r.GetByIdAsync("tenant-a", "r-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(rep);
-        repo.Setup(r => r.TransitionStatusAsync(It.IsAny<PersonalRepresentative>(), It.IsAny<PersonalRepEvent>()))
+        repo.Setup(r => r.TransitionStatusAsync(It.IsAny<PersonalRepresentative>(), It.IsAny<PersonalRepEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidPersonalRepTransitionException(
                 PersonalRepStatus.Active, PersonalRepStatus.Active));
 
