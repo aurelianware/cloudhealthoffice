@@ -29,6 +29,13 @@ public class RotatingKeyProvider
     private readonly ConcurrentDictionary<CacheKey, byte[]> _cache = new();
     private readonly SemaphoreSlim _resolveLock = new(1, 1);
 
+    // Generation token: bumped by InvalidateCache. A resolve that started
+    // under generation N must not persist its result if the generation
+    // changed before the write — otherwise a concurrent rotation could
+    // see the newly-resolved-but-stale key re-populate the cache after
+    // the clear, defeating the reload-driven invalidation.
+    private long _generation;
+
     public RotatingKeyProvider(ISecretProvider secrets, ILogger<RotatingKeyProvider> logger)
     {
         _secrets = secrets;
@@ -60,6 +67,12 @@ public class RotatingKeyProvider
         {
             if (_cache.TryGetValue(cacheKey, out cached)) return cached;
 
+            // Snapshot the generation BEFORE the fetch so we can detect a
+            // concurrent InvalidateCache and skip the write-back. Without
+            // this, a rotation that lands between the fetch and the cache
+            // write would see the stale result repopulate the cache.
+            var generationAtStart = Interlocked.Read(ref _generation);
+
             var secretName = $"{secretPrefix}-{version}";
             var raw = await _secrets.GetSecretAsync(secretName, ct);
 
@@ -83,7 +96,15 @@ public class RotatingKeyProvider
                 keyBytes = Encoding.UTF8.GetBytes(raw);
             }
 
-            _cache[cacheKey] = keyBytes;
+            if (Interlocked.Read(ref _generation) == generationAtStart)
+            {
+                _cache[cacheKey] = keyBytes;
+            }
+            // else: an InvalidateCache ran between our fetch and our write —
+            // return the freshly-resolved bytes to this caller but do NOT
+            // persist them; the next caller will re-resolve against the
+            // post-rotation secret.
+
             return keyBytes;
         }
         finally
@@ -101,6 +122,10 @@ public class RotatingKeyProvider
     /// </summary>
     public virtual void InvalidateCache()
     {
+        // Bump generation BEFORE clearing so any in-flight resolve that
+        // reads the new generation before checking at write time will
+        // skip its write-back. See GetKeyAsync for the matching check.
+        Interlocked.Increment(ref _generation);
         var dropped = _cache.Count;
         _cache.Clear();
         _logger.LogInformation(

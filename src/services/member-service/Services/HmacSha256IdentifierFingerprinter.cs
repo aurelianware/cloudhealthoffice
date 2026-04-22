@@ -70,15 +70,20 @@ public sealed class HmacSha256IdentifierFingerprinter : IIdentifierFingerprinter
             }
             catch (InvalidOperationException ex)
             {
-                // An accepted version without a resolvable secret is a
-                // misconfiguration; the health check reports this as
-                // Degraded. On the dedupe read path we log-and-skip so a
-                // partially-broken window doesn't silently produce
-                // duplicate identifiers.
-                _logger.LogWarning(ex,
-                    "Fingerprint key version {Version} listed in AcceptedKeyVersions could not be resolved; skipping candidate",
+                // Fail closed: skipping an accepted version means a row
+                // fingerprinted under it wouldn't match, and the caller
+                // would silently admit a duplicate. That's worse than
+                // returning an error. The health check flags this as
+                // Degraded so ops has already been paged; the read-path
+                // caller should 503 here rather than serve the dedupe
+                // check with a partial candidate set.
+                _logger.LogError(ex,
+                    "Fingerprint key version {Version} listed in AcceptedKeyVersions could not be resolved; failing closed on the candidate set",
                     Sanitize(version));
-                continue;
+                throw new StaleFingerprintKeyException(version,
+                    $"Accepted fingerprint key version '{version}' cannot be resolved. " +
+                    "Publish the secret or drop the version from AcceptedKeyVersions.",
+                    ex);
             }
             results.Add(Compute(key, normalizedPlaintext));
         }

@@ -97,4 +97,47 @@ public class RotatingKeyProviderTests
         var key = await sut.GetKeyAsync("pref", "v1");
         key.Should().Equal(Encoding.UTF8.GetBytes("not-base64!!plain-utf8-literal"));
     }
+
+    /// <summary>
+    /// Regression guard for the race the reviewer flagged: an in-flight
+    /// resolve that completes AFTER an InvalidateCache must not persist
+    /// its (now-stale) result back into the cache. The generation counter
+    /// makes the resolve's write-back conditional on the generation being
+    /// unchanged since the fetch started.
+    /// </summary>
+    [Fact]
+    public async Task GetKey_InvalidationDuringInFlightResolve_SkipsWriteBack()
+    {
+        var fetchReleased = new TaskCompletionSource<string?>();
+        var fetchStarted = new TaskCompletionSource();
+
+        var secrets = new Mock<ISecretProvider>();
+        secrets.Setup(s => s.GetSecretAsync("pref-v1", It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                fetchStarted.TrySetResult();
+                return await fetchReleased.Task;
+            });
+
+        var sut = New(secrets);
+
+        // Start the resolve and wait until it's inside the secret-provider call.
+        var resolveTask = sut.GetKeyAsync("pref", "v1");
+        await fetchStarted.Task;
+
+        // Invalidate before the fetch completes.
+        sut.InvalidateCache();
+
+        // Let the fetch return. The result should NOT land in the cache.
+        fetchReleased.SetResult(Convert.ToBase64String(Enumerable.Repeat((byte)0xAA, 32).ToArray()));
+        var firstBytes = await resolveTask;
+        firstBytes[0].Should().Be(0xAA);
+
+        // A subsequent call must re-fetch (cache was cleared and the in-flight
+        // write was suppressed), so the mock returns the NEW stub.
+        secrets.Setup(s => s.GetSecretAsync("pref-v1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Convert.ToBase64String(Enumerable.Repeat((byte)0xBB, 32).ToArray()));
+        var secondBytes = await sut.GetKeyAsync("pref", "v1");
+        secondBytes[0].Should().Be(0xBB);
+    }
 }

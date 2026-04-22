@@ -7,6 +7,13 @@ namespace CloudHealthOffice.Infrastructure.Tests;
 
 public class SecretRefreshServiceTests
 {
+    // A short-but-bounded wait used when asserting that a
+    // ChangeToken.OnChange callback fired. All waits go through a signal
+    // that's set inside the fake provider's InvalidateCache override, so
+    // a passing test completes in microseconds; the timeout only trips
+    // on a real regression.
+    private static readonly TimeSpan CallbackTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// An IConfiguration source whose reload token is a mutable
     /// CancellationChangeToken — calling <see cref="FireReload"/> cancels
@@ -37,26 +44,52 @@ public class SecretRefreshServiceTests
         public IConfigurationSection GetSection(string key) => throw new NotSupportedException();
     }
 
-    private sealed class CountingProvider : RotatingKeyProvider
+    /// <summary>
+    /// Test double that signals a per-call <see cref="ManualResetEventSlim"/>
+    /// whenever <see cref="InvalidateCache"/> runs, so tests can wait
+    /// deterministically for the Nth invalidation rather than sleeping.
+    /// </summary>
+    private sealed class SignallingProvider : RotatingKeyProvider
     {
         public int InvalidateCalls;
-        public CountingProvider() : base(new NullSecretProvider(), NullLogger<RotatingKeyProvider>.Instance) { }
-        public override void InvalidateCache()
-        {
-            Interlocked.Increment(ref InvalidateCalls);
-            base.InvalidateCache();
-        }
-    }
+        private readonly ManualResetEventSlim _signal = new(false);
+        private readonly bool _throwOnFirst;
 
-    private sealed class FailOnceProvider : RotatingKeyProvider
-    {
-        public int InvalidateCalls;
-        public FailOnceProvider() : base(new NullSecretProvider(), NullLogger<RotatingKeyProvider>.Instance) { }
+        public SignallingProvider(bool throwOnFirst = false)
+            : base(new NullSecretProvider(), NullLogger<RotatingKeyProvider>.Instance)
+        {
+            _throwOnFirst = throwOnFirst;
+        }
+
         public override void InvalidateCache()
         {
             var n = Interlocked.Increment(ref InvalidateCalls);
-            if (n == 1) throw new InvalidOperationException("first invalidation throws");
-            base.InvalidateCache();
+            try
+            {
+                if (_throwOnFirst && n == 1)
+                    throw new InvalidOperationException("first invalidation throws");
+                base.InvalidateCache();
+            }
+            finally
+            {
+                _signal.Set();
+            }
+        }
+
+        public void WaitFor(int expectedCount)
+        {
+            var deadline = DateTime.UtcNow + CallbackTimeout;
+            while (Interlocked.CompareExchange(ref InvalidateCalls, 0, 0) < expectedCount)
+            {
+                var remaining = deadline - DateTime.UtcNow;
+                if (remaining <= TimeSpan.Zero)
+                    throw new TimeoutException(
+                        $"Expected InvalidateCalls >= {expectedCount}, got {InvalidateCalls} after {CallbackTimeout}");
+
+                _signal.Reset();
+                if (Interlocked.CompareExchange(ref InvalidateCalls, 0, 0) >= expectedCount) return;
+                _signal.Wait(remaining);
+            }
         }
     }
 
@@ -64,12 +97,12 @@ public class SecretRefreshServiceTests
     public async Task OnReload_InvalidatesCache()
     {
         var cfg = new FakeReloadingConfiguration();
-        var provider = new CountingProvider();
+        var provider = new SignallingProvider();
         var svc = new SecretRefreshService(cfg, provider, NullLogger<SecretRefreshService>.Instance);
         await svc.StartAsync(CancellationToken.None);
 
         cfg.FireReload();
-        await Task.Delay(50); // ChangeToken.OnChange fires synchronously but on the firing thread; give it a tick.
+        provider.WaitFor(1);
 
         provider.InvalidateCalls.Should().Be(1);
 
@@ -89,14 +122,15 @@ public class SecretRefreshServiceTests
     public async Task OnReload_SurvivesCallbackException_AndProcessesSubsequentReloads()
     {
         var cfg = new FakeReloadingConfiguration();
-        var provider = new FailOnceProvider();
+        var provider = new SignallingProvider(throwOnFirst: true);
         var svc = new SecretRefreshService(cfg, provider, NullLogger<SecretRefreshService>.Instance);
         await svc.StartAsync(CancellationToken.None);
 
-        cfg.FireReload();          // attempt #1 → throws inside InvalidateCache
-        await Task.Delay(50);
-        cfg.FireReload();          // attempt #2 → must still reach InvalidateCache
-        await Task.Delay(50);
+        cfg.FireReload();               // attempt #1 → throws inside InvalidateCache
+        provider.WaitFor(1);
+
+        cfg.FireReload();               // attempt #2 → must still reach InvalidateCache
+        provider.WaitFor(2);
 
         provider.InvalidateCalls.Should().Be(2);
 

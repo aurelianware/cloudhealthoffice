@@ -93,10 +93,14 @@ silently allow duplicate identifiers past the 409.
 `RotatingKeyProviderHealthCheck` (`Infrastructure/HealthChecks/`) accepts
 a list of `(secretPrefix, versions)` probes and reports Degraded (not
 Unhealthy) if any accepted version is unresolvable. Degraded rather than
-Unhealthy because a missing legacy version is a compliance concern, not
-a serve-5xx concern — readers tolerate it (fingerprinter logs-and-skips,
-decryptor raises `StaleEncryptionKeyException` on a hit) but ops must be
-paged to restore the secret before backfill or rotation completes.
+Unhealthy because a missing legacy version is an operational concern
+that gets surfaced before it hits a request, not a per-request failure.
+If a request does hit a missing version, the read paths fail closed:
+the decryptor throws `StaleEncryptionKeyException` and the fingerprinter
+throws `StaleFingerprintKeyException` on its candidates call. Fail-open
+behaviour (e.g. returning a partial candidate set) would silently admit
+duplicate PII identifiers past the uniqueness check, so the read paths
+require every accepted version to resolve.
 
 Each host service registers its own probes — e.g. member-service registers
 two (encryption prefix + fingerprint prefix), idcard-service registers one.

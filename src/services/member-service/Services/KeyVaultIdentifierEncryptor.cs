@@ -132,10 +132,14 @@ public sealed class KeyVaultIdentifierEncryptor : IIdentifierEncryptor
         {
             envelope = Base64UrlDecode(ciphertext);
         }
-        catch (FormatException)
+        catch (FormatException ex)
         {
-            _logger.LogWarning("Identifier ciphertext is not valid base64url");
-            throw;
+            // Translate to CryptographicException so the entire decrypt
+            // surface has a single failure type for callers — base64
+            // decode is an internal implementation detail of the envelope
+            // format, not a contract the caller should know about.
+            _logger.LogWarning(ex, "Identifier ciphertext is not valid base64url");
+            throw new CryptographicException("Identifier ciphertext is not valid base64url", ex);
         }
 
         if (envelope.Length < 1)

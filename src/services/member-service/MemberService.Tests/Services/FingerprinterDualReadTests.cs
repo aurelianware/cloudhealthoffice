@@ -74,12 +74,13 @@ public class FingerprinterDualReadTests
     }
 
     [Fact]
-    public async Task FingerprintCandidates_SkipsUnresolvableVersion()
+    public async Task FingerprintCandidates_FailsClosed_WhenVersionUnresolvable()
     {
         // v1 is accepted but the operator accidentally didn't publish fp-v1.
-        // The candidates call must still return v2 (and log a warning for v1)
-        // rather than throwing — otherwise a dedupe read would 500 instead of
-        // matching on whatever versions DO resolve.
+        // Returning v2 only would silently let duplicates past the dedupe
+        // check for rows fingerprinted under v1 — a correctness violation.
+        // The candidates call MUST throw so the controller can 503 instead
+        // of serving the dedupe with a partial candidate set.
         var v2Key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var secrets = new MultiKeySecretProvider(new Dictionary<string, string>
         {
@@ -92,8 +93,9 @@ public class FingerprinterDualReadTests
             AcceptedKeyVersions = new[] { "v2", "v1" }, LegacyKeySecretName = null
         });
 
-        var candidates = await fp.FingerprintCandidatesAsync("anything");
-        candidates.Should().HaveCount(1);
+        var act = async () => await fp.FingerprintCandidatesAsync("anything");
+        var ex = await act.Should().ThrowAsync<StaleFingerprintKeyException>();
+        ex.Which.KeyVersion.Should().Be("v1");
     }
 
     [Fact]
