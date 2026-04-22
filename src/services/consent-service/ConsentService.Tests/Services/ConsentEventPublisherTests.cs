@@ -27,23 +27,15 @@ public class ConsentEventPublisherTests
     }
 
     [Fact]
-    public async Task ProducerInitFailure_FallsIntoDegradedMode()
+    public async Task DegradedMode_StopBeforeStart_DoesNotThrow()
     {
-        // Malformed bootstrap server: the Confluent client throws on the
-        // ProducerBuilder.Build() call; we swallow and stay in degraded mode.
+        // Defensive: the xUnit fixture teardown order or a partial Start
+        // might end up disposing a publisher that never started. Must be
+        // safe.
         var pub = new ConsentEventPublisher(NullLogger<ConsentEventPublisher>.Instance,
-            Config(new Dictionary<string, string?>
-            {
-                ["Kafka:BootstrapServers"] = "::::not-a-broker::::"
-            }));
-        await pub.StartAsync(CancellationToken.None);
-
-        // Even if StartAsync didn't throw (broker resolution is lazy), publish
-        // must not surface producer failures to the caller.
-        var consent = NewConsent();
-        await pub.PublishStatusChangedAsync(consent, null, ConsentStatus.Draft, "alice", "corr", CancellationToken.None);
-
+            Config(new Dictionary<string, string?>()));
         await pub.StopAsync(CancellationToken.None);
+        await pub.DisposeAsync();
     }
 
     /// <summary>

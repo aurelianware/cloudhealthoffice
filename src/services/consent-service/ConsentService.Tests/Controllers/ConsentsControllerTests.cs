@@ -246,7 +246,7 @@ public class ConsentsControllerTests
     public void TenantMiddleware_GetTenantId_Throws_WhenMissing()
     {
         var http = new DefaultHttpContext();
-        FluentActions.Invoking(() => http.GetTenantId())
-            .Should().Throw<InvalidOperationException>();
+        Action act = () => http.GetTenantId();
+        act.Should().Throw<InvalidOperationException>();
     }
 }

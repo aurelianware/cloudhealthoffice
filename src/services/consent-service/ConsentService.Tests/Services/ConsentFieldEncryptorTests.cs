@@ -108,8 +108,8 @@ public class ConsentFieldEncryptorTests
         var keys = new RotatingKeyProvider(secrets, NullLogger<RotatingKeyProvider>.Instance);
         var encNarrow = new ConsentFieldEncryptor(keys, NullLogger<ConsentFieldEncryptor>.Instance, optsNarrow);
 
-        await FluentActions.Invoking(() => encNarrow.DecryptAsync(ct))
-            .Should().ThrowAsync<CryptographicException>();
+        var act = async () => await encNarrow.DecryptAsync(ct);
+        await act.Should().ThrowAsync<CryptographicException>();
     }
 
     [Theory]
@@ -143,8 +143,8 @@ public class ConsentFieldEncryptorTests
         // Flip one character in the base64url envelope — invalidates the GCM tag.
         var tampered = ct![..^1] + (ct[^1] == 'A' ? 'B' : 'A');
 
-        await FluentActions.Invoking(() => enc.DecryptAsync(tampered))
-            .Should().ThrowAsync<CryptographicException>();
+        var act = async () => await enc.DecryptAsync(tampered);
+        await act.Should().ThrowAsync<CryptographicException>();
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public class ConsentFieldEncryptorTests
         var bogus = new byte[] { 0x01, 0x00, 0x00 };
         var envelope = Convert.ToBase64String(bogus).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-        await FluentActions.Invoking(() => enc.DecryptAsync(envelope))
-            .Should().ThrowAsync<CryptographicException>();
+        var act = async () => await enc.DecryptAsync(envelope);
+        await act.Should().ThrowAsync<CryptographicException>();
     }
 }

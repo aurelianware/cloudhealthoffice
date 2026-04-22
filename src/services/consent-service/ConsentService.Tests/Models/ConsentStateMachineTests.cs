@@ -13,8 +13,8 @@ public class ConsentStateMachineTests
     public void LegalTransitions_Allowed(ConsentStatus from, ConsentStatus to)
     {
         ConsentStateMachine.IsAllowed(from, to).Should().BeTrue();
-        FluentActions.Invoking(() => ConsentStateMachine.EnsureAllowed(from, to))
-            .Should().NotThrow();
+        Action act = () => ConsentStateMachine.EnsureAllowed(from, to);
+        act.Should().NotThrow();
     }
 
     [Theory]
@@ -37,8 +37,8 @@ public class ConsentStateMachineTests
     public void IllegalTransitions_Throw(ConsentStatus from, ConsentStatus to)
     {
         ConsentStateMachine.IsAllowed(from, to).Should().BeFalse();
-        FluentActions.Invoking(() => ConsentStateMachine.EnsureAllowed(from, to))
-            .Should().Throw<InvalidConsentTransitionException>()
+        Action act = () => ConsentStateMachine.EnsureAllowed(from, to);
+        act.Should().Throw<InvalidConsentTransitionException>()
             .Where(e => e.FromStatus == from && e.ToStatus == to);
     }
 
