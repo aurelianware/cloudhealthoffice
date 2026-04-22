@@ -210,29 +210,66 @@ static MemberEncryptionOptions ResolveMemberEncryptionOptions(
     };
 }
 
-// Identifier fingerprinting (HMAC-SHA256 keyed by a DISTINCT KV secret from the
-// encryption key). Used to dedupe PII identifiers without comparing ciphertexts
-// (which differ by AES-GCM nonce even for identical plaintext).
+// Identifier fingerprinting (HMAC-SHA256 keyed by a DISTINCT KV secret from
+// the encryption key — rotated independently). Used to dedupe PII
+// identifiers without comparing ciphertexts (which differ by AES-GCM nonce
+// even for identical plaintext). Dual-read during rotation windows via
+// IIdentifierFingerprinter.FingerprintCandidatesAsync.
 var fingerprintKeySecretName =
     builder.Configuration["Encryption:IdentifierFingerprintKeySecret"]
     ?? builder.Configuration["Member:IdentifierFingerprint:KeySecretName"];
-if (!string.IsNullOrWhiteSpace(fingerprintKeySecretName))
+var memberFingerprintingSection = builder.Configuration.GetSection(MemberFingerprintingOptions.SectionName);
+if (memberFingerprintingSection.Exists() || !string.IsNullOrWhiteSpace(fingerprintKeySecretName))
 {
+    var fpOptions = ResolveMemberFingerprintingOptions(memberFingerprintingSection, fingerprintKeySecretName);
+
+    builder.Services.AddSingleton(fpOptions);
     builder.Services.AddSingleton<IIdentifierFingerprinter>(sp =>
         new HmacSha256IdentifierFingerprinter(
+            sp.GetRequiredService<RotatingKeyProvider>(),
             sp.GetRequiredService<ISecretProvider>(),
             sp.GetRequiredService<ILogger<HmacSha256IdentifierFingerprinter>>(),
-            fingerprintKeySecretName));
+            fpOptions));
+
+    Console.WriteLine(
+        $"[member-service] IIdentifierFingerprinter = HmacSha256 (rotating) — current: {fpOptions.CurrentKeyVersion}; " +
+        $"accepted: [{string.Join(", ", fpOptions.AcceptedKeyVersions)}]; " +
+        $"legacy secret: {fpOptions.LegacyKeySecretName ?? "<none>"}");
 }
 else
 {
     if (!builder.Environment.IsDevelopment())
     {
         throw new InvalidOperationException(
-            "Encryption:IdentifierFingerprintKeySecret must be configured in non-development environments.");
+            "MemberFingerprinting (or legacy Encryption:IdentifierFingerprintKeySecret) must be configured in non-development environments.");
     }
     builder.Services.AddSingleton<IIdentifierFingerprinter, NoOpIdentifierFingerprinter>();
-    Console.WriteLine("[dev] IIdentifierFingerprinter = NoOp (plain SHA-256). Configure Encryption:IdentifierFingerprintKeySecret to enable.");
+    Console.WriteLine("[dev] IIdentifierFingerprinter = NoOp (plain SHA-256). Configure MemberFingerprinting to enable.");
+}
+
+static MemberFingerprintingOptions ResolveMemberFingerprintingOptions(
+    IConfigurationSection section, string? legacyKeySecretName)
+{
+    var bound = section.Exists() ? section.Get<MemberFingerprintingOptions>() : null;
+    if (bound is not null)
+    {
+        var legacy = string.IsNullOrWhiteSpace(bound.LegacyKeySecretName)
+            ? legacyKeySecretName ?? bound.KeySecretPrefix
+            : bound.LegacyKeySecretName;
+        return bound with { LegacyKeySecretName = legacy };
+    }
+
+    // Pure legacy path: treat the old single-name secret as the implicit v1
+    // entry. FingerprintAsync resolves v1 via the legacy name fallback in
+    // HmacSha256IdentifierFingerprinter, so existing rows keep deduping
+    // without requiring the operator to publish a prefix-versioned secret.
+    return new MemberFingerprintingOptions
+    {
+        KeySecretPrefix = legacyKeySecretName!,
+        CurrentKeyVersion = "v1",
+        AcceptedKeyVersions = new[] { "v1" },
+        LegacyKeySecretName = legacyKeySecretName
+    };
 }
 
 // ── Downstream typed clients ─────────────────────────────────────────
