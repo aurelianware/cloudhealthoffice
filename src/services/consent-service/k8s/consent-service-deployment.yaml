@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: consent-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "cloudhealthoffice"
+  ConsentEncryption__KeySecretPrefix: "consent-body-encryption-key"
+  ConsentEncryption__CurrentKeyVersion: "v1"
+  ConsentEncryption__AcceptedKeyVersions__0: "v1"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consent-service
+  namespace: cloudhealthoffice
+  labels:
+    app: consent-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consent-service
+  template:
+    metadata:
+      labels:
+        app: consent-service
+        tier: backend
+    spec:
+      containers:
+      - name: consent-service
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-consent-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: consent-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: consent-service-config
+              key: MongoDb__DatabaseName
+        - name: ConsentEncryption__KeySecretPrefix
+          valueFrom:
+            configMapKeyRef:
+              name: consent-service-config
+              key: ConsentEncryption__KeySecretPrefix
+        - name: ConsentEncryption__CurrentKeyVersion
+          valueFrom:
+            configMapKeyRef:
+              name: consent-service-config
+              key: ConsentEncryption__CurrentKeyVersion
+        - name: Kafka__BootstrapServers
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secret
+              key: bootstrapServers
+              optional: true
+        - name: Kafka__SaslUsername
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secret
+              key: saslUsername
+              optional: true
+        - name: Kafka__SaslPassword
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secret
+              key: saslPassword
+              optional: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consent-service
+  namespace: cloudhealthoffice
+  labels:
+    app: consent-service
+spec:
+  type: ClusterIP
+  selector:
+    app: consent-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

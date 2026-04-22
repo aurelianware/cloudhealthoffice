@@ -78,6 +78,7 @@ jobs:
           - src/services/enrollment-import-service
           - src/services/trading-partner-service
           - src/services/tenant-service
+          - src/services/consent-service
 
     steps:
       - name: Checkout code
