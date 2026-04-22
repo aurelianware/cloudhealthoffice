@@ -83,6 +83,63 @@ public sealed class AzureKeyVaultSecretProvider : ISecretProvider
     }
 
     /// <inheritdoc />
+    public async Task<string?> GetSecretByVersionAsync(
+        string secretName, string version, CancellationToken ct = default)
+    {
+        _logger.LogDebug("Retrieving secret '{SecretName}' version '{Version}' from Azure Key Vault",
+            secretName, version);
+
+        try
+        {
+            KeyVaultSecret secret = await _client.GetSecretAsync(secretName, version, cancellationToken: ct);
+            return secret.Value;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            _logger.LogDebug("Secret '{SecretName}' version '{Version}' not found in Azure Key Vault",
+                secretName, version);
+            return null;
+        }
+        catch (RequestFailedException ex)
+        {
+            _logger.LogError(ex,
+                "Failed to retrieve secret '{SecretName}' version '{Version}' from Azure Key Vault (HTTP {Status})",
+                secretName, version, ex.Status);
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SecretVersionInfo>> ListSecretVersionsAsync(
+        string secretName, CancellationToken ct = default)
+    {
+        _logger.LogDebug("Listing versions of secret '{SecretName}' from Azure Key Vault", secretName);
+
+        var results = new List<SecretVersionInfo>();
+        try
+        {
+            await foreach (SecretProperties p in _client.GetPropertiesOfSecretVersionsAsync(secretName, ct))
+            {
+                if (!p.Enabled.GetValueOrDefault()) continue;
+                results.Add(new SecretVersionInfo(
+                    Version: p.Version,
+                    CreatedOn: p.CreatedOn,
+                    NotBefore: p.NotBefore,
+                    ExpiresOn: p.ExpiresOn,
+                    Enabled: p.Enabled.GetValueOrDefault()));
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return Array.Empty<SecretVersionInfo>();
+        }
+
+        return results
+            .OrderByDescending(v => v.CreatedOn ?? DateTimeOffset.MinValue)
+            .ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<bool> HealthCheckAsync(CancellationToken ct = default)
     {
         try

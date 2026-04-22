@@ -30,4 +30,24 @@ public interface ISecretProvider
     /// <param name="ct">Cancellation token.</param>
     /// <returns><c>true</c> if the secret store is healthy; otherwise <c>false</c>.</returns>
     Task<bool> HealthCheckAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieves a specific version of a secret. Version identifiers are
+    /// provider-specific — for Azure Key Vault, this is the URL segment
+    /// after the secret name (e.g. "abc123..."). Returns null if the
+    /// secret or version does not exist.
+    /// </summary>
+    Task<string?> GetSecretByVersionAsync(
+        string secretName,
+        string version,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns metadata about every enabled version of the named secret,
+    /// ordered by creation time descending (newest first). Empty if the
+    /// secret has no enabled versions.
+    /// </summary>
+    Task<IReadOnlyList<SecretVersionInfo>> ListSecretVersionsAsync(
+        string secretName,
+        CancellationToken ct = default);
 }
