@@ -498,10 +498,18 @@ public sealed class RedisPaRuleRepository : IPaRuleRepository
         }
     }
 
-    /// <summary>
-    /// Serialization wrapper — <see cref="ICacheProvider.GetOrSetAsync{T}"/>
-    /// requires T : class, and <see cref="IReadOnlyList{T}"/> is not a
-    /// reference type the JSON serializer can round-trip without help.
-    /// </summary>
-    private sealed record CachedRuleSet(List<PaRuleDocument> Rules);
 }
+
+/// <summary>
+/// Serialization wrapper — <see cref="ICacheProvider.GetOrSetAsync{T}"/>
+/// requires T : class, and <see cref="IReadOnlyList{T}"/> is an interface
+/// type that the JSON serializer can't reliably materialize on the read
+/// path without an explicit concrete type to bind to. Wrapping the list in
+/// a concrete record gives the serializer a fixed shape to round-trip.
+/// Internal so the tests-assembly can reference the exact generic type
+/// instantiation of <see cref="ICacheProvider.GetOrSetAsync{T}"/> when
+/// setting up NSubstitute expectations — generic method match is
+/// per-T, so a mock set up for <c>GetOrSetAsync&lt;object&gt;</c> does
+/// NOT intercept <c>GetOrSetAsync&lt;CachedRuleSet&gt;</c>.
+/// </summary>
+internal sealed record CachedRuleSet(List<PaRuleDocument> Rules);
