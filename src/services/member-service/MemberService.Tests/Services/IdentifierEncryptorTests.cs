@@ -15,6 +15,28 @@ public class IdentifierEncryptorTests
         public Task<IDictionary<string, string>> GetSecretsAsync(string prefix, CancellationToken ct = default)
             => Task.FromResult<IDictionary<string, string>>(new Dictionary<string, string>());
         public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(true);
+        public Task<string?> GetSecretByVersionAsync(string name, string version, CancellationToken ct = default)
+            => Task.FromResult<string?>(_secret);
+        public Task<IReadOnlyList<SecretVersionInfo>> ListSecretVersionsAsync(string name, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<SecretVersionInfo>>(Array.Empty<SecretVersionInfo>());
+    }
+
+    private static KeyVaultIdentifierEncryptor MakeEncryptor(
+        ISecretProvider secrets,
+        string keySecretName = "cho-member-id-dek",
+        bool legacyEnvelope = true)
+    {
+        var options = new MemberEncryptionOptions
+        {
+            KeySecretPrefix = keySecretName,
+            CurrentKeyVersion = "v1",
+            AcceptedKeyVersions = new[] { "v1" },
+            LegacyKeySecretName = keySecretName,
+            EmitLegacyEnvelope = legacyEnvelope
+        };
+        var keys = new RotatingKeyProvider(secrets, NullLogger<RotatingKeyProvider>.Instance);
+        return new KeyVaultIdentifierEncryptor(
+            keys, secrets, NullLogger<KeyVaultIdentifierEncryptor>.Instance, options);
     }
 
     [Fact]
@@ -31,10 +53,7 @@ public class IdentifierEncryptorTests
     public async Task KeyVaultEncryptor_RoundTripsPlaintext()
     {
         var keyBytes = RandomNumberGenerator.GetBytes(32);
-        var enc = new KeyVaultIdentifierEncryptor(
-            new StaticSecretProvider(Convert.ToBase64String(keyBytes)),
-            NullLogger<KeyVaultIdentifierEncryptor>.Instance,
-            "cho-member-id-dek");
+        var enc = MakeEncryptor(new StaticSecretProvider(Convert.ToBase64String(keyBytes)));
 
         var cipher = await enc.EncryptAsync("123-45-6789");
         cipher.Should().NotBeNullOrEmpty();
@@ -47,10 +66,7 @@ public class IdentifierEncryptorTests
     [Fact]
     public async Task KeyVaultEncryptor_EmptyIn_EmptyOut()
     {
-        var enc = new KeyVaultIdentifierEncryptor(
-            new StaticSecretProvider(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))),
-            NullLogger<KeyVaultIdentifierEncryptor>.Instance,
-            "k");
+        var enc = MakeEncryptor(new StaticSecretProvider(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))), keySecretName: "k");
         (await enc.EncryptAsync("")).Should().Be("");
         (await enc.DecryptAsync("")).Should().Be("");
     }
@@ -58,10 +74,7 @@ public class IdentifierEncryptorTests
     [Fact]
     public async Task KeyVaultEncryptor_WrongKeyLength_Throws()
     {
-        var enc = new KeyVaultIdentifierEncryptor(
-            new StaticSecretProvider("short"),
-            NullLogger<KeyVaultIdentifierEncryptor>.Instance,
-            "k");
+        var enc = MakeEncryptor(new StaticSecretProvider("short"), keySecretName: "k");
         var act = async () => await enc.EncryptAsync("anything");
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -72,22 +85,16 @@ public class IdentifierEncryptorTests
         var provider = new Moq.Mock<ISecretProvider>();
         provider.Setup(p => p.GetSecretAsync(Moq.It.IsAny<string>(), Moq.It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
-        var enc = new KeyVaultIdentifierEncryptor(
-            provider.Object,
-            NullLogger<KeyVaultIdentifierEncryptor>.Instance,
-            "k");
+        var enc = MakeEncryptor(provider.Object, keySecretName: "k");
         var act = async () => await enc.EncryptAsync("anything");
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        await act.Should().ThrowAsync<CryptographicException>();
     }
 
     [Fact]
     public async Task KeyVaultEncryptor_TamperedCiphertext_ThrowsCrypto()
     {
         var keyBytes = RandomNumberGenerator.GetBytes(32);
-        var enc = new KeyVaultIdentifierEncryptor(
-            new StaticSecretProvider(Convert.ToBase64String(keyBytes)),
-            NullLogger<KeyVaultIdentifierEncryptor>.Instance,
-            "k");
+        var enc = MakeEncryptor(new StaticSecretProvider(Convert.ToBase64String(keyBytes)), keySecretName: "k");
         var cipher = await enc.EncryptAsync("secret-mbi");
         cipher.Should().NotBeNull();
         // Flip a byte in the middle.

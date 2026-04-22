@@ -102,9 +102,17 @@ public class IdentifiersController : ControllerBase
             if (string.IsNullOrEmpty(normalized))
                 return BadRequest(new { message = "Identifier value cannot be empty after normalization." });
 
+            // Write path: store the fingerprint under the current key version only.
             fingerprint = await _fingerprinter.FingerprintAsync(normalized, ct);
 
-            if (member.Identifiers.Any(i => i.System == system && i.ValueFingerprint == fingerprint))
+            // Read path: dedupe against every accepted key version so a row
+            // fingerprinted under a previous key version is still detected as
+            // a duplicate during a rotation window. Without this, rotating
+            // the HMAC key would silently let duplicates past the 409 check.
+            var candidates = await _fingerprinter.FingerprintCandidatesAsync(normalized, ct);
+            if (member.Identifiers.Any(i => i.System == system
+                    && !string.IsNullOrEmpty(i.ValueFingerprint)
+                    && candidates.Contains(i.ValueFingerprint!, StringComparer.Ordinal)))
                 return Conflict(new { message = "Identifier already exists on this member." });
 
             storedValue = await _encryptor.EncryptAsync(request.Value, ct) ?? request.Value;
@@ -184,9 +192,12 @@ public class IdentifiersController : ControllerBase
         if (member == null) return NotFound();
 
         var normalized = IdentifierNormalization.Normalize(value);
-        var fingerprintLookup = string.IsNullOrEmpty(normalized)
-            ? null
-            : await _fingerprinter.FingerprintAsync(normalized, ct);
+        // Read path: compute a fingerprint under each accepted key version so
+        // identifiers stored under a previous version still resolve during a
+        // rotation window.
+        var fingerprintCandidates = string.IsNullOrEmpty(normalized)
+            ? Array.Empty<string>()
+            : await _fingerprinter.FingerprintCandidatesAsync(normalized, ct);
 
         var removed = 0;
         var kept = new List<MemberIdentifier>(member.Identifiers.Count);
@@ -197,7 +208,7 @@ public class IdentifiersController : ControllerBase
             bool match;
             if (!string.IsNullOrEmpty(i.ValueFingerprint))
             {
-                match = i.ValueFingerprint == fingerprintLookup;
+                match = fingerprintCandidates.Contains(i.ValueFingerprint!, StringComparer.Ordinal);
             }
             else
             {

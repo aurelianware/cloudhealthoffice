@@ -94,8 +94,20 @@ builder.Services.AddSingleton<IBenefitPlanClient, BenefitPlanClient>();
 builder.Services.AddSingleton<IMemberDocumentClient, MemberDocumentClient>();
 builder.Services.AddSingleton<IEligibilityClient, EligibilityClient>();
 
-// QR signing + card generation
+// QR signing + card generation. RotatingKeyProvider is registered by
+// AddSecretProvider above; QrCodeService consumes it directly so the
+// per-service key cache stays in sync with IConfiguration reloads.
 builder.Services.AddSingleton<IQrCodeService, QrCodeService>();
+
+// Startup log: visible in pod logs so ops can confirm the rotation window
+// the service booted with. No secret material logged.
+{
+    var current = builder.Configuration["IdCard:CurrentKeyVersion"] ?? "v1";
+    var accepted = builder.Configuration.GetSection("IdCard:AcceptedKeyVersions").Get<string[]>()
+        ?? new[] { current };
+    Console.WriteLine(
+        $"[idcard-service] QrCodeService rotating keys — current: {current}; accepted: [{string.Join(", ", accepted)}]");
+}
 builder.Services.AddSingleton<IIdCardGenerator, IdCardGenerator>();
 builder.Services.AddScoped<ITemplateResolver, TemplateResolver>();
 

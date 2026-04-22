@@ -140,16 +140,31 @@ builder.Services.AddScoped<IFamilyRelationshipService, FamilyRelationshipService
 builder.Services.AddScoped<IRelationshipShim, RelationshipShim>();
 builder.Services.AddScoped<IMemberAlertGuard, MemberAlertGuard>();
 
-// Identifier encryption. Real KV-backed encryptor when a data-key secret name is
-// configured; otherwise fall through to the no-op shim (dev only).
+// Identifier encryption. Rotation-aware KV-backed encryptor when either
+// the new MemberEncryption section is configured OR the legacy
+// Member:IdentifierEncryption:KeySecretName is set — the legacy config
+// is bridged onto MemberEncryptionOptions so a service booting with no
+// new config keeps the pre-A.7.3 behaviour: v1 current, v1 accepted, and
+// the legacy secret name used for both rotation (KeySecretPrefix) and
+// 0x01 decrypt.
 var encryptionKeySecretName = builder.Configuration["Member:IdentifierEncryption:KeySecretName"];
-if (!string.IsNullOrWhiteSpace(encryptionKeySecretName))
+var memberEncryptionSection = builder.Configuration.GetSection(MemberEncryptionOptions.SectionName);
+if (memberEncryptionSection.Exists() || !string.IsNullOrWhiteSpace(encryptionKeySecretName))
 {
+    var options = ResolveMemberEncryptionOptions(memberEncryptionSection, encryptionKeySecretName);
+
+    builder.Services.AddSingleton(options);
     builder.Services.AddSingleton<IIdentifierEncryptor>(sp =>
         new KeyVaultIdentifierEncryptor(
+            sp.GetRequiredService<RotatingKeyProvider>(),
             sp.GetRequiredService<ISecretProvider>(),
             sp.GetRequiredService<ILogger<KeyVaultIdentifierEncryptor>>(),
-            encryptionKeySecretName));
+            options));
+
+    Console.WriteLine(
+        $"[member-service] IIdentifierEncryptor = KeyVault (rotating) — current: {options.CurrentKeyVersion}; " +
+        $"accepted: [{string.Join(", ", options.AcceptedKeyVersions)}]; " +
+        $"legacy 0x01 secret: {options.LegacyKeySecretName ?? "<none>"}");
 }
 else
 {
@@ -157,35 +172,104 @@ else
     {
         // Fail loudly in non-dev rather than silently passing PII through plaintext.
         throw new InvalidOperationException(
-            "Member:IdentifierEncryption:KeySecretName must be configured in non-development environments.");
+            "MemberEncryption (or legacy Member:IdentifierEncryption:KeySecretName) must be configured in non-development environments.");
     }
     builder.Services.AddSingleton<IIdentifierEncryptor, NoOpIdentifierEncryptor>();
-    Console.WriteLine("[dev] IIdentifierEncryptor = NoOp (PII stored plaintext). Configure Member:IdentifierEncryption:KeySecretName to enable.");
+    Console.WriteLine("[dev] IIdentifierEncryptor = NoOp (PII stored plaintext). Configure MemberEncryption to enable.");
 }
 
-// Identifier fingerprinting (HMAC-SHA256 keyed by a DISTINCT KV secret from the
-// encryption key). Used to dedupe PII identifiers without comparing ciphertexts
-// (which differ by AES-GCM nonce even for identical plaintext).
+static MemberEncryptionOptions ResolveMemberEncryptionOptions(
+    IConfigurationSection section, string? legacyKeySecretName)
+{
+    var bound = section.Exists() ? section.Get<MemberEncryptionOptions>() : null;
+    if (bound is not null)
+    {
+        // If the new section is partially configured but LegacyKeySecretName
+        // is absent, fall back to the pre-A.7.3 config key so 0x01 envelopes
+        // keep decrypting.
+        var legacy = string.IsNullOrWhiteSpace(bound.LegacyKeySecretName)
+            ? legacyKeySecretName ?? bound.KeySecretPrefix
+            : bound.LegacyKeySecretName;
+        return bound with { LegacyKeySecretName = legacy };
+    }
+
+    // Pure legacy path — no MemberEncryption block, only the old single-name
+    // key. Emit 0x01 envelopes against that exact secret so new writes have
+    // the same shape as pre-A.7.3 writes and don't reference a versioned
+    // secret name that was never published. Decrypt still supports both 0x01
+    // (via the same legacy key) and 0x02 (should a stray one appear). When
+    // the operator adds an explicit MemberEncryption section they opt into
+    // 0x02 emission.
+    return new MemberEncryptionOptions
+    {
+        KeySecretPrefix = legacyKeySecretName!,
+        CurrentKeyVersion = "v1",
+        AcceptedKeyVersions = new[] { "v1" },
+        LegacyKeySecretName = legacyKeySecretName,
+        EmitLegacyEnvelope = true
+    };
+}
+
+// Identifier fingerprinting (HMAC-SHA256 keyed by a DISTINCT KV secret from
+// the encryption key — rotated independently). Used to dedupe PII
+// identifiers without comparing ciphertexts (which differ by AES-GCM nonce
+// even for identical plaintext). Dual-read during rotation windows via
+// IIdentifierFingerprinter.FingerprintCandidatesAsync.
 var fingerprintKeySecretName =
     builder.Configuration["Encryption:IdentifierFingerprintKeySecret"]
     ?? builder.Configuration["Member:IdentifierFingerprint:KeySecretName"];
-if (!string.IsNullOrWhiteSpace(fingerprintKeySecretName))
+var memberFingerprintingSection = builder.Configuration.GetSection(MemberFingerprintingOptions.SectionName);
+if (memberFingerprintingSection.Exists() || !string.IsNullOrWhiteSpace(fingerprintKeySecretName))
 {
+    var fpOptions = ResolveMemberFingerprintingOptions(memberFingerprintingSection, fingerprintKeySecretName);
+
+    builder.Services.AddSingleton(fpOptions);
     builder.Services.AddSingleton<IIdentifierFingerprinter>(sp =>
         new HmacSha256IdentifierFingerprinter(
+            sp.GetRequiredService<RotatingKeyProvider>(),
             sp.GetRequiredService<ISecretProvider>(),
             sp.GetRequiredService<ILogger<HmacSha256IdentifierFingerprinter>>(),
-            fingerprintKeySecretName));
+            fpOptions));
+
+    Console.WriteLine(
+        $"[member-service] IIdentifierFingerprinter = HmacSha256 (rotating) — current: {fpOptions.CurrentKeyVersion}; " +
+        $"accepted: [{string.Join(", ", fpOptions.AcceptedKeyVersions)}]; " +
+        $"legacy secret: {fpOptions.LegacyKeySecretName ?? "<none>"}");
 }
 else
 {
     if (!builder.Environment.IsDevelopment())
     {
         throw new InvalidOperationException(
-            "Encryption:IdentifierFingerprintKeySecret must be configured in non-development environments.");
+            "MemberFingerprinting (or legacy Encryption:IdentifierFingerprintKeySecret) must be configured in non-development environments.");
     }
     builder.Services.AddSingleton<IIdentifierFingerprinter, NoOpIdentifierFingerprinter>();
-    Console.WriteLine("[dev] IIdentifierFingerprinter = NoOp (plain SHA-256). Configure Encryption:IdentifierFingerprintKeySecret to enable.");
+    Console.WriteLine("[dev] IIdentifierFingerprinter = NoOp (plain SHA-256). Configure MemberFingerprinting to enable.");
+}
+
+static MemberFingerprintingOptions ResolveMemberFingerprintingOptions(
+    IConfigurationSection section, string? legacyKeySecretName)
+{
+    var bound = section.Exists() ? section.Get<MemberFingerprintingOptions>() : null;
+    if (bound is not null)
+    {
+        var legacy = string.IsNullOrWhiteSpace(bound.LegacyKeySecretName)
+            ? legacyKeySecretName ?? bound.KeySecretPrefix
+            : bound.LegacyKeySecretName;
+        return bound with { LegacyKeySecretName = legacy };
+    }
+
+    // Pure legacy path: treat the old single-name secret as the implicit v1
+    // entry. FingerprintAsync resolves v1 via the legacy name fallback in
+    // HmacSha256IdentifierFingerprinter, so existing rows keep deduping
+    // without requiring the operator to publish a prefix-versioned secret.
+    return new MemberFingerprintingOptions
+    {
+        KeySecretPrefix = legacyKeySecretName!,
+        CurrentKeyVersion = "v1",
+        AcceptedKeyVersions = new[] { "v1" },
+        LegacyKeySecretName = legacyKeySecretName
+    };
 }
 
 // ── Downstream typed clients ─────────────────────────────────────────

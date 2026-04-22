@@ -39,7 +39,10 @@ internal static class TestFixtures
     }
 
     public static QrCodeService QrService(params (string Key, string? Value)[] extraConfig) =>
-        new(EmptySecretProvider(), Configuration(extraConfig), NullLogger<QrCodeService>.Instance);
+        new(
+            new RotatingKeyProvider(EmptySecretProvider(), NullLogger<RotatingKeyProvider>.Instance),
+            Configuration(extraConfig),
+            NullLogger<QrCodeService>.Instance);
 
     public static IdCardTemplate GlobalDefault(string tenantId = TenantId) => new()
     {

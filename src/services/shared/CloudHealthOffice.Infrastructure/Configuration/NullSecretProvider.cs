@@ -18,4 +18,14 @@ public sealed class NullSecretProvider : ISecretProvider
     /// <inheritdoc />
     public Task<bool> HealthCheckAsync(CancellationToken ct = default)
         => Task.FromResult(true);
+
+    /// <inheritdoc />
+    public Task<string?> GetSecretByVersionAsync(
+        string secretName, string version, CancellationToken ct = default)
+        => Task.FromResult<string?>(null);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<SecretVersionInfo>> ListSecretVersionsAsync(
+        string secretName, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<SecretVersionInfo>>(Array.Empty<SecretVersionInfo>());
 }
