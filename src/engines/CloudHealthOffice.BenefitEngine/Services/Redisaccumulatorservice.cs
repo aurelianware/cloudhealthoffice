@@ -60,6 +60,25 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 /// from claim history (which no longer includes the voided claim).
 /// Either way, the result is correct.
 /// </summary>
+/// <remarks>
+/// This service intentionally does NOT use the shared
+/// <see cref="CloudHealthOffice.Infrastructure.Caching.ICacheProvider"/>
+/// abstraction introduced in Addendum A.7.2. Accumulators use Redis hashes
+/// with server-side atomic <c>HINCRBYFLOAT</c> to avoid read-modify-write
+/// races between concurrent claim adjudications — behaviour that a
+/// string-K/V cache abstraction cannot express. Moving this class onto
+/// <c>ICacheProvider</c> would either require expanding the interface with
+/// hash operations (leaking Redis semantics into a neutral abstraction) or
+/// JSON-serializing the full hash on every update (reintroducing the race
+/// we designed around). Neither is acceptable.
+///
+/// The pattern: <c>ICacheProvider</c> is for caches — reads dominated, data
+/// is regeneratable, loss is recoverable. This service uses Redis as
+/// structured hot storage with domain-specific atomic semantics, which is
+/// a different job. See <c>docs/architecture/shared-cache.md</c> for the
+/// decision tree and the second deliberate exception
+/// (<c>RedisPaRuleRepository</c> for SCAN-based invalidation).
+/// </remarks>
 public class RedisAccumulatorService : IAccumulatorService
 {
     private readonly IConnectionMultiplexer _redis;
