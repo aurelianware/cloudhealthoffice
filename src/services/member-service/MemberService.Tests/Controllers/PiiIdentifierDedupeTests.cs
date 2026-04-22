@@ -27,6 +27,10 @@ public class PiiIdentifierDedupeTests
         public Task<IDictionary<string, string>> GetSecretsAsync(string p, CancellationToken ct = default)
             => Task.FromResult<IDictionary<string, string>>(new Dictionary<string, string>());
         public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(true);
+        public Task<string?> GetSecretByVersionAsync(string n, string v, CancellationToken ct = default)
+            => Task.FromResult<string?>(_secret);
+        public Task<IReadOnlyList<SecretVersionInfo>> ListSecretVersionsAsync(string n, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<SecretVersionInfo>>(Array.Empty<SecretVersionInfo>());
     }
 
     private static (IdentifiersController ctl, InMemoryMemberRepository repo) Build(
