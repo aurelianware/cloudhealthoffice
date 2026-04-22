@@ -14,6 +14,9 @@ COPY src/services/fhir-service/ src/services/fhir-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/
+# CHO-authored FHIR profile artifacts — embedded into fhir-service.dll at
+# build time by the CopyFhirArtifacts MSBuild target.
+COPY docs/fhir/profiles/ docs/fhir/profiles/
 RUN dotnet build src/services/fhir-service/fhir-service.csproj -c Release --no-restore
 
 # Publish stage

@@ -1,0 +1,161 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "cho-appeal-document-reference",
+  "url": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-document-reference",
+  "version": "1.0.0",
+  "name": "ChoAppealDocumentReference",
+  "title": "CHO Appeal DocumentReference",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "Profile on DocumentReference representing a supporting attachment for an appeal (clinical docs, operative reports, X12 275 payloads). Links to the parent appeal Task via `context.related`. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "jurisdiction": [
+    { "coding": [{ "system": "urn:iso:std:iso:3166", "code": "US" }] }
+  ],
+  "fhirVersion": "4.0.1",
+  "kind": "resource",
+  "abstract": false,
+  "type": "DocumentReference",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/DocumentReference",
+  "derivation": "constraint",
+  "differential": {
+    "element": [
+      {
+        "id": "DocumentReference",
+        "path": "DocumentReference",
+        "short": "Appeal supporting attachment"
+      },
+      {
+        "id": "DocumentReference.identifier",
+        "path": "DocumentReference.identifier",
+        "slicing": {
+          "discriminator": [{ "type": "value", "path": "extension.url" }],
+          "rules": "open"
+        }
+      },
+      {
+        "id": "DocumentReference.identifier.extension",
+        "path": "DocumentReference.identifier.extension",
+        "slicing": {
+          "discriminator": [{ "type": "value", "path": "url" }],
+          "rules": "open"
+        }
+      },
+      {
+        "id": "DocumentReference.identifier.extension:x12ControlNumber",
+        "path": "DocumentReference.identifier.extension",
+        "sliceName": "x12ControlNumber",
+        "min": 0,
+        "max": "1",
+        "type": [
+          {
+            "code": "Extension",
+            "profile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-x12-275-control-number"]
+          }
+        ]
+      },
+      {
+        "id": "DocumentReference.status",
+        "path": "DocumentReference.status",
+        "min": 1,
+        "max": "1",
+        "binding": {
+          "strength": "required",
+          "valueSet": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-document-status"
+        }
+      },
+      {
+        "id": "DocumentReference.type",
+        "path": "DocumentReference.type",
+        "min": 1,
+        "max": "1",
+        "binding": {
+          "strength": "extensible",
+          "valueSet": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-attachment-type"
+        }
+      },
+      {
+        "id": "DocumentReference.subject",
+        "path": "DocumentReference.subject",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/Patient"]
+          }
+        ]
+      },
+      {
+        "id": "DocumentReference.content",
+        "path": "DocumentReference.content",
+        "min": 1,
+        "max": "*"
+      },
+      {
+        "id": "DocumentReference.content.attachment",
+        "path": "DocumentReference.content.attachment",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "DocumentReference.content.attachment.contentType",
+        "path": "DocumentReference.content.attachment.contentType",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "DocumentReference.content.attachment.url",
+        "path": "DocumentReference.content.attachment.url",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "DocumentReference.content.format",
+        "path": "DocumentReference.content.format",
+        "min": 0,
+        "max": "1"
+      },
+      {
+        "id": "DocumentReference.content.format.extension",
+        "path": "DocumentReference.content.format.extension",
+        "slicing": {
+          "discriminator": [{ "type": "value", "path": "url" }],
+          "rules": "open"
+        }
+      },
+      {
+        "id": "DocumentReference.content.format.extension:x12TransmissionCode",
+        "path": "DocumentReference.content.format.extension",
+        "sliceName": "x12TransmissionCode",
+        "min": 0,
+        "max": "1",
+        "type": [
+          {
+            "code": "Extension",
+            "profile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-x12-275-transmission-code"]
+          }
+        ]
+      },
+      {
+        "id": "DocumentReference.context",
+        "path": "DocumentReference.context",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "DocumentReference.context.related",
+        "path": "DocumentReference.context.related",
+        "min": 1,
+        "max": "*",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-task"]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -140,10 +140,18 @@ public class SmartScopeEnforcementMiddleware
 
     // ── Path analysis helpers ─────────────────────────────────────────────────
 
+    // FHIR conformance resources (StructureDefinition, OperationDefinition,
+    // CodeSystem, ValueSet) sit at the same metadata/discovery layer as the
+    // CapabilityStatement. Clients need to discover them before authenticating,
+    // so they bypass SMART scope enforcement just like /fhir/r4/metadata.
     private static bool IsPublicPath(PathString path)
         => !path.StartsWithSegments("/fhir/r4")
         || path.StartsWithSegments("/fhir/r4/metadata")
         || path.StartsWithSegments("/fhir/r4/.well-known")
+        || path.StartsWithSegments("/fhir/r4/StructureDefinition")
+        || path.StartsWithSegments("/fhir/r4/OperationDefinition")
+        || path.StartsWithSegments("/fhir/r4/CodeSystem")
+        || path.StartsWithSegments("/fhir/r4/ValueSet")
         || path.StartsWithSegments("/health")
         || path.StartsWithSegments("/swagger");
 

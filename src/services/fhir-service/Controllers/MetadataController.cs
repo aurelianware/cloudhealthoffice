@@ -1,3 +1,4 @@
+using FhirService.Services;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
 
@@ -132,7 +133,42 @@ public class MetadataController : FhirControllerBase
                             CapabilityStatement.TypeRestfulInteraction.Read,
                             CapabilityStatement.TypeRestfulInteraction.SearchType,
                             CapabilityStatement.TypeRestfulInteraction.Create,
-                        ])
+                        ]),
+                        BuildResource("Task",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("_lastUpdated", SearchParamType.Date),
+                            ("patient",      SearchParamType.Reference),
+                            ("status",       SearchParamType.Token),
+                        ],
+                        supportedProfiles: [ChoFhirCanonicalUrls.AppealTask]),
+                        BuildResource("Communication",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("_lastUpdated", SearchParamType.Date),
+                            ("subject",      SearchParamType.Reference),
+                            ("status",       SearchParamType.Token),
+                        ],
+                        supportedProfiles: [ChoFhirCanonicalUrls.AppealCommunication]),
+                        BuildResource("DocumentReference",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("_lastUpdated", SearchParamType.Date),
+                            ("subject",      SearchParamType.Reference),
+                            ("status",       SearchParamType.Token),
+                            ("type",         SearchParamType.Token),
+                        ],
+                        supportedProfiles: [ChoFhirCanonicalUrls.AppealDocumentReference]),
+                        BuildResource("ClaimResponse",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("_lastUpdated", SearchParamType.Date),
+                            ("patient",      SearchParamType.Reference),
+                            ("created",      SearchParamType.Date),
+                            ("status",       SearchParamType.Token),
+                            ("outcome",      SearchParamType.Token),
+                        ],
+                        supportedProfiles: [ChoFhirCanonicalUrls.AppealClaimResponse]),
                     ],
                     Operation =
                     [
@@ -140,6 +176,12 @@ public class MetadataController : FhirControllerBase
                         {
                             Name = "export",
                             Definition = "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export",
+                        },
+                        new CapabilityStatement.OperationComponent
+                        {
+                            Name = "cho-appeal-submit",
+                            Definition = ChoFhirCanonicalUrls.AppealSubmitOperation,
+                            Documentation = "Submit a post-adjudication claim appeal as a Bundle containing a Task and its supporting Communications and DocumentReferences.",
                         },
                     ]
                 }
@@ -152,14 +194,15 @@ public class MetadataController : FhirControllerBase
     private static CapabilityStatement.ResourceComponent BuildResource(
         string type,
         (string Name, SearchParamType Type)[] searchParams,
-        CapabilityStatement.TypeRestfulInteraction[]? interactions = null)
+        CapabilityStatement.TypeRestfulInteraction[]? interactions = null,
+        string[]? supportedProfiles = null)
     {
         interactions ??= [
             CapabilityStatement.TypeRestfulInteraction.Read,
             CapabilityStatement.TypeRestfulInteraction.SearchType,
         ];
 
-        return new CapabilityStatement.ResourceComponent
+        var resource = new CapabilityStatement.ResourceComponent
         {
             Type = type,
             Interaction = interactions
@@ -173,5 +216,12 @@ public class MetadataController : FhirControllerBase
                 })
                 .ToList()
         };
+
+        if (supportedProfiles is { Length: > 0 })
+        {
+            resource.SupportedProfile = [.. supportedProfiles];
+        }
+
+        return resource;
     }
 }
