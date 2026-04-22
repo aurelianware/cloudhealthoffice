@@ -74,13 +74,34 @@ public sealed class CacheKeyGuard
         return output;
     }
 
+    /// <summary>
+    /// Return just the prefix the guard would prepend for a given scope —
+    /// <c>{env}:{tenantId}:</c> or <c>{env}:_global:</c>. Consumers that
+    /// need to construct a Redis SCAN pattern against already-stored
+    /// (prefixed) keys use this to anchor the pattern on the correct
+    /// environment + scope, instead of a leading-wildcard <c>"*..."</c>
+    /// pattern that would force a full-keyspace SCAN.
+    /// </summary>
+    public string BuildPrefix(CacheScope scope = CacheScope.Tenant)
+    {
+        var tenant = scope == CacheScope.Global ? "_global" : ResolveTenantOrThrow();
+        return $"{_envPrefix}:{tenant}:";
+    }
+
     private static void ValidateShape(string key)
     {
         foreach (var c in key)
         {
             if (c == '\0' || c == '\r' || c == '\n' || char.IsWhiteSpace(c))
+                // Do NOT echo the raw key. ExceptionHandlingMiddleware logs
+                // exception.Message in production and may surface it to
+                // clients in Development; a rejected key can contain PHI
+                // (that's why we're rejecting it). Describe the problem
+                // without quoting the input.
                 throw new ArgumentException(
-                    $"Cache key '{key}' contains whitespace or control characters.",
+                    "Cache key contains whitespace, newline, or null characters. " +
+                    "Keys must be printable ASCII; whitespace is disallowed to prevent " +
+                    "log-forging via user-controlled cache keys.",
                     nameof(key));
         }
     }
@@ -91,8 +112,11 @@ public sealed class CacheKeyGuard
         foreach (var token in tokens)
         {
             if (PhiTokens.Contains(token))
+                // Token name is not PHI (it's the identifier class, not a
+                // value); safe to include. The surrounding key value is
+                // NOT included — see docs/architecture/shared-cache.md.
                 throw new ArgumentException(
-                    $"Cache key '{key}' contains PHI token '{token}'. " +
+                    $"Cache key contains PHI token '{token.ToLowerInvariant()}'. " +
                     "Hash, pseudonymize, or redesign the key. See docs/architecture/shared-cache.md.",
                     nameof(key));
         }

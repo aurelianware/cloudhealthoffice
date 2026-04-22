@@ -350,20 +350,32 @@ public sealed class RedisPaRuleRepository : IPaRuleRepository
 {
     private readonly IPaRuleRepository _inner;
     private readonly ICacheProvider _cache;
-    private readonly IConnectionMultiplexer _multiplexer;
+    private readonly IConnectionMultiplexer? _multiplexer;
+    private readonly CacheKeyGuard _keyGuard;
     private readonly TimeSpan _ttl;
     private readonly ILogger<RedisPaRuleRepository> _logger;
 
+    /// <summary>
+    /// <paramref name="multiplexer"/> is optional: it is null when the
+    /// cache backend resolves to InMemory or Null, in which case the
+    /// SCAN-based state flush degrades to a debug log + no-op. Exact-key
+    /// invalidation on Upsert/BulkUpsert continues to work via
+    /// <see cref="ICacheProvider"/>. This lets fhir-service and any other
+    /// host wire <c>WithRuleCache()</c> unconditionally without the
+    /// previous "Redis must be present" gate.
+    /// </summary>
     public RedisPaRuleRepository(
         IPaRuleRepository inner,
         ICacheProvider cache,
-        IConnectionMultiplexer multiplexer,
+        IConnectionMultiplexer? multiplexer,
+        CacheKeyGuard keyGuard,
         IOptions<PriorAuthRuleEngineOptions> options,
         ILogger<RedisPaRuleRepository> logger)
     {
         _inner       = inner;
         _cache       = cache;
         _multiplexer = multiplexer;
+        _keyGuard    = keyGuard;
         _ttl         = options.Value.RuleSetCacheTtl;
         _logger      = logger;
     }
@@ -446,6 +458,19 @@ public sealed class RedisPaRuleRepository : IPaRuleRepository
 
     private async Task FlushStateViaScanAsync(string stateCode)
     {
+        if (_multiplexer is null)
+        {
+            // Cache backend is InMemory or Null; SCAN is unreachable and
+            // also unnecessary. InMemory entries are process-local — they
+            // will expire via TTL, and exact-key invalidation on Upsert /
+            // BulkUpsert already handles the common write path. Skip.
+            _logger.LogDebug(
+                "PA rule state-flush skipped for {State}: no IConnectionMultiplexer " +
+                "(cache backend is not Redis). Entries will expire via TTL.",
+                stateCode);
+            return;
+        }
+
         // TODO(scale): SCAN across every pa-rules:{state}:* key is fine at
         // today's rule cardinality (~hundreds of keys per state) but becomes
         // expensive once a state carries thousands of (lob, program, tenant)
@@ -453,18 +478,16 @@ public sealed class RedisPaRuleRepository : IPaRuleRepository
         // explicit per-state index set (SADD pa-rules:{state}:index on write;
         // SMEMBERS + DEL on flush). Tracked as a follow-up.
         //
-        // SCAN returns RAW Redis keys (already carrying CacheKeyGuard's
-        // {env}:_global: prefix from prior writes) so DEL must run against
-        // the multiplexer directly; routing back through ICacheProvider
-        // would double-prefix. The SCAN pattern matches every tenant's
-        // entry for this state because the prefix precedes the
-        // "pa-rules:{state}:" portion only on the guard's side — the
-        // wildcard "*pa-rules:{state}:*" (with leading * to skip the
-        // guard prefix) covers every env/scope combination in one sweep.
+        // The pattern is ANCHORED at CacheKeyGuard's deterministic prefix
+        // ({env}:_global:) so SCAN traverses only keys in this env + scope
+        // instead of the full keyspace. Rule-set writes go through
+        // CacheScope.Global (see GetRulesAsync / UpsertAsync), so Global is
+        // the correct scope to flush here.
         try
         {
+            var prefix  = _keyGuard.BuildPrefix(CacheScope.Global);
+            var pattern = $"{prefix}pa-rules:{stateCode}:*";
             var server  = _multiplexer.GetServer(_multiplexer.GetEndPoints().First());
-            var pattern = $"*pa-rules:{stateCode}:*";
             var keys    = server.Keys(pattern: pattern).ToArray();
             if (keys.Length > 0)
                 await _multiplexer.GetDatabase().KeyDeleteAsync(keys);

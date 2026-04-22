@@ -61,6 +61,11 @@ public static class CloudHealthOfficeJsonOptions
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
         opts.Converters.Add(new JsonStringEnumConverter());
+        // Freeze. A mutable singleton surfaces as a subtle global: any
+        // caller adding a Converter here would reshape serialization for
+        // every sibling service that consumes this property. MakeReadOnly
+        // converts future mutation into a clear InvalidOperationException.
+        opts.MakeReadOnly();
         return opts;
     }
 }

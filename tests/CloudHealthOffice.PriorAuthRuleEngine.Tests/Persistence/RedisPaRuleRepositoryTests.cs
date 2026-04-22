@@ -4,6 +4,8 @@ using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.PriorAuthRuleEngine.Persistence;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -35,14 +37,33 @@ public class RedisPaRuleRepositoryTests
     };
     private const string TxStarCacheKey = "pa-rules:TX:3:STAR:pchp";
 
+    private readonly CacheKeyGuard _keyGuard = BuildGuard();
+
     public RedisPaRuleRepositoryTests()
     {
         _sut = new RedisPaRuleRepository(
             _inner,
             _cache,
             _multiplexer,
+            _keyGuard,
             Options.Create(new PriorAuthRuleEngineOptions { RuleSetCacheTtl = Ttl }),
             Substitute.For<ILogger<RedisPaRuleRepository>>());
+    }
+
+    private static CacheKeyGuard BuildGuard()
+    {
+        var accessor = new HttpContextAccessor();
+        var env = new FakeEnv { EnvironmentName = "test" };
+        return new CacheKeyGuard(accessor, env);
+    }
+
+    private sealed class FakeEnv : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "test";
+        public string ApplicationName { get; set; } = "cho-test";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+            new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 
     [Fact]
@@ -132,7 +153,7 @@ public class RedisPaRuleRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteAsync_FlushesStateKeys_ViaMultiplexerScan()
+    public async Task DeleteAsync_FlushesStateKeys_ViaAnchoredScan()
     {
         var server   = Substitute.For<IServer>();
         var database = Substitute.For<IDatabase>();
@@ -151,13 +172,26 @@ public class RedisPaRuleRepositoryTests
             Arg.Any<CommandFlags>())
             .Returns(new RedisKey[]
             {
-                "development:_global:pa-rules:TX:3:STAR:pchp",
-                "development:_global:pa-rules:TX:3:any:platform"
+                "test:_global:pa-rules:TX:3:STAR:pchp",
+                "test:_global:pa-rules:TX:3:any:platform"
             });
 
         await _sut.DeleteAsync("TX-STAR-REG-001", "TX");
 
         await _inner.Received(1).DeleteAsync("TX-STAR-REG-001", "TX", Arg.Any<CancellationToken>());
+
+        // SCAN pattern is ANCHORED at the guard prefix — no leading wildcard.
+        // Copilot flagged the previous "*pa-rules:…" pattern because it
+        // forced SCAN to traverse the entire keyspace; the anchored form
+        // keeps Redis's trie pruning intact. Keys() is synchronous on IServer.
+        server.Received(1).Keys(
+            Arg.Any<int>(),
+            Arg.Is<RedisValue>(v => v.ToString() == "test:_global:pa-rules:TX:*"),
+            Arg.Any<int>(),
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Any<CommandFlags>());
+
         // SCAN path goes direct to multiplexer — bulk RemoveAsync on
         // ICacheProvider must NOT be called (it would double-prefix).
         await database.Received(1).KeyDeleteAsync(
@@ -167,6 +201,27 @@ public class RedisPaRuleRepositoryTests
             Arg.Any<IReadOnlyCollection<string>>(),
             Arg.Any<CacheScope>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WithoutMultiplexer_SkipsScanGracefully()
+    {
+        // When the cache backend is InMemory / Null, AddChoCaching does not
+        // register IConnectionMultiplexer. RedisPaRuleRepository must still
+        // construct — the SCAN path becomes a debug-logged no-op. Exact-key
+        // invalidation on Upsert/BulkUpsert covers the common write path.
+        var sutWithoutMux = new RedisPaRuleRepository(
+            _inner,
+            _cache,
+            multiplexer: null,
+            _keyGuard,
+            Options.Create(new PriorAuthRuleEngineOptions { RuleSetCacheTtl = Ttl }),
+            Substitute.For<ILogger<RedisPaRuleRepository>>());
+
+        await sutWithoutMux.DeleteAsync("TX-STAR-REG-001", "TX");
+
+        await _inner.Received(1).DeleteAsync("TX-STAR-REG-001", "TX", Arg.Any<CancellationToken>());
+        // No multiplexer → no SCAN, no KeyDelete, no throw.
     }
 
     [Fact]

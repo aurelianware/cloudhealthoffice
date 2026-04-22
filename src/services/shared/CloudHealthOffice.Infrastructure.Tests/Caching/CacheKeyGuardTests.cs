@@ -81,6 +81,45 @@ public class CacheKeyGuardTests
     }
 
     [Fact]
+    public void Build_RejectionMessage_DoesNotEchoRawKey()
+    {
+        // The exception message flows through ExceptionHandlingMiddleware
+        // and into production logs; if it echoed the PHI-containing key,
+        // the guard would leak the exact value it was designed to reject.
+        var guard = MakeGuard("Production", tenantId: "pchp");
+
+        var sensitive = "member:ssn:123-45-6789";
+        var ex = Assert.Throws<ArgumentException>(() => guard.Build(sensitive));
+        Assert.DoesNotContain("123-45-6789", ex.Message);
+        Assert.DoesNotContain(sensitive, ex.Message);
+        Assert.Contains("ssn", ex.Message); // token name is OK — not the value
+    }
+
+    [Fact]
+    public void Build_WhitespaceRejectionMessage_DoesNotEchoRawKey()
+    {
+        var guard = MakeGuard("Production", tenantId: "pchp");
+        var sensitive = "something member-ssn-123-45-6789";
+        var ex = Assert.Throws<ArgumentException>(() => guard.Build(sensitive));
+        Assert.DoesNotContain(sensitive, ex.Message);
+        Assert.DoesNotContain("123-45-6789", ex.Message);
+    }
+
+    [Fact]
+    public void BuildPrefix_TenantScope_UsesAmbientTenant()
+    {
+        var guard = MakeGuard("Production", tenantId: "pchp");
+        Assert.Equal("production:pchp:", guard.BuildPrefix());
+    }
+
+    [Fact]
+    public void BuildPrefix_GlobalScope_UsesGlobalSentinel()
+    {
+        var guard = MakeGuard("Development", tenantId: null);
+        Assert.Equal("development:_global:", guard.BuildPrefix(CacheScope.Global));
+    }
+
+    [Fact]
     public void BuildMany_AppliesGuardToEach()
     {
         var guard = MakeGuard("Production", tenantId: "pchp");

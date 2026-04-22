@@ -110,14 +110,18 @@ public sealed class PriorAuthRuleEngineBuilder
     /// Call AFTER UseCosmosRepository() or UseMongoRepository().
     ///
     /// Requires:
-    ///   • <see cref="ICacheProvider"/>       — for K/V reads, writes,
-    ///     and exact-key invalidation. Registered by the host via
-    ///     <c>AddChoCaching(IConfiguration, IHostEnvironment)</c>.
-    ///   • <see cref="IConnectionMultiplexer"/> — for the state-level
-    ///     <c>SCAN</c> invalidation path on <see cref="RedisPaRuleRepository.DeleteAsync"/>.
-    ///     This is a deliberate exception to the shared abstraction,
-    ///     documented on the class and in
-    ///     <c>docs/architecture/shared-cache.md</c>.
+    ///   • <see cref="ICacheProvider"/> + <see cref="CacheKeyGuard"/> —
+    ///     for K/V reads, writes, and exact-key invalidation. Registered
+    ///     by the host via <c>AddChoCaching(IConfiguration, IHostEnvironment)</c>.
+    ///   • <see cref="IConnectionMultiplexer"/> — OPTIONAL. Used by the
+    ///     state-level <c>SCAN</c> path on
+    ///     <see cref="RedisPaRuleRepository.DeleteAsync"/>. Registered
+    ///     automatically by <c>AddChoCaching</c> when the cache backend
+    ///     resolves to Redis; absent when it resolves to InMemory / Null.
+    ///     When absent, the state-flush degrades to a debug log and
+    ///     InMemory entries rely on TTL. Exact-key invalidation on
+    ///     Upsert / BulkUpsert continues to work via
+    ///     <see cref="ICacheProvider"/>.
     ///
     /// Cache key: pa-rules:{stateCode}:{lob}:{program}:{tenantId}
     /// Default TTL: 15 minutes (PriorAuthRuleEngineOptions.RuleSetCacheTtl)
@@ -137,7 +141,8 @@ public sealed class PriorAuthRuleEngineBuilder
             return new RedisPaRuleRepository(
                 inner,
                 sp.GetRequiredService<ICacheProvider>(),
-                sp.GetRequiredService<IConnectionMultiplexer>(),
+                sp.GetService<IConnectionMultiplexer>(),
+                sp.GetRequiredService<CacheKeyGuard>(),
                 sp.GetRequiredService<IOptions<PriorAuthRuleEngineOptions>>(),
                 sp.GetRequiredService<ILogger<RedisPaRuleRepository>>());
         });

@@ -54,7 +54,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
             }
             catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Corrupted cache entry at {Key} — deleting", key);
+                _logger.LogWarning(ex, "Corrupted cache entry at {Key} — deleting", LogSanitize(key));
                 try { await db.KeyDeleteAsync(key).ConfigureAwait(false); }
                 catch (RedisException) { /* best-effort */ }
                 return null;
@@ -62,7 +62,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis unavailable on GetAsync({Key}) — treating as miss", key);
+            _logger.LogWarning(ex, "Redis unavailable on GetAsync({Key}) — treating as miss", LogSanitize(key));
             return null;
         }
     }
@@ -77,7 +77,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis unavailable on SetAsync({Key}) — entry not cached", key);
+            _logger.LogWarning(ex, "Redis unavailable on SetAsync({Key}) — entry not cached", LogSanitize(key));
         }
     }
 
@@ -90,7 +90,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis unavailable on RemoveAsync({Key}) — stale entry will expire via TTL", key);
+            _logger.LogWarning(ex, "Redis unavailable on RemoveAsync({Key}) — stale entry will expire via TTL", LogSanitize(key));
         }
     }
 
@@ -128,5 +128,21 @@ internal sealed class RedisCacheProvider : ICacheProvider
 
             return fresh;
         }, ct);
+    }
+
+    /// <summary>
+    /// Strips CR/LF/NUL before a cache key enters a log entry. CacheKeyGuard
+    /// already rejects those characters at the entry boundary, but CodeQL
+    /// (and any other taint tracker) cannot see that invariant across the
+    /// Guard → Provider call boundary. Applying defense-in-depth here is
+    /// cheap and silences the cs/log-forging alerts.
+    /// </summary>
+    private static string LogSanitize(string key)
+    {
+        if (string.IsNullOrEmpty(key)) return string.Empty;
+        return key
+            .Replace("\r", string.Empty)
+            .Replace("\n", string.Empty)
+            .Replace("\0", string.Empty);
     }
 }
