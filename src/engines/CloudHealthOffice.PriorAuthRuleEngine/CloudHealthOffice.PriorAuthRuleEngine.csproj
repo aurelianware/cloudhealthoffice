@@ -17,6 +17,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Surface the internal CachedRuleSet serialization wrapper to the
+         tests project so NSubstitute can set up returns on the exact
+         ICacheProvider.GetOrSetAsync<T> instantiation used by
+         RedisPaRuleRepository — generic method match is per-T. -->
+    <InternalsVisibleTo Include="CloudHealthOffice.PriorAuthRuleEngine.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- StackExchange.Redis arrives transitively from CloudHealthOffice.Infrastructure.
          RedisPaRuleRepository still touches IConnectionMultiplexer/IServer directly
          for the state-level SCAN invalidation path — a deliberate exception documented

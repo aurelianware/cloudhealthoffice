@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,7 +56,11 @@ public static class CachingServiceCollectionExtensions
 
         services.AddHttpContextAccessor();
         services.AddMemoryCache();
-        services.AddSingleton<CacheKeyGuard>();
+        // Capture the passed-in IHostEnvironment so callers (tests, or hosts
+        // that build a ServiceCollection without a HostBuilder) don't have
+        // to separately register IHostEnvironment in DI for CacheKeyGuard.
+        services.AddSingleton<CacheKeyGuard>(sp =>
+            new CacheKeyGuard(sp.GetRequiredService<IHttpContextAccessor>(), environment));
         services.AddSingleton<SingleFlightRunner>(_ =>
             new SingleFlightRunner(options.SingleFlightMaxInFlight));
 

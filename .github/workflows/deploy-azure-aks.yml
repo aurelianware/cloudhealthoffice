@@ -68,7 +68,13 @@ jobs:
             echo "::error::vars.ACR_NAME is not set; cannot import base images"
             exit 1
           fi
-          for img in dotnet/sdk:8.0 dotnet/aspnet:8.0; do
+          # sdk:8.0 / aspnet:8.0 back the Debian-based services (the majority).
+          # sdk:8.0-alpine / aspnet:8.0-alpine back CHO.TerminologyService,
+          # whose Dockerfile pins the alpine variant for the smaller runtime
+          # footprint. Importing both pairs unconditionally keeps the
+          # preflight idempotent and covers every service Dockerfile currently
+          # in the matrix without each one needing its own import step.
+          for img in dotnet/sdk:8.0 dotnet/aspnet:8.0 dotnet/sdk:8.0-alpine dotnet/aspnet:8.0-alpine; do
             echo "::group::Importing mcr.microsoft.com/${img} → ${ACR_NAME}.azurecr.io/${img}"
             az acr import \
               --name "$ACR_NAME" \
