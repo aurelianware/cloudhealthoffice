@@ -61,14 +61,31 @@ public class PiiIdentifierDedupeTests
     {
         var encKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var fpKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var encSecrets = new StaticSecretProvider(encKey);
+        var fpSecrets = new StaticSecretProvider(fpKey);
+        var encOptions = new MemberEncryptionOptions
+        {
+            KeySecretPrefix = "enc", CurrentKeyVersion = "v1",
+            AcceptedKeyVersions = new[] { "v1" },
+            LegacyKeySecretName = "enc",
+            EmitLegacyEnvelope = true
+        };
+        var fpOptions = new MemberFingerprintingOptions
+        {
+            KeySecretPrefix = "fp", CurrentKeyVersion = "v1",
+            AcceptedKeyVersions = new[] { "v1" },
+            LegacyKeySecretName = "fp"
+        };
         var enc = new KeyVaultIdentifierEncryptor(
-            new StaticSecretProvider(encKey),
+            new RotatingKeyProvider(encSecrets, NullLogger<RotatingKeyProvider>.Instance),
+            encSecrets,
             NullLogger<KeyVaultIdentifierEncryptor>.Instance,
-            "enc");
+            encOptions);
         var fp = new HmacSha256IdentifierFingerprinter(
-            new StaticSecretProvider(fpKey),
+            new RotatingKeyProvider(fpSecrets, NullLogger<RotatingKeyProvider>.Instance),
+            fpSecrets,
             NullLogger<HmacSha256IdentifierFingerprinter>.Instance,
-            "fp");
+            fpOptions);
         return (enc, fp);
     }
 
