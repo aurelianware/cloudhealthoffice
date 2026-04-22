@@ -103,6 +103,27 @@ jobs:
             exit 1
           fi
 
+      - name: Surface failed test names in annotations
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+          ns = {'m': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+          for trx in glob.glob('**/TestResults/**/*.trx', recursive=True) + glob.glob('**/*.trx', recursive=True):
+              try:
+                  tree = ET.parse(trx)
+              except Exception as ex:
+                  print(f'::warning::Could not parse {trx}: {ex}')
+                  continue
+              for res in tree.iter('{http://microsoft.com/schemas/VisualStudio/TeamTest/2010}UnitTestResult'):
+                  if res.get('outcome') == 'Failed':
+                      name = res.get('testName', '?')
+                      msg_el = res.find('.//m:Output/m:ErrorInfo/m:Message', ns)
+                      msg = (msg_el.text or '').strip() if msg_el is not None else '(no message)'
+                      msg = msg.replace('\r', ' ').replace('\n', ' ')[:500]
+                      print(f'::error title=Test failed::{name}: {msg}')
+          PY
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()

@@ -57,6 +57,7 @@ jobs:
           - payment-service
           - provider-verification-service
           - idcard-service
+          - consent-service
         include:
           # provider-verification-service references engine project outside src/services/
           - service: provider-verification-service
