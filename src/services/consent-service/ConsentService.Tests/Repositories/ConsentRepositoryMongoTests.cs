@@ -136,4 +136,94 @@ public class ConsentRepositoryMongoTests
         events.Should().HaveCount(2);
         events.Last().EventType.Should().Be(ConsentEventType.ConsentActivated);
     }
+
+    [Fact]
+    public async Task TransitionStatus_WhenFromStatusMissing_ThrowsArgumentException()
+    {
+        // The tightened repository contract requires every transition
+        // audit event to declare its expected from-status so the Cosmos
+        // and Mongo implementations can enforce a write-side precondition.
+        // The fake mirrors that contract — a null FromStatus is a caller bug.
+        var repo = new InMemoryConsentRepository();
+        var consent = NewActiveConsent();
+        await repo.CreateAsync(consent, new ConsentEvent
+        {
+            TenantId = consent.TenantId, ConsentId = consent.Id, MemberId = consent.MemberId,
+            EventId = Guid.NewGuid().ToString(),
+            EventType = ConsentEventType.ConsentCreated, ActorId = "alice"
+        });
+
+        var invalidAuditEvent = new ConsentEvent
+        {
+            TenantId = consent.TenantId, ConsentId = consent.Id, MemberId = consent.MemberId,
+            EventId = Guid.NewGuid().ToString(),
+            EventType = ConsentEventType.ConsentRevoked,
+            FromStatus = null, ToStatus = ConsentStatus.Revoked, ActorId = "alice"
+        };
+
+        var act = async () => await repo.TransitionStatusAsync(consent, invalidAuditEvent);
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*FromStatus*");
+    }
+
+    [Fact]
+    public async Task TransitionStatus_WhenFromStatusMismatchesPersisted_ThrowsInvalidConsentTransition()
+    {
+        // Simulates the concurrent-writer race at the fake layer: the
+        // caller read the record as Draft, but another writer has since
+        // persisted Active. The caller's TransitionStatusAsync must NOT
+        // silently overwrite — it surfaces the race as an
+        // InvalidConsentTransitionException so the controller can return
+        // 409, matching the Cosmos (IfMatchEtag) and Mongo
+        // (status-filter ReplaceOneAsync) implementations.
+        var repo = new InMemoryConsentRepository();
+        var consent = NewActiveConsent();
+        consent.Status = ConsentStatus.Draft;
+        consent.ExpiresAt = null;
+        await repo.CreateAsync(consent, new ConsentEvent
+        {
+            TenantId = consent.TenantId, ConsentId = consent.Id, MemberId = consent.MemberId,
+            EventId = Guid.NewGuid().ToString(),
+            EventType = ConsentEventType.ConsentCreated, ActorId = "alice"
+        });
+
+        // Concurrent writer lands Draft -> Active first.
+        var winningWrite = new Consent
+        {
+            TenantId = consent.TenantId, Id = consent.Id, MemberId = consent.MemberId,
+            ConsentType = consent.ConsentType,
+            Status = ConsentStatus.Active,
+            GrantedBy = consent.GrantedBy, CreatedAt = consent.CreatedAt
+        };
+        await repo.TransitionStatusAsync(winningWrite, new ConsentEvent
+        {
+            TenantId = consent.TenantId, ConsentId = consent.Id, MemberId = consent.MemberId,
+            EventId = Guid.NewGuid().ToString(),
+            EventType = ConsentEventType.ConsentActivated,
+            FromStatus = ConsentStatus.Draft, ToStatus = ConsentStatus.Active, ActorId = "winner"
+        });
+
+        // Our caller, still holding a stale Draft snapshot, tries to
+        // transition Draft -> Revoked. Persisted status is Active now, so
+        // the from-status precondition fails.
+        consent.Status = ConsentStatus.Revoked;
+        var losingAuditEvent = new ConsentEvent
+        {
+            TenantId = consent.TenantId, ConsentId = consent.Id, MemberId = consent.MemberId,
+            EventId = Guid.NewGuid().ToString(),
+            EventType = ConsentEventType.ConsentRevoked,
+            FromStatus = ConsentStatus.Draft, ToStatus = ConsentStatus.Revoked, ActorId = "loser"
+        };
+
+        var act = async () => await repo.TransitionStatusAsync(consent, losingAuditEvent);
+        await act.Should().ThrowAsync<InvalidConsentTransitionException>()
+            .Where(ex => ex.FromStatus == ConsentStatus.Active &&
+                         ex.ToStatus == ConsentStatus.Revoked);
+
+        // No ConsentRevoked audit row appears — the winner's Activated
+        // event is the only lifecycle event after creation.
+        var events = await repo.ListByConsentAsync(consent.TenantId, consent.Id);
+        events.Should().HaveCount(2);
+        events.Should().NotContain(e => e.EventType == ConsentEventType.ConsentRevoked);
+    }
 }

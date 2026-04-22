@@ -249,4 +249,51 @@ public class ConsentsControllerTests
         Action act = () => http.GetTenantId();
         act.Should().Throw<InvalidOperationException>();
     }
+
+    /// <summary>
+    /// Repository-level concurrent-writer races (Cosmos 412 PreconditionFailed
+    /// from the IfMatchEtag check, Mongo ReplaceOneAsync MatchedCount == 0)
+    /// surface as <see cref="InvalidConsentTransitionException"/>. The
+    /// controller must translate them into 409 ProblemDetails rather than
+    /// letting them escape as 500 — the same shape used for state-machine
+    /// rejections so clients see one uniform conflict surface.
+    /// </summary>
+    [Fact]
+    public async Task Activate_WhenRepoSignalsRace_Returns409()
+    {
+        var repo = new Mock<IConsentRepository>();
+        var events = new Mock<IConsentEventRepository>();
+        var publisher = new RecordingConsentEventPublisher();
+        var encryptor = new ReversibleConsentFieldEncryptor();
+
+        var consent = new Consent
+        {
+            TenantId = "tenant-a",
+            Id = "c-1",
+            MemberId = "M1",
+            ConsentType = ConsentType.GeneralAuthorization,
+            Status = ConsentStatus.Draft,
+            GrantedBy = "alice",
+            CreatedAt = DateTime.UtcNow
+        };
+        repo.Setup(r => r.GetByIdAsync("tenant-a", "M1", "c-1")).ReturnsAsync(consent);
+        repo.Setup(r => r.TransitionStatusAsync(It.IsAny<Consent>(), It.IsAny<ConsentEvent>()))
+            .ThrowsAsync(new InvalidConsentTransitionException(
+                ConsentStatus.Active, ConsentStatus.Active));
+
+        var controller = new ConsentsController(repo.Object, events.Object, encryptor, publisher);
+        var http = new DefaultHttpContext();
+        http.Items["TenantId"] = "tenant-a";
+        http.User = new ClaimsPrincipal(new ClaimsIdentity(
+            new[] { new Claim(ClaimTypes.Name, "alice") }, "test"));
+        controller.ControllerContext = new ControllerContext { HttpContext = http };
+
+        var result = await controller.Activate("M1", "c-1", request: null, CancellationToken.None);
+
+        var conflict = result.Should().BeOfType<ConflictObjectResult>().Subject;
+        conflict.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Extensions["fromStatus"].Should().Be(ConsentStatus.Active.ToString());
+        publisher.Calls.Should().NotContain(c => c.ToStatus == ConsentStatus.Active,
+            "publisher must not emit a status-changed event when the persisted transition never happened");
+    }
 }
