@@ -46,6 +46,13 @@ public static class SecretProviderServiceCollectionExtensions
                 break;
         }
 
+        // Rotation-aware key resolution, shared by every cryptographic
+        // consumer (idcard QR signing, member identifier encryption,
+        // member identifier fingerprinting, …). Registered once here so
+        // all 35 host services pick it up automatically via AddSecretProvider.
+        services.AddSingleton<RotatingKeyProvider>();
+        services.AddHostedService<SecretRefreshService>();
+
         return services;
     }
 }
