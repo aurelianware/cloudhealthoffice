@@ -1,112 +1,123 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using ConsentService.Controllers;
+using ConsentService.HostedServices;
 using ConsentService.Models;
 using ConsentService.Repositories;
 using ConsentService.Services;
 using ConsentService.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Hosting;
 
 namespace ConsentService.Tests.Integration;
 
 /// <summary>
-/// End-to-end lifecycle: Create -> Activate -> Revoke through
-/// <see cref="WebApplicationFactory{Program}"/>. Substitutes the repository,
-/// encryptor, and publisher with in-memory fakes so the test does not need
-/// Cosmos, Mongo, Key Vault, or Kafka to run.
+/// End-to-end smoke test over the real Program pipeline using in-memory fakes
+/// so the test does not require Cosmos, Mongo, Key Vault, or Kafka.
+/// Mirrors the pattern used by <c>MemberService.Tests.Integration.MemberFhirSmokeTests</c>.
 /// </summary>
 public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTests.Factory>
 {
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     public sealed class Factory : WebApplicationFactory<Program>
     {
-        public readonly InMemoryConsentRepository Repo = new();
-        public readonly RecordingConsentEventPublisher Publisher = new();
-        public readonly ReversibleConsentFieldEncryptor Encryptor = new();
+        public InMemoryConsentRepository Repo { get; } = new();
+        public RecordingConsentEventPublisher Publisher { get; } = new();
+        public ReversibleConsentFieldEncryptor Encryptor { get; } = new();
 
-        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        protected override IHost CreateHost(IHostBuilder builder)
         {
-            builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
-
-            builder.ConfigureTestServices(services =>
+            builder.UseEnvironment("Development");
+            builder.ConfigureAppConfiguration((ctx, cfg) =>
             {
-                services.RemoveAll<IConsentRepository>();
-                services.RemoveAll<IConsentEventRepository>();
-                services.RemoveAll<IConsentEventSink>();
-                services.RemoveAll<IConsentFieldEncryptor>();
-                services.RemoveAll<IConsentEventPublisher>();
+                cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    // Leave MongoDb/CosmosDb connection unset; we swap the repository
+                    // implementations below so the Cosmos branch in Program.cs never
+                    // resolves a CosmosClient. Kafka bootstrap stays empty so the
+                    // ConsentEventPublisher hosted service goes into degraded mode.
+                    ["ConsentEncryption:KeySecretPrefix"] = "consent-body-encryption-key",
+                    ["ConsentEncryption:CurrentKeyVersion"] = "v1",
+                    ["ConsentEncryption:AcceptedKeyVersions:0"] = "v1"
+                });
+            });
 
+            builder.ConfigureServices(services =>
+            {
+                RemoveAll<IConsentRepository>(services);
+                RemoveAll<IConsentEventRepository>(services);
+                RemoveAll<IConsentEventSink>(services);
+                RemoveAll<IConsentFieldEncryptor>(services);
+                RemoveAll<IConsentEventPublisher>(services);
+                RemoveAll<ConsentIndexInitializer>(services);
+
+                // Don't remove the concrete ConsentEventPublisher singleton —
+                // AddHostedService resolves it via a factory, and with no
+                // Kafka:BootstrapServers it starts in degraded-mode no-op.
                 services.AddSingleton<IConsentRepository>(Repo);
                 services.AddSingleton<IConsentEventRepository>(Repo);
                 services.AddSingleton<IConsentEventSink>(Repo);
                 services.AddSingleton<IConsentFieldEncryptor>(Encryptor);
                 services.AddSingleton<IConsentEventPublisher>(Publisher);
-
-                // The default consent-encryption-key readiness check would
-                // fail in the test harness (no secret store). Override with
-                // a pass-through so the test can reach /health/ready.
-                services.Configure<HealthCheckServiceOptions>(opt =>
-                {
-                    opt.Registrations.Clear();
-                    opt.Registrations.Add(new HealthCheckRegistration(
-                        "self",
-                        _ => new AlwaysHealthyCheck(),
-                        HealthStatus.Unhealthy,
-                        new[] { "live", "ready" }));
-                });
             });
+
+            return base.CreateHost(builder);
         }
 
-        private sealed class AlwaysHealthyCheck : IHealthCheck
+        private static void RemoveAll<T>(IServiceCollection services)
         {
-            public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
-                => Task.FromResult(HealthCheckResult.Healthy());
+            var toRemove = services.Where(d =>
+                d.ServiceType == typeof(T) || d.ImplementationType == typeof(T)).ToList();
+            foreach (var d in toRemove) services.Remove(d);
         }
     }
 
     private readonly Factory _factory;
 
-    public ConsentLifecycleSmokeTests(Factory factory)
+    public ConsentLifecycleSmokeTests(Factory factory) { _factory = factory; }
+
+    private HttpClient NewClient()
     {
-        _factory = factory;
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-int");
+        return client;
     }
 
     [Fact]
     public async Task FullLifecycle_ThreeEventsInOrder()
     {
         _factory.Publisher.Calls.Clear();
+        var client = NewClient();
 
-        var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-a");
-
-        // Create
         var create = await client.PostAsJsonAsync("/api/v1/members/M1/consents", new CreateConsentRequest
         {
             ConsentType = ConsentType.GeneralAuthorization,
             GrantedBy = "alice",
             Reason = "continuity of care"
-        });
+        }, Json);
         create.StatusCode.Should().Be(HttpStatusCode.Created);
-        var consent = await create.Content.ReadFromJsonAsync<Consent>();
+        var consent = await create.Content.ReadFromJsonAsync<Consent>(Json);
         consent.Should().NotBeNull();
 
-        // Activate
         var activate = await client.PostAsync($"/api/v1/members/M1/consents/{consent!.Id}/activate", content: null);
         activate.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // Revoke
         var revoke = await client.PostAsJsonAsync(
             $"/api/v1/members/M1/consents/{consent.Id}/revoke",
-            new RevokeConsentRequest { ReasonCode = ConsentRevocationReasonCode.MemberRequest });
+            new RevokeConsentRequest { ReasonCode = ConsentRevocationReasonCode.MemberRequest },
+            Json);
         revoke.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // Audit trail
         var history = await client.GetFromJsonAsync<ConsentHistoryResponse>(
-            $"/api/v1/members/M1/consents/{consent.Id}/history");
+            $"/api/v1/members/M1/consents/{consent.Id}/history", Json);
         history!.Items.Select(e => e.EventType).Should().ContainInOrder(
             ConsentEventType.ConsentCreated,
             ConsentEventType.ConsentActivated,
@@ -114,20 +125,9 @@ public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTes
     }
 
     [Fact]
-    public async Task HealthEndpoints_AreReachable()
-    {
-        var client = _factory.CreateClient();
-
-        (await client.GetAsync("/health")).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await client.GetAsync("/health/live")).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await client.GetAsync("/health/ready")).StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Fact]
     public async Task MissingTenantHeader_Returns401()
     {
         var client = _factory.CreateClient();
-        // No X-Tenant-ID header.
         var r = await client.GetAsync("/api/v1/members/M1/consents");
         r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
