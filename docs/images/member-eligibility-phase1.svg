@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" font-family="Segoe UI, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="cyanGrad3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1400" height="900" fill="#000000"/>
+
+  <text x="700" y="38" font-size="22" font-weight="700" fill="#ffffff" text-anchor="middle" filter="url(#glow)">MEMBER + ELIGIBILITY</text>
+  <text x="700" y="60" font-size="12" fill="#00ffff" text-anchor="middle" letter-spacing="3">PHASE 1 SHIPPED · PHASE 2 ROADMAP</text>
+  <line x1="530" y1="72" x2="870" y2="72" stroke="#00ffff" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- CENTER HUB -->
+  <g transform="translate(700,460)">
+    <circle cx="0" cy="0" r="118" fill="rgba(8,8,8,0.9)" stroke="#00ffff" stroke-width="2"/>
+    <circle cx="0" cy="0" r="108" fill="none" stroke="rgba(0,255,255,0.2)" stroke-width="0.5"/>
+    <text x="0" y="-22" text-anchor="middle" font-size="18" font-weight="700" fill="#00ffff">member-service</text>
+    <text x="0" y="0" text-anchor="middle" font-size="11" fill="#b0b0b0">Identifiers · Demographics</text>
+    <text x="0" y="15" text-anchor="middle" font-size="11" fill="#b0b0b0">Temporal coverage</text>
+    <text x="0" y="38" text-anchor="middle" font-size="10" font-style="italic" fill="#ffaa00">MBI · SSN · ext-ids encrypted</text>
+    <text x="0" y="52" text-anchor="middle" font-size="10" font-style="italic" fill="#ffaa00">0x02 envelope · v1+v2 accepted</text>
+  </g>
+
+  <!-- ============ CAPABILITY BOXES ============ -->
+  <!-- 5.1 Member Foundation -->
+  <g>
+    <rect x="280" y="160" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="300" cy="180" r="11" fill="#00ff88"/>
+    <text x="300" y="184" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.1</text>
+    <text x="320" y="184" font-size="13" font-weight="700" fill="#00ff88">Member Foundation</text>
+    <text x="295" y="208" font-size="10" fill="#b0b0b0">• Cosmos + Mongo dual-persist</text>
+    <text x="295" y="222" font-size="10" fill="#b0b0b0">• PII-encrypted identifier lookup</text>
+    <text x="295" y="236" font-size="10" fill="#b0b0b0">• Fingerprint-based dedup</text>
+    <text x="485" y="245" text-anchor="end" font-size="9" fill="#808080" font-style="italic">PR #650</text>
+  </g>
+
+  <!-- 5.2 Temporal -->
+  <g>
+    <rect x="520" y="130" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="540" cy="150" r="11" fill="#00ff88"/>
+    <text x="540" y="154" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.2</text>
+    <text x="560" y="154" font-size="13" font-weight="700" fill="#00ff88">Temporal Eligibility</text>
+    <text x="535" y="178" font-size="10" fill="#b0b0b0">• As-of date slices</text>
+    <text x="535" y="192" font-size="10" fill="#b0b0b0">• Batch via IMessageBus</text>
+    <text x="535" y="206" font-size="10" fill="#b0b0b0">• 271 response feed</text>
+    <text x="725" y="215" text-anchor="end" font-size="9" fill="#808080" font-style="italic">PR #651</text>
+  </g>
+
+  <!-- 5.3 Benefits -->
+  <g>
+    <rect x="760" y="130" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="780" cy="150" r="11" fill="#00ff88"/>
+    <text x="780" y="154" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.3</text>
+    <text x="800" y="154" font-size="13" font-weight="700" fill="#00ff88">Benefits Viewer</text>
+    <text x="775" y="178" font-size="10" fill="#b0b0b0">• Plan + network + accum</text>
+    <text x="775" y="192" font-size="10" fill="#b0b0b0">• As-of service-date resolution</text>
+    <text x="775" y="206" font-size="10" fill="#b0b0b0">• Blazor portal integration</text>
+    <text x="965" y="215" text-anchor="end" font-size="9" fill="#808080" font-style="italic">PR #652</text>
+  </g>
+
+  <!-- 5.4 Accumulators -->
+  <g>
+    <rect x="1000" y="160" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="1020" cy="180" r="11" fill="#00ff88"/>
+    <text x="1020" y="184" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.4</text>
+    <text x="1040" y="184" font-size="13" font-weight="700" fill="#00ff88">Accumulators</text>
+    <text x="1015" y="208" font-size="10" fill="#b0b0b0">• RedisAccum (HINCRBYFLOAT)</text>
+    <text x="1015" y="222" font-size="10" fill="#b0b0b0">• Runtime calc from claims</text>
+    <text x="1015" y="236" font-size="10" fill="#b0b0b0">• Family + individual rollups</text>
+    <text x="1205" y="245" text-anchor="end" font-size="9" fill="#ffaa00" font-style="italic">A.7.2 exception</text>
+  </g>
+
+  <!-- 5.5 Family -->
+  <g>
+    <rect x="120" y="280" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="140" cy="300" r="11" fill="#00ff88"/>
+    <text x="140" y="304" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.5</text>
+    <text x="160" y="304" font-size="13" font-weight="700" fill="#00ff88">Family Relationships</text>
+    <text x="135" y="328" font-size="10" fill="#b0b0b0">• Subscriber + dependent graph</text>
+    <text x="135" y="342" font-size="10" fill="#b0b0b0">• Cross-member operations</text>
+    <text x="135" y="356" font-size="10" fill="#b0b0b0">• Family accum targeting</text>
+  </g>
+
+  <!-- 5.6 Enrollment events -->
+  <g>
+    <rect x="1060" y="280" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="1080" cy="300" r="11" fill="#00ff88"/>
+    <text x="1080" y="304" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.6</text>
+    <text x="1100" y="304" font-size="13" font-weight="700" fill="#00ff88">Enrollment Events</text>
+    <text x="1075" y="328" font-size="10" fill="#b0b0b0">• Append-only event stream</text>
+    <text x="1075" y="342" font-size="10" fill="#b0b0b0">• 834 + portal + admin</text>
+    <text x="1075" y="356" font-size="10" fill="#b0b0b0">• Audit source of truth</text>
+  </g>
+
+  <!-- 5.7 PCP -->
+  <g>
+    <rect x="120" y="420" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="140" cy="440" r="11" fill="#00ff88"/>
+    <text x="140" y="444" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.7</text>
+    <text x="160" y="444" font-size="13" font-weight="700" fill="#00ff88">PCP Assignment</text>
+    <text x="135" y="468" font-size="10" fill="#b0b0b0">• Auto-assign rules per LOB</text>
+    <text x="135" y="482" font-size="10" fill="#b0b0b0">• Provider network validation</text>
+    <text x="135" y="496" font-size="10" fill="#b0b0b0">• Member change request flow</text>
+    <text x="325" y="505" text-anchor="end" font-size="9" fill="#808080" font-style="italic">PR #656</text>
+  </g>
+
+  <!-- 5.9 Alerts -->
+  <g>
+    <rect x="1060" y="420" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="1080" cy="440" r="11" fill="#00ff88"/>
+    <text x="1080" y="444" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.9</text>
+    <text x="1100" y="444" font-size="13" font-weight="700" fill="#00ff88">Alerts · Notes</text>
+    <text x="1075" y="468" font-size="10" fill="#b0b0b0">• Severity-ranked alerts</text>
+    <text x="1075" y="482" font-size="10" fill="#b0b0b0">• Threaded CSR notes</text>
+    <text x="1075" y="496" font-size="10" fill="#b0b0b0">• Dismissal + escalation audit</text>
+    <text x="1265" y="505" text-anchor="end" font-size="9" fill="#808080" font-style="italic">PR #657</text>
+  </g>
+
+  <!-- 5.10 Documents -->
+  <g>
+    <rect x="120" y="560" width="220" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="140" cy="580" r="11" fill="#00ff88"/>
+    <text x="140" y="584" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.10</text>
+    <text x="160" y="584" font-size="13" font-weight="700" fill="#00ff88">Member Documents</text>
+    <text x="135" y="608" font-size="10" fill="#b0b0b0">• Blob + presigned URLs</text>
+    <text x="135" y="622" font-size="10" fill="#b0b0b0">• Two-step upload + confirm</text>
+    <text x="135" y="636" font-size="10" fill="#b0b0b0">• Tag + category classification</text>
+    <text x="325" y="645" text-anchor="end" font-size="9" fill="#808080" font-style="italic">PR #662</text>
+  </g>
+
+  <!-- 5.11 ID Cards -->
+  <g>
+    <rect x="1060" y="560" width="220" height="92" rx="8" fill="rgba(255,170,0,0.06)" stroke="rgba(255,170,0,0.6)" stroke-width="1.5"/>
+    <circle cx="1080" cy="580" r="11" fill="#ffaa00"/>
+    <text x="1080" y="584" text-anchor="middle" font-size="10" font-weight="700" fill="#000000">5.11</text>
+    <text x="1100" y="584" font-size="13" font-weight="700" fill="#ffaa00">ID Cards + QR</text>
+    <text x="1075" y="608" font-size="10" fill="#b0b0b0">• PNG + PDF generation</text>
+    <text x="1075" y="622" font-size="10" fill="#b0b0b0">• QR · RotatingKeyProvider</text>
+    <text x="1075" y="636" font-size="10" fill="#b0b0b0">• Reprint · QNXT mirror</text>
+    <text x="1265" y="645" text-anchor="end" font-size="9" fill="#808080" font-style="italic">PR #663</text>
+  </g>
+
+  <!-- 5.12-5.16 Linkage tabs (bottom center) -->
+  <g>
+    <rect x="540" y="720" width="320" height="92" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.5)" stroke-width="1.5"/>
+    <circle cx="560" cy="740" r="11" fill="#00ff88"/>
+    <text x="560" y="744" text-anchor="middle" font-size="9" font-weight="700" fill="#000000">5.12–.16</text>
+    <text x="592" y="744" font-size="13" font-weight="700" fill="#00ff88">Member Linkage Tabs</text>
+    <text x="555" y="768" font-size="10" fill="#b0b0b0">• Authorization · Claim · Coverage · COB · Encounter history</text>
+    <text x="555" y="782" font-size="10" fill="#b0b0b0">• Cross-service reads, Blazor-native</text>
+    <text x="555" y="796" font-size="10" fill="#b0b0b0">• CSR 360° member view</text>
+  </g>
+
+  <!-- Connector lines from hub to capabilities (subtle) -->
+  <g stroke="rgba(0,255,255,0.2)" stroke-width="1" fill="none">
+    <path d="M 610 390 L 500 220"/>
+    <path d="M 650 350 L 650 222"/>
+    <path d="M 750 350 L 750 222"/>
+    <path d="M 790 390 L 1000 220"/>
+    <path d="M 590 430 L 340 325"/>
+    <path d="M 810 430 L 1060 325"/>
+    <path d="M 580 470 L 340 465"/>
+    <path d="M 820 470 L 1060 465"/>
+    <path d="M 590 530 L 340 605"/>
+    <path d="M 810 530 L 1060 605"/>
+    <path d="M 700 578 L 700 720"/>
+  </g>
+
+  <!-- PHASE 2 ROADMAP -->
+  <rect x="50" y="830" width="1300" height="58" rx="8" fill="rgba(255,170,0,0.04)" stroke="rgba(255,170,0,0.3)" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="68" y="853" font-size="10" font-weight="700" fill="#ffaa00" letter-spacing="2">PHASE 2 ROADMAP · UNBLOCKED BY SHARED INFRASTRUCTURE</text>
+
+  <g transform="translate(150,873)">
+    <rect x="-65" y="-11" width="130" height="22" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-dasharray="3,2"/>
+    <text x="0" y="3" text-anchor="middle" font-size="10" fill="#00ffff">5.8 · Personal Rep</text>
+  </g>
+  <g transform="translate(325,873)">
+    <rect x="-85" y="-11" width="170" height="22" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-dasharray="3,2"/>
+    <text x="0" y="3" text-anchor="middle" font-size="10" fill="#00ffff">5.17 · Value-Based Benefits</text>
+  </g>
+  <g transform="translate(510,873)">
+    <rect x="-80" y="-11" width="160" height="22" rx="4" fill="rgba(255,170,0,0.1)" stroke="rgba(255,170,0,0.6)"/>
+    <text x="0" y="3" text-anchor="middle" font-size="10" font-weight="700" fill="#ffaa00">5.18 · HIPAA Consent ★ next</text>
+  </g>
+  <g transform="translate(680,873)">
+    <rect x="-75" y="-11" width="150" height="22" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-dasharray="3,2"/>
+    <text x="0" y="3" text-anchor="middle" font-size="10" fill="#00ffff">5.22 · Call Tracking</text>
+  </g>
+  <g transform="translate(835,873)">
+    <rect x="-65" y="-11" width="130" height="22" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-dasharray="3,2"/>
+    <text x="0" y="3" text-anchor="middle" font-size="10" fill="#00ffff">5.23 · Appeals</text>
+  </g>
+  <text x="1336" y="877" text-anchor="end" font-size="9" fill="#808080" font-style="italic">all consume IMessageBus · ICacheProvider · RotatingKeyProvider · OTel</text>
+</svg>
