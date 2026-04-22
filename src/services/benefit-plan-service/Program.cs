@@ -12,6 +12,7 @@ using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.OperatingMode;
@@ -52,10 +53,20 @@ else
 }
 
 // ── Redis — shared across all engines ────────────────────────────────────────
+// Two registrations coexist on the same physical Redis instance:
+//   1. IConnectionMultiplexer — required by RedisAccumulatorService
+//      (atomic HINCRBYFLOAT on hashes) and by the SCAN-based state flush
+//      inside RedisPaRuleRepository. Both are deliberate exceptions to
+//      ICacheProvider — see docs/architecture/shared-cache.md.
+//   2. ICacheProvider (via AddChoCaching) — tenant-config + rule-set K/V
+//      consumers. AddChoCaching reuses the multiplexer above rather than
+//      opening a second connection.
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(
         builder.Configuration["Redis:ConnectionString"]
         ?? throw new InvalidOperationException("Redis:ConnectionString is required.")));
+
+builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 
 // ── Benefit Engine ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
@@ -101,11 +112,11 @@ builder.Services.AddScoped<IEnrollmentDecisionGate, PassthroughEnrollmentGate>()
 
 if (useMongo)
     builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseMongoRepositories().WithRedisTenantConfigCache()
+        .UseMongoRepositories().WithTenantConfigCache()
         .WithTexasSource().WithCaqhSource();
 else
     builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseCosmosRepositories().WithRedisTenantConfigCache()
+        .UseCosmosRepositories().WithTenantConfigCache()
         .WithTexasSource().WithCaqhSource();
 
 // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
@@ -121,11 +132,11 @@ else
 //   }
 if (useMongo)
     builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseMongoRepository().WithRedisRuleCache()
+        .UseMongoRepository().WithRuleCache()
         .WithPlatformRules().SeedOnStartup();
 else
     builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseCosmosRepository().WithRedisRuleCache()
+        .UseCosmosRepository().WithRuleCache()
         .WithPlatformRules().SeedOnStartup();
 
 // ── Operating Mode Provider ───────────────────────────────────────────────────

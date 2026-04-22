@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -58,6 +59,18 @@ public static class CachingServiceCollectionExtensions
         services.AddSingleton<SingleFlightRunner>(_ =>
             new SingleFlightRunner(options.SingleFlightMaxInFlight));
 
+        // On the Redis backend path, ensure IConnectionMultiplexer is
+        // registered in DI so callers that hold a deliberate direct
+        // dependency (RedisAccumulatorService, RedisPaRuleRepository's
+        // SCAN flush) can inject it without the host having to open a
+        // second connection. TryAdd so hosts that pre-register their own
+        // multiplexer (benefit-plan-service) win.
+        if (decision.Backend == CachingBackend.Redis)
+        {
+            services.TryAddSingleton<IConnectionMultiplexer>(_ =>
+                ConnectionMultiplexer.Connect(options.RedisConnectionString!));
+        }
+
         services.AddSingleton<ICacheProvider>(sp =>
         {
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
@@ -110,15 +123,11 @@ public static class CachingServiceCollectionExtensions
         CachingOptions options,
         ILoggerFactory loggerFactory)
     {
-        // Resolve an already-registered IConnectionMultiplexer if one exists
-        // (the host service may have its own for RedisAccumulatorService /
-        // RedisPaRuleRepository). Otherwise spin up a new one against the
-        // same connection string.
-        var multiplexer = sp.GetService<IConnectionMultiplexer>()
-            ?? ConnectionMultiplexer.Connect(options.RedisConnectionString!);
-
+        // The multiplexer is already in DI (via TryAddSingleton above or a
+        // host pre-registration). Resolve it so every Redis touchpoint in
+        // the process shares one connection.
         return new RedisCacheProvider(
-            multiplexer,
+            sp.GetRequiredService<IConnectionMultiplexer>(),
             sp.GetRequiredService<SingleFlightRunner>(),
             loggerFactory.CreateLogger<RedisCacheProvider>());
     }
