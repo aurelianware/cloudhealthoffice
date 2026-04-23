@@ -255,4 +255,59 @@ public sealed class AppealRepositoryMongo : IAppealRepository
         await _events.AppendAsync(auditEvent, ct);
         return updated;
     }
+
+    public async Task<AppealNoteLookup?> GetNoteByIdAsync(string tenantId, string noteId, CancellationToken ct = default)
+    {
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
+                   & Builders<Appeal>.Filter.ElemMatch(a => a.Notes, n => n.NoteId == noteId);
+
+        var appeal = await _appeals.Find(filter).FirstOrDefaultAsync(ct);
+        if (appeal is null) return null;
+
+        var note = appeal.Notes.FirstOrDefault(n => n.NoteId == noteId);
+        if (note is null) return null;
+
+        return new AppealNoteLookup
+        {
+            AppealId = appeal.Id,
+            MemberId = appeal.MemberId,
+            NoteId = note.NoteId,
+            CreatedBy = note.CreatedBy,
+            NoteText = note.NoteText,
+            IsInternal = note.IsInternal,
+            CreatedAt = note.CreatedAt
+        };
+    }
+
+    public async Task<AppealAttachmentLookup?> GetAttachmentByIdAsync(string tenantId, string attachmentId, CancellationToken ct = default)
+    {
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
+                   & Builders<Appeal>.Filter.ElemMatch(a => a.Attachments, a => a.AttachmentId == attachmentId);
+
+        var appeal = await _appeals.Find(filter).FirstOrDefaultAsync(ct);
+        if (appeal is null) return null;
+
+        var att = appeal.Attachments.FirstOrDefault(a => a.AttachmentId == attachmentId);
+        if (att is null) return null;
+
+        return new AppealAttachmentLookup
+        {
+            AppealId = appeal.Id,
+            MemberId = appeal.MemberId,
+            AttachmentId = att.AttachmentId,
+            ControlNumber = att.ControlNumber,
+            AttachmentTypeCode = att.AttachmentTypeCode,
+            AttachmentTypeDescription = att.AttachmentTypeDescription,
+            TransmissionCode = att.TransmissionCode,
+            FileName = att.FileName,
+            BlobUrl = att.BlobUrl,
+            ContentType = att.ContentType,
+            FileSizeBytes = att.FileSizeBytes,
+            UploadedAt = att.UploadedAt,
+            Description = att.Description,
+            Status = att.Status,
+            SentDate = att.SentDate,
+            AcknowledgmentReceived = att.AcknowledgmentReceived
+        };
+    }
 }

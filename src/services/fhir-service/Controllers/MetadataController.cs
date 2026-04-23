@@ -1,3 +1,4 @@
+using FhirService.Services;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
 
@@ -138,15 +139,6 @@ public class MetadataController : FhirControllerBase
                         // CodeSystem, ValueSet, and OperationDefinition —
                         // advertise them here so clients can discover them
                         // programmatically.
-                        //
-                        // Task / Communication / DocumentReference / ClaimResponse
-                        // profiles and the cho-appeal-submit operation are NOT
-                        // advertised in this PR: runtime read/search and the
-                        // operation implementation land in PR 2. Advertising
-                        // unimplemented interactions would be a false
-                        // conformance claim. The profiles remain discoverable
-                        // via `GET /fhir/r4/StructureDefinition` and the
-                        // operation via `GET /fhir/r4/OperationDefinition`.
                         BuildResource("StructureDefinition",
                         [
                             ("_id", SearchParamType.Token),
@@ -163,6 +155,54 @@ public class MetadataController : FhirControllerBase
                         [
                             ("_id", SearchParamType.Token),
                         ]),
+                        // ── Appeal projections (PR 3) ─────────────────────
+                        // PR 3 adds runtime read + search for the four
+                        // appeal-derived FHIR resources, backed by
+                        // appeals-service over HTTP via HttpFhirAppealAdapter
+                        // (the first IFhirDataAdapter implementation against
+                        // a real backing service).
+                        BuildResource("Task",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("_lastUpdated", SearchParamType.Date),
+                            ("patient",      SearchParamType.Reference),
+                            // TODO: implement authored-on filter in TaskController.Search
+                            // ("authored-on", SearchParamType.Date),
+                            ("status",       SearchParamType.Token),
+                            ("focus",        SearchParamType.Reference),
+                            ("owner",        SearchParamType.Reference)
+                        ],
+                        supportedProfiles: [FhirAppealMapper.TaskProfileUrl]),
+                        BuildResource("Communication",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("_lastUpdated", SearchParamType.Date),
+                            ("patient",      SearchParamType.Reference),
+                            // TODO: implement sent filter in CommunicationController.Search
+                            // ("sent", SearchParamType.Date),
+                            ("about",        SearchParamType.Reference)
+                        ],
+                        supportedProfiles: [FhirAppealMapper.CommunicationProfileUrl]),
+                        BuildResource("DocumentReference",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("_lastUpdated", SearchParamType.Date),
+                            ("patient",      SearchParamType.Reference),
+                            // TODO: implement type filter in DocumentReferenceController.Search
+                            // ("type", SearchParamType.Token),
+                            ("related",      SearchParamType.Reference)
+                        ],
+                        supportedProfiles: [FhirAppealMapper.DocumentReferenceProfileUrl]),
+                        BuildResource("ClaimResponse",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("_lastUpdated", SearchParamType.Date),
+                            ("patient",      SearchParamType.Reference),
+                            // TODO: implement created filter in ClaimResponseController.Search
+                            // ("created", SearchParamType.Date),
+                            ("request",      SearchParamType.Reference)
+                        ],
+                        supportedProfiles: [FhirAppealMapper.ClaimResponseProfileUrl]),
                     ],
                     Operation =
                     [
@@ -170,6 +210,11 @@ public class MetadataController : FhirControllerBase
                         {
                             Name = "export",
                             Definition = "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export",
+                        },
+                        new CapabilityStatement.OperationComponent
+                        {
+                            Name = AppealSubmitController.OperationName,
+                            Definition = "http://fhir.cloudhealthoffice.com/OperationDefinition/cho-appeal-submit",
                         },
                     ]
                 }

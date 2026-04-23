@@ -128,6 +128,40 @@ builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataP
 builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecker>();
 builder.Services.AddSingleton<IChoFhirArtifactRegistry, ChoFhirArtifactRegistry>();
 
+// ── Appeals FHIR adapter (PR 3) ───────────────────────────────────────────────
+// FhirAppealMapper is stateless and pure. The adapter selection (HTTP
+// vs mock) is driven by configuration: Appeals:UseMockAdapter=true
+// (default in dev environments without an appeals-service instance)
+// uses the in-memory seed data. Production wires the HTTP adapter.
+builder.Services.AddSingleton<FhirAppealMapper>();
+builder.Services.AddScoped<ICorrelationIdAccessor, CorrelationIdAccessor>();
+builder.Services.AddTransient<TenantHeaderPropagationHandler>();
+builder.Services.AddTransient<CorrelationIdPropagationHandler>();
+
+var useMockAppealAdapter = builder.Configuration.GetValue<bool>(
+    "Appeals:UseMockAdapter",
+    defaultValue: builder.Environment.IsDevelopment());
+
+if (useMockAppealAdapter)
+{
+    builder.Services.AddSingleton<IFhirAppealAdapter, MockFhirAppealAdapter>();
+}
+else
+{
+    builder.Services.AddScoped<IFhirAppealAdapter, HttpFhirAppealAdapter>();
+    builder.Services
+        .AddHttpClient(HttpFhirAppealAdapter.HttpClientName, client =>
+        {
+            var baseUrl = builder.Configuration["Services:AppealsServiceUrl"]
+                ?? "http://appeals-service.cloudhealthoffice/";
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        })
+        .AddHttpMessageHandler<TenantHeaderPropagationHandler>()
+        .AddHttpMessageHandler<CorrelationIdPropagationHandler>();
+}
+
 // ── Da Vinci PAS ──────────────────────────────────────────────────────────────
 // PasAutoAdjudicator now receives IEnrollmentDecisionGate (Rule 0)
 // and IPriorAuthRuleEngine (Rule 5) via constructor injection.
