@@ -485,7 +485,7 @@ First pilot deployments in motion. We have chosen not to fabricate a customer ro
 
 ### Shipped as the Layer 2 Reference Implementation
 
-- **PR #677** — Four CHO-authored FHIR appeal profiles published under `http://fhir.cloudhealthoffice.com/`
+- **PR #677** — Four Cloud Health Office-authored FHIR appeal profiles published under `http://fhir.cloudhealthoffice.com/`
 - **PR #678** — `appeals-service` modernized with bespoke domain model, state machine, audit trail, field-level PHI encryption, and Kafka event publisher
 - **PR #680** — `fhir-service` exposes appeals via the four FHIR resources plus the `$cho-appeal-submit` operation, using the `IFhirAppealAdapter` pattern
 - **PR #681** — X12 275 Kafka consumer in `appeals-service`, closing the production ingress chain

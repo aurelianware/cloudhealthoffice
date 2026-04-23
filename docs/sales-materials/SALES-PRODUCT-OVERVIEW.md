@@ -35,7 +35,7 @@ Cloud Health Office is a source-available, cloud-native platform for healthcare 
 | Layer | Scope                                    | Today                                                                 |
 | ----- | ---------------------------------------- | --------------------------------------------------------------------- |
 | 1     | CMS-0057-F compliance surface            | Production-ready; Helm-deployable; pilot-validated                    |
-| 2     | Progressive modernization (per domain)   | Appeals shipped (PRs #677-#681); capitation, claims, others in flight |
+| 2     | Progressive modernization (per domain)   | Appeals shipped (PRs #677, #678, #680, #681); capitation, claims, others in flight |
 | 3     | Full cloud-native CAPS platform          | Architecturally complete; test-coverage hardening on some services; no production reference customer yet |
 
 See [POSITIONING.md](../POSITIONING.md) for the full per-layer disclosure including specific gaps we are closing deliberately.

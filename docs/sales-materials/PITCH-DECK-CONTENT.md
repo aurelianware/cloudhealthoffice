@@ -136,7 +136,7 @@
 | X12 ↔ FHIR R4 Transformation | ✅ 45 Tests Passing |
 | Da Vinci IG Conformance | ✅ PDex, PAS, CRD, DTR |
 
-*Production-ready as Layer 1 CMS-0057-F surface. First pilot deployment in motion; no production reference customer yet. See [POSITIONING.md](../POSITIONING.md) §Layer 3 "honestly is today."*
+*Production-ready as Layer 1 CMS-0057-F surface. First pilot deployment in motion; no production reference customer yet. See [POSITIONING.md](../POSITIONING.md) §Layer 3 ("what it honestly is today").*
 
 ### The Transformation
 
@@ -156,7 +156,7 @@
 
 ### The Appeals Four-PR Sequence
 
-- **PR #677** — Four CHO-authored FHIR appeal profiles published under `http://fhir.cloudhealthoffice.com/`
+- **PR #677** — Four Cloud Health Office-authored FHIR appeal profiles published under `http://fhir.cloudhealthoffice.com/`
 - **PR #678** — `appeals-service` modernized with bespoke domain model, state machine, audit trail, field-level PHI encryption, and Kafka event publisher
 - **PR #680** — `fhir-service` exposes appeals as `Task` / `Communication` / `DocumentReference` / `ClaimResponse` plus the `$cho-appeal-submit` operation, using the `IFhirAppealAdapter` pattern
 - **PR #681** — X12 275 Kafka consumer in `appeals-service`, closing the production ingress chain
