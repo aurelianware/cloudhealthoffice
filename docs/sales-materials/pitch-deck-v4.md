@@ -30,7 +30,7 @@
 - GitHub: github.com/aurelianware/cloudhealthoffice
 
 **Tagline at bottom**
-*Just emerged from the void. Ready for production.*
+*Just emerged from the void. Production-ready for new entrants; Layer 2 pathway for established payers.*
 
 ---
 
@@ -114,7 +114,7 @@
 |--------|---------------------------|-------|
 | Deployment Time | 6-18 months | **< 1 hour** |
 | Implementation Cost | $500K - $2M | **$6K - $60K/year** |
-| Compliance Readiness | Uncertain | **100% Guaranteed** |
+| Compliance Readiness | Uncertain | **100% CMS-0057-F capability coverage — pilot-validated with first partners** |
 | Source Code Access | None (vendor lock-in) | **Full (BSL 1.1)** |
 | Ongoing Maintenance | $150K+/year | **$0 (included)** |
 
@@ -470,45 +470,27 @@ npm run generate -- interactive --output my-config.json --generate
 
 ---
 
-## Slide 11: Customer Success Stories (Placeholder)
+## Slide 11: Beta Partners and Proven Architecture
 
 ### Visual Elements
-- Customer logo wall
-- Before/After metrics visualization
+- Shipped-work timeline showing the four-PR appeals sequence
+- Architectural schematic: X12 275 → Kafka → appeals-service → FHIR Task/Communication/DocumentReference/ClaimResponse
 
 ### Headline
-**Trusted by Forward-Thinking Health Plans**
+**Beta Partners and Proven Architecture**
 
-### Beta Customer Testimonials (Coming Soon)
+### Where We Are
 
-**Placeholder for Beta Launch**:
+First pilot deployments in motion. We have chosen not to fabricate a customer roster; instead we lead with the architectural proof points that matter to an evaluator.
 
-*"We're currently onboarding our first 10 Beta customers. Check back in 60 days for success stories."*
+### Shipped as the Layer 2 Reference Implementation
 
-### Expected Results (Based on Pilot Testing)
+- **PR #677** — Four Cloud Health Office-authored FHIR appeal profiles published under `http://fhir.cloudhealthoffice.com/`
+- **PR #678** — `appeals-service` modernized with bespoke domain model, state machine, audit trail, field-level PHI encryption, and Kafka event publisher
+- **PR #680** — `fhir-service` exposes appeals via the four FHIR resources plus the `$cho-appeal-submit` operation, using the `IFhirAppealAdapter` pattern
+- **PR #681** — X12 275 Kafka consumer in `appeals-service`, closing the production ingress chain
 
-| Metric | Target | Typical Outcome |
-|--------|--------|-----------------|
-| **Time to Go-Live** | < 1 week | 3-5 days |
-| **Implementation Cost** | < $10K | $5K-$8K (mostly internal time) |
-| **Transaction Success Rate** | > 95% | 97-99% |
-| **Provider Satisfaction** | +20 NPS points | +25 NPS points |
-| **Support Ticket Volume** | -50% | -60% (self-service portal) |
-
-### Anonymized Case Study Preview
-
-**Regional TPA (300K members managed)**:
-
-- **Challenge**: Manual EDI processing, 20+ clearinghouse connections, CMS deadline looming
-- **Solution**: Cloud Health Office Professional tier
-- **Results**:
-  - Deployed in **4 days** (vs. 12-month vendor estimate)
-  - **$180K annual savings** (vs. enterprise vendor quote)
-  - **99.8% transaction success rate**
-  - **80% reduction in support calls** (ValueAdds277 feature)
-  - **100% CMS-0057-F compliant** (passed audit)
-
-*Full case study available after Beta period.*
+This is the precedent that every subsequent Layer 2 domain follows (capitation, claims, and beyond). For the honest state of each layer and the gaps we are closing deliberately, see [POSITIONING.md](../POSITIONING.md).
 
 ---
 
