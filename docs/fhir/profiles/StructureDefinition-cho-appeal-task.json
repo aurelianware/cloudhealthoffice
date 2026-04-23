@@ -15,7 +15,7 @@
       "telecom": [{ "system": "url", "value": "https://cloudhealthoffice.com" }]
     }
   ],
-  "description": "Profile on Task representing a post-adjudication claim appeal as a work item. The Task links a Patient (the member) via `for`, the original ClaimResponse being appealed via `focus`, and the submitting provider via `requester`. Reviewer assignment, appeal-level, line-of-business, and regulatory target-response-date are captured via constrained elements and CHO-local extensions. Note on bindings: Task.status narrows the base R4 required binding to a strict 7-code subset of the 11-code base set; FHIR R4 conformance rules explicitly permit narrowing a required binding to a strict subset. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide. Post-adjudication appeals are not covered by any stable external FHIR IG at time of authoring; this profile follows Da Vinci profiling conventions.",
+  "description": "Profile on Task representing a post-adjudication claim appeal as a work item. The Task links a Patient (the member) via `for`, the original denied Claim being appealed via `focus`, and the submitting provider via `requester`. The appeal-outcome ClaimResponse, when it exists, links back to the Task via the `cho-appeal-task-reference` extension on ClaimResponse — Draft, Submitted, InReview, and PendingInfo appeals have no appeal-outcome ClaimResponse yet, so Task.focus points at the original Claim (the thing being acted on). Reviewer assignment, appeal-level, line-of-business, and regulatory target-response-date are captured via constrained elements and CHO-local extensions. Note on bindings: Task.status narrows the base R4 required binding to a strict 7-code subset of the 11-code base set; FHIR R4 conformance rules explicitly permit narrowing a required binding to a strict subset. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide. Post-adjudication appeals are not covered by any stable external FHIR IG at time of authoring; this profile follows Da Vinci profiling conventions.",
   "jurisdiction": [
     { "coding": [{ "system": "urn:iso:std:iso:3166", "code": "US" }] }
   ],
@@ -147,7 +147,7 @@
         "type": [
           {
             "code": "Reference",
-            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/ClaimResponse"]
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/Claim"]
           }
         ]
       },

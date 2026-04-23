@@ -24,9 +24,24 @@ public class SmartScopeEnforcementMiddleware
     private static readonly JsonSerializerOptions FhirOptions =
         new JsonSerializerOptions().ForFhir(typeof(OperationOutcome).Assembly);
 
-    // Resource types served by this FHIR service
+    // Resource types served by this FHIR service. Task, Communication,
+    // DocumentReference, and ClaimResponse are added here in PR 3 as part
+    // of the appeals FHIR surface — each enforces the same
+    // patient|user|system/{Type}.read scope as the existing resources.
+    // See AppealsController.cs in appeals-service for the domain model;
+    // see FhirAppealMapper.cs in this service for the projection.
     private static readonly HashSet<string> KnownResources =
-        ["Patient", "Coverage", "ExplanationOfBenefit", "Encounter", "Claim"];
+    [
+        "Patient",
+        "Coverage",
+        "ExplanationOfBenefit",
+        "Encounter",
+        "Claim",
+        "Task",
+        "Communication",
+        "DocumentReference",
+        "ClaimResponse"
+    ];
 
     private readonly RequestDelegate _next;
     private readonly ILogger<SmartScopeEnforcementMiddleware> _logger;

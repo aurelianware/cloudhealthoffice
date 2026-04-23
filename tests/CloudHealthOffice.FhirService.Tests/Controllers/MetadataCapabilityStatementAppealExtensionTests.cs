@@ -8,11 +8,10 @@ namespace CloudHealthOffice.FhirService.Tests.Controllers;
 /// <summary>
 /// Verifies that the CapabilityStatement advertises the FHIR conformance
 /// resource endpoints (StructureDefinition, CodeSystem, ValueSet,
-/// OperationDefinition) that PR 1 actually implements — and that it does
-/// NOT advertise the Task/Communication/DocumentReference/ClaimResponse
-/// profiles or the cho-appeal-submit operation, since runtime read/search
-/// and the operation itself land in PR 2. Includes a regression guard on
-/// existing resource entries and the bulk-export operation.
+/// OperationDefinition) AND the PR 3 appeal-projection resources
+/// (Task, Communication, DocumentReference, ClaimResponse) plus the
+/// `cho-appeal-submit` operation. The assertions here FLIP from
+/// negative (PR 1 era — "not yet advertised") to positive in PR 3.
 /// </summary>
 public class MetadataCapabilityStatementAppealExtensionTests : IClassFixture<FhirTestWebAppFactory>
 {
@@ -48,37 +47,39 @@ public class MetadataCapabilityStatementAppealExtensionTests : IClassFixture<Fhi
         codes.Should().Contain(CapabilityStatement.TypeRestfulInteraction.SearchType);
     }
 
+    /// <summary>
+    /// PR 3 flip: Task, Communication, DocumentReference, and
+    /// ClaimResponse are now advertised with read + search interactions,
+    /// each declaring its cho-appeal-* supportedProfile.
+    /// </summary>
     [Theory]
-    [InlineData("Task")]
-    [InlineData("Communication")]
-    [InlineData("DocumentReference")]
-    [InlineData("ClaimResponse")]
-    public async Task Appeal_profile_resources_are_NOT_yet_advertised_in_PR_1(string resourceType)
+    [InlineData("Task", "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-task")]
+    [InlineData("Communication", "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-communication")]
+    [InlineData("DocumentReference", "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-document-reference")]
+    [InlineData("ClaimResponse", "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-claim-response")]
+    public async Task Appeal_projection_resources_are_advertised_with_read_search_and_profile(
+        string resourceType, string profileUrl)
     {
-        // Advertising read/search interactions or supportedProfile for these
-        // resource types before the runtime endpoints exist would be a false
-        // conformance claim. The profile JSON is still discoverable via
-        // GET /fhir/r4/StructureDefinition; PR 2 adds the resource entries
-        // once persistence and read/search land.
         var cs = await GetCapabilityStatement();
         var rest = cs.Rest.Should().ContainSingle().Subject;
 
-        rest.Resource.Should().NotContain(
-            r => r.Type.ToString() == resourceType,
-            $"{resourceType} read/search is not implemented in PR 1; " +
-            "advertising it would mislead clients and compliance tooling");
+        var resource = rest.Resource.Should().ContainSingle(
+            r => r.Type.ToString() == resourceType).Subject;
+
+        resource.Interaction.Should().Contain(i =>
+            i.Code == CapabilityStatement.TypeRestfulInteraction.Read);
+        resource.Interaction.Should().Contain(i =>
+            i.Code == CapabilityStatement.TypeRestfulInteraction.SearchType);
+        resource.SupportedProfile.Should().Contain(profileUrl);
     }
 
     [Fact]
-    public async Task cho_appeal_submit_operation_is_NOT_yet_advertised_in_PR_1()
+    public async Task cho_appeal_submit_operation_is_advertised()
     {
-        // Same reasoning as above: the operation is defined (OperationDefinition
-        // JSON served at its canonical URL) but not implemented. Advertising it
-        // in rest[0].operation[] would cause clients to invoke it and receive
-        // 404/405. PR 2 adds the advertisement alongside the implementation.
         var cs = await GetCapabilityStatement();
-
-        cs.Rest[0].Operation.Should().NotContain(o => o.Name == "cho-appeal-submit");
+        cs.Rest[0].Operation.Should().Contain(o =>
+            o.Name == "cho-appeal-submit" &&
+            o.Definition == "http://fhir.cloudhealthoffice.com/OperationDefinition/cho-appeal-submit");
     }
 
     [Fact]

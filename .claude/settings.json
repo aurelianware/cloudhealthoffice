@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(DOTNET_ROOT=/opt/homebrew/Cellar/dotnet@8/8.0.125/libexec /opt/homebrew/Cellar/dotnet@8/8.0.125/libexec/dotnet test src/services/personal-representative-service/PersonalRepresentativeService.Tests/PersonalRepresentativeService.Tests.csproj -c Debug --nologo --no-build --verbosity quiet)",
+      "Bash(DOTNET_ROOT=/opt/homebrew/Cellar/dotnet@8/8.0.125/libexec /opt/homebrew/Cellar/dotnet@8/8.0.125/libexec/dotnet sln /Users/karkusdog/cloudhealthoffice/cloudhealthoffice-main.sln list)",
+      "Bash(DOTNET_ROOT=/opt/homebrew/Cellar/dotnet@8/8.0.125/libexec /opt/homebrew/Cellar/dotnet@8/8.0.125/libexec/dotnet --version)",
+      "Bash(DOTNET_ROOT=/opt/homebrew/Cellar/dotnet@8/8.0.125/libexec /opt/homebrew/Cellar/dotnet@8/8.0.125/libexec/dotnet sln cloudhealthoffice-main.sln list)"
+    ]
+  }
+}

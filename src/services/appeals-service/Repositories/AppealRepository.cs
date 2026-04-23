@@ -371,4 +371,71 @@ public sealed class AppealRepository : IAppealRepository
         }
         throw new InvalidOperationException("AssignReviewerAsync retry budget exhausted.");
     }
+
+    public async Task<AppealNoteLookup?> GetNoteByIdAsync(string tenantId, string noteId, CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND EXISTS(SELECT VALUE n FROM n IN c.notes WHERE n.noteId = @noteId)")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@noteId", noteId);
+
+        using var iterator = _appeals.GetItemQueryIterator<Appeal>(query, requestOptions: new QueryRequestOptions { MaxItemCount = 1 });
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            var appeal = page.FirstOrDefault();
+            if (appeal is null) continue;
+            var note = appeal.Notes.FirstOrDefault(n => n.NoteId == noteId);
+            if (note is null) continue;
+            return new AppealNoteLookup
+            {
+                AppealId = appeal.Id,
+                MemberId = appeal.MemberId,
+                NoteId = note.NoteId,
+                CreatedBy = note.CreatedBy,
+                NoteText = note.NoteText,
+                IsInternal = note.IsInternal,
+                CreatedAt = note.CreatedAt
+            };
+        }
+        return null;
+    }
+
+    public async Task<AppealAttachmentLookup?> GetAttachmentByIdAsync(string tenantId, string attachmentId, CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND EXISTS(SELECT VALUE a FROM a IN c.attachments WHERE a.attachmentId = @attachmentId)")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@attachmentId", attachmentId);
+
+        using var iterator = _appeals.GetItemQueryIterator<Appeal>(query, requestOptions: new QueryRequestOptions { MaxItemCount = 1 });
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            var appeal = page.FirstOrDefault();
+            if (appeal is null) continue;
+            var att = appeal.Attachments.FirstOrDefault(a => a.AttachmentId == attachmentId);
+            if (att is null) continue;
+            return new AppealAttachmentLookup
+            {
+                AppealId = appeal.Id,
+                MemberId = appeal.MemberId,
+                AttachmentId = att.AttachmentId,
+                ControlNumber = att.ControlNumber,
+                AttachmentTypeCode = att.AttachmentTypeCode,
+                AttachmentTypeDescription = att.AttachmentTypeDescription,
+                TransmissionCode = att.TransmissionCode,
+                FileName = att.FileName,
+                BlobUrl = att.BlobUrl,
+                ContentType = att.ContentType,
+                FileSizeBytes = att.FileSizeBytes,
+                UploadedAt = att.UploadedAt,
+                Description = att.Description,
+                Status = att.Status,
+                SentDate = att.SentDate,
+                AcknowledgmentReceived = att.AcknowledgmentReceived
+            };
+        }
+        return null;
+    }
 }
