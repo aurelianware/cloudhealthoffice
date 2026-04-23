@@ -1,401 +1,452 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
-using System.Collections.Generic;
+using MongoDB.Bson.Serialization.Attributes;
+
+// TODO(appeals-followup-pr3): FHIR Task / Communication / DocumentReference /
+// ClaimResponse rendering belongs in fhir-service via the existing
+// IFhirDataAdapter pattern — not here. appeals-service owns the bespoke
+// domain model.
 
 namespace AppealsService.Models;
 
 /// <summary>
-/// Represents a claim appeal request with 275 attachment support
-/// Appeals are submitted when claims are denied and require additional documentation
+/// A claim appeal request with 275 attachment support. Appeals are submitted
+/// when claims are denied and require additional documentation. Appeals are
+/// never hard-deleted; lifecycle transitions (Draft → Submitted → InReview →
+/// PendingInfo → Closed) are captured through
+/// <see cref="Repositories.IAppealRepository.TransitionStatusAsync"/> with a
+/// matching <see cref="AppealEvent"/> appended atomically for audit.
+///
+/// PHI-adjacent free-text fields (<see cref="PatientName"/>,
+/// <see cref="AppealReason"/>, <see cref="DenialReason"/>, note text, decision
+/// reasons, reviewer notes, clinical document summaries, attachment
+/// descriptions) are stored as ciphertext; encryption is applied by the
+/// controller layer before persistence, decryption on read-back. The fields
+/// are always accessed through the entity in ciphertext form — repositories
+/// do not decrypt.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class Appeal
 {
-    /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
-    /// </summary>
+    /// <summary>Multi-tenant partition key.</summary>
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Unique appeal identifier (Cosmos DB document id)
-    /// </summary>
+    /// <summary>Stable appeal id. Cosmos document id and Mongo `_id`.</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>
-    /// Appeal tracking number (user-facing)
-    /// </summary>
+    /// <summary>User-facing tracking number. Unique within tenant.</summary>
     [Required]
     [StringLength(50)]
     public string AppealNumber { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Original claim ID being appealed
-    /// </summary>
     [Required]
     [StringLength(50)]
     public string ClaimId { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Original claim number
-    /// </summary>
     [Required]
     [StringLength(50)]
     public string ClaimNumber { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Member ID
-    /// </summary>
     [Required]
     [StringLength(50)]
     public string MemberId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Patient name
+    /// Patient name. Encrypted at rest via
+    /// <see cref="Services.IAppealFieldEncryptor"/>.
     /// </summary>
     [Required]
     [StringLength(200)]
     public string PatientName { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Provider NPI submitting appeal
-    /// </summary>
     [Required]
     [StringLength(10)]
     public string ProviderNPI { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Provider name
-    /// </summary>
     [StringLength(300)]
     public string? ProviderName { get; set; }
 
-    /// <summary>
-    /// Original denial reason code
-    /// </summary>
+    /// <summary>Original denial reason code from the claim. Not PHI.</summary>
     [StringLength(5)]
     public string? DenialReasonCode { get; set; }
 
     /// <summary>
-    /// Original denial reason description
+    /// Original denial reason description from the claim. Free text —
+    /// encrypted at rest.
     /// </summary>
+    [StringLength(4000)]
     public string? DenialReason { get; set; }
 
-    /// <summary>
-    /// Original denied amount
-    /// </summary>
     public decimal DeniedAmount { get; set; }
 
-    /// <summary>
-    /// Amount being appealed
-    /// </summary>
     public decimal AppealedAmount { get; set; }
 
-    /// <summary>
-    /// Appeal type
-    /// </summary>
     [Required]
     public AppealType AppealType { get; set; } = AppealType.Reconsideration;
 
-    /// <summary>
-    /// Appeal level (first, second, external review)
-    /// </summary>
     [Required]
     public AppealLevel AppealLevel { get; set; } = AppealLevel.FirstLevel;
 
-    /// <summary>
-    /// Line of Business
-    /// </summary>
     [Required]
     public LineOfBusiness LineOfBusiness { get; set; }
 
-    /// <summary>
-    /// Appeal status
-    /// </summary>
     [Required]
-    public AppealStatus Status { get; set; } = AppealStatus.Submitted;
+    public AppealStatus Status { get; set; } = AppealStatus.Draft;
 
     /// <summary>
-    /// Reason for appeal (provider's argument)
+    /// The provider's argument for the appeal. Free text — encrypted at
+    /// rest.
     /// </summary>
     [Required]
+    [StringLength(8000)]
     public string AppealReason { get; set; } = string.Empty;
 
     /// <summary>
-    /// Supporting documentation/attachments (275 transaction references)
+    /// Ingress channel. Defaults to <see cref="AppealSource.ProviderPortal"/>.
+    /// Future ingress channels (Availity 275, CSR transcription, internal
+    /// retro review, external review) come in follow-up PRs.
     /// </summary>
+    public AppealSource Source { get; set; } = AppealSource.ProviderPortal;
+
     public List<AppealAttachment> Attachments { get; set; } = new();
 
-    /// <summary>
-    /// Clinical documentation references
-    /// </summary>
     public List<ClinicalDocument> ClinicalDocuments { get; set; } = new();
 
     /// <summary>
-    /// Appeal decision outcome
+    /// Decision outcome. Populated when <see cref="Status"/> transitions to
+    /// <see cref="AppealStatus.Closed"/> with a decision-bearing
+    /// <see cref="ClosureReasonCode"/>.
     /// </summary>
     public AppealDecision? Decision { get; set; }
 
-    /// <summary>
-    /// Date appeal submitted
-    /// </summary>
+    // ── Lifecycle timestamps ────────────────────────────────────────────
+
     [Required]
     public DateTime SubmittedDate { get; set; } = DateTime.UtcNow;
 
-    /// <summary>
-    /// Date appeal was received by payer
-    /// </summary>
     public DateTime? ReceivedDate { get; set; }
 
-    /// <summary>
-    /// Target response date (regulatory deadline)
-    /// </summary>
+    /// <summary>Regulatory deadline. Drives the read-time overdue projection.</summary>
     public DateTime? TargetResponseDate { get; set; }
 
-    /// <summary>
-    /// Date decision was made
-    /// </summary>
     public DateTime? DecisionDate { get; set; }
 
     /// <summary>
-    /// User who submitted the appeal
+    /// User who submitted the appeal.
+    /// TODO(appeals-followup-personal-rep-integration): When filed on behalf
+    /// of a member by a Personal Representative, the SubmittedBy field
+    /// should resolve to a personal-rep-service reference. Not this PR.
+    /// TODO(appeals-followup-consent-integration): When filed on behalf of
+    /// a member who granted §164.508 authorization, the chain should be
+    /// recorded via consent-service. Not this PR.
     /// </summary>
     [StringLength(100)]
     public string? SubmittedBy { get; set; }
 
-    /// <summary>
-    /// Internal notes
-    /// </summary>
     public List<AppealNote> Notes { get; set; } = new();
 
-    /// <summary>
-    /// 275 attachment transaction control numbers
-    /// </summary>
+    /// <summary>275 attachment transaction control numbers.</summary>
     public List<string> AttachmentControlNumbers { get; set; } = new();
 
-    /// <summary>
-    /// Priority flag
-    /// </summary>
-    public bool IsUrgent { get; set; } = false;
+    public bool IsUrgent { get; set; }
 
-    /// <summary>
-    /// Service date from original claim
-    /// </summary>
     public DateTime? ServiceDate { get; set; }
 
     /// <summary>
-    /// Diagnosis codes from original claim
+    /// Diagnosis codes from the original claim. Plain-stored for
+    /// queryability — matches the claims-service posture. Legal review to
+    /// confirm for the PCHP tenant before merge.
     /// </summary>
     public List<string> DiagnosisCodes { get; set; } = new();
 
     /// <summary>
-    /// Procedure codes from original claim
+    /// Procedure codes from the original claim. Plain-stored for
+    /// queryability — matches the claims-service posture. Legal review to
+    /// confirm for the PCHP tenant before merge.
     /// </summary>
     public List<string> ProcedureCodes { get; set; } = new();
+
+    /// <summary>
+    /// Assigned reviewer id (plain-stored, not encrypted). Mutated only via
+    /// the <c>POST /{id}/assign</c> endpoint, which writes an
+    /// <c>AppealAssigned</c> audit event.
+    /// TODO(appeals-followup-work-queue): Auto-assignment rules and
+    /// workload balancing live in a future work-queue service.
+    /// </summary>
+    [StringLength(200)]
+    public string? AssignedReviewerId { get; set; }
+
+    // ── Audit timestamps ────────────────────────────────────────────────
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    [StringLength(200)]
+    public string? CreatedBy { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
+
+    [StringLength(200)]
+    public string? UpdatedBy { get; set; }
+
+    public DateTime? ClosedAt { get; set; }
+
+    [StringLength(200)]
+    public string? ClosedBy { get; set; }
+
+    /// <summary>
+    /// Controlled reason code for closure. Safe to include in event payload
+    /// (enum-valued). Populated when <see cref="Status"/> is
+    /// <see cref="AppealStatus.Closed"/>. See
+    /// <see cref="AppealClosureReasonCode"/>.
+    /// </summary>
+    public AppealClosureReasonCode? ClosureReasonCode { get; set; }
+
+    /// <summary>
+    /// One-shot marker for the read-time overdue observer. Set to
+    /// <c>true</c> by
+    /// <see cref="Repositories.IAppealRepository.TryTransitionToOverdueAsync"/>
+    /// when the first read past <see cref="TargetResponseDate"/> emits an
+    /// <c>AppealOverdueObserved</c> audit event. Prevents duplicate overdue
+    /// events for the same appeal.
+    /// </summary>
+    public bool OverdueAuditEmitted { get; set; }
+
+    /// <summary>
+    /// Projects the persisted status into the status the caller observes —
+    /// the raw <see cref="Status"/> today; overdue is NOT a status (it's a
+    /// read-time projection on <see cref="IsOverdue"/>). This method is
+    /// kept for symmetry with consent-service/personal-rep-service and will
+    /// gain responsibilities if a future status (e.g. a review-pending
+    /// state) joins the lifecycle.
+    /// </summary>
+    public AppealStatus ObservedStatus(DateTime? asOf = null) => Status;
+
+    /// <summary>
+    /// Read-time projection: <c>true</c> when the appeal is in a
+    /// non-terminal status and <see cref="TargetResponseDate"/> has passed.
+    /// </summary>
+    [BsonIgnore]
+    public bool IsOverdue =>
+        TargetResponseDate.HasValue &&
+        TargetResponseDate.Value <= DateTime.UtcNow &&
+        Status != AppealStatus.Draft &&
+        Status != AppealStatus.Closed;
 }
 
 /// <summary>
-/// 275 attachment submission record
-/// 275: Attachment/additional documentation transaction
+/// 275 attachment submission record. The <see cref="BlobUrl"/> is a
+/// member-document-service reference — appeals-service does NOT store blob
+/// bytes.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class AppealAttachment
 {
-    /// <summary>
-    /// Attachment ID
-    /// </summary>
     [Required]
     public string AttachmentId { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>
-    /// 275 transaction control number
-    /// </summary>
+    /// <summary>275 transaction control number (PWK06 equivalent).</summary>
     [StringLength(50)]
     public string? ControlNumber { get; set; }
 
-    /// <summary>
-    /// Attachment type code (275: PWK01)
-    /// </summary>
+    /// <summary>Attachment type code (275: PWK01).</summary>
     [Required]
     [StringLength(2)]
     public string AttachmentTypeCode { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Attachment type description
-    /// </summary>
     public string? AttachmentTypeDescription { get; set; }
 
     /// <summary>
-    /// Transmission code (275: PWK02) - AA=Available, BM=By Mail, EL=Electronically, etc.
+    /// Transmission code (275: PWK02). AA=Available, BM=By Mail,
+    /// EL=Electronically, etc.
     /// </summary>
     [Required]
     [StringLength(2)]
     public string TransmissionCode { get; set; } = "EL";
 
-    /// <summary>
-    /// File name or document reference
-    /// </summary>
     [StringLength(300)]
     public string? FileName { get; set; }
 
     /// <summary>
-    /// Blob storage URL for uploaded document
+    /// Reference into member-document-service where the document bytes live.
+    /// appeals-service does NOT store blobs.
     /// </summary>
     public string? BlobUrl { get; set; }
 
-    /// <summary>
-    /// Content type (PDF, TIFF, etc.)
-    /// </summary>
     [StringLength(50)]
     public string? ContentType { get; set; }
 
-    /// <summary>
-    /// File size in bytes
-    /// </summary>
     public long? FileSizeBytes { get; set; }
 
-    /// <summary>
-    /// Upload timestamp
-    /// </summary>
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Description/notes about this attachment
+    /// Free-text description. May contain PHI — encrypted at rest.
     /// </summary>
+    [StringLength(2000)]
     public string? Description { get; set; }
 
-    /// <summary>
-    /// 275 submission status
-    /// </summary>
     public AttachmentStatus Status { get; set; } = AttachmentStatus.Pending;
 
-    /// <summary>
-    /// Date attachment was sent via 275 transaction
-    /// </summary>
     public DateTime? SentDate { get; set; }
 
-    /// <summary>
-    /// Acknowledgment received
-    /// </summary>
-    public bool AcknowledgmentReceived { get; set; } = false;
+    public bool AcknowledgmentReceived { get; set; }
 }
 
-/// <summary>
-/// Clinical documentation reference
-/// </summary>
+/// <summary>Clinical documentation reference.</summary>
+[BsonIgnoreExtraElements]
 public class ClinicalDocument
 {
     public string DocumentId { get; set; } = Guid.NewGuid().ToString();
-    public string DocumentType { get; set; } = string.Empty; // Progress Note, Operative Report, Lab Results, etc.
+    public string DocumentType { get; set; } = string.Empty;
     public string? DocumentDate { get; set; }
     public string? Provider { get; set; }
     public string? BlobUrl { get; set; }
+
+    /// <summary>Free-text clinical summary. PHI — encrypted at rest.</summary>
+    [StringLength(4000)]
     public string? Summary { get; set; }
 }
 
-/// <summary>
-/// Appeal decision outcome
-/// </summary>
+/// <summary>Appeal decision outcome.</summary>
+[BsonIgnoreExtraElements]
 public class AppealDecision
 {
-    /// <summary>
-    /// Decision code (Approved, Denied, Partial)
-    /// </summary>
     [Required]
     public AppealDecisionType DecisionType { get; set; }
 
-    /// <summary>
-    /// Approved amount (if approved/partial)
-    /// </summary>
     public decimal? ApprovedAmount { get; set; }
 
-    /// <summary>
-    /// Decision reason/rationale
-    /// </summary>
+    /// <summary>Decision rationale. Free text — encrypted at rest.</summary>
+    [StringLength(8000)]
     public string? DecisionReason { get; set; }
 
-    /// <summary>
-    /// Decision maker (reviewer name/ID)
-    /// </summary>
     [StringLength(100)]
     public string? DecisionMaker { get; set; }
 
-    /// <summary>
-    /// Date decision was made
-    /// </summary>
     public DateTime DecisionDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Additional reviewer notes
+    /// Additional reviewer notes. Free text — encrypted at rest.
     /// </summary>
+    [StringLength(8000)]
     public string? ReviewerNotes { get; set; }
 }
 
-/// <summary>
-/// Appeal note/comment
-/// </summary>
+/// <summary>Appeal note / comment.</summary>
+[BsonIgnoreExtraElements]
 public class AppealNote
 {
     public string NoteId { get; set; } = Guid.NewGuid().ToString();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    [StringLength(200)]
     public string CreatedBy { get; set; } = string.Empty;
+
+    /// <summary>Note body. Free text — encrypted at rest.</summary>
+    [StringLength(8000)]
     public string NoteText { get; set; } = string.Empty;
+
     public bool IsInternal { get; set; } = true;
 }
 
 public enum AppealType
 {
-    Reconsideration,  // Standard appeal review
-    PeerReview,       // Clinical peer-to-peer review
-    ExternalReview,   // Independent external review
-    Grievance         // Member-initiated grievance
+    Reconsideration = 1,
+    PeerReview = 2,
+    ExternalReview = 3,
+    Grievance = 4
 }
 
 public enum AppealLevel
 {
-    FirstLevel,      // Initial appeal review
-    SecondLevel,     // Second-level appeal
-    ExternalReview   // State/Federal external review
+    FirstLevel = 1,
+    SecondLevel = 2,
+    ExternalReview = 3
 }
 
+/// <summary>
+/// Appeal lifecycle state. See <c>Services.AppealStateMachine</c> for the
+/// allowed transitions. The four historical terminal values (Approved,
+/// Denied, PartialApproval, Withdrawn) consolidate into
+/// <see cref="Closed"/> plus an <see cref="AppealClosureReasonCode"/>
+/// discriminator — mirrors the pattern
+/// <c>PersonalRepInactivationReasonCode</c> established.
+/// </summary>
 public enum AppealStatus
 {
-    Draft,           // Being prepared
-    Submitted,       // Submitted to payer
-    InReview,        // Under review by payer
-    PendingInfo,     // Waiting for additional information
-    Approved,        // Appeal approved
-    Denied,          // Appeal denied
-    PartialApproval, // Partially approved
-    Withdrawn        // Withdrawn by provider
+    Draft = 1,
+    Submitted = 2,
+    InReview = 3,
+    PendingInfo = 4,
+    Closed = 5
 }
 
 public enum AppealDecisionType
 {
-    Approved,
-    Denied,
-    PartialApproval
+    Approved = 1,
+    Denied = 2,
+    PartialApproval = 3
 }
 
 public enum AttachmentStatus
 {
-    Pending,      // Not yet sent
-    Sent,         // 275 transaction sent
-    Acknowledged, // Payer acknowledged receipt
-    Rejected,     // Payer rejected attachment
-    Error         // Transmission error
+    Pending = 1,
+    Sent = 2,
+    Acknowledged = 3,
+    Rejected = 4,
+    Error = 5
 }
 
 public enum LineOfBusiness
 {
-    Commercial,
-    Medicare,
-    Medicaid,
-    Marketplace
+    Commercial = 1,
+    Medicare = 2,
+    Medicaid = 3,
+    Marketplace = 4
 }
 
 /// <summary>
-/// Appeals summary statistics
+/// Controlled closure reasons. Safe to include in event payloads (no PHI).
+/// Unlike consent-service which models Expired as a distinct terminal
+/// status, appeals collapses all termination reasons into
+/// <see cref="AppealStatus.Closed"/> with a discriminator here — see
+/// <c>Services.AppealStateMachine</c> remarks for rationale.
+/// </summary>
+public enum AppealClosureReasonCode
+{
+    Approved = 1,
+    Denied = 2,
+    PartialApproval = 3,
+    Withdrawn = 4,
+    Expired = 5,
+    AdminError = 6,
+    Other = 99
+}
+
+/// <summary>
+/// Ingress channel for an appeal. Zero-cost foresight for PR 4's 275
+/// consumer and future ingress work — default today is
+/// <see cref="ProviderPortal"/>; no behavior branches on this yet.
+/// </summary>
+public enum AppealSource
+{
+    ProviderPortal = 1,
+    Availity275 = 2,
+    CsrTranscription = 3,
+    InternalRetroReview = 4,
+    ExternalReview = 5
+}
+
+/// <summary>
+/// Appeals summary statistics. Wire shape is stable — the four portal-
+/// observed buckets (<see cref="OpenAppeals"/>, <see cref="UrgentExpedited"/>,
+/// <see cref="DueThisWeek"/>, <see cref="OverturnedRate"/>) are preserved
+/// across the status-enum consolidation by recomputing over
+/// <c>Status + ClosureReasonCode</c>.
 /// </summary>
 public class AppealsSummary
 {
@@ -404,10 +455,56 @@ public class AppealsSummary
     public int Approved { get; set; }
     public int Denied { get; set; }
     public int PartialApprovals { get; set; }
+    public int Withdrawn { get; set; }
     public decimal TotalAppealedAmount { get; set; }
     public decimal TotalApprovedAmount { get; set; }
     public double AverageDecisionTimeDays { get; set; }
     public double ApprovalRate { get; set; }
+
+    // ── Portal-observed wire-shape buckets ──────────────────────────────
+    /// <summary>
+    /// Appeals in a non-terminal status (Submitted, InReview, PendingInfo).
+    /// Draft is excluded — a draft is not yet an open appeal from the
+    /// payer's perspective.
+    /// </summary>
+    public int OpenAppeals { get; set; }
+
+    /// <summary>Open appeals flagged urgent.</summary>
+    public int UrgentExpedited { get; set; }
+
+    /// <summary>
+    /// Open appeals with <c>TargetResponseDate</c> within the next 7 days
+    /// (including already-overdue).
+    /// </summary>
+    public int DueThisWeek { get; set; }
+
+    /// <summary>
+    /// Percentage of Closed appeals with
+    /// <c>ClosureReasonCode ∈ {Approved, PartialApproval}</c> — the rate at
+    /// which original denials were overturned on appeal. 0–100.
+    /// </summary>
+    public double OverturnedRate { get; set; }
+
     public Dictionary<AppealStatus, int> AppealsByStatus { get; set; } = new();
     public Dictionary<AppealLevel, int> AppealsByLevel { get; set; } = new();
+}
+
+/// <summary>
+/// Thrown when a caller attempts an appeal lifecycle transition that is not
+/// allowed by <c>Services.AppealStateMachine</c>. Distinct from a generic
+/// <see cref="InvalidOperationException"/> so the controller layer can map
+/// it to a 409 Conflict with <see cref="FromStatus"/>/<see cref="ToStatus"/>
+/// in ProblemDetails rather than a 500.
+/// </summary>
+public sealed class InvalidAppealTransitionException : InvalidOperationException
+{
+    public AppealStatus FromStatus { get; }
+    public AppealStatus ToStatus { get; }
+
+    public InvalidAppealTransitionException(AppealStatus from, AppealStatus to)
+        : base($"Appeal transition {from} -> {to} is not allowed.")
+    {
+        FromStatus = from;
+        ToStatus = to;
+    }
 }

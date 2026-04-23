@@ -6,8 +6,12 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   CosmosDb__DatabaseName: "CloudHealthOffice"
-  AzureStorage__ContainerName: "appeal-attachments"
   ClaimsService__BaseUrl: "http://claims-service.cloudhealthoffice"
+  AppealEncryption__KeySecretPrefix: "appeal-body-encryption-key"
+  AppealEncryption__CurrentKeyVersion: "v1"
+  AppealEncryption__AcceptedKeyVersions__0: "v1"
+  Kafka__ClientId: "appeals-service"
+  AppealMigration__BatchSize: "100"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -57,16 +61,6 @@ spec:
             configMapKeyRef:
               name: appeals-service-config
               key: CosmosDb__DatabaseName
-        - name: AzureStorage__ConnectionString
-          valueFrom:
-            secretKeyRef:
-              name: azure-storage-secret
-              key: connectionString
-        - name: AzureStorage__ContainerName
-          valueFrom:
-            configMapKeyRef:
-              name: appeals-service-config
-              key: AzureStorage__ContainerName
         - name: ClaimsService__BaseUrl
           valueFrom:
             configMapKeyRef:
@@ -79,6 +73,44 @@ spec:
               key: connectionString
         - name: MongoDb__DatabaseName
           value: "cloudhealthoffice"
+        # Appeal body encryption — key material is in Key Vault under
+        # appeal-body-encryption-key-v1. Must be provisioned BEFORE first
+        # deployment; otherwise the readiness check fails and the pod is
+        # not rotated into traffic. See rotate-secret.sh.
+        - name: AppealEncryption__KeySecretPrefix
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: AppealEncryption__KeySecretPrefix
+        - name: AppealEncryption__CurrentKeyVersion
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: AppealEncryption__CurrentKeyVersion
+        - name: AppealEncryption__AcceptedKeyVersions__0
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: AppealEncryption__AcceptedKeyVersions__0
+        # Kafka — empty BootstrapServers puts the publisher in degraded
+        # mode (service boots, publishes are silent no-ops). Populate the
+        # secret when the broker is ready for appeal.status-changed.v1.
+        - name: Kafka__BootstrapServers
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secret
+              key: bootstrapServers
+              optional: true
+        - name: Kafka__ClientId
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: Kafka__ClientId
+        - name: AppealMigration__BatchSize
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: AppealMigration__BatchSize
         resources:
           requests:
             cpu: 100m

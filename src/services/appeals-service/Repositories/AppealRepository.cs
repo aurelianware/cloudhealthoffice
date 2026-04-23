@@ -1,286 +1,374 @@
-using Microsoft.Azure.Cosmos;
+using System.Net;
 using AppealsService.Models;
+using Microsoft.Azure.Cosmos;
 
 namespace AppealsService.Repositories;
 
-public interface IAppealRepository
+/// <summary>
+/// Cosmos DB implementation of <see cref="IAppealRepository"/>.
+/// Partition key: <c>/tenantId</c>. Audit-trail atomicity for
+/// <see cref="TransitionStatusAsync"/> / <see cref="TryTransitionToOverdueAsync"/>
+/// follows the same pattern as consent-service and personal-rep-service:
+/// conditional ReplaceItem with ETag precondition on the appeal entity;
+/// the audit event is appended after the conditional replace succeeds.
+/// Event writes are idempotent (unique key on EventId) so a retry is safe.
+/// </summary>
+public sealed class AppealRepository : IAppealRepository
 {
-    Task<Appeal?> GetByIdAsync(string id);
-    Task<Appeal?> GetByAppealNumberAsync(string appealNumber);
-    Task<IEnumerable<Appeal>> GetByClaimIdAsync(string claimId);
-    Task<IEnumerable<Appeal>> SearchAsync(
-        string? memberId,
-        string? providerNPI,
-        DateTime? submittedFrom,
-        DateTime? submittedTo,
-        AppealStatus? status,
-        LineOfBusiness? lineOfBusiness,
-        int page = 1,
-        int pageSize = 50);
-    Task<AppealsSummary> GetAppealsSummaryAsync(DateTime from, DateTime to);
-    Task<Appeal> CreateAsync(Appeal appeal);
-    Task<Appeal> UpdateAsync(Appeal appeal);
-    Task DeleteAsync(string id);
-}
+    public const string AppealsContainerName = "Appeals";
 
-public class AppealRepository : IAppealRepository
-{
-    private readonly Container _container;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ILogger<AppealRepository> _logger;
+    private readonly Container _appeals;
+    private readonly IAppealEventSink _events;
 
-    public AppealRepository(
-        CosmosClient cosmosClient,
-        IConfiguration configuration,
-        IHttpContextAccessor httpContextAccessor,
-        ILogger<AppealRepository> logger)
+    public AppealRepository(CosmosClient cosmosClient, string databaseName, IAppealEventSink events)
     {
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var containerName = configuration["CosmosDb:ContainerName"] ?? "Appeals";
-
-        _container = cosmosClient.GetContainer(databaseName, containerName);
-        _httpContextAccessor = httpContextAccessor;
-        _logger = logger;
+        _appeals = cosmosClient.GetDatabase(databaseName).GetContainer(AppealsContainerName);
+        _events = events;
     }
 
-    private string GetTenantId()
+    public async Task<Appeal> CreateAsync(Appeal appeal, AppealEvent genesisEvent, CancellationToken ct = default)
     {
-        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString();
-        if (string.IsNullOrEmpty(tenantId))
-        {
-            throw new InvalidOperationException("TenantId not found in request context");
-        }
-        return tenantId;
+        if (string.IsNullOrEmpty(appeal.Id)) appeal.Id = Guid.NewGuid().ToString();
+        if (appeal.CreatedAt == default) appeal.CreatedAt = DateTime.UtcNow;
+
+        var response = await _appeals.CreateItemAsync(appeal, new PartitionKey(appeal.TenantId), cancellationToken: ct);
+        await _events.AppendAsync(genesisEvent, ct);
+        return response.Resource;
     }
 
-    public async Task<Appeal?> GetByIdAsync(string id)
+    public async Task<Appeal?> GetByIdAsync(string tenantId, string id, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
-
         try
         {
-            var response = await _container.ReadItemAsync<Appeal>(
-                id,
-                new PartitionKey(tenantId));
+            var response = await _appeals.ReadItemAsync<Appeal>(id, new PartitionKey(tenantId), cancellationToken: ct);
             return response.Resource;
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
         }
     }
 
-    public async Task<Appeal?> GetByAppealNumberAsync(string appealNumber)
+    public async Task<Appeal?> GetByAppealNumberAsync(string tenantId, string appealNumber, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
-
         var query = new QueryDefinition(
             "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.appealNumber = @appealNumber")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@appealNumber", appealNumber);
 
-        var iterator = _container.GetItemQueryIterator<Appeal>(query);
-        var results = new List<Appeal>();
+        var iterator = _appeals.GetItemQueryIterator<Appeal>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
 
         while (iterator.HasMoreResults)
         {
-            var response = await iterator.ReadNextAsync();
-            results.AddRange(response);
+            var page = await iterator.ReadNextAsync(ct);
+            foreach (var item in page) return item;
         }
-
-        return results.FirstOrDefault();
+        return null;
     }
 
-    public async Task<IEnumerable<Appeal>> GetByClaimIdAsync(string claimId)
+    public async Task<IReadOnlyList<Appeal>> GetByClaimIdAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
-
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.claimId = @claimId ORDER BY c.submittedDate DESC")
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.claimId = @claimId ORDER BY c.createdAt DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@claimId", claimId);
 
-        var iterator = _container.GetItemQueryIterator<Appeal>(query);
-        var results = new List<Appeal>();
+        var iterator = _appeals.GetItemQueryIterator<Appeal>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
 
+        var results = new List<Appeal>();
         while (iterator.HasMoreResults)
         {
-            var response = await iterator.ReadNextAsync();
-            results.AddRange(response);
+            var page = await iterator.ReadNextAsync(ct);
+            results.AddRange(page);
         }
-
         return results;
     }
 
-    public async Task<IEnumerable<Appeal>> SearchAsync(
-        string? memberId,
-        string? providerNPI,
-        DateTime? submittedFrom,
-        DateTime? submittedTo,
-        AppealStatus? status,
-        LineOfBusiness? lineOfBusiness,
-        int page = 1,
-        int pageSize = 50)
+    public async Task<IReadOnlyList<Appeal>> SearchAsync(
+        string tenantId, AppealSearchParams p, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
+        var page = Math.Max(1, p.Page);
+        var pageSize = Math.Clamp(p.PageSize, 1, 100);
 
         var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId";
         var parameters = new List<(string, object)> { ("@tenantId", tenantId) };
 
-        if (!string.IsNullOrEmpty(memberId))
+        if (!string.IsNullOrEmpty(p.MemberId))
         {
             queryText += " AND c.memberId = @memberId";
-            parameters.Add(("@memberId", memberId));
+            parameters.Add(("@memberId", p.MemberId));
         }
-
-        if (!string.IsNullOrEmpty(providerNPI))
+        if (!string.IsNullOrEmpty(p.ProviderNPI))
         {
             queryText += " AND c.providerNPI = @providerNPI";
-            parameters.Add(("@providerNPI", providerNPI));
+            parameters.Add(("@providerNPI", p.ProviderNPI));
         }
-
-        if (submittedFrom.HasValue)
+        if (p.SubmittedFrom.HasValue)
         {
             queryText += " AND c.submittedDate >= @submittedFrom";
-            parameters.Add(("@submittedFrom", submittedFrom.Value));
+            parameters.Add(("@submittedFrom", p.SubmittedFrom.Value));
         }
-
-        if (submittedTo.HasValue)
+        if (p.SubmittedTo.HasValue)
         {
             queryText += " AND c.submittedDate <= @submittedTo";
-            parameters.Add(("@submittedTo", submittedTo.Value));
+            parameters.Add(("@submittedTo", p.SubmittedTo.Value));
         }
-
-        if (status.HasValue)
+        if (p.Status.HasValue)
         {
             queryText += " AND c.status = @status";
-            parameters.Add(("@status", (int)status.Value));
+            parameters.Add(("@status", p.Status.Value.ToString()));
         }
-
-        if (lineOfBusiness.HasValue)
+        if (p.ClosureReasonCode.HasValue)
+        {
+            queryText += " AND c.closureReasonCode = @closureReasonCode";
+            parameters.Add(("@closureReasonCode", p.ClosureReasonCode.Value.ToString()));
+        }
+        if (p.LineOfBusiness.HasValue)
         {
             queryText += " AND c.lineOfBusiness = @lineOfBusiness";
-            parameters.Add(("@lineOfBusiness", (int)lineOfBusiness.Value));
+            parameters.Add(("@lineOfBusiness", p.LineOfBusiness.Value.ToString()));
+        }
+        if (!string.IsNullOrEmpty(p.AssignedReviewerId))
+        {
+            queryText += " AND c.assignedReviewerId = @assignedReviewerId";
+            parameters.Add(("@assignedReviewerId", p.AssignedReviewerId));
         }
 
-        queryText += " ORDER BY c.submittedDate DESC";
+        queryText += " ORDER BY c.createdAt DESC";
+        // page and pageSize are bounded integers — no injection surface.
         queryText += $" OFFSET {(page - 1) * pageSize} LIMIT {pageSize}";
 
-        var queryDefinition = new QueryDefinition(queryText);
-        foreach (var param in parameters)
-        {
-            queryDefinition = queryDefinition.WithParameter(param.Item1, param.Item2);
-        }
+        var query = new QueryDefinition(queryText);
+        foreach (var (name, value) in parameters) query = query.WithParameter(name, value);
 
-        var iterator = _container.GetItemQueryIterator<Appeal>(queryDefinition);
+        var iterator = _appeals.GetItemQueryIterator<Appeal>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+
         var results = new List<Appeal>();
-
         while (iterator.HasMoreResults)
         {
-            var response = await iterator.ReadNextAsync();
-            results.AddRange(response);
+            var pageResults = await iterator.ReadNextAsync(ct);
+            results.AddRange(pageResults);
         }
-
         return results;
     }
 
-    public async Task<AppealsSummary> GetAppealsSummaryAsync(DateTime from, DateTime to)
+    public async Task<AppealsSummary> GetAppealsSummaryAsync(
+        string tenantId, DateTime from, DateTime to, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
+        // TODO(appeals-followup-summary-perf): scan-all + in-memory aggregation
+        // scales poorly. Migrate to a Cosmos GROUP BY in a follow-up PR.
+        var results = await SearchAsync(
+            tenantId,
+            new AppealSearchParams { SubmittedFrom = from, SubmittedTo = to, Page = 1, PageSize = 100 },
+            ct);
 
-        var appeals = await SearchAsync(null, null, from, to, null, null, 1, 10000);
-        var appealsList = appeals.ToList();
-
-        var summary = new AppealsSummary
+        // Paginate — SearchAsync caps at 100/page. Keep reading for the summary.
+        var all = new List<Appeal>(results);
+        var page = 2;
+        while (results.Count == 100)
         {
-            TotalAppeals = appealsList.Count,
-            InReview = appealsList.Count(a => a.Status == AppealStatus.InReview),
-            Approved = appealsList.Count(a => a.Status == AppealStatus.Approved),
-            Denied = appealsList.Count(a => a.Status == AppealStatus.Denied),
-            PartialApprovals = appealsList.Count(a => a.Status == AppealStatus.PartialApproval),
-            TotalAppealedAmount = appealsList.Sum(a => a.AppealedAmount),
-            TotalApprovedAmount = appealsList
-                .Where(a => a.Decision != null && a.Decision.ApprovedAmount.HasValue)
-                .Sum(a => a.Decision!.ApprovedAmount!.Value)
-        };
-
-        // Calculate average decision time
-        var decidedAppeals = appealsList.Where(a => a.DecisionDate.HasValue).ToList();
-        if (decidedAppeals.Any())
-        {
-            summary.AverageDecisionTimeDays = decidedAppeals
-                .Average(a => (a.DecisionDate!.Value - a.SubmittedDate).TotalDays);
+            results = await SearchAsync(
+                tenantId,
+                new AppealSearchParams { SubmittedFrom = from, SubmittedTo = to, Page = page, PageSize = 100 },
+                ct);
+            all.AddRange(results);
+            page++;
         }
 
-        // Calculate approval rate
-        var totalDecided = appealsList.Count(a => a.Status == AppealStatus.Approved || 
-                                                  a.Status == AppealStatus.Denied || 
-                                                  a.Status == AppealStatus.PartialApproval);
-        if (totalDecided > 0)
+        return SummaryBuilder.Build(all);
+    }
+
+    public async Task<Appeal> TransitionStatusAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        if (!auditEvent.FromStatus.HasValue)
         {
-            summary.ApprovalRate = ((double)(summary.Approved + summary.PartialApprovals) / totalDecided) * 100;
+            throw new ArgumentException(
+                "TransitionStatusAsync requires auditEvent.FromStatus to be set.",
+                nameof(auditEvent));
         }
+        var expectedFromStatus = auditEvent.FromStatus.Value;
 
-        // Group by status
-        foreach (var appeal in appealsList)
+        try
         {
-            if (!summary.AppealsByStatus.ContainsKey(appeal.Status))
-                summary.AppealsByStatus[appeal.Status] = 0;
-            summary.AppealsByStatus[appeal.Status]++;
+            var fresh = await _appeals.ReadItemAsync<Appeal>(
+                appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
 
-            if (!summary.AppealsByLevel.ContainsKey(appeal.AppealLevel))
-                summary.AppealsByLevel[appeal.AppealLevel] = 0;
-            summary.AppealsByLevel[appeal.AppealLevel]++;
+            if (fresh.Resource.Status != expectedFromStatus)
+            {
+                throw new InvalidAppealTransitionException(fresh.Resource.Status, appeal.Status);
+            }
+
+            appeal.UpdatedAt = DateTime.UtcNow;
+            var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+            var response = await _appeals.ReplaceItemAsync(
+                appeal, appeal.Id, new PartitionKey(appeal.TenantId), options, ct);
+
+            await _events.AppendAsync(auditEvent, ct);
+            return response.Resource;
         }
-
-        return summary;
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
+        }
     }
 
-    public async Task<Appeal> CreateAsync(Appeal appeal)
+    public async Task<Appeal?> TryTransitionToOverdueAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
     {
-        appeal.TenantId = GetTenantId();
-        appeal.SubmittedDate = DateTime.UtcNow;
+        try
+        {
+            var fresh = await _appeals.ReadItemAsync<Appeal>(
+                appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
 
-        // Calculate target response date (typically 30-60 days)
-        appeal.TargetResponseDate = appeal.SubmittedDate.AddDays(appeal.IsUrgent ? 30 : 60);
+            if (fresh.Resource.OverdueAuditEmitted) return null;
+            if (fresh.Resource.Status != AppealStatus.Submitted &&
+                fresh.Resource.Status != AppealStatus.InReview &&
+                fresh.Resource.Status != AppealStatus.PendingInfo)
+            {
+                return null;
+            }
 
-        var response = await _container.CreateItemAsync(
-            appeal,
-            new PartitionKey(appeal.TenantId));
+            var mutated = fresh.Resource;
+            mutated.OverdueAuditEmitted = true;
+            mutated.UpdatedAt = DateTime.UtcNow;
 
-        _logger.LogInformation("Created appeal {AppealId} for claim {ClaimId}",
-            SanitizeForLog(appeal.Id), SanitizeForLog(appeal.ClaimId));
+            var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+            var response = await _appeals.ReplaceItemAsync(
+                mutated, mutated.Id, new PartitionKey(mutated.TenantId), options, ct);
 
-        return response.Resource;
+            await _events.AppendAsync(auditEvent, ct);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            return null;
+        }
     }
 
-    public async Task<Appeal> UpdateAsync(Appeal appeal)
+    public async Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default)
     {
-        var response = await _container.ReplaceItemAsync(
-            appeal,
-            appeal.Id,
-            new PartitionKey(appeal.TenantId));
+        // Cosmos has no native array-push operator for arbitrary depth. We
+        // re-read with ETag and do a conditional ReplaceItem. Contention on
+        // the same appeal's notes is rare; on 412 we retry once. A third
+        // conflicting writer is extremely unlikely in practice.
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                var fresh = await _appeals.ReadItemAsync<Appeal>(
+                    appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
+                var mutated = fresh.Resource;
+                mutated.Notes.Add(note);
+                mutated.UpdatedAt = DateTime.UtcNow;
 
-        _logger.LogInformation("Updated appeal {AppealId}", SanitizeForLog(appeal.Id));
+                var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+                var response = await _appeals.ReplaceItemAsync(
+                    mutated, mutated.Id, new PartitionKey(mutated.TenantId), options, ct);
 
-        return response.Resource;
+                await _events.AppendAsync(auditEvent, ct);
+                return response.Resource;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                if (attempt == 1) throw;
+            }
+        }
+        throw new InvalidOperationException("AppendNoteAsync retry budget exhausted.");
     }
 
-    public async Task DeleteAsync(string id)
+    public async Task<Appeal> AppendAttachmentAsync(Appeal appeal, AppealAttachment attachment, AppealEvent auditEvent, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                var fresh = await _appeals.ReadItemAsync<Appeal>(
+                    appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
+                var mutated = fresh.Resource;
+                mutated.Attachments.Add(attachment);
+                if (!string.IsNullOrEmpty(attachment.ControlNumber))
+                    mutated.AttachmentControlNumbers.Add(attachment.ControlNumber);
+                mutated.UpdatedAt = DateTime.UtcNow;
 
-        await _container.DeleteItemAsync<Appeal>(
-            id,
-            new PartitionKey(tenantId));
+                var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+                var response = await _appeals.ReplaceItemAsync(
+                    mutated, mutated.Id, new PartitionKey(mutated.TenantId), options, ct);
 
-        _logger.LogInformation("Deleted appeal {AppealId}", SanitizeForLog(id));
+                await _events.AppendAsync(auditEvent, ct);
+                return response.Resource;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                if (attempt == 1) throw;
+            }
+        }
+        throw new InvalidOperationException("AppendAttachmentAsync retry budget exhausted.");
     }
 
-    private static string SanitizeForLog(string? value)
+    public async Task<Appeal> AcknowledgeAttachmentAsync(
+        string tenantId, string appealId, string attachmentId, bool acknowledgmentReceived,
+        AppealEvent auditEvent, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                var fresh = await _appeals.ReadItemAsync<Appeal>(
+                    appealId, new PartitionKey(tenantId), cancellationToken: ct);
+                var mutated = fresh.Resource;
+                var attachment = mutated.Attachments.FirstOrDefault(a => a.AttachmentId == attachmentId)
+                    ?? throw new InvalidOperationException(
+                        $"Attachment {attachmentId} not found on appeal {appealId} for tenant {tenantId}.");
+
+                attachment.AcknowledgmentReceived = acknowledgmentReceived;
+                attachment.Status = acknowledgmentReceived ? AttachmentStatus.Acknowledged : AttachmentStatus.Sent;
+                if (acknowledgmentReceived) attachment.SentDate = DateTime.UtcNow;
+                mutated.UpdatedAt = DateTime.UtcNow;
+
+                var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+                var response = await _appeals.ReplaceItemAsync(
+                    mutated, mutated.Id, new PartitionKey(mutated.TenantId), options, ct);
+
+                await _events.AppendAsync(auditEvent, ct);
+                return response.Resource;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                if (attempt == 1) throw;
+            }
+        }
+        throw new InvalidOperationException("AcknowledgeAttachmentAsync retry budget exhausted.");
+    }
+
+    public async Task<Appeal> AssignReviewerAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                var fresh = await _appeals.ReadItemAsync<Appeal>(
+                    appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
+                var mutated = fresh.Resource;
+                mutated.AssignedReviewerId = appeal.AssignedReviewerId;
+                mutated.UpdatedAt = DateTime.UtcNow;
+
+                var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+                var response = await _appeals.ReplaceItemAsync(
+                    mutated, mutated.Id, new PartitionKey(mutated.TenantId), options, ct);
+
+                await _events.AppendAsync(auditEvent, ct);
+                return response.Resource;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                if (attempt == 1) throw;
+            }
+        }
+        throw new InvalidOperationException("AssignReviewerAsync retry budget exhausted.");
     }
 }
