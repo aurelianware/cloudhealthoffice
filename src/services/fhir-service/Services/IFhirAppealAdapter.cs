@@ -45,6 +45,23 @@ public interface IFhirAppealAdapter
     /// </summary>
     Task<IReadOnlyList<AppealSubmitChildOutcome>> SubmitAppealAsync(
         AppealSubmitBundleDto bundle, string tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Read a single note by its noteId, returning both the note and the
+    /// minimal parent appeal context needed to project a FHIR Communication.
+    /// Returns null when not found or when the note belongs to a different tenant.
+    /// </summary>
+    Task<(AppealDto Appeal, AppealNoteDto Note)?> GetNoteByIdAsync(
+        string noteId, string tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Read a single attachment by its attachmentId, returning both the
+    /// attachment and the minimal parent appeal context needed to project a
+    /// FHIR DocumentReference.
+    /// Returns null when not found or when the attachment belongs to a different tenant.
+    /// </summary>
+    Task<(AppealDto Appeal, AppealAttachmentDto Attachment)?> GetAttachmentByIdAsync(
+        string attachmentId, string tenantId, CancellationToken ct = default);
 }
 
 /// <summary>

@@ -166,9 +166,10 @@ public class MetadataController : FhirControllerBase
                             ("_id",          SearchParamType.Token),
                             ("_lastUpdated", SearchParamType.Date),
                             ("patient",      SearchParamType.Reference),
+                            // TODO: implement authored-on filter in TaskController.Search
+                            // ("authored-on", SearchParamType.Date),
                             ("status",       SearchParamType.Token),
                             ("focus",        SearchParamType.Reference),
-                            ("authored-on",  SearchParamType.Date),
                             ("owner",        SearchParamType.Reference)
                         ],
                         supportedProfiles: [FhirAppealMapper.TaskProfileUrl]),
@@ -177,9 +178,9 @@ public class MetadataController : FhirControllerBase
                             ("_id",          SearchParamType.Token),
                             ("_lastUpdated", SearchParamType.Date),
                             ("patient",      SearchParamType.Reference),
-                            ("status",       SearchParamType.Token),
-                            ("about",        SearchParamType.Reference),
-                            ("sent",         SearchParamType.Date)
+                            // TODO: implement sent filter in CommunicationController.Search
+                            // ("sent", SearchParamType.Date),
+                            ("about",        SearchParamType.Reference)
                         ],
                         supportedProfiles: [FhirAppealMapper.CommunicationProfileUrl]),
                         BuildResource("DocumentReference",
@@ -187,9 +188,9 @@ public class MetadataController : FhirControllerBase
                             ("_id",          SearchParamType.Token),
                             ("_lastUpdated", SearchParamType.Date),
                             ("patient",      SearchParamType.Reference),
-                            ("status",       SearchParamType.Token),
-                            ("related",      SearchParamType.Reference),
-                            ("type",         SearchParamType.Token)
+                            // TODO: implement type filter in DocumentReferenceController.Search
+                            // ("type", SearchParamType.Token),
+                            ("related",      SearchParamType.Reference)
                         ],
                         supportedProfiles: [FhirAppealMapper.DocumentReferenceProfileUrl]),
                         BuildResource("ClaimResponse",
@@ -197,9 +198,9 @@ public class MetadataController : FhirControllerBase
                             ("_id",          SearchParamType.Token),
                             ("_lastUpdated", SearchParamType.Date),
                             ("patient",      SearchParamType.Reference),
-                            ("status",       SearchParamType.Token),
-                            ("request",      SearchParamType.Reference),
-                            ("created",      SearchParamType.Date)
+                            // TODO: implement created filter in ClaimResponseController.Search
+                            // ("created", SearchParamType.Date),
+                            ("request",      SearchParamType.Reference)
                         ],
                         supportedProfiles: [FhirAppealMapper.ClaimResponseProfileUrl]),
                     ],

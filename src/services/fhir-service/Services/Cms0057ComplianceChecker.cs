@@ -159,7 +159,7 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
         var issues = new List<ComplianceIssue>();
         var warnings = new List<ComplianceWarning>();
         var required = 0;
-        const int total = 5;
+        const int total = 4;
 
         if (resource.Status is null)
             issues.Add(new("error", "MISSING_STATUS", "DocumentReference.status is required", Requirement: "CHO Appeal DocumentReference"));
@@ -177,7 +177,6 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
             warnings.Add(new("MISSING_CONTEXT_RELATED",
                 "DocumentReference.context.related (Task back-reference) is recommended",
                 "Add Task/{appealId} to Context.related"));
-        else required++;
 
         if (HasProfile(resource.Meta, AppealDocumentReferenceProfile)) required++;
         else warnings.Add(new("MISSING_PROFILE",

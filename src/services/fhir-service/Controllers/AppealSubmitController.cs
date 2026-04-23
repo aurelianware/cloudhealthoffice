@@ -102,33 +102,52 @@ public sealed class AppealSubmitController : FhirControllerBase
 
     internal static AppealSubmitBundleDto BuildSubmitBundle(Bundle bundle)
     {
-        Hl7.Fhir.Model.Task? taskEntry = null;
-        var communications = new List<Communication>();
-        var documentReferences = new List<DocumentReference>();
+        // Fix 4: reject non-transaction bundles early
+        if (bundle.Type != Bundle.BundleType.Transaction)
+        {
+            throw new InvalidOperationException(
+                $"Bundle.type must be 'transaction' for $cho-appeal-submit; got '{bundle.Type}'.");
+        }
 
+        Hl7.Fhir.Model.Task? taskEntry = null;
+        Patient? patient = null;
+        Claim? claim = null;
+        var communications = new List<(Communication comm, int entryIndex)>();
+        var documentReferences = new List<(DocumentReference doc, int entryIndex)>();
+        var taskEntryIndex = 0;
+
+        var entryIndex = 0;
         foreach (var entry in bundle.Entry ?? [])
         {
             switch (entry.Resource)
             {
                 case Hl7.Fhir.Model.Task t when taskEntry is null:
                     taskEntry = t;
+                    taskEntryIndex = entryIndex;
                     break;
                 case Hl7.Fhir.Model.Task:
                     throw new InvalidOperationException(
                         "Bundle must contain exactly one Task entry.");
+                case Patient p:
+                    patient = p;
+                    break;
+                case Claim c:
+                    claim = c;
+                    break;
                 case Communication c:
-                    communications.Add(c);
+                    communications.Add((c, entryIndex));
                     break;
                 case DocumentReference d:
-                    documentReferences.Add(d);
+                    documentReferences.Add((d, entryIndex));
                     break;
                 case null:
                     break;
                 default:
                     throw new InvalidOperationException(
                         $"Unsupported resource type '{entry.Resource.TypeName}' in Bundle; " +
-                        "only Task, Communication, and DocumentReference are accepted.");
+                        "only Task, Patient, Claim, Communication, and DocumentReference are accepted.");
             }
+            entryIndex++;
         }
 
         if (taskEntry is null)
@@ -137,19 +156,29 @@ public sealed class AppealSubmitController : FhirControllerBase
                 "Bundle must contain a Task entry representing the appeal.");
         }
 
-        var appealDto = TaskToAppealDto(taskEntry);
-        var noteDtos = communications.Select(CommunicationToNoteDto).ToList();
-        var attachmentDtos = documentReferences.Select(DocumentReferenceToAttachmentDto).ToList();
+        // Fix 2: require Patient entry for PatientName mapping
+        if (patient is null)
+        {
+            throw new InvalidOperationException(
+                "Bundle must contain a Patient entry; PatientName cannot be populated without it.");
+        }
+
+        var appealDto = TaskToAppealDto(taskEntry, patient, claim);
+        var noteDtos = communications.Select(t => CommunicationToNoteDto(t.comm)).ToList();
+        var attachmentDtos = documentReferences.Select(t => DocumentReferenceToAttachmentDto(t.doc)).ToList();
 
         return new AppealSubmitBundleDto
         {
             Appeal = appealDto,
             Notes = noteDtos,
-            Attachments = attachmentDtos
+            Attachments = attachmentDtos,
+            AppealEntryIndex = taskEntryIndex,
+            NoteEntryIndices = communications.Select(t => t.entryIndex).ToArray(),
+            AttachmentEntryIndices = documentReferences.Select(t => t.entryIndex).ToArray()
         };
     }
 
-    internal static AppealDto TaskToAppealDto(Hl7.Fhir.Model.Task task)
+    internal static AppealDto TaskToAppealDto(Hl7.Fhir.Model.Task task, Patient patient, Claim? claim)
     {
         // Light conversion — extract the fields appeals-service requires
         // on create. Deep profile validation (all required extensions
@@ -168,6 +197,16 @@ public sealed class AppealSubmitController : FhirControllerBase
             throw new InvalidOperationException("Task.focus (Claim reference) is required.");
         if (string.IsNullOrEmpty(providerNpi))
             throw new InvalidOperationException("Task.requester (Practitioner reference) is required.");
+
+        // Fix 2: Extract PatientName from Patient resource
+        var nameComponent = patient.Name.FirstOrDefault();
+        var patientName = nameComponent?.Text
+            ?? string.Join(" ",
+                new[] { nameComponent?.Family, nameComponent?.Given.FirstOrDefault() }
+                    .Where(s => !string.IsNullOrEmpty(s)));
+
+        // Fix 2: Extract ClaimNumber from Claim.identifier or fall back to claimId
+        var claimNumber = claim?.Identifier.FirstOrDefault()?.Value ?? claimId!;
 
         // TODO(appeals-followup-fhir-validation): deep profile-level
         // validation (Task.extension:appealLevel / lineOfBusiness /
@@ -191,8 +230,8 @@ public sealed class AppealSubmitController : FhirControllerBase
             Source = AppealSource.ProviderPortal,
             AppealReason = task.Description ?? string.Empty,
             AppealNumber = string.Empty,
-            ClaimNumber = string.Empty,
-            PatientName = string.Empty,
+            ClaimNumber = claimNumber,
+            PatientName = patientName ?? string.Empty,
             IsUrgent = HasExtensionTrue(task, FhirAppealMapper.AppealUrgentFlagExtensionUrl),
             TargetResponseDate = ReadDateTimeExtension(task,
                 FhirAppealMapper.AppealTargetResponseDateExtensionUrl),
@@ -212,7 +251,9 @@ public sealed class AppealSubmitController : FhirControllerBase
                 .SelectMany(c => c.Coding)
                 .Any(c => c.Code == "internal"),
             CreatedAt = communication.Sent is { } sent
-                ? DateTime.Parse(sent)
+                ? (DateTimeOffset.TryParse(sent, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed)
+                    ? parsed.UtcDateTime
+                    : DateTime.UtcNow)
                 : DateTime.UtcNow
         };
     }
@@ -271,8 +312,16 @@ public sealed class AppealSubmitController : FhirControllerBase
                     ? OperationOutcome.IssueType.Informational
                     : MapFailureToIssueType(child.FailureKind),
                 Diagnostics = BuildIssueDiagnostics(child),
-                Location = new[] { $"{IssueLocationPrefix}[{child.ChildRef}]" }
+                Location = new[] { $"Bundle.entry[{child.EntryIndex}].resource" }
             };
+
+            // Add cho-appeal-child-ref extension for correlation
+            issue.Extension ??= new List<Extension>();
+            issue.Extension.Add(new Extension
+            {
+                Url = "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-child-ref",
+                Value = new FhirString(child.ChildRef)
+            });
 
             if (!child.Success && !string.IsNullOrEmpty(child.RetryUrl))
             {

@@ -173,106 +173,119 @@ public sealed class FhirAppealMapper
     {
         foreach (var note in appeal.Notes)
         {
-            yield return new Communication
-            {
-                Id = note.NoteId,
-                Meta = new Meta
-                {
-                    LastUpdated = note.CreatedAt,
-                    Profile = [CommunicationProfileUrl]
-                },
-                Status = EventStatus.Completed,
-                // Subject = the member
-                Subject = new ResourceReference($"Patient/{appeal.MemberId}"),
-                // About = back-reference to the appeal Task (the work item
-                // the note is attached to). Same id space as the appeal.
-                About = [new ResourceReference($"Task/{appeal.Id}")],
-                Sent = note.CreatedAt.ToString("o"),
-                Sender = new ResourceReference($"Practitioner/{note.CreatedBy}"),
-                Payload =
-                [
-                    new Communication.PayloadComponent
-                    {
-                        Content = new FhirString(note.NoteText)
-                    }
-                ],
-                Category =
-                [
-                    new CodeableConcept(
-                        "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-note-category",
-                        note.IsInternal ? "internal" : "external")
-                ]
-            };
+            yield return ToAppealCommunication(note, appeal.Id, appeal.MemberId);
         }
     }
 
+    /// <summary>
+    /// Maps a single <see cref="AppealNoteDto"/> to a FHIR <see cref="Communication"/>.
+    /// Used by <c>CommunicationController.Read</c> after a direct GetNoteByIdAsync call.
+    /// </summary>
+    public Communication ToAppealCommunication(AppealNoteDto note, string appealId, string memberId)
+    {
+        return new Communication
+        {
+            Id = note.NoteId,
+            Meta = new Meta
+            {
+                LastUpdated = note.CreatedAt,
+                Profile = [CommunicationProfileUrl]
+            },
+            Status = EventStatus.Completed,
+            Subject = new ResourceReference($"Patient/{memberId}"),
+            About = [new ResourceReference($"Task/{appealId}")],
+            Sent = note.CreatedAt.ToString("o"),
+            Sender = new ResourceReference($"Practitioner/{note.CreatedBy}"),
+            Payload =
+            [
+                new Communication.PayloadComponent
+                {
+                    Content = new FhirString(note.NoteText)
+                }
+            ],
+            Category =
+            [
+                new CodeableConcept(
+                    "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-note-category",
+                    note.IsInternal ? "internal" : "external")
+            ]
+        };
+    }
+
     // ── DocumentReferences (one per attachment + one per clinical doc) ──
+
+    /// <summary>
+    /// Maps a single <see cref="AppealAttachmentDto"/> to a FHIR <see cref="DocumentReference"/>.
+    /// Used by <c>DocumentReferenceController.Read</c> after a direct GetAttachmentByIdAsync call.
+    /// </summary>
+    public DocumentReference ToAppealDocumentReference(AppealAttachmentDto att, string appealId, string memberId)
+    {
+        var docRef = new DocumentReference
+        {
+            Id = att.AttachmentId,
+            Meta = new Meta
+            {
+                LastUpdated = att.UploadedAt,
+                Profile = [DocumentReferenceProfileUrl]
+            },
+            Status = DocumentReferenceStatus.Current,
+            Subject = new ResourceReference($"Patient/{memberId}"),
+            Date = att.UploadedAt,
+            Type = new CodeableConcept(
+                "http://fhir.cloudhealthoffice.com/CodeSystem/cho-275-attachment-type",
+                att.AttachmentTypeCode,
+                att.AttachmentTypeDescription),
+            Content =
+            [
+                new DocumentReference.ContentComponent
+                {
+                    Attachment = new Attachment
+                    {
+                        ContentType = att.ContentType,
+                        Url = att.BlobUrl,
+                        Title = att.FileName,
+                        Size = att.FileSizeBytes.HasValue
+                            ? (int?)Math.Min(att.FileSizeBytes.Value, int.MaxValue)
+                            : null
+                    }
+                }
+            ],
+            Context = new DocumentReference.ContextComponent
+            {
+                Related = [new ResourceReference($"Task/{appealId}")]
+            },
+            Extension =
+            [
+                new Extension
+                {
+                    Url = AppealX12TransmissionCodeExtensionUrl,
+                    Value = new Code(att.TransmissionCode)
+                }
+            ]
+        };
+
+        if (!string.IsNullOrEmpty(att.ControlNumber))
+        {
+            docRef.Extension.Add(new Extension
+            {
+                Url = AppealX12ControlNumberExtensionUrl,
+                Value = new FhirString(att.ControlNumber)
+            });
+        }
+
+        if (!string.IsNullOrEmpty(att.Description))
+        {
+            docRef.Description = att.Description;
+        }
+
+        return docRef;
+    }
 
     public IEnumerable<DocumentReference> ToAppealDocumentReferences(AppealDto appeal)
     {
         foreach (var att in appeal.Attachments)
         {
-            var docRef = new DocumentReference
-            {
-                Id = att.AttachmentId,
-                Meta = new Meta
-                {
-                    LastUpdated = att.UploadedAt,
-                    Profile = [DocumentReferenceProfileUrl]
-                },
-                Status = DocumentReferenceStatus.Current,
-                Subject = new ResourceReference($"Patient/{appeal.MemberId}"),
-                Date = att.UploadedAt,
-                Type = new CodeableConcept(
-                    "http://fhir.cloudhealthoffice.com/CodeSystem/cho-275-attachment-type",
-                    att.AttachmentTypeCode,
-                    att.AttachmentTypeDescription),
-                Content =
-                [
-                    new DocumentReference.ContentComponent
-                    {
-                        Attachment = new Attachment
-                        {
-                            ContentType = att.ContentType,
-                            Url = att.BlobUrl,
-                            Title = att.FileName,
-                            Size = att.FileSizeBytes.HasValue
-                                ? (int?)Math.Min(att.FileSizeBytes.Value, int.MaxValue)
-                                : null
-                        }
-                    }
-                ],
-                // Context.related back-references the appeal Task.
-                Context = new DocumentReference.ContextComponent
-                {
-                    Related = [new ResourceReference($"Task/{appeal.Id}")]
-                },
-                // Extensions: 275 X12 control number + transmission code.
-                Extension =
-                [
-                    new Extension
-                    {
-                        Url = AppealX12TransmissionCodeExtensionUrl,
-                        Value = new Code(att.TransmissionCode)
-                    }
-                ]
-            };
-
-            if (!string.IsNullOrEmpty(att.ControlNumber))
-            {
-                docRef.Extension.Add(new Extension
-                {
-                    Url = AppealX12ControlNumberExtensionUrl,
-                    Value = new FhirString(att.ControlNumber)
-                });
-            }
-
-            if (!string.IsNullOrEmpty(att.Description))
-            {
-                docRef.Description = att.Description;
-            }
-
-            yield return docRef;
+            yield return ToAppealDocumentReference(att, appeal.Id, appeal.MemberId);
         }
 
         foreach (var doc in appeal.ClinicalDocuments)

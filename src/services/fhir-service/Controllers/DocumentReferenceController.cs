@@ -35,17 +35,12 @@ public sealed class DocumentReferenceController : FhirControllerBase
     [ProducesResponseType(typeof(OperationOutcome), 404)]
     public async Task<IActionResult> Read(string id, CancellationToken ct)
     {
-        var (appeals, _) = await _appeals.SearchAppealsAsync(
-            new AppealSearchQuery { PageSize = 100 }, TenantId, ct);
-
-        foreach (var appeal in appeals)
-        {
-            var docRef = _mapper.ToAppealDocumentReferences(appeal)
-                .FirstOrDefault(d => d.Id == id);
-            if (docRef is not null) return Ok(docRef);
-        }
-
-        return FhirNotFound("DocumentReference", id);
+        // Fix 18: use dedicated GetAttachmentByIdAsync instead of scanning all appeals
+        var result = await _appeals.GetAttachmentByIdAsync(id, TenantId, ct);
+        if (result is null) return FhirNotFound("DocumentReference", id);
+        var (appeal, attachment) = result.Value;
+        var docRef = _mapper.ToAppealDocumentReference(attachment, appeal.Id, appeal.MemberId);
+        return Ok(docRef);
     }
 
     [HttpGet("DocumentReference")]
@@ -77,13 +72,20 @@ public sealed class DocumentReferenceController : FhirControllerBase
         {
             MemberId = StripPrefix("Patient/", search.Patient)
                        ?? StripPrefix("Patient/", SmartPatientId),
-            PageSize = search.Count
+            Page = search.Page,
+            // Fix 6: use larger page to fetch more appeals for projection-level pagination
+            PageSize = 500
         };
         var (appeals, _) = await _appeals.SearchAppealsAsync(query, TenantId, ct);
-        var docsAll = appeals.SelectMany(_mapper.ToAppealDocumentReferences).ToList();
+        // Fix 6: project all document references first, then paginate at this level
+        var allDocs = appeals.SelectMany(_mapper.ToAppealDocumentReferences).ToList();
+        var pagedDocs = allDocs
+            .Skip((search.Page - 1) * search.Count)
+            .Take(search.Count)
+            .ToList();
 
         var bundle = _bundleBuilder.Build(
-            docsAll, docsAll.Count, search.Page, search.Count,
+            pagedDocs, allDocs.Count, search.Page, search.Count,
             "DocumentReference", FhirBaseUrl, RawQueryString);
         return Ok(bundle);
     }

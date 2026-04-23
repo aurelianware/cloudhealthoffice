@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.Appeals.Contracts;
+using FhirService.Middleware;
+using Microsoft.AspNetCore.Http;
 
 namespace FhirService.Services;
 
@@ -31,23 +33,36 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
     };
 
     private readonly IHttpClientFactory _clientFactory;
-    private readonly ICorrelationIdAccessor _correlation;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<HttpFhirAppealAdapter> _logger;
 
     public HttpFhirAppealAdapter(
         IHttpClientFactory clientFactory,
-        ICorrelationIdAccessor correlation,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<HttpFhirAppealAdapter> logger)
     {
         _clientFactory = clientFactory;
-        _correlation = correlation;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+    }
+
+    private void AssertTenantConsistency(string tenantId)
+    {
+        var handlerTenant = _httpContextAccessor.HttpContext?.GetTenantId();
+        if (!string.IsNullOrEmpty(handlerTenant) &&
+            !string.Equals(handlerTenant, tenantId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Tenant parameter ({ParamTenant}) differs from HttpContext tenant ({CtxTenant}); using parameter.",
+                Sanitize(tenantId), Sanitize(handlerTenant));
+        }
     }
 
     // ── Read ────────────────────────────────────────────────────────────
 
     public async Task<AppealDto?> GetAppealAsync(string id, string tenantId, CancellationToken ct = default)
     {
+        AssertTenantConsistency(tenantId);
         var client = _clientFactory.CreateClient(HttpClientName);
         HttpResponseMessage response;
         try
@@ -71,6 +86,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
     public async Task<(IReadOnlyList<AppealDto> Items, int Total)> SearchAppealsAsync(
         AppealSearchQuery query, string tenantId, CancellationToken ct = default)
     {
+        AssertTenantConsistency(tenantId);
         var client = _clientFactory.CreateClient(HttpClientName);
         var qs = BuildSearchQueryString(query);
 
@@ -87,6 +103,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
     public async Task<IReadOnlyList<AppealSubmitChildOutcome>> SubmitAppealAsync(
         AppealSubmitBundleDto bundle, string tenantId, CancellationToken ct = default)
     {
+        AssertTenantConsistency(tenantId);
         var client = _clientFactory.CreateClient(HttpClientName);
         var outcomes = new List<AppealSubmitChildOutcome>();
 
@@ -97,6 +114,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
             client,
             AppealSubmitChildKind.Appeal,
             bundle.Appeal.Id,
+            entryIndex: bundle.AppealEntryIndex,
             method: HttpMethod.Post,
             requestUri: "api/appeals",
             body: bundle.Appeal,
@@ -117,12 +135,15 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
 
         // 2. POST /api/appeals/{id}/notes (serial; each failure is
         //    independent — keep going with the rest).
-        foreach (var note in bundle.Notes)
+        for (var i = 0; i < bundle.Notes.Count; i++)
         {
+            var note = bundle.Notes[i];
+            var noteEntryIndex = i < bundle.NoteEntryIndices.Count ? bundle.NoteEntryIndices[i] : i + 1;
             var noteOutcome = await PostChildAsync(
                 client,
                 AppealSubmitChildKind.Note,
                 note.NoteId,
+                entryIndex: noteEntryIndex,
                 method: HttpMethod.Post,
                 requestUri: $"api/appeals/{Uri.EscapeDataString(appealId)}/notes",
                 body: note,
@@ -133,12 +154,15 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         }
 
         // 3. POST /api/appeals/{id}/attachments (same pattern).
-        foreach (var att in bundle.Attachments)
+        for (var i = 0; i < bundle.Attachments.Count; i++)
         {
+            var att = bundle.Attachments[i];
+            var attEntryIndex = i < bundle.AttachmentEntryIndices.Count ? bundle.AttachmentEntryIndices[i] : bundle.Notes.Count + i + 1;
             var attOutcome = await PostChildAsync(
                 client,
                 AppealSubmitChildKind.Attachment,
                 att.AttachmentId,
+                entryIndex: attEntryIndex,
                 method: HttpMethod.Post,
                 requestUri: $"api/appeals/{Uri.EscapeDataString(appealId)}/attachments",
                 body: att,
@@ -157,6 +181,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         HttpClient client,
         AppealSubmitChildKind kind,
         string childRef,
+        int entryIndex,
         HttpMethod method,
         string requestUri,
         TBody body,
@@ -167,7 +192,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         HttpResponseMessage? response = null;
         try
         {
-            var request = new HttpRequestMessage(method, requestUri)
+            using var request = new HttpRequestMessage(method, requestUri)
             {
                 Content = JsonContent.Create(body, options: JsonOptions)
             };
@@ -181,6 +206,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
                 {
                     Kind = kind,
                     ChildRef = childRef,
+                    EntryIndex = entryIndex,
                     Success = true,
                     AssignedId = assignedId,
                     HttpStatus = (int)response.StatusCode,
@@ -200,6 +226,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
             {
                 Kind = kind,
                 ChildRef = childRef,
+                EntryIndex = entryIndex,
                 Success = false,
                 HttpStatus = (int)response.StatusCode,
                 Diagnostics = diagnostics,
@@ -217,6 +244,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
             {
                 Kind = kind,
                 ChildRef = childRef,
+                EntryIndex = entryIndex,
                 Success = false,
                 HttpStatus = null,
                 Diagnostics = $"Transport failure: {ex.GetType().Name}",
@@ -318,6 +346,87 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         return parts.Count == 0 ? string.Empty : "?" + string.Join("&", parts);
     }
 
+    public async Task<(AppealDto Appeal, AppealNoteDto Note)?> GetNoteByIdAsync(
+        string noteId, string tenantId, CancellationToken ct = default)
+    {
+        AssertTenantConsistency(tenantId);
+        var client = _clientFactory.CreateClient(HttpClientName);
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.GetAsync($"api/appeals/notes/{Uri.EscapeDataString(noteId)}", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "appeals-service GET notes/{NoteId} failed for tenant={TenantId}",
+                Sanitize(noteId), Sanitize(tenantId));
+            throw;
+        }
+
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+
+        var lookup = await response.Content.ReadFromJsonAsync<AppealNoteLookupResponse>(JsonOptions, ct);
+        if (lookup is null) return null;
+
+        var appeal = new AppealDto { Id = lookup.AppealId, MemberId = lookup.MemberId };
+        var note = new AppealNoteDto
+        {
+            NoteId = lookup.NoteId,
+            CreatedBy = lookup.CreatedBy,
+            NoteText = lookup.NoteText,
+            IsInternal = lookup.IsInternal,
+            CreatedAt = lookup.CreatedAt
+        };
+        return (appeal, note);
+    }
+
+    public async Task<(AppealDto Appeal, AppealAttachmentDto Attachment)?> GetAttachmentByIdAsync(
+        string attachmentId, string tenantId, CancellationToken ct = default)
+    {
+        AssertTenantConsistency(tenantId);
+        var client = _clientFactory.CreateClient(HttpClientName);
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.GetAsync($"api/appeals/attachments/{Uri.EscapeDataString(attachmentId)}", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "appeals-service GET attachments/{AttachmentId} failed for tenant={TenantId}",
+                Sanitize(attachmentId), Sanitize(tenantId));
+            throw;
+        }
+
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+
+        var lookup = await response.Content.ReadFromJsonAsync<AppealAttachmentLookupResponse>(JsonOptions, ct);
+        if (lookup is null) return null;
+
+        var appeal = new AppealDto { Id = lookup.AppealId, MemberId = lookup.MemberId };
+        var attachment = new AppealAttachmentDto
+        {
+            AttachmentId = lookup.AttachmentId,
+            ControlNumber = lookup.ControlNumber,
+            AttachmentTypeCode = lookup.AttachmentTypeCode,
+            AttachmentTypeDescription = lookup.AttachmentTypeDescription,
+            TransmissionCode = lookup.TransmissionCode,
+            FileName = lookup.FileName,
+            BlobUrl = lookup.BlobUrl,
+            ContentType = lookup.ContentType,
+            FileSizeBytes = lookup.FileSizeBytes,
+            UploadedAt = lookup.UploadedAt,
+            Description = lookup.Description,
+            Status = lookup.Status,
+            SentDate = lookup.SentDate,
+            AcknowledgmentReceived = lookup.AcknowledgmentReceived
+        };
+        return (appeal, attachment);
+    }
+
     private static string Sanitize(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty
             : value.Replace("\r", "").Replace("\n", "");
@@ -329,5 +438,36 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
     private sealed class AppealsListResponse
     {
         public List<AppealDto> Items { get; set; } = new();
+    }
+
+    private sealed class AppealNoteLookupResponse
+    {
+        public string AppealId { get; set; } = string.Empty;
+        public string MemberId { get; set; } = string.Empty;
+        public string NoteId { get; set; } = string.Empty;
+        public string CreatedBy { get; set; } = string.Empty;
+        public string NoteText { get; set; } = string.Empty;
+        public bool IsInternal { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private sealed class AppealAttachmentLookupResponse
+    {
+        public string AppealId { get; set; } = string.Empty;
+        public string MemberId { get; set; } = string.Empty;
+        public string AttachmentId { get; set; } = string.Empty;
+        public string? ControlNumber { get; set; }
+        public string AttachmentTypeCode { get; set; } = string.Empty;
+        public string? AttachmentTypeDescription { get; set; }
+        public string TransmissionCode { get; set; } = "EL";
+        public string? FileName { get; set; }
+        public string? BlobUrl { get; set; }
+        public string? ContentType { get; set; }
+        public long? FileSizeBytes { get; set; }
+        public DateTime UploadedAt { get; set; }
+        public string? Description { get; set; }
+        public AttachmentStatus Status { get; set; }
+        public DateTime? SentDate { get; set; }
+        public bool AcknowledgmentReceived { get; set; }
     }
 }

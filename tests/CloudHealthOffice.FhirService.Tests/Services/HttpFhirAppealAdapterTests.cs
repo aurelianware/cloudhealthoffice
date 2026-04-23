@@ -4,6 +4,7 @@ using System.Text.Json;
 using CloudHealthOffice.Appeals.Contracts;
 using FhirService.Services;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CloudHealthOffice.FhirService.Tests.Services;
@@ -61,7 +62,7 @@ public class HttpFhirAppealAdapterTests
 
         var adapter = new HttpFhirAppealAdapter(
             factoryMock.Object,
-            correlation,
+            new HttpContextAccessor(),
             NullLogger<HttpFhirAppealAdapter>.Instance);
 
         return (adapter, handler, correlation);

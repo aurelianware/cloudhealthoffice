@@ -3,11 +3,12 @@ using CloudHealthOffice.Appeals.Contracts;
 namespace FhirService.Services;
 
 /// <summary>
-/// In-memory fallback for local dev (no appeals-service running) and
-/// test runs that want predictable appeal data without standing up a
-/// real downstream. Registered as <see cref="IFhirAppealAdapter"/> when
-/// the "ChoAppealsService" named HttpClient cannot reach its configured
-/// base URL or when <c>Appeals:UseMockAdapter</c> is set.
+/// In-memory adapter for local development (for example, when no
+/// appeals-service is running) and for test runs that want predictable
+/// appeal data without standing up a real downstream. Registered as
+/// <see cref="IFhirAppealAdapter"/> when <c>Appeals:UseMockAdapter</c> is
+/// true (default in Development environments), or when the configuration
+/// explicitly selects the mock implementation.
 /// </summary>
 public sealed class MockFhirAppealAdapter : IFhirAppealAdapter
 {
@@ -65,16 +66,36 @@ public sealed class MockFhirAppealAdapter : IFhirAppealAdapter
                     Description = "Operative report."
                 }
             ]
+        },
+        new AppealDto
+        {
+            TenantId = "other-tenant",
+            Id = "apl-100",
+            AppealNumber = "APL-20260401-OT100001",
+            ClaimId = "clm-100",
+            ClaimNumber = "CLM-100",
+            MemberId = "pat-100",
+            PatientName = "Jane B Doe",
+            ProviderNPI = "9876543210",
+            AppealType = AppealType.Reconsideration,
+            AppealLevel = AppealLevel.FirstLevel,
+            LineOfBusiness = LineOfBusiness.Commercial,
+            Status = AppealStatus.InReview,
+            AppealReason = "Other tenant appeal.",
+            Source = AppealSource.ProviderPortal,
+            CreatedAt = new DateTime(2026, 4, 2, 0, 0, 0, DateTimeKind.Utc),
+            Notes = [],
+            Attachments = []
         }
     };
 
     public Task<AppealDto?> GetAppealAsync(string id, string tenantId, CancellationToken ct = default)
-        => Task.FromResult(Seed.FirstOrDefault(a => a.Id == id));
+        => Task.FromResult(Seed.FirstOrDefault(a => a.Id == id && a.TenantId == tenantId));
 
     public Task<(IReadOnlyList<AppealDto> Items, int Total)> SearchAppealsAsync(
         AppealSearchQuery query, string tenantId, CancellationToken ct = default)
     {
-        var filtered = Seed.AsEnumerable();
+        var filtered = Seed.Where(a => a.TenantId == tenantId).AsEnumerable();
         if (!string.IsNullOrEmpty(query.MemberId))
             filtered = filtered.Where(a => a.MemberId == query.MemberId);
         if (!string.IsNullOrEmpty(query.ClaimId))
@@ -105,6 +126,7 @@ public sealed class MockFhirAppealAdapter : IFhirAppealAdapter
             {
                 Kind = AppealSubmitChildKind.Appeal,
                 ChildRef = bundle.Appeal.Id,
+                EntryIndex = bundle.AppealEntryIndex,
                 Success = true,
                 AssignedId = assigned,
                 HttpStatus = 201,
@@ -112,12 +134,14 @@ public sealed class MockFhirAppealAdapter : IFhirAppealAdapter
             }
         };
 
-        foreach (var n in bundle.Notes)
+        for (var i = 0; i < bundle.Notes.Count; i++)
         {
+            var n = bundle.Notes[i];
             outcomes.Add(new AppealSubmitChildOutcome
             {
                 Kind = AppealSubmitChildKind.Note,
                 ChildRef = n.NoteId,
+                EntryIndex = i < bundle.NoteEntryIndices.Count ? bundle.NoteEntryIndices[i] : i + 1,
                 Success = true,
                 AssignedId = n.NoteId,
                 HttpStatus = 200,
@@ -125,12 +149,14 @@ public sealed class MockFhirAppealAdapter : IFhirAppealAdapter
             });
         }
 
-        foreach (var a in bundle.Attachments)
+        for (var i = 0; i < bundle.Attachments.Count; i++)
         {
+            var a = bundle.Attachments[i];
             outcomes.Add(new AppealSubmitChildOutcome
             {
                 Kind = AppealSubmitChildKind.Attachment,
                 ChildRef = a.AttachmentId,
+                EntryIndex = i < bundle.AttachmentEntryIndices.Count ? bundle.AttachmentEntryIndices[i] : bundle.Notes.Count + i + 1,
                 Success = true,
                 AssignedId = a.AttachmentId,
                 HttpStatus = 200,
@@ -139,5 +165,29 @@ public sealed class MockFhirAppealAdapter : IFhirAppealAdapter
         }
 
         return Task.FromResult<IReadOnlyList<AppealSubmitChildOutcome>>(outcomes);
+    }
+
+    public Task<(AppealDto Appeal, AppealNoteDto Note)?> GetNoteByIdAsync(
+        string noteId, string tenantId, CancellationToken ct = default)
+    {
+        foreach (var appeal in Seed.Where(a => a.TenantId == tenantId))
+        {
+            var note = appeal.Notes.FirstOrDefault(n => n.NoteId == noteId);
+            if (note is not null)
+                return Task.FromResult<(AppealDto, AppealNoteDto)?>((appeal, note));
+        }
+        return Task.FromResult<(AppealDto, AppealNoteDto)?>(null);
+    }
+
+    public Task<(AppealDto Appeal, AppealAttachmentDto Attachment)?> GetAttachmentByIdAsync(
+        string attachmentId, string tenantId, CancellationToken ct = default)
+    {
+        foreach (var appeal in Seed.Where(a => a.TenantId == tenantId))
+        {
+            var attachment = appeal.Attachments.FirstOrDefault(a => a.AttachmentId == attachmentId);
+            if (attachment is not null)
+                return Task.FromResult<(AppealDto, AppealAttachmentDto)?>((appeal, attachment));
+        }
+        return Task.FromResult<(AppealDto, AppealAttachmentDto)?>(null);
     }
 }

@@ -112,6 +112,7 @@ public class AppealSubmitControllerTests
             Entry =
             [
                 new Bundle.EntryComponent { Resource = BuildValidTask() },
+                new Bundle.EntryComponent { Resource = BuildValidPatient() },
                 new Bundle.EntryComponent
                 {
                     Resource = new Communication
@@ -144,6 +145,93 @@ public class AppealSubmitControllerTests
         dto.Attachments.Should().ContainSingle();
     }
 
+    [Fact]
+    public void BuildSubmitBundle_rejects_non_transaction_bundle_type()
+    {
+        var bundle = new Bundle
+        {
+            Type = Bundle.BundleType.Collection,
+            Entry = [new Bundle.EntryComponent { Resource = BuildValidTask() }]
+        };
+
+        Action act = () => AppealSubmitController.BuildSubmitBundle(bundle);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*transaction*");
+    }
+
+    [Fact]
+    public void BuildSubmitBundle_rejects_bundle_without_Patient_entry()
+    {
+        var bundle = new Bundle
+        {
+            Type = Bundle.BundleType.Transaction,
+            Entry = [new Bundle.EntryComponent { Resource = BuildValidTask() }]
+        };
+
+        Action act = () => AppealSubmitController.BuildSubmitBundle(bundle);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Patient*");
+    }
+
+    [Fact]
+    public void BuildSubmitBundle_assigns_correct_entry_indices()
+    {
+        var bundle = new Bundle
+        {
+            Type = Bundle.BundleType.Transaction,
+            Entry =
+            [
+                // index 0: Patient
+                new Bundle.EntryComponent { Resource = BuildValidPatient() },
+                // index 1: Task
+                new Bundle.EntryComponent { Resource = BuildValidTask() },
+                // index 2: Communication
+                new Bundle.EntryComponent
+                {
+                    Resource = new Communication
+                    {
+                        Id = "n1",
+                        Status = EventStatus.Completed,
+                        Payload = [new Communication.PayloadComponent { Content = new FhirString("hi") }]
+                    }
+                }
+            ]
+        };
+
+        var dto = AppealSubmitController.BuildSubmitBundle(bundle);
+
+        dto.AppealEntryIndex.Should().Be(1, "Task is at index 1");
+        dto.NoteEntryIndices.Should().ContainSingle()
+            .Which.Should().Be(2, "Communication is at index 2");
+    }
+
+    [Fact]
+    public void BuildOperationOutcome_uses_FHIRPath_location_and_cho_child_ref_extension()
+    {
+        var outcomes = new[]
+        {
+            new AppealSubmitChildOutcome
+            {
+                Kind = AppealSubmitChildKind.Appeal,
+                ChildRef = "apl-new",
+                EntryIndex = 1,
+                Success = true,
+                AssignedId = "apl-001",
+                HttpStatus = 201,
+                FailureKind = AppealSubmitFailureKind.None
+            }
+        };
+
+        var outcome = AppealSubmitController.BuildOperationOutcome(outcomes, "corr-x");
+
+        outcome.Issue[0].Location.Should().ContainSingle()
+            .Which.Should().Be("Bundle.entry[1].resource",
+                "FHIRPath location must use EntryIndex, not ChildRef");
+
+        outcome.Issue[0].Extension.Should().ContainSingle(e =>
+            e.Url == "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-child-ref" &&
+            (e.Value as FhirString)!.Value == "apl-new",
+            "cho-appeal-child-ref extension must carry the ChildRef value");
+    }
+
     private static Hl7.Fhir.Model.Task BuildValidTask() => new()
     {
         Id = "apl-new",
@@ -153,5 +241,11 @@ public class AppealSubmitControllerTests
         Focus = new ResourceReference("Claim/c1"),
         Requester = new ResourceReference("Practitioner/prov-1"),
         Code = new CodeableConcept(null, "Reconsideration")
+    };
+
+    private static Patient BuildValidPatient() => new()
+    {
+        Id = "p1",
+        Name = [new HumanName { Family = "Doe", Given = ["Jane"] }]
     };
 }

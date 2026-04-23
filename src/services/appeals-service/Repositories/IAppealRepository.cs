@@ -58,13 +58,26 @@ public interface IAppealRepository
         string tenantId, string appealId, string attachmentId, bool acknowledgmentReceived,
         AppealEvent auditEvent, CancellationToken ct = default);
 
-    /// <summary>
-    /// Atomic reviewer assignment + audit event. Caller sets
+    /// <summary>Atomic reviewer assignment + audit event. Caller sets
     /// <c>appeal.AssignedReviewerId</c> (and optionally appends a note
     /// separately via <see cref="AppendNoteAsync"/> for reassignment
     /// reason) before calling.
     /// </summary>
     Task<Appeal> AssignReviewerAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the note with <paramref name="noteId"/> within the tenant,
+    /// together with its parent appeal, or <c>null</c> if not found /
+    /// belongs to a different tenant.
+    /// </summary>
+    Task<AppealNoteLookup?> GetNoteByIdAsync(string tenantId, string noteId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the attachment with <paramref name="attachmentId"/> within the
+    /// tenant, together with its parent appeal, or <c>null</c> if not found /
+    /// belongs to a different tenant.
+    /// </summary>
+    Task<AppealAttachmentLookup?> GetAttachmentByIdAsync(string tenantId, string attachmentId, CancellationToken ct = default);
 }
 
 /// <summary>Search filters — bag of optional query parameters.</summary>
@@ -91,8 +104,7 @@ public interface IAppealEventRepository
         CancellationToken ct = default);
 }
 
-/// <summary>
-/// Repository-local sink for appending <see cref="AppealEvent"/> rows.
+/// <summary>Repository-local sink for appending <see cref="AppealEvent"/> rows.
 /// Lets the Cosmos and Mongo <see cref="IAppealRepository"/> implementations
 /// share a single transition-and-append shape while keeping their own
 /// storage choice for audit rows.
@@ -100,4 +112,37 @@ public interface IAppealEventRepository
 public interface IAppealEventSink
 {
     Task AppendAsync(AppealEvent evt, CancellationToken ct = default);
+}
+
+/// <summary>Result type for <see cref="IAppealRepository.GetNoteByIdAsync"/>.</summary>
+public sealed class AppealNoteLookup
+{
+    public string AppealId { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string NoteId { get; set; } = string.Empty;
+    public string CreatedBy { get; set; } = string.Empty;
+    public string NoteText { get; set; } = string.Empty;
+    public bool IsInternal { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>Result type for <see cref="IAppealRepository.GetAttachmentByIdAsync"/>.</summary>
+public sealed class AppealAttachmentLookup
+{
+    public string AppealId { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string AttachmentId { get; set; } = string.Empty;
+    public string? ControlNumber { get; set; }
+    public string AttachmentTypeCode { get; set; } = string.Empty;
+    public string? AttachmentTypeDescription { get; set; }
+    public string TransmissionCode { get; set; } = "EL";
+    public string? FileName { get; set; }
+    public string? BlobUrl { get; set; }
+    public string? ContentType { get; set; }
+    public long? FileSizeBytes { get; set; }
+    public DateTime UploadedAt { get; set; }
+    public string? Description { get; set; }
+    public AttachmentStatus Status { get; set; }
+    public DateTime? SentDate { get; set; }
+    public bool AcknowledgmentReceived { get; set; }
 }

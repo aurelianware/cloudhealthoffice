@@ -846,6 +846,36 @@ public class AppealsController : ControllerBase
         problem.Extensions["toStatus"] = ex.ToStatus.ToString();
         return Conflict(problem);
     }
+
+    // ── Per-note and per-attachment lookup (used by fhir-service) ───────
+
+    /// <summary>GET /api/appeals/notes/{noteId} — fetch a single note across any appeal for the tenant.</summary>
+    [HttpGet("notes/{noteId}")]
+    [ProducesResponseType(typeof(AppealNoteLookup), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetNoteById([FromRoute] string noteId, CancellationToken ct)
+    {
+        var lookup = await _appeals.GetNoteByIdAsync(TenantId, noteId, ct);
+        if (lookup is null) return NotFound();
+
+        // Decrypt note text before returning (NoteText is encrypted at rest)
+        lookup.NoteText = await _encryptor.DecryptAsync(lookup.NoteText, ct) ?? string.Empty;
+        return Ok(lookup);
+    }
+
+    /// <summary>GET /api/appeals/attachments/{attachmentId} — fetch a single attachment across any appeal for the tenant.</summary>
+    [HttpGet("attachments/{attachmentId}")]
+    [ProducesResponseType(typeof(AppealAttachmentLookup), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAttachmentById([FromRoute] string attachmentId, CancellationToken ct)
+    {
+        var lookup = await _appeals.GetAttachmentByIdAsync(TenantId, attachmentId, ct);
+        if (lookup is null) return NotFound();
+
+        // Decrypt description before returning (Description is encrypted at rest)
+        lookup.Description = await _encryptor.DecryptAsync(lookup.Description, ct);
+        return Ok(lookup);
+    }
 }
 
 // ── Request / response DTOs ─────────────────────────────────────────────

@@ -226,6 +226,61 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         }
     }
 
+    public Task<AppealNoteLookup?> GetNoteByIdAsync(string tenantId, string noteId, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            foreach (var appeal in _appeals.Values.Where(a => a.TenantId == tenantId))
+            {
+                var note = appeal.Notes.FirstOrDefault(n => n.NoteId == noteId);
+                if (note is null) continue;
+                return Task.FromResult<AppealNoteLookup?>(new AppealNoteLookup
+                {
+                    AppealId = appeal.Id,
+                    MemberId = appeal.MemberId,
+                    NoteId = note.NoteId,
+                    CreatedBy = note.CreatedBy,
+                    NoteText = note.NoteText,
+                    IsInternal = note.IsInternal,
+                    CreatedAt = note.CreatedAt
+                });
+            }
+            return Task.FromResult<AppealNoteLookup?>(null);
+        }
+    }
+
+    public Task<AppealAttachmentLookup?> GetAttachmentByIdAsync(string tenantId, string attachmentId, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            foreach (var appeal in _appeals.Values.Where(a => a.TenantId == tenantId))
+            {
+                var att = appeal.Attachments.FirstOrDefault(a => a.AttachmentId == attachmentId);
+                if (att is null) continue;
+                return Task.FromResult<AppealAttachmentLookup?>(new AppealAttachmentLookup
+                {
+                    AppealId = appeal.Id,
+                    MemberId = appeal.MemberId,
+                    AttachmentId = att.AttachmentId,
+                    ControlNumber = att.ControlNumber,
+                    AttachmentTypeCode = att.AttachmentTypeCode,
+                    AttachmentTypeDescription = att.AttachmentTypeDescription,
+                    TransmissionCode = att.TransmissionCode,
+                    FileName = att.FileName,
+                    BlobUrl = att.BlobUrl,
+                    ContentType = att.ContentType,
+                    FileSizeBytes = att.FileSizeBytes,
+                    UploadedAt = att.UploadedAt,
+                    Description = att.Description,
+                    Status = att.Status,
+                    SentDate = att.SentDate,
+                    AcknowledgmentReceived = att.AcknowledgmentReceived
+                });
+            }
+            return Task.FromResult<AppealAttachmentLookup?>(null);
+        }
+    }
+
     public Task AppendAsync(AppealEvent evt, CancellationToken ct = default)
     {
         AppendEventInternal(evt);

@@ -35,23 +35,12 @@ public sealed class CommunicationController : FhirControllerBase
     [ProducesResponseType(typeof(OperationOutcome), 404)]
     public async Task<IActionResult> Read(string id, CancellationToken ct)
     {
-        // Notes are embedded in the appeal. Finding the parent appeal
-        // requires scanning: current adapter shape doesn't support
-        // per-note read directly, so we search and project. The search
-        // endpoint scopes by tenant via the adapter's HttpClient.
-        var (appeals, _) = await _appeals.SearchAppealsAsync(
-            new AppealSearchQuery { PageSize = 100 }, TenantId, ct);
-
-        foreach (var appeal in appeals)
-        {
-            var note = appeal.Notes.FirstOrDefault(n => n.NoteId == id);
-            if (note is null) continue;
-            var communication = _mapper.ToAppealCommunications(appeal)
-                .FirstOrDefault(c => c.Id == id);
-            if (communication is not null) return Ok(communication);
-        }
-
-        return FhirNotFound("Communication", id);
+        // Fix 17: use dedicated GetNoteByIdAsync instead of scanning all appeals
+        var result = await _appeals.GetNoteByIdAsync(id, TenantId, ct);
+        if (result is null) return FhirNotFound("Communication", id);
+        var (appeal, note) = result.Value;
+        var communication = _mapper.ToAppealCommunication(note, appeal.Id, appeal.MemberId);
+        return Ok(communication);
     }
 
     /// <summary>GET /fhir/r4/Communication — search notes across appeals.</summary>
@@ -68,7 +57,9 @@ public sealed class CommunicationController : FhirControllerBase
             MemberId = StripPrefix("Patient/", search.Patient)
                        ?? StripPrefix("Patient/", SmartPatientId),
             ClaimId = null,
-            PageSize = search.Count
+            Page = search.Page,
+            // Fix 6: use larger page to fetch more appeals for projection-level pagination
+            PageSize = 500
         };
 
         // If the caller filters by `about=Task/{id}`, that's a single
@@ -90,10 +81,15 @@ public sealed class CommunicationController : FhirControllerBase
         }
 
         var (appeals, _) = await _appeals.SearchAppealsAsync(query, TenantId, ct);
-        var comms = appeals.SelectMany(_mapper.ToAppealCommunications).ToList();
+        // Fix 6: project all communications first, then paginate at this level
+        var allComms = appeals.SelectMany(_mapper.ToAppealCommunications).ToList();
+        var pagedComms = allComms
+            .Skip((search.Page - 1) * search.Count)
+            .Take(search.Count)
+            .ToList();
 
         var bundle = _bundleBuilder.Build(
-            comms, comms.Count, search.Page, search.Count,
+            pagedComms, allComms.Count, search.Page, search.Count,
             "Communication", FhirBaseUrl, RawQueryString);
         return Ok(bundle);
     }

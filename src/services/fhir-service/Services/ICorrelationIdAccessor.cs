@@ -1,14 +1,17 @@
 namespace FhirService.Services;
 
 /// <summary>
-/// Per-request correlation ID holder. Populated by the controller that
-/// starts a work unit (e.g. <c>AppealSubmitController.SubmitAppeal</c>)
-/// and read by the <c>CorrelationIdPropagationHandler</c> attached to
-/// every HttpClient that calls downstream services.
+/// Per-request correlation ID holder. Populated by controllers or
+/// request handlers that start a work unit (e.g.
+/// <c>AppealSubmitController.SubmitAppeal</c>) and read by the
+/// <c>CorrelationIdPropagationHandler</c> attached to every HttpClient
+/// that calls downstream services.
 ///
-/// Scope is request-scoped (DI: <c>AddScoped</c>). For non-Submit paths,
-/// the accessor is seeded by middleware from the inbound
-/// <c>X-Correlation-Id</c> header, or given a fresh GUID when absent.
+/// Scope is request-scoped (DI: <c>AddScoped</c>). When no caller has
+/// set a value for the current request, the accessor lazily generates a
+/// fresh GUID on first access. Future work may add a middleware that
+/// seeds the accessor from an inbound <c>X-Correlation-Id</c> header;
+/// for now the lazy-GUID default is the only non-explicit path.
 /// </summary>
 public interface ICorrelationIdAccessor
 {

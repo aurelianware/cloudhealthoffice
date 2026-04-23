@@ -67,6 +67,7 @@ public sealed class ClaimResponseController : FhirControllerBase
             MemberId = StripPrefix("Patient/", search.Patient)
                        ?? StripPrefix("Patient/", SmartPatientId),
             ClaimId = StripPrefix("Claim/", search.Request),
+            Page = search.Page,
             PageSize = search.Count
         };
 

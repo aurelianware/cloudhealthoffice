@@ -12,14 +12,18 @@
       names, types, and nullability, but with no Mongo serialization
       attributes, no ValidationAttributes, and no encryption concerns.
 
-      Both appeals-service and fhir-service reference this project:
-      - appeals-service produces AppealDto on its REST responses (domain
-        Appeal is mapped to AppealDto before serialization).
-      - fhir-service consumes AppealDto on its HttpFhirAppealAdapter.
+      Current dependency direction:
+      - fhir-service references this project and consumes AppealDto via
+        HttpFhirAppealAdapter.
+      - CloudHealthOffice.Appeals.Contracts.Tests references both this
+        project and appeals-service to run reflection-based drift checks
+        between AppealDto and the domain Appeal aggregate.
 
-      Drift between domain Appeal and AppealDto is caught structurally by
-      CloudHealthOffice.Appeals.Contracts.Tests.AppealDtoDriftTests,
-      which runs in both CI pipelines.
+      appeals-service does NOT currently reference this project. A future
+      PR may move appeals-service's controller-layer request/response shapes
+      to consume AppealDto directly, eliminating the shape-translation step
+      at the HTTP boundary. Until then, both sides serialize to a
+      structurally-equivalent JSON shape enforced by AppealDtoDriftTests.
     -->
   </PropertyGroup>
 

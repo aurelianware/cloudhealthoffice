@@ -21,6 +21,24 @@ public sealed class AppealSubmitBundleDto
     public required AppealDto Appeal { get; init; }
     public List<AppealNoteDto> Notes { get; init; } = new();
     public List<AppealAttachmentDto> Attachments { get; init; } = new();
+
+    /// <summary>
+    /// Zero-based index of the appeal Task entry in the original FHIR Bundle.
+    /// Passed to adapters so they can populate <see cref="AppealSubmitChildOutcome.EntryIndex"/>.
+    /// </summary>
+    public int AppealEntryIndex { get; init; }
+
+    /// <summary>
+    /// Zero-based Bundle.entry indices for each <see cref="Notes"/> entry,
+    /// in matching positional order.
+    /// </summary>
+    public IReadOnlyList<int> NoteEntryIndices { get; init; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Zero-based Bundle.entry indices for each <see cref="Attachments"/> entry,
+    /// in matching positional order.
+    /// </summary>
+    public IReadOnlyList<int> AttachmentEntryIndices { get; init; } = Array.Empty<int>();
 }
 
 /// <summary>
@@ -32,11 +50,22 @@ public sealed class AppealSubmitChildOutcome
     public required AppealSubmitChildKind Kind { get; init; }
 
     /// <summary>
-    /// Stable identifier within the inbound Bundle — fullUrl for Bundle-
-    /// entry children, position index for Notes/Attachments. Echoed back
-    /// so the caller can correlate failures to specific entries.
+    /// Correlation identifier echoed from the transformed submit input.
+    /// For the top-level appeal: the appeal's Id (empty if server-
+    /// assigned). For notes: the NoteId. For attachments: the
+    /// AttachmentId. These are the identifiers carried by the child DTO
+    /// when submitted to appeals-service, so callers can correlate
+    /// failures back to specific Bundle entries via those ids (not via
+    /// Bundle.entry.fullUrl or position index).
     /// </summary>
     public required string ChildRef { get; init; }
+
+    /// <summary>
+    /// Zero-based index of the corresponding entry in the inbound FHIR
+    /// Bundle. Used to build spec-compliant FHIRPath location strings
+    /// of the form <c>Bundle.entry[N].resource</c> in the OperationOutcome.
+    /// </summary>
+    public int EntryIndex { get; init; }
 
     public bool Success { get; init; }
 
