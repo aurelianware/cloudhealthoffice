@@ -71,7 +71,7 @@ public sealed class InMemoryConsentRepository : IConsentRepository, IConsentEven
             if (!_consents.TryGetValue(key, out var current) || current.Status != expectedFromStatus)
             {
                 var actual = current?.Status ?? consent.Status;
-                throw new Models.InvalidConsentTransitionException(actual, consent.Status);
+                throw new InvalidConsentTransitionException(actual, consent.Status);
             }
 
             _consents[key] = Clone(consent);

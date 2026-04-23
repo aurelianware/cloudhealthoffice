@@ -36,8 +36,12 @@ jobs:
       - name: Run npm audit
         run: |
           echo "## NPM Security Audit" >> $GITHUB_STEP_SUMMARY
-          npm audit --omit=dev --audit-level=moderate
+          # Keep the raw report as an artifact for triage.
           npm audit --omit=dev --audit-level=moderate --json > npm-audit.json || true
+          # Gate on production moderate+ advisories via audit-ci so we can
+          # carve out known-non-exploitable transitives without lowering
+          # the bar project-wide. Config: .audit-ci.json at repo root.
+          npx --yes audit-ci@^7 --config .audit-ci.json
 
       - name: Check claims-scrubbing-service
         run: |

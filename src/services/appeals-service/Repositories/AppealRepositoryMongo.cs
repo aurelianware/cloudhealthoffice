@@ -1,172 +1,258 @@
-using MongoDB.Driver;
 using AppealsService.Models;
+using MongoDB.Driver;
 
 namespace AppealsService.Repositories;
 
-public class AppealRepositoryMongo : IAppealRepository
+/// <summary>
+/// MongoDB implementation of <see cref="IAppealRepository"/>. The
+/// transition-and-append shape is not truly atomic across the Appeals and
+/// AppealEvents collections — Mongo multi-collection transactions require
+/// a replica-set primary, which our dev and many production deployments do
+/// not guarantee. Operationally we accept that a transition-then-event
+/// crash window can drop a single audit row; the appeal record update is
+/// still conditional (filter on current Status) so the status invariant
+/// holds. If operations observe a gap, the source of truth is the appeal
+/// row itself — the event log is an audit annotation, not the authoritative
+/// lifecycle store. Same inherited posture as consent-service and
+/// personal-representative-service.
+/// </summary>
+public sealed class AppealRepositoryMongo : IAppealRepository
 {
-    private readonly IMongoCollection<Appeal> _collection;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ILogger<AppealRepositoryMongo> _logger;
+    public const string AppealsCollectionName = "Appeals";
 
-    public AppealRepositoryMongo(
-        IMongoDatabase database,
-        IHttpContextAccessor httpContextAccessor,
-        ILogger<AppealRepositoryMongo> logger)
+    private readonly IMongoCollection<Appeal> _appeals;
+    private readonly IAppealEventSink _events;
+
+    public AppealRepositoryMongo(IMongoDatabase database, IAppealEventSink events)
     {
-        _collection = database.GetCollection<Appeal>("appeals");
-        _httpContextAccessor = httpContextAccessor;
-        _logger = logger;
+        _appeals = database.GetCollection<Appeal>(AppealsCollectionName);
+        _events = events;
     }
 
-    private string GetTenantId()
+    /// <summary>
+    /// Internal test seam for the migration hosted service — exposes the
+    /// raw collection so a one-shot batch scan can rewrite legacy-status
+    /// records. Not part of <see cref="IAppealRepository"/>.
+    /// </summary>
+    internal IMongoCollection<Appeal> AppealsCollection => _appeals;
+
+    public async Task<Appeal> CreateAsync(Appeal appeal, AppealEvent genesisEvent, CancellationToken ct = default)
     {
-        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString();
-        if (string.IsNullOrEmpty(tenantId))
-            throw new InvalidOperationException("TenantId not found in request context");
-        return tenantId;
+        if (string.IsNullOrEmpty(appeal.Id)) appeal.Id = Guid.NewGuid().ToString();
+        if (appeal.CreatedAt == default) appeal.CreatedAt = DateTime.UtcNow;
+        await _appeals.InsertOneAsync(appeal, cancellationToken: ct);
+        await _events.AppendAsync(genesisEvent, ct);
+        return appeal;
     }
 
-    public async Task<Appeal?> GetByIdAsync(string id)
+    public async Task<Appeal?> GetByIdAsync(string tenantId, string id, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
-        var filter = Builders<Appeal>.Filter.And(
-            Builders<Appeal>.Filter.Eq(x => x.Id, id),
-            Builders<Appeal>.Filter.Eq(x => x.TenantId, tenantId));
-        return await _collection.Find(filter).FirstOrDefaultAsync();
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, id);
+        return await _appeals.Find(filter).FirstOrDefaultAsync(ct);
     }
 
-    public async Task<Appeal?> GetByAppealNumberAsync(string appealNumber)
+    public async Task<Appeal?> GetByAppealNumberAsync(string tenantId, string appealNumber, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
-        var filter = Builders<Appeal>.Filter.And(
-            Builders<Appeal>.Filter.Eq(x => x.TenantId, tenantId),
-            Builders<Appeal>.Filter.Eq(x => x.AppealNumber, appealNumber));
-        return await _collection.Find(filter).FirstOrDefaultAsync();
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.AppealNumber, appealNumber);
+        return await _appeals.Find(filter).FirstOrDefaultAsync(ct);
     }
 
-    public async Task<IEnumerable<Appeal>> GetByClaimIdAsync(string claimId)
+    public async Task<IReadOnlyList<Appeal>> GetByClaimIdAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
-        var filter = Builders<Appeal>.Filter.And(
-            Builders<Appeal>.Filter.Eq(x => x.TenantId, tenantId),
-            Builders<Appeal>.Filter.Eq(x => x.ClaimId, claimId));
-        return await _collection.Find(filter)
-            .SortByDescending(x => x.SubmittedDate)
-            .ToListAsync();
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.ClaimId, claimId);
+        return await _appeals.Find(filter)
+            .SortByDescending(a => a.CreatedAt)
+            .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<Appeal>> SearchAsync(
-        string? memberId,
-        string? providerNPI,
-        DateTime? submittedFrom,
-        DateTime? submittedTo,
-        AppealStatus? status,
-        LineOfBusiness? lineOfBusiness,
-        int page = 1,
-        int pageSize = 50)
+    public async Task<IReadOnlyList<Appeal>> SearchAsync(
+        string tenantId, AppealSearchParams p, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
         var filters = new List<FilterDefinition<Appeal>>
         {
-            Builders<Appeal>.Filter.Eq(x => x.TenantId, tenantId)
+            Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
         };
 
-        if (!string.IsNullOrEmpty(memberId))
-            filters.Add(Builders<Appeal>.Filter.Eq(x => x.MemberId, memberId));
-        if (!string.IsNullOrEmpty(providerNPI))
-            filters.Add(Builders<Appeal>.Filter.Eq(x => x.ProviderNPI, providerNPI));
-        if (submittedFrom.HasValue)
-            filters.Add(Builders<Appeal>.Filter.Gte(x => x.SubmittedDate, submittedFrom.Value));
-        if (submittedTo.HasValue)
-            filters.Add(Builders<Appeal>.Filter.Lte(x => x.SubmittedDate, submittedTo.Value));
-        if (status.HasValue)
-            filters.Add(Builders<Appeal>.Filter.Eq(x => x.Status, status.Value));
-        if (lineOfBusiness.HasValue)
-            filters.Add(Builders<Appeal>.Filter.Eq(x => x.LineOfBusiness, lineOfBusiness.Value));
+        if (!string.IsNullOrEmpty(p.MemberId))
+            filters.Add(Builders<Appeal>.Filter.Eq(a => a.MemberId, p.MemberId));
+        if (!string.IsNullOrEmpty(p.ProviderNPI))
+            filters.Add(Builders<Appeal>.Filter.Eq(a => a.ProviderNPI, p.ProviderNPI));
+        if (p.SubmittedFrom.HasValue)
+            filters.Add(Builders<Appeal>.Filter.Gte(a => a.SubmittedDate, p.SubmittedFrom.Value));
+        if (p.SubmittedTo.HasValue)
+            filters.Add(Builders<Appeal>.Filter.Lte(a => a.SubmittedDate, p.SubmittedTo.Value));
+        if (p.Status.HasValue)
+            filters.Add(Builders<Appeal>.Filter.Eq(a => a.Status, p.Status.Value));
+        if (p.ClosureReasonCode.HasValue)
+            filters.Add(Builders<Appeal>.Filter.Eq(a => a.ClosureReasonCode, p.ClosureReasonCode.Value));
+        if (p.LineOfBusiness.HasValue)
+            filters.Add(Builders<Appeal>.Filter.Eq(a => a.LineOfBusiness, p.LineOfBusiness.Value));
+        if (!string.IsNullOrEmpty(p.AssignedReviewerId))
+            filters.Add(Builders<Appeal>.Filter.Eq(a => a.AssignedReviewerId, p.AssignedReviewerId));
 
-        return await _collection
+        var page = Math.Max(1, p.Page);
+        var pageSize = Math.Clamp(p.PageSize, 1, 100);
+
+        return await _appeals
             .Find(Builders<Appeal>.Filter.And(filters))
-            .SortByDescending(x => x.SubmittedDate)
+            .SortByDescending(a => a.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Limit(pageSize)
-            .ToListAsync();
+            .ToListAsync(ct);
     }
 
-    public async Task<AppealsSummary> GetAppealsSummaryAsync(DateTime from, DateTime to)
+    public async Task<AppealsSummary> GetAppealsSummaryAsync(
+        string tenantId, DateTime from, DateTime to, CancellationToken ct = default)
     {
-        var appeals = (await SearchAsync(null, null, from, to, null, null, 1, 10000)).ToList();
-
-        var summary = new AppealsSummary
-        {
-            TotalAppeals = appeals.Count,
-            InReview = appeals.Count(a => a.Status == AppealStatus.InReview),
-            Approved = appeals.Count(a => a.Status == AppealStatus.Approved),
-            Denied = appeals.Count(a => a.Status == AppealStatus.Denied),
-            PartialApprovals = appeals.Count(a => a.Status == AppealStatus.PartialApproval),
-            TotalAppealedAmount = appeals.Sum(a => a.AppealedAmount),
-            TotalApprovedAmount = appeals
-                .Where(a => a.Decision != null && a.Decision.ApprovedAmount.HasValue)
-                .Sum(a => a.Decision!.ApprovedAmount!.Value)
-        };
-
-        var decidedAppeals = appeals.Where(a => a.DecisionDate.HasValue).ToList();
-        if (decidedAppeals.Any())
-        {
-            summary.AverageDecisionTimeDays = decidedAppeals
-                .Average(a => (a.DecisionDate!.Value - a.SubmittedDate).TotalDays);
-        }
-
-        var totalDecided = appeals.Count(a => a.Status == AppealStatus.Approved ||
-                                              a.Status == AppealStatus.Denied ||
-                                              a.Status == AppealStatus.PartialApproval);
-        if (totalDecided > 0)
-        {
-            summary.ApprovalRate = ((double)(summary.Approved + summary.PartialApprovals) / totalDecided) * 100;
-        }
-
-        foreach (var appeal in appeals)
-        {
-            if (!summary.AppealsByStatus.ContainsKey(appeal.Status))
-                summary.AppealsByStatus[appeal.Status] = 0;
-            summary.AppealsByStatus[appeal.Status]++;
-
-            if (!summary.AppealsByLevel.ContainsKey(appeal.AppealLevel))
-                summary.AppealsByLevel[appeal.AppealLevel] = 0;
-            summary.AppealsByLevel[appeal.AppealLevel]++;
-        }
-
-        return summary;
+        // TODO(appeals-followup-summary-perf): in-memory aggregation over all
+        // rows scans poorly at scale. A follow-up PR will migrate this to a
+        // Mongo aggregation pipeline / Cosmos GROUP BY. Correctness is fine;
+        // only performance is deferred.
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
+                   & Builders<Appeal>.Filter.Gte(a => a.SubmittedDate, from)
+                   & Builders<Appeal>.Filter.Lte(a => a.SubmittedDate, to);
+        var appeals = await _appeals.Find(filter).ToListAsync(ct);
+        return SummaryBuilder.Build(appeals);
     }
 
-    public async Task<Appeal> CreateAsync(Appeal appeal)
+    public async Task<Appeal> TransitionStatusAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
     {
-        appeal.TenantId = GetTenantId();
-        appeal.SubmittedDate = DateTime.UtcNow;
-        appeal.TargetResponseDate = appeal.SubmittedDate.AddDays(appeal.IsUrgent ? 30 : 60);
+        if (!auditEvent.FromStatus.HasValue)
+        {
+            throw new ArgumentException(
+                "TransitionStatusAsync requires auditEvent.FromStatus to be set.",
+                nameof(auditEvent));
+        }
+        var expectedFromStatus = auditEvent.FromStatus.Value;
 
-        await _collection.InsertOneAsync(appeal);
-        _logger.LogInformation("Created appeal {AppealId} for claim {ClaimId}", appeal.Id, appeal.ClaimId);
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id)
+                   & Builders<Appeal>.Filter.Eq(a => a.Status, expectedFromStatus);
+
+        appeal.UpdatedAt = DateTime.UtcNow;
+        var replaceResult = await _appeals.ReplaceOneAsync(filter, appeal, cancellationToken: ct);
+        if (replaceResult.MatchedCount == 0)
+        {
+            throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
+        }
+
+        await _events.AppendAsync(auditEvent, ct);
         return appeal;
     }
 
-    public async Task<Appeal> UpdateAsync(Appeal appeal)
+    public async Task<Appeal?> TryTransitionToOverdueAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
     {
-        var filter = Builders<Appeal>.Filter.And(
-            Builders<Appeal>.Filter.Eq(x => x.Id, appeal.Id),
-            Builders<Appeal>.Filter.Eq(x => x.TenantId, appeal.TenantId));
-        await _collection.ReplaceOneAsync(filter, appeal);
-        _logger.LogInformation("Updated appeal {AppealId}", appeal.Id);
-        return appeal;
+        var nonTerminalStatuses = new[] { AppealStatus.Submitted, AppealStatus.InReview, AppealStatus.PendingInfo };
+
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id)
+                   & Builders<Appeal>.Filter.Eq(a => a.OverdueAuditEmitted, false)
+                   & Builders<Appeal>.Filter.In(a => a.Status, nonTerminalStatuses);
+
+        var update = Builders<Appeal>.Update
+            .Set(a => a.OverdueAuditEmitted, true)
+            .Set(a => a.UpdatedAt, DateTime.UtcNow);
+
+        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
+
+        var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct);
+        if (updated is null) return null;
+
+        await _events.AppendAsync(auditEvent, ct);
+        return updated;
     }
 
-    public async Task DeleteAsync(string id)
+    public async Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default)
     {
-        var tenantId = GetTenantId();
-        var filter = Builders<Appeal>.Filter.And(
-            Builders<Appeal>.Filter.Eq(x => x.Id, id),
-            Builders<Appeal>.Filter.Eq(x => x.TenantId, tenantId));
-        await _collection.DeleteOneAsync(filter);
-        _logger.LogInformation("Deleted appeal {AppealId}", id);
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id);
+
+        var update = Builders<Appeal>.Update
+            .Push(a => a.Notes, note)
+            .Set(a => a.UpdatedAt, DateTime.UtcNow);
+
+        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
+
+        var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct)
+            ?? throw new InvalidOperationException(
+                $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
+
+        await _events.AppendAsync(auditEvent, ct);
+        return updated;
+    }
+
+    public async Task<Appeal> AppendAttachmentAsync(Appeal appeal, AppealAttachment attachment, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id);
+
+        var updateBuilder = Builders<Appeal>.Update
+            .Push(a => a.Attachments, attachment)
+            .Set(a => a.UpdatedAt, DateTime.UtcNow);
+
+        if (!string.IsNullOrEmpty(attachment.ControlNumber))
+        {
+            updateBuilder = updateBuilder.Push(a => a.AttachmentControlNumbers, attachment.ControlNumber);
+        }
+
+        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
+
+        var updated = await _appeals.FindOneAndUpdateAsync(filter, updateBuilder, options, ct)
+            ?? throw new InvalidOperationException(
+                $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
+
+        await _events.AppendAsync(auditEvent, ct);
+        return updated;
+    }
+
+    public async Task<Appeal> AcknowledgeAttachmentAsync(
+        string tenantId, string appealId, string attachmentId, bool acknowledgmentReceived,
+        AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appealId)
+                   & Builders<Appeal>.Filter.ElemMatch(
+                         a => a.Attachments,
+                         att => att.AttachmentId == attachmentId);
+
+        var newStatus = acknowledgmentReceived ? AttachmentStatus.Acknowledged : AttachmentStatus.Sent;
+        var update = Builders<Appeal>.Update
+            .Set("attachments.$.acknowledgmentReceived", acknowledgmentReceived)
+            .Set("attachments.$.status", newStatus)
+            .Set(a => a.UpdatedAt, DateTime.UtcNow);
+
+        if (acknowledgmentReceived)
+        {
+            update = update.Set("attachments.$.sentDate", DateTime.UtcNow);
+        }
+
+        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
+        var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct)
+            ?? throw new InvalidOperationException(
+                $"Appeal {appealId} with attachment {attachmentId} not found for tenant {tenantId}.");
+
+        await _events.AppendAsync(auditEvent, ct);
+        return updated;
+    }
+
+    public async Task<Appeal> AssignReviewerAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id);
+
+        var update = Builders<Appeal>.Update
+            .Set(a => a.AssignedReviewerId, appeal.AssignedReviewerId)
+            .Set(a => a.UpdatedAt, DateTime.UtcNow);
+
+        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
+        var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct)
+            ?? throw new InvalidOperationException(
+                $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
+
+        await _events.AppendAsync(auditEvent, ct);
+        return updated;
     }
 }
