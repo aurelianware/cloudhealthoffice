@@ -31,7 +31,14 @@ public interface ICms0057ComplianceChecker
 public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
 {
     public IReadOnlyList<string> SupportedResourceTypes { get; } =
-        ["ServiceRequest", "ExplanationOfBenefit", "Claim", "Patient"];
+    [
+        "ServiceRequest", "ExplanationOfBenefit", "Claim", "Patient",
+        // PR 3 — appeal-projection resources. Validation is intentionally
+        // lightweight: structural checks (required fields, profile
+        // declaration) rather than deep HL7 semantic validation, which is
+        // deferred to a future PR.
+        "Task", "Communication", "DocumentReference", "ClaimResponse"
+    ];
 
     /// <summary>
     /// Main compliance validation — dispatches to resource-specific validators.
@@ -44,9 +51,193 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
             ExplanationOfBenefit eob => ValidateExplanationOfBenefit(eob),
             Claim claim => ValidateClaim(claim),
             Patient patient => ValidatePatient(patient),
+            Hl7.Fhir.Model.Task task => ValidateAppealTask(task),
+            Communication communication => ValidateAppealCommunication(communication),
+            DocumentReference documentReference => ValidateAppealDocumentReference(documentReference),
+            ClaimResponse claimResponse => ValidateAppealClaimResponse(claimResponse),
             _ => BuildUnsupportedResult(resource)
         };
     }
+
+    // ── Appeal projections (PR 3) ────────────────────────────────────────
+    // Lightweight structural validation — verify required elements and
+    // the cho-appeal-* profile declaration. Deep validation of bindings
+    // and slicing against the StructureDefinition differential is a
+    // future PR's work.
+
+    private const string AppealTaskProfile =
+        "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-task";
+    private const string AppealCommunicationProfile =
+        "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-communication";
+    private const string AppealDocumentReferenceProfile =
+        "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-document-reference";
+    private const string AppealClaimResponseProfile =
+        "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-claim-response";
+
+    private static ComplianceResult ValidateAppealTask(Hl7.Fhir.Model.Task resource)
+    {
+        var issues = new List<ComplianceIssue>();
+        var warnings = new List<ComplianceWarning>();
+        var required = 0;
+        const int total = 6;
+
+        if (resource.Status is null)
+            issues.Add(new("error", "MISSING_STATUS", "Task.status is required", Requirement: "CHO Appeal Task"));
+        else required++;
+
+        if (resource.Intent != Hl7.Fhir.Model.Task.TaskIntent.Order)
+            issues.Add(new("error", "WRONG_INTENT", "cho-appeal-task requires Task.intent = 'order'", Requirement: "CHO Appeal Task"));
+        else required++;
+
+        if (resource.For is null)
+            issues.Add(new("error", "MISSING_FOR", "Task.for (Patient reference) is required", Requirement: "CHO Appeal Task"));
+        else required++;
+
+        if (resource.Focus is null)
+            issues.Add(new("error", "MISSING_FOCUS", "Task.focus (Claim reference) is required", Requirement: "CHO Appeal Task"));
+        else required++;
+
+        if (resource.Requester is null)
+            issues.Add(new("error", "MISSING_REQUESTER", "Task.requester is required", Requirement: "CHO Appeal Task"));
+        else required++;
+
+        if (HasProfile(resource.Meta, AppealTaskProfile)) required++;
+        else warnings.Add(new("MISSING_PROFILE",
+            $"Task should declare profile {AppealTaskProfile}",
+            $"Add {AppealTaskProfile} to Meta.profile"));
+
+        return new ComplianceResult(
+            Compliant: issues.All(i => i.Severity != "error"),
+            Issues: issues, Warnings: warnings,
+            Summary: new ComplianceSummary(
+                ResourceType: "Task", RequiredElementsPresent: required,
+                TotalRequiredElements: total,
+                UsCoreSections: ["Appeal Task"],
+                DaVinciProfiles: ["CHO Appeal Task"],
+                UscdiDataClasses: [],
+                TimelineCompliance: new TimelineCompliance(Applicable: false)));
+    }
+
+    private static ComplianceResult ValidateAppealCommunication(Communication resource)
+    {
+        var issues = new List<ComplianceIssue>();
+        var warnings = new List<ComplianceWarning>();
+        var required = 0;
+        const int total = 4;
+
+        if (resource.Status is null)
+            issues.Add(new("error", "MISSING_STATUS", "Communication.status is required", Requirement: "CHO Appeal Communication"));
+        else required++;
+
+        if (resource.Subject is null)
+            issues.Add(new("error", "MISSING_SUBJECT", "Communication.subject (Patient) is required", Requirement: "CHO Appeal Communication"));
+        else required++;
+
+        if (resource.About is null || resource.About.Count == 0)
+            issues.Add(new("error", "MISSING_ABOUT", "Communication.about (Task back-reference) is required", Requirement: "CHO Appeal Communication"));
+        else required++;
+
+        if (HasProfile(resource.Meta, AppealCommunicationProfile)) required++;
+        else warnings.Add(new("MISSING_PROFILE",
+            $"Communication should declare profile {AppealCommunicationProfile}",
+            $"Add {AppealCommunicationProfile} to Meta.profile"));
+
+        return new ComplianceResult(
+            Compliant: issues.All(i => i.Severity != "error"),
+            Issues: issues, Warnings: warnings,
+            Summary: new ComplianceSummary(
+                ResourceType: "Communication", RequiredElementsPresent: required,
+                TotalRequiredElements: total,
+                UsCoreSections: ["Appeal Communication"],
+                DaVinciProfiles: ["CHO Appeal Communication"],
+                UscdiDataClasses: [],
+                TimelineCompliance: new TimelineCompliance(Applicable: false)));
+    }
+
+    private static ComplianceResult ValidateAppealDocumentReference(DocumentReference resource)
+    {
+        var issues = new List<ComplianceIssue>();
+        var warnings = new List<ComplianceWarning>();
+        var required = 0;
+        const int total = 5;
+
+        if (resource.Status is null)
+            issues.Add(new("error", "MISSING_STATUS", "DocumentReference.status is required", Requirement: "CHO Appeal DocumentReference"));
+        else required++;
+
+        if (resource.Subject is null)
+            issues.Add(new("error", "MISSING_SUBJECT", "DocumentReference.subject (Patient) is required", Requirement: "CHO Appeal DocumentReference"));
+        else required++;
+
+        if (resource.Content is null || resource.Content.Count == 0)
+            issues.Add(new("error", "MISSING_CONTENT", "DocumentReference.content is required", Requirement: "CHO Appeal DocumentReference"));
+        else required++;
+
+        if (resource.Context is null || resource.Context.Related is null || resource.Context.Related.Count == 0)
+            warnings.Add(new("MISSING_CONTEXT_RELATED",
+                "DocumentReference.context.related (Task back-reference) is recommended",
+                "Add Task/{appealId} to Context.related"));
+        else required++;
+
+        if (HasProfile(resource.Meta, AppealDocumentReferenceProfile)) required++;
+        else warnings.Add(new("MISSING_PROFILE",
+            $"DocumentReference should declare profile {AppealDocumentReferenceProfile}",
+            $"Add {AppealDocumentReferenceProfile} to Meta.profile"));
+
+        return new ComplianceResult(
+            Compliant: issues.All(i => i.Severity != "error"),
+            Issues: issues, Warnings: warnings,
+            Summary: new ComplianceSummary(
+                ResourceType: "DocumentReference", RequiredElementsPresent: required,
+                TotalRequiredElements: total,
+                UsCoreSections: ["Appeal DocumentReference"],
+                DaVinciProfiles: ["CHO Appeal DocumentReference"],
+                UscdiDataClasses: [],
+                TimelineCompliance: new TimelineCompliance(Applicable: false)));
+    }
+
+    private static ComplianceResult ValidateAppealClaimResponse(ClaimResponse resource)
+    {
+        var issues = new List<ComplianceIssue>();
+        var warnings = new List<ComplianceWarning>();
+        var required = 0;
+        const int total = 5;
+
+        if (resource.Status is null)
+            issues.Add(new("error", "MISSING_STATUS", "ClaimResponse.status is required", Requirement: "CHO Appeal ClaimResponse"));
+        else required++;
+
+        if (resource.Patient is null)
+            issues.Add(new("error", "MISSING_PATIENT", "ClaimResponse.patient is required", Requirement: "CHO Appeal ClaimResponse"));
+        else required++;
+
+        if (resource.Request is null)
+            issues.Add(new("error", "MISSING_REQUEST", "ClaimResponse.request (original Claim) is required", Requirement: "CHO Appeal ClaimResponse"));
+        else required++;
+
+        if (resource.Outcome is null)
+            issues.Add(new("error", "MISSING_OUTCOME", "ClaimResponse.outcome is required", Requirement: "CHO Appeal ClaimResponse"));
+        else required++;
+
+        if (HasProfile(resource.Meta, AppealClaimResponseProfile)) required++;
+        else warnings.Add(new("MISSING_PROFILE",
+            $"ClaimResponse should declare profile {AppealClaimResponseProfile}",
+            $"Add {AppealClaimResponseProfile} to Meta.profile"));
+
+        return new ComplianceResult(
+            Compliant: issues.All(i => i.Severity != "error"),
+            Issues: issues, Warnings: warnings,
+            Summary: new ComplianceSummary(
+                ResourceType: "ClaimResponse", RequiredElementsPresent: required,
+                TotalRequiredElements: total,
+                UsCoreSections: ["Appeal ClaimResponse"],
+                DaVinciProfiles: ["CHO Appeal ClaimResponse"],
+                UscdiDataClasses: ["Financial"],
+                TimelineCompliance: new TimelineCompliance(Applicable: false)));
+    }
+
+    private static bool HasProfile(Meta? meta, string profileUrl) =>
+        meta?.Profile?.Any(p => string.Equals(p, profileUrl, StringComparison.Ordinal)) ?? false;
 
     public IReadOnlyList<ComplianceResult> ValidateBatchCompliance(IEnumerable<Resource> resources)
         => resources.Select(ValidateCompliance).ToList();

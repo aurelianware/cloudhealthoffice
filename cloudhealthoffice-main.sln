@@ -211,6 +211,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "appeals-service", "appeals-
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppealsService.Tests", "src\services\appeals-service\AppealsService.Tests\AppealsService.Tests.csproj", "{A222A10A-7DAD-450C-9ADB-C32C62558082}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.Appeals.Contracts", "src\services\shared\CloudHealthOffice.Appeals.Contracts\CloudHealthOffice.Appeals.Contracts.csproj", "{C9ADB84C-F447-450B-A837-C877F58FC32B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.Appeals.Contracts.Tests", "src\services\shared\CloudHealthOffice.Appeals.Contracts.Tests\CloudHealthOffice.Appeals.Contracts.Tests.csproj", "{C0E682EC-F646-44F9-B942-68FA1ED04012}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1169,6 +1173,30 @@ Global
 		{A222A10A-7DAD-450C-9ADB-C32C62558082}.Release|x64.Build.0 = Release|Any CPU
 		{A222A10A-7DAD-450C-9ADB-C32C62558082}.Release|x86.ActiveCfg = Release|Any CPU
 		{A222A10A-7DAD-450C-9ADB-C32C62558082}.Release|x86.Build.0 = Release|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Debug|x64.Build.0 = Debug|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Debug|x86.Build.0 = Debug|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Release|x64.ActiveCfg = Release|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Release|x64.Build.0 = Release|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Release|x86.ActiveCfg = Release|Any CPU
+		{C9ADB84C-F447-450B-A837-C877F58FC32B}.Release|x86.Build.0 = Release|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Debug|x64.Build.0 = Debug|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Debug|x86.Build.0 = Debug|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Release|x64.ActiveCfg = Release|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Release|x64.Build.0 = Release|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Release|x86.ActiveCfg = Release|Any CPU
+		{C0E682EC-F646-44F9-B942-68FA1ED04012}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1261,6 +1289,8 @@ Global
 		{01B944CE-AB6C-4EE7-8419-9775A1BEC9AB} = {984BB9B3-3FA3-BE33-9484-CAC21695A33C}
 		{9903112D-0596-411F-A5B5-4640FD31749A} = {984BB9B3-3FA3-BE33-9484-CAC21695A33C}
 		{A222A10A-7DAD-450C-9ADB-C32C62558082} = {9903112D-0596-411F-A5B5-4640FD31749A}
+		{C9ADB84C-F447-450B-A837-C877F58FC32B} = {1CF083BF-0A1D-5B5F-37B1-E2F5EFE0303B}
+		{C0E682EC-F646-44F9-B942-68FA1ED04012} = {1CF083BF-0A1D-5B5F-37B1-E2F5EFE0303B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C10C3349-5BEE-4B34-9987-23F0142F9D98}

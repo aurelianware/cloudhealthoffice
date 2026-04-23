@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CloudHealthOffice.Appeals.Contracts</RootNamespace>
+    <AssemblyName>CloudHealthOffice.Appeals.Contracts</AssemblyName>
+    <!--
+      Cross-service DTO contract for appeals. Mirrors the domain model in
+      appeals-service/Models/Appeal.cs as a parallel type: same property
+      names, types, and nullability, but with no Mongo serialization
+      attributes, no ValidationAttributes, and no encryption concerns.
+
+      Both appeals-service and fhir-service reference this project:
+      - appeals-service produces AppealDto on its REST responses (domain
+        Appeal is mapped to AppealDto before serialization).
+      - fhir-service consumes AppealDto on its HttpFhirAppealAdapter.
+
+      Drift between domain Appeal and AppealDto is caught structurally by
+      CloudHealthOffice.Appeals.Contracts.Tests.AppealDtoDriftTests,
+      which runs in both CI pipelines.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CloudHealthOffice.Appeals.Contracts.Tests" />
+  </ItemGroup>
+
+</Project>
