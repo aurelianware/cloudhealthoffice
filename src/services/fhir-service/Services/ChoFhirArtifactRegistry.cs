@@ -29,11 +29,17 @@ public sealed class ChoFhirArtifactRegistry : IChoFhirArtifactRegistry
                      && n.EndsWith(".json", StringComparison.Ordinal))
             .ToArray();
 
+        // Fail fast on zero artifacts: the service advertises CHO profiles via
+        // CapabilityStatement and serves them via conformance endpoints; a DLL
+        // built without the embedded `FhirArtifacts.*.json` resources is
+        // misconfigured and must not start silently.
         if (resourceNames.Length == 0)
         {
-            logger.LogWarning(
-                "ChoFhirArtifactRegistry found no embedded FHIR artifacts. " +
-                "Build system may not have run the CopyFhirArtifacts target.");
+            throw new InvalidOperationException(
+                "ChoFhirArtifactRegistry found no embedded FHIR artifacts " +
+                $"(resource prefix '{ResourcePrefix}'). Verify that " +
+                "fhir-service.csproj's <EmbeddedResource Include=\"...docs/fhir/profiles/*.json\"> " +
+                "item group resolves and that docs/fhir/profiles/ is present in the build tree.");
         }
 
         foreach (var name in resourceNames)
@@ -57,16 +63,16 @@ public sealed class ChoFhirArtifactRegistry : IChoFhirArtifactRegistry
             switch (parsed)
             {
                 case StructureDefinition sd when !string.IsNullOrEmpty(sd.Id):
-                    _structureDefinitions[sd.Id] = sd;
+                    AddUnique(_structureDefinitions, sd.Id, sd, name, "StructureDefinition");
                     break;
                 case CodeSystem cs when !string.IsNullOrEmpty(cs.Id):
-                    _codeSystems[cs.Id] = cs;
+                    AddUnique(_codeSystems, cs.Id, cs, name, "CodeSystem");
                     break;
                 case ValueSet vs when !string.IsNullOrEmpty(vs.Id):
-                    _valueSets[vs.Id] = vs;
+                    AddUnique(_valueSets, vs.Id, vs, name, "ValueSet");
                     break;
                 case OperationDefinition od when !string.IsNullOrEmpty(od.Id):
-                    _operationDefinitions[od.Id] = od;
+                    AddUnique(_operationDefinitions, od.Id, od, name, "OperationDefinition");
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -95,6 +101,26 @@ public sealed class ChoFhirArtifactRegistry : IChoFhirArtifactRegistry
 
     public OperationDefinition? GetOperationDefinition(string id)
         => _operationDefinitions.TryGetValue(id, out var od) ? od : null;
+
+    // Canonical URLs and resource IDs are load-bearing: once a FHIR resource
+    // claims conformance via meta.profile, the URL cannot change without
+    // invalidating persisted data. Treat duplicate IDs as a fatal build error
+    // rather than last-write-wins.
+    private static void AddUnique<T>(
+        Dictionary<string, T> bucket, string id, T resource,
+        string resourceName, string resourceType) where T : Resource
+    {
+        if (bucket.ContainsKey(id))
+        {
+            throw new InvalidOperationException(
+                $"Duplicate {resourceType} id '{id}' detected while loading " +
+                $"'{resourceName}'. Each CHO FHIR artifact id must be unique " +
+                $"because canonical URLs are permanent once resources claim " +
+                $"conformance via meta.profile.");
+        }
+
+        bucket.Add(id, resource);
+    }
 
     public IReadOnlyList<StructureDefinition> AllStructureDefinitions
         => _structureDefinitions.Values.OrderBy(sd => sd.Id, StringComparer.Ordinal).ToList();

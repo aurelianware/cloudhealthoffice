@@ -97,18 +97,37 @@ subset of the parent's.
 
 ## Discovery
 
-The `fhir-service` CapabilityStatement advertises these profiles and
-the `cho-appeal-submit` operation. Query the FHIR server's metadata
-endpoint to discover supported profiles and operations at runtime:
+The `fhir-service` CapabilityStatement advertises the FHIR conformance-
+resource endpoints (StructureDefinition, CodeSystem, ValueSet,
+OperationDefinition) with `read` + `search-type` interactions:
 
     GET /fhir/r4/metadata
 
-Each profile is also served directly by canonical URL. For example:
+Each profile, code system, value set, and operation definition is
+served directly by canonical URL. For example:
 
     GET /fhir/r4/StructureDefinition/cho-appeal-task
     GET /fhir/r4/CodeSystem/cho-appeal-type
     GET /fhir/r4/ValueSet/cho-appeal-task-status
     GET /fhir/r4/OperationDefinition/cho-appeal-submit
+
+Search endpoints return a `Bundle` (type `searchset`) of all artifacts
+of the given kind — useful for tooling that wants the complete set:
+
+    GET /fhir/r4/StructureDefinition    -> all 11 profiles + extensions
+    GET /fhir/r4/CodeSystem             -> all 6 code systems
+    GET /fhir/r4/ValueSet               -> all 9 value sets
+    GET /fhir/r4/OperationDefinition    -> all 1 operation definition
+
+**Note on `CapabilityStatement.rest.resource.supportedProfile`:** this
+PR does NOT yet advertise the Task / Communication / DocumentReference /
+ClaimResponse profiles via the CapabilityStatement's `supportedProfile`,
+nor the `cho-appeal-submit` operation in `rest.operation`. Advertising
+read/search interactions or an operation name before the runtime
+endpoints exist would be a false conformance claim. Those advertisements
+land in a subsequent PR alongside the runtime implementations. Until
+then, profiles and the operation definition remain fully discoverable
+via the conformance-resource endpoints listed above.
 
 ## Adding a new profile
 
@@ -128,10 +147,14 @@ Each profile is also served directly by canonical URL. For example:
    the `ArtifactSnapshotTests` failure message includes a mechanical
    `echo <hash> > <file>` command to register the snapshot.
 
-The `fhir-service` project's MSBuild `CopyFhirArtifacts` target copies
-every `.json` in this directory into the built assembly as an embedded
-resource at build time. No extra wiring is needed after the steps
-above — rebuild and the new artifact is served.
+The `fhir-service` project embeds every `.json` in this directory
+directly into the built assembly as an embedded resource via an
+`<EmbeddedResource Include="...docs/fhir/profiles/*.json"
+LogicalName="FhirArtifacts.%(Filename)%(Extension)" />` item in
+`fhir-service.csproj` — there is no separate copy target. MSBuild
+participates in incremental rebuilds: editing a profile causes
+`fhir-service.dll` to rebuild and the new artifact is served. No
+extra wiring is needed after the steps above.
 
 ## Tooling
 

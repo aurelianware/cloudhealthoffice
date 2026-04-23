@@ -1,5 +1,4 @@
 using System.Net;
-using FhirService.Services;
 using FluentAssertions;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
@@ -7,9 +6,12 @@ using Hl7.Fhir.Serialization;
 namespace CloudHealthOffice.FhirService.Tests.Controllers;
 
 /// <summary>
-/// Verifies the CapabilityStatement correctly advertises CHO appeal
-/// profiles (via supportedProfile on Task/Communication/DocumentReference/ClaimResponse)
-/// and the cho-appeal-submit operation. Includes a regression guard on
+/// Verifies that the CapabilityStatement advertises the FHIR conformance
+/// resource endpoints (StructureDefinition, CodeSystem, ValueSet,
+/// OperationDefinition) that PR 1 actually implements — and that it does
+/// NOT advertise the Task/Communication/DocumentReference/ClaimResponse
+/// profiles or the cho-appeal-submit operation, since runtime read/search
+/// and the operation itself land in PR 2. Includes a regression guard on
 /// existing resource entries and the bulk-export operation.
 /// </summary>
 public class MetadataCapabilityStatementAppealExtensionTests : IClassFixture<FhirTestWebAppFactory>
@@ -31,28 +33,52 @@ public class MetadataCapabilityStatementAppealExtensionTests : IClassFixture<Fhi
     }
 
     [Theory]
-    [InlineData("Task",              "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-task")]
-    [InlineData("Communication",     "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-communication")]
-    [InlineData("DocumentReference", "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-document-reference")]
-    [InlineData("ClaimResponse",     "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-claim-response")]
-    public async Task Resource_entry_advertises_CHO_appeal_profile(string resourceType, string expectedProfileUrl)
+    [InlineData("StructureDefinition")]
+    [InlineData("CodeSystem")]
+    [InlineData("ValueSet")]
+    [InlineData("OperationDefinition")]
+    public async Task Conformance_resource_endpoints_are_advertised_with_read_and_search(string resourceType)
     {
         var cs = await GetCapabilityStatement();
-
         var rest = cs.Rest.Should().ContainSingle().Subject;
         var resource = rest.Resource.Should().ContainSingle(r => r.Type.ToString() == resourceType).Subject;
-        resource.SupportedProfile.Should().Contain(expectedProfileUrl);
+
+        var codes = resource.Interaction.Select(i => i.Code).ToList();
+        codes.Should().Contain(CapabilityStatement.TypeRestfulInteraction.Read);
+        codes.Should().Contain(CapabilityStatement.TypeRestfulInteraction.SearchType);
+    }
+
+    [Theory]
+    [InlineData("Task")]
+    [InlineData("Communication")]
+    [InlineData("DocumentReference")]
+    [InlineData("ClaimResponse")]
+    public async Task Appeal_profile_resources_are_NOT_yet_advertised_in_PR_1(string resourceType)
+    {
+        // Advertising read/search interactions or supportedProfile for these
+        // resource types before the runtime endpoints exist would be a false
+        // conformance claim. The profile JSON is still discoverable via
+        // GET /fhir/r4/StructureDefinition; PR 2 adds the resource entries
+        // once persistence and read/search land.
+        var cs = await GetCapabilityStatement();
+        var rest = cs.Rest.Should().ContainSingle().Subject;
+
+        rest.Resource.Should().NotContain(
+            r => r.Type.ToString() == resourceType,
+            $"{resourceType} read/search is not implemented in PR 1; " +
+            "advertising it would mislead clients and compliance tooling");
     }
 
     [Fact]
-    public async Task Operation_list_includes_cho_appeal_submit()
+    public async Task cho_appeal_submit_operation_is_NOT_yet_advertised_in_PR_1()
     {
+        // Same reasoning as above: the operation is defined (OperationDefinition
+        // JSON served at its canonical URL) but not implemented. Advertising it
+        // in rest[0].operation[] would cause clients to invoke it and receive
+        // 404/405. PR 2 adds the advertisement alongside the implementation.
         var cs = await GetCapabilityStatement();
 
-        var op = cs.Rest[0].Operation
-            .Should().ContainSingle(o => o.Name == "cho-appeal-submit").Subject;
-        op.Definition.Should().Be(ChoFhirCanonicalUrls.AppealSubmitOperation);
-        op.Documentation.ToString().Should().Contain("appeal");
+        cs.Rest[0].Operation.Should().NotContain(o => o.Name == "cho-appeal-submit");
     }
 
     [Fact]
@@ -61,19 +87,16 @@ public class MetadataCapabilityStatementAppealExtensionTests : IClassFixture<Fhi
         var cs = await GetCapabilityStatement();
         var rest = cs.Rest[0];
 
-        // Existing resources still advertised
         rest.Resource.Select(r => r.Type.ToString()).Should().Contain(new[]
         {
             "Patient", "Coverage", "ExplanationOfBenefit",
             "Encounter", "Claim", "Questionnaire", "QuestionnaireResponse"
         });
 
-        // Existing bulk-export operation still listed
         rest.Operation.Should().Contain(o =>
             o.Name == "export" &&
             o.Definition == "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export");
 
-        // Implementation description unchanged
         cs.Implementation.Description.Should().Contain("CMS-0057-F");
     }
 }

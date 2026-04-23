@@ -6,10 +6,12 @@ using Hl7.Fhir.Serialization;
 namespace CloudHealthOffice.FhirService.Tests.FhirArtifacts;
 
 /// <summary>
-/// Verifies that every canonical URL appearing in a shipped artifact is
+/// Verifies that every canonical URL appearing in a shipped artifact
+/// (StructureDefinition, CodeSystem, ValueSet, OperationDefinition) is
 /// represented by a constant in <see cref="ChoFhirCanonicalUrls"/>.
 /// Protects against copy-paste typos that would be load-bearing and
-/// permanent once a resource claims conformance via <c>meta.profile</c>.
+/// permanent once a resource claims conformance via <c>meta.profile</c>
+/// or references a CodeSystem/ValueSet URL.
 /// </summary>
 public class CanonicalUrlConstantsTests
 {
@@ -33,6 +35,30 @@ public class CanonicalUrlConstantsTests
     }
 
     [Fact]
+    public void Every_CodeSystem_url_has_matching_constant()
+    {
+        var urlsFromArtifacts = TestArtifactFiles
+            .JsonFilesMatching("CodeSystem-")
+            .Select(path => _parser.Parse<CodeSystem>(TestArtifactFiles.ReadAllText(path)).Url)
+            .OrderBy(u => u, StringComparer.Ordinal)
+            .ToList();
+
+        urlsFromArtifacts.Should().BeEquivalentTo(ChoFhirCanonicalUrls.AllCodeSystems);
+    }
+
+    [Fact]
+    public void Every_ValueSet_url_has_matching_constant()
+    {
+        var urlsFromArtifacts = TestArtifactFiles
+            .JsonFilesMatching("ValueSet-")
+            .Select(path => _parser.Parse<ValueSet>(TestArtifactFiles.ReadAllText(path)).Url)
+            .OrderBy(u => u, StringComparer.Ordinal)
+            .ToList();
+
+        urlsFromArtifacts.Should().BeEquivalentTo(ChoFhirCanonicalUrls.AllValueSets);
+    }
+
+    [Fact]
     public void Every_OperationDefinition_url_has_matching_constant()
     {
         var urlsFromArtifacts = TestArtifactFiles
@@ -42,6 +68,31 @@ public class CanonicalUrlConstantsTests
             .ToList();
 
         urlsFromArtifacts.Should().BeEquivalentTo(ChoFhirCanonicalUrls.AllOperationDefinitions);
+    }
+
+    [Fact]
+    public void Every_binding_valueSet_reference_points_at_an_existing_ValueSet_artifact()
+    {
+        // CHO profile bindings reference ValueSet URLs via `binding.valueSet`.
+        // Every such reference that points into the CHO canonical namespace
+        // must resolve to an artifact we actually ship.
+        var shippedValueSetUrls = ChoFhirCanonicalUrls.AllValueSets.ToHashSet(StringComparer.Ordinal);
+
+        foreach (var path in TestArtifactFiles.JsonFilesMatching("StructureDefinition-"))
+        {
+            var sd = _parser.Parse<StructureDefinition>(TestArtifactFiles.ReadAllText(path));
+            foreach (var elem in sd.Differential.Element)
+            {
+                var vsRef = elem.Binding?.ValueSet?.ToString();
+                if (vsRef is not null &&
+                    vsRef.StartsWith(ChoFhirCanonicalUrls.ValueSetBase, StringComparison.Ordinal))
+                {
+                    shippedValueSetUrls.Should().Contain(vsRef,
+                        $"{Path.GetFileName(path)} element {elem.Path} binds to {vsRef}, " +
+                        "which must exist as a shipped ValueSet artifact");
+                }
+            }
+        }
     }
 
     [Fact]

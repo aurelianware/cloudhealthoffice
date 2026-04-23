@@ -1,4 +1,3 @@
-using FhirService.Services;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
 
@@ -134,41 +133,36 @@ public class MetadataController : FhirControllerBase
                             CapabilityStatement.TypeRestfulInteraction.SearchType,
                             CapabilityStatement.TypeRestfulInteraction.Create,
                         ]),
-                        BuildResource("Task",
+                        // ── FHIR conformance-resource endpoints ──────────────────
+                        // PR 1 ships read+search for StructureDefinition,
+                        // CodeSystem, ValueSet, and OperationDefinition —
+                        // advertise them here so clients can discover them
+                        // programmatically.
+                        //
+                        // Task / Communication / DocumentReference / ClaimResponse
+                        // profiles and the cho-appeal-submit operation are NOT
+                        // advertised in this PR: runtime read/search and the
+                        // operation implementation land in PR 2. Advertising
+                        // unimplemented interactions would be a false
+                        // conformance claim. The profiles remain discoverable
+                        // via `GET /fhir/r4/StructureDefinition` and the
+                        // operation via `GET /fhir/r4/OperationDefinition`.
+                        BuildResource("StructureDefinition",
                         [
-                            ("_id",          SearchParamType.Token),
-                            ("_lastUpdated", SearchParamType.Date),
-                            ("patient",      SearchParamType.Reference),
-                            ("status",       SearchParamType.Token),
-                        ],
-                        supportedProfiles: [ChoFhirCanonicalUrls.AppealTask]),
-                        BuildResource("Communication",
+                            ("_id", SearchParamType.Token),
+                        ]),
+                        BuildResource("CodeSystem",
                         [
-                            ("_id",          SearchParamType.Token),
-                            ("_lastUpdated", SearchParamType.Date),
-                            ("subject",      SearchParamType.Reference),
-                            ("status",       SearchParamType.Token),
-                        ],
-                        supportedProfiles: [ChoFhirCanonicalUrls.AppealCommunication]),
-                        BuildResource("DocumentReference",
+                            ("_id", SearchParamType.Token),
+                        ]),
+                        BuildResource("ValueSet",
                         [
-                            ("_id",          SearchParamType.Token),
-                            ("_lastUpdated", SearchParamType.Date),
-                            ("subject",      SearchParamType.Reference),
-                            ("status",       SearchParamType.Token),
-                            ("type",         SearchParamType.Token),
-                        ],
-                        supportedProfiles: [ChoFhirCanonicalUrls.AppealDocumentReference]),
-                        BuildResource("ClaimResponse",
+                            ("_id", SearchParamType.Token),
+                        ]),
+                        BuildResource("OperationDefinition",
                         [
-                            ("_id",          SearchParamType.Token),
-                            ("_lastUpdated", SearchParamType.Date),
-                            ("patient",      SearchParamType.Reference),
-                            ("created",      SearchParamType.Date),
-                            ("status",       SearchParamType.Token),
-                            ("outcome",      SearchParamType.Token),
-                        ],
-                        supportedProfiles: [ChoFhirCanonicalUrls.AppealClaimResponse]),
+                            ("_id", SearchParamType.Token),
+                        ]),
                     ],
                     Operation =
                     [
@@ -176,12 +170,6 @@ public class MetadataController : FhirControllerBase
                         {
                             Name = "export",
                             Definition = "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export",
-                        },
-                        new CapabilityStatement.OperationComponent
-                        {
-                            Name = "cho-appeal-submit",
-                            Definition = ChoFhirCanonicalUrls.AppealSubmitOperation,
-                            Documentation = "Submit a post-adjudication claim appeal as a Bundle containing a Task and its supporting Communications and DocumentReferences.",
                         },
                     ]
                 }

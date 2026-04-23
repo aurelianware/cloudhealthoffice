@@ -29,6 +29,25 @@ public static class ChoFhirCanonicalUrls
     public const string AppealX12TransmissionExt    = StructureDefinitionBase + "cho-appeal-x12-275-transmission-code";
     public const string AppealTaskReferenceExt      = StructureDefinitionBase + "cho-appeal-task-reference";
 
+    // ── CHO appeal CodeSystems ──────────────────────────────────────────────
+    public const string AppealTypeCs                  = CodeSystemBase + "cho-appeal-type";
+    public const string AppealLevelCs                 = CodeSystemBase + "cho-appeal-level";
+    public const string AppealLineOfBusinessCs        = CodeSystemBase + "cho-appeal-line-of-business";
+    public const string AppealX12TransmissionCs       = CodeSystemBase + "cho-appeal-x12-275-transmission-code";
+    public const string AppealCommunicationCategoryCs = CodeSystemBase + "cho-appeal-communication-category";
+    public const string AppealAttachmentTypeCs        = CodeSystemBase + "cho-appeal-attachment-type";
+
+    // ── CHO appeal ValueSets ────────────────────────────────────────────────
+    public const string AppealTaskStatusVs             = ValueSetBase + "cho-appeal-task-status";
+    public const string AppealCommunicationStatusVs    = ValueSetBase + "cho-appeal-communication-status";
+    public const string AppealDocumentStatusVs         = ValueSetBase + "cho-appeal-document-status";
+    public const string AppealTypeVs                   = ValueSetBase + "cho-appeal-type";
+    public const string AppealLevelVs                  = ValueSetBase + "cho-appeal-level";
+    public const string AppealLineOfBusinessVs         = ValueSetBase + "cho-appeal-line-of-business";
+    public const string AppealX12TransmissionVs        = ValueSetBase + "cho-appeal-x12-275-transmission-code";
+    public const string AppealCommunicationCategoryVs  = ValueSetBase + "cho-appeal-communication-category";
+    public const string AppealAttachmentTypeVs         = ValueSetBase + "cho-appeal-attachment-type";
+
     // ── CHO appeal operations ───────────────────────────────────────────────
     public const string AppealSubmitOperation = OperationDefinitionBase + "cho-appeal-submit";
 
@@ -56,6 +75,31 @@ public static class ChoFhirCanonicalUrls
     /// <summary>All CHO-authored StructureDefinition URLs (profiles + extensions).</summary>
     public static readonly IReadOnlyList<string> AllStructureDefinitions =
         [.. AllAppealResourceProfiles, .. AllAppealExtensions];
+
+    /// <summary>All CHO-authored CodeSystem URLs.</summary>
+    public static readonly IReadOnlyList<string> AllCodeSystems =
+    [
+        AppealTypeCs,
+        AppealLevelCs,
+        AppealLineOfBusinessCs,
+        AppealX12TransmissionCs,
+        AppealCommunicationCategoryCs,
+        AppealAttachmentTypeCs,
+    ];
+
+    /// <summary>All CHO-authored ValueSet URLs.</summary>
+    public static readonly IReadOnlyList<string> AllValueSets =
+    [
+        AppealTaskStatusVs,
+        AppealCommunicationStatusVs,
+        AppealDocumentStatusVs,
+        AppealTypeVs,
+        AppealLevelVs,
+        AppealLineOfBusinessVs,
+        AppealX12TransmissionVs,
+        AppealCommunicationCategoryVs,
+        AppealAttachmentTypeVs,
+    ];
 
     /// <summary>All CHO-authored OperationDefinition URLs.</summary>
     public static readonly IReadOnlyList<string> AllOperationDefinitions =
