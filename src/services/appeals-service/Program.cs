@@ -150,6 +150,16 @@ builder.Services.AddSingleton<AppealEventPublisher>();
 builder.Services.AddSingleton<IAppealEventPublisher>(sp => sp.GetRequiredService<AppealEventPublisher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AppealEventPublisher>());
 
+// ── Kafka consumer (X12 275 attachment ingress) ──────────────────────
+// Subscribes to the attachments-in topic, routes appeal-context 275s to
+// the existing AppendAttachmentAsync path. Degraded-mode-silent if
+// Kafka:BootstrapServers is unset. Registered AFTER AppealEventPublisher
+// so the producer's StartAsync runs first — the consumer's per-message
+// publish call expects the producer to already be available.
+builder.Services.AddSingleton<Attachment275EnvelopeMapper>();
+builder.Services.AddSingleton<IAttachment275DeadLetterSink, LoggingAttachment275DeadLetterSink>();
+builder.Services.AddHostedService<Attachment275ConsumerHostedService>();
+
 // IMessageBus — registered for future consumers; no-op cost today.
 builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 
