@@ -88,6 +88,31 @@ public sealed class AppealRepository : IAppealRepository
         return results;
     }
 
+    public async Task<Appeal?> GetMostRecentAppealByClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default)
+    {
+        // Status enum is persisted as a string by the System.Text.Json
+        // converter — compare against the enum name, not the integer value.
+        var query = new QueryDefinition(
+            "SELECT * FROM c " +
+            "WHERE c.tenantId = @tenantId AND c.claimId = @claimId AND c.status != @closed " +
+            "ORDER BY c.submittedDate DESC OFFSET 0 LIMIT 1")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@claimId", claimId)
+            .WithParameter("@closed", AppealStatus.Closed.ToString());
+
+        var iterator = _appeals.GetItemQueryIterator<Appeal>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            foreach (var item in page) return item;
+        }
+        return null;
+    }
+
     public async Task<IReadOnlyList<Appeal>> SearchAsync(
         string tenantId, AppealSearchParams p, CancellationToken ct = default)
     {
