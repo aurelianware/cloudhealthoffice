@@ -32,8 +32,12 @@ public sealed class LoggingAttachment275DeadLetterSink : IAttachment275DeadLette
 
     public Task DeadLetterMalformedAsync(string rawMessage, string reason, CancellationToken ct = default)
     {
+        // CharLength is UTF-16 code units, not byte length — we deliberately
+        // do not compute UTF-8 byte length here because that requires
+        // touching the (potentially PHI-bearing) raw payload, which we
+        // are explicitly trying to avoid.
         _logger.LogWarning(
-            "275 dead-letter (malformed): bytes={Bytes} reason={Reason}",
+            "275 dead-letter (malformed): charLength={CharLength} reason={Reason}",
             rawMessage?.Length ?? 0,
             LogSanitizer.SafeForLog(reason));
         return Task.CompletedTask;

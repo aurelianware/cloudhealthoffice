@@ -52,17 +52,22 @@ public sealed class Attachment275EnvelopeMapper
         string? encryptedDescription)
     {
         ArgumentNullException.ThrowIfNull(envelope);
+        // Compute the effective submitted date once so the persisted
+        // UploadedAt and the file-name timestamp are guaranteed to match
+        // for the same call — multiple DateTime.UtcNow reads inside the
+        // same mapping can drift by milliseconds.
+        var effectiveSubmittedDate = envelope.SubmittedDate == default
+            ? DateTime.UtcNow
+            : envelope.SubmittedDate;
         return new AppealAttachment
         {
             ControlNumber = envelope.ControlNumber,
             AttachmentTypeCode = MapDocumentTypeToAttachmentTypeCode(envelope.DocumentType),
             AttachmentTypeDescription = envelope.DocumentType,
             TransmissionCode = ResolveTransmissionCode(envelope.TransmissionCode),
-            FileName = DeriveFileName(envelope),
+            FileName = DeriveFileName(envelope, effectiveSubmittedDate),
             ContentType = MapDocumentFormatToContentType(envelope.DocumentFormat),
-            UploadedAt = envelope.SubmittedDate == default
-                ? DateTime.UtcNow
-                : envelope.SubmittedDate,
+            UploadedAt = effectiveSubmittedDate,
             Description = encryptedDescription,
             Status = AttachmentStatus.Sent
         };
@@ -84,11 +89,10 @@ public sealed class Attachment275EnvelopeMapper
             : DefaultTransmissionCode;
     }
 
-    private static string DeriveFileName(Attachment275EnvelopeDto envelope)
+    private static string DeriveFileName(Attachment275EnvelopeDto envelope, DateTime effectiveSubmittedDate)
     {
         var control = string.IsNullOrEmpty(envelope.ControlNumber) ? "unknown" : envelope.ControlNumber;
-        var stamp = (envelope.SubmittedDate == default ? DateTime.UtcNow : envelope.SubmittedDate)
-            .ToString("yyyyMMddHHmmss");
+        var stamp = effectiveSubmittedDate.ToString("yyyyMMddHHmmss");
         var ext = string.IsNullOrEmpty(envelope.DocumentFormat)
             ? "bin"
             : envelope.DocumentFormat.ToLowerInvariant();

@@ -129,6 +129,24 @@ public class Attachment275EnvelopeMapperTests
         result.UploadedAt.Should().BeAfter(before).And.BeBefore(after);
     }
 
+    [Fact]
+    public void ToAppealAttachment_FileNameStamp_AgreesWithUploadedAt_WhenSubmittedDateMissing()
+    {
+        // Regression: when envelope.SubmittedDate is default, both
+        // UploadedAt and the filename's timestamp segment used to call
+        // DateTime.UtcNow independently and could drift by milliseconds —
+        // producing a record where the filename stamp does not match the
+        // persisted UploadedAt. Mapper must compute the effective date
+        // once and reuse it.
+        var mapper = new Attachment275EnvelopeMapper();
+        var envelope = NewEnvelope(controlNumber: "BHT-CONSISTENCY", submittedDate: default(DateTime));
+
+        var result = mapper.ToAppealAttachment(envelope, encryptedDescription: null);
+
+        var expectedStamp = result.UploadedAt.ToString("yyyyMMddHHmmss");
+        result.FileName.Should().Be($"275-BHT-CONSISTENCY-{expectedStamp}.{envelope.DocumentFormat!.ToLowerInvariant()}");
+    }
+
     [Theory]
     [InlineData("Medical Records", "OZ")]
     [InlineData("Lab Results", "LA")]

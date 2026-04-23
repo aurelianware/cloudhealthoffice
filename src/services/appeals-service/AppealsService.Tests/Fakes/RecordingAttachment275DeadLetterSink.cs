@@ -27,5 +27,5 @@ public sealed class RecordingAttachment275DeadLetterSink : IAttachment275DeadLet
     }
 
     public sealed record EnvelopeCall(string TenantId, string? ClaimId, string? ControlNumber, string Reason);
-    public sealed record MalformedCall(int RawByteCount, string Reason);
+    public sealed record MalformedCall(int RawCharLength, string Reason);
 }
