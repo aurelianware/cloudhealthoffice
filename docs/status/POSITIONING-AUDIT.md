@@ -1,6 +1,6 @@
-# CHO Positioning & Documentation Audit
+# Cloud Health Office — Positioning & Documentation Audit
 
-**Scope:** Every CHO-facing documentation and marketing artifact, measured against [`docs/POSITIONING.md`](../POSITIONING.md) (created this session).
+**Scope:** Every Cloud Health Office (CHO) documentation and marketing artifact, measured against [`docs/POSITIONING.md`](../POSITIONING.md) (created this session).
 
 **Status:** Audit complete. Phase 2 (separate PR) will execute the updates this audit recommends.
 
@@ -8,7 +8,7 @@
 
 ## Summary
 
-- Total artifacts classified: ~175 (36 agents-fully-read + several dozen ASSUMED-ALIGNED in low-risk neighborhoods)
+- Total artifacts classified: ~175. The majority were fully read; a minority in low-risk neighborhoods (some per-service architecture internals, most `docs/deployment/*` runbooks, most `src/site/docs/*.html` developer pages) were spot-checked and flagged ASSUMED-ALIGNED.
 - ALIGNED: ~95
 - UNDERCLAIMS: 22
 - OVERCLAIMS: 9

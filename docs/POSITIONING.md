@@ -1,6 +1,6 @@
 # Cloud Health Office — Positioning
 
-**Audience:** internal teams, partners, and evaluators deciding how CHO fits into their roadmap. Payer-facing pitch materials should derive from this document and not contradict it.
+**Audience:** internal teams, partners, and evaluators deciding how Cloud Health Office (CHO) fits into their roadmap. Payer-facing pitch materials should derive from this document and not contradict it.
 
 **Last updated:** April 2026
 
@@ -115,7 +115,7 @@ Domains shipped as services:
 - **Core admin**: member, coverage, eligibility, personal representative, consent, ID card, sponsor.
 - **Claims**: claims, claims scrubbing, claims examiner, encounter, encounter submission.
 - **Authorization**: authorization (including CRD/DTR/PAS), attachment, RFAI.
-- **Appeals**: appeals-service (fully re-foundationed).
+- **Appeals**: appeals-service (fully re-founded).
 - **Provider**: provider, provider contracts, provider verification.
 - **Financial**: AR, payment, premium billing, capitation, FFS, accumulator, risk adjustment.
 - **Platform**: tenant, trading partner, reference data, FHIR, SMART auth, terminology, pricing API, enrollment import, member document.
@@ -126,7 +126,7 @@ EDI coverage via Argo workflows: 270/271/275/276/277/278/834/837.
 
 ### Evidence shipped today
 
-- 36 services under `src/services/` and 9 engines under `src/engines/`.
+- 36 services under `src/services/` and 9 adjudication/rules engines under `src/engines/` (PriorAuthRuleEngine, BenefitEngine, RiskAdjustmentEngine, ProviderVerificationEngine, FeeScheduleEngine, ClaimsScrubEngine, CobEngine, EncounterEngine, NcciEngine). The `src/engines/` directory also contains supporting projects (`OperatingMode`, `DocumentStore`, `ProviderEnrollmentService`, `cho-enrollment-wiring`) that are not adjudication engines and are not counted in the "9 engines" figure.
 - Argo-orchestrated adjudication workflow (`infrastructure/argo-workflows/claims-adjudication-workflow.yaml`) wiring the pipeline end-to-end.
 - Per-tenant multi-tenancy enforced across services, databases (Cosmos DB partitions), secrets (Key Vault namespacing), and Kafka topics.
 - Portal under `src/portal/` for operational workflows across tenants, services, and operating modes.
