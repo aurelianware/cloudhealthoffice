@@ -21,6 +21,27 @@ public interface IAppealRepository
 
     Task<IReadOnlyList<Appeal>> GetByClaimIdAsync(string tenantId, string claimId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Find the most-recently-submitted non-<see cref="AppealStatus.Closed"/>
+    /// appeal for a given claim in a tenant. Returns <c>null</c> when no
+    /// open appeal matches.
+    /// </summary>
+    /// <remarks>
+    /// Used by the X12 275 ingress consumer to route an inbound attachment
+    /// to the correct existing appeal. The consumer dead-letters when this
+    /// returns <c>null</c> rather than fabricating a ghost appeal —
+    /// unsolicited 275s without a linkable open appeal are
+    /// operator-intervention territory.
+    ///
+    /// When multiple open appeals exist for the same claim (rare; a first-
+    /// level appeal can coexist with a second-level on the same denied
+    /// claim), the most-recently-submitted one wins. This matches the
+    /// operational intent: a freshly-arrived 275 supports the most active
+    /// appeal.
+    /// </remarks>
+    Task<Appeal?> GetMostRecentAppealByClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default);
+
     Task<IReadOnlyList<Appeal>> SearchAsync(string tenantId, AppealSearchParams p, CancellationToken ct = default);
 
     Task<AppealsSummary> GetAppealsSummaryAsync(string tenantId, DateTime from, DateTime to, CancellationToken ct = default);

@@ -79,6 +79,18 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         return Task.FromResult<IReadOnlyList<Appeal>>(results);
     }
 
+    public Task<Appeal?> GetMostRecentAppealByClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var match = _appeals.Values
+            .Where(a => a.TenantId == tenantId
+                     && a.ClaimId == claimId
+                     && a.Status != AppealStatus.Closed)
+            .OrderByDescending(a => a.SubmittedDate)
+            .FirstOrDefault();
+        return Task.FromResult<Appeal?>(match is null ? null : Clone(match));
+    }
+
     public Task<IReadOnlyList<Appeal>> SearchAsync(string tenantId, AppealSearchParams p, CancellationToken ct = default)
     {
         var query = _appeals.Values.Where(a => a.TenantId == tenantId);

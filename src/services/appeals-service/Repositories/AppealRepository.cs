@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using AppealsService.Models;
 using Microsoft.Azure.Cosmos;
 
@@ -25,6 +26,18 @@ public sealed class AppealRepository : IAppealRepository
         _appeals = cosmosClient.GetDatabase(databaseName).GetContainer(AppealsContainerName);
         _events = events;
     }
+
+    /// <summary>
+    /// Marshal an enum value into the on-disk Cosmos representation.
+    /// <see cref="Middleware.CosmosSystemTextJsonSerializer"/> registers
+    /// <c>JsonStringEnumConverter(JsonNamingPolicy.CamelCase)</c>, so
+    /// <c>AppealStatus.Closed</c> persists as <c>"closed"</c>, not
+    /// <c>"Closed"</c>. SQL parameters compared against <c>c.status</c>
+    /// (and other enum-valued document fields) MUST use this helper —
+    /// raw <c>.ToString()</c> silently never matches.
+    /// </summary>
+    private static string CosmosEnumValue<TEnum>(TEnum value) where TEnum : struct, Enum =>
+        JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
 
     public async Task<Appeal> CreateAsync(Appeal appeal, AppealEvent genesisEvent, CancellationToken ct = default)
     {
@@ -88,6 +101,29 @@ public sealed class AppealRepository : IAppealRepository
         return results;
     }
 
+    public async Task<Appeal?> GetMostRecentAppealByClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c " +
+            "WHERE c.tenantId = @tenantId AND c.claimId = @claimId AND c.status != @closed " +
+            "ORDER BY c.submittedDate DESC OFFSET 0 LIMIT 1")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@claimId", claimId)
+            .WithParameter("@closed", CosmosEnumValue(AppealStatus.Closed));
+
+        var iterator = _appeals.GetItemQueryIterator<Appeal>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            foreach (var item in page) return item;
+        }
+        return null;
+    }
+
     public async Task<IReadOnlyList<Appeal>> SearchAsync(
         string tenantId, AppealSearchParams p, CancellationToken ct = default)
     {
@@ -120,17 +156,17 @@ public sealed class AppealRepository : IAppealRepository
         if (p.Status.HasValue)
         {
             queryText += " AND c.status = @status";
-            parameters.Add(("@status", p.Status.Value.ToString()));
+            parameters.Add(("@status", CosmosEnumValue(p.Status.Value)));
         }
         if (p.ClosureReasonCode.HasValue)
         {
             queryText += " AND c.closureReasonCode = @closureReasonCode";
-            parameters.Add(("@closureReasonCode", p.ClosureReasonCode.Value.ToString()));
+            parameters.Add(("@closureReasonCode", CosmosEnumValue(p.ClosureReasonCode.Value)));
         }
         if (p.LineOfBusiness.HasValue)
         {
             queryText += " AND c.lineOfBusiness = @lineOfBusiness";
-            parameters.Add(("@lineOfBusiness", p.LineOfBusiness.Value.ToString()));
+            parameters.Add(("@lineOfBusiness", CosmosEnumValue(p.LineOfBusiness.Value)));
         }
         if (!string.IsNullOrEmpty(p.AssignedReviewerId))
         {
