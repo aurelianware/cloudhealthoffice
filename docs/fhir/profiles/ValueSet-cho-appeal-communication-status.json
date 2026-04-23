@@ -1,0 +1,24 @@
+{
+  "resourceType": "ValueSet",
+  "id": "cho-appeal-communication-status",
+  "url": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-communication-status",
+  "version": "1.0.0",
+  "name": "ChoAppealCommunicationStatusVS",
+  "title": "CHO Appeal Communication Status Value Set",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "The subset of HL7 event-status codes used for CHO appeal Communication resources. Strict subset of http://hl7.org/fhir/event-status. Codes enumerated explicitly so offline validators need no terminology server. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "compose": {
+    "include": [
+      {
+        "system": "http://hl7.org/fhir/event-status",
+        "concept": [
+          { "code": "in-progress", "display": "In Progress" },
+          { "code": "completed", "display": "Completed" }
+        ]
+      }
+    ]
+  }
+}

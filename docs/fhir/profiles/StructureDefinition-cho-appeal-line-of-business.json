@@ -1,0 +1,47 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "cho-appeal-line-of-business",
+  "url": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-line-of-business",
+  "version": "1.0.0",
+  "name": "ChoAppealLineOfBusiness",
+  "title": "CHO Appeal Line of Business",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "Line of business under which the appeal is filed (commercial, medicare, medicaid, marketplace). Drives regulatory deadlines and review routing. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "fhirVersion": "4.0.1",
+  "kind": "complex-type",
+  "abstract": false,
+  "type": "Extension",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Extension",
+  "derivation": "constraint",
+  "context": [{ "type": "element", "expression": "Task" }],
+  "differential": {
+    "element": [
+      {
+        "id": "Extension",
+        "path": "Extension",
+        "short": "Line of business",
+        "min": 0,
+        "max": "1"
+      },
+      {
+        "id": "Extension.url",
+        "path": "Extension.url",
+        "fixedUri": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-line-of-business"
+      },
+      {
+        "id": "Extension.value[x]",
+        "path": "Extension.value[x]",
+        "min": 1,
+        "max": "1",
+        "type": [{ "code": "Coding" }],
+        "binding": {
+          "strength": "required",
+          "valueSet": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-line-of-business"
+        }
+      }
+    ]
+  }
+}

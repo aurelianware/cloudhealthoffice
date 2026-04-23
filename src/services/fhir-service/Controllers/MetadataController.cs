@@ -132,7 +132,37 @@ public class MetadataController : FhirControllerBase
                             CapabilityStatement.TypeRestfulInteraction.Read,
                             CapabilityStatement.TypeRestfulInteraction.SearchType,
                             CapabilityStatement.TypeRestfulInteraction.Create,
-                        ])
+                        ]),
+                        // ── FHIR conformance-resource endpoints ──────────────────
+                        // PR 1 ships read+search for StructureDefinition,
+                        // CodeSystem, ValueSet, and OperationDefinition —
+                        // advertise them here so clients can discover them
+                        // programmatically.
+                        //
+                        // Task / Communication / DocumentReference / ClaimResponse
+                        // profiles and the cho-appeal-submit operation are NOT
+                        // advertised in this PR: runtime read/search and the
+                        // operation implementation land in PR 2. Advertising
+                        // unimplemented interactions would be a false
+                        // conformance claim. The profiles remain discoverable
+                        // via `GET /fhir/r4/StructureDefinition` and the
+                        // operation via `GET /fhir/r4/OperationDefinition`.
+                        BuildResource("StructureDefinition",
+                        [
+                            ("_id", SearchParamType.Token),
+                        ]),
+                        BuildResource("CodeSystem",
+                        [
+                            ("_id", SearchParamType.Token),
+                        ]),
+                        BuildResource("ValueSet",
+                        [
+                            ("_id", SearchParamType.Token),
+                        ]),
+                        BuildResource("OperationDefinition",
+                        [
+                            ("_id", SearchParamType.Token),
+                        ]),
                     ],
                     Operation =
                     [
@@ -152,14 +182,15 @@ public class MetadataController : FhirControllerBase
     private static CapabilityStatement.ResourceComponent BuildResource(
         string type,
         (string Name, SearchParamType Type)[] searchParams,
-        CapabilityStatement.TypeRestfulInteraction[]? interactions = null)
+        CapabilityStatement.TypeRestfulInteraction[]? interactions = null,
+        string[]? supportedProfiles = null)
     {
         interactions ??= [
             CapabilityStatement.TypeRestfulInteraction.Read,
             CapabilityStatement.TypeRestfulInteraction.SearchType,
         ];
 
-        return new CapabilityStatement.ResourceComponent
+        var resource = new CapabilityStatement.ResourceComponent
         {
             Type = type,
             Interaction = interactions
@@ -173,5 +204,12 @@ public class MetadataController : FhirControllerBase
                 })
                 .ToList()
         };
+
+        if (supportedProfiles is { Length: > 0 })
+        {
+            resource.SupportedProfile = [.. supportedProfiles];
+        }
+
+        return resource;
     }
 }

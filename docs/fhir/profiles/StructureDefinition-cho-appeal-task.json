@@ -1,0 +1,195 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "cho-appeal-task",
+  "url": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-task",
+  "version": "1.0.0",
+  "name": "ChoAppealTask",
+  "title": "CHO Appeal Task",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "contact": [
+    {
+      "name": "Cloud Health Office FHIR Authoring",
+      "telecom": [{ "system": "url", "value": "https://cloudhealthoffice.com" }]
+    }
+  ],
+  "description": "Profile on Task representing a post-adjudication claim appeal as a work item. The Task links a Patient (the member) via `for`, the original ClaimResponse being appealed via `focus`, and the submitting provider via `requester`. Reviewer assignment, appeal-level, line-of-business, and regulatory target-response-date are captured via constrained elements and CHO-local extensions. Note on bindings: Task.status narrows the base R4 required binding to a strict 7-code subset of the 11-code base set; FHIR R4 conformance rules explicitly permit narrowing a required binding to a strict subset. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide. Post-adjudication appeals are not covered by any stable external FHIR IG at time of authoring; this profile follows Da Vinci profiling conventions.",
+  "jurisdiction": [
+    { "coding": [{ "system": "urn:iso:std:iso:3166", "code": "US" }] }
+  ],
+  "fhirVersion": "4.0.1",
+  "kind": "resource",
+  "abstract": false,
+  "type": "Task",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Task",
+  "derivation": "constraint",
+  "differential": {
+    "element": [
+      {
+        "id": "Task",
+        "path": "Task",
+        "short": "CHO post-adjudication appeal",
+        "definition": "A work item representing one post-adjudication appeal filed against a ClaimResponse."
+      },
+      {
+        "id": "Task.extension",
+        "path": "Task.extension",
+        "slicing": {
+          "discriminator": [{ "type": "value", "path": "url" }],
+          "rules": "open",
+          "ordered": false
+        }
+      },
+      {
+        "id": "Task.extension:appealLevel",
+        "path": "Task.extension",
+        "sliceName": "appealLevel",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Extension",
+            "profile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-level"]
+          }
+        ]
+      },
+      {
+        "id": "Task.extension:lineOfBusiness",
+        "path": "Task.extension",
+        "sliceName": "lineOfBusiness",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Extension",
+            "profile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-line-of-business"]
+          }
+        ]
+      },
+      {
+        "id": "Task.extension:targetResponseDate",
+        "path": "Task.extension",
+        "sliceName": "targetResponseDate",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Extension",
+            "profile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-target-response-date"]
+          }
+        ]
+      },
+      {
+        "id": "Task.extension:urgentFlag",
+        "path": "Task.extension",
+        "sliceName": "urgentFlag",
+        "min": 0,
+        "max": "1",
+        "type": [
+          {
+            "code": "Extension",
+            "profile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-urgent-flag"]
+          }
+        ]
+      },
+      {
+        "id": "Task.status",
+        "path": "Task.status",
+        "min": 1,
+        "max": "1",
+        "binding": {
+          "strength": "required",
+          "valueSet": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-task-status"
+        }
+      },
+      {
+        "id": "Task.businessStatus",
+        "path": "Task.businessStatus",
+        "min": 0,
+        "max": "1"
+      },
+      {
+        "id": "Task.intent",
+        "path": "Task.intent",
+        "min": 1,
+        "max": "1",
+        "fixedCode": "order"
+      },
+      {
+        "id": "Task.code",
+        "path": "Task.code",
+        "min": 0,
+        "max": "1",
+        "binding": {
+          "strength": "required",
+          "valueSet": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-type"
+        }
+      },
+      {
+        "id": "Task.for",
+        "path": "Task.for",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/Patient"]
+          }
+        ]
+      },
+      {
+        "id": "Task.focus",
+        "path": "Task.focus",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/ClaimResponse"]
+          }
+        ]
+      },
+      {
+        "id": "Task.authoredOn",
+        "path": "Task.authoredOn",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "Task.requester",
+        "path": "Task.requester",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": [
+              "http://hl7.org/fhir/StructureDefinition/Practitioner",
+              "http://hl7.org/fhir/StructureDefinition/Organization"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "Task.owner",
+        "path": "Task.owner",
+        "min": 0,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/Practitioner"]
+          }
+        ]
+      },
+      {
+        "id": "Task.note",
+        "path": "Task.note",
+        "min": 0,
+        "max": "*"
+      }
+    ]
+  }
+}

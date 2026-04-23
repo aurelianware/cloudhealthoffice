@@ -1,0 +1,20 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "cho-appeal-level",
+  "url": "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-level",
+  "version": "1.0.0",
+  "name": "ChoAppealLevel",
+  "title": "CHO Appeal Level",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "caseSensitive": true,
+  "content": "complete",
+  "description": "Regulatory appeal-level ladder. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "concept": [
+    { "code": "first-level", "display": "First Level", "definition": "Initial appeal review" },
+    { "code": "second-level", "display": "Second Level", "definition": "Second-level appeal review" },
+    { "code": "external-review", "display": "External Review", "definition": "State/Federal external review" }
+  ]
+}

@@ -126,6 +126,7 @@ builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
 builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
 builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecker>();
+builder.Services.AddSingleton<IChoFhirArtifactRegistry, ChoFhirArtifactRegistry>();
 
 // ── Da Vinci PAS ──────────────────────────────────────────────────────────────
 // PasAutoAdjudicator now receives IEnrollmentDecisionGate (Rule 0)

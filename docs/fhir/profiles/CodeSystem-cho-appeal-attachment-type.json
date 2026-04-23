@@ -1,0 +1,24 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "cho-appeal-attachment-type",
+  "url": "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-attachment-type",
+  "version": "1.0.0",
+  "name": "ChoAppealAttachmentType",
+  "title": "CHO Appeal Attachment Type",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "caseSensitive": true,
+  "content": "complete",
+  "description": "CHO-specific attachment categories used when LOINC does not fit the clinical-document taxonomy. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "concept": [
+    { "code": "provider-appeal-letter", "display": "Provider Appeal Letter" },
+    { "code": "medical-records", "display": "Medical Records" },
+    { "code": "operative-report", "display": "Operative Report" },
+    { "code": "progress-note", "display": "Progress Note" },
+    { "code": "lab-results", "display": "Lab Results" },
+    { "code": "imaging-report", "display": "Imaging Report" },
+    { "code": "other", "display": "Other / Miscellaneous" }
+  ]
+}

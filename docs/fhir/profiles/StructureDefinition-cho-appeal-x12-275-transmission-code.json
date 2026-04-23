@@ -1,0 +1,47 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "cho-appeal-x12-275-transmission-code",
+  "url": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-x12-275-transmission-code",
+  "version": "1.0.0",
+  "name": "ChoAppealX12_275TransmissionCode",
+  "title": "CHO Appeal X12 275 Transmission Code",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "The X12 PWK02 transmission code indicating how the physical attachment was transmitted (AA, BM, EL, FT, FX, IL, OZ). Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "fhirVersion": "4.0.1",
+  "kind": "complex-type",
+  "abstract": false,
+  "type": "Extension",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Extension",
+  "derivation": "constraint",
+  "context": [{ "type": "element", "expression": "DocumentReference.content.format" }],
+  "differential": {
+    "element": [
+      {
+        "id": "Extension",
+        "path": "Extension",
+        "short": "X12 275 PWK02 transmission code",
+        "min": 0,
+        "max": "1"
+      },
+      {
+        "id": "Extension.url",
+        "path": "Extension.url",
+        "fixedUri": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-x12-275-transmission-code"
+      },
+      {
+        "id": "Extension.value[x]",
+        "path": "Extension.value[x]",
+        "min": 1,
+        "max": "1",
+        "type": [{ "code": "code" }],
+        "binding": {
+          "strength": "required",
+          "valueSet": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-x12-275-transmission-code"
+        }
+      }
+    ]
+  }
+}

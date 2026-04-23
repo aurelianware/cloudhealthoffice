@@ -1,0 +1,139 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "cho-appeal-claim-response",
+  "url": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-claim-response",
+  "version": "1.0.0",
+  "name": "ChoAppealClaimResponse",
+  "title": "CHO Appeal ClaimResponse",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "Profile on ClaimResponse representing the decision outcome of a post-adjudication appeal. References the ORIGINAL Claim being appealed via `request` (FHIR standard Claim→ClaimResponse linkage); the associated appeal Task is referenced via the `cho-appeal-task-reference` extension. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "jurisdiction": [
+    { "coding": [{ "system": "urn:iso:std:iso:3166", "code": "US" }] }
+  ],
+  "fhirVersion": "4.0.1",
+  "kind": "resource",
+  "abstract": false,
+  "type": "ClaimResponse",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/ClaimResponse",
+  "derivation": "constraint",
+  "differential": {
+    "element": [
+      {
+        "id": "ClaimResponse",
+        "path": "ClaimResponse",
+        "short": "CHO appeal decision outcome"
+      },
+      {
+        "id": "ClaimResponse.extension",
+        "path": "ClaimResponse.extension",
+        "slicing": {
+          "discriminator": [{ "type": "value", "path": "url" }],
+          "rules": "open"
+        }
+      },
+      {
+        "id": "ClaimResponse.extension:appealTaskReference",
+        "path": "ClaimResponse.extension",
+        "sliceName": "appealTaskReference",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Extension",
+            "profile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-task-reference"]
+          }
+        ]
+      },
+      {
+        "id": "ClaimResponse.status",
+        "path": "ClaimResponse.status",
+        "min": 1,
+        "max": "1",
+        "fixedCode": "active"
+      },
+      {
+        "id": "ClaimResponse.type",
+        "path": "ClaimResponse.type",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "ClaimResponse.use",
+        "path": "ClaimResponse.use",
+        "min": 1,
+        "max": "1",
+        "fixedCode": "claim"
+      },
+      {
+        "id": "ClaimResponse.patient",
+        "path": "ClaimResponse.patient",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/Patient"]
+          }
+        ]
+      },
+      {
+        "id": "ClaimResponse.created",
+        "path": "ClaimResponse.created",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "ClaimResponse.insurer",
+        "path": "ClaimResponse.insurer",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/Organization"]
+          }
+        ]
+      },
+      {
+        "id": "ClaimResponse.request",
+        "path": "ClaimResponse.request",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/Claim"]
+          }
+        ],
+        "short": "Reference to the ORIGINAL Claim being appealed"
+      },
+      {
+        "id": "ClaimResponse.outcome",
+        "path": "ClaimResponse.outcome",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "ClaimResponse.disposition",
+        "path": "ClaimResponse.disposition",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "ClaimResponse.total",
+        "path": "ClaimResponse.total",
+        "min": 0,
+        "max": "*"
+      },
+      {
+        "id": "ClaimResponse.processNote",
+        "path": "ClaimResponse.processNote",
+        "min": 0,
+        "max": "*"
+      }
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "cho-appeal-urgent-flag",
+  "url": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-urgent-flag",
+  "version": "1.0.0",
+  "name": "ChoAppealUrgentFlag",
+  "title": "CHO Appeal Urgent Flag",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "Indicates that this appeal meets urgency criteria requiring accelerated review timelines. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "fhirVersion": "4.0.1",
+  "kind": "complex-type",
+  "abstract": false,
+  "type": "Extension",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Extension",
+  "derivation": "constraint",
+  "context": [{ "type": "element", "expression": "Task" }],
+  "differential": {
+    "element": [
+      {
+        "id": "Extension",
+        "path": "Extension",
+        "short": "Urgent flag",
+        "min": 0,
+        "max": "1"
+      },
+      {
+        "id": "Extension.url",
+        "path": "Extension.url",
+        "fixedUri": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-urgent-flag"
+      },
+      {
+        "id": "Extension.value[x]",
+        "path": "Extension.value[x]",
+        "min": 1,
+        "max": "1",
+        "type": [{ "code": "boolean" }]
+      }
+    ]
+  }
+}

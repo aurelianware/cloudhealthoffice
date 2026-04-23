@@ -1,0 +1,18 @@
+{
+  "resourceType": "ValueSet",
+  "id": "cho-appeal-x12-275-transmission-code",
+  "url": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-x12-275-transmission-code",
+  "version": "1.0.0",
+  "name": "ChoAppealX12_275TransmissionCodeVS",
+  "title": "CHO Appeal X12 275 Transmission Code Value Set",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "All concepts from CodeSystem cho-appeal-x12-275-transmission-code. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "compose": {
+    "include": [
+      { "system": "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-x12-275-transmission-code" }
+    ]
+  }
+}

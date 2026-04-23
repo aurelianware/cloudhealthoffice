@@ -39,12 +39,19 @@ public class TenantMiddleware
         await _next(context);
     }
 
+    // Conformance-discovery endpoints bypass tenant context for the same
+    // reason as /fhir/r4/metadata: clients need to read them anonymously
+    // before they have a tenant binding.
     private static bool IsPassthroughPath(PathString path)
         => path.StartsWithSegments("/health")
         || path.StartsWithSegments("/ready")
         || path.StartsWithSegments("/live")
         || path.StartsWithSegments("/fhir/r4/metadata")
         || path.StartsWithSegments("/fhir/r4/.well-known")
+        || path.StartsWithSegments("/fhir/r4/StructureDefinition")
+        || path.StartsWithSegments("/fhir/r4/OperationDefinition")
+        || path.StartsWithSegments("/fhir/r4/CodeSystem")
+        || path.StartsWithSegments("/fhir/r4/ValueSet")
         || path.StartsWithSegments("/swagger");
 
     private static string? ExtractTenantId(HttpContext context)

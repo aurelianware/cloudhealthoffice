@@ -1,0 +1,24 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "cho-appeal-x12-275-transmission-code",
+  "url": "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-x12-275-transmission-code",
+  "version": "1.0.0",
+  "name": "ChoAppealX12_275TransmissionCode",
+  "title": "CHO Appeal X12 275 Transmission Code",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "caseSensitive": true,
+  "content": "complete",
+  "description": "Mirrors X12 PWK02 transmission-code values for attachments that arrived via X12 275. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "concept": [
+    { "code": "AA", "display": "Available on Request at Provider Site" },
+    { "code": "BM", "display": "By Mail" },
+    { "code": "EL", "display": "Electronically Only" },
+    { "code": "FT", "display": "File Transfer" },
+    { "code": "FX", "display": "By Fax" },
+    { "code": "IL", "display": "In Lieu of" },
+    { "code": "OZ", "display": "Not Specified" }
+  ]
+}
