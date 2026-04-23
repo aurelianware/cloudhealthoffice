@@ -376,13 +376,16 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
 /// </summary>
 public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program>
 {
-    public InMemoryAppealRepository Repo { get; private set; } = new();
-    public RecordingAppealEventPublisher Publisher { get; private set; } = new();
+    public InMemoryAppealRepository Repo { get; } = new();
+    public RecordingAppealEventPublisher Publisher { get; } = new();
 
+    // Clears state on the same instances the DI container holds. Replacing
+    // the instances here would leave the cached singletons pointing at the
+    // old Repo / Publisher and every assertion would read an empty one.
     public void Reset()
     {
-        Repo = new InMemoryAppealRepository();
-        Publisher = new RecordingAppealEventPublisher();
+        Repo.Clear();
+        Publisher.Clear();
     }
 
     protected override IHost CreateHost(IHostBuilder builder)

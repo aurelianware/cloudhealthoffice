@@ -21,6 +21,24 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
     public readonly ConcurrentQueue<AssignedCall> Assigned = new();
     public readonly ConcurrentQueue<MigratedCall> Migrated = new();
 
+    /// <summary>
+    /// Clears all recorded publish calls. Used by the integration test
+    /// factory to reset state between tests without replacing the instance
+    /// (which would desync from the DI container's cached singleton).
+    /// </summary>
+    public void Clear()
+    {
+        Created.Clear();
+        StatusChanged.Clear();
+        Closed.Clear();
+        NotesAdded.Clear();
+        AttachmentsAdded.Clear();
+        AttachmentsAcknowledged.Clear();
+        OverdueObserved.Clear();
+        Assigned.Clear();
+        Migrated.Clear();
+    }
+
     public Task PublishCreatedAsync(Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
     {
         Created.Enqueue(new CreatedCall(appeal.Id, appeal.TenantId, actor, correlationId));

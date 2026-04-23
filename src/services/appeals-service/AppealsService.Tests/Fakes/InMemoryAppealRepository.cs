@@ -27,6 +27,22 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
 
     public void FailAuditAppendOnce() => _failAuditAppendOnce = true;
 
+    /// <summary>
+    /// Clears all appeals, events, and failure-injection flags. Used by the
+    /// integration test factory to reset state between tests without
+    /// replacing the instance (which would desync from the DI container's
+    /// cached singleton).
+    /// </summary>
+    public void Clear()
+    {
+        lock (_sync)
+        {
+            _appeals.Clear();
+            _events.Clear();
+            _failAuditAppendOnce = false;
+        }
+    }
+
     public Task<Appeal> CreateAsync(Appeal appeal, AppealEvent genesisEvent, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(appeal.Id)) appeal.Id = Guid.NewGuid().ToString();
