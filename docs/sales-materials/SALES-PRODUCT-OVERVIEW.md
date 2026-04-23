@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-Cloud Health Office is the industry's first source-available, Azure-native EDI platform delivering **complete CMS-0057-F compliance** well ahead of the January 1, 2027 deadline. Where enterprise vendors require 6-18 months of implementation, Cloud Health Office deploys production-ready HIPAA infrastructure in under 5 minutes.
+Cloud Health Office is a source-available, cloud-native platform for healthcare claims administration. It engages customers at three layers: a production-ready CMS-0057-F compliance surface (Layer 1), a progressive modernization path with appeals as the shipped reference domain (Layer 2), and a full cloud-native CAPS platform for new entrants and established payers finishing their modernization (Layer 3). See [POSITIONING.md](../POSITIONING.md) for the honest today-state of each layer.
 
 ### The Compliance Imperative
 
@@ -29,6 +29,16 @@ Cloud Health Office is the industry's first source-available, Azure-native EDI p
 ---
 
 ## Key Capabilities
+
+### Maturity by Layer
+
+| Layer | Scope                                    | Today                                                                 |
+| ----- | ---------------------------------------- | --------------------------------------------------------------------- |
+| 1     | CMS-0057-F compliance surface            | Production-ready; Helm-deployable; pilot-validated                    |
+| 2     | Progressive modernization (per domain)   | Appeals shipped (PRs #677-#681); capitation, claims, others in flight |
+| 3     | Full cloud-native CAPS platform          | Architecturally complete; test-coverage hardening on some services; no production reference customer yet |
+
+See [POSITIONING.md](../POSITIONING.md) for the full per-layer disclosure including specific gaps we are closing deliberately.
 
 ### EDI Transaction Processing
 
