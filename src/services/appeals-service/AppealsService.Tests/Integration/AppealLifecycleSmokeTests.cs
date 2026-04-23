@@ -376,13 +376,18 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
 /// </summary>
 public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program>
 {
-    public InMemoryAppealRepository Repo { get; private set; } = new();
-    public RecordingAppealEventPublisher Publisher { get; private set; } = new();
+    // Not reassigned across tests — the DI container captures the
+    // singleton reference at first host build; reassigning these fields
+    // would desync the controller's dependencies from what the test
+    // inspects. Reset() clears state in-place via the fakes' Clear()
+    // methods.
+    public InMemoryAppealRepository Repo { get; } = new();
+    public RecordingAppealEventPublisher Publisher { get; } = new();
 
     public void Reset()
     {
-        Repo = new InMemoryAppealRepository();
-        Publisher = new RecordingAppealEventPublisher();
+        Repo.Clear();
+        Publisher.Clear();
     }
 
     protected override IHost CreateHost(IHostBuilder builder)

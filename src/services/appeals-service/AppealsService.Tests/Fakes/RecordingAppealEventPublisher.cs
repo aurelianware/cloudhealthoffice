@@ -21,6 +21,25 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
     public readonly ConcurrentQueue<AssignedCall> Assigned = new();
     public readonly ConcurrentQueue<MigratedCall> Migrated = new();
 
+    /// <summary>
+    /// Drain every queue. Used by the
+    /// <see cref="Integration.AppealsWebApplicationFactory"/>'s test-scoped
+    /// Reset hook — replacing the whole publisher between tests would
+    /// desync the DI container (which caches the singleton at first build).
+    /// </summary>
+    public void Clear()
+    {
+        while (Created.TryDequeue(out _)) { }
+        while (StatusChanged.TryDequeue(out _)) { }
+        while (Closed.TryDequeue(out _)) { }
+        while (NotesAdded.TryDequeue(out _)) { }
+        while (AttachmentsAdded.TryDequeue(out _)) { }
+        while (AttachmentsAcknowledged.TryDequeue(out _)) { }
+        while (OverdueObserved.TryDequeue(out _)) { }
+        while (Assigned.TryDequeue(out _)) { }
+        while (Migrated.TryDequeue(out _)) { }
+    }
+
     public Task PublishCreatedAsync(Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
     {
         Created.Enqueue(new CreatedCall(appeal.Id, appeal.TenantId, actor, correlationId));

@@ -27,6 +27,22 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
 
     public void FailAuditAppendOnce() => _failAuditAppendOnce = true;
 
+    /// <summary>
+    /// Reset internal state in place. Used by the
+    /// <see cref="Integration.AppealsWebApplicationFactory"/>'s test-scoped
+    /// Reset hook — replacing the whole fake between tests would desync
+    /// the DI container (which caches the singleton at first build).
+    /// </summary>
+    public void Clear()
+    {
+        lock (_sync)
+        {
+            _appeals.Clear();
+            while (_events.TryTake(out _)) { }
+            _failAuditAppendOnce = false;
+        }
+    }
+
     public Task<Appeal> CreateAsync(Appeal appeal, AppealEvent genesisEvent, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(appeal.Id)) appeal.Id = Guid.NewGuid().ToString();
