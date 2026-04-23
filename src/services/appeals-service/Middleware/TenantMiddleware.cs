@@ -1,18 +1,22 @@
+using System.Security.Claims;
+
 namespace AppealsService.Middleware;
 
 /// <summary>
-/// Middleware to extract TenantId from JWT claims or headers
-/// Multi-tenant SaaS isolation: each tenant's appeals are partitioned by TenantId
+/// Extracts tenant context from JWT tokens or headers for multi-tenant
+/// isolation. Reconciled with consent-service / personal-rep-service
+/// during modernization: returns 401 on missing context rather than
+/// silently defaulting to a shared "default-tenant" (which was a prior
+/// multi-tenancy violation — any unauthenticated request would read that
+/// tenant's data).
 /// </summary>
 public class TenantMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly ILogger<TenantMiddleware> _logger;
 
-    public TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> logger)
+    public TenantMiddleware(RequestDelegate next)
     {
         _next = next;
-        _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -23,56 +27,66 @@ public class TenantMiddleware
             return;
         }
 
-        string? tenantId = null;
+        var tenantId = ExtractTenantId(context);
 
-        // 1. Try to get from JWT claims (production)
-        if (context.User.Identity?.IsAuthenticated == true)
-        {
-            // Azure AD B2C or custom JWT
-            tenantId = context.User.FindFirst("tenant_id")?.Value
-                      ?? context.User.FindFirst("extension_TenantId")?.Value;
-        }
-
-        // 2. Fallback to headers (development/testing)
         if (string.IsNullOrEmpty(tenantId))
         {
-            tenantId = context.Request.Headers["X-Tenant-ID"].FirstOrDefault()
-                      ?? context.Request.Headers["X-Dev-Tenant-ID"].FirstOrDefault();
+            context.Response.StatusCode = 401;
+            await context.Response.WriteAsync("Missing tenant context. Provide X-Tenant-ID header or valid JWT with tenant claim.");
+            return;
         }
 
-        // 3. Default for local development
-        if (string.IsNullOrEmpty(tenantId))
-        {
-            tenantId = "default-tenant";
-            _logger.LogWarning("No TenantId found in JWT or headers, using default: {TenantId}", SanitizeForLog(tenantId));
-        }
-
-        // Store in HttpContext for repository access
         context.Items["TenantId"] = tenantId;
-
-        _logger.LogDebug("Request TenantId: {TenantId}", SanitizeForLog(tenantId));
-
         await _next(context);
     }
 
     private static bool IsHealthCheckPath(PathString path)
     {
-        return path.StartsWithSegments("/health") 
+        return path.StartsWithSegments("/health")
+            || path.StartsWithSegments("/ready")
+            || path.StartsWithSegments("/live")
             || path.StartsWithSegments("/swagger");
     }
 
-    private static string SanitizeForLog(string? value)
+    private static string? ExtractTenantId(HttpContext context)
     {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        var user = context.User;
+        if (user?.Identity?.IsAuthenticated == true)
+        {
+            var tenantClaim = user.FindFirst("tenant_id")?.Value
+                           ?? user.FindFirst("extension_TenantId")?.Value
+                           ?? user.FindFirst(ClaimTypes.GroupSid)?.Value;
+
+            if (!string.IsNullOrEmpty(tenantClaim))
+            {
+                return tenantClaim;
+            }
+        }
+
+        if (context.Request.Headers.TryGetValue("X-Tenant-ID", out var headerValue))
+        {
+            return headerValue.FirstOrDefault();
+        }
+
+        if (context.Request.Headers.TryGetValue("X-Dev-Tenant-ID", out var devHeaderValue))
+        {
+            return devHeaderValue.FirstOrDefault();
+        }
+
+        return null;
     }
 }
 
 public static class TenantMiddlewareExtensions
 {
-    public static IApplicationBuilder UseTenantMiddleware(this IApplicationBuilder builder)
+    public static IApplicationBuilder UseTenantContext(this IApplicationBuilder builder)
     {
         return builder.UseMiddleware<TenantMiddleware>();
+    }
+
+    public static string GetTenantId(this HttpContext context)
+    {
+        return context.Items["TenantId"]?.ToString()
+            ?? throw new InvalidOperationException("Tenant context not found. Ensure TenantMiddleware is registered.");
     }
 }

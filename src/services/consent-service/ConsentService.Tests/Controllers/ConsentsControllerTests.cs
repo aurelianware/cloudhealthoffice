@@ -2,6 +2,8 @@ using System.Security.Claims;
 using ConsentService.Controllers;
 using ConsentService.Middleware;
 using ConsentService.Models;
+using ConsentService.Repositories;
+using ConsentService.Services;
 using ConsentService.Tests.Fakes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
