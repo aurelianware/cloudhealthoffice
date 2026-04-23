@@ -81,7 +81,6 @@
     "lodash.once": "^4.1.1",
     "ajv": "^8.18.0",
     "minimatch": "^10.2.1",
-    "test-exclude": "^7.0.1",
-    "uuid": "^14.0.0"
+    "test-exclude": "^7.0.1"
   }
 }
