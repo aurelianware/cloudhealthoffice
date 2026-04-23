@@ -1,0 +1,38 @@
+{
+  "resourceType": "OperationDefinition",
+  "id": "cho-appeal-submit",
+  "url": "http://fhir.cloudhealthoffice.com/OperationDefinition/cho-appeal-submit",
+  "version": "1.0.0",
+  "name": "ChoAppealSubmit",
+  "title": "CHO Appeal Submit",
+  "status": "active",
+  "kind": "operation",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "Submit a post-adjudication claim appeal as a transaction Bundle. Accepts a Task conforming to cho-appeal-task, zero-to-many Communications conforming to cho-appeal-communication, and zero-to-many DocumentReferences conforming to cho-appeal-document-reference. Returns a transaction-response Bundle with assigned IDs. Runtime invariants (submitted Task must have status=requested; Communications and DocumentReferences must reference the submitted Task; transactional all-or-nothing semantics) are enforced at operation-invocation time by the implementing service. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide. PR 1 authors this OperationDefinition; the operation itself is implemented in the appeals-service in a subsequent PR.",
+  "affectsState": true,
+  "code": "cho-appeal-submit",
+  "resource": ["Task"],
+  "system": false,
+  "type": true,
+  "instance": false,
+  "parameter": [
+    {
+      "name": "resource",
+      "use": "in",
+      "min": 1,
+      "max": "1",
+      "documentation": "A transaction Bundle containing exactly one Task conforming to cho-appeal-task, plus zero-to-many Communications and DocumentReferences. Bundle.type MUST be 'transaction'.",
+      "type": "Bundle"
+    },
+    {
+      "name": "return",
+      "use": "out",
+      "min": 1,
+      "max": "1",
+      "documentation": "A transaction-response Bundle with persisted resource IDs and meta.lastUpdated populated. All-or-nothing semantics: if any resource fails to persist, no resources are persisted.",
+      "type": "Bundle"
+    }
+  ]
+}

@@ -9,6 +9,25 @@
     <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
+  <!--
+    CHO FHIR artifact embedding
+    ===========================
+    Source of truth for CHO-authored FHIR artifacts is `docs/fhir/profiles/`.
+    MSBuild embeds each JSON file directly into fhir-service.dll with
+    logical name prefix `FhirArtifacts.`. Because the <EmbeddedResource>
+    item references the source path verbatim, MSBuild participates in
+    incremental rebuilds — editing a profile causes fhir-service.dll to
+    rebuild with no manual copy step. `ChoFhirArtifactRegistry` reads
+    them at startup via `Assembly.GetManifestResourceStream`.
+
+    The Dockerfile includes a corresponding `COPY docs/fhir/profiles/`
+    line so the files are present in the build-stage working directory.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\..\docs\fhir\profiles\*.json"
+                      LogicalName="FhirArtifacts.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />

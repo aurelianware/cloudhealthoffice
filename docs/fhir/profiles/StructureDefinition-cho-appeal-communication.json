@@ -1,0 +1,103 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "cho-appeal-communication",
+  "url": "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-communication",
+  "version": "1.0.0",
+  "name": "ChoAppealCommunication",
+  "title": "CHO Appeal Communication",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "description": "Profile on Communication representing one discrete appeal-related communication: a provider's appeal argument, an internal reviewer note, or the decision rationale. Links back to the parent appeal Task via `about`. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "jurisdiction": [
+    { "coding": [{ "system": "urn:iso:std:iso:3166", "code": "US" }] }
+  ],
+  "fhirVersion": "4.0.1",
+  "kind": "resource",
+  "abstract": false,
+  "type": "Communication",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Communication",
+  "derivation": "constraint",
+  "differential": {
+    "element": [
+      {
+        "id": "Communication",
+        "path": "Communication",
+        "short": "CHO appeal communication entry"
+      },
+      {
+        "id": "Communication.status",
+        "path": "Communication.status",
+        "min": 1,
+        "max": "1",
+        "binding": {
+          "strength": "required",
+          "valueSet": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-communication-status"
+        }
+      },
+      {
+        "id": "Communication.category",
+        "path": "Communication.category",
+        "min": 1,
+        "max": "1",
+        "binding": {
+          "strength": "required",
+          "valueSet": "http://fhir.cloudhealthoffice.com/ValueSet/cho-appeal-communication-category"
+        }
+      },
+      {
+        "id": "Communication.subject",
+        "path": "Communication.subject",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://hl7.org/fhir/StructureDefinition/Patient"]
+          }
+        ]
+      },
+      {
+        "id": "Communication.about",
+        "path": "Communication.about",
+        "min": 1,
+        "max": "*",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": ["http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-task"]
+          }
+        ]
+      },
+      {
+        "id": "Communication.sent",
+        "path": "Communication.sent",
+        "min": 1,
+        "max": "1"
+      },
+      {
+        "id": "Communication.sender",
+        "path": "Communication.sender",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": [
+              "http://hl7.org/fhir/StructureDefinition/Practitioner",
+              "http://hl7.org/fhir/StructureDefinition/Organization",
+              "http://hl7.org/fhir/StructureDefinition/RelatedPerson"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "Communication.payload",
+        "path": "Communication.payload",
+        "min": 0,
+        "max": "*"
+      }
+    ]
+  }
+}

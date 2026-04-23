@@ -1,0 +1,21 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "cho-appeal-line-of-business",
+  "url": "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-line-of-business",
+  "version": "1.0.0",
+  "name": "ChoAppealLineOfBusiness",
+  "title": "CHO Appeal Line of Business",
+  "status": "active",
+  "experimental": false,
+  "date": "2026-04-22",
+  "publisher": "Cloud Health Office",
+  "caseSensitive": true,
+  "content": "complete",
+  "description": "Lines of business under which an appeal may be filed. Authored by Cloud Health Office under its own canonical namespace; does not claim conformance to any external Implementation Guide.",
+  "concept": [
+    { "code": "commercial", "display": "Commercial" },
+    { "code": "medicare", "display": "Medicare" },
+    { "code": "medicaid", "display": "Medicaid" },
+    { "code": "marketplace", "display": "Marketplace" }
+  ]
+}
