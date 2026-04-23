@@ -68,6 +68,18 @@ public sealed class AppealRepositoryMongo : IAppealRepository
             .ToListAsync(ct);
     }
 
+    public async Task<Appeal?> GetMostRecentAppealByClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.ClaimId, claimId)
+                   & Builders<Appeal>.Filter.Ne(a => a.Status, AppealStatus.Closed);
+        return await _appeals.Find(filter)
+            .SortByDescending(a => a.SubmittedDate)
+            .Limit(1)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Appeal>> SearchAsync(
         string tenantId, AppealSearchParams p, CancellationToken ct = default)
     {
