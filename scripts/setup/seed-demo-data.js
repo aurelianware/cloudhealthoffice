@@ -1010,7 +1010,7 @@ choDb.Accumulators.insertMany(accumulators);
 print("✓ " + accumulators.length + " Accumulators");
 
 // Override member 1's accumulator with specific demo values
-// (believable partial-year utilisation for Thomas & Victoria demo)
+// (believable partial-year utilisation for the demo member)
 choDb.Accumulators.updateOne(
   { OwnerId: makeId("mbr", 1), TenantId: TENANT_ID },
   { $set: {

@@ -128,8 +128,8 @@ thousand keys per state.
 Every cache key is mandatorily transformed by `CacheKeyGuard` before
 hitting the backend. Two compliance controls:
 
-1. **Tenant prefixing.** The logical key `enrollment:config:exhp`
-   becomes `{env}:{tenantId}:enrollment:config:exhp`. `tenantId` is
+1. **Tenant prefixing.** The logical key `enrollment:config:txmco01`
+   becomes `{env}:{tenantId}:enrollment:config:txmco01`. `tenantId` is
    resolved from `HttpContext.Items["TenantId"]` (set by
    `TenantMiddleware`). Cross-tenant cache pollution is unreachable by
    construction. The sole escape hatch is `CacheScope.Global`, which
@@ -148,7 +148,7 @@ hitting the backend. Two compliance controls:
 
 | Logical key                                | Scope  | Result |
 |--------------------------------------------|--------|--------|
-| `enrollment:config:exhp`                   | Tenant | ✅ `production:exhp:enrollment:config:exhp` |
+| `enrollment:config:txmco01`                   | Tenant | ✅ `production:txmco01:enrollment:config:txmco01` |
 | `member:memberIdHash:deadbeef`             | Tenant | ✅ allowed — hashed form |
 | `feature-flags:pas-auto`                   | Global | ✅ `production:_global:feature-flags:pas-auto` |
 | `enrollment:memberId:M12345`               | Tenant | ❌ `ArgumentException` — PHI token `memberId` |
