@@ -116,10 +116,12 @@ I'm reaching out because Cloud Health Office can reduce your EDI platform costs 
 
 | Cost Category | Current (Estimated) | With Cloud Health Office |
 |---------------|---------------------|--------------------------|
-| Annual Platform | $[X]00,000 | $36,000 |
-| Implementation | $[X]00,000 | $5,000 |
+| Annual Platform | $[X]00,000 | PMPM (pilot-custom) |
+| Implementation | $[X]00,000 | Pilot-scoped |
 | Support | $[X]0,000 | Included |
-| **3-Year TCO** | **$[X]M** | **$169,000** |
+| **3-Year TCO** | **$[X]M** | **Pilot-scoped; see FINANCIAL-MODEL.md** |
+
+**Pricing:** PMPM-based, pilot-custom terms for founding partners. Happy to scope specifics on a discovery call.
 
 **Why the difference?**
 • Source-available platform (BSL 1.1) - no vendor lock-in

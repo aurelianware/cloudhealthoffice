@@ -96,7 +96,7 @@ I wanted to introduce you to [Your Name], founder of Cloud Health Office.
 They've built a source-available, Azure-native EDI platform that helps health plans achieve CMS-0057-F compliance in under 5 minutes—compared to 6-18 months with traditional vendors. With the January 2027 deadline approaching, 900+ health plans face mandatory compliance, and there's no comparable solution in market.
 
 I've been advising them for [X months/time] and have been impressed by:
-• Technical execution (100% CMS-compliant, 193 tests passing)
+• Technical execution (100% CMS-compliant, ~2,800 test methods across 44 test projects)
 • Market timing (regulatory deadline creates urgent demand)
 • Capital efficiency (LTV:CAC of 25:1)
 
@@ -123,7 +123,7 @@ A few quick highlights:
 • 900+ health plans must comply by January 1, 2027
 • Traditional implementations take 6-18 months and $500K+
 • We deploy in <5 minutes at 85% lower cost
-• 100% compliant, 193 tests passing, production-ready
+• 100% compliant, ~2,800 test methods across 44 test projects, production-ready
 
 I've attached our one-pager and would be happy to send our full deck if helpful. Would [specific times] work for a call?
 
@@ -188,8 +188,8 @@ Thanks for connecting us, [Existing Investor Name].
 Quick context:
 • $8B healthcare EDI market with regulatory forcing function
 • 900+ health plans must comply with CMS-0057-F by January 2027
-• Traditional vendors: 6-18 months, $500K-$2M
-• Cloud Health Office: <5 minutes, $36K/year
+• Traditional vendors: 6-18 months, $500K–$2M implementation + annual licensing
+• Cloud Health Office: Layer 1 compliance surface deployable in weeks, PMPM-based pricing, pilot-custom terms for founding partners
 • Unit economics: LTV:CAC of 25:1, 6-month CAC payback
 
 I'd love to find 30 minutes to walk through our platform and market opportunity. Would [specific times] work?
@@ -258,7 +258,7 @@ Thank you, [Customer Name], for the kind introduction.
 
 • Deploy CMS-0057-F compliance in under 5 minutes
 • 85% cost reduction vs. enterprise vendors
-• 100% compliant infrastructure, 193 tests passing
+• 100% compliant infrastructure, ~2,800 test methods across 44 test projects
 • Zero-code configuration for payer-specific needs
 
 We're raising a $2M seed round to scale from pilot customers like [Customer Company] to 50+ customers by end of Year 1.
