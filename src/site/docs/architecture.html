@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Architecture — Cloud Health Office Documentation</title>
-  <meta name="description" content="Cloud Health Office platform architecture. Multi-tenant SaaS, Kubernetes-native with Argo Workflows, 29 microservices, 9 calculation engines, configuration-driven deployment for healthcare payers." />
+  <meta name="description" content="Cloud Health Office platform architecture. Multi-tenant SaaS, Kubernetes-native with Argo Workflows, 36 microservices, 9 adjudication engines, configuration-driven deployment for healthcare payers." />
   <meta name="keywords" content="healthcare payer platform architecture, Kubernetes healthcare, multi-tenant claims processing, Argo Workflows EDI, FHIR R4 architecture, healthcare microservices, claims adjudication pipeline" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/architecture" />
   <meta property="og:type" content="article" />
@@ -43,8 +43,8 @@
         <p class="docs-subtitle">Cloud Health Office is a cloud-native multi-tenant SaaS platform that processes healthcare EDI transactions for unlimited health plans. Configuration-driven, backend-agnostic, and deployable to any Kubernetes cluster.</p>
 
         <figure class="docs-diagram">
-          <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 29 microservices, 9 calculation engines, 7 FHIR R4 APIs, and multi-cloud deployment" />
-          <figcaption>Platform overview — 29 microservices, 9 engines, 6 parsers, 7 FHIR APIs, 17 Argo Workflows</figcaption>
+          <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 36 microservices, 9 adjudication engines, 7 FHIR R4 APIs, and multi-cloud deployment" />
+          <figcaption>Platform overview — 36 microservices, 9 engines, 6 parsers, 7 FHIR APIs, 17 Argo Workflows</figcaption>
         </figure>
 
         <h2 id="overview">Overview</h2>
@@ -64,7 +64,7 @@
 
         <h2 id="platform">Platform Components</h2>
 
-        <h3>Microservices (29)</h3>
+        <h3>Microservices (36)</h3>
         <p>Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, Claims Scrubbing, Capitation, Payment, Pricing API, Terminology Service, Provider Verification, and more. Each service owns its domain data and communicates via Azure Service Bus messaging. The Terminology Service provides FHIR <code>ConceptMap/$translate</code> for SNOMED CT &harr; CPT/ICD-10-CM crosswalk — required for Da Vinci CRD, DTR, and PAS workflows. The Provider Verification Service aggregates NPPES, OIG/LEIE, PECOS, CMS Open Payments, and FSMB data into a composite integrity score per NPI.</p>
 
         <h3>Calculation Engines (9)</h3>

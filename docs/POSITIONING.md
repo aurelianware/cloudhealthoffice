@@ -182,6 +182,25 @@ Layer 3 entry — full platform, day one. The reference-customer gap is real and
 
 Layer 2 entry typically, with Layer 3 visible on the horizon. State-specific compliance variations (FL-AHCA-SMMC, Texas TMPPM, and similar) are handled through per-tenant configuration rather than per-customer code forks.
 
+## Canonical Facts
+
+*Last verified: April 2026*
+
+These are the ground-truth numbers for CHO as of the most recent verification. Any artifact citing service counts, engine counts, test counts, or documentation volume should reconcile to this section. When these numbers drift from reality, update this section first; derivative artifacts then reconcile to it.
+
+| Metric | Value | Source |
+| --- | --- | --- |
+| Services | 36 | `src/services/*/` excluding `shared/` |
+| Adjudication/rules engines | 9 | BenefitEngine, FeeScheduleEngine, NcciEngine, CobEngine, RiskAdjustmentEngine, EncounterEngine, ClaimsScrubEngine, PriorAuthRuleEngine, ProviderVerificationEngine |
+| Supporting engine projects | 4 | DocumentStore, OperatingMode, ProviderEnrollmentService, enrollment-wiring |
+| Test projects | 44 | `*.Tests.csproj` files |
+| Test methods | ~2,800 | xUnit Facts + Theories |
+| Production C# lines | ~136,000 | Excluding tests, bin, obj |
+| Documentation lines | ~94,000 | Markdown under `docs/` |
+| Pricing framework | PMPM-based, pilot-specific | See FINANCIAL-MODEL.md for indicative ranges |
+
+Verification procedure documented at `scripts/verify-canonical-facts.sh` (to be created in a follow-up PR). Numbers should be re-verified at each major release and when the Canonical Facts section is cited by another artifact.
+
 ## Governance
 
 This document is the source of truth for CHO positioning. Every other CHO-facing artifact — site pages, pitch deck, sales materials, compliance docs, technical documentation — should derive from and not contradict this document.
