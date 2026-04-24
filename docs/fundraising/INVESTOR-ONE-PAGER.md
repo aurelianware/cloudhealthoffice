@@ -2,9 +2,26 @@
 
 ---
 
+> **Pre-Pilot Status (Read First)**
+>
+> Cloud Health Office is pre-pilot. We have no production reference
+> customer yet; our first pilot deployment is in motion. The
+> "Production Ready" labels in this document refer to Layer 1
+> (CMS-0057-F compliance surface) and Layer 2 (appeals re-foundation,
+> PRs #677, #678, #680, #681) — both of which are genuinely shipped
+> and architecturally complete. Layer 3 (full CAPS platform) is
+> architecturally complete with named gaps we are closing
+> deliberately: no production reference customer, test coverage on
+> claims / provider / sponsor services, IFhirDataAdapter wiring
+> beyond appeals, portal polish, correspondence service, scale
+> testing. Full disclosure in [POSITIONING.md](../POSITIONING.md)
+> §Layer 3 "what it honestly is today."
+
+---
+
 ## The Company
 
-**Cloud Health Office** is the first source-available, Azure-native EDI platform delivering complete CMS-0057-F compliance to health plans in under 5 minutes—not 6-18 months.
+**Cloud Health Office** is the first source-available, Azure-native platform for healthcare claims administration. We deliver Layer 1 CMS-0057-F compliance in weeks (vs. the 6-18 months of traditional implementations), with a Layer 2 progressive-modernization path (appeals shipped; see [POSITIONING.md](../POSITIONING.md)) and a Layer 3 full-CAPS platform for new entrants.
 
 ---
 
@@ -23,12 +40,14 @@
 
 | Capability | Status |
 |------------|--------|
-| Patient Access API (FHIR R4) | ✅ Production Ready |
-| Provider Access API | ✅ Production Ready |
-| Prior Authorization API (72hr/7-day) | ✅ Automated |
-| Payer-to-Payer API | ✅ Ready |
-| Complete X12 ↔ FHIR Transformation | ✅ 45 Tests Passing |
-| Deployment Time | **< 5 minutes** |
+| Patient Access API (FHIR R4) | ✅ Production Ready (Layer 1) |
+| Provider Access API | ✅ Production Ready (Layer 1) |
+| Prior Authorization API (72hr/7-day) | ✅ Automated (Layer 1) |
+| Payer-to-Payer API | ✅ Ready (Layer 1) |
+| Complete X12 ↔ FHIR Transformation | ✅ 45 transformation tests (193 total suite) |
+| Configuration Wizard | **< 5 min per tenant** |
+
+*Layer 1 = CMS-0057-F compliance surface. Layer 2 (appeals re-foundation) also production-ready. See [POSITIONING.md](../POSITIONING.md) §Layer 3 for full-CAPS honest today-state.*
 
 ---
 
@@ -64,6 +83,8 @@
 | **Year 1** | 50 | $1.8M | 75% |
 | **Year 2** | 150 | $6.0M | 78% |
 | **Year 3** | 300 | $13.5M | 82% |
+
+*All rows are forward-looking targets, not present-state. Pre-pilot status disclosed above.*
 
 **Unit Economics**: LTV:CAC 25:1 | CAC Payback: 6 months | NRR: 115-125%
 

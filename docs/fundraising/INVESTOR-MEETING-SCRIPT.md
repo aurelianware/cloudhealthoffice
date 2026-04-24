@@ -30,7 +30,7 @@ This script provides a structured framework for 30-minute investor meetings. Ada
 > "In [X] days, 900 health plans face a compliance cliff that could cost them up to $10,000 per day in penalties and potential exclusion from Medicare and Medicaid programs. Most of them have no viable path to compliance—and that's the problem we've solved."
 
 **Option B: Time-to-Value**
-> "Traditional healthcare EDI implementations take 6-18 months and cost $500K to $2M. We've reduced that to under 5 minutes and $36K per year—and we're already 100% compliant with the upcoming CMS mandate."
+> "Traditional healthcare EDI implementations take 6-18 months and cost $500K to $2M. We've reduced Layer 1 CMS-0057-F compliance to weeks-to-deploy and ~$36K/year blended (tiers from $11K–$86K) — with 100% capability coverage of the mandate. Layer 2 progressive modernization (appeals shipped as the reference domain) and Layer 3 full-CAPS are the expansion path."
 
 **Option C: Market Transformation**
 > "The healthcare EDI market is $8 billion and hasn't seen meaningful innovation in 20 years. The CMS-0057-F mandate is forcing every health plan in America to modernize—and we're the only source-available, cloud-native solution ready to help them."
@@ -60,7 +60,7 @@ This script provides a structured framework for 30-minute investor meetings. Ada
 > - Prior Authorization API with automated 72-hour and 7-day response tracking ✓
 > - Payer-to-Payer API ✓
 >
-> And we do this with deployment times measured in minutes, not months."
+> The configuration wizard deploys in minutes; the full end-to-end compliance rollout takes weeks — not the 6-18 months of traditional implementations."
 
 ### Live Demo (4-5 minutes)
 
@@ -185,7 +185,9 @@ npm run generate -- interactive --output demo-config.json --generate
 
 > "Here's where we are today:
 >
-> - **Product**: 100% CMS-0057-F compliant, 193 tests passing, production-ready
+> - **Product (Layer 1)**: 100% CMS-0057-F capability coverage, production-ready, pilot-validated with first partners
+> - **Product (Layer 2)**: Appeals re-foundation shipped (PRs #677, #678, #680, #681) — the strangler-fig reference implementation
+> - **Product (Layer 3)**: 36 services, 9 engines, Argo-orchestrated adjudication, multi-tenant throughout — architecturally complete, gaps disclosed in POSITIONING.md §Layer 3
 > - **Technology**: Complete FHIR R4 transformation, ValueAdds277 enhanced claim status, production-grade security
 > - **Pipeline**: Active conversations with [X] qualified prospects
 > - **Community**: GitHub stars growing, active contributor community forming
@@ -292,6 +294,10 @@ npm run generate -- interactive --output demo-config.json --generate
 > "I want to leave time for questions. What would you like to dig into?"
 
 ### Common Questions & Responses
+
+**Q: Are you in production with any customers today?**
+
+> "No — we are pre-pilot. Our first pilot deployment is in motion. We chose not to fabricate production metrics; instead the architectural proof points (the four-PR appeals re-foundation — PRs #677, #678, #680, #681) are what we lead with for a technical evaluator. POSITIONING.md §Layer 3 has the full honest today-state, including specific gaps (test coverage on claims/provider/sponsor services, IFhirDataAdapter wiring beyond appeals, no correspondence-service yet, no scale testing at top-tier payer volume) and our plan to close each one. Happy to walk through any of them."
 
 **Q: Who are your competitors?**
 
