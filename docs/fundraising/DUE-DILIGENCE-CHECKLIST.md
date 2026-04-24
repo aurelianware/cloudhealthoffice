@@ -10,6 +10,44 @@ This checklist ensures Cloud Health Office is prepared for investor due diligenc
 
 ---
 
+## Critical Disclosures (Read First)
+
+The following disclosures derive from [`docs/POSITIONING.md`](../POSITIONING.md)
+§Layer 3 "what it honestly is today." They are surfaced here as
+explicit DD line-items to prevent either party from navigating DD
+without confronting them directly.
+
+- [ ] **Reference customer**: no production reference customer yet;
+      first pilot deployment in motion. Pilot partner name, status,
+      and timeline available under NDA.
+- [ ] **Test coverage on core services**: claims-service ≈24% line
+      coverage, provider-service ≈12%, sponsor-service ≈13%. These
+      are the lowest-covered services in the repo and the most
+      operationally critical for Layer 3 at scale. Hardening plan
+      and timeline available.
+- [ ] **IFhirDataAdapter wiring**: the interface exists and the
+      appeal adapter is real; several domain adapters are still
+      mock implementations. Replacement with typed HTTP clients to
+      the live domain services is in-flight.
+- [ ] **Portal polish**: Blazor portal is functional for
+      operational workflows today; not yet at enterprise-demo-day
+      aesthetic maturity.
+- [ ] **Correspondence service**: disposition letters following
+      appeal decisions require a correspondence-service not yet
+      shipped. Appeal decisions produce structured Kafka events
+      today that the future service will consume; nothing blocks
+      adding it in a dedicated PR sequence.
+- [ ] **Scale testing**: platform has not been run against a
+      top-tier payer's claim volume (10M+ claims/year). Architecture
+      is designed for it; proof requires a pilot at that scale.
+
+Each item above is also surfaced in the Technical and/or Commercial
+DD sections below with supporting artifacts. Investors should
+confirm each disclosure independently in addition to working the
+full checklist.
+
+---
+
 ## Legal Due Diligence
 
 ### Corporate Structure

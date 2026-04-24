@@ -4,6 +4,19 @@
 
 ---
 
+> **Source-of-truth notice:** All fundraising materials in this
+> directory must derive from and not contradict
+> [`docs/POSITIONING.md`](../POSITIONING.md). Overclaims identified
+> in the positioning audit
+> ([`docs/status/POSITIONING-AUDIT.md`](../status/POSITIONING-AUDIT.md))
+> must be resolved in each document before it is sent to investors.
+> Wave 1b of phase 2 closed the known investor-one-pager and
+> investor-meeting-script overclaims; before sending any document
+> from this directory to an investor, verify its claims against
+> POSITIONING.md one more time.
+
+---
+
 ## Overview
 
 This directory contains comprehensive materials to support Cloud Health Office's venture capital fundraising and strategic partnership development. All documents are designed to enable immediate outreach to investors and partners.
