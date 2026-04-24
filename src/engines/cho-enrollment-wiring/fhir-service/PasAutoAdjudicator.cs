@@ -285,7 +285,7 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
             "MEDICAID" or "STAR" or "STARPLUS" or "STARKIDS" => PaLineOfBusiness.Medicaid,
             "EXCHANGE" or "QHP" or "MARKETPLACE"             => PaLineOfBusiness.Exchange,
             "MEDICARE" or "MA"                               => PaLineOfBusiness.Medicare,
-            _                                                => PaLineOfBusiness.Medicaid // default for PCHP
+            _                                                => PaLineOfBusiness.Medicaid // default for Texas Medicaid MCO tenants
         };
     }
 

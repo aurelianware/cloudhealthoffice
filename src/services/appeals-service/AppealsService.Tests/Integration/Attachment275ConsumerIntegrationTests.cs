@@ -37,7 +37,7 @@ public class Attachment275ConsumerIntegrationTests
     /// </summary>
     private const string AppealContextFixtureTemplate = """
         {
-          "tenantId": "tenant-pchp",
+          "tenantId": "tenant-txmco01",
           "context": "appeal",
           "claimId": "{CLAIM_ID}",
           "authorizationId": "auth-20260207-001",
@@ -137,7 +137,7 @@ public class Attachment275ConsumerIntegrationTests
     public async Task AppealContextFixture_RoutesToSeededAppeal_WithFullAuditLineage()
     {
         var (consumer, repository, publisher, sink) = BuildHarness();
-        var seeded = await SeedOpenAppeal(repository, tenantId: "tenant-pchp", claimId: "claim-PCHP-9001");
+        var seeded = await SeedOpenAppeal(repository, tenantId: "tenant-txmco01", claimId: "claim-txmco01-9001");
         var bht03 = "BHT03-2026-04-23-XYZ";
         var json = AppealContextFixtureTemplate
             .Replace("{CLAIM_ID}", seeded.ClaimId)
@@ -200,7 +200,7 @@ public class Attachment275ConsumerIntegrationTests
     public async Task AppealContextFixture_DeadLetters_WhenSeededAppealIsClosed()
     {
         var (consumer, repository, publisher, sink) = BuildHarness();
-        var seeded = await SeedOpenAppeal(repository, tenantId: "tenant-pchp", claimId: "claim-closed-x");
+        var seeded = await SeedOpenAppeal(repository, tenantId: "tenant-txmco01", claimId: "claim-closed-x");
         // Move the appeal to Closed via the repository's transition path
         // so the next 275 has nothing to land on.
         var transition = new AppealEvent

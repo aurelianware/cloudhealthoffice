@@ -13,7 +13,7 @@ namespace CHO.TmppmIngestionService;
 /// 
 /// Usage:
 ///   dotnet run -- ingest 2026 4                    # Full ingestion of April 2026 TMPPM
-///   dotnet run -- ingest 2026 4 --tenant pchp      # With PCHP tenant scoping
+///   dotnet run -- ingest 2026 4 --tenant txmco01   # With tenant scoping
 ///   dotnet run -- parse-section 2_13 9.2.46.14     # Parse a specific section from a chapter
 ///   dotnet run -- diff 2026-03 2026-04             # Diff two editions
 ///   dotnet run -- download 2026 4                  # Download only (no parsing)
@@ -185,7 +185,7 @@ public class Program
             
             Examples:
               dotnet run -- ingest 2026 4                    # Ingest April 2026 TMPPM
-              dotnet run -- ingest 2026 4 --tenant pchp      # Scoped to PCHP tenant
+              dotnet run -- ingest 2026 4 --tenant txmco01   # Scoped to a specific tenant
               dotnet run -- parse-section 2_13 9.2.46.14     # Extract HNS PA rules
               dotnet run -- download 2026 4                  # Download chapters only
             

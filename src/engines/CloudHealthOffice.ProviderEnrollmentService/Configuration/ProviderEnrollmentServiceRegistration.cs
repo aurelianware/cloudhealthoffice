@@ -23,7 +23,7 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Configuration;
 ///
 /// ── Typical usage ─────────────────────────────────────────────────────────
 ///
-/// // PCHP (Texas, Medicaid + Exchange) — v1:
+/// // Texas Medicaid MCO tenant (Medicaid + Exchange) — v1:
 /// builder.Services
 ///     .AddProviderEnrollmentService(builder.Configuration)
 ///     .UseCosmosRepositories()

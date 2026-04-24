@@ -12,8 +12,8 @@ public class SyntheticBenefitPlan
     /// <summary>Human-readable plan name.</summary>
     public string PlanName { get; set; } = string.Empty;
 
-    /// <summary>Payer name (e.g., Parkland Community Health Plan).</summary>
-    public string Payer { get; set; } = "Parkland Community Health Plan";
+    /// <summary>Payer name (e.g., Texas Medicaid MCO).</summary>
+    public string Payer { get; set; } = "Texas Medicaid MCO";
 
     /// <summary>Tenant identifier.</summary>
     public string TenantId { get; set; } = "mcc-benchmark";

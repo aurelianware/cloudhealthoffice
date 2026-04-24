@@ -15,7 +15,7 @@ public class StateEnrollmentGateTests
 {
     private const string Npi = "1234567890";
     private const string StateCode = "TX";
-    private const string TenantId = "pchp";
+    private const string TenantId = "txmco01";
     private const string Taxonomy = "207Q00000X";
 
     private readonly DateOnly _today = DateOnly.FromDateTime(DateTime.Today);

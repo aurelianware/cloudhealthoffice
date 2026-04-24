@@ -143,10 +143,10 @@ Output fields:
 
 ### Run full ingestion pipeline
 
-Downloads chapters, detects changes, parses PA sections, and persists to Cosmos DB with PCHP tenant scoping.
+Downloads chapters, detects changes, parses PA sections, and persists to Cosmos DB with tenant scoping.
 
 ```bash
-dotnet run -- ingest 2026 4 --tenant pchp
+dotnet run -- ingest 2026 4 --tenant txmco01
 ```
 
 This will:
@@ -163,7 +163,7 @@ This will:
 When TMHP publishes a new TMPPM edition (typically the last day of each month):
 
 ```bash
-dotnet run -- ingest 2026 5 --tenant pchp
+dotnet run -- ingest 2026 5 --tenant txmco01
 ```
 
 The pipeline automatically:
@@ -240,15 +240,13 @@ These sections have been tested and confirmed working:
 | §9.2.33.1 | Hyperbaric Oxygen Therapy | 99183 | G0277 | 1,658 chars | Session limits per indication in table |
 | §9.2.51.1 | Organ Transplants (General) | — (category-level) | — | 2,431 chars | Contraindications, 3-day pre/6-week post window |
 
-## Competitive context
+## Why automated extraction
 
-Cognizant told PCHP on the March 2024 interoperability call that they have **no state-specific Medicaid modules**. Their EPA quote includes 130 custom rules/questionnaires, but Texas Medicaid likely exceeds that. Ongoing TMPPM monthly maintenance falls entirely on Parkland staff.
-
-CHO's approach with this service:
+Generic payer-platform prior-auth modules typically ship without state-specific Medicaid rules, leaving plan staff to track TMPPM monthly changes by hand. This service closes that gap:
 
 - **Automated** — TMPPM changes detected and extracted monthly via SHA256 + PDF parsing
 - **Structured** — Rules persisted as FHIR-queryable ConceptMapEntry overrides
-- **Tenant-scoped** — PCHP gets TX-specific rules via `TenantId` + `State=TX` + `IsOverride=true`
+- **Tenant-scoped** — Each Texas MCO tenant gets TX-specific rules via `TenantId` + `State=TX` + `IsOverride=true`
 - **Scalable** — Same architecture replicates to any state (FL, NY, CA) by adding a new state code
 - **LLM-enriched** — Claude API backfills CPT codes for criteria-only sections like bariatric surgery
 
@@ -278,7 +276,7 @@ spec:
           containers:
           - name: tmppm-ingestion
             image: cho.azurecr.io/tmppm-ingestion:latest
-            command: ["dotnet", "TmppmIngestionService.dll", "ingest", "2026", "4", "--tenant", "pchp"]
+            command: ["dotnet", "TmppmIngestionService.dll", "ingest", "2026", "4", "--tenant", "txmco01"]
             env:
             - name: CHO_TMPPM_MONGODB__CONNECTIONSTRING
               valueFrom:

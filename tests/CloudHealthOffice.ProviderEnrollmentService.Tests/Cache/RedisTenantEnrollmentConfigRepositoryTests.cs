@@ -21,7 +21,7 @@ public class RedisTenantEnrollmentConfigRepositoryTests
     private readonly ICacheProvider _cache = Substitute.For<ICacheProvider>();
     private readonly RedisTenantEnrollmentConfigRepository _sut;
 
-    private const string TenantId = "pchp";
+    private const string TenantId = "txmco01";
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
     private static readonly string ExpectedKey = $"enrollment:config:{TenantId}";
 

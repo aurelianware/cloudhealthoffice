@@ -170,7 +170,7 @@ Customers move outward-to-inward over time. No customer is locked at Layer 1. Ev
 
 ## What this positioning means for our existing and prospective customers
 
-### For existing pilot discussions (e.g. PCHP)
+### For existing pilot discussions
 
 Our primary engagement frame is Layer 2 — progressive modernization, starting with appeals plus the CMS-0057-F compliance surface that Layer 1 already delivers. Layer 1 alone is available if a multi-year commitment is premature. Layer 3 is the aspirational end-state story for the CTO conversation, with honest disclosure of the gaps listed above.
 
