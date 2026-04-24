@@ -30,7 +30,7 @@ This script provides a structured framework for 30-minute investor meetings. Ada
 > "In [X] days, 900 health plans face a compliance cliff that could cost them up to $10,000 per day in penalties and potential exclusion from Medicare and Medicaid programs. Most of them have no viable path to compliance—and that's the problem we've solved."
 
 **Option B: Time-to-Value**
-> "Traditional healthcare EDI implementations take 6-18 months and cost $500K to $2M. We've reduced Layer 1 CMS-0057-F compliance to weeks-to-deploy and $36K per year — with 100% capability coverage of the mandate. Layer 2 progressive modernization (appeals shipped as the reference domain) and Layer 3 full-CAPS are the expansion path."
+> "Traditional healthcare EDI implementations take 6-18 months and cost $500K to $2M. We've reduced Layer 1 CMS-0057-F compliance to weeks-to-deploy and ~$36K/year blended (tiers from $11K–$86K) — with 100% capability coverage of the mandate. Layer 2 progressive modernization (appeals shipped as the reference domain) and Layer 3 full-CAPS are the expansion path."
 
 **Option C: Market Transformation**
 > "The healthcare EDI market is $8 billion and hasn't seen meaningful innovation in 20 years. The CMS-0057-F mandate is forcing every health plan in America to modernize—and we're the only source-available, cloud-native solution ready to help them."
@@ -60,7 +60,7 @@ This script provides a structured framework for 30-minute investor meetings. Ada
 > - Prior Authorization API with automated 72-hour and 7-day response tracking ✓
 > - Payer-to-Payer API ✓
 >
-> And we do this with deployment times measured in minutes, not months."
+> The configuration wizard deploys in minutes; the full end-to-end compliance rollout takes weeks — not the 6-18 months of traditional implementations."
 
 ### Live Demo (4-5 minutes)
 

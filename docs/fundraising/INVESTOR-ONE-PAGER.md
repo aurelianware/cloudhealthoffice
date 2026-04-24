@@ -44,7 +44,7 @@
 | Provider Access API | ✅ Production Ready (Layer 1) |
 | Prior Authorization API (72hr/7-day) | ✅ Automated (Layer 1) |
 | Payer-to-Payer API | ✅ Ready (Layer 1) |
-| Complete X12 ↔ FHIR Transformation | ✅ 45 Tests Passing |
+| Complete X12 ↔ FHIR Transformation | ✅ 45 transformation tests (193 total suite) |
 | Configuration Wizard | **< 5 min per tenant** |
 
 *Layer 1 = CMS-0057-F compliance surface. Layer 2 (appeals re-foundation) also production-ready. See [POSITIONING.md](../POSITIONING.md) §Layer 3 for full-CAPS honest today-state.*
