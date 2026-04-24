@@ -16,20 +16,18 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 | Cost Category | Custom Development | Enterprise Vendor | Cloud Health Office |
 |---------------|-------------------|-------------------|---------------------|
-| **Year 1 Implementation** | $1,500,000 | $250,000 | $15,000 |
-| **Year 1 Licensing/Subscription** | $0 | $180,000 | $36,000 |
-| **Year 1 Support & Maintenance** | $150,000 | $45,000 | $0 (included) |
-| **Year 2 Licensing/Subscription** | $0 | $180,000 | $36,000 |
-| **Year 2 Support & Maintenance** | $300,000 | $45,000 | $0 (included) |
-| **Year 3 Licensing/Subscription** | $0 | $180,000 | $36,000 |
-| **Year 3 Support & Maintenance** | $300,000 | $45,000 | $0 (included) |
-| **Compliance Updates** | $200,000 | $50,000 | $0 (included) |
-| **Infrastructure (3-year)** | $180,000 | $90,000 | $36,000 |
-| **Total 3-Year TCO** | **$2,630,000** | **$1,065,000** | **$159,000** |
-| **Additional Cost vs. Cloud Health Office** | $2,471,000 | $906,000 | — |
-| **Savings with Cloud Health Office** | **94%** | **85%** | — |
+| **Year 1 Implementation** | $1,500,000 | $250,000 | Pilot-scoped |
+| **Year 1 Licensing/Subscription** | $0 | $180,000 | PMPM (indicative market-rate) |
+| **Year 1 Support & Maintenance** | $150,000 | $45,000 | Included |
+| **Year 2 Licensing/Subscription** | $0 | $180,000 | PMPM (expands by layer) |
+| **Year 2 Support & Maintenance** | $300,000 | $45,000 | Included |
+| **Year 3 Licensing/Subscription** | $0 | $180,000 | PMPM (expands by layer) |
+| **Year 3 Support & Maintenance** | $300,000 | $45,000 | Included |
+| **Compliance Updates** | $200,000 | $50,000 | Included |
+| **Infrastructure (3-year)** | $180,000 | $90,000 | Customer-deployed |
+| **Total 3-Year TCO (indicative)** | **$2,630,000** | **$1,065,000** | **Pilot-scoped; see FINANCIAL-MODEL.md** |
 
-> **Note:** The Cost Comparison Matrix uses conservative estimates for Custom Development. The Detailed Cost Breakdown reflects typical implementation costs, including common overruns and delays observed in real-world payer integrations. This distinction ensures transparent, future-proof financial modeling for decision-makers.
+> **Note:** Cost Comparison Matrix uses conservative estimates for Custom Development and Enterprise Vendor paths. Cloud Health Office pricing is PMPM-based (per member per month) and pilot-scoped. Specific three-year TCO for Cloud Health Office depends on layer mix (Layer 1 compliance surface vs. Layer 2 progressive modernization vs. Layer 3 full-CAPS) and member count. See [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md) for indicative PMPM framing per layer.
 
 ### Detailed Cost Breakdown
 

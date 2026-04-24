@@ -44,7 +44,7 @@
 | Provider Access API | ✅ Production Ready (Layer 1) |
 | Prior Authorization API (72hr/7-day) | ✅ Automated (Layer 1) |
 | Payer-to-Payer API | ✅ Ready (Layer 1) |
-| Complete X12 ↔ FHIR Transformation | ✅ 45 transformation tests (193 total suite) |
+| Complete X12 ↔ FHIR Transformation | ✅ 45 transformation tests (part of ~2,800-method suite across 44 test projects) |
 | Configuration Wizard | **< 5 min per tenant** |
 
 *Layer 1 = CMS-0057-F compliance surface. Layer 2 (appeals re-foundation) also production-ready. See [POSITIONING.md](../POSITIONING.md) §Layer 3 for full-CAPS honest today-state.*
@@ -68,7 +68,7 @@
 | Metric | Current | Year 1 Target |
 |--------|---------|---------------|
 | Platform Status | ✅ 100% CMS-Ready | Maintained |
-| Test Suite | 193 tests passing | 250+ |
+| Test Suite | ~2,800 test methods across 44 test projects | Maintain coverage |
 | Pilot Pipeline | Active conversations | 25 customers |
 | GitHub Stars | Growing | 1,000 |
 

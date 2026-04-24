@@ -37,8 +37,9 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 |Component           |Count    |Details                                                                                                    |
 |---------------------|---------|-----------------------------------------------------------------------------------------------------------|
-|Microservices        |29       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
-|Calculation Engines  |10       |Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter, Claims Scrub, Operating Mode, Document Store, Provider Verification|
+|Microservices        |36       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
+|Adjudication Engines |9        |Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter, Claims Scrub, Prior Auth Rule, Provider Verification|
+|Supporting Projects  |4        |Operating Mode, Document Store, Provider Enrollment, enrollment-wiring                                     |
 |X12 Parsers          |5        |275, 276, 277, 278 (Python), 834 (Node.js)                                                                 |
 |FHIR APIs            |5        |Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory                            |
 |Argo Workflows       |17       |Claims adjudication, EDI ingest, enrollment import, RFAI                                                    |
@@ -84,26 +85,36 @@ Start with compliance. Expand into claims. Move at your own pace.
 |provider-verification-service|Multi-source provider verification & integrity scoring|—         |
 |ffs-service              |Fee-for-service rate configuration            |—               |
 
-### Calculation Engines
+### Adjudication Engines
 
 ![Calculation Engines](docs/images/calculation-engines.svg)
 
-|Engine              |Purpose                                                                                                     |
-|--------------------|------------------------------------------------------------------------------------------------------------|
-|BenefitEngine       |Cost-sharing calculation (deductible, copay, coinsurance), accumulator tracking, service category resolution|
-|FeeScheduleEngine   |Rate resolution against contracted fee schedules, allowed amount calculation                                |
-|NcciEngine          |CCI procedure-to-procedure edits, medically unlikely edits (MUE), modifier adjudication                     |
-|CobEngine           |Coordination of benefits, payer order determination, primary/secondary/tertiary payment split               |
-|RiskAdjustmentEngine|ICD-10 to HCC mapping, hierarchy resolution, CMS-HCC risk score calculation                                 |
-|EncounterEngine     |Encounter data transformation and batch submission for Medicaid/MA reporting                                |
-|ClaimsScrubEngine   |Pre-adjudication validation: 20+ rules across 6 categories (data completeness, code validation, date logic, amount logic, provider validation, modifier validation)|
-|OperatingMode       |Per-engine, per-tenant Augment/Replace mode toggle with AugmentResult&lt;T&gt; for parallel-run comparison against legacy CAPS|
-|DocumentStore       |IDocumentStore abstraction with Azure Blob Storage + InMemory providers for attachment and document management|
+|Engine                    |Purpose                                                                                                     |
+|--------------------------|------------------------------------------------------------------------------------------------------------|
+|BenefitEngine             |Cost-sharing calculation (deductible, copay, coinsurance), accumulator tracking, service category resolution|
+|FeeScheduleEngine         |Rate resolution against contracted fee schedules, allowed amount calculation                                |
+|NcciEngine                |CCI procedure-to-procedure edits, medically unlikely edits (MUE), modifier adjudication                     |
+|CobEngine                 |Coordination of benefits, payer order determination, primary/secondary/tertiary payment split               |
+|RiskAdjustmentEngine      |ICD-10 to HCC mapping, hierarchy resolution, CMS-HCC risk score calculation                                 |
+|EncounterEngine           |Encounter data transformation and batch submission for Medicaid/MA reporting                                |
+|ClaimsScrubEngine         |Pre-adjudication validation: 20+ rules across 6 categories (data completeness, code validation, date logic, amount logic, provider validation, modifier validation)|
+|PriorAuthRuleEngine       |CRD → DTR → PAS prior-authorization rule evaluation and decision orchestration                              |
 |ProviderVerificationEngine|Multi-source provider verification: NPPES, OIG/LEIE, PECOS, Open Payments, Medicare Utilization, FSMB. Composite 0–100 integrity scoring with configurable dimension weights|
+
+### Supporting Projects
+
+Additional projects under `src/engines/` that are not adjudication engines:
+
+|Project                 |Purpose                                                                                                     |
+|------------------------|------------------------------------------------------------------------------------------------------------|
+|OperatingMode           |Per-engine, per-tenant Augment/Replace mode toggle with AugmentResult&lt;T&gt; for parallel-run comparison against legacy CAPS|
+|DocumentStore           |IDocumentStore abstraction with Azure Blob Storage + InMemory providers for attachment and document management|
+|ProviderEnrollmentService|Provider enrollment workflow coordination                                                                  |
+|cho-enrollment-wiring   |Enrollment import orchestration wiring for 834 EDI processing                                               |
 
 ### Provider Verification
 
-The Provider Verification Service (service #29) aggregates six federal and licensed data sources to produce a composite integrity score for every provider in your network. The score is cached on the `Provider` and `ProviderContract` entities for sub-millisecond claims adjudication gating.
+The Provider Verification Service aggregates six federal and licensed data sources to produce a composite integrity score for every provider in your network. The score is cached on the `Provider` and `ProviderContract` entities for sub-millisecond claims adjudication gating.
 
 |Data Source         |Purpose                                                                                                     |
 |--------------------|------------------------------------------------------------------------------------------------------------|
@@ -195,7 +206,7 @@ curl http://localhost:5000/health
 
 ### Full Development Stack
 
-To bring up the complete backend (all 28 services + MongoDB + Redis + seed data):
+To bring up the complete backend (all 36 services + MongoDB + Redis + seed data):
 
 ```bash
 # Start everything
@@ -220,8 +231,8 @@ Or deploy to Azure:
 ```
 cloudhealthoffice/
 ├── src/
-│   ├── services/           # 28 C# microservices
-│   ├── engines/            # Calculation engines (Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter)
+│   ├── services/           # 36 C# microservices
+│   ├── engines/            # 9 adjudication engines + supporting projects
 │   ├── portal/             # Blazor Server portal (50 pages, MudBlazor, Entra ID multi-tenant)
 │   ├── site/               # Marketing site (cloudhealthoffice.com)
 │   ├── fhir/               # FHIR R4 APIs and X12→FHIR mappers

@@ -8,6 +8,18 @@
 
 This financial model outlines Cloud Health Office's path to profitability as a SaaS platform serving the healthcare payer market. With a **$1.8M Year 1 ARR target** growing to **$13.5M ARR by Year 3**, the model demonstrates a capital-efficient approach to capturing the $8B+ healthcare EDI market segment facing CMS-0057-F compliance mandates.
 
+---
+
+## Pricing Framework
+
+Cloud Health Office is priced **per member per month (PMPM)** across the Platform Engagement layers. Pricing is indicative market-rate within each layer; specific terms are negotiated per pilot.
+
+- **Layer 1 — Compliance Accelerator.** Entry pricing for the CMS-0057-F compliance surface. Indicative market-rate PMPM; founding-partner terms available for first pilot engagements.
+- **Layer 2 — Progressive Modernization.** PMPM expands per domain migrated. Appeals shipped as the first reference domain; additional domains (capitation, claims, others) activated per pilot scope.
+- **Layer 3 — Full CAPS Platform.** PMPM for end-to-end platform engagement. Pricing aspires to incumbent CAPS market range as the platform matures and production references accumulate; founding partners receive preferential terms.
+
+The per-customer dollar figures in the tables below are **internal modeled ARPU figures** used to produce 3-year ARR and unit-economics projections. They represent weighted averages of pilot-scenario pricing, not list prices or customer-quotable rates. Customer-facing artifacts cite PMPM framing; specific PMPM ranges per layer are negotiated per pilot and are not published.
+
 ### Key Financial Highlights
 
 | Metric | Year 1 | Year 2 | Year 3 |
@@ -32,8 +44,10 @@ This financial model outlines Cloud Health Office's path to profitability as a S
 
 ### Tier Distribution Assumptions
 
-| Year | Starter | Professional | Enterprise | Blended ARPU |
-|------|---------|--------------|------------|--------------|
+*Blended ARPU figures below are internal modeled projections (weighted averages of pilot-scenario pricing), used to produce 3-year ARR targets. Not list prices or customer-quotable rates.*
+
+| Year | Starter | Professional | Enterprise | Blended ARPU (modeled) |
+|------|---------|--------------|------------|------------------------|
 | Year 1 | 50% | 40% | 10% | $36,000 |
 | Year 2 | 40% | 45% | 15% | $40,000 |
 | Year 3 | 30% | 50% | 20% | $45,000 |
@@ -105,8 +119,10 @@ This financial model outlines Cloud Health Office's path to profitability as a S
 
 ### Customer Segmentation
 
-| Segment | Year 1 | Year 2 | Year 3 | ARPU |
-|---------|--------|--------|--------|------|
+*ARPU figures below are internal modeled projections by segment, used to produce 3-year revenue forecasts. Not list prices or customer-quotable rates.*
+
+| Segment | Year 1 | Year 2 | Year 3 | Modeled ARPU |
+|---------|--------|--------|--------|--------------|
 | **Regional Health Plans** | 25 | 75 | 150 | $36,000 |
 | **TPAs** | 15 | 45 | 90 | $32,000 |
 | **Medicaid MCOs** | 8 | 24 | 48 | $72,000 |
@@ -132,7 +148,7 @@ This financial model outlines Cloud Health Office's path to profitability as a S
 
 | Metric | Year 1 | Year 2 | Year 3 |
 |--------|--------|--------|--------|
-| **ARPU** | $36,000 | $40,000 | $45,000 |
+| **ARPU (modeled)** | $36,000 | $40,000 | $45,000 |
 | **Gross Margin** | 75% | 78% | 82% |
 | **Churn Rate** | 8% | 6% | 5% |
 | **Customer Lifetime** | 12.5 years | 16.7 years | 20 years |
@@ -161,7 +177,7 @@ This financial model outlines Cloud Health Office's path to profitability as a S
 | **Starter** | $10,788 | $2,500 | 77% |
 | **Professional** | $32,388 | $6,500 | 80% |
 | **Enterprise** | $86,388 | $14,000 | 84% |
-| **Blended (Year 1)** | $36,000 | $9,000 | **75%** |
+| **Blended (Year 1, modeled)** | $36,000 | $9,000 | **75%** |
 | **Blended (Year 3)** | $45,000 | $8,100 | **82%** |
 
 ### Cost of Goods Sold (COGS)

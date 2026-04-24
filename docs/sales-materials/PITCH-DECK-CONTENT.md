@@ -142,8 +142,8 @@
 
 | Metric | Before Cloud Health Office | After |
 |--------|---------------------------|-------|
-| Deployment Time | 6-18 months | **< 5 minutes** |
-| Implementation Cost | $500K - $2M | **$36K/year** |
+| Deployment Time | 6-18 months | **Weeks to deploy (Layer 1)** |
+| Implementation Cost | $500K - $2M | **PMPM-based, pilot-custom** |
 | Compliance Readiness | Uncertain | **100%** |
 | Source Code Access | None | **Full (BSL 1.1)** |
 
@@ -413,11 +413,13 @@ npm run generate -- interactive --output my-config.json --generate
 
 | Metric | Value |
 |--------|-------|
-| **ARPU** | $36,000 - $45,000 |
+| **Pricing Model** | PMPM (per member per month), indicative market-rate per layer |
 | **Gross Margin** | 75% - 82% |
 | **LTV:CAC** | 25:1 - 43:1 |
 | **CAC Payback** | 6 months |
 | **Net Revenue Retention** | 115% - 125% |
+
+*See [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md) for indicative PMPM framing per layer and 3-year ARR projections.*
 
 ---
 
@@ -437,8 +439,8 @@ npm run generate -- interactive --output my-config.json --generate
 |--------|---------|-----------------|
 | **GitHub Stars** | [PLACEHOLDER] | 1,000 |
 | **Contributors** | [PLACEHOLDER] | 30 |
-| **Test Suite** | 193 tests passing | 250+ |
-| **Documentation** | 20,000+ lines | 30,000+ |
+| **Test Suite** | ~2,800 test methods across 44 test projects | Maintain coverage |
+| **Documentation** | ~94,000 lines of markdown | Maintain coverage |
 | **CMS Compliance** | 100% | Maintained |
 
 ### Product Milestones Achieved
@@ -540,7 +542,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 
 | Assumption | Value |
 |------------|-------|
-| **Blended ARPU** | $36K → $45K |
+| **Pricing Framework** | PMPM-based, pilot-specific (see FINANCIAL-MODEL.md) |
 | **Annual Churn** | 8% → 5% |
 | **Net Revenue Retention** | 115% → 125% |
 | **CAC Payback** | 6 months |
