@@ -159,14 +159,14 @@ public class Appeal
     /// <summary>
     /// Diagnosis codes from the original claim. Plain-stored for
     /// queryability — matches the claims-service posture. Legal review to
-    /// confirm for the PCHP tenant before merge.
+    /// confirm for the deploying tenant before production use.
     /// </summary>
     public List<string> DiagnosisCodes { get; set; } = new();
 
     /// <summary>
     /// Procedure codes from the original claim. Plain-stored for
     /// queryability — matches the claims-service posture. Legal review to
-    /// confirm for the PCHP tenant before merge.
+    /// confirm for the deploying tenant before production use.
     /// </summary>
     public List<string> ProcedureCodes { get; set; } = new();
 

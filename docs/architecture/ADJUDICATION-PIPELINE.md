@@ -175,7 +175,7 @@ The `IClaimTypeRouter` determines how a claim is processed based on its type (Pr
 
 ```json
 {
-  "tenantId": "pchp-texas",
+  "tenantId": "txmco01",
   "engines": {
     "professional-medicaid": "replace",
     "institutional-medicaid": "augment",

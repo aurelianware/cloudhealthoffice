@@ -154,7 +154,7 @@ public class PriorAuthRuleEngineIntegrationTests : IAsyncLifetime
     {
         var context = new PaRuleContext
         {
-            TenantId = "pchp",
+            TenantId = "txmco01",
             StateCode = "TX",
             Lob = PaLineOfBusiness.Medicaid,
             Program = "STARKids",
@@ -182,7 +182,7 @@ public class PriorAuthRuleEngineIntegrationTests : IAsyncLifetime
     {
         var context = new PaRuleContext
         {
-            TenantId = "pchp",
+            TenantId = "txmco01",
             StateCode = "TX",
             Lob = PaLineOfBusiness.Exchange,
             Program = null,
@@ -207,7 +207,7 @@ public class PriorAuthRuleEngineIntegrationTests : IAsyncLifetime
         IReadOnlyList<string>? procedures = null,
         MemberAuthHistory? memberHistory = null) => new()
     {
-        TenantId = "pchp",
+        TenantId = "txmco01",
         StateCode = "TX",
         Lob = PaLineOfBusiness.Medicaid,
         Program = "STAR",

@@ -739,12 +739,12 @@ node dist/scripts/cli/partner-reporting.js \
 ```json
 {
   "partnerBranding": {
-    "partnerName": "HealthTech Solutions",
-    "logo": "https://healthtech.com/logo.png",
-    "supportEmail": "support@healthtech.com",
+    "partnerName": "Example Partner Inc.",
+    "logo": "https://example-partner.com/logo.png",
+    "supportEmail": "support@example-partner.com",
     "supportPhone": "8005551234",
-    "portalUrl": "https://portal.healthtech.com",
-    "documentationUrl": "https://docs.healthtech.com"
+    "portalUrl": "https://portal.example-partner.com",
+    "documentationUrl": "https://docs.example-partner.com"
   }
 }
 ```

@@ -33,9 +33,9 @@ public class RedisPaRuleRepositoryTests
         StateCode = "TX",
         Lob       = PaLineOfBusiness.Medicaid,
         Program   = "STAR",
-        TenantId  = "pchp"
+        TenantId  = "txmco01"
     };
-    private const string TxStarCacheKey = "pa-rules:TX:3:STAR:pchp";
+    private const string TxStarCacheKey = "pa-rules:TX:3:STAR:txmco01";
 
     private readonly CacheKeyGuard _keyGuard = BuildGuard();
 
@@ -174,7 +174,7 @@ public class RedisPaRuleRepositoryTests
             Arg.Any<CommandFlags>())
             .Returns(new RedisKey[]
             {
-                "test:_global:pa-rules:TX:3:STAR:pchp",
+                "test:_global:pa-rules:TX:3:STAR:txmco01",
                 "test:_global:pa-rules:TX:3:any:platform"
             });
 
@@ -232,10 +232,10 @@ public class RedisPaRuleRepositoryTests
         var rules = new List<PaRuleDocument> { MakeRule() };
         _inner.ListAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(rules);
 
-        var result = await _sut.ListAsync(tenantId: "pchp", stateCode: "TX");
+        var result = await _sut.ListAsync(tenantId: "txmco01", stateCode: "TX");
 
         result.Should().HaveCount(1);
-        await _inner.Received(1).ListAsync("pchp", "TX", Arg.Any<CancellationToken>());
+        await _inner.Received(1).ListAsync("txmco01", "TX", Arg.Any<CancellationToken>());
     }
 
     private static PaRuleDocument MakeRule(
@@ -243,7 +243,7 @@ public class RedisPaRuleRepositoryTests
         string stateCode = "TX",
         PaLineOfBusiness lob = PaLineOfBusiness.Medicaid,
         string? program = "STAR",
-        string? tenantId = "pchp") => new()
+        string? tenantId = "txmco01") => new()
     {
         RuleId    = ruleId,
         RuleName  = $"Rule {ruleId}",

@@ -26,7 +26,7 @@ file static class Helpers
         DateOnly? memberDob = null,
         int requestedUnits = 1) => new()
     {
-        TenantId = "pchp",
+        TenantId = "txmco01",
         StateCode = "TX",
         Lob = PaLineOfBusiness.Medicaid,
         Program = "STAR",
@@ -469,10 +469,10 @@ public class PriorAuthRuleEngineServiceTests
     {
         var tenantDoc = new PaRuleDocument
         {
-            RuleId = "PCHP-STAR-PA-001", RuleName = "Tenant PA Rule",
+            RuleId = "TXMCO01-STAR-PA-001", RuleName = "Tenant PA Rule",
             StateCode = "TX", Lob = PaLineOfBusiness.Medicaid,
             Category = RuleCategory.ClinicalCriteria,
-            Scope = RuleScope.Tenant, TenantId = "pchp",
+            Scope = RuleScope.Tenant, TenantId = "txmco01",
             Priority = 10, RuleType = "ProcedureRequiresAuth"
         };
         var platformDoc = new PaRuleDocument
@@ -498,7 +498,7 @@ public class PriorAuthRuleEngineServiceTests
                 Outcome = PaDecisionOutcome.Pend,
                 FiringRuleId = tenantDoc.RuleId,
                 FiringRuleName = tenantDoc.RuleName,
-                ResolvedRuleSetKey = "pchp/TX/Medicaid/any"
+                ResolvedRuleSetKey = "txmco01/TX/Medicaid/any"
             });
         rule.EvaluateAsync(platformDoc, Arg.Any<PaRuleContext>(), Arg.Any<CancellationToken>())
             .Returns((PaRuleDecision?)null);
@@ -508,6 +508,6 @@ public class PriorAuthRuleEngineServiceTests
         var result = await engine.EvaluateAsync(DefaultContext);
 
         result.Outcome.Should().Be(PaDecisionOutcome.Pend);
-        result.FiringRuleId.Should().Be("PCHP-STAR-PA-001", "tenant rule should fire before platform rule at same priority");
+        result.FiringRuleId.Should().Be("TXMCO01-STAR-PA-001", "tenant rule should fire before platform rule at same priority");
     }
 }

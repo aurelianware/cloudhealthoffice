@@ -105,7 +105,7 @@ public record TenantEnrollmentConfig
     /// <summary>
     /// MCO participant IDs for this plan within each state enrollment system.
     /// Used by the panel reconciliation service to pull the plan's enrolled panel.
-    /// Example: ["PCHP-MCO-TX-001"] for PCHP's PEMS MCO identifier.
+    /// Example: ["TXMCO01-MCO-TX-001"] for the tenant's PEMS MCO identifier.
     /// </summary>
     public IReadOnlyList<string> McoIds { get; init; } = [];
 

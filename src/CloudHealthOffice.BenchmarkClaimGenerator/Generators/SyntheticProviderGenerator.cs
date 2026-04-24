@@ -39,7 +39,7 @@ public class SyntheticProviderGenerator
         "Regional Medical Center", "Community Hospital", "General Hospital",
         "Memorial Hospital", "Methodist Hospital", "Baptist Hospital",
         "Presbyterian Hospital", "St. Luke's Hospital", "Baylor Medical Center",
-        "Parkland Memorial Hospital", "Children's Medical Center",
+        "Regional County Hospital", "Children's Medical Center",
         "Medical City Hospital", "Texas Health Hospital",
         "JPS Health Network", "Cook Children's Hospital",
     };

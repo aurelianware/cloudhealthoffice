@@ -22,7 +22,7 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Workers;
 ///           end:   "0 4 * * *"     # hard stop at 4:00 AM CT
 ///
 /// State sync order:
-///   1. Texas PEMS (SFTP batch export — highest priority for PCHP)
+///   1. Texas PEMS (SFTP batch export — highest priority for Texas MCO tenants)
 ///   2. Other state sources in registration order
 ///   3. CAQH panel refresh (API fan-out, not a true bulk sync)
 /// </summary>

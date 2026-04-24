@@ -19,13 +19,13 @@
 
 Urgency breakdown of findings that need change:
 
-- P0 (public-facing / PCHP- or evaluator-critical): 22
+- P0 (public-facing / evaluator-critical): 22
 - P1 (contributor / partner visible): 36
 - P2 (internal / low-traffic): 12
 
 ## Biggest positioning gaps
 
-### Overclaims — must soften before next PCHP / evaluator / investor engagement
+### Overclaims — must soften before next evaluator / investor engagement
 
 1. **`docs/fundraising/INVESTOR-ONE-PAGER.md`** — frames four FHIR APIs as "Production Ready" with $1.8M ARR Year-1 targets, no disclosure that there is no production customer yet. Phase 2 must add the pre-pilot disclosure block from POSITIONING.md Layer 3 honest-today section, and relabel "Production Ready" → "Production Ready (Layer 1 / Layer 2 appeals)".
 2. **`docs/fundraising/INVESTOR-MEETING-SCRIPT.md`** — claims "100% compliant… in under 5 minutes" and walks through demo as if it were a production deployment at a payer. Phase 2 must qualify the "< 5 minutes" claim to Layer 1 compliance scope only and add a Q&A entry that answers "Are you in production with any customers?" honestly.
@@ -57,7 +57,7 @@ See the MISSING section below. Most consequential: `docs/adr/006-three-layer-pos
 
 ## Full artifact classification
 
-### P0 — public-facing / PCHP- / evaluator- / investor-critical
+### P0 — public-facing / evaluator- / investor-critical
 
 #### `README.md` (repo root)
 - **Layer:** multi
@@ -796,7 +796,7 @@ The term "Operating Mode" (Augment / Replace / Legacy) is the Layer 2 risk-mitig
 
 **Pick: (b) sequenced fix, with two parallel streams inside each phase.**
 
-- **Wave 1 (P0, ~1-2 weeks):** fix every OVERCLAIMS finding before any investor or PCHP-evaluator engagement. This is seven documents (INVESTOR-ONE-PAGER, INVESTOR-MEETING-SCRIPT, pitch-deck-v4 Slide 11, PITCH-DECK-CONTENT Slide 4, SALES-PRODUCT-OVERVIEW, v3.0.0-announcement, v3.0.0-features-overview) plus the solutions-payers and site-index underclaims. Stream it in two parallel PRs: one for public-facing site/sales, one for fundraising materials.
+- **Wave 1 (P0, ~1-2 weeks):** fix every OVERCLAIMS finding before any investor or evaluator engagement. This is seven documents (INVESTOR-ONE-PAGER, INVESTOR-MEETING-SCRIPT, pitch-deck-v4 Slide 11, PITCH-DECK-CONTENT Slide 4, SALES-PRODUCT-OVERVIEW, v3.0.0-announcement, v3.0.0-features-overview) plus the solutions-payers and site-index underclaims. Stream it in two parallel PRs: one for public-facing site/sales, one for fundraising materials.
 
 - **Wave 2 (P1, ~2-3 weeks):** the three-layer framing rollout — each of the ten "compliance layer" framing artifacts gets the POSITIONING.md §Summary insert, plus the Layer 2 / appeals language added to proposal template, demo script, cold-call scripts, email templates. Single PR, reviewed by sales lead.
 

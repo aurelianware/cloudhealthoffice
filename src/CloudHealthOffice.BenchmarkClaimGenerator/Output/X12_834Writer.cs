@@ -95,7 +95,7 @@ public class X12_834Writer
                   $"{ElementSeparator}FI{ElementSeparator}741234567{SegmentTerminator}");
 
         // Loop 1000B - Payer Name
-        sb.Append($"N1{ElementSeparator}IN{ElementSeparator}PARKLAND COMMUNITY HEALTH PLAN" +
+        sb.Append($"N1{ElementSeparator}IN{ElementSeparator}TEXAS MEDICAID MCO" +
                   $"{ElementSeparator}FI{ElementSeparator}752345678{SegmentTerminator}");
 
         int segmentCount = 4; // ST + BGN + 2x N1
@@ -137,7 +137,7 @@ public class X12_834Writer
         sb.Append(ElementSeparator); sb.Append("ZZ");              // ISA05 - Sender Qualifier
         sb.Append(ElementSeparator); sb.Append("MCCBENCHMARK   "); // ISA06 - Sender ID (15 chars)
         sb.Append(ElementSeparator); sb.Append("ZZ");              // ISA07 - Receiver Qualifier
-        sb.Append(ElementSeparator); sb.Append("PCHP           "); // ISA08 - Receiver ID (15 chars)
+        sb.Append(ElementSeparator); sb.Append("TXMCO01        "); // ISA08 - Receiver ID (15 chars)
         sb.Append(ElementSeparator); sb.Append(timestamp.ToString("yyMMdd")); // ISA09 - Date
         sb.Append(ElementSeparator); sb.Append(timestamp.ToString("HHmm"));  // ISA10 - Time
         sb.Append(ElementSeparator); sb.Append("^");               // ISA11 - Repetition Separator
@@ -151,7 +151,7 @@ public class X12_834Writer
 
     private static void WriteGs(StringBuilder sb, string controlNumber, DateTime timestamp)
     {
-        sb.Append($"GS{ElementSeparator}HP{ElementSeparator}MCCBENCHMARK{ElementSeparator}PCHP" +
+        sb.Append($"GS{ElementSeparator}HP{ElementSeparator}MCCBENCHMARK{ElementSeparator}TXMCO01" +
                   $"{ElementSeparator}{timestamp:yyyyMMdd}{ElementSeparator}{timestamp:HHmm}" +
                   $"{ElementSeparator}{controlNumber}{ElementSeparator}X{ElementSeparator}005010X220A1" +
                   $"{SegmentTerminator}");

@@ -9,11 +9,11 @@ public class CacheKeyGuardTests
     [Fact]
     public void Build_WithTenantContext_PrependsEnvAndTenant()
     {
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
 
-        var key = guard.Build("enrollment:config:pchp");
+        var key = guard.Build("enrollment:config:txmco01");
 
-        Assert.Equal("production:pchp:enrollment:config:pchp", key);
+        Assert.Equal("production:txmco01:enrollment:config:txmco01", key);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class CacheKeyGuardTests
     [InlineData("patient:patientId:P99")]        // patientId
     public void Build_RejectsPhiTokens(string badKey)
     {
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
         Assert.Throws<ArgumentException>(() => guard.Build(badKey));
     }
 
@@ -53,28 +53,28 @@ public class CacheKeyGuardTests
         // The hashed form of a member ID is explicitly permitted. Rejecting
         // it would block a large class of legitimate per-member cache keys
         // that have already been pseudonymized.
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
 
         var key = guard.Build("member:memberIdHash:deadbeef");
 
-        Assert.Equal("production:pchp:member:memberIdHash:deadbeef", key);
+        Assert.Equal("production:txmco01:member:memberIdHash:deadbeef", key);
     }
 
     [Theory]
-    [InlineData("enrollment config pchp")]      // spaces
+    [InlineData("enrollment config txmco01")]      // spaces
     [InlineData("enrollment\tconfig")]            // tab
     [InlineData("enrollment\nconfig")]            // newline
     [InlineData("enrollment\0config")]            // null byte
     public void Build_RejectsControlAndWhitespaceChars(string badKey)
     {
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
         Assert.Throws<ArgumentException>(() => guard.Build(badKey));
     }
 
     [Fact]
     public void Build_NullOrEmptyKey_Throws()
     {
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
 
         Assert.Throws<ArgumentException>(() => guard.Build(""));
         Assert.Throws<ArgumentException>(() => guard.Build(null!));
@@ -86,7 +86,7 @@ public class CacheKeyGuardTests
         // The exception message flows through ExceptionHandlingMiddleware
         // and into production logs; if it echoed the PHI-containing key,
         // the guard would leak the exact value it was designed to reject.
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
 
         var sensitive = "member:ssn:123-45-6789";
         var ex = Assert.Throws<ArgumentException>(() => guard.Build(sensitive));
@@ -98,7 +98,7 @@ public class CacheKeyGuardTests
     [Fact]
     public void Build_WhitespaceRejectionMessage_DoesNotEchoRawKey()
     {
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
         var sensitive = "something member-ssn-123-45-6789";
         var ex = Assert.Throws<ArgumentException>(() => guard.Build(sensitive));
         Assert.DoesNotContain(sensitive, ex.Message);
@@ -108,8 +108,8 @@ public class CacheKeyGuardTests
     [Fact]
     public void BuildPrefix_TenantScope_UsesAmbientTenant()
     {
-        var guard = MakeGuard("Production", tenantId: "pchp");
-        Assert.Equal("production:pchp:", guard.BuildPrefix());
+        var guard = MakeGuard("Production", tenantId: "txmco01");
+        Assert.Equal("production:txmco01:", guard.BuildPrefix());
     }
 
     [Fact]
@@ -122,17 +122,17 @@ public class CacheKeyGuardTests
     [Fact]
     public void BuildMany_AppliesGuardToEach()
     {
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
 
         var keys = guard.BuildMany(new[] { "a:b", "c:d" });
 
-        Assert.Equal(new[] { "production:pchp:a:b", "production:pchp:c:d" }, keys);
+        Assert.Equal(new[] { "production:txmco01:a:b", "production:txmco01:c:d" }, keys);
     }
 
     [Fact]
     public void BuildMany_OneBadKey_ThrowsAndDoesNotReturnPartial()
     {
-        var guard = MakeGuard("Production", tenantId: "pchp");
+        var guard = MakeGuard("Production", tenantId: "txmco01");
 
         Assert.Throws<ArgumentException>(() =>
             guard.BuildMany(new[] { "ok:one", "bad:ssn:2", "ok:three" }));

@@ -784,7 +784,7 @@ public class AdjudicationController : ControllerBase
         3 => PaLineOfBusiness.Medicaid,
         4 => PaLineOfBusiness.Medicaid,  // CHIP → Medicaid rules
         5 => PaLineOfBusiness.Exchange,
-        _ => PaLineOfBusiness.Medicaid   // Default to Medicaid for TX PCHP
+        _ => PaLineOfBusiness.Medicaid   // Default to Medicaid for TX MCO tenants
     };
 
     // ═══════════════════════════════════════════════════════════════════

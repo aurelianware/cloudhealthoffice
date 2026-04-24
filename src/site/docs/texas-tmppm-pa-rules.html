@@ -211,7 +211,7 @@
         <!-- The Problem -->
         <h2 id="the-problem">The Problem</h2>
 
-        <p>On the March 2024 PCHP interoperability call, Cognizant confirmed their TriZetto EPA has <strong>no Texas Medicaid-specific rules</strong>. Their quote includes 130 custom questionnaires &mdash; but Texas Medicaid exceeds that. Monthly TMPPM maintenance falls entirely on plan staff, who must manually read PDFs, identify changes, and update questionnaires by hand.</p>
+        <p>Manual TMPPM tracking falls entirely on plan staff, who must read PDFs, identify changes, and update prior-authorization questionnaires by hand every month. Generic payer-platform questionnaires are not Texas Medicaid-specific, so plan staff must bridge the gap themselves.</p>
 
         <p>CHO eliminates this manual burden entirely with an automated extraction pipeline that reads the same TMHP PDFs and produces structured, queryable PA rules.</p>
 
@@ -315,7 +315,7 @@
               <tr><td>HCPCS quarterly updates</td><td class="tmppm-cross">&#x2717; Not included</td><td class="tmppm-check">&#x2713; 8 Q1 2026 rules loaded</td></tr>
               <tr><td>SNOMED&#x2194;CPT translation</td><td class="tmppm-cross">&#x2717; &ldquo;Go buy from a vendor&rdquo;</td><td class="tmppm-check">&#x2713; Built-in TerminologyService</td></tr>
               <tr><td>Clinical criteria extraction</td><td class="tmppm-cross">&#x2717; Not digitized</td><td class="tmppm-check">&#x2713; LLM-assisted structured extraction</td></tr>
-              <tr><td>Tenant scoping</td><td>Single-tenant</td><td class="tmppm-check">&#x2713; Per-plan overrides (PCHP, etc.)</td></tr>
+              <tr><td>Tenant scoping</td><td>Single-tenant</td><td class="tmppm-check">&#x2713; Per-plan overrides (tenant-scoped)</td></tr>
               <tr><td>Completed implementations</td><td class="tmppm-cross">&#x2717; Zero as of March 2024</td><td class="tmppm-check">&#x2713; Pipeline running, data in Cosmos</td></tr>
             </tbody>
           </table>
@@ -324,7 +324,7 @@
         <!-- PA Rule Explorer -->
         <h2 id="pa-rule-explorer">PA Rule Explorer</h2>
 
-        <p>The <strong>PA Rule Explorer</strong> is a Blazor Server page in the CHO portal that gives PCHP plan administrators and UM staff direct access to the extracted TMPPM rules:</p>
+        <p>The <strong>PA Rule Explorer</strong> is a Blazor Server page in the CHO portal that gives plan administrators and UM staff direct access to the extracted TMPPM rules:</p>
 
         <ul>
           <li><strong>Search by CPT/HCPCS code</strong> &mdash; type a procedure code and instantly see whether PA is required, the clinical criteria, required documentation, and the TMPPM section reference</li>
@@ -355,7 +355,7 @@
         </div>
 
         <h3>Tenant Scoping</h3>
-        <p>All rules are tenant-scoped with <code>TenantId</code> (e.g., <code>pchp</code>). The CRD server merges global rules with tenant-specific overrides at query time, allowing plans to customize PA requirements while inheriting the platform baseline.</p>
+        <p>All rules are tenant-scoped with <code>TenantId</code> (e.g., <code>txmco01</code>). The CRD server merges global rules with tenant-specific overrides at query time, allowing plans to customize PA requirements while inheriting the platform baseline.</p>
 
         <h3>Extraction Pipeline</h3>
         <p>The <code>TmppmIngestionService</code> is a .NET 8 console application in <code>tools/CloudHealthOffice.TmppmIngestionService</code>:</p>

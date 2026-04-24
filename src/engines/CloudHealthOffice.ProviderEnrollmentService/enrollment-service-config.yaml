@@ -21,7 +21,7 @@
 #     "BaseUrl": "https://proview.caqh.org/api",
 #     "Username": "",                        // from AKV: caqh-username
 #     "Password": "",                        // from AKV: caqh-password
-#     "OrganizationId": ""                   // PCHP's CAQH org ID
+#     "OrganizationId": ""                   // Tenant's CAQH org ID
 #   }
 # }
 

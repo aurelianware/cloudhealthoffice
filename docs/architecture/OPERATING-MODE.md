@@ -59,7 +59,7 @@ Operating mode is stored on the tenant document in tenant-service:
 
 ```json
 {
-  "tenantId": "pchp-texas",
+  "tenantId": "txmco01",
   "operatingMode": {
     "engines": {
       "professional-medicaid": "replace",
@@ -68,7 +68,7 @@ Operating mode is stored on the tenant document in tenant-service:
       "rateResolution": "replace"
     },
     "updatedAt": "2026-04-12T14:30:00Z",
-    "updatedBy": "admin@pchp.com"
+    "updatedBy": "admin@example.com"
   }
 }
 ```
