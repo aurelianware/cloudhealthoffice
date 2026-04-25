@@ -99,7 +99,7 @@
   <text x="500" y="762" fill="#e8e6e0" font-size="14" font-weight="600" text-anchor="middle">Cosmos DB (MongoDB API)</text>
   <text x="500" y="782" fill="#3388ff" font-size="12" text-anchor="middle" opacity="0.8">ConceptMapEntry overrides</text>
   <!-- Annotation -->
-  <text x="720" y="775" fill="#9c9a92" font-size="11" font-style="italic" opacity="0.6">State=TX, tenant=PCHP</text>
+  <text x="720" y="775" fill="#9c9a92" font-size="11" font-style="italic" opacity="0.6">State=TX, tenant=txmco01</text>
   <line x1="690" y1="772" x2="715" y2="772" stroke="#9c9a92" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
 
   <!-- Arrow 8→9 -->

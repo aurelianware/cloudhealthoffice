@@ -39,7 +39,7 @@ This release represents a significant evolution of Cloud Health Office with **cr
 ### Portal Isolation (CRITICAL)
 - **TenantContextService**: Maps Azure AD tenant → CHO tenant via subscription lookup
 - **TenantHttpMessageHandler**: Injects `X-Tenant-ID` header on all backend API calls
-- **Backend Enforcement**: All 22 microservices enforce `PartitionKey(tenantId)` on database operations
+- **Backend Enforcement**: All 36 microservices enforce `PartitionKey(tenantId)` on database operations
 - **Logout Functionality**: Proper Microsoft Identity sign-out
 - **Dynamic UI**: Shows actual tenant name with demo/production badges
 
@@ -119,14 +119,14 @@ Created `CloudHealthOffice.Infrastructure` package supporting:
 ### Multi-Tenant Backend Requirement
 - **Change:** Portal now sends `X-Tenant-ID` header on all API calls
 - **Impact:** Backend services **must** have TenantMiddleware registered
-- **Verification:** All 22 microservices already compliant ✅
+- **Verification:** All 36 microservices already compliant ✅
 
 ---
 
 ## 🚀 Deployment
 
 ### GitHub Actions Workflows
-1. **docker-build.yml**: ✅ Passing (builds all 22 services)
+1. **docker-build.yml**: ✅ Passing (builds all 36 services)
 2. **deploy.yml**: ✅ Passing (Azure AKS deployment)
 3. **pre-approval-checks.yml**: ✅ Passing (security gates)
 4. **deploy-multi-cloud.yml**: 🚧 Feature branch (cloud toggles)
@@ -142,7 +142,7 @@ Created `CloudHealthOffice.Infrastructure` package supporting:
 ## 📊 Metrics
 
 ### Codebase Health
-- **Services:** 22 microservices (all .NET 8)
+- **Services:** 36 microservices (all .NET 8)
 - **Portal:** Blazor Server with MudBlazor UI
 - **Database:** Azure Cosmos DB (SQL API)
 - **Total Projects:** 20+ (.csproj files)
