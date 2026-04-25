@@ -39,7 +39,7 @@ This release represents a significant evolution of Cloud Health Office with **cr
 ### Portal Isolation (CRITICAL)
 - **TenantContextService**: Maps Azure AD tenant → CHO tenant via subscription lookup
 - **TenantHttpMessageHandler**: Injects `X-Tenant-ID` header on all backend API calls
-- **Backend Enforcement**: All 36 microservices enforce `PartitionKey(tenantId)` on database operations
+- **Backend Enforcement**: All 36 microservices scope database operations by tenant (`PartitionKey(tenantId)` or equivalent)
 - **Logout Functionality**: Proper Microsoft Identity sign-out
 - **Dynamic UI**: Shows actual tenant name with demo/production badges
 
@@ -126,7 +126,7 @@ Created `CloudHealthOffice.Infrastructure` package supporting:
 ## 🚀 Deployment
 
 ### GitHub Actions Workflows
-1. **docker-build.yml**: ✅ Passing (builds all 36 services)
+1. **docker-build.yml**: ✅ Passing (builds container images for the core service set)
 2. **deploy.yml**: ✅ Passing (Azure AKS deployment)
 3. **pre-approval-checks.yml**: ✅ Passing (security gates)
 4. **deploy-multi-cloud.yml**: 🚧 Feature branch (cloud toggles)
