@@ -175,6 +175,11 @@ jobs:
           - CHO.TerminologyService
           - CloudHealthOffice.PricingApi
           - consent-service
+          - accumulator-service
+          - capitation-service
+          - encounter-submission-service
+          - member-document-service
+          - personal-representative-service
         include:
           # All .NET services need repo root as context to reach
           # src/services/shared/CloudHealthOffice.Infrastructure/ and/or src/engines/.
@@ -235,6 +240,16 @@ jobs:
             build_context: '.'
             image_name: cloudhealthoffice-pricing-api
           - service: consent-service
+            build_context: '.'
+          - service: accumulator-service
+            build_context: '.'
+          - service: capitation-service
+            build_context: '.'
+          - service: encounter-submission-service
+            build_context: '.'
+          - service: member-document-service
+            build_context: '.'
+          - service: personal-representative-service
             build_context: '.'
 
     steps:
