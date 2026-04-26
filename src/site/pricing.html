@@ -179,21 +179,23 @@
   /* CARDS */
   .pricing-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-    max-width: 1200px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    max-width: 1280px;
     margin: 0 auto;
     padding: 0 48px;
-    align-items: start;
+    align-items: stretch;
   }
 
   .pricing-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 40px 36px;
+    padding: 36px 28px;
     position: relative;
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
   }
   .pricing-card:hover {
     background: var(--bg-card-hover);
@@ -201,15 +203,15 @@
     transform: translateY(-4px);
   }
   .pricing-card.featured {
-    border-color: rgba(56, 189, 248, 0.35);
-    box-shadow: var(--shadow-glow-blue);
+    border-color: rgba(251, 191, 36, 0.35);
+    box-shadow: var(--shadow-glow-gold);
   }
   .pricing-card.featured::before {
     content: '';
     position: absolute;
     top: 0; left: 24px; right: 24px;
     height: 2px;
-    background: var(--gradient-blue);
+    background: var(--gradient-gold);
     border-radius: 0 0 2px 2px;
   }
 
@@ -223,9 +225,10 @@
     display: inline-block;
     margin-bottom: 20px;
   }
-  .badge-starter { color: var(--accent-teal); border: 1px solid rgba(45, 212, 191, 0.3); }
-  .badge-pro { color: var(--accent-blue); border: 1px solid rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.08); }
-  .badge-enterprise { color: var(--accent-gold); border: 1px solid rgba(251, 191, 36, 0.3); }
+  .badge-public-tools  { color: var(--accent-teal);   border: 1px solid rgba(45, 212, 191, 0.3); }
+  .badge-transactional { color: var(--accent-blue);   border: 1px solid rgba(56, 189, 248, 0.3); }
+  .badge-managed-data  { color: var(--accent-indigo); border: 1px solid rgba(129, 140, 248, 0.3); }
+  .badge-platform      { color: var(--accent-gold);   border: 1px solid rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.08); }
 
   .card-title {
     font-size: 24px;
@@ -243,10 +246,10 @@
   .price-block { margin-bottom: 8px; }
   .platform-price {
     font-family: 'Space Mono', monospace;
-    font-size: 40px;
+    font-size: 28px;
     font-weight: 700;
-    letter-spacing: -2px;
-    line-height: 1;
+    letter-spacing: -1px;
+    line-height: 1.1;
   }
   .price-period {
     font-size: 14px;
@@ -317,6 +320,7 @@
     text-decoration: none;
     margin-top: 8px;
   }
+  .pricing-card .cta-btn { margin-top: auto; }
   .cta-outline {
     background: transparent;
     border: 1px solid var(--border);
@@ -541,15 +545,87 @@
   }
   .footer a { color: var(--accent-blue); text-decoration: none; }
 
+  /* LAYERS SECTION */
+  .layers-section {
+    max-width: 1200px;
+    margin: 80px auto 0;
+    padding: 0 48px;
+  }
+  .layers-section h2 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .layers-section > p {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 15px;
+    margin-bottom: 40px;
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .layer-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .layer-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    transition: all 0.25s;
+  }
+  .layer-card:hover { border-color: var(--border-hover); }
+  .layer-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--accent-gold);
+    margin-bottom: 10px;
+  }
+  .layer-name {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    letter-spacing: -0.3px;
+  }
+  .layer-row {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+  .layer-row > strong {
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 400;
+  }
+
   /* RESPONSIVE */
+  @media (max-width: 1100px) {
+    .pricing-grid { grid-template-columns: repeat(2, 1fr); max-width: 760px; }
+    .layer-grid { grid-template-columns: 1fr; }
+  }
   @media (max-width: 900px) {
-    .pricing-grid { grid-template-columns: 1fr; max-width: 440px; }
     .adapter-grid { grid-template-columns: 1fr; }
     .calc-row { grid-template-columns: 1fr; }
     .calc-results { grid-template-columns: 1fr; }
     .hero h1 { font-size: 36px; }
     nav { padding: 20px 24px; }
-    .hero, .pricing-grid, .calculator-section, .adapters-section, .faq-section { padding-left: 24px; padding-right: 24px; }
+    .hero, .pricing-grid, .calculator-section, .adapters-section, .layers-section, .faq-section { padding-left: 24px; padding-right: 24px; }
+  }
+  @media (max-width: 620px) {
+    .pricing-grid { grid-template-columns: 1fr; max-width: 440px; }
   }
 </style>
 </head>
@@ -567,138 +643,180 @@
 </nav>
 
 <section class="hero">
-  <div class="hero-badge">CMS-0057-F Compliant by January 2027</div>
+  <div class="hero-badge">Four Product Lines &middot; PMPM Platform Engagement</div>
   <h1>Compliance now. Modernization on your timeline.</h1>
-  <p>Most health plans start with Cloud Health Office as a compliance layer alongside their existing core admin system &mdash; meeting CMS-0057-F without replatforming. Over time, activate modular capabilities and transition at your own pace. Modernize now. Replace later.</p>
+  <p>Most health plans engage Cloud Health Office through Platform Engagement &mdash; multi-year, payer-scale relationships priced per member per month (PMPM). We also offer Public Tools, Transactional Services, and Managed Data Services for developers, integrators, and small plans with specific data needs. Modernize now. Replace later.</p>
 </section>
 
 <div class="pricing-grid">
-  <!-- STARTER -->
+  <!-- PUBLIC TOOLS -->
   <div class="pricing-card">
-    <div class="card-badge badge-starter">Starter</div>
-    <div class="card-title">Standalone</div>
-    <div class="card-desc">For new plans, startups, or organizations ready for full core modernization. CHO as your complete core admin system with built-in compliance.</div>
+    <div class="card-badge badge-public-tools">Public Tools</div>
+    <div class="card-title">Public Tools</div>
+    <div class="card-desc">Free utilities for healthcare data lookup and calculation. No signup, no credit card, no commercial conversation required.</div>
 
     <div class="price-block">
-      <div class="platform-price" style="font-size:1.5rem;">Contact Us</div>
+      <div class="platform-price">Free</div>
+      <div class="pmpm-price"><span>no commercial relationship required</span></div>
     </div>
 
     <hr class="divider">
 
-    <div class="section-label">Deployment</div>
+    <div class="section-label">What&rsquo;s included</div>
     <ul class="feature-list">
-      <li>CHO native engines (adjudication, benefits, COB, enrollment)</li>
-      <li>All four CMS-0057-F FHIR APIs included</li>
-      <li>SMART on FHIR authorization</li>
-      <li>835, 271, 278 EDI generation</li>
+      <li>Fee schedule lookup &mdash; RBRVS, OPPS APC, MS-DRG with full RVU breakdown</li>
+      <li>Free-tier claims repricing &mdash; CMS-1500, UB-04, ADA</li>
+      <li>SEO-optimized utility pages with structured data</li>
+      <li>Same calculation engines that power Platform Engagement</li>
     </ul>
 
-    <div class="section-label">Adapters</div>
+    <div class="section-label">Commercial shape</div>
     <ul class="feature-list">
-      <li>ChoNativeAdapter included</li>
+      <li>Free, usage-metered against the free-tier ceiling</li>
+      <li>Self-serve consumer signup is in progress &mdash; see Transactional Services</li>
     </ul>
 
-    <div class="section-label">Support</div>
-    <ul class="feature-list">
-      <li>Community support + documentation</li>
-      <li>API reference at api.cloudhealthoffice.com</li>
-    </ul>
-
-    <a href="#" class="cta-btn cta-outline">Start Free Trial</a>
+    <a href="/claims-repricing" class="cta-btn cta-outline">Try Public Tools</a>
   </div>
 
-  <!-- PROFESSIONAL -->
+  <!-- TRANSACTIONAL SERVICES -->
+  <div class="pricing-card">
+    <div class="card-badge badge-transactional">Transactional Services</div>
+    <div class="card-title">Transactional Services</div>
+    <div class="card-desc">Per-call APIs for healthcare calculations. Designed for developers integrating into billing systems, TPAs, clearinghouses, and provider tooling.</div>
+
+    <div class="price-block">
+      <div class="platform-price">Pay per use</div>
+      <div class="pmpm-price"><span>free tier available &middot; self-serve subscription in progress</span></div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-label">What&rsquo;s productized today</div>
+    <ul class="feature-list">
+      <li>Claims Repricing API &mdash; paid tiers above the free tier</li>
+      <li>Pricing API &mdash; programmatic batch and streaming access</li>
+      <li>Rate metering and quota enforcement in place</li>
+    </ul>
+
+    <div class="section-label">Activation status</div>
+    <ul class="feature-list">
+      <li>Engines, endpoints, and tier definitions are live</li>
+      <li>Consumer-grade signup and end-to-end checkout are fast-follow engineering</li>
+      <li>Contact for early access while activation completes</li>
+    </ul>
+
+    <a href="/pricing-api" class="cta-btn cta-outline">View API Pricing</a>
+  </div>
+
+  <!-- MANAGED DATA SERVICES -->
+  <div class="pricing-card">
+    <div class="card-badge badge-managed-data">Managed Data Services</div>
+    <div class="card-title">Managed Data Services</div>
+    <div class="card-desc">Subscription services for healthcare data that changes constantly. Recurring value at a fraction of the cost of consultants or commercial vendors.</div>
+
+    <div class="price-block">
+      <div class="platform-price">Custom subscription</div>
+      <div class="pmpm-price"><span>productization in progress &middot; pilot terms negotiated per service</span></div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-label">Capabilities shipped today</div>
+    <ul class="feature-list">
+      <li>State Medicaid compliance &mdash; TMPPM ingestion pipeline live; Florida AHCA next</li>
+      <li>CMS Fee Schedule Updates &mdash; quarterly RBRVS / OPPS / MS-DRG / NCCI</li>
+      <li>Provider Verification &mdash; NPPES, OIG/LEIE, PECOS, CAQH, state licensure scoring</li>
+      <li>Terminology Service &mdash; SNOMED &harr; CPT &harr; ICD with FHIR <code>$translate</code></li>
+    </ul>
+
+    <div class="section-label">Productization status</div>
+    <ul class="feature-list">
+      <li>Capabilities ship in code; subscriber-facing wrappers are in flight</li>
+      <li>TMPPM and Provider Verification are first to productize</li>
+      <li>Included for any Platform Engagement customer</li>
+    </ul>
+
+    <a href="mailto:sales@cloudhealthoffice.com?subject=Managed%20Data%20Services" class="cta-btn cta-outline">Discuss Subscription</a>
+  </div>
+
+  <!-- PLATFORM ENGAGEMENT (featured) -->
   <div class="pricing-card featured">
-    <div class="card-badge badge-pro">Most Popular</div>
-    <div class="card-title">Augment &amp; Comply</div>
-    <div class="card-desc">Deploy CMS-0057-F compliance alongside your existing CAPS &mdash; without replacing it. The fastest path to the January 2027 mandate. Start here, expand later.</div>
+    <div class="card-badge badge-platform">Platform Engagement</div>
+    <div class="card-title">Platform Engagement</div>
+    <div class="card-desc">Payer-scale relationships across three layers: Compliance Accelerator, Progressive Modernization, Full CAPS Platform. Multi-year contracts.</div>
 
     <div class="price-block">
-      <div class="platform-price" style="font-size:1.5rem;">Contact Us</div>
+      <div class="platform-price">PMPM</div>
+      <div class="pmpm-price"><span>indicative within each layer &middot; pilot-specific terms negotiated per engagement</span></div>
     </div>
 
     <hr class="divider">
 
-    <div class="section-label">Deployment</div>
+    <div class="section-label">Three layers</div>
     <ul class="feature-list">
-      <li>Everything in Starter</li>
-      <li>One core admin adapter of your choice</li>
-      <li>Augmentation mode — CHO reads from your CAPS</li>
-      <li>X12 278 ↔ FHIR PAS bidirectional bridge</li>
+      <li>Layer 1 &mdash; Compliance Accelerator (CMS-0057-F surface alongside legacy core)</li>
+      <li>Layer 2 &mdash; Progressive Modernization (domain-by-domain, per-tenant Augment or Replace)</li>
+      <li>Layer 3 &mdash; Full CAPS Platform (cloud-native end-to-end for new entrants)</li>
     </ul>
 
-    <div class="section-label">Adapters — choose one</div>
+    <div class="section-label">Commercial shape</div>
     <ul class="feature-list">
-      <li>QNXT (Open Access, Connect, direct DB)</li>
-      <li>Facets</li>
-      <li>HealthEdge (HealthRules Payer)</li>
-      <li>Generic DB/API adapter</li>
+      <li>Multi-year contracts; expansion is an amendment, not a renegotiation</li>
+      <li>Founding-partner terms available for first pilots in each layer</li>
+      <li>Indicative ranges available on request; pilot terms set per engagement</li>
     </ul>
 
-    <div class="section-label">Support</div>
-    <ul class="feature-list">
-      <li>Business-hours email + Slack support</li>
-      <li>Adapter configuration assistance</li>
-      <li>Quarterly compliance review</li>
-    </ul>
-
-    <a href="#" class="cta-btn cta-primary">Get Started</a>
-  </div>
-
-  <!-- ENTERPRISE -->
-  <div class="pricing-card">
-    <div class="card-badge badge-enterprise">Enterprise</div>
-    <div class="card-title">Multi-System</div>
-    <div class="card-desc">For complex environments with multiple legacy core systems. Full adapter library, custom integrations, and a dedicated modernization roadmap.</div>
-
-    <div class="price-block">
-      <div class="platform-price" style="font-size:1.5rem;">Contact Us</div>
-    </div>
-
-    <hr class="divider">
-
-    <div class="section-label">Deployment</div>
-    <ul class="feature-list">
-      <li>Everything in Professional</li>
-      <li>All available adapters included</li>
-      <li>Custom adapter development</li>
-      <li>Multi-CAPS environments supported</li>
-      <li>Payer-to-Payer orchestration</li>
-    </ul>
-
-    <div class="section-label">Adapters — all included</div>
-    <ul class="feature-list">
-      <li>QNXT, Facets, HealthEdge, Amisys, Jiva</li>
-      <li>Generic DB + Generic REST adapters</li>
-      <li>Custom adapter for proprietary systems</li>
-    </ul>
-
-    <div class="section-label">Support</div>
-    <ul class="feature-list">
-      <li>Dedicated solution architect</li>
-      <li>24/7 support with SLA</li>
-      <li>On-site onboarding available</li>
-      <li>Conformance testing assistance</li>
-    </ul>
-
-    <a href="#" class="cta-btn cta-gold">Contact Sales</a>
+    <a href="mailto:sales@cloudhealthoffice.com?subject=Platform%20Engagement" class="cta-btn cta-gold">Schedule a Conversation</a>
   </div>
 </div>
+
+<!-- PLATFORM ENGAGEMENT LAYER DETAIL -->
+<section class="layers-section" id="platform-layers">
+  <h2>Platform Engagement &mdash; three layers</h2>
+  <p>Each layer is a coherent offering on its own; each layer contains the previous. Customers enter where they are and expand on their timeline.</p>
+
+  <div class="layer-grid">
+    <div class="layer-card">
+      <div class="layer-tag">Layer 1</div>
+      <div class="layer-name">Compliance Accelerator</div>
+      <div class="layer-row"><strong>Who enters here</strong>A payer locked into QNXT, HealthEdge, Facets, or a comparable legacy core, staring down the CMS-0057-F deadline, who needs a compliance surface stood up in weeks without a platform-rebuild project.</div>
+      <div class="layer-row"><strong>What&rsquo;s included</strong>Patient Access, Provider Directory, Prior Authorization (CRD &rarr; DTR &rarr; PAS), and Payer-to-Payer APIs. SMART-on-FHIR scope enforcement at the resource-type level. Ships as Helm into your existing Kubernetes cluster or Azure AKS. Read-mostly &mdash; your core admin remains system of record.</div>
+      <div class="layer-row"><strong>Commercial shape</strong>Small annual subscription priced PMPM, weeks-to-deploy. Pilot-specific terms negotiated per engagement.</div>
+    </div>
+
+    <div class="layer-card">
+      <div class="layer-tag">Layer 2</div>
+      <div class="layer-name">Progressive Modernization</div>
+      <div class="layer-row"><strong>Who enters here</strong>A payer frustrated with their legacy core&rsquo;s license cost, innovation pace, or integration friction, with a CTO willing to commit to multi-year modernization only if the risk is contained one domain at a time.</div>
+      <div class="layer-row"><strong>What&rsquo;s included</strong>Domain-by-domain migration with per-tenant, per-domain operating mode &mdash; <strong>Augment</strong> (legacy authoritative, CHO calculates in parallel for comparison) or <strong>Replace</strong> (CHO authoritative, legacy off the critical path). Appeals is the lighthouse domain shipped end-to-end today.</div>
+      <div class="layer-row"><strong>Commercial shape</strong>Multi-year, priced PMPM and per domain. New domains are amendments, not renegotiations.</div>
+    </div>
+
+    <div class="layer-card">
+      <div class="layer-tag">Layer 3</div>
+      <div class="layer-name">Full CAPS Platform</div>
+      <div class="layer-row"><strong>Who enters here</strong>MA startups and new-license plans with no legacy platform; small regional Medicaid plans whose existing platform cannot meet new requirements; mid-market commercial plans finishing a Layer 2 journey by turning their legacy core off entirely.</div>
+      <div class="layer-row"><strong>What&rsquo;s included</strong>The full cloud-native CAPS &mdash; 36 services, 9 adjudication and rules engines, Argo-orchestrated adjudication pipeline, EDI ingress and egress (270/271/275/276/277/278/834/837), multi-tenant throughout. Production-ready today for new entrants; honest disclosure of remaining gaps (reference customer, scale testing, portal polish) discussed openly with pilot partners.</div>
+      <div class="layer-row"><strong>Commercial shape</strong>Larger engagement, multi-year, priced PMPM. Founding-partner terms reflect both the strategic advantage of being first and the cost structure a cloud-native architecture supports.</div>
+    </div>
+  </div>
+</section>
 
 <!-- COST CALCULATOR -->
 <section class="calculator-section">
   <h2>Get a Quote</h2>
-  <p>Pricing is based on your deployment mode and member count. Contact our team for a personalized quote.</p>
+  <p>Platform Engagement is priced PMPM, indicative within each layer; specific terms are negotiated per pilot. Contact our team for a conversation scoped to your environment.</p>
 
   <div class="calculator">
     <div class="calc-results">
       <div class="calc-result-item">
-        <div class="calc-result-label">Platform + PMPM</div>
-        <div class="calc-result-value blue">Usage-Based</div>
-        <div class="calc-result-sub">scaled to your organization</div>
+        <div class="calc-result-label">Pricing Model</div>
+        <div class="calc-result-value blue">PMPM</div>
+        <div class="calc-result-sub">scaled to your member count</div>
       </div>
       <div class="calc-result-item">
-        <div class="calc-result-label">All Tiers Include</div>
+        <div class="calc-result-label">All Engagements Include</div>
         <div class="calc-result-value teal">Full Platform</div>
         <div class="calc-result-sub">no feature gates</div>
       </div>
@@ -760,8 +878,13 @@
   </div>
 
   <div class="faq-item">
-    <div class="faq-q">What does the PMPM cover vs. the platform fee?</div>
-    <div class="faq-a">The platform fee covers your deployment mode, adapter entitlement, and support tier — it's what you are. The PMPM covers actual usage — how many members flow through the FHIR APIs, PA transactions processed, and data exchanged via Payer-to-Payer. This hybrid model ensures you only pay for the scale you're operating at.</div>
+    <div class="faq-q">What does PMPM mean and how is it priced?</div>
+    <div class="faq-a">PMPM stands for per member per month &mdash; the standard unit economics for payer-scale platform relationships. CHO&rsquo;s Platform Engagement is priced PMPM across all three layers. Pricing is indicative market-rate within each layer; specific terms are negotiated per pilot. Founding-partner terms are available for first pilot engagements in each layer. Layer 1 entry pricing is market-rate for CMS-0057-F compliance surfaces; Layer 2 PMPM expands per domain migrated; Layer 3 PMPM aspires to the range of incumbent CAPS platforms as production references accumulate.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">Why are there four product lines? Can I use just one?</div>
+    <div class="faq-a">Yes &mdash; each product line is a coherent offering on its own. Public Tools, Transactional Services, and Managed Data Services do not require a Platform Engagement commitment. A developer can use the free fee schedule lookup forever; a TPA can subscribe to the Claims Repricing API without ever evaluating Platform Engagement; a Texas Medicaid plan can subscribe to TMPPM compliance updates while staying on its incumbent core. Customers move outward-to-inward over time when it makes sense for them &mdash; we don&rsquo;t ask for a commitment to expand.</div>
   </div>
 
   <div class="faq-item">
@@ -781,7 +904,7 @@
 
   <div class="faq-item">
     <div class="faq-q">What if my core admin system isn't listed?</div>
-    <div class="faq-a">The Generic DB and Generic REST adapters handle any system with a relational database or REST API — you configure the mapping between your schema and CHO's domain model. For proprietary or mainframe-based systems, Enterprise tier includes custom adapter development.</div>
+    <div class="faq-a">The Generic DB and Generic REST adapters handle any system with a relational database or REST API &mdash; you configure the mapping between your schema and CHO&rsquo;s domain model. For proprietary or mainframe-based systems, custom adapter development is available for Platform Engagement customers with specific integration needs &mdash; contact sales for scope.</div>
   </div>
 </section>
 
