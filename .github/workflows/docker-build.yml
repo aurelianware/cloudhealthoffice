@@ -1,11 +1,19 @@
-name: Build and Push Docker Images
+name: Build Portal / Site / Utility Containers
+
+# Service-image builds moved out of this workflow as part of the δ-series
+# consolidation (PRs #691, #692, and the δ3 PR introducing pr-validation.yml).
+# Production service builds run via deploy-azure-aks.yml; PR validation runs
+# via pr-validation.yml. This workflow now covers only the non-service
+# concerns: the Blazor portal, the static marketing site, and the utility
+# containers under containers/. The service trigger path 'src/services/**'
+# is intentionally absent below; service-only changes should NOT spin this
+# workflow up.
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'src/services/**'
       - 'src/portal/**'
       - 'src/site/**'
       - 'containers/**'
@@ -14,10 +22,10 @@ on:
     branches:
       - main
     paths:
-      - 'src/services/**'
       - 'src/portal/**'
       - 'src/site/**'
       - 'containers/**'
+      - '.github/workflows/docker-build.yml'
   workflow_dispatch:
 
 concurrency:
@@ -29,138 +37,6 @@ env:
   IMAGE_PREFIX: cloudhealthoffice
 
 jobs:
-  build-services:
-    name: Build Microservices
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-
-    strategy:
-      fail-fast: false  # Build all services to see all errors
-      matrix:
-        service:
-          - member-service
-          - coverage-service
-          - claims-service
-          - eligibility-service
-          - authorization-service
-          - attachment-service
-          - provider-service
-          - reference-data-service
-          - sponsor-service
-          - claims-scrubbing-service
-          - enrollment-import-service
-          - trading-partner-service
-          - tenant-service
-          - benefit-plan-service
-          - payment-service
-          - provider-verification-service
-          - idcard-service
-          - consent-service
-        include:
-          # provider-verification-service references engine project outside src/services/
-          - service: provider-verification-service
-            build_context: '.'
-          # claims-scrubbing-service is now .NET — needs repo root for shared lib
-          - service: claims-scrubbing-service
-            build_context: '.'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Azure Login (OIDC)
-        if: github.event_name != 'pull_request'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Log in to Azure Container Registry
-        if: github.event_name != 'pull_request'
-        run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
-
-      # PR builds cannot use OIDC (no push), but still need ACR access to pull
-      # mirrored .NET base images. Check first whether the read-only ACR token
-      # (ACR_USERNAME / ACR_PASSWORD secrets) is configured so that fork PRs,
-      # where repository secrets are unavailable, truly skip the login rather
-      # than triggering a noisy failed attempt.
-      - name: Check ACR token available
-        id: check-acr-token
-        if: github.event_name == 'pull_request'
-        env:
-          _ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-        run: |
-          if [ -n "$_ACR_USERNAME" ]; then
-            echo "available=true" >> $GITHUB_OUTPUT
-          else
-            echo "available=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Log in to ACR for PR base-image pulls
-        id: acr-pr-login
-        if: github.event_name == 'pull_request' && steps.check-acr-token.outputs.available == 'true'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
-
-      # PR builds must exercise the same ACR path that main deploys do.
-      # The old silent MCR fallback hid commit 71c9d37 for 5 days: PR checks
-      # pulled .NET base images directly from MCR while main deploys tried to
-      # pull from an unpopulated ACR mirror and failed. Fail loudly here
-      # rather than let PR builds and main deploys exercise different
-      # registries — PR-green/main-red regressions must be impossible.
-      - name: Fail if ACR login didn't succeed on PR
-        if: github.event_name == 'pull_request' && steps.acr-pr-login.outcome != 'success'
-        env:
-          ACR_SHORT_NAME: ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
-        run: |
-          echo "::error::PR base-image pulls require the ACR_USERNAME / ACR_PASSWORD repo secrets."
-          echo "::error::Without them, PR builds and main deploys exercise different container"
-          echo "::error::registries, and main-only regressions (like 71c9d37) slip through PR review."
-          echo "::error::Setup (run against the subscription that owns $ACR_SHORT_NAME):"
-          echo "::error::  1. az acr scope-map create --registry $ACR_SHORT_NAME --name cho-ci-dotnet-pull --repository dotnet/sdk content/read --repository dotnet/aspnet content/read"
-          echo "::error::  2. az acr token create --registry $ACR_SHORT_NAME --name cho-ci-readonly --scope-map cho-ci-dotnet-pull"
-          echo "::error::     (this command prints credentials.passwords[0].value once — capture it)"
-          echo "::error::  3. If you missed step 2's output, rotate with: az acr token credential generate --registry $ACR_SHORT_NAME --name cho-ci-readonly --password1"
-          echo "::error::  4. Save username 'cho-ci-readonly' as repo secret ACR_USERNAME"
-          echo "::error::  5. Save password1 value as repo secret ACR_PASSWORD"
-          echo "::error::See docs/security/SECRETS-INVENTORY.md for the rationale."
-          exit 1
-
-      - name: Set effective base-image registry
-        run: echo "BUILD_REGISTRY=${{ env.REGISTRY }}" >> $GITHUB_ENV
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.build_context || '.' }}
-          file: ./src/services/${{ matrix.service }}/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: REGISTRY=${{ env.BUILD_REGISTRY }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
-
   build-portal:
     name: Build Blazor Portal
     runs-on: ubuntu-latest
@@ -507,51 +383,3 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-  summary:
-    name: Build Summary
-    runs-on: ubuntu-latest
-    needs: [build-services, build-portal, build-site, deploy-site, build-containers]
-    if: always()
-
-    steps:
-      - name: Check build results
-        run: |
-          echo "## Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ **All images built successfully**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Images pushed to: \`${{ env.REGISTRY }}/cloudhealthoffice-*\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Services Built:" >> $GITHUB_STEP_SUMMARY
-          echo "- member-service" >> $GITHUB_STEP_SUMMARY
-          echo "- coverage-service" >> $GITHUB_STEP_SUMMARY
-          echo "- claims-service" >> $GITHUB_STEP_SUMMARY
-          echo "- eligibility-service" >> $GITHUB_STEP_SUMMARY
-          echo "- authorization-service" >> $GITHUB_STEP_SUMMARY
-          echo "- provider-service" >> $GITHUB_STEP_SUMMARY
-          echo "- benefit-plan-service" >> $GITHUB_STEP_SUMMARY
-          echo "- reference-data-service" >> $GITHUB_STEP_SUMMARY
-          echo "- sponsor-service" >> $GITHUB_STEP_SUMMARY
-          echo "- claims-scrubbing-service" >> $GITHUB_STEP_SUMMARY
-          echo "- tenant-service" >> $GITHUB_STEP_SUMMARY
-          echo "- enrollment-import-service" >> $GITHUB_STEP_SUMMARY
-          echo "- provider-verification-service" >> $GITHUB_STEP_SUMMARY
-          echo "- portal (Blazor)" >> $GITHUB_STEP_SUMMARY
-          echo "- site (Static)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Utility Containers Built:" >> $GITHUB_STEP_SUMMARY
-          echo "- x12-parser (837 claims parsing)" >> $GITHUB_STEP_SUMMARY
-          echo "- x12-276-parser (276 claim status inquiry parsing)" >> $GITHUB_STEP_SUMMARY
-          echo "- x12-834-parser (834 enrollment parsing)" >> $GITHUB_STEP_SUMMARY
-          echo "- claims-publisher (Kafka)" >> $GITHUB_STEP_SUMMARY
-          echo "- kafka-publisher" >> $GITHUB_STEP_SUMMARY
-          echo "- sftp-fetcher" >> $GITHUB_STEP_SUMMARY
-          echo "- x12-encoder" >> $GITHUB_STEP_SUMMARY
-          echo "- metadata-extractor" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Deploy Kafka topics: \`kubectl apply -f kafka/topics.yaml\`" >> $GITHUB_STEP_SUMMARY
-          echo "2. Deploy Argo workflows: \`kubectl apply -f argo-workflows/\`" >> $GITHUB_STEP_SUMMARY
-          echo "3. Deploy Argo Events: \`kubectl apply -f argo-events/\`" >> $GITHUB_STEP_SUMMARY
-          echo "4. Deploy services: \`kubectl apply -f services/*/k8s/\`" >> $GITHUB_STEP_SUMMARY
-          echo "5. Test 834 pipeline: Upload test-x12-834-enrollment-sample.edi to SFTP" >> $GITHUB_STEP_SUMMARY

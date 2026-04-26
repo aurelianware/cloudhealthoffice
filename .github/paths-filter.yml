@@ -1,0 +1,102 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# dorny/paths-filter configuration consumed by .github/workflows/pr-validation.yml.
+#
+# Two filter classes live here:
+#
+#   1. Per-service filters — one entry per CHO microservice with a Dockerfile.
+#      A PR that touches files under the service's directory triggers the
+#      reusable build workflow for THAT service only. The filter name MUST
+#      match the on-disk service directory name and the matrix entry name
+#      that pr-validation.yml emits, since the same string is fed back as
+#      the `service:` input to _build-service-image.yml.
+#
+#   2. Meta filters — shared-libs / engines / build-config / workflows.
+#      Any one of these matching means "the change could affect every
+#      service's build," so pr-validation.yml's detect-changes job promotes
+#      to the full-matrix (validate-all) branch instead of the per-service
+#      branch. This eliminates a class of false negatives where a shared
+#      lib change builds clean against one service but breaks another.
+#
+# Intentionally excluded:
+#
+#   * ffs-service — has no Dockerfile (see docs/deployment/KNOWN-GAPS.md).
+#     The directory exists with a csproj but the service is not yet
+#     containerized, so a "build" filter would never have a matching
+#     Dockerfile to invoke.
+#
+# Service set: 35 services = 33 currently in deploy-azure-aks.yml's matrix
+# plus idcard-service and provider-verification-service (both already
+# PR-validated by docker-build.yml today; preserved here so δ3 doesn't
+# regress existing coverage). Both services have a separate doc-gap on
+# main: they build but don't deploy. That's a pre-existing condition, not
+# a δ3 concern.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Per-service filters (alphabetical, case-insensitive) ────────────────────
+accumulator-service:           ['src/services/accumulator-service/**']
+appeals-service:               ['src/services/appeals-service/**']
+ar-service:                    ['src/services/ar-service/**']
+attachment-service:            ['src/services/attachment-service/**']
+authorization-service:         ['src/services/authorization-service/**']
+benefit-plan-service:          ['src/services/benefit-plan-service/**']
+capitation-service:            ['src/services/capitation-service/**']
+CHO.TerminologyService:        ['src/services/CHO.TerminologyService/**']
+claims-examiner-service:       ['src/services/claims-examiner-service/**']
+claims-scrubbing-service:      ['src/services/claims-scrubbing-service/**']
+claims-service:                ['src/services/claims-service/**']
+CloudHealthOffice.PricingApi:  ['src/services/CloudHealthOffice.PricingApi/**']
+consent-service:               ['src/services/consent-service/**']
+coverage-service:              ['src/services/coverage-service/**']
+eligibility-service:           ['src/services/eligibility-service/**']
+encounter-service:             ['src/services/encounter-service/**']
+encounter-submission-service:  ['src/services/encounter-submission-service/**']
+enrollment-import-service:     ['src/services/enrollment-import-service/**']
+fhir-service:                  ['src/services/fhir-service/**']
+idcard-service:                ['src/services/idcard-service/**']
+member-document-service:       ['src/services/member-document-service/**']
+member-service:                ['src/services/member-service/**']
+payment-service:               ['src/services/payment-service/**']
+personal-representative-service: ['src/services/personal-representative-service/**']
+premium-billing-service:       ['src/services/premium-billing-service/**']
+provider-contracts-service:    ['src/services/provider-contracts-service/**']
+provider-service:              ['src/services/provider-service/**']
+provider-verification-service: ['src/services/provider-verification-service/**']
+reference-data-service:        ['src/services/reference-data-service/**']
+rfai-service:                  ['src/services/rfai-service/**']
+risk-adjustment-service:       ['src/services/risk-adjustment-service/**']
+smart-auth-service:            ['src/services/smart-auth-service/**']
+sponsor-service:               ['src/services/sponsor-service/**']
+tenant-service:                ['src/services/tenant-service/**']
+trading-partner-service:       ['src/services/trading-partner-service/**']
+
+# ── Meta filters (any match → validate ALL services) ────────────────────────
+# shared-libs: src/services/shared/ contains CloudHealthOffice.Infrastructure,
+# CloudHealthOffice.Events, CloudHealthOffice.Appeals.Contracts — every
+# service's Dockerfile COPYs from here, so any change can break every build.
+shared-libs:
+  - 'src/services/shared/**'
+
+# engines: src/engines/ contains BenefitEngine, ClaimsScrubEngine, CobEngine,
+# EncounterEngine, FeeScheduleEngine, NcciEngine, PriorAuthRuleEngine,
+# ProviderEnrollmentService, ProviderVerificationEngine, RiskAdjustmentEngine,
+# DocumentStore, OperatingMode. Several services COPY from here and the
+# coupling isn't easy to enumerate per-service, so any engine change fans
+# out to all builds.
+engines:
+  - 'src/engines/**'
+
+# build-config: root-level MSBuild artifacts that affect every project's
+# compilation. Today this is just the solution file (no Directory.Build.props
+# at root yet); add Directory.Build.props / Directory.Build.targets here if
+# they are introduced later.
+build-config:
+  - 'cloudhealthoffice-main.sln'
+
+# workflows: self-edits to the CI workflow files that drive PR validation.
+# Including this file in its own filter means any path-filter config change
+# triggers a full-matrix run on the same PR — config errors surface
+# immediately instead of going green here and breaking on a future PR.
+workflows:
+  - '.github/workflows/_build-service-image.yml'
+  - '.github/workflows/pr-validation.yml'
+  - '.github/paths-filter.yml'

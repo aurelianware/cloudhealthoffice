@@ -1,0 +1,298 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PR validation: builds CHO microservice container images for whichever
+# services are affected by the pull request. Replaces the build-services
+# job in docker-build.yml as part of the δ-series workflow consolidation
+# (PRs #691, #692 shipped the reusable workflow and refactored the production
+# deploy path; this is δ3, the PR-validation half).
+#
+# Two-job structure
+# ─────────────────
+#
+#   detect-changes  →  uses dorny/paths-filter to inspect which files the
+#                       PR touched, then computes the JSON service list that
+#                       drives the build matrix. Two outcomes:
+#
+#                         • Selective: only the per-service filters that
+#                           matched are built. Common case: a PR scoped to
+#                           one or two services.
+#
+#                         • Validate-all: when any META filter matched
+#                           (shared-libs, engines, build-config, workflows),
+#                           every service in the canonical 35-service list
+#                           is built. The change could affect any build, so
+#                           we don't risk a false negative.
+#
+#                       Both branches emit the SAME output shape: a JSON
+#                       array of {service, image_name?} objects, ready for
+#                       fromJSON() expansion in the downstream matrix.
+#
+#   build           →  consumes detect-changes.outputs.services as
+#                       matrix.include, calling _build-service-image.yml
+#                       once per matrix entry with push: false.
+#
+# Why a single matrix job instead of two (selective + all-services)
+# ─────────────────────────────────────────────────────────────────
+# Either pattern works. Computing the list in detect-changes keeps the
+# build job free of conditional logic — same uses:, same with:, same
+# secrets: regardless of which branch fired. The validate-all decision
+# lives in one bash heredoc instead of two parallel matrix jobs that
+# would otherwise duplicate the reusable-workflow call site.
+#
+# Why image_name lives inside the JSON, not in a static include: block
+# ────────────────────────────────────────────────────────────────────
+# GitHub Actions matrix expansion has a footgun: a static `include:`
+# entry whose key (e.g. service: CHO.TerminologyService) doesn't appear
+# in the dynamic base array CAN be promoted to a NEW matrix combination
+# rather than just adding a field to an existing one. That would build
+# CHO.TerminologyService on every PR, even ones that don't touch it.
+# Encoding image_name into the JSON itself avoids that — the override
+# only exists in the matrix when the service is already present.
+#
+# Cache-write asymmetry (push:false vs push:true)
+# ───────────────────────────────────────────────
+# _build-service-image.yml gates `cache-to: type=gha,mode=max` on
+# push:true (see header item 3 of that file). PR-validation builds
+# therefore READ the GHA cache but don't WRITE back, preventing PR
+# build artifacts from polluting the cache namespace shared with main
+# deploys. This is intentional and a behavioral departure from
+# docker-build.yml, where PR builds wrote cache (line 161 of that file).
+#
+# Tag asymmetry (tag_latest:false, tag_sha:true)
+# ──────────────────────────────────────────────
+# The reusable workflow requires AT LEAST one of tag_latest / tag_sha
+# to be true (see _build-service-image.yml line 261). Because PR builds
+# never push, the tag value is computed but never published — it only
+# satisfies the "must produce a tagged image" check. tag_latest is set
+# to false to make the asymmetry explicit (PR builds don't touch the
+# rolling :latest tag even hypothetically); tag_sha is set to true
+# because it's the cheaper, more inert option to satisfy the constraint.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: PR Validation (Service Images)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Trigger any time a PR could plausibly affect a service build.
+      # The dorny step refines the matrix from there; this list is the
+      # outer gate. Keep it broad to avoid missing legitimate triggers.
+      - 'src/services/**'
+      - 'src/engines/**'
+      - 'cloudhealthoffice-main.sln'
+      - '.github/workflows/_build-service-image.yml'
+      - '.github/workflows/pr-validation.yml'
+      - '.github/paths-filter.yml'
+  workflow_dispatch:
+
+concurrency:
+  # Pattern matches docker-build.yml: superseding pushes on the same PR
+  # branch cancel in-flight runs so we don't pile up duplicate matrix
+  # explosions. PR refs are unique per PR, so this also keeps unrelated
+  # PRs running in parallel.
+  group: pr-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # detect-changes: figure out which services the PR affects and emit the
+  # build matrix as a JSON array. Output shape:
+  #
+  #   [
+  #     {"service": "appeals-service"},
+  #     {"service": "CHO.TerminologyService", "image_name": "cloudhealthoffice-terminology-service"}
+  #   ]
+  #
+  # Empty array (`[]`) when no per-service filter matched and no meta
+  # filter triggered — the build job's `if:` gate skips in that case.
+  # ───────────────────────────────────────────────────────────────────────
+  detect-changes:
+    name: Detect Affected Services
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.compute.outputs.services }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run path filter
+        id: filter
+        # v4 is the current major (the v3 line stopped at v3.0.3 in March 2023;
+        # v4.0.0/v4.0.1 followed in the same window with a Node 24 runtime
+        # upgrade). Pinned to v4.0.1 — the latest minor in the v4 line.
+        # All other actions in this repo follow the same "current major"
+        # convention (actions/checkout@v4, docker/setup-buildx-action@v3,
+        # docker/build-push-action@v6, docker/metadata-action@v5).
+        uses: dorny/paths-filter@v4.0.1
+        with:
+          filters: .github/paths-filter.yml
+
+      - name: Compute build matrix
+        id: compute
+        env:
+          # outputs.changes is a JSON array of names of all filters that
+          # matched any changed file (e.g. ["appeals-service","shared-libs"]).
+          CHANGES_JSON: ${{ steps.filter.outputs.changes }}
+          # Per-filter outputs are 'true' / 'false' strings. dorny exposes
+          # these alongside `changes` so callers can branch without parsing
+          # the array. We use them to decide selective vs validate-all.
+          SHARED_LIBS:  ${{ steps.filter.outputs.shared-libs }}
+          ENGINES:      ${{ steps.filter.outputs.engines }}
+          BUILD_CONFIG: ${{ steps.filter.outputs.build-config }}
+          WORKFLOWS:    ${{ steps.filter.outputs.workflows }}
+        run: |
+          set -euo pipefail
+
+          # The canonical 35-service list. MUST stay in sync with
+          # .github/paths-filter.yml (per-service filter names) and with
+          # deploy-azure-aks.yml's matrix (33 entries; this list adds
+          # idcard-service and provider-verification-service which are
+          # PR-validated but not yet deploy-targeted). ffs-service is
+          # intentionally absent — see paths-filter.yml header.
+          #
+          # Order doesn't matter for matrix correctness; alphabetical for
+          # readability. The two PascalCase services carry image_name
+          # overrides because the default ${image_prefix}-${service} naming
+          # would produce "cloudhealthoffice-CHO.TerminologyService" instead
+          # of the convention "cloudhealthoffice-terminology-service" that
+          # k8s manifests and ACR repositories expect.
+          FULL_LIST='[
+            {"service":"accumulator-service"},
+            {"service":"appeals-service"},
+            {"service":"ar-service"},
+            {"service":"attachment-service"},
+            {"service":"authorization-service"},
+            {"service":"benefit-plan-service"},
+            {"service":"capitation-service"},
+            {"service":"CHO.TerminologyService","image_name":"cloudhealthoffice-terminology-service"},
+            {"service":"claims-examiner-service"},
+            {"service":"claims-scrubbing-service"},
+            {"service":"claims-service"},
+            {"service":"CloudHealthOffice.PricingApi","image_name":"cloudhealthoffice-pricing-api"},
+            {"service":"consent-service"},
+            {"service":"coverage-service"},
+            {"service":"eligibility-service"},
+            {"service":"encounter-service"},
+            {"service":"encounter-submission-service"},
+            {"service":"enrollment-import-service"},
+            {"service":"fhir-service"},
+            {"service":"idcard-service"},
+            {"service":"member-document-service"},
+            {"service":"member-service"},
+            {"service":"payment-service"},
+            {"service":"personal-representative-service"},
+            {"service":"premium-billing-service"},
+            {"service":"provider-contracts-service"},
+            {"service":"provider-service"},
+            {"service":"provider-verification-service"},
+            {"service":"reference-data-service"},
+            {"service":"rfai-service"},
+            {"service":"risk-adjustment-service"},
+            {"service":"smart-auth-service"},
+            {"service":"sponsor-service"},
+            {"service":"tenant-service"},
+            {"service":"trading-partner-service"}
+          ]'
+
+          # Decide selective vs validate-all. Validate-all means a meta
+          # filter matched — the change is structurally capable of breaking
+          # any service's build, so we exercise every one of them.
+          if [ "$SHARED_LIBS" = "true" ] || \
+             [ "$ENGINES" = "true" ] || \
+             [ "$BUILD_CONFIG" = "true" ] || \
+             [ "$WORKFLOWS" = "true" ]; then
+
+            # Build a human-readable reason string for the diagnostic echo.
+            # Future debuggers reading the workflow log should be able to
+            # answer "why did this PR fan out to 35 builds?" by skimming
+            # this single line, instead of cross-referencing the dorny
+            # output table against the meta-filter names.
+            TRIGGER_REASON=""
+            [ "$SHARED_LIBS" = "true" ]  && TRIGGER_REASON="$TRIGGER_REASON shared-libs"
+            [ "$ENGINES" = "true" ]      && TRIGGER_REASON="$TRIGGER_REASON engines"
+            [ "$BUILD_CONFIG" = "true" ] && TRIGGER_REASON="$TRIGGER_REASON build-config"
+            [ "$WORKFLOWS" = "true" ]    && TRIGGER_REASON="$TRIGGER_REASON workflows"
+            echo "Validate-all triggered by:${TRIGGER_REASON}"
+
+            # Compact the heredoc JSON to a single line — GHA outputs
+            # tolerate multi-line via heredoc syntax but compact is easier
+            # to read in step logs and avoids any whitespace ambiguity
+            # when the downstream job runs fromJSON() against it.
+            RESULT=$(jq -nc --argjson v "$FULL_LIST" '$v')
+          else
+            # Selective: drop meta filter names from CHANGES_JSON, then
+            # transform each remaining entry into {service, image_name?}
+            # with the two PascalCase overrides applied. jq does this
+            # atomically so the output is always valid JSON, even when
+            # CHANGES_JSON is empty (`[]`) or contains only meta filter
+            # names that all get filtered out.
+            RESULT=$(jq -nc --argjson changes "$CHANGES_JSON" '
+              $changes
+              | map(select(. as $name
+                  | ["shared-libs","engines","build-config","workflows"]
+                  | index($name) | not))
+              | map(
+                  if . == "CHO.TerminologyService" then
+                    {service: ., image_name: "cloudhealthoffice-terminology-service"}
+                  elif . == "CloudHealthOffice.PricingApi" then
+                    {service: ., image_name: "cloudhealthoffice-pricing-api"}
+                  else
+                    {service: .}
+                  end
+                )
+            ')
+          fi
+
+          echo "Computed services: $RESULT"
+          echo "services=$RESULT" >> "$GITHUB_OUTPUT"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # build: dispatch to _build-service-image.yml once per matrix entry.
+  # `matrix.include: ${{ fromJSON(...) }}` expands each JSON object as a
+  # matrix combination, with the object's keys becoming matrix variables.
+  # When detect-changes emits an empty array, the `if:` gate skips this
+  # job entirely — GHA does not run a job whose matrix expands to zero.
+  # ───────────────────────────────────────────────────────────────────────
+  build:
+    name: Build ${{ matrix.service }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
+    strategy:
+      # fail-fast: false matches the deploy-aks and docker-build conventions
+      # — we want every affected service's build status visible in the same
+      # PR check, not a single-failure short-circuit.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    uses: ./.github/workflows/_build-service-image.yml
+    with:
+      service: ${{ matrix.service }}
+      # When matrix.image_name is absent (most services), pass empty string
+      # — the reusable workflow's resolve-effective-params step then falls
+      # through to ${image_prefix}-${service} naming. The two PascalCase
+      # services carry the override in their JSON entry.
+      image_name: ${{ matrix.image_name || '' }}
+      # All CHO services COPY from src/services/shared/ and several COPY
+      # from src/engines/, so build_context: '.' (repo root) is the only
+      # value that produces working builds. Matches deploy-aks.
+      build_context: '.'
+      # PR validation NEVER pushes to ACR. The reusable workflow's three-
+      # step "check / login / fail-loudly" pattern still runs — it ensures
+      # PR builds pull base images from the same ACR mirror that main
+      # deploys do, which is what catches the regression class behind
+      # incident 71c9d37 in PR review instead of on main.
+      push: false
+      # See the tag-asymmetry section in the header. tag_sha satisfies the
+      # reusable workflow's "must tag at least one of sha/latest" check.
+      # The sha tag is computed but never published in non-push mode, so
+      # PR builds neither pollute :latest nor leak per-PR sha tags.
+      tag_latest: false
+      tag_sha: true
+    secrets:
+      # PR builds need ACR read access for mirrored .NET base image pulls.
+      # AZURE_CLIENT_ID / TENANT / SUBSCRIPTION are deliberately NOT
+      # threaded — push: false means OIDC isn't exercised, and granting
+      # workload identity to PR builds would unnecessarily widen the
+      # secret surface for fork PRs.
+      acr_username: ${{ secrets.ACR_USERNAME }}
+      acr_password: ${{ secrets.ACR_PASSWORD }}
