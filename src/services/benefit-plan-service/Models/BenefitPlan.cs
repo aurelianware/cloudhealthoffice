@@ -107,24 +107,30 @@ public class BenefitPlan
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// Stable per-version identifier (ULID, Crockford base-32). Generated
-    /// when a draft is created and never reused.
+    /// Stable per-version identifier (ULID, Crockford base-32). Set
+    /// explicitly by the service layer when a draft or legacy v1 is
+    /// created. Empty on the wire ⇒ legacy row (predates this feature)
+    /// and is hydrated as Published v1 on read.
     /// </summary>
     [JsonPropertyName("versionId")]
-    public string VersionId { get; set; } = PlanVersionId.NewId();
+    public string VersionId { get; set; } = string.Empty;
 
     /// <summary>
     /// 1-based monotonic sequence within <c>(TenantId, PlanId)</c>.
+    /// Populated by the service when creating new versions; left at the
+    /// default for legacy documents so hydration can fix it up on read.
     /// </summary>
     [JsonPropertyName("versionNumber")]
-    public int VersionNumber { get; set; } = 1;
+    public int VersionNumber { get; set; }
 
     /// <summary>
-    /// Lifecycle state. Default for new objects is <see cref="PlanVersionState.Draft"/>;
-    /// legacy documents missing this field are hydrated as <see cref="PlanVersionState.Published"/>.
+    /// Lifecycle state. Populated by the service when creating new
+    /// versions; legacy documents missing this field deserialize to the
+    /// default and are normalized to <see cref="PlanVersionState.Published"/>
+    /// during hydration.
     /// </summary>
     [JsonPropertyName("versionState")]
-    public PlanVersionState VersionState { get; set; } = PlanVersionState.Draft;
+    public PlanVersionState VersionState { get; set; }
 
     /// <summary>
     /// <see cref="VersionId"/> of the version this draft amends, if any.

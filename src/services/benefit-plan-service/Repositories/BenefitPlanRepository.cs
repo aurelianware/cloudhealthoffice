@@ -71,14 +71,22 @@ public interface IBenefitPlanRepository
 
 /// <summary>
 /// Thrown when a write violates the version-state invariants — e.g. an
-/// attempt to update a Published row, or to publish a non-Draft row.
-/// Surfaces as HTTP 409 at the controller boundary.
+/// attempt to update a Published row, to publish a non-Draft row, or to
+/// reach a version that doesn't exist. The controller boundary maps
+/// <see cref="IsNotFound"/> to HTTP 404 and everything else to 409.
 /// </summary>
 public sealed class PlanVersionStateException : InvalidOperationException
 {
     public string PlanId { get; }
     public string VersionId { get; }
     public PlanVersionState CurrentState { get; }
+
+    /// <summary>
+    /// True when the underlying cause is "the requested plan/version
+    /// does not exist", as opposed to a state-machine violation. Set on
+    /// construction; controllers map this to HTTP 404 instead of 409.
+    /// </summary>
+    public bool IsNotFound { get; init; }
 
     public PlanVersionStateException(string planId, string versionId, PlanVersionState currentState, string message)
         : base(message)
@@ -336,7 +344,7 @@ public class BenefitPlanRepository : IBenefitPlanRepository
     {
         var existing = await GetByIdAsync(draft.Id, draft.TenantId)
             ?? throw new PlanVersionStateException(draft.PlanId, draft.VersionId, PlanVersionState.Draft,
-                $"Draft {draft.VersionId} not found");
+                $"Draft {draft.VersionId} not found") { IsNotFound = true };
 
         if (existing.VersionState != PlanVersionState.Draft)
         {

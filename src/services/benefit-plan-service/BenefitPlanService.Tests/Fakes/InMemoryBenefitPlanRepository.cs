@@ -125,7 +125,7 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
     {
         var existing = _docs.FirstOrDefault(d => d.Id == draft.Id && d.TenantId == draft.TenantId)
             ?? throw new PlanVersionStateException(draft.PlanId, draft.VersionId, PlanVersionState.Draft,
-                $"Draft {draft.VersionId} not found");
+                $"Draft {draft.VersionId} not found") { IsNotFound = true };
         if (existing.VersionState != PlanVersionState.Draft)
             throw new PlanVersionStateException(existing.PlanId, existing.VersionId, existing.VersionState,
                 $"Plan version {existing.VersionId} is {existing.VersionState} and cannot be edited.");

@@ -207,7 +207,7 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
     {
         var existing = await GetByIdAsync(draft.Id, draft.TenantId)
             ?? throw new PlanVersionStateException(draft.PlanId, draft.VersionId, PlanVersionState.Draft,
-                $"Draft {draft.VersionId} not found");
+                $"Draft {draft.VersionId} not found") { IsNotFound = true };
 
         if (existing.VersionState != PlanVersionState.Draft)
         {

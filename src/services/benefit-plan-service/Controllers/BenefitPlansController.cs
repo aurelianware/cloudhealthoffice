@@ -310,11 +310,13 @@ public class BenefitPlansController : ControllerBase
                 id, versionId, TenantId, ResolveActorId(), body?.EffectiveDate);
             return Ok(published);
         }
+        catch (PlanVersionStateException ex) when (ex.IsNotFound)
+        {
+            return NotFound(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId });
+        }
         catch (PlanVersionStateException ex)
         {
-            return ex.Message.Contains("not found")
-                ? NotFound(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId })
-                : Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+            return Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
         }
     }
 
@@ -332,9 +334,13 @@ public class BenefitPlansController : ControllerBase
             var draft = await _service.AmendPublishedPlanAsync(id, TenantId, ResolveActorId());
             return CreatedAtAction(nameof(GetVersion), new { id = draft.PlanId, versionId = draft.VersionId }, draft);
         }
-        catch (PlanVersionStateException ex)
+        catch (PlanVersionStateException ex) when (ex.IsNotFound)
         {
             return NotFound(new { message = ex.Message, planId = ex.PlanId });
+        }
+        catch (PlanVersionStateException ex)
+        {
+            return Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
         }
     }
 

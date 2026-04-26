@@ -40,6 +40,10 @@ if (useMongo)
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
     builder.Services.AddScoped<IPlanVersionTransitionRepository, MongoPlanVersionTransitionRepository>();
     builder.Services.AddScoped<IPlanVersionEventPublisher, MongoPlanVersionEventPublisher>();
+    // Ensures (TenantId, PlanId, EventId) and (TenantId, PlanId, Version)
+    // unique indexes exist on the events collection — the publisher's
+    // retry-on-duplicate loop depends on them.
+    builder.Services.AddHostedService<BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer>();
     Console.WriteLine("Using MongoDB repository");
 }
 else

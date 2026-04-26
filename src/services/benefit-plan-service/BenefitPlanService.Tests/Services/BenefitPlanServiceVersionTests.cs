@@ -206,4 +206,37 @@ public class BenefitPlanServiceVersionTests
         legacy.VersionId.Should().NotBeNullOrEmpty();
         legacy.PublishedAt.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task PublishVersionAsync_rejects_when_predecessor_no_longer_current()
+    {
+        // Two parallel amend chains race: the first amendment to publish
+        // wins; the second draft (created from the same v1 baseline) is
+        // now stale because the chain head moved, and publish must 409.
+        var (service, _, _, _) = Build();
+
+        var d1 = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
+        var v1 = await service.PublishVersionAsync(d1.PlanId, d1.VersionId, Tenant, Actor);
+
+        var amendA = await service.AmendPublishedPlanAsync(v1.PlanId, Tenant, Actor);
+        var amendB = await service.AmendPublishedPlanAsync(v1.PlanId, Tenant, Actor);
+
+        // amendA wins the race.
+        await service.PublishVersionAsync(amendA.PlanId, amendA.VersionId, Tenant, Actor);
+
+        // amendB still points at v1; its publish must now fail.
+        var act = () => service.PublishVersionAsync(amendB.PlanId, amendB.VersionId, Tenant, Actor);
+        await act.Should().ThrowAsync<PlanVersionStateException>()
+            .Where(ex => ex.CurrentState == PlanVersionState.Draft && !ex.IsNotFound);
+    }
+
+    [Fact]
+    public async Task PublishVersionAsync_unknown_version_throws_with_isNotFound_set()
+    {
+        var (service, _, _, _) = Build();
+
+        var act = () => service.PublishVersionAsync("plan", "no-such-version", Tenant, Actor);
+        await act.Should().ThrowAsync<PlanVersionStateException>()
+            .Where(ex => ex.IsNotFound);
+    }
 }

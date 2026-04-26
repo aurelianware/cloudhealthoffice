@@ -339,7 +339,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     {
         var draft = await _repository.GetVersionAsync(planId, versionId, tenantId)
             ?? throw new PlanVersionStateException(planId, versionId, PlanVersionState.Draft,
-                $"Version {versionId} not found");
+                $"Version {versionId} not found") { IsNotFound = true };
 
         if (draft.VersionState != PlanVersionState.Draft)
         {
@@ -348,6 +348,24 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         }
 
         var current = await _repository.GetLatestPublishedAsync(planId, tenantId, DateTime.UtcNow);
+
+        // Optimistic-concurrency: the draft must point at the version that
+        // is currently Published (or null on a genesis publish). If something
+        // got published in between (or the draft was created from a stale
+        // snapshot) the predecessor / version-number invariants no longer
+        // hold — surface 409 and force the caller to re-amend from latest.
+        var expectedPredecessor = current?.VersionId;
+        if (draft.PredecessorVersionId != expectedPredecessor)
+        {
+            throw new PlanVersionStateException(planId, versionId, draft.VersionState,
+                $"Draft predecessor '{draft.PredecessorVersionId ?? "<none>"}' does not match the current Published version '{expectedPredecessor ?? "<none>"}'. Re-amend from the latest version and retry.");
+        }
+        var expectedNumber = (current?.VersionNumber ?? 0) + 1;
+        if (draft.VersionNumber != expectedNumber)
+        {
+            throw new PlanVersionStateException(planId, versionId, draft.VersionState,
+                $"Draft version number {draft.VersionNumber} does not match the expected next number {expectedNumber}. Re-amend from the latest version and retry.");
+        }
 
         var now = DateTime.UtcNow;
         draft.VersionState = PlanVersionState.Published;
@@ -393,7 +411,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     {
         var current = await _repository.GetLatestPublishedAsync(planId, tenantId, DateTime.UtcNow)
             ?? throw new PlanVersionStateException(planId, string.Empty, PlanVersionState.Published,
-                $"No Published version of plan {planId} exists to amend");
+                $"No Published version of plan {planId} exists to amend") { IsNotFound = true };
 
         var draft = Clone(current);
         draft.Id = Guid.NewGuid().ToString();
@@ -430,7 +448,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     {
         var target = await _repository.GetVersionAsync(planId, versionId, tenantId)
             ?? throw new PlanVersionStateException(planId, versionId, PlanVersionState.Published,
-                $"Version {versionId} not found");
+                $"Version {versionId} not found") { IsNotFound = true };
 
         if (target.VersionState != PlanVersionState.Published)
         {

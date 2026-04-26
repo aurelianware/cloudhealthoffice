@@ -33,12 +33,16 @@ public class PlanVersionIdTests
 public class BenefitPlanIdentityDefaultsTests
 {
     [Fact]
-    public void New_plan_gets_versionId_versionNumber_and_draft_state()
+    public void Default_plan_has_empty_identity_so_legacy_rows_are_distinguishable()
     {
+        // Defaults must be "absent" markers so that documents persisted
+        // before the version-chain feature can be detected on read and
+        // hydrated as Published v1. The service layer is responsible for
+        // populating these fields on every new write.
         var plan = new BenefitPlan();
-        plan.VersionId.Should().NotBeNullOrEmpty();
-        plan.VersionNumber.Should().Be(1);
-        plan.VersionState.Should().Be(PlanVersionState.Draft);
+        plan.VersionId.Should().BeEmpty();
+        plan.VersionNumber.Should().Be(0);
+        plan.VersionState.Should().Be(PlanVersionState.Draft); // = 0; treated as "absent" by Hydrate when VersionId is empty
         plan.PredecessorVersionId.Should().BeNull();
     }
 }
