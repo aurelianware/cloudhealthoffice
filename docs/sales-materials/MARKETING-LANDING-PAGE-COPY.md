@@ -4,6 +4,12 @@
 
 ---
 
+## Product Line Context
+
+This landing-page copy presents Cloud Health Office (CHO) across all four product lines: Public Tools (free utilities), Transactional Services (per-call APIs on self-serve subscription), Managed Data Services (recurring data subscriptions), and Platform Engagement (payer-scale relationships priced per member per month (PMPM), with three layers — Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform). Most landing-page traffic is qualifying for Platform Engagement, but the page is also the primary discovery surface for Transactional Services prospects and Public Tools users. Authoring should keep the four-product-line framing intact rather than collapsing the page into Platform Engagement only. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md).
+
+---
+
 ## Hero Section
 
 ### Headline
@@ -192,36 +198,37 @@ const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 ## Pricing Preview Section
 
 ### Headline
-**Transparent Pricing. Predictable Costs.**
+**Four Product Lines. One Platform. Pay for What You Use.**
 
-### Tier Comparison Table
+### How CHO is Priced
 
-| Feature | Starter | Professional | Enterprise |
-|---------|---------|--------------|------------|
-| **Monthly Price** | Contact us for commercial licensing | Contact us for commercial licensing | Contact us for commercial licensing |
-| **Annual Price** | Contact us for commercial licensing | Contact us for commercial licensing | Contact us for commercial licensing |
-| | | | |
-| EDI Transactions | 25,000/mo | 150,000/mo | Unlimited |
+| Product Line | Pricing Shape | Best For |
+|--------------|---------------|----------|
+| **Public Tools** | Free, no signup required | Verifying engine accuracy; SEO discovery; free-tier evaluation |
+| **Transactional Services** | Per-call subscription (free tier + paid tiers) via Stripe | Developers, billing systems, small plans, TPAs, clearinghouses integrating specific APIs |
+| **Managed Data Services** | Recurring subscription (per-month or per-quarter) | Plans needing constantly-updated healthcare data (state Medicaid compliance, CMS fee schedules, provider verification, terminology) |
+| **Platform Engagement** | PMPM, pilot-scoped, multi-year | Health plans engaging at Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, or Layer 3 — Full CAPS Platform |
+
+### What's Included Across Platform Engagement Layers
+
+| Capability | Layer 1 | Layer 2 | Layer 3 |
+|------------|---------|---------|---------|
+| CMS-0057-F Compliance Surface | ✅ | ✅ | ✅ |
 | FHIR R4 APIs | ✅ | ✅ | ✅ |
-| CMS-0057-F Compliance | ✅ | ✅ | ✅ |
-| ValueAdds277 | Basic | ✅ Full | ✅ Full |
-| Support | Email (48hr) | Priority (24hr) | 24/7 Phone |
-| Instance Type | Shared | Shared | Dedicated |
-| Custom Integrations | — | Limited | Unlimited |
-| SLA | 99.5% | 99.9% | 99.95% |
-| | | | |
-| **Best For** | Evaluation | Production | High Volume |
-| | | | |
-| | [Start Trial] | [Start Trial] | [Contact Sales] |
+| Per-Domain Strangler-Fig Modernization (Augment / Replace operating modes) | — | ✅ | ✅ |
+| Appeals as a complete CHO domain (shipped reference Layer 2 implementation) | — | ✅ | ✅ |
+| Full multi-tenant CAPS platform (36 services, 9 adjudication engines) | — | — | ✅ |
+| End-to-end Argo-orchestrated adjudication pipeline | — | — | ✅ |
+| Deployment Target | Existing Kubernetes cluster or AKS | Existing Kubernetes cluster or AKS | Existing Kubernetes cluster or AKS |
 
 ### Pricing Notes
 
-- **30-day free trial** on all tiers
-- **Annual pricing includes a 10% discount** compared to monthly billing
-- **No per-transaction fees** — usage included in subscription
-- **No implementation fees** — self-service deployment
-- **Cancel anytime** — no long-term contracts required
-- **Azure billing** — pay through existing Azure agreement
+- **Layer 1, 2, and 3 are priced PMPM**, pilot-scoped, with founding-partner terms available for first pilots in each layer.
+- **60-Day Pilot Program** — free implementation, CMS-0057-F compliance audit, premium support.
+- **Public Tools** are free with no signup required.
+- **Transactional Services** are self-serve via Stripe with a free tier for evaluation.
+- **Managed Data Services** are subscribed per-month or per-quarter; pricing depends on the data feed.
+- **Azure billing available** — Platform Engagement engagements can be funded through existing Azure commitments.
 
 ### CTA
 **[Calculate Your ROI]** — See exactly how much you'll save

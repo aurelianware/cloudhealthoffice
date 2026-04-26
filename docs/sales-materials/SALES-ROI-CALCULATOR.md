@@ -6,7 +6,13 @@
 
 ## Executive Summary
 
-This ROI calculator enables healthcare organizations to quantify the financial impact of adopting Cloud Health Office compared to custom development, enterprise vendors, or maintaining legacy systems. The platform delivers **measurable cost savings**, **accelerated compliance**, and **operational efficiency** that translates to millions in avoided costs and revenue protection.
+This ROI calculator enables healthcare organizations to quantify the financial impact of adopting Cloud Health Office (CHO) compared to custom development, enterprise vendors, or maintaining legacy systems. The platform delivers **measurable cost savings**, **accelerated compliance**, and **operational efficiency** that translates to millions in avoided costs and revenue protection.
+
+---
+
+## Product Line Context
+
+This calculator is anchored to CHO's Platform Engagement product line, which is priced per member per month (PMPM) across three layers: Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform. The cost-comparison and TCO analyses below assume a customer engaging at one or more of those layers; specific layer mix and PMPM ranges are negotiated per pilot. Customers also evaluating Public Tools, Transactional Services, or Managed Data Services should treat those as separate, additive commercial relationships rather than substitutes for the Platform Engagement TCO model. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md). For indicative PMPM framing per layer, see [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).
 
 ---
 
@@ -57,13 +63,13 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 #### Cloud Health Office Path
 
-Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for current subscription pricing. Cloud Health Office pricing is usage-based and includes all Azure infrastructure costs.
+Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for current PMPM pricing. Platform Engagement is deployed into the customer's own Azure subscription; CHO licensing is PMPM and covers the CHO platform, compliance surface, and managed updates — not the underlying Azure compute and storage, which run in the customer's environment.
 
 **Pricing Model:**
-- **SaaS Model**: Subscription includes ALL infrastructure costs (Azure compute, storage, Service Bus, Application Insights)
+- **PMPM Licensing**: Covers CHO platform access, compliance surface, and managed updates per layer
+- **Customer Azure Costs**: Azure compute, storage, Service Bus, and Application Insights run in the customer's subscription and are billed directly by Microsoft — not included in the CHO PMPM
 - **Implementation**: Self-service setup assistance available
 - **Professional Services**: Optional custom integration work (not required for standard onboarding)
-- **Customer Azure Costs**: Only for customer's own claims system/backend (not included in Cloud Health Office subscription)
 
 ---
 
@@ -351,7 +357,7 @@ For organizations seeking CMS-0057-F compliance with minimal investment and maxi
 
 1. **Start with evaluation** — non-production use is free under BSL 1.1
 2. **Contact us for production licensing** — tiered pricing scaled to your organization
-3. **All subscription tiers include Azure infrastructure costs** — no separate cloud charges
+3. **Platform Engagement deploys into your Azure subscription** — CHO PMPM covers licensing; Azure infrastructure costs are visible to your FinOps team and billed directly by Microsoft
 
 Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for commercial licensing.
 

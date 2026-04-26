@@ -4,6 +4,12 @@
 
 ---
 
+## Product Line Context
+
+This pitch deck presents Cloud Health Office (CHO) across all four of its product lines — Public Tools, Transactional Services, Managed Data Services, and Platform Engagement. The deck is weighted toward Platform Engagement (the highest-investment product line, priced per member per month (PMPM), with three layers: Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform), since that is the product line under active discussion with health-plan and investor audiences. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md). For indicative PMPM framing per layer, see [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).
+
+---
+
 ## Slide 1: Cover
 
 ### Visual Elements
@@ -384,21 +390,21 @@ npm run generate -- interactive --output my-config.json --generate
 ## Slide 10: Business Model
 
 ### Visual Elements
-- [PLACEHOLDER: Pricing tier comparison table]
+- [PLACEHOLDER: Platform Engagement layer pricing matrix]
 - [PLACEHOLDER: Revenue stream breakdown]
 
 ### Headline
 **Predictable SaaS Revenue with Expansion Potential**
 
-### Subscription Tiers
+### Platform Engagement: Three Layers, PMPM Pricing
 
-| Tier | Monthly | Annual | Best For |
-|------|---------|--------|----------|
-| **Starter** | [Contact sales] | [Contact sales] | Regional payers, evaluation |
-| **Professional** | [Contact sales] | [Contact sales] | Mid-market, production |
-| **Enterprise** | [Contact sales] | [Contact sales] | Large plans, unlimited scale |
+| Engagement | Pricing | Best For |
+|------------|---------|----------|
+| **Layer 1 — Compliance Accelerator** | PMPM, pilot-scoped | CMS-0057-F surface alongside an existing core admin |
+| **Layer 2 — Progressive Modernization** | PMPM expands per domain | Strangler-fig replacement of a legacy core, one domain at a time |
+| **Layer 3 — Full CAPS Platform** | PMPM, full platform | New entrants greenfield; established payers finishing modernization |
 
-*Annual pricing includes a 10% discount compared to monthly billing.*
+*Public Tools, Transactional Services, and Managed Data Services contribute additional revenue streams under their own commercial shapes (free, per-call subscription, and recurring data subscription respectively). Specific PMPM ranges per layer and indicative ARR projections are documented in [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).*
 
 ### Revenue Streams
 
@@ -637,7 +643,7 @@ Reference: [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md)
 |---------|--------------|
 | **60-Day Pilot** | Free implementation, CMS audit, premium support |
 | **Azure Marketplace** | Instant deployment, 30-day trial |
-| **Enterprise Custom** | Dedicated instance, SLA guarantees |
+| **Custom Engagement** | Dedicated instance, SLA guarantees, negotiated PMPM |
 
 **Why Act Now:**
 - 18 months until CMS deadline

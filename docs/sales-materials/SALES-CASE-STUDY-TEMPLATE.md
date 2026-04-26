@@ -4,6 +4,12 @@
 
 ---
 
+## Product Line Context
+
+This template captures success stories for Cloud Health Office (CHO) customers across any of the four product lines: Public Tools, Transactional Services, Managed Data Services, and Platform Engagement. Most early case studies are expected to come from Platform Engagement pilots — typically Layer 1 — Compliance Accelerator or Layer 2 — Progressive Modernization deployments — but the template is intentionally product-line-agnostic. When completing a case study, capture which product line(s) the customer engaged with so the narrative is anchored correctly. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md).
+
+---
+
 ## Instructions for Use
 
 This template is designed to capture pilot customer success stories in a consistent, compelling format. Complete each section with specific data and quotes from the customer engagement.

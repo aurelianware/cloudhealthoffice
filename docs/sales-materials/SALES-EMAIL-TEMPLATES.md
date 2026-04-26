@@ -6,7 +6,13 @@
 
 ## Overview
 
-This document contains 5 targeted email templates for Cloud Health Office commercial launch outreach. Each template is designed for a specific persona and use case, with personalization fields marked in [brackets].
+This document contains 5 targeted email templates for Cloud Health Office (CHO) commercial launch outreach. Each template is designed for a specific persona and use case, with personalization fields marked in [brackets].
+
+---
+
+## Product Line Context
+
+Most of these templates target Layer 1 — Compliance Accelerator and Layer 2 — Progressive Modernization conversations within CHO's Platform Engagement product line. Pricing in CHO outreach is per member per month (PMPM), pilot-scoped, with founding-partner terms available for first pilots in each layer; reps should not quote list-price tiers in cold email. Outreach to developers and integrators (Public Tools and Transactional Services audiences) follows a different, self-serve motion and is not covered by these templates. For the canonical positioning across all four product lines (Public Tools, Transactional Services, Managed Data Services, Platform Engagement), see [POSITIONING.md](../POSITIONING.md).
 
 ---
 
@@ -273,13 +279,15 @@ Pay through your existing Azure commitment. No separate vendor contracts, no new
 • Payer-to-Payer API ✓
 • Da Vinci IG Conformance ✓
 
-**Pricing (Start Small, Scale as Needed):**
+**Pricing (Start Where You Are, Expand as Needed):**
 
-| Tier | Monthly | Best For |
-|------|---------|----------|
-| Starter | Competitive pricing | Evaluation, single LOB |
-| Professional | Competitive pricing | Production, mid-market |
-| Enterprise | Competitive pricing | High volume, dedicated |
+| Engagement | Pricing | Best For |
+|------------|---------|----------|
+| Layer 1 — Compliance Accelerator | PMPM, pilot-scoped | CMS-0057-F surface alongside an existing core admin |
+| Layer 2 — Progressive Modernization | PMPM per domain | Strangler-fig path from a legacy core, one domain at a time (appeals first) |
+| Layer 3 — Full CAPS Platform | PMPM, full platform | New entrants and established payers finishing modernization |
+
+*PMPM ranges and pilot terms are negotiated per engagement.*
 
 **Try it now:**
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/...)
