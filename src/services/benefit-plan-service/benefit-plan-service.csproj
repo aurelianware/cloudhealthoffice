@@ -7,6 +7,25 @@
     <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
+  <!--
+    The Web SDK glob picks up every .cs file under the project root. The
+    sibling BenefitPlanService.Tests project lives in a subdirectory and
+    has its own SDK + test packages; excluding it here keeps the service
+    build (and the Dockerfile build that scopes to this csproj) from
+    pulling test sources into the service binary.
+  -->
+  <ItemGroup>
+    <Compile Remove="BenefitPlanService.Tests/**" />
+    <Content Remove="BenefitPlanService.Tests/**" />
+    <EmbeddedResource Remove="BenefitPlanService.Tests/**" />
+    <None Remove="BenefitPlanService.Tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets the sibling test project reach internal types like PlanVersionId. -->
+    <InternalsVisibleTo Include="BenefitPlanService.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.58.0" />

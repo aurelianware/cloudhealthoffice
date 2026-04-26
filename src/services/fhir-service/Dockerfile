@@ -5,6 +5,7 @@ WORKDIR /repo
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/fhir-service/fhir-service.csproj src/services/fhir-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.Appeals.Contracts/CloudHealthOffice.Appeals.Contracts.csproj src/services/shared/CloudHealthOffice.Appeals.Contracts/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/CloudHealthOffice.ProviderEnrollmentService.csproj src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/CloudHealthOffice.PriorAuthRuleEngine.csproj src/engines/CloudHealthOffice.PriorAuthRuleEngine/
 RUN dotnet restore src/services/fhir-service/fhir-service.csproj
@@ -12,6 +13,7 @@ RUN dotnet restore src/services/fhir-service/fhir-service.csproj
 # Copy source code and build
 COPY src/services/fhir-service/ src/services/fhir-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.Appeals.Contracts/ src/services/shared/CloudHealthOffice.Appeals.Contracts/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/
 # CHO-authored FHIR profile artifacts — embedded into fhir-service.dll at

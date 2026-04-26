@@ -86,8 +86,75 @@ public class BenefitPlan
     [JsonPropertyName("createdBy")]
     public string CreatedBy { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Backward-compatible activation flag. Semantically equivalent to
+    /// <c>VersionState == Published</c> for new code; kept on the wire so
+    /// existing consumers (eligibility-service, claims-service) don't break.
+    /// </summary>
     [JsonPropertyName("isActive")]
     public bool IsActive { get; set; } = true;
+
+    // ---------------------------------------------------------------------
+    // Version identity (5.1 — Plan Identity & Versioning)
+    //
+    // A plan is an append-only chain of immutable Published versions. Each
+    // row in this collection is one version. The chain is keyed on
+    // (TenantId, PlanId); identity within the chain is the ULID VersionId.
+    //
+    // Documents written before these fields existed hydrate with
+    // VersionState = Published, VersionNumber = 1, VersionId = Id.
+    // See docs/architecture/plan-versioning.md.
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Stable per-version identifier (ULID, Crockford base-32). Set
+    /// explicitly by the service layer when a draft or legacy v1 is
+    /// created. Empty on the wire ⇒ legacy row (predates this feature)
+    /// and is hydrated as Published v1 on read.
+    /// </summary>
+    [JsonPropertyName("versionId")]
+    public string VersionId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 1-based monotonic sequence within <c>(TenantId, PlanId)</c>.
+    /// Populated by the service when creating new versions; left at the
+    /// default for legacy documents so hydration can fix it up on read.
+    /// </summary>
+    [JsonPropertyName("versionNumber")]
+    public int VersionNumber { get; set; }
+
+    /// <summary>
+    /// Lifecycle state. Populated by the service when creating new
+    /// versions; legacy documents missing this field deserialize to the
+    /// default and are normalized to <see cref="PlanVersionState.Published"/>
+    /// during hydration.
+    /// </summary>
+    [JsonPropertyName("versionState")]
+    public PlanVersionState VersionState { get; set; }
+    // Defaults to PlanVersionState.Draft (enum value 0) for newly created instances.
+    // Legacy documents that predate this field also deserialize to this default,
+    // but are normalized to PlanVersionState.Published by Hydrate() when VersionId
+    // is empty — the two conditions (VersionId empty AND VersionState==Draft) together
+    // identify a legacy row, not a real draft.
+
+    /// <summary>
+    /// <see cref="VersionId"/> of the version this draft amends, if any.
+    /// Null for the genesis version.
+    /// </summary>
+    [JsonPropertyName("predecessorVersionId")]
+    public string? PredecessorVersionId { get; set; }
+
+    [JsonPropertyName("publishedAt")]
+    public DateTime? PublishedAt { get; set; }
+
+    [JsonPropertyName("publishedBy")]
+    public string? PublishedBy { get; set; }
+
+    [JsonPropertyName("supersededAt")]
+    public DateTime? SupersededAt { get; set; }
+
+    [JsonPropertyName("supersededByVersionId")]
+    public string? SupersededByVersionId { get; set; }
 }
 
 /// <summary>
