@@ -86,8 +86,64 @@ public class BenefitPlan
     [JsonPropertyName("createdBy")]
     public string CreatedBy { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Backward-compatible activation flag. Semantically equivalent to
+    /// <c>VersionState == Published</c> for new code; kept on the wire so
+    /// existing consumers (eligibility-service, claims-service) don't break.
+    /// </summary>
     [JsonPropertyName("isActive")]
     public bool IsActive { get; set; } = true;
+
+    // ---------------------------------------------------------------------
+    // Version identity (5.1 — Plan Identity & Versioning)
+    //
+    // A plan is an append-only chain of immutable Published versions. Each
+    // row in this collection is one version. The chain is keyed on
+    // (TenantId, PlanId); identity within the chain is the ULID VersionId.
+    //
+    // Documents written before these fields existed hydrate with
+    // VersionState = Published, VersionNumber = 1, VersionId = Id.
+    // See docs/architecture/plan-versioning.md.
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Stable per-version identifier (ULID, Crockford base-32). Generated
+    /// when a draft is created and never reused.
+    /// </summary>
+    [JsonPropertyName("versionId")]
+    public string VersionId { get; set; } = PlanVersionId.NewId();
+
+    /// <summary>
+    /// 1-based monotonic sequence within <c>(TenantId, PlanId)</c>.
+    /// </summary>
+    [JsonPropertyName("versionNumber")]
+    public int VersionNumber { get; set; } = 1;
+
+    /// <summary>
+    /// Lifecycle state. Default for new objects is <see cref="PlanVersionState.Draft"/>;
+    /// legacy documents missing this field are hydrated as <see cref="PlanVersionState.Published"/>.
+    /// </summary>
+    [JsonPropertyName("versionState")]
+    public PlanVersionState VersionState { get; set; } = PlanVersionState.Draft;
+
+    /// <summary>
+    /// <see cref="VersionId"/> of the version this draft amends, if any.
+    /// Null for the genesis version.
+    /// </summary>
+    [JsonPropertyName("predecessorVersionId")]
+    public string? PredecessorVersionId { get; set; }
+
+    [JsonPropertyName("publishedAt")]
+    public DateTime? PublishedAt { get; set; }
+
+    [JsonPropertyName("publishedBy")]
+    public string? PublishedBy { get; set; }
+
+    [JsonPropertyName("supersededAt")]
+    public DateTime? SupersededAt { get; set; }
+
+    [JsonPropertyName("supersededByVersionId")]
+    public string? SupersededByVersionId { get; set; }
 }
 
 /// <summary>

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
+using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using MongoDB.Driver;
 
@@ -88,12 +89,15 @@ public class BenefitPlansController : ControllerBase
     }
 
     /// <summary>
-    /// Update an existing benefit plan
+    /// Update an existing benefit plan. Returns 409 Conflict when the
+    /// target version is Published or Superseded — clients must create
+    /// an amendment via <c>POST /api/v1/plans/{id}/amend</c> instead.
     /// </summary>
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BenefitPlan>> UpdatePlan(string id, [FromBody] BenefitPlan plan)
     {
         if (id != plan.Id)
@@ -110,13 +114,25 @@ public class BenefitPlansController : ControllerBase
             return BadRequest(new { field = ex.ParamName, message = ex.Message });
         }
 
-        var updated = await _service.UpdatePlanAsync(plan, TenantId);
-        if (updated == null)
+        try
         {
-            return NotFound(new { message = $"Benefit plan '{id}' not found" });
+            var updated = await _service.UpdatePlanAsync(plan, TenantId);
+            if (updated == null)
+            {
+                return NotFound(new { message = $"Benefit plan '{id}' not found" });
+            }
+            return Ok(updated);
         }
-
-        return Ok(updated);
+        catch (PlanVersionStateException ex)
+        {
+            return Conflict(new
+            {
+                message = ex.Message,
+                planId = ex.PlanId,
+                versionId = ex.VersionId,
+                versionState = ex.CurrentState.ToString()
+            });
+        }
     }
 
     /// <summary>
@@ -230,12 +246,164 @@ public class BenefitPlansController : ControllerBase
         return Ok(response);
     }
 
+    // -----------------------------------------------------------------
+    // Version chain endpoints (5.1 — Plan Identity & Versioning)
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Paginated, newest-first list of every version for a plan.
+    /// </summary>
+    [HttpGet("{id}/versions")]
+    [ProducesResponseType(typeof(PlanVersionPage), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PlanVersionPage>> GetVersions(
+        string id,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? continuationToken = null)
+    {
+        if (pageSize <= 0 || pageSize > 200) pageSize = 25;
+
+        var (items, next) = await _service.ListVersionsAsync(id, TenantId, pageSize, continuationToken);
+        return Ok(new PlanVersionPage { Items = items, ContinuationToken = next });
+    }
+
+    /// <summary>Get a single version by <c>VersionId</c>.</summary>
+    [HttpGet("{id}/versions/{versionId}")]
+    [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BenefitPlan>> GetVersion(string id, string versionId)
+    {
+        var version = await _service.GetVersionAsync(id, versionId, TenantId);
+        if (version == null)
+            return NotFound(new { message = $"Version '{versionId}' of plan '{id}' not found" });
+        return Ok(version);
+    }
+
+    /// <summary>Create a Draft v1 of a brand-new plan.</summary>
+    [HttpPost("drafts")]
+    [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BenefitPlan>> CreateDraft([FromBody] BenefitPlan plan)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        try { PlanDocumentValidation.ValidateDocuments(plan.Documents); }
+        catch (ArgumentException ex) { return BadRequest(new { field = ex.ParamName, message = ex.Message }); }
+
+        var draft = await _service.CreateDraftAsync(plan, TenantId, ResolveActorId());
+        return CreatedAtAction(nameof(GetVersion), new { id = draft.PlanId, versionId = draft.VersionId }, draft);
+    }
+
+    /// <summary>
+    /// Move a Draft into Published. If a current Published version exists
+    /// for the same <c>PlanId</c>, atomically supersedes it.
+    /// </summary>
+    [HttpPost("{id}/versions/{versionId}/publish")]
+    [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<BenefitPlan>> Publish(
+        string id, string versionId, [FromBody] PublishRequest? body = null)
+    {
+        try
+        {
+            var published = await _service.PublishVersionAsync(
+                id, versionId, TenantId, ResolveActorId(), body?.EffectiveDate);
+            return Ok(published);
+        }
+        catch (PlanVersionStateException ex)
+        {
+            return ex.Message.Contains("not found")
+                ? NotFound(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId })
+                : Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+        }
+    }
+
+    /// <summary>
+    /// Clone the latest Published version into a new Draft (next
+    /// <c>VersionNumber</c>, predecessor link set).
+    /// </summary>
+    [HttpPost("{id}/amend")]
+    [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BenefitPlan>> Amend(string id)
+    {
+        try
+        {
+            var draft = await _service.AmendPublishedPlanAsync(id, TenantId, ResolveActorId());
+            return CreatedAtAction(nameof(GetVersion), new { id = draft.PlanId, versionId = draft.VersionId }, draft);
+        }
+        catch (PlanVersionStateException ex)
+        {
+            return NotFound(new { message = ex.Message, planId = ex.PlanId });
+        }
+    }
+
+    /// <summary>
+    /// Standalone supersede (without a successor) is reserved for a future
+    /// release; this endpoint exists for API parity and currently returns
+    /// 409 with an explanation.
+    /// </summary>
+    [HttpPost("{id}/versions/{versionId}/supersede")]
+    [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<BenefitPlan>> Supersede(
+        string id, string versionId, [FromBody] SupersedeRequest body)
+    {
+        try
+        {
+            var result = await _service.SupersedeVersionAsync(
+                id, versionId, TenantId, ResolveActorId(), body?.Reason ?? string.Empty,
+                body?.EffectiveDate ?? DateTime.UtcNow);
+            return Ok(result);
+        }
+        catch (PlanVersionStateException ex)
+        {
+            return ex.Message.Contains("not found")
+                ? NotFound(new { message = ex.Message })
+                : Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    private string ResolveActorId()
+    {
+        var sub = HttpContext.User?.FindFirst("sub")?.Value;
+        if (!string.IsNullOrEmpty(sub)) return sub;
+        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
+            return header.ToString();
+        return "system";
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
             return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
+}
+
+/// <summary>Body for POST <c>/{id}/versions/{versionId}/publish</c>.</summary>
+public sealed class PublishRequest
+{
+    public DateTime? EffectiveDate { get; set; }
+}
+
+/// <summary>Body for POST <c>/{id}/versions/{versionId}/supersede</c>.</summary>
+public sealed class SupersedeRequest
+{
+    public string? Reason { get; set; }
+    public DateTime? EffectiveDate { get; set; }
+}
+
+/// <summary>Page envelope for <c>GET /{id}/versions</c>.</summary>
+public sealed class PlanVersionPage
+{
+    public IReadOnlyList<BenefitPlan> Items { get; set; } = Array.Empty<BenefitPlan>();
+    public string? ContinuationToken { get; set; }
 }
 
 /// <summary>

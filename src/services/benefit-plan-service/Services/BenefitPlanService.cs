@@ -17,18 +17,61 @@ public interface IBenefitPlanService
     Task<BenefitAppliedResult?> ApplyBenefitRules(string planId, string tenantId, string serviceCategory, string? cptCode, decimal chargeAmount);
     Task<bool> CheckPriorAuthRequirement(string planId, string tenantId, string serviceCategory, string? cptCode);
     Task<MemberCostSharingResult> CalculateMemberCostSharing(string planId, string tenantId, decimal allowedAmount, decimal deductibleAccumulation, decimal oopAccumulation, string serviceCategory, bool inNetwork);
+
+    // ---- Version lifecycle (5.1) -----------------------------------------
+
+    /// <summary>
+    /// Persist <paramref name="draft"/> as a brand-new genesis Draft (no
+    /// predecessor) for a new <c>PlanId</c>. Sets identity fields.
+    /// </summary>
+    Task<BenefitPlan> CreateDraftAsync(BenefitPlan draft, string tenantId, string actorId);
+
+    /// <summary>
+    /// Move a Draft into <c>Published</c>. If a current Published version
+    /// exists for the same <c>PlanId</c>, atomically supersedes it (sets
+    /// <c>SupersededAt</c>, <c>SupersededByVersionId</c>) and emits both a
+    /// <c>PlanVersionPublished</c> and a <c>PlanVersionSuperseded</c> event.
+    /// </summary>
+    Task<BenefitPlan> PublishVersionAsync(string planId, string versionId, string tenantId, string actorId, DateTime? effectiveDate = null);
+
+    /// <summary>
+    /// Clone the latest Published version of <paramref name="planId"/> into
+    /// a new Draft (next <c>VersionNumber</c>, <c>PredecessorVersionId</c>
+    /// pointing at the source). The Draft is mutable until published.
+    /// </summary>
+    Task<BenefitPlan> AmendPublishedPlanAsync(string planId, string tenantId, string actorId);
+
+    /// <summary>
+    /// Mark <paramref name="versionId"/> as Superseded. Today this is only
+    /// reachable via <see cref="PublishVersionAsync"/> (a successor must
+    /// exist); explicit termination without a successor is reserved.
+    /// </summary>
+    Task<BenefitPlan> SupersedeVersionAsync(string planId, string versionId, string tenantId, string actorId, string reason, DateTime effectiveDate);
+
+    /// <summary>Newest-first list of all versions for a plan, paginated.</summary>
+    Task<(IReadOnlyList<BenefitPlan> Items, string? ContinuationToken)> ListVersionsAsync(
+        string planId, string tenantId, int pageSize, string? continuationToken);
+
+    /// <summary>Look up a single version.</summary>
+    Task<BenefitPlan?> GetVersionAsync(string planId, string versionId, string tenantId);
 }
 
 public class BenefitPlanServiceImpl : IBenefitPlanService
 {
     private readonly IBenefitPlanRepository _repository;
+    private readonly IPlanVersionTransitionRepository _transitions;
+    private readonly IPlanVersionEventPublisher _events;
     private readonly ILogger<BenefitPlanServiceImpl> _logger;
 
     public BenefitPlanServiceImpl(
         IBenefitPlanRepository repository,
+        IPlanVersionTransitionRepository transitions,
+        IPlanVersionEventPublisher events,
         ILogger<BenefitPlanServiceImpl> logger)
     {
         _repository = repository;
+        _transitions = transitions;
+        _events = events;
         _logger = logger;
     }
 
@@ -63,6 +106,16 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         plan.TenantId = tenantId;
         plan.CreatedAt = DateTime.UtcNow;
         plan.UpdatedAt = DateTime.UtcNow;
+
+        // Legacy create-and-go semantics: plans created via the original
+        // POST endpoint are published as v1 immediately. Callers that want
+        // an explicit draft → publish workflow use CreateDraftAsync /
+        // PublishVersionAsync instead.
+        if (string.IsNullOrEmpty(plan.VersionId)) plan.VersionId = PlanVersionId.NewId();
+        if (plan.VersionNumber <= 0) plan.VersionNumber = 1;
+        plan.VersionState = PlanVersionState.Published;
+        plan.PublishedAt = DateTime.UtcNow;
+
         return await _repository.CreateAsync(plan);
     }
 
@@ -76,6 +129,8 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
         plan.TenantId = tenantId;
         plan.UpdatedAt = DateTime.UtcNow;
+        // Repository raises PlanVersionStateException for Published/Superseded;
+        // controller maps to 409.
         return await _repository.UpdateAsync(plan);
     }
 
@@ -259,6 +314,219 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
         return result;
     }
+
+    public async Task<BenefitPlan> CreateDraftAsync(BenefitPlan draft, string tenantId, string actorId)
+    {
+        draft.TenantId = tenantId;
+        draft.CreatedBy = string.IsNullOrEmpty(draft.CreatedBy) ? actorId : draft.CreatedBy;
+        draft.CreatedAt = DateTime.UtcNow;
+        draft.UpdatedAt = DateTime.UtcNow;
+        draft.VersionId = PlanVersionId.NewId();
+        draft.VersionNumber = 1;
+        draft.VersionState = PlanVersionState.Draft;
+        draft.PredecessorVersionId = null;
+        draft.PublishedAt = null;
+        draft.PublishedBy = null;
+        draft.SupersededAt = null;
+        draft.SupersededByVersionId = null;
+        // Legacy IsActive semantics ⇒ Drafts are not active.
+        draft.IsActive = false;
+
+        return await _repository.CreateDraftAsync(draft);
+    }
+
+    public async Task<BenefitPlan> PublishVersionAsync(string planId, string versionId, string tenantId, string actorId, DateTime? effectiveDate = null)
+    {
+        var draft = await _repository.GetVersionAsync(planId, versionId, tenantId)
+            ?? throw new PlanVersionStateException(planId, versionId, PlanVersionState.Draft,
+                $"Version {versionId} not found");
+
+        if (draft.VersionState != PlanVersionState.Draft)
+        {
+            throw new PlanVersionStateException(planId, versionId, draft.VersionState,
+                $"Version {versionId} is {draft.VersionState}; only Draft versions can be published.");
+        }
+
+        var current = await _repository.GetLatestPublishedAsync(planId, tenantId, DateTime.UtcNow);
+
+        var now = DateTime.UtcNow;
+        draft.VersionState = PlanVersionState.Published;
+        draft.PublishedAt = now;
+        draft.PublishedBy = actorId;
+        draft.IsActive = true;
+        if (effectiveDate.HasValue) draft.EffectiveDate = effectiveDate.Value;
+
+        BenefitPlan? predecessor = null;
+        if (current != null && current.VersionId != draft.VersionId)
+        {
+            predecessor = current;
+            predecessor.VersionState = PlanVersionState.Superseded;
+            predecessor.SupersededAt = now;
+            predecessor.SupersededByVersionId = draft.VersionId;
+            predecessor.IsActive = false;
+        }
+
+        await _repository.PublishAndSupersedeAsync(draft, predecessor);
+
+        await _transitions.AppendAsync(new PlanVersionTransition
+        {
+            TenantId = tenantId,
+            PlanId = planId,
+            FromVersionId = predecessor?.VersionId,
+            ToVersionId = draft.VersionId,
+            TransitionType = predecessor == null ? PlanVersionTransitionType.Publish : PlanVersionTransitionType.Supersede,
+            EffectiveDate = draft.EffectiveDate,
+            OccurredAt = now,
+            ActorId = actorId
+        });
+
+        await _events.PublishVersionPublishedAsync(draft, actorId, correlationId: null);
+        if (predecessor != null)
+        {
+            await _events.PublishVersionSupersededAsync(predecessor, draft, reason: null, actorId, correlationId: null);
+        }
+
+        return draft;
+    }
+
+    public async Task<BenefitPlan> AmendPublishedPlanAsync(string planId, string tenantId, string actorId)
+    {
+        var current = await _repository.GetLatestPublishedAsync(planId, tenantId, DateTime.UtcNow)
+            ?? throw new PlanVersionStateException(planId, string.Empty, PlanVersionState.Published,
+                $"No Published version of plan {planId} exists to amend");
+
+        var draft = Clone(current);
+        draft.Id = Guid.NewGuid().ToString();
+        draft.VersionId = PlanVersionId.NewId();
+        draft.VersionNumber = current.VersionNumber + 1;
+        draft.VersionState = PlanVersionState.Draft;
+        draft.PredecessorVersionId = current.VersionId;
+        draft.PublishedAt = null;
+        draft.PublishedBy = null;
+        draft.SupersededAt = null;
+        draft.SupersededByVersionId = null;
+        draft.IsActive = false;
+        draft.CreatedBy = actorId;
+        draft.CreatedAt = DateTime.UtcNow;
+        draft.UpdatedAt = DateTime.UtcNow;
+
+        var stored = await _repository.CreateDraftAsync(draft);
+
+        await _transitions.AppendAsync(new PlanVersionTransition
+        {
+            TenantId = tenantId,
+            PlanId = planId,
+            FromVersionId = current.VersionId,
+            ToVersionId = stored.VersionId,
+            TransitionType = PlanVersionTransitionType.Amend,
+            OccurredAt = DateTime.UtcNow,
+            ActorId = actorId
+        });
+
+        return stored;
+    }
+
+    public async Task<BenefitPlan> SupersedeVersionAsync(string planId, string versionId, string tenantId, string actorId, string reason, DateTime effectiveDate)
+    {
+        var target = await _repository.GetVersionAsync(planId, versionId, tenantId)
+            ?? throw new PlanVersionStateException(planId, versionId, PlanVersionState.Published,
+                $"Version {versionId} not found");
+
+        if (target.VersionState != PlanVersionState.Published)
+        {
+            throw new PlanVersionStateException(planId, versionId, target.VersionState,
+                $"Version {versionId} is {target.VersionState}; only Published versions can be superseded.");
+        }
+
+        // Standalone supersede paths (without a successor) are reserved.
+        // Today, supersession always happens via PublishVersionAsync — this
+        // method exists so callers can request an explicit transition log
+        // without the side-effect of publishing a new version.
+        throw new InvalidOperationException(
+            "Standalone supersede (without a successor Published version) is not supported in this release. " +
+            "Create an amendment and publish it to supersede the current version.");
+    }
+
+    public Task<(IReadOnlyList<BenefitPlan> Items, string? ContinuationToken)> ListVersionsAsync(
+        string planId, string tenantId, int pageSize, string? continuationToken)
+        => _repository.ListVersionsAsync(planId, tenantId, pageSize, continuationToken);
+
+    public Task<BenefitPlan?> GetVersionAsync(string planId, string versionId, string tenantId)
+        => _repository.GetVersionAsync(planId, versionId, tenantId);
+
+    private static BenefitPlan Clone(BenefitPlan src) => new()
+    {
+        TenantId = src.TenantId,
+        PlanId = src.PlanId,
+        PlanName = src.PlanName,
+        Payer = src.Payer,
+        EffectiveDate = src.EffectiveDate,
+        TerminationDate = src.TerminationDate,
+        PlanType = src.PlanType,
+        MetalLevel = src.MetalLevel,
+        LineOfBusiness = src.LineOfBusiness,
+        Benefits = src.Benefits.Select(CloneBenefit).ToList(),
+        NetworkTiers = src.NetworkTiers.Select(CloneNetworkTier).ToList(),
+        CostSharing = CloneCostSharing(src.CostSharing),
+        Documents = src.Documents.Select(CloneDocument).ToList(),
+    };
+
+    private static Benefit CloneBenefit(Benefit b) => new()
+    {
+        ServiceCategory = b.ServiceCategory,
+        Description = b.Description,
+        CptCodes = b.CptCodes.ToList(),
+        InNetworkCopay = b.InNetworkCopay,
+        OutNetworkCopay = b.OutNetworkCopay,
+        InNetworkCoinsurance = b.InNetworkCoinsurance,
+        OutNetworkCoinsurance = b.OutNetworkCoinsurance,
+        DeductibleApplies = b.DeductibleApplies,
+        OopApplies = b.OopApplies,
+        PriorAuthRequired = b.PriorAuthRequired,
+        CopayAmount = b.CopayAmount,
+        CoinsurancePercentage = b.CoinsurancePercentage,
+        RequiresPriorAuth = b.RequiresPriorAuth,
+        VisitLimit = b.VisitLimit,
+        VisitLimitPeriod = b.VisitLimitPeriod,
+        Limitations = b.Limitations,
+        AnnualMaximum = b.AnnualMaximum,
+        LifetimeMaximum = b.LifetimeMaximum
+    };
+
+    private static NetworkTier CloneNetworkTier(NetworkTier n) => new()
+    {
+        TierName = n.TierName,
+        TierLevel = n.TierLevel,
+        ProviderNpis = n.ProviderNpis.ToList()
+    };
+
+    private static CostSharing CloneCostSharing(CostSharing c) => new()
+    {
+        IndividualDeductible = c.IndividualDeductible,
+        FamilyDeductible = c.FamilyDeductible,
+        IndividualOutOfPocketMax = c.IndividualOutOfPocketMax,
+        FamilyOutOfPocketMax = c.FamilyOutOfPocketMax,
+        InNetworkDeductible = c.InNetworkDeductible,
+        OutOfNetworkDeductible = c.OutOfNetworkDeductible,
+        InNetworkOutOfPocketMax = c.InNetworkOutOfPocketMax,
+        OutOfNetworkOutOfPocketMax = c.OutOfNetworkOutOfPocketMax,
+        OutNetworkIndividualDeductible = c.OutNetworkIndividualDeductible,
+        OutNetworkFamilyDeductible = c.OutNetworkFamilyDeductible,
+        OutNetworkIndividualOutOfPocketMax = c.OutNetworkIndividualOutOfPocketMax,
+        OutNetworkFamilyOutOfPocketMax = c.OutNetworkFamilyOutOfPocketMax
+    };
+
+    private static PlanDocumentReference CloneDocument(PlanDocumentReference d) => new()
+    {
+        DocType = d.DocType,
+        Location = d.Location,
+        ContentType = d.ContentType,
+        Size = d.Size,
+        ContentHashSha256 = d.ContentHashSha256,
+        Version = d.Version,
+        EffectiveDate = d.EffectiveDate,
+        DisplayName = d.DisplayName
+    };
 
     private static string SanitizeForLog(string? value)
     {

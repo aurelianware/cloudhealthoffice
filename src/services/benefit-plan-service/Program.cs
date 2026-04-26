@@ -38,6 +38,8 @@ if (useMongo)
           .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
     builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
+    builder.Services.AddScoped<IPlanVersionTransitionRepository, MongoPlanVersionTransitionRepository>();
+    builder.Services.AddScoped<IPlanVersionEventPublisher, MongoPlanVersionEventPublisher>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -49,6 +51,20 @@ else
     });
     builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
+    builder.Services.AddScoped<IPlanVersionTransitionRepository, CosmosPlanVersionTransitionRepository>();
+    // Even on Cosmos, plan-version-events stream lands in Mongo today
+    // (consistent with member-events pattern). Migrated to Cosmos when
+    // cross-store consistency is needed — see plan-versioning.md.
+    builder.Services.AddScoped<IPlanVersionEventPublisher>(sp =>
+    {
+        // Only register a Mongo publisher if Mongo is available; otherwise
+        // fall back to a no-op so Cosmos-only deployments don't crash.
+        var mongo = sp.GetService<IMongoDatabase>();
+        return mongo == null
+            ? new NoopPlanVersionEventPublisher(sp.GetRequiredService<ILogger<NoopPlanVersionEventPublisher>>())
+            : new MongoPlanVersionEventPublisher(mongo, sp.GetRequiredService<IConfiguration>(),
+                sp.GetRequiredService<ILogger<MongoPlanVersionEventPublisher>>());
+    });
     Console.WriteLine("Using Cosmos DB repository");
 }
 
