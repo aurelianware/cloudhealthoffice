@@ -136,10 +136,10 @@ jobs:
           # Per-filter outputs are 'true' / 'false' strings. dorny exposes
           # these alongside `changes` so callers can branch without parsing
           # the array. We use them to decide selective vs validate-all.
-          SHARED_LIBS:  ${{ steps.filter.outputs.shared-libs }}
-          ENGINES:      ${{ steps.filter.outputs.engines }}
+          SHARED_LIBS: ${{ steps.filter.outputs.shared-libs }}
+          ENGINES: ${{ steps.filter.outputs.engines }}
           BUILD_CONFIG: ${{ steps.filter.outputs.build-config }}
-          WORKFLOWS:    ${{ steps.filter.outputs.workflows }}
+          WORKFLOWS: ${{ steps.filter.outputs.workflows }}
         run: |
           set -euo pipefail
 
