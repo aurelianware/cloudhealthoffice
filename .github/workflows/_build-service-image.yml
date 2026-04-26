@@ -1,0 +1,400 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Reusable workflow: build (and optionally push) a single CHO service image.
+#
+# This file is the single source of truth for "how do CHO microservice container
+# images get built?" — both production deploys (deploy-azure-aks.yml) and PR
+# validation (post-δ3, pr-validation.yml) call into this workflow with different
+# inputs. Treat this file as a canonical reference; future maintainers will read
+# it to understand the conventions baked into CHO's CI build path.
+#
+# Two triggers are declared:
+#   * workflow_call    — the production use case; called as a job by other
+#                        workflows in this repo (δ2 wires deploy-azure-aks.yml,
+#                        δ3 wires pr-validation.yml).
+#   * workflow_dispatch — manual smoke testing from the Actions UI or `gh
+#                        workflow run`. Useful while developing this file
+#                        before any caller exists, and afterwards for one-off
+#                        builds.
+#
+# GitHub Actions requires the input schema to be declared SEPARATELY under
+# each trigger (the schemas don't inherit). Keep the two `inputs:` blocks in
+# sync — if you add or change an input, do it in BOTH places.
+#
+# Key design decisions (see PR δ1 description for full rationale):
+#
+# 1. Registry/registry_name resolution uses a 3-tier fallback in a `steps`
+#    expression, NOT in `default:`. `vars.*` is not resolvable at the
+#    `on.workflow_call.inputs.<name>.default` level — only inside `steps.*`
+#    expressions. The fallback chain is:
+#      caller-provided input → vars.ACR_LOGIN_SERVER → hardcoded literal.
+#    The hardcoded literal exists so this workflow remains functional even on
+#    callers that haven't configured the org-level GitHub variable.
+#
+# 2. `build-args: REGISTRY=<effective>` is always passed. Today's
+#    deploy-azure-aks.yml does NOT set this build-arg and works only because
+#    every CHO service Dockerfile defaults `ARG REGISTRY=<acr-url>`. That's
+#    fragile: a future Dockerfile copying the upstream MCR-default pattern
+#    would build green via docker-build.yml (which DOES set this build-arg)
+#    and fail red on main deploy. Threading it through the reusable workflow
+#    eliminates that drift class. This is the one place δ1 deliberately
+#    deviates from strict deploy-aks fidelity (see incident 71c9d37 for the
+#    real-world precedent).
+#
+# 3. cache-to writes are gated on `push: true`. PR-style builds read the
+#    GHA cache (cache-from) but don't write back. This prevents PR builds
+#    from polluting the cache namespace shared with main builds. Today's
+#    docker-build.yml writes cache on PRs; that behavior changes when δ3
+#    routes PR validation through this workflow.
+#
+# 4. Both push and non-push modes preserve the "fail loudly if ACR login
+#    didn't succeed" pattern from docker-build.yml lines 92-135. Incident
+#    71c9d37 hid a 5-day regression behind a silent MCR fallback when PR
+#    builds and main deploys exercised different registries. The reusable
+#    workflow propagates that safety check to all callers.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Build Service Image (Reusable)
+
+on:
+  # ─────────────────────────────────────────────────────────────────────────
+  # workflow_call: invoked as a job by other workflows in this repo.
+  # δ2 will wire deploy-azure-aks.yml's `build-push-services` job into this.
+  # δ3 will wire pr-validation.yml (replacing docker-build.yml) into this.
+  # ─────────────────────────────────────────────────────────────────────────
+  workflow_call:
+    inputs:
+      service:
+        description: "Service directory name under src/services/ (e.g. appeals-service, CHO.TerminologyService)."
+        type: string
+        required: true
+      build_context:
+        description: "Docker build context. Empty default resolves to ./src/services/<service>; override to '.' for services that reference shared code outside their directory (most CHO services do)."
+        type: string
+        required: false
+        default: ""
+      image_name:
+        description: "FULL image name including prefix (e.g. cloudhealthoffice-terminology-service). Empty default resolves to ${image_prefix}-${service}. When overridden, the value is used as-is — no double prefixing."
+        type: string
+        required: false
+        default: ""
+      push:
+        description: "Whether to push the built image to ACR. true = production deploy mode (OIDC + az acr login). false = build-only (uses ACR_USERNAME/ACR_PASSWORD for read-only base-image pulls)."
+        type: boolean
+        required: false
+        default: false
+      registry:
+        description: "ACR login server (e.g. choacrhy6h2vdulfru6.azurecr.io). Empty default falls back to vars.ACR_LOGIN_SERVER, then to the hardcoded production literal. See header comment item 1 for why default resolution lives in a step, not here."
+        type: string
+        required: false
+        default: ""
+      registry_name:
+        description: "ACR short name used by `az acr login` (e.g. choacrhy6h2vdulfru6). Empty default falls back to vars.ACR_NAME, then to the hardcoded production literal."
+        type: string
+        required: false
+        default: ""
+      image_prefix:
+        description: "Prefix prepended to the default image name. Used only when image_name is not overridden."
+        type: string
+        required: false
+        default: "cloudhealthoffice"
+      tag_sha:
+        description: "Whether to tag the image with sha-<commit-sha>. Useful for production deploy traceability; can be disabled for PR builds that don't need long-lived tags."
+        type: boolean
+        required: false
+        default: true
+      tag_latest:
+        description: "Whether to tag the image with :latest. PR validation may want to disable this to avoid touching the rolling :latest tag."
+        type: boolean
+        required: false
+        default: true
+    secrets:
+      # All secrets are declared optional — runtime checks below enforce
+      # presence when actually needed (push:true requires Azure OIDC; push:false
+      # requires ACR read credentials unless skipped).
+      azure_client_id:
+        required: false
+        description: "OIDC federated identity client ID. Required when push: true."
+      azure_tenant_id:
+        required: false
+        description: "Azure AD tenant ID. Required when push: true."
+      azure_subscription_id:
+        required: false
+        description: "Azure subscription ID. Required when push: true."
+      acr_username:
+        required: false
+        description: "ACR scope-mapped read-only token username (e.g. cho-ci-readonly). Required when push: false to pull mirrored .NET base images. See docs/security/SECRETS-INVENTORY.md for setup."
+      acr_password:
+        required: false
+        description: "ACR scope-mapped read-only token password. Required when push: false."
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # workflow_dispatch: manual one-off invocations from the Actions UI or
+  # `gh workflow run`. Inputs schema mirrors workflow_call exactly. Note that
+  # workflow_dispatch cannot accept a `secrets:` block — secrets used in
+  # dispatch mode are read directly from the repository's secret store via
+  # the `secrets.X || secrets.Y` fallback pattern in step expressions below.
+  # ─────────────────────────────────────────────────────────────────────────
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service directory name under src/services/ (e.g. appeals-service, CHO.TerminologyService)."
+        type: string
+        required: true
+      build_context:
+        description: "Docker build context. Empty default resolves to ./src/services/<service>; override to '.' for repo-root context."
+        type: string
+        required: false
+        default: ""
+      image_name:
+        description: "FULL image name including prefix. Empty default resolves to ${image_prefix}-${service}."
+        type: string
+        required: false
+        default: ""
+      push:
+        description: "Whether to push to ACR. true requires AZURE_* repo secrets to be configured."
+        type: boolean
+        required: false
+        default: false
+      registry:
+        description: "ACR login server. Empty default falls back to vars.ACR_LOGIN_SERVER then to hardcoded production literal."
+        type: string
+        required: false
+        default: ""
+      registry_name:
+        description: "ACR short name. Empty default falls back to vars.ACR_NAME then to hardcoded production literal."
+        type: string
+        required: false
+        default: ""
+      image_prefix:
+        description: "Prefix prepended to default image name."
+        type: string
+        required: false
+        default: "cloudhealthoffice"
+      tag_sha:
+        description: "Whether to tag the image with sha-<commit-sha>."
+        type: boolean
+        required: false
+        default: true
+      tag_latest:
+        description: "Whether to tag the image with :latest."
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  build:
+    name: Build ${{ inputs.service }}${{ (inputs.push == true || inputs.push == 'true') && ' (push)' || ' (no-push)' }}
+    runs-on: ubuntu-latest
+    env:
+      PUSH_ENABLED: ${{ inputs.push == true || inputs.push == 'true' }}
+    permissions:
+      # Read-only checkout of the repository.
+      contents: read
+      # OIDC token issuance for azure/login@v2 (only used when push: true,
+      # but the permission must be granted at the job level regardless).
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ───────────────────────────────────────────────────────────────────
+      # Resolve effective parameters from the input/var/literal fallback
+      # chain. This step exists because GitHub Actions does NOT allow
+      # `vars.*` references in `on.workflow_call.inputs.<name>.default` —
+      # the only way to express the 3-tier fallback chain is here, in a
+      # step expression evaluated at runtime.
+      #
+      # Outputs:
+      #   registry        — the final ACR login server (e.g. xxx.azurecr.io)
+      #   registry_name   — the final ACR short name (for az acr login)
+      #   image_name      — the final image name (with prefix)
+      #   build_context   — the final docker build context path
+      #   tags            — multi-line tag list ready for build-push-action
+      # ───────────────────────────────────────────────────────────────────
+      - name: Resolve effective build parameters
+        id: params
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # 3-tier fallback (see header item 1):
+          #   1. caller's input (if non-empty)
+          #   2. org/repo variable (if set)
+          #   3. hardcoded production literal (last resort)
+          REGISTRY="${{ inputs.registry || vars.ACR_LOGIN_SERVER || 'choacrhy6h2vdulfru6.azurecr.io' }}"
+          REGISTRY_NAME="${{ inputs.registry_name || vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}"
+
+          # image_name: when caller provides one, it's used VERBATIM (no
+          # double-prefixing). This matches the convention deploy-azure-aks.yml
+          # already uses for PascalCase services like CHO.TerminologyService
+          # and CloudHealthOffice.PricingApi (see deploy-azure-aks.yml lines
+          # 236-241). When NOT overridden, default to ${image_prefix}-${service}.
+          IMAGE_NAME="${{ inputs.image_name || format('{0}-{1}', inputs.image_prefix, inputs.service) }}"
+
+          # build_context: default to ./src/services/<service>. In practice
+          # every current caller overrides to '.' because all CHO .NET services
+          # share infrastructure code under src/services/shared/ that lives
+          # outside the per-service directory. The default is preserved for
+          # hypothetical self-contained services.
+          BUILD_CONTEXT="${{ inputs.build_context || format('./src/services/{0}', inputs.service) }}"
+
+          echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
+          echo "registry_name=$REGISTRY_NAME" >> "$GITHUB_OUTPUT"
+          echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "build_context=$BUILD_CONTEXT" >> "$GITHUB_OUTPUT"
+
+          # Build the multi-line tag list that docker/build-push-action expects.
+          # Each line becomes one tag the image is published under.
+          TAGS=""
+          if [ "${{ inputs.tag_latest }}" = "true" ]; then
+            TAGS="${REGISTRY}/${IMAGE_NAME}:latest"
+          fi
+          if [ "${{ inputs.tag_sha }}" = "true" ]; then
+            if [ -n "$TAGS" ]; then
+              TAGS="${TAGS}"$'\n'
+            fi
+            TAGS="${TAGS}${REGISTRY}/${IMAGE_NAME}:sha-${GITHUB_SHA}"
+          fi
+          if [ -z "$TAGS" ]; then
+            echo "::error::Both tag_sha and tag_latest are false; the build would produce an untagged image. Enable at least one."
+            exit 1
+          fi
+
+          # Multi-line outputs require the heredoc form.
+          {
+            echo "tags<<TAGS_EOF"
+            echo "$TAGS"
+            echo "TAGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Resolved registry:      $REGISTRY"
+          echo "Resolved registry_name: $REGISTRY_NAME"
+          echo "Resolved image_name:    $IMAGE_NAME"
+          echo "Resolved build_context: $BUILD_CONTEXT"
+          echo "Resolved tags:"
+          echo "$TAGS" | sed 's/^/  /'
+
+      # ───────────────────────────────────────────────────────────────────
+      # PUSH MODE: authenticate to Azure via OIDC and `az acr login`. This
+      # is the production deploy path (called by deploy-azure-aks.yml after
+      # δ2). OIDC federated identity means no long-lived credentials live in
+      # the repo — the AZURE_CLIENT_ID identifies the service principal, and
+      # GitHub mints a short-lived token bound to this workflow's subject.
+      # ───────────────────────────────────────────────────────────────────
+      - name: Azure Login (OIDC) — push mode
+        if: env.PUSH_ENABLED == 'true'
+        uses: azure/login@v2
+        with:
+          # secrets.X || secrets.Y pattern: in workflow_call mode the lowercase
+          # form is the caller-passed secret; in workflow_dispatch mode it's
+          # empty (undeclared, resolves to ""), and the uppercase form picks
+          # up the repo secret directly. This makes the same step work for
+          # both triggers without a duplicate-step kludge.
+          client-id: ${{ secrets.azure_client_id || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.azure_tenant_id || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.azure_subscription_id || secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR — push mode
+        if: env.PUSH_ENABLED == 'true'
+        run: az acr login --name "${{ steps.params.outputs.registry_name }}"
+
+      # ───────────────────────────────────────────────────────────────────
+      # NON-PUSH MODE: PR-style build that doesn't need OIDC (no push
+      # privilege required) but DOES need ACR read access to pull the
+      # mirrored .NET base images that all service Dockerfiles depend on.
+      #
+      # The 3-step pattern below is a faithful extraction of docker-build.yml
+      # lines 92-135 — preserved deliberately because incident 71c9d37 burned
+      # a 5-day silent regression when PR builds quietly fell through to MCR
+      # while main deploys hit (and missed in) ACR. The "fail loudly" step
+      # makes that whole class of PR-green/main-red regressions impossible:
+      # if the read-only ACR token isn't configured, non-push builds error
+      # out with explicit setup instructions instead of silently using the
+      # wrong registry.
+      # ───────────────────────────────────────────────────────────────────
+      - name: Check ACR read-token availability — non-push mode
+        id: check-acr-token
+        if: env.PUSH_ENABLED != 'true'
+        env:
+          # Same secrets.X || secrets.Y pattern as the OIDC step — works for
+          # both workflow_call (caller-provided) and workflow_dispatch (repo
+          # secret). The check looks at the username because (username, password)
+          # are always set as a pair; testing one is sufficient.
+          _ACR_USERNAME: ${{ secrets.acr_username || secrets.ACR_USERNAME }}
+        run: |
+          if [ -n "$_ACR_USERNAME" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to ACR for base-image pulls — non-push mode
+        id: acr-pr-login
+        if: env.PUSH_ENABLED != 'true' && steps.check-acr-token.outputs.available == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.params.outputs.registry }}
+          username: ${{ secrets.acr_username || secrets.ACR_USERNAME }}
+          password: ${{ secrets.acr_password || secrets.ACR_PASSWORD }}
+
+      - name: Fail loudly if ACR login didn't succeed — non-push mode
+        # Fires when EITHER (a) the read-only token wasn't available so the
+        # login step was skipped, OR (b) the login step ran and failed.
+        # Either way, proceeding silently would let the build pull base
+        # images from MCR — exactly what 71c9d37 did, undetected for 5 days.
+        if: env.PUSH_ENABLED != 'true' && steps.acr-pr-login.outcome != 'success'
+        env:
+          ACR_SHORT_NAME: ${{ steps.params.outputs.registry_name }}
+        run: |
+          echo "::error::Non-push base-image pulls require the ACR_USERNAME / ACR_PASSWORD repo secrets."
+          echo "::error::Without them, non-push builds and main deploys exercise different container"
+          echo "::error::registries, and main-only regressions (like 71c9d37) slip through review."
+          echo "::error::Setup (run against the subscription that owns $ACR_SHORT_NAME):"
+          echo "::error::  1. az acr scope-map create --registry $ACR_SHORT_NAME --name cho-ci-dotnet-pull --repository dotnet/sdk content/read --repository dotnet/aspnet content/read"
+          echo "::error::  2. az acr token create --registry $ACR_SHORT_NAME --name cho-ci-readonly --scope-map cho-ci-dotnet-pull"
+          echo "::error::     (this command prints credentials.passwords[0].value once — capture it)"
+          echo "::error::  3. If you missed step 2's output, rotate with: az acr token credential generate --registry $ACR_SHORT_NAME --name cho-ci-readonly --password1"
+          echo "::error::  4. Save username 'cho-ci-readonly' as repo secret ACR_USERNAME"
+          echo "::error::  5. Save password1 value as repo secret ACR_PASSWORD"
+          echo "::error::See docs/security/SECRETS-INVENTORY.md for the rationale."
+          exit 1
+
+      # ───────────────────────────────────────────────────────────────────
+      # Buildx + the actual build. Both modes (push:true, push:false) share
+      # this final stage; the only differences are the `push` parameter and
+      # the cache-to gating.
+      # ───────────────────────────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and ${{ env.PUSH_ENABLED == 'true' && 'push' || 'check' }} ${{ inputs.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.params.outputs.build_context }}
+          # The Dockerfile ALWAYS lives at src/services/<service>/Dockerfile,
+          # even when build_context points to repo root. This is a CHO
+          # convention — the Dockerfile and the service code live together;
+          # the context just controls how much of the tree the build sees.
+          file: ./src/services/${{ inputs.service }}/Dockerfile
+          push: ${{ inputs.push }}
+          tags: ${{ steps.params.outputs.tags }}
+          # Pass REGISTRY as a build-arg so service Dockerfiles' `FROM
+          # ${REGISTRY}/dotnet/...` lines resolve to the ACR mirror that
+          # the deploy workflow's ensure-base-images job pre-populates.
+          # See header item 2 — this is intentionally stricter than today's
+          # deploy-azure-aks.yml (which relies on per-Dockerfile ARG
+          # defaults). Setting it here means a future Dockerfile that forgot
+          # to default ARG REGISTRY can't silently fall through to MCR.
+          build-args: |
+            REGISTRY=${{ steps.params.outputs.registry }}
+          # cache-from is always read-only — both push and non-push builds
+          # benefit from warm cache.
+          cache-from: type=gha
+          # cache-to (write) is gated on push: true. Non-push builds skip
+          # cache writes to avoid polluting the cache namespace shared with
+          # main builds. See header item 3.
+          cache-to: ${{ env.PUSH_ENABLED == 'true' && 'type=gha,mode=max' || '' }}
+          # All CHO services target linux/amd64. Multi-arch is not in scope.
+          platforms: linux/amd64
