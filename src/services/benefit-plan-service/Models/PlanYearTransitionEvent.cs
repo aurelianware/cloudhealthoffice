@@ -51,9 +51,12 @@ public class PlanYearTransitionEvent
     /// Deterministic idempotency key:
     /// <c>{transitionType}:{tenantId}:{planId}:{planYearEnd:yyyyMMdd}</c>.
     /// Re-running the scheduler will not insert a duplicate row.
+    /// Sized at 256 to accommodate the full deterministic format using
+    /// the model's allowed <see cref="TenantId"/> and <see cref="PlanId"/>
+    /// lengths (each up to 100 chars).
     /// </summary>
     [Required]
-    [StringLength(160)]
+    [StringLength(256)]
     public string EventId { get; set; } = string.Empty;
 
     [Required]

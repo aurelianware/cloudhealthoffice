@@ -185,8 +185,13 @@ public sealed class PlanYearScheduler : BackgroundService
         var publisher = scope.ServiceProvider.GetRequiredService<IPlanYearTransitionPublisher>();
 
         var now = _clock.GetUtcNow().UtcDateTime;
-        var approaching = 0;
-        var transitions = 0;
+        // The scheduler only counts *attempts*. The publisher's
+        // idempotency contract means a publish call can be a no-op
+        // (returns an existing row); distinguishing that here would
+        // require extending the publisher contract, so we name the
+        // counters honestly instead.
+        var approachingAttempted = 0;
+        var transitionsAttempted = 0;
         var inspected = 0;
 
         await foreach (var plan in source.EnumeratePlansAsync(ct))
@@ -213,7 +218,7 @@ public sealed class PlanYearScheduler : BackgroundService
             {
                 await publisher.PublishTransitionAsync(plan, previousEnd, currentStart,
                     actorId: "scheduler", correlationId: null, ct);
-                transitions++;
+                transitionsAttempted++;
             }
 
             // Approaching: within ApproachingDays of the CURRENT
@@ -226,16 +231,21 @@ public sealed class PlanYearScheduler : BackgroundService
                 {
                     await publisher.PublishApproachingAsync(plan, currentEnd, nextStart,
                         actorId: "scheduler", correlationId: null, ct);
-                    approaching++;
+                    approachingAttempted++;
                 }
             }
         }
 
         _logger.LogInformation(
-            "PlanYearScheduler sweep complete: inspected={Inspected} approaching={Approaching} transitions={Transitions}",
-            inspected, approaching, transitions);
-        return new SweepResult(inspected, approaching, transitions);
+            "PlanYearScheduler sweep complete: inspected={Inspected} approachingAttempted={ApproachingAttempted} transitionsAttempted={TransitionsAttempted}",
+            inspected, approachingAttempted, transitionsAttempted);
+        return new SweepResult(inspected, approachingAttempted, transitionsAttempted);
     }
 
-    public readonly record struct SweepResult(int Inspected, int ApproachingEmitted, int TransitionsEmitted);
+    /// <summary>
+    /// Counters describe scheduler-side publish *attempts*, not
+    /// publisher-side inserts. The publisher dedups idempotently, so a
+    /// no-op replay still increments these. Naming reflects that.
+    /// </summary>
+    public readonly record struct SweepResult(int Inspected, int ApproachingAttempted, int TransitionsAttempted);
 }

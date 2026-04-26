@@ -69,37 +69,49 @@ public class PlanYearDefinition
 
     /// <summary>
     /// Computes the plan-year window containing <paramref name="asOf"/>.
-    /// Returns inclusive start and end dates; for calendar / contract /
-    /// fiscal types the window is exactly one year; for anniversary
-    /// plans the window rolls forward from <see cref="PlanYearStart"/>.
+    /// Returns inclusive start and end dates.
+    ///
+    /// <para>
+    /// For calendar plans the window snaps to Jan 1 – Dec 31 of
+    /// <paramref name="asOf"/>'s year. For contract / fiscal /
+    /// anniversary plans both <see cref="PlanYearStart"/> and
+    /// <see cref="PlanYearEnd"/> roll forward (or backward) in
+    /// 1-year hops until the window contains <paramref name="asOf"/>.
+    /// Honoring the persisted end keeps day-of-year boundaries
+    /// authoritative — leap years and explicit terminus dates survive
+    /// the rollover without drift.
+    /// </para>
     /// </summary>
     public (DateTime Start, DateTime End) ComputeWindow(DateTime asOf)
     {
-        var start = PlanYearStart.Date;
         if (PlanYearType == PlanYearType.CalendarYear)
         {
-            // Snap to Jan 1 of asOf's year, regardless of the persisted
-            // PlanYearStart's year — calendar plans always reset Jan 1.
-            start = new DateTime(asOf.Year, 1, 1);
-            return (start, start.AddYears(1).AddDays(-1));
+            // Calendar plans always reset Jan 1, regardless of the
+            // persisted anchor's year.
+            var calStart = new DateTime(asOf.Year, 1, 1);
+            return (calStart, calStart.AddYears(1).AddDays(-1));
         }
 
-        // Contract / Fiscal / Anniversary: roll PlanYearStart forward in
-        // 1-year hops until the window contains asOf. Caps the loop at
+        // Contract / Fiscal / Anniversary: roll the persisted
+        // (start, end) pair forward together so the persisted end's
+        // day-of-year is preserved across rollovers. Caps the loop at
         // 200 iterations to defend against pathological inputs.
-        var end = start.AddYears(1).AddDays(-1);
+        var start = PlanYearStart.Date;
+        var end = PlanYearEnd.Date;
+        // Defensive: if end was never set or is malformed, derive the
+        // canonical 1-year-minus-a-day window from start.
+        if (end < start) end = start.AddYears(1).AddDays(-1);
+
         var safety = 0;
         while (asOf > end && safety++ < 200)
         {
             start = start.AddYears(1);
-            end = start.AddYears(1).AddDays(-1);
+            end = end.AddYears(1);
         }
-        // Roll backward when asOf precedes the persisted anchor (rare —
-        // happens only when the scheduler runs against an old snapshot).
         while (asOf < start && safety++ < 200)
         {
             start = start.AddYears(-1);
-            end = start.AddYears(1).AddDays(-1);
+            end = end.AddYears(-1);
         }
         return (start, end);
     }

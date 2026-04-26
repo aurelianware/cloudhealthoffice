@@ -58,8 +58,8 @@ public class PlanYearSchedulerTests
 
         var result = await scheduler.SweepOnceAsync(CancellationToken.None);
 
-        result.ApproachingEmitted.Should().Be(1);
-        result.TransitionsEmitted.Should().Be(0);
+        result.ApproachingAttempted.Should().Be(1);
+        result.TransitionsAttempted.Should().Be(0);
         pub.Events.Should().HaveCount(1);
         pub.Events[0].TransitionType.Should().Be(PlanYearTransitionType.ApproachingTransition);
         pub.Events[0].FromPlanYearEnd.Should().Be(new DateTime(2026, 12, 31));
@@ -87,8 +87,8 @@ public class PlanYearSchedulerTests
 
         var result = await scheduler.SweepOnceAsync(CancellationToken.None);
 
-        result.TransitionsEmitted.Should().Be(1);
-        result.ApproachingEmitted.Should().Be(0);
+        result.TransitionsAttempted.Should().Be(1);
+        result.ApproachingAttempted.Should().Be(0);
         pub.Events.Should().ContainSingle(e => e.TransitionType == PlanYearTransitionType.Transition);
     }
 
@@ -111,8 +111,8 @@ public class PlanYearSchedulerTests
 
         var result = await scheduler.SweepOnceAsync(CancellationToken.None);
 
-        result.TransitionsEmitted.Should().Be(0);
-        result.ApproachingEmitted.Should().Be(0);
+        result.TransitionsAttempted.Should().Be(0);
+        result.ApproachingAttempted.Should().Be(0);
         pub.Events.Should().BeEmpty();
     }
 
@@ -158,8 +158,8 @@ public class PlanYearSchedulerTests
         var result = await scheduler.SweepOnceAsync(CancellationToken.None);
 
         result.Inspected.Should().Be(1);
-        result.ApproachingEmitted.Should().Be(0);
-        result.TransitionsEmitted.Should().Be(0);
+        result.ApproachingAttempted.Should().Be(0);
+        result.TransitionsAttempted.Should().Be(0);
         pub.Events.Should().BeEmpty();
     }
 
@@ -168,9 +168,8 @@ public class PlanYearSchedulerTests
     [InlineData(PlanYearType.ContractYear, "2024-04-01", "2025-03-31", "2026-03-20")]
     [InlineData(PlanYearType.FiscalYear, "2023-10-01", "2024-09-30", "2026-09-15")]
     [InlineData(PlanYearType.EnrollmentAnniversary, "2024-08-12", "2025-08-11", "2026-07-25")]
-    public async Task Sweep_handles_each_plan_year_type(string planYearType, string anchorStart, string anchorEnd, string asOf)
+    public async Task Sweep_handles_each_plan_year_type(PlanYearType planYearType, string anchorStart, string anchorEnd, string asOf)
     {
-        var type = Enum.Parse<PlanYearType>(planYearType);
         var now = DateTime.SpecifyKind(DateTime.Parse(asOf), DateTimeKind.Utc);
         var (scheduler, pub, src) = BuildScheduler(now);
 
@@ -178,12 +177,12 @@ public class PlanYearSchedulerTests
         {
             PlanYearStart = DateTime.Parse(anchorStart),
             PlanYearEnd = DateTime.Parse(anchorEnd),
-            PlanYearType = type
-        }, planId: $"plan-{type}"));
+            PlanYearType = planYearType
+        }, planId: $"plan-{planYearType}"));
 
         var result = await scheduler.SweepOnceAsync(CancellationToken.None);
 
-        result.ApproachingEmitted.Should().Be(1, $"asOf {asOf} sits inside the 30-day approach window for {type}");
+        result.ApproachingAttempted.Should().Be(1, $"asOf {asOf} sits inside the 30-day approach window for {planYearType}");
         pub.Events.Should().ContainSingle();
     }
 
