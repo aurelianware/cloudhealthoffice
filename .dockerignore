@@ -12,6 +12,11 @@ node_modules
 
 # Documentation and non-build assets
 docs/
+# fhir-service embeds the FHIR profile artifacts at compile time
+# (EmbeddedResource glob in fhir-service.csproj), so this subtree must
+# survive the docs/ exclusion above.
+!docs/fhir/
+!docs/fhir/**
 infra/
 
 # Test result files
