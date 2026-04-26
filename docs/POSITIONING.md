@@ -289,7 +289,7 @@ We generate a stratified synthetic corpus of 1,000,000 healthcare claims — pro
 - `src/CloudHealthOffice.BenchmarkClaimGenerator/` — full .NET 8 library for parallel corpus generation.
 - `/docs/million-claim-challenge` — public landing page at cloudhealthoffice.com describing the benchmark.
 - Reference data coverage across procedure codes, diagnosis codes, dental codes, taxonomy codes, modifier sets, revenue codes, network tiers, and benefit plan templates.
-- Dedicated Cosmos DB seeder for running the corpus against production-shape infrastructure.
+- Dedicated Cosmos DB seeder scaffold (`CosmosDbSeeder`) for running the corpus against production-shape infrastructure — provides document-shape and adapter wiring; actual Cosmos DB persistence requires a concrete implementation or separate package (the base `WriteDocumentsAsync` is a no-op stub by design).
 
 ### Strategic purpose
 
@@ -345,7 +345,7 @@ Layer 2 entry typically, with Layer 3 visible on the horizon. State-specific com
 
 ### For strategic acquirers
 
-Cloud Health Office is structured to be intelligible to sophisticated acquirers — consulting firms seeking platform assets, private equity firms evaluating healthcare-IT acquisitions, or strategic buyers consolidating the CAPS category. Every architectural decision record (`docs/adr/`), every service's documentation, every compliance claim, and every operational runbook is written to survive rigorous diligence.
+Cloud Health Office is structured to be intelligible to sophisticated acquirers — consulting firms seeking platform assets, private equity firms evaluating healthcare-IT acquisitions, or strategic buyers consolidating the CAPS category. Every architectural decision record (`docs/adr/`), every service's documentation, every compliance claim, and every operational runbook are written to survive rigorous diligence.
 
 The four-product-line portfolio is designed to present multiple value vectors: Public Tools for brand and traffic, Transactional Services for recurring SaaS metrics, Managed Data Services for high-margin recurring subscriptions, Platform Engagement for multi-year payer contracts with PMPM unit economics. Acquirers evaluating Cloud Health Office can independently assess each product line against their thesis; the pieces are architecturally separable but commercially reinforcing.
 
