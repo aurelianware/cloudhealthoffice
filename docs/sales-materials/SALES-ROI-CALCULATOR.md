@@ -63,13 +63,13 @@ This calculator is anchored to CHO's Platform Engagement product line, which is 
 
 #### Cloud Health Office Path
 
-Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for current subscription pricing. Cloud Health Office pricing is usage-based and includes all Azure infrastructure costs.
+Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for current PMPM pricing. Platform Engagement is deployed into the customer's own Azure subscription; CHO licensing is PMPM and covers the CHO platform, compliance surface, and managed updates — not the underlying Azure compute and storage, which run in the customer's environment.
 
 **Pricing Model:**
-- **SaaS Model**: Subscription includes ALL infrastructure costs (Azure compute, storage, Service Bus, Application Insights)
+- **PMPM Licensing**: Covers CHO platform access, compliance surface, and managed updates per layer
+- **Customer Azure Costs**: Azure compute, storage, Service Bus, and Application Insights run in the customer's subscription and are billed directly by Microsoft — not included in the CHO PMPM
 - **Implementation**: Self-service setup assistance available
 - **Professional Services**: Optional custom integration work (not required for standard onboarding)
-- **Customer Azure Costs**: Only for customer's own claims system/backend (not included in Cloud Health Office subscription)
 
 ---
 
@@ -357,7 +357,7 @@ For organizations seeking CMS-0057-F compliance with minimal investment and maxi
 
 1. **Start with evaluation** — non-production use is free under BSL 1.1
 2. **Contact us for production licensing** — tiered pricing scaled to your organization
-3. **All subscription tiers include Azure infrastructure costs** — no separate cloud charges
+3. **Platform Engagement deploys into your Azure subscription** — CHO PMPM covers licensing; Azure infrastructure costs are visible to your FinOps team and billed directly by Microsoft
 
 Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for commercial licensing.
 

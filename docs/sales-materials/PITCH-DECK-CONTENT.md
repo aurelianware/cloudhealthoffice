@@ -390,7 +390,7 @@ npm run generate -- interactive --output my-config.json --generate
 ## Slide 10: Business Model
 
 ### Visual Elements
-- [PLACEHOLDER: Pricing tier comparison table]
+- [PLACEHOLDER: Platform Engagement layer pricing matrix]
 - [PLACEHOLDER: Revenue stream breakdown]
 
 ### Headline

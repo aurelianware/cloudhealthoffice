@@ -270,7 +270,7 @@ Deploy → Configure → Process Transactions
 Deploy instantly from the Azure Marketplace:
 - **Free-tier evaluation**: Immediate deployment, no credit card required
 - **30-day evaluation**: Full feature trial
-- **Transactable**: Pay through Azure billing for paid Transactional Services and Layer 1 — Compliance Accelerator engagements
+- **Transactable**: Pay through Azure billing for Layer 1 — Compliance Accelerator engagements
 
 ### Next Steps
 
