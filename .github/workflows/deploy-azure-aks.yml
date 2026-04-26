@@ -137,7 +137,6 @@ jobs:
 
   build-push-services:
     name: Build & Push Services (${{ matrix.service }})
-    runs-on: ubuntu-latest
     needs: ensure-base-images
     permissions:
       id-token: write
@@ -146,6 +145,11 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
+        # All 33 .NET services need repo root as context (build_context: '.')
+        # to reach src/services/shared/CloudHealthOffice.Infrastructure/
+        # and/or src/engines/. Passed inline via the with: block below
+        # for every entry — replaces the per-entry include: overrides
+        # that previously carried the same value 33 times.
         service:
           - member-service
           - coverage-service
@@ -181,105 +185,24 @@ jobs:
           - member-document-service
           - personal-representative-service
         include:
-          # All .NET services need repo root as context to reach
-          # src/services/shared/CloudHealthOffice.Infrastructure/ and/or src/engines/.
-          - service: claims-scrubbing-service
-            build_context: '.'
-          - service: member-service
-            build_context: '.'
-          - service: coverage-service
-            build_context: '.'
-          - service: claims-service
-            build_context: '.'
-          - service: eligibility-service
-            build_context: '.'
-          - service: authorization-service
-            build_context: '.'
-          - service: attachment-service
-            build_context: '.'
-          - service: benefit-plan-service
-            build_context: '.'
-          - service: enrollment-import-service
-            build_context: '.'
-          - service: tenant-service
-            build_context: '.'
-          - service: provider-service
-            build_context: '.'
-          - service: sponsor-service
-            build_context: '.'
-          - service: trading-partner-service
-            build_context: '.'
-          - service: reference-data-service
-            build_context: '.'
-          - service: premium-billing-service
-            build_context: '.'
-          - service: appeals-service
-            build_context: '.'
-          - service: rfai-service
-            build_context: '.'
-          - service: payment-service
-            build_context: '.'
-          - service: fhir-service
-            build_context: '.'
-          - service: smart-auth-service
-            build_context: '.'
-          - service: risk-adjustment-service
-            build_context: '.'
-          - service: encounter-service
-            build_context: '.'
-          - service: provider-contracts-service
-            build_context: '.'
-          - service: ar-service
-            build_context: '.'
-          - service: claims-examiner-service
-            build_context: '.'
+          # Image name overrides for the two PascalCase services. Repo
+          # convention treats the override value verbatim — no double
+          # prefixing. All other services fall through to the reusable
+          # workflow's default ${image_prefix}-${service} naming.
           - service: CHO.TerminologyService
-            build_context: '.'
             image_name: cloudhealthoffice-terminology-service
           - service: CloudHealthOffice.PricingApi
-            build_context: '.'
             image_name: cloudhealthoffice-pricing-api
-          - service: consent-service
-            build_context: '.'
-          - service: accumulator-service
-            build_context: '.'
-          - service: capitation-service
-            build_context: '.'
-          - service: encounter-submission-service
-            build_context: '.'
-          - service: member-document-service
-            build_context: '.'
-          - service: personal-representative-service
-            build_context: '.'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Azure Login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Login to ACR
-        run: az acr login --name ${{ vars.ACR_NAME }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push ${{ matrix.service }}
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.build_context || format('./src/services/{0}', matrix.service) }}
-          file: ./src/services/${{ matrix.service }}/Dockerfile
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ matrix.image_name || format('{0}-{1}', env.IMAGE_PREFIX, matrix.service) }}:latest
-            ${{ env.REGISTRY }}/${{ matrix.image_name || format('{0}-{1}', env.IMAGE_PREFIX, matrix.service) }}:sha-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
+    uses: ./.github/workflows/_build-service-image.yml
+    with:
+      service: ${{ matrix.service }}
+      build_context: '.'
+      image_name: ${{ matrix.image_name || '' }}
+      push: true
+    secrets:
+      azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+      azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
   build-push-containers:
     name: Build & Push Containers (${{ matrix.container }})
