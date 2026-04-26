@@ -5,6 +5,19 @@ This directory contains all sales, marketing, and customer onboarding materials 
 
 ---
 
+## Product Line Context
+
+Cloud Health Office (CHO) engages customers across four product lines:
+
+- **Public Tools** — free utilities (fee schedule lookup, free-tier claims repricing) at the top of the funnel.
+- **Transactional Services** — per-call APIs (Claims Repricing API, Pricing API) on self-serve subscription.
+- **Managed Data Services** — recurring-revenue subscriptions for data that changes constantly (state Medicaid compliance, CMS fee schedule updates, provider verification, terminology).
+- **Platform Engagement** — payer-scale relationships priced per member per month (PMPM), with three layers: Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform.
+
+The materials in this directory are weighted toward Platform Engagement pilots — that's where Phase 1 acquisition effort is concentrated — but the same files support customer conversations at any product line. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md). For the indicative PMPM modeling that backs the financial projections, see [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).
+
+---
+
 ## 📁 Directory Structure
 
 ```

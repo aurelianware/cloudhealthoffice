@@ -6,6 +6,12 @@ Cloud Health Office (CHO) adjudicates claims today through a production-ready, m
 
 ---
 
+## Product Line Context
+
+This document describes the adjudication pipeline that anchors CHO's Platform Engagement product line — specifically the substrate that Layer 2 — Progressive Modernization and Layer 3 — Full CAPS Platform engagements depend on. Adjudication is what a health plan buys when they buy Platform Engagement. Public Tools, Transactional Services, and Managed Data Services exercise subsets of the same engines (the FeeScheduleEngine in particular) but do not require the orchestrated pipeline described here. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md).
+
+---
+
 ## What's Running Today
 
 ### A Real Adjudication Pipeline, Not a Prototype

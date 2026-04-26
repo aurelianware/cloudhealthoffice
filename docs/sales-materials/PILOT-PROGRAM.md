@@ -4,9 +4,15 @@
 
 ---
 
+## Product Line Context
+
+This pilot program is the on-ramp for Cloud Health Office's (CHO) Platform Engagement product line. Pilot scope and post-pilot conversion are framed against the three Platform Engagement layers — Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform — and pricing is per member per month (PMPM), pilot-scoped, with founding-partner terms available for first pilots in each layer. CHO's other three product lines (Public Tools, Transactional Services, Managed Data Services) follow self-serve or contracted-subscription motions and do not run through this pilot template. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md). For indicative PMPM framing per layer, see [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).
+
+---
+
 ## Program Overview
 
-Cloud Health Office offers a **60-day pilot program** designed to demonstrate the platform's value with zero financial risk. Pilot customers receive complete platform deployment, CMS-0057-F compliance audit, and premium support at no cost in exchange for feedback and case study participation.
+CHO offers a **60-day pilot program** designed to demonstrate the platform's value with zero financial risk. Pilot customers receive complete platform deployment, CMS-0057-F compliance audit, and premium support at no cost in exchange for feedback and case study participation.
 
 ### Why a Pilot Program?
 
@@ -221,22 +227,24 @@ We'll help you calculate:
 
 ## Post-Pilot Options
 
-### Conversion to Paid Subscription
+### Conversion to Paid Engagement
 
-| Tier | Monthly | Annual | Recommendation |
-|------|---------|--------|----------------|
-| **Starter** | [Contact sales] | [Contact sales] | Single LOB, evaluation extension |
-| **Professional** | [Contact sales] | [Contact sales] | Production deployment, mid-market |
-| **Enterprise** | [Contact sales] | [Contact sales] | High volume, dedicated instance |
+| Engagement | Pricing | Typical Path |
+|------------|---------|--------------|
+| **Layer 1 — Compliance Accelerator** | PMPM, pilot-scoped | CMS-0057-F surface alongside an existing core admin; weeks-to-deploy |
+| **Layer 2 — Progressive Modernization** | PMPM expands per domain migrated | Strangler-fig replacement starting with a single domain (typically appeals); multi-year |
+| **Layer 3 — Full CAPS Platform** | PMPM, full platform | New entrants greenfield, or established payers finishing modernization |
+
+*Specific PMPM ranges per layer are documented in [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md) and negotiated per pilot. Founding-partner terms are available for first pilots in each layer.*
 
 ### Pilot-to-Paid Incentives
 
 | Incentive | Condition | Value |
 |-----------|-----------|-------|
-| **10% Annual Discount** | Sign within 30 days of pilot end | [Contact sales] |
+| **Annual-Term Discount** | Sign within 30 days of pilot end | [Contact sales] |
 | **Extended Onboarding** | First year customers | 30 days additional support |
-| **Success Manager** | Professional+ tiers | Dedicated CSM first 90 days |
-| **Training Credits** | All tiers | $2,500 in additional training |
+| **Success Manager** | Layer 2 and Layer 3 engagements | Dedicated CSM first 90 days |
+| **Training Credits** | All engagements | $2,500 in additional training |
 
 ### If You Choose Not to Continue
 
@@ -279,8 +287,8 @@ A: Approximately 20-40 hours total over the 60-day pilot, primarily in Weeks 1-4
 **Q: Are we obligated to buy after the pilot?**
 A: No. The pilot creates no purchase obligation. We hope to earn your business based on demonstrated value.
 
-**Q: What's the typical subscription after a pilot?**
-A: Most pilot customers start with the Professional tier ([Contact sales]) for production use.
+**Q: What's the typical engagement after a pilot?**
+A: Most pilot customers convert to Layer 1 — Compliance Accelerator or Layer 2 — Progressive Modernization for production use, with PMPM pricing scoped to their member count and chosen domains. Specific terms are negotiated per pilot.
 
 **Q: Can we negotiate pricing?**
 A: Yes. Annual contracts and multi-year commitments offer additional flexibility.

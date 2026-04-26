@@ -8,6 +8,12 @@
 
 ---
 
+## Product Line Context
+
+This is a milestone summary of the Phase 1 sales-materials build-out for Cloud Health Office (CHO). The materials catalogued here support customer acquisition across all four CHO product lines — Public Tools, Transactional Services, Managed Data Services, and Platform Engagement — with the heaviest weighting toward Platform Engagement pilots, which were Phase 1's primary commercial target. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md).
+
+---
+
 ## 📦 Deliverables Summary
 
 This phase delivered complete sales, marketing, and customer onboarding materials to support securing and deploying the first paying customer.

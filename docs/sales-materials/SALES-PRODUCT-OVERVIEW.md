@@ -4,9 +4,15 @@
 
 ---
 
+## Product Line Context
+
+Cloud Health Office (CHO) engages customers across four product lines: **Public Tools** (free fee schedule lookup and free-tier claims repricing), **Transactional Services** (per-call APIs on self-serve subscription, including the Claims Repricing API and Pricing API), **Managed Data Services** (recurring subscriptions for state Medicaid compliance, CMS fee schedule updates, provider verification, and terminology), and **Platform Engagement** (payer-scale relationships priced per member per month (PMPM), with three layers — Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform). This overview is weighted toward Platform Engagement, which is what most health-plan buyers are evaluating, but customers can enter at any product line and expand over time. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md).
+
+---
+
 ## Executive Summary
 
-Cloud Health Office is a source-available, cloud-native platform for healthcare claims administration. It engages customers at three layers: a production-ready CMS-0057-F compliance surface (Layer 1), a progressive modernization path with appeals as the shipped reference domain (Layer 2), and a full cloud-native CAPS platform for new entrants and established payers finishing their modernization (Layer 3). See [POSITIONING.md](../POSITIONING.md) for the honest today-state of each layer.
+CHO is a source-available, cloud-native platform for healthcare claims administration. Within Platform Engagement, it engages customers at three layers: a production-ready CMS-0057-F compliance surface (Layer 1 — Compliance Accelerator), a progressive modernization path with appeals as the shipped reference domain (Layer 2 — Progressive Modernization), and a full cloud-native CAPS platform for new entrants and established payers finishing their modernization (Layer 3 — Full CAPS Platform). See [POSITIONING.md](../POSITIONING.md) for the honest today-state of each layer.
 
 ### The Compliance Imperative
 
@@ -140,37 +146,41 @@ Production-grade HIPAA infrastructure:
 
 ## Pricing Overview
 
-### Subscription Tiers
+### Pricing by Product Line
 
-| Tier | Monthly | Annual | Best For |
-|------|---------|--------|----------|
-| **Starter** | Contact us for pricing | Contact us for pricing | Regional payers, single LOB |
-| **Professional** | Contact us for pricing | Contact us for pricing | Mid-market, multiple payers |
-| **Enterprise** | Contact us for pricing | Contact us for pricing | Large plans, unlimited scale |
+| Product Line | Pricing Shape | Best For |
+|--------------|---------------|----------|
+| **Public Tools** | Free, no signup required | Verifying engine accuracy and SEO discovery |
+| **Transactional Services** | Per-call subscription via Stripe (free tier + paid tiers) | Developers, billing systems, small plans, TPAs, clearinghouses |
+| **Managed Data Services** | Recurring subscription (per-month or per-quarter) | Plans needing constantly-updated healthcare data feeds |
+| **Platform Engagement** | PMPM, pilot-scoped, multi-year | Health plans engaging at Layer 1, Layer 2, or Layer 3 |
 
-*Annual pricing includes a 10% discount compared to monthly billing.*
+*PMPM ranges per Platform Engagement layer are documented in [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md) and negotiated per pilot. Founding-partner terms are available for first pilots in each layer.*
 
-### What's Included
+### What's Included Across Platform Engagement
 
-**All Tiers**:
-- Complete EDI transaction processing (275, 277, 278, 837, 270/271, 276/277)
-- FHIR R4 transformation APIs
-- CMS-0057-F compliance infrastructure
-- HIPAA-compliant Azure deployment
+**Layer 1 — Compliance Accelerator**:
+- Production-ready CMS-0057-F compliance surface (Patient Access, Provider Directory, Prior Authorization, Payer-to-Payer)
+- Four CHO-authored FHIR appeal profiles plus the `$cho-appeal-submit` operation
+- SMART-on-FHIR scope enforcement at the resource-type level
+- HIPAA-compliant Azure deployment (Helm chart into existing Kubernetes cluster or AKS)
 - Standard support (email, 48-hour response)
 
-**Professional & Enterprise**:
+**Layer 2 — Progressive Modernization** (includes Layer 1):
+- Per-domain Augment / Replace operating mode (legacy stays authoritative until you flip to CHO)
+- Appeals as a complete CHO domain (shipped reference Layer 2 implementation: PRs #677, #678, #680, #681)
 - ValueAdds277 Enhanced Claim Status (60+ fields)
 - Priority support (24-hour response)
 - Custom trading partner configurations
 - Advanced analytics and dashboards
 
-**Enterprise Only**:
-- Dedicated instance (single-tenant)
-- 24/7 phone support
+**Layer 3 — Full CAPS Platform** (includes Layer 2):
+- All 36 services and 9 adjudication engines under CHO orchestration
+- End-to-end Argo-orchestrated adjudication pipeline
+- Multi-tenant operations across services, databases, secrets, and Kafka topics
 - Custom integrations and modules
 - Compliance audit support
-- SLA guarantees (99.95% uptime)
+- SLA guarantees per pilot scope
 
 ---
 
@@ -258,9 +268,9 @@ Deploy → Configure → Process Transactions
 ### Azure Marketplace
 
 Deploy instantly from the Azure Marketplace:
-- **Starter tier**: Immediate deployment
-- **Free trial**: 30-day evaluation
-- **Transactable**: Pay through Azure billing
+- **Free-tier evaluation**: Immediate deployment, no credit card required
+- **30-day evaluation**: Full feature trial
+- **Transactable**: Pay through Azure billing for paid Transactional Services and Layer 1 — Compliance Accelerator engagements
 
 ### Next Steps
 

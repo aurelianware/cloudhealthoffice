@@ -7,6 +7,12 @@
 
 ---
 
+## Product Line Context
+
+This deck presents Cloud Health Office (CHO) across all four product lines: Public Tools (free utilities), Transactional Services (per-call APIs on self-serve subscription), Managed Data Services (recurring data subscriptions), and Platform Engagement (payer-scale relationships priced per member per month (PMPM), with three layers — Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform). The deck is weighted toward Platform Engagement, since beta and pilot conversations are concentrated there, but customers can enter at any product line and expand. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md). For indicative PMPM framing per layer, see [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).
+
+---
+
 ## Slide 1: Cover
 
 ### Visual Elements
@@ -162,61 +168,59 @@ npm run generate -- interactive --output my-config.json --generate
 ## Slide 5: Pricing & Packaging (v4.0)
 
 ### Visual Elements
-- Pricing tier comparison table
+- Four-product-line packaging diagram (concentric rings: Public Tools outermost, Platform Engagement innermost)
 - Cost savings calculator visualization
 
 ### Headline
-**Transparent, Predictable Pricing - No Hidden Fees**
+**Four Product Lines. PMPM-Anchored Platform Engagement. No Hidden Fees.**
 
-### Subscription Tiers
+### How CHO is Priced
 
-| Tier | Monthly | Annual (10% off) | Payers | Transactions/Month | Best For |
-|------|---------|------------------|--------|---------------------|----------|
-| **Starter** | [Contact sales] | [Contact sales] | 1-3 | 10,000 | Small payers, pilots, evaluation |
-| **Professional** | [Contact sales] | [Contact sales] | 4-10 | 100,000 | Regional plans, production |
-| **Enterprise** | [Contact sales] | [Contact sales] | Unlimited | Unlimited | National plans, high volume |
-| **Custom** | [Contact sales] | [Contact sales] | Unlimited | Unlimited | White-label, dedicated SLA |
+| Product Line | Pricing Shape | Best For |
+|--------------|---------------|----------|
+| **Public Tools** | Free, no signup required | Verifying engine accuracy; SEO discovery; free-tier evaluation |
+| **Transactional Services** | Per-call subscription (free tier + paid tiers) via Stripe | Developers, billing systems, small plans, TPAs, clearinghouses |
+| **Managed Data Services** | Recurring subscription (per-month or per-quarter) | Plans needing constantly-updated data feeds |
+| **Platform Engagement** | PMPM, pilot-scoped, multi-year | Health plans engaging at Layer 1, Layer 2, or Layer 3 |
 
-**Beta Launch Offer**: 50% discount for 90 days
-- Starter: [Contact sales]
-- Professional: [Contact sales]
-- Enterprise: [Contact sales]
+### Platform Engagement: Three Layers
 
-### Overage Pricing
+| Layer | Pricing | Best For |
+|-------|---------|----------|
+| **Layer 1 — Compliance Accelerator** | PMPM, pilot-scoped | CMS-0057-F surface alongside an existing core admin; weeks to deploy |
+| **Layer 2 — Progressive Modernization** | PMPM expands per domain | Strangler-fig path from a legacy core, one domain at a time (appeals first) |
+| **Layer 3 — Full CAPS Platform** | PMPM, full platform | New entrants greenfield; established payers finishing modernization |
 
-**Transactions** (Starter & Professional only):
-- [Contact sales] per transaction over tier limit
+*Specific PMPM ranges per layer are documented in [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md) and negotiated per pilot. Founding-partner terms are available for first pilots in each layer.*
 
-**Storage** (all tiers):
-- 1TB included per tier
-- [Contact sales] for additional storage beyond 1TB (applies to all tiers including Enterprise)
+**Beta Launch Offer**: 50% PMPM discount for 90 days on first Platform Engagement pilots in each layer. Storage and additional Managed Data Services subscriptions priced separately.
 
-**No Transaction Overages on Enterprise**: Unlimited transactions included
+### What's Included Across Platform Engagement
 
-### What's Included (All Tiers)
-
-✅ Complete CMS-0057-F compliance  
+✅ Complete CMS-0057-F compliance surface (Layer 1 and above)  
 ✅ HIPAA Business Associate Agreement (BAA)  
-✅ X12 EDI processing (837, 270/271, 275, 276/277, 278, 835, 834)  
-✅ FHIR R4 APIs (Patient, Provider, Prior Auth, Payer-to-Payer)  
-✅ **All Azure infrastructure costs** (AKS, Argo Workflows, Service Bus, Storage, Key Vault)
+✅ X12 EDI processing (837, 270/271, 275, 276/277, 278, 835, 834) via Argo workflows  
+✅ FHIR R4 APIs (Patient, Provider, Prior Auth, Payer-to-Payer) plus four CHO-authored appeal profiles  
+✅ Customer-deployed Azure or Kubernetes infrastructure (Helm charts under `infrastructure/helm/`)
 ✅ 7-year EDI archive retention  
-✅ Application Insights monitoring  
+✅ Application Insights monitoring with PHI-scrubbing SpanProcessor  
 ✅ Managed security updates  
-✅ Email support (response SLA varies by tier)
+✅ Support response SLA scoped per pilot
 
-**No hidden costs**: Subscription includes complete infrastructure - you pay one predictable price
+**No hidden costs**: PMPM pricing covers the platform engagement; deployment target (existing AKS cluster or customer Kubernetes cluster) determines infrastructure cost separately.
 
-### Cost Comparison (Annual TCO)
+### Cost Comparison (Annual TCO, indicative)
 
 | Vendor | Year 1 Cost | 3-Year TCO | vs. Cloud Health Office |
 |--------|-------------|------------|-------------------------|
-| **Cloud Health Office (Professional)** | **$32,389** | **$97,167** | — |
+| **Cloud Health Office (mid-market Layer 1+2 modeled)** | **~$32,389** | **~$97,167** | — |
 | Custom Development | $1,560,000 | $3,180,000 | **33x more** |
 | Change Healthcare / Major Vendor | $505,000 | $1,065,000 | **11x more** |
 | Regional EDI Vendor | $180,000 | $540,000 | **6x more** |
 
-**Savings**: 83-97% cost reduction vs. alternatives
+*Cloud Health Office figures are internal modeled ARPU values for mid-market segment Platform Engagement; specific PMPM ranges per layer are pilot-scoped. See [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).*
+
+**Savings**: 83-97% cost reduction vs. alternatives at indicative modeled scale.
 
 ---
 
@@ -428,15 +432,15 @@ npm run generate -- interactive --output my-config.json --generate
 
 **Duration**: 90 days (March 1 - May 31, 2026)  
 **Slots Available**: 10 customers (first-come, first-served)  
-**Discount**: 50% off subscription fee for 90 days
+**Discount**: 50% off PMPM for 90 days
 
-| Tier | Beta Benefit |
-|------|-------------|
-| **Starter** | 50% off for 90 days |
-| **Professional** | 50% off for 90 days |
-| **Enterprise** | 50% off for 90 days |
+| Engagement | Beta Benefit |
+|------------|-------------|
+| **Layer 1 — Compliance Accelerator** | 50% off PMPM for 90 days |
+| **Layer 2 — Progressive Modernization** | 50% off PMPM for 90 days (per domain activated) |
+| **Layer 3 — Full CAPS Platform** | 50% off PMPM for 90 days; founding-partner terms available |
 
-**After Beta**: Transition to standard pricing (or negotiate custom terms for annual commitment). Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for details.
+**After Beta**: Transition to standard PMPM pricing or negotiate annual-commitment terms. Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for details.
 
 ### Beta Customer Benefits
 
@@ -581,7 +585,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 - Private endpoints for all PHI resources
 - Virtual Network (VNet) integration
 - Network Security Groups (NSGs) with least-privilege rules
-- Azure Firewall available for Enterprise tier
+- Azure Firewall available for Layer 3 — Full CAPS Platform engagements and pilot-scoped for Layer 1 / Layer 2
 
 **Access Controls**:
 - Azure AD authentication (MFA required for admins)

@@ -6,7 +6,13 @@
 
 ## Executive Summary
 
-This ROI calculator enables healthcare organizations to quantify the financial impact of adopting Cloud Health Office compared to custom development, enterprise vendors, or maintaining legacy systems. The platform delivers **measurable cost savings**, **accelerated compliance**, and **operational efficiency** that translates to millions in avoided costs and revenue protection.
+This ROI calculator enables healthcare organizations to quantify the financial impact of adopting Cloud Health Office (CHO) compared to custom development, enterprise vendors, or maintaining legacy systems. The platform delivers **measurable cost savings**, **accelerated compliance**, and **operational efficiency** that translates to millions in avoided costs and revenue protection.
+
+---
+
+## Product Line Context
+
+This calculator is anchored to CHO's Platform Engagement product line, which is priced per member per month (PMPM) across three layers: Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform. The cost-comparison and TCO analyses below assume a customer engaging at one or more of those layers; specific layer mix and PMPM ranges are negotiated per pilot. Customers also evaluating Public Tools, Transactional Services, or Managed Data Services should treat those as separate, additive commercial relationships rather than substitutes for the Platform Engagement TCO model. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md). For indicative PMPM framing per layer, see [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).
 
 ---
 

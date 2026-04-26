@@ -4,9 +4,15 @@
 
 ---
 
+## Product Line Context
+
+This is an internal financial-modeling document for Cloud Health Office (CHO). The 3-year ARR projections and unit-economics figures below are weighted across all four CHO product lines — Public Tools, Transactional Services, Managed Data Services, and Platform Engagement — with the dominant revenue contribution coming from Platform Engagement, which is priced per member per month (PMPM) across three layers: Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform. Per-customer dollar figures in this document are internal modeled ARPU; CHO's customer-facing pricing is PMPM, pilot-scoped. For the canonical positioning across all four product lines, see [POSITIONING.md](../POSITIONING.md).
+
+---
+
 ## Executive Summary
 
-This financial model outlines Cloud Health Office's path to profitability as a SaaS platform serving the healthcare payer market. With a **$1.8M Year 1 ARR target** growing to **$13.5M ARR by Year 3**, the model demonstrates a capital-efficient approach to capturing the $8B+ healthcare EDI market segment facing CMS-0057-F compliance mandates.
+This financial model outlines CHO's path to profitability as a SaaS platform serving the healthcare payer market. With a **$1.8M Year 1 ARR target** growing to **$13.5M ARR by Year 3**, the model demonstrates a capital-efficient approach to capturing the $8B+ healthcare EDI market segment facing CMS-0057-F compliance mandates.
 
 ---
 
@@ -34,20 +40,22 @@ The per-customer dollar figures in the tables below are **internal modeled ARPU 
 
 ## Revenue Model
 
-### Subscription Tiers
+### Modeled Customer Segments
 
-| Tier | Monthly | Annual | Transaction Limit | Target Segment |
-|------|---------|--------|-------------------|----------------|
-| **Starter** | [Contact sales] | [Contact sales] | 25,000/month | Regional payers, single LOB |
-| **Professional** | [Contact sales] | [Contact sales] | 150,000/month | Mid-market, multi-payer |
-| **Enterprise** | [Contact sales] | [Contact sales] | Unlimited | Large plans, custom needs |
+The 3-year financial model groups Platform Engagement customers into three internal modeling segments, sized by member count and operational complexity. **These are modeling segments, not customer-facing pricing tiers** — Cloud Health Office's customer-facing pricing is PMPM, pilot-scoped, with founding-partner terms in each Platform Engagement layer (Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform).
 
-### Tier Distribution Assumptions
+| Modeled Segment | Pricing Framework | Indicative Transaction Volume (modeled) | Customer Profile |
+|-----------------|-------------------|------------------------------------------|------------------|
+| **Small** | PMPM, pilot-scoped | ~25,000/month | Regional payers, single LOB, pilot-stage |
+| **Mid-Market** | PMPM, pilot-scoped | ~150,000/month | Regional plans, multi-payer, mid-market |
+| **Large** | PMPM, pilot-scoped | Unlimited / high-volume | Large plans, national plans, custom scope |
+
+### Segment Distribution Assumptions
 
 *Blended ARPU figures below are internal modeled projections (weighted averages of pilot-scenario pricing), used to produce 3-year ARR targets. Not list prices or customer-quotable rates.*
 
-| Year | Starter | Professional | Enterprise | Blended ARPU (modeled) |
-|------|---------|--------------|------------|------------------------|
+| Year | Small | Mid-Market | Large | Blended ARPU (modeled) |
+|------|-------|------------|-------|------------------------|
 | Year 1 | 50% | 40% | 10% | $36,000 |
 | Year 2 | 40% | 45% | 15% | $40,000 |
 | Year 3 | 30% | 50% | 20% | $45,000 |
@@ -170,13 +178,15 @@ The per-customer dollar figures in the tables below are **internal modeled ARPU 
 | **CAC** | $13,440 | $15,093 | $17,239 |
 | **Payback (months)** | **6.0** | **5.8** | **5.6** |
 
-### Gross Margin by Tier
+### Gross Margin by Modeled Segment
 
-| Tier | Revenue | COGS | Gross Margin |
-|------|---------|------|--------------|
-| **Starter** | $10,788 | $2,500 | 77% |
-| **Professional** | $32,388 | $6,500 | 80% |
-| **Enterprise** | $86,388 | $14,000 | 84% |
+*Per-segment revenue and COGS figures below are internal modeled values (weighted averages of pilot-scenario pricing) used to produce unit-economics projections. Not list prices or customer-quotable rates.*
+
+| Modeled Segment | Revenue | COGS | Gross Margin |
+|-----------------|---------|------|--------------|
+| **Small** | $10,788 | $2,500 | 77% |
+| **Mid-Market** | $32,388 | $6,500 | 80% |
+| **Large** | $86,388 | $14,000 | 84% |
 | **Blended (Year 1, modeled)** | $36,000 | $9,000 | **75%** |
 | **Blended (Year 3)** | $45,000 | $8,100 | **82%** |
 
