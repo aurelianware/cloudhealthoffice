@@ -43,17 +43,9 @@
       },
       {
         "@type": "Offer",
-        "name": "Starter",
-        "price": "49",
-        "priceCurrency": "USD",
-        "description": "10,000 claims/month"
-      },
-      {
-        "@type": "Offer",
-        "name": "Professional",
-        "price": "199",
-        "priceCurrency": "USD",
-        "description": "100,000 claims/month"
+        "name": "Paid plans",
+        "description": "Self-serve subscription tiers for higher-volume usage; usage-scaled pricing.",
+        "url": "https://cloudhealthoffice.com/pricing"
       }
     ],
     "author": {
@@ -124,7 +116,7 @@
     /* ===== TIER CARDS ===== */
     .tier-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 24px;
       max-width: 1100px;
       margin: 0 auto;
@@ -586,41 +578,16 @@
           </div>
 
           <div class="tier-card">
-            <div class="tier-name">Starter</div>
-            <div class="tier-price" style="font-size:1.5rem;">Contact Us</div>
-            <div class="tier-volume">10,000 claims/month</div>
+            <div class="tier-name">Need More Capacity?</div>
+            <div class="tier-price" style="font-size:1.5rem;">See Plans</div>
+            <div class="tier-volume">Higher-volume &amp; custom integrations</div>
             <ul class="tier-features">
-              <li>Everything in Free</li>
-              <li>Batch repricing endpoint</li>
-              <li>Webhook notifications</li>
-              <li>Email support</li>
+              <li>Self-serve subscription tiers above the free tier</li>
+              <li>Usage-scaled pricing for higher claim volumes</li>
+              <li>Custom fee schedules &amp; priority routing</li>
+              <li>Priority support and SLA options</li>
             </ul>
-            <a href="#signup" class="tier-cta tier-cta-secondary">Get Started</a>
-          </div>
-
-          <div class="tier-card featured">
-            <div class="tier-name">Professional</div>
-            <div class="tier-price" style="font-size:1.5rem;">Contact Us</div>
-            <div class="tier-volume">100,000 claims/month</div>
-            <ul class="tier-features">
-              <li>Everything in Starter</li>
-              <li>Custom fee schedules</li>
-              <li>Priority API routing</li>
-              <li>Priority support (SLA)</li>
-            </ul>
-            <a href="#signup" class="tier-cta tier-cta-primary">Get Started</a>
-          </div>
-
-          <div class="tier-card">
-            <div class="tier-name">Enterprise</div>
-            <div class="tier-price" style="font-size:2rem;">Custom</div>
-            <div class="tier-volume">Unlimited claims</div>
-            <ul class="tier-features">
-              <li>Everything in Professional</li>
-              <li>Dedicated infrastructure</li>
-              <li>Custom integrations</li>
-              <li>Dedicated account team</li>
-            </ul>
+            <a href="/pricing" class="tier-cta tier-cta-primary">Full Pricing &rarr;</a>
             <a href="https://portal.cloudhealthoffice.com/contact-sales" class="tier-cta tier-cta-secondary">Contact Sales</a>
           </div>
         </div>
