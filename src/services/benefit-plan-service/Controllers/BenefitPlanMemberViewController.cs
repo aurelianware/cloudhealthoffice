@@ -1,6 +1,6 @@
+using BenefitPlanService.Adapters;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
-using BenefitPlanService.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BenefitPlanService.Controllers;
@@ -16,14 +16,14 @@ namespace BenefitPlanService.Controllers;
 [Route("api/v1/benefit-plans")]
 public class BenefitPlanMemberViewController : ControllerBase
 {
-    private readonly IBenefitViewService _view;
+    private readonly BenefitPlanAdapterFactory _adapterFactory;
     private readonly ILogger<BenefitPlanMemberViewController> _logger;
 
     public BenefitPlanMemberViewController(
-        IBenefitViewService view,
+        BenefitPlanAdapterFactory adapterFactory,
         ILogger<BenefitPlanMemberViewController> logger)
     {
-        _view = view;
+        _adapterFactory = adapterFactory;
         _logger = logger;
     }
 
@@ -46,13 +46,21 @@ public class BenefitPlanMemberViewController : ControllerBase
             "Building member view for plan {PlanId} tenant {TenantId} as of {ServiceDate:yyyy-MM-dd}",
             SanitizeForLog(planId), SanitizeForLog(TenantId), asOf);
 
-        var view = await _view.GetMemberViewAsync(planId, TenantId, asOf);
-        if (view == null)
+        var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
+        var response = await adapter.GetMemberBenefitViewAsync(new BenefitPlanAdapterRequest
+        {
+            TenantId = TenantId,
+            PlanId = planId,
+            ServiceDate = asOf,
+            PlatformSettings = settings,
+        });
+
+        if (response.View == null)
         {
             return NotFound(new { message = $"Benefit plan '{planId}' not found" });
         }
 
-        return Ok(view);
+        return Ok(response.View.ToMemberBenefitView());
     }
 
     private static string SanitizeForLog(string? value)

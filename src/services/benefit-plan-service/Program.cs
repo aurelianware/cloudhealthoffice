@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using BenefitPlanService.Adapters;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
@@ -100,6 +101,25 @@ builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
 builder.Services.AddScoped<IBenefitViewService, BenefitViewService>();
 builder.Services.AddHttpContextAccessor();
+
+// ── Benefit Plan Adapters ─────────────────────────────────────────────────────
+// Tenant-driven routing: each tenant can be configured to read benefit plans
+// from CHO (default) or one of QNXT / Facets / HealthEdge once those adapters
+// are implemented. The factory consults tenant-service config (cached 5 min by
+// BenefitPlanTenantConfigCache) and falls back to "cho" on any failure.
+//
+// All adapters and the factory are scoped because ChoBenefitPlanAdapter wraps
+// scoped business services (IBenefitPlanService / IBenefitViewService). The
+// shared TTL cache lives on the singleton so it survives across requests.
+builder.Services.AddHttpClient(BenefitPlanTenantConfigCache.HttpClientName)
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddSingleton<BenefitPlanTenantConfigCache>();
+builder.Services.AddScoped<IBenefitPlanAdapter, ChoBenefitPlanAdapter>();
+builder.Services.AddScoped<IBenefitPlanAdapter, QnxtBenefitPlanAdapter>();
+builder.Services.AddScoped<IBenefitPlanAdapter, FacetsBenefitPlanAdapter>();
+builder.Services.AddScoped<IBenefitPlanAdapter, HealthEdgeBenefitPlanAdapter>();
+builder.Services.AddScoped<BenefitPlanAdapterFactory>();
 builder.Services.AddScoped<IBenefitEngineTenantContext, HttpContextTenantContext>();
 
 builder.Services.AddHttpClient<IClaimsAccumulatorSource, ClaimsServiceAccumulatorSource>(client =>

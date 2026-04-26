@@ -153,6 +153,9 @@ public class TenantConfiguration
     [JsonPropertyName("eligibilityPlatform")]
     public EligibilityConfig? EligibilityPlatform { get; set; }
 
+    [JsonPropertyName("benefitPlanPlatform")]
+    public BenefitPlanConfig? BenefitPlanPlatform { get; set; }
+
     [JsonPropertyName("customSettings")]
     public Dictionary<string, string> CustomSettings { get; set; } = new();
 }
@@ -183,6 +186,32 @@ public class EligibilityConfig
 {
     [JsonPropertyName("platform")]
     public string Platform { get; set; } = "cho"; // cho, availity, change-healthcare, waystar, custom
+
+    [JsonPropertyName("apiEndpoint")]
+    public string? ApiEndpoint { get; set; }
+
+    [JsonPropertyName("keyVaultSecretName")]
+    public string? KeyVaultSecretName { get; set; }
+
+    [JsonPropertyName("timeoutMs")]
+    public int TimeoutMs { get; set; } = 5000;
+
+    [JsonPropertyName("retryCount")]
+    public int RetryCount { get; set; } = 2;
+
+    [JsonPropertyName("platformSettings")]
+    public Dictionary<string, string> PlatformSettings { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for tenant's benefit-plan source-of-truth platform.
+/// Controls which adapter is used at runtime when reading plans.
+/// Mirrors <see cref="EligibilityConfig"/>.
+/// </summary>
+public class BenefitPlanConfig
+{
+    [JsonPropertyName("platform")]
+    public string Platform { get; set; } = "cho"; // cho, qnxt, facets, healthedge
 
     [JsonPropertyName("apiEndpoint")]
     public string? ApiEndpoint { get; set; }
@@ -272,6 +301,8 @@ public class CreateTenantRequest
     public ClearinghouseConfig? Clearinghouse { get; set; }
 
     public EligibilityConfig? EligibilityPlatform { get; set; }
+
+    public BenefitPlanConfig? BenefitPlanPlatform { get; set; }
 }
 
 /// <summary>
