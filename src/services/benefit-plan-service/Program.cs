@@ -43,7 +43,15 @@ if (useMongo)
     // Ensures (TenantId, PlanId, EventId) and (TenantId, PlanId, Version)
     // unique indexes exist on the events collection — the publisher's
     // retry-on-duplicate loop depends on them.
-    builder.Services.AddHostedService<BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer>();
+    // Use a factory-based singleton (mirrors MemberEventIndexInitializer in
+    // member-service) to avoid injecting the scoped IMongoDatabase into a
+    // singleton hosted service.
+    builder.Services.AddSingleton<IHostedService>(sp =>
+        new BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer(
+            sp.GetRequiredService<IMongoClient>()
+              .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<ILogger<BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer>>()));
     Console.WriteLine("Using MongoDB repository");
 }
 else

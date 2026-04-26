@@ -363,11 +363,13 @@ public class BenefitPlansController : ControllerBase
                 body?.EffectiveDate ?? DateTime.UtcNow);
             return Ok(result);
         }
+        catch (PlanVersionStateException ex) when (ex.IsNotFound)
+        {
+            return NotFound(new { message = ex.Message });
+        }
         catch (PlanVersionStateException ex)
         {
-            return ex.Message.Contains("not found")
-                ? NotFound(new { message = ex.Message })
-                : Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+            return Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
         }
         catch (InvalidOperationException ex)
         {
