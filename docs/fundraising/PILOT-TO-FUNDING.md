@@ -8,6 +8,8 @@
 
 This strategy document outlines how Cloud Health Office will leverage its pilot program to generate the traction metrics, customer references, and revenue commitments needed to successfully raise a $2M seed round. The pilot program is not just a sales tool—it's the foundation of our fundraising narrative.
 
+Cloud Health Office (CHO) operates four product lines: **Public Tools**, **Transactional Services**, **Managed Data Services**, and **Platform Engagement** (payer-scale PMPM across Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform). The pilot program described below is anchored in Platform Engagement Layer 1 — that's the line where the pilot-to-paid-deployment unit of progress lives. Recurring-revenue product lines (Transactional Services, Managed Data Services) follow a different self-serve onboarding motion and produce traction signal independently. Canonical breakdown: [POSITIONING.md](../POSITIONING.md).
+
 ---
 
 ## Strategic Framework
@@ -280,7 +282,7 @@ Based on our experience during the pilot:
 • CMS-0057-F compliance requirements met
 
 Subject to final contract negotiation, we anticipate:
-• Subscription tier: [Starter/Professional/Enterprise]
+• Engagement scope: [Layer 1 — Compliance Accelerator / Layer 2 — Progressive Modernization / Layer 3 — Full CAPS Platform]
 • Expected annual contract value: $[X]
 • Target start date: [Date]
 

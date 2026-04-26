@@ -8,6 +8,8 @@
 
 This document identifies and prioritizes strategic partners for Cloud Health Office across four categories: Microsoft/Azure, Healthcare IT Implementation, Technology Partners, and Clearinghouse/Payer Ecosystem. Partnerships are evaluated based on revenue opportunity, strategic value, and ease of engagement.
 
+Cloud Health Office (CHO) operates four product lines, and partnership fit varies by line: **Public Tools** (free fee schedule lookup, free-tier claims repricing) benefits most from clearinghouse and developer-ecosystem distribution; **Transactional Services** (per-call APIs) and **Managed Data Services** (recurring healthcare-data subscriptions) benefit most from Azure Marketplace co-sell and technology-partner integrations; **Platform Engagement** (payer-scale PMPM relationships across Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform) benefits most from healthcare IT implementation partners. Map each prospect below to the lines it most directly enables. Canonical breakdown: [POSITIONING.md](../POSITIONING.md).
+
 ### Partnership Goals
 
 | Goal | Target | Timeline |

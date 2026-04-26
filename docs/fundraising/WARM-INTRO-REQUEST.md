@@ -8,6 +8,8 @@
 
 Warm introductions are significantly more effective than cold outreach for venture capital fundraising. These templates help you request introductions from various sources in a way that makes it easy for the intermediary to say "yes" and forward your materials.
 
+When customizing the templates below, pick the product line that matches the receiving investor's thesis. Cloud Health Office (CHO) operates four: **Public Tools** (free, funnel-top), **Transactional Services** (per-call APIs, self-serve-oriented subscription; customer activation and billing surface still being finalized), **Managed Data Services** (recurring healthcare-data subscriptions), and **Platform Engagement** (payer-scale PMPM relationships across Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform). For Enterprise SaaS investors, lead with Transactional Services / Managed Data Services. For healthcare-vertical investors, lead with Platform Engagement Layer 1 — the CMS-0057-F compliance surface. Canonical breakdown: [POSITIONING.md](../POSITIONING.md).
+
 ### Key Principles
 
 1. **Make it easy**: Provide forwardable content so they don't have to write anything

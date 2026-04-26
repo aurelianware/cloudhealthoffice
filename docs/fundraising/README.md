@@ -21,6 +21,8 @@
 
 This directory contains comprehensive materials to support Cloud Health Office's venture capital fundraising and strategic partnership development. All documents are designed to enable immediate outreach to investors and partners.
 
+Cloud Health Office operates four product lines, each presenting distinct unit economics for investor evaluation: **Public Tools** (free fee schedule lookup, free-tier claims repricing — funnel-top), **Transactional Services** (per-call APIs with a self-serve subscription model in progress; self-serve signup, API key provisioning, and Stripe checkout are not yet fully end-to-end — recurring SaaS metrics as activation is completed), **Managed Data Services** (recurring subscriptions for state Medicaid compliance, CMS fee schedule updates, provider verification, and terminology — high-margin recurring), and **Platform Engagement** (payer-scale relationships priced per member per month (PMPM) across Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform — multi-year contract economics). The materials below address all four lines; specific documents may emphasize one or another based on audience. Canonical breakdown: [POSITIONING.md](../POSITIONING.md) and [FINANCIAL-MODEL.md](../sales-materials/FINANCIAL-MODEL.md).
+
 ### Raise Overview
 
 | Metric | Target |
