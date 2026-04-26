@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BenefitPlanService.Models.Benefits;
+
 namespace BenefitPlanService.Models;
 
 /// <summary>
@@ -142,6 +145,25 @@ public class AdapterBenefitPlan
     };
 }
 
+/// <summary>
+/// Vendor-neutral benefit DTO. Mirrors the discriminated-union shape of
+/// <see cref="Benefit"/> so external adapters (today CHO; tomorrow QNXT,
+/// Facets, HealthEdge) can populate the typed facets that line up with
+/// each vendor's API. <see cref="From"/> dispatches on the runtime type of
+/// the source <see cref="Benefit"/>; <see cref="ToBenefit"/> reconstructs
+/// the matching subclass.
+/// </summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "benefitType",
+    UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType,
+    IgnoreUnrecognizedTypeDiscriminators = true)]
+[JsonDerivedType(typeof(AdapterMedicalBenefit), BenefitTypeDiscriminators.Medical)]
+[JsonDerivedType(typeof(AdapterDentalBenefit), BenefitTypeDiscriminators.Dental)]
+[JsonDerivedType(typeof(AdapterPharmacyBenefit), BenefitTypeDiscriminators.Pharmacy)]
+[JsonDerivedType(typeof(AdapterBehavioralHealthBenefit), BenefitTypeDiscriminators.BehavioralHealth)]
+[JsonDerivedType(typeof(AdapterVisionBenefit), BenefitTypeDiscriminators.Vision)]
+[JsonDerivedType(typeof(AdapterDMEBenefit), BenefitTypeDiscriminators.DME)]
+[JsonDerivedType(typeof(AdapterMaternityBenefit), BenefitTypeDiscriminators.Maternity)]
+[JsonDerivedType(typeof(AdapterPreventiveBenefit), BenefitTypeDiscriminators.Preventive)]
 public class AdapterBenefit
 {
     public string Id { get; set; } = string.Empty;
@@ -163,52 +185,327 @@ public class AdapterBenefit
     public string? Limitations { get; set; }
     public decimal? AnnualMaximum { get; set; }
     public decimal? LifetimeMaximum { get; set; }
+    public List<BenefitRulePredicate>? Rules { get; set; }
 
-    public static AdapterBenefit From(Benefit b) => new()
+    /// <summary>
+    /// Dispatch on the runtime type of <paramref name="b"/> and return the
+    /// matching adapter subclass with all common-plus-typed facets copied.
+    /// A base-class <see cref="Benefit"/> (legacy / pre-5.4 shape) maps to
+    /// <see cref="AdapterMedicalBenefit"/>.
+    /// </summary>
+    public static AdapterBenefit From(Benefit b) => b switch
     {
-        Id = b.Id,
-        ServiceCategory = b.ServiceCategory,
-        Description = b.Description,
-        CptCodes = b.CptCodes.ToList(),
-        InNetworkCopay = b.InNetworkCopay,
-        OutNetworkCopay = b.OutNetworkCopay,
-        InNetworkCoinsurance = b.InNetworkCoinsurance,
-        OutNetworkCoinsurance = b.OutNetworkCoinsurance,
-        DeductibleApplies = b.DeductibleApplies,
-        OopApplies = b.OopApplies,
-        PriorAuthRequired = b.PriorAuthRequired,
-        CopayAmount = b.CopayAmount,
-        CoinsurancePercentage = b.CoinsurancePercentage,
-        RequiresPriorAuth = b.RequiresPriorAuth,
-        VisitLimit = b.VisitLimit,
-        VisitLimitPeriod = b.VisitLimitPeriod,
-        Limitations = b.Limitations,
-        AnnualMaximum = b.AnnualMaximum,
-        LifetimeMaximum = b.LifetimeMaximum,
+        DentalBenefit dental => AdapterDentalBenefit.FromTyped(dental),
+        PharmacyBenefit pharmacy => AdapterPharmacyBenefit.FromTyped(pharmacy),
+        BehavioralHealthBenefit bh => AdapterBehavioralHealthBenefit.FromTyped(bh),
+        VisionBenefit vision => AdapterVisionBenefit.FromTyped(vision),
+        DMEBenefit dme => AdapterDMEBenefit.FromTyped(dme),
+        MaternityBenefit maternity => AdapterMaternityBenefit.FromTyped(maternity),
+        PreventiveBenefit preventive => AdapterPreventiveBenefit.FromTyped(preventive),
+        MedicalBenefit medical => AdapterMedicalBenefit.FromTyped(medical),
+        _ => AdapterMedicalBenefit.FromTyped(b), // base-class Benefit ⇒ medical (legacy default)
     };
 
-    public Benefit ToBenefit() => new()
+    /// <summary>
+    /// Reconstruct the matching <see cref="Benefit"/> subclass. Override
+    /// in each concrete adapter type to populate the type-specific facets.
+    /// </summary>
+    public virtual Benefit ToBenefit()
     {
-        Id = Id,
-        ServiceCategory = ServiceCategory,
-        Description = Description,
-        CptCodes = CptCodes.ToList(),
-        InNetworkCopay = InNetworkCopay,
-        OutNetworkCopay = OutNetworkCopay,
-        InNetworkCoinsurance = InNetworkCoinsurance,
-        OutNetworkCoinsurance = OutNetworkCoinsurance,
-        DeductibleApplies = DeductibleApplies,
-        OopApplies = OopApplies,
-        PriorAuthRequired = PriorAuthRequired,
-        CopayAmount = CopayAmount,
-        CoinsurancePercentage = CoinsurancePercentage,
-        RequiresPriorAuth = RequiresPriorAuth,
-        VisitLimit = VisitLimit,
-        VisitLimitPeriod = VisitLimitPeriod,
-        Limitations = Limitations,
-        AnnualMaximum = AnnualMaximum,
-        LifetimeMaximum = LifetimeMaximum,
-    };
+        var medical = new MedicalBenefit();
+        CopyCommonTo(medical);
+        return medical;
+    }
+
+    /// <summary>Copy common facets from this DTO onto a <see cref="Benefit"/>.</summary>
+    protected void CopyCommonTo(Benefit b)
+    {
+        b.Id = Id;
+        b.ServiceCategory = ServiceCategory;
+        b.Description = Description;
+        b.CptCodes = CptCodes.ToList();
+        b.InNetworkCopay = InNetworkCopay;
+        b.OutNetworkCopay = OutNetworkCopay;
+        b.InNetworkCoinsurance = InNetworkCoinsurance;
+        b.OutNetworkCoinsurance = OutNetworkCoinsurance;
+        b.DeductibleApplies = DeductibleApplies;
+        b.OopApplies = OopApplies;
+        b.PriorAuthRequired = PriorAuthRequired;
+        b.CopayAmount = CopayAmount;
+        b.CoinsurancePercentage = CoinsurancePercentage;
+        b.RequiresPriorAuth = RequiresPriorAuth;
+        b.VisitLimit = VisitLimit;
+        b.VisitLimitPeriod = VisitLimitPeriod;
+        b.Limitations = Limitations;
+        b.AnnualMaximum = AnnualMaximum;
+        b.LifetimeMaximum = LifetimeMaximum;
+        b.Rules = Rules?.Select(r => r).ToList();
+    }
+
+    /// <summary>Copy common facets from a <see cref="Benefit"/> onto this DTO.</summary>
+    protected void CopyCommonFrom(Benefit b)
+    {
+        Id = b.Id;
+        ServiceCategory = b.ServiceCategory;
+        Description = b.Description;
+        CptCodes = b.CptCodes.ToList();
+        InNetworkCopay = b.InNetworkCopay;
+        OutNetworkCopay = b.OutNetworkCopay;
+        InNetworkCoinsurance = b.InNetworkCoinsurance;
+        OutNetworkCoinsurance = b.OutNetworkCoinsurance;
+        DeductibleApplies = b.DeductibleApplies;
+        OopApplies = b.OopApplies;
+        PriorAuthRequired = b.PriorAuthRequired;
+        CopayAmount = b.CopayAmount;
+        CoinsurancePercentage = b.CoinsurancePercentage;
+        RequiresPriorAuth = b.RequiresPriorAuth;
+        VisitLimit = b.VisitLimit;
+        VisitLimitPeriod = b.VisitLimitPeriod;
+        Limitations = b.Limitations;
+        AnnualMaximum = b.AnnualMaximum;
+        LifetimeMaximum = b.LifetimeMaximum;
+        Rules = b.Rules?.Select(r => r).ToList();
+    }
+}
+
+public sealed class AdapterMedicalBenefit : AdapterBenefit
+{
+    public static AdapterMedicalBenefit FromTyped(Benefit src)
+    {
+        var dto = new AdapterMedicalBenefit();
+        dto.CopyCommonFrom(src);
+        return dto;
+    }
+
+    public override Benefit ToBenefit()
+    {
+        var b = new MedicalBenefit();
+        CopyCommonTo(b);
+        return b;
+    }
+}
+
+public sealed class AdapterDentalBenefit : AdapterBenefit
+{
+    public bool IsOrthodontic { get; set; }
+    public bool IsImplant { get; set; }
+    public decimal? LifetimeBenefitMaximum { get; set; }
+
+    public static AdapterDentalBenefit FromTyped(DentalBenefit src)
+    {
+        var dto = new AdapterDentalBenefit
+        {
+            IsOrthodontic = src.IsOrthodontic,
+            IsImplant = src.IsImplant,
+            LifetimeBenefitMaximum = src.LifetimeBenefitMaximum,
+        };
+        dto.CopyCommonFrom(src);
+        return dto;
+    }
+
+    public override Benefit ToBenefit()
+    {
+        var b = new DentalBenefit
+        {
+            IsOrthodontic = IsOrthodontic,
+            IsImplant = IsImplant,
+            LifetimeBenefitMaximum = LifetimeBenefitMaximum,
+        };
+        CopyCommonTo(b);
+        return b;
+    }
+}
+
+public sealed class AdapterPharmacyBenefit : AdapterBenefit
+{
+    public string? FormularyTier { get; set; }
+    public bool IsSpecialtyDrug { get; set; }
+    public bool RequiresStepTherapy { get; set; }
+    public int? QuantityLimit { get; set; }
+    public int? DaysSupply { get; set; }
+
+    public static AdapterPharmacyBenefit FromTyped(PharmacyBenefit src)
+    {
+        var dto = new AdapterPharmacyBenefit
+        {
+            FormularyTier = src.FormularyTier,
+            IsSpecialtyDrug = src.IsSpecialtyDrug,
+            RequiresStepTherapy = src.RequiresStepTherapy,
+            QuantityLimit = src.QuantityLimit,
+            DaysSupply = src.DaysSupply,
+        };
+        dto.CopyCommonFrom(src);
+        return dto;
+    }
+
+    public override Benefit ToBenefit()
+    {
+        var b = new PharmacyBenefit
+        {
+            FormularyTier = FormularyTier,
+            IsSpecialtyDrug = IsSpecialtyDrug,
+            RequiresStepTherapy = RequiresStepTherapy,
+            QuantityLimit = QuantityLimit,
+            DaysSupply = DaysSupply,
+        };
+        CopyCommonTo(b);
+        return b;
+    }
+}
+
+public sealed class AdapterBehavioralHealthBenefit : AdapterBenefit
+{
+    public bool IsParityProtected { get; set; } = true;
+    public string? ParityCategory { get; set; }
+
+    public static AdapterBehavioralHealthBenefit FromTyped(BehavioralHealthBenefit src)
+    {
+        var dto = new AdapterBehavioralHealthBenefit
+        {
+            IsParityProtected = src.IsParityProtected,
+            ParityCategory = src.ParityCategory,
+        };
+        dto.CopyCommonFrom(src);
+        return dto;
+    }
+
+    public override Benefit ToBenefit()
+    {
+        var b = new BehavioralHealthBenefit
+        {
+            IsParityProtected = IsParityProtected,
+            ParityCategory = ParityCategory,
+        };
+        CopyCommonTo(b);
+        return b;
+    }
+}
+
+public sealed class AdapterVisionBenefit : AdapterBenefit
+{
+    public bool IsRoutineExam { get; set; }
+    public decimal? FrameAllowance { get; set; }
+    public string? LensCoverageType { get; set; }
+
+    public static AdapterVisionBenefit FromTyped(VisionBenefit src)
+    {
+        var dto = new AdapterVisionBenefit
+        {
+            IsRoutineExam = src.IsRoutineExam,
+            FrameAllowance = src.FrameAllowance,
+            LensCoverageType = src.LensCoverageType,
+        };
+        dto.CopyCommonFrom(src);
+        return dto;
+    }
+
+    public override Benefit ToBenefit()
+    {
+        var b = new VisionBenefit
+        {
+            IsRoutineExam = IsRoutineExam,
+            FrameAllowance = FrameAllowance,
+            LensCoverageType = LensCoverageType,
+        };
+        CopyCommonTo(b);
+        return b;
+    }
+}
+
+public sealed class AdapterDMEBenefit : AdapterBenefit
+{
+    public bool RequiresFitting { get; set; }
+    public int? FittingPeriodDays { get; set; }
+    public bool IsRental { get; set; }
+    public int? MaxRentalMonths { get; set; }
+
+    public static AdapterDMEBenefit FromTyped(DMEBenefit src)
+    {
+        var dto = new AdapterDMEBenefit
+        {
+            RequiresFitting = src.RequiresFitting,
+            FittingPeriodDays = src.FittingPeriodDays,
+            IsRental = src.IsRental,
+            MaxRentalMonths = src.MaxRentalMonths,
+        };
+        dto.CopyCommonFrom(src);
+        return dto;
+    }
+
+    public override Benefit ToBenefit()
+    {
+        var b = new DMEBenefit
+        {
+            RequiresFitting = RequiresFitting,
+            FittingPeriodDays = FittingPeriodDays,
+            IsRental = IsRental,
+            MaxRentalMonths = MaxRentalMonths,
+        };
+        CopyCommonTo(b);
+        return b;
+    }
+}
+
+public sealed class AdapterMaternityBenefit : AdapterBenefit
+{
+    public bool CoversPrenatal { get; set; }
+    public bool CoversDelivery { get; set; }
+    public bool CoversPostpartum { get; set; }
+    public bool CoversNICU { get; set; }
+
+    public static AdapterMaternityBenefit FromTyped(MaternityBenefit src)
+    {
+        var dto = new AdapterMaternityBenefit
+        {
+            CoversPrenatal = src.CoversPrenatal,
+            CoversDelivery = src.CoversDelivery,
+            CoversPostpartum = src.CoversPostpartum,
+            CoversNICU = src.CoversNICU,
+        };
+        dto.CopyCommonFrom(src);
+        return dto;
+    }
+
+    public override Benefit ToBenefit()
+    {
+        var b = new MaternityBenefit
+        {
+            CoversPrenatal = CoversPrenatal,
+            CoversDelivery = CoversDelivery,
+            CoversPostpartum = CoversPostpartum,
+            CoversNICU = CoversNICU,
+        };
+        CopyCommonTo(b);
+        return b;
+    }
+}
+
+public sealed class AdapterPreventiveBenefit : AdapterBenefit
+{
+    public bool IsAcaPreventive { get; set; }
+    public string? UspstfRecommendationGrade { get; set; }
+
+    public static AdapterPreventiveBenefit FromTyped(PreventiveBenefit src)
+    {
+        var dto = new AdapterPreventiveBenefit
+        {
+            IsAcaPreventive = src.IsAcaPreventive,
+            UspstfRecommendationGrade = src.UspstfRecommendationGrade,
+        };
+        dto.CopyCommonFrom(src);
+        return dto;
+    }
+
+    public override Benefit ToBenefit()
+    {
+        var b = new PreventiveBenefit
+        {
+            IsAcaPreventive = IsAcaPreventive,
+            UspstfRecommendationGrade = UspstfRecommendationGrade,
+        };
+        CopyCommonTo(b);
+        return b;
+    }
 }
 
 public class AdapterNetworkTier
