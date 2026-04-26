@@ -40,11 +40,15 @@
       "name": "Aurelianware, Inc.",
       "url": "https://github.com/aurelianware"
     },
-    "offers": [
-      {"@type":"Offer","name":"Starter","price":"999","priceCurrency":"USD","billingDuration":"P1M"},
-      {"@type":"Offer","name":"Professional","price":"2999","priceCurrency":"USD","billingDuration":"P1M"},
-      {"@type":"Offer","name":"Enterprise","price":"7999","priceCurrency":"USD","billingDuration":"P1M"}
-    ],
+    "offers": {
+      "@type": "Offer",
+      "priceSpecification": {
+        "@type": "PriceSpecification",
+        "priceCurrency": "USD",
+        "description": "PMPM (per member per month) pricing across Platform Engagement layers (Layer 1 Compliance Accelerator, Layer 2 Progressive Modernization, Layer 3 Full CAPS Platform). Pilot-scoped, founding-partner terms negotiated per engagement."
+      },
+      "url": "https://cloudhealthoffice.com/pricing"
+    },
     "softwareVersion": "4.0.0",
     "license": "https://mariadb.com/bsl11/",
     "featureList": [
@@ -1345,50 +1349,9 @@
 <section id="pricing" data-reveal>
   <div class="container">
     <div class="section-label">Pricing</div>
-    <h2 class="section-title">Tiered PMPM Pricing</h2>
-    <p class="section-desc">Predictable per-member-per-month pricing. No hidden fees. No surprise infrastructure costs. Cancel anytime.</p>
-
-```
-<div class="pricing-grid" data-reveal>
-  <div class="price-card">
-    <div class="price-tier">Starter</div>
-    <div class="price-amount">Contact Us</div>
-    <div class="price-desc">For small health plans getting started with CMS-0057-F compliance.</div>
-    <ul class="price-features">
-      <li>All four required FHIR APIs</li>
-      <li>X12 ↔ FHIR transformation</li>
-      <li>Single clearinghouse connector</li>
-      <li>Compliance checker</li>
-      <li>Community support</li>
-    </ul>
-  </div>
-  <div class="price-card featured">
-    <div class="price-tier">Professional</div>
-    <div class="price-amount">Contact Us</div>
-    <div class="price-desc">For mid-size plans needing multi-clearinghouse EDI and priority support.</div>
-    <ul class="price-features">
-      <li>Everything in Starter</li>
-      <li>Multi-clearinghouse failover</li>
-      <li>Benefit engine (HDHP/HSA/COB)</li>
-      <li>Work queues + appeals</li>
-      <li>Priority support</li>
-    </ul>
-  </div>
-  <div class="price-card">
-    <div class="price-tier">Enterprise</div>
-    <div class="price-amount">Contact Us</div>
-    <div class="price-desc">For large plans with dedicated infrastructure and custom integration.</div>
-    <ul class="price-features">
-      <li>Everything in Professional</li>
-      <li>Dedicated AKS namespace</li>
-      <li>Custom CAPS adapter development</li>
-      <li>SLA guarantee (99.9%)</li>
-      <li>Dedicated support engineer</li>
-    </ul>
-  </div>
-</div>
-```
-
+    <h2 class="section-title">PMPM Pricing</h2>
+    <p class="section-desc">CMS-0057-F compliance is delivered through Platform Engagement &mdash; payer-scale relationships priced per member per month (PMPM) across three layers: Layer 1 &mdash; Compliance Accelerator, Layer 2 &mdash; Progressive Modernization, and Layer 3 &mdash; Full CAPS Platform. Pilot-scoped terms; founding-partner relationships in each layer.</p>
+    <p class="section-desc"><a href="/pricing" class="primary-cta">See full pricing across all four product lines &rarr;</a></p>
   </div>
 </section>
 
