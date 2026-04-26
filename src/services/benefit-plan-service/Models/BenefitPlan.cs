@@ -131,6 +131,11 @@ public class BenefitPlan
     /// </summary>
     [JsonPropertyName("versionState")]
     public PlanVersionState VersionState { get; set; }
+    // Defaults to PlanVersionState.Draft (enum value 0) for newly created instances.
+    // Legacy documents that predate this field also deserialize to this default,
+    // but are normalized to PlanVersionState.Published by Hydrate() when VersionId
+    // is empty — the two conditions (VersionId empty AND VersionState==Draft) together
+    // identify a legacy row, not a real draft.
 
     /// <summary>
     /// <see cref="VersionId"/> of the version this draft amends, if any.

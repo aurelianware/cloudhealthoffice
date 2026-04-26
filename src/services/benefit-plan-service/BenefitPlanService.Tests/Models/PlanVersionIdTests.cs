@@ -42,7 +42,11 @@ public class BenefitPlanIdentityDefaultsTests
         var plan = new BenefitPlan();
         plan.VersionId.Should().BeEmpty();
         plan.VersionNumber.Should().Be(0);
-        plan.VersionState.Should().Be(PlanVersionState.Draft); // = 0; treated as "absent" by Hydrate when VersionId is empty
+        plan.VersionState.Should().Be(PlanVersionState.Draft); // = 0; correct initial state for new instances.
+        // Note: legacy documents that predate versioning also deserialize to Draft (value 0)
+        // because versionState is absent in their persisted JSON, but Hydrate() normalizes
+        // them to Published when VersionId is also empty — that combination unambiguously
+        // identifies a legacy row.
         plan.PredecessorVersionId.Should().BeNull();
     }
 }

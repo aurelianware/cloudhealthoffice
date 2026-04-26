@@ -360,6 +360,10 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
             throw new PlanVersionStateException(planId, versionId, draft.VersionState,
                 $"Draft predecessor '{draft.PredecessorVersionId ?? "<none>"}' does not match the current Published version '{expectedPredecessor ?? "<none>"}'. Re-amend from the latest version and retry.");
         }
+        // Belt-and-suspenders: also validate VersionNumber so that a draft
+        // whose VersionNumber was patched directly (e.g. via UpdateDraftAsync
+        // on a manipulated payload) cannot sneak through when its predecessor
+        // pointer happens to match.
         var expectedNumber = (current?.VersionNumber ?? 0) + 1;
         if (draft.VersionNumber != expectedNumber)
         {
