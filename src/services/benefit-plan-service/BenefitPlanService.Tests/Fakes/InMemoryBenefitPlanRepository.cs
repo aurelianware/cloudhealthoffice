@@ -1,5 +1,6 @@
 using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
+using BenefitPlanService.Services;
 
 namespace BenefitPlanService.Tests.Fakes;
 
@@ -189,7 +190,7 @@ public sealed class InMemoryPlanVersionTransitionRepository : IPlanVersionTransi
     }
 }
 
-public sealed class FakePlanVersionEventPublisher : Services.IPlanVersionEventPublisher
+public sealed class FakePlanVersionEventPublisher : IPlanVersionEventPublisher
 {
     public List<PlanVersionEvent> Events { get; } = new();
 
