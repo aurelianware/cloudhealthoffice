@@ -1,9 +1,12 @@
+using BenefitPlanService.Adapters;
 using BenefitPlanService.Controllers;
 using BenefitPlanService.Models;
 using BenefitPlanService.Services;
+using BenefitPlanService.Tests.Adapters;
 using BenefitPlanService.Tests.Fakes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BenefitPlanService.Tests.Controllers;
@@ -14,13 +17,29 @@ public class BenefitPlansControllerVersionTests
 
     private static (BenefitPlansController controller,
                     BenefitPlanServiceImpl service,
-                    InMemoryBenefitPlanRepository repo) Build()
+                    InMemoryBenefitPlanRepository repo) Build(
+        Func<IBenefitPlanService, IBenefitViewService, IBenefitPlanAdapter>? adapterFactory = null)
     {
         var repo = new InMemoryBenefitPlanRepository();
         var transitions = new InMemoryPlanVersionTransitionRepository();
         var events = new FakePlanVersionEventPublisher();
         var service = new BenefitPlanServiceImpl(repo, transitions, events, NullLogger<BenefitPlanServiceImpl>.Instance);
-        var controller = new BenefitPlansController(service, NullLogger<BenefitPlansController>.Instance)
+        var viewService = new BenefitViewService(service, NullLogger<BenefitViewService>.Instance);
+
+        // Default adapter: real CHO adapter backed by the in-memory service so
+        // controller GET endpoints behave as before this refactor.
+        var primary = adapterFactory?.Invoke(service, viewService)
+            ?? new ChoBenefitPlanAdapter(service, viewService, NullLogger<ChoBenefitPlanAdapter>.Instance);
+
+        var config = new ConfigurationBuilder().Build();
+        var cache = new BenefitPlanTenantConfigCache(
+            new StubHttpClientFactory(FakeHttpMessageHandler.Status(System.Net.HttpStatusCode.NotFound)),
+            config,
+            NullLogger<BenefitPlanTenantConfigCache>.Instance);
+        var factory = new BenefitPlanAdapterFactory(
+            new[] { primary }, cache, NullLogger<BenefitPlanAdapterFactory>.Instance);
+
+        var controller = new BenefitPlansController(service, factory, NullLogger<BenefitPlansController>.Instance)
         {
             ControllerContext = new ControllerContext
             {
@@ -124,5 +143,79 @@ public class BenefitPlansControllerVersionTests
         var result = await controller.Supersede(v1.PlanId, v1.VersionId,
             new SupersedeRequest { Reason = "test" });
         result.Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetPlan_routes_through_adapter_factory()
+    {
+        RecordingChoAdapter? recording = null;
+        var (controller, service, _) = Build((s, v) =>
+            recording = new RecordingChoAdapter(new ChoBenefitPlanAdapter(s, v, NullLogger<ChoBenefitPlanAdapter>.Instance)));
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
+
+        var result = await controller.GetPlan(v1.Id);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        recording.Should().NotBeNull();
+        recording!.GetPlanCalls.Should().HaveCount(1);
+        recording.GetPlanCalls[0].PlanId.Should().Be(v1.Id);
+        recording.GetPlanCalls[0].TenantId.Should().Be(Tenant);
+    }
+
+    [Fact]
+    public async Task GetVersion_routes_through_adapter_factory()
+    {
+        RecordingChoAdapter? recording = null;
+        var (controller, service, _) = Build((s, v) =>
+            recording = new RecordingChoAdapter(new ChoBenefitPlanAdapter(s, v, NullLogger<ChoBenefitPlanAdapter>.Instance)));
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
+
+        var result = await controller.GetVersion(v1.PlanId, v1.VersionId);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        recording.Should().NotBeNull();
+        recording!.GetVersionCalls.Should().HaveCount(1);
+        recording.GetVersionCalls[0].VersionId.Should().Be(v1.VersionId);
+    }
+
+    /// <summary>
+    /// Decorator over <see cref="ChoBenefitPlanAdapter"/> that records every
+    /// invocation so we can assert the controller hit the factory.
+    /// </summary>
+    private sealed class RecordingChoAdapter : IBenefitPlanAdapter
+    {
+        private readonly ChoBenefitPlanAdapter _inner;
+        public RecordingChoAdapter(ChoBenefitPlanAdapter inner) { _inner = inner; }
+
+        public string Platform => "cho";
+        public List<BenefitPlanAdapterRequest> GetPlanCalls { get; } = new();
+        public List<BenefitPlanAdapterRequest> GetVersionCalls { get; } = new();
+
+        public Task<BenefitPlanAdapterResponse> GetPlanAsync(BenefitPlanAdapterRequest request, CancellationToken ct = default)
+        {
+            GetPlanCalls.Add(Clone(request));
+            return _inner.GetPlanAsync(request, ct);
+        }
+
+        public Task<BenefitPlanAdapterResponse> GetPlanVersionAsync(BenefitPlanAdapterRequest request, CancellationToken ct = default)
+        {
+            GetVersionCalls.Add(Clone(request));
+            return _inner.GetPlanVersionAsync(request, ct);
+        }
+
+        public Task<MemberBenefitViewAdapterResponse> GetMemberBenefitViewAsync(BenefitPlanAdapterRequest request, CancellationToken ct = default)
+            => _inner.GetMemberBenefitViewAsync(request, ct);
+
+        private static BenefitPlanAdapterRequest Clone(BenefitPlanAdapterRequest r) => new()
+        {
+            TenantId = r.TenantId,
+            PlanId = r.PlanId,
+            VersionId = r.VersionId,
+            ServiceDate = r.ServiceDate,
+            SubscriberId = r.SubscriberId,
+            PlatformSettings = new(r.PlatformSettings),
+        };
     }
 }
