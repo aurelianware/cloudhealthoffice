@@ -107,7 +107,7 @@ public class BenefitPlansController : ControllerBase
     /// <summary>
     /// Update an existing benefit plan. Returns 409 Conflict when the
     /// target version is Published or Superseded — clients must create
-    /// an amendment via <c>POST /api/v1/plans/{id}/amend</c> instead.
+    /// an amendment via <c>POST /api/v1/plans/{planId}/amend</c> instead.
     /// </summary>
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
@@ -264,21 +264,28 @@ public class BenefitPlansController : ControllerBase
 
     // -----------------------------------------------------------------
     // Version chain endpoints (5.1 — Plan Identity & Versioning)
+    //
+    // These endpoints address plans by their business <c>PlanId</c> (the
+    // version-chain key shared across every version of the same plan), as
+    // opposed to <c>GET /{id}</c> / <c>PUT /{id}</c> which address a single
+    // immutable version document by its persistent row <c>Id</c>. The route
+    // token is therefore <c>{planId}</c>, not <c>{id}</c>, to keep the two
+    // identifiers distinct at the API surface.
     // -----------------------------------------------------------------
 
     /// <summary>
     /// Paginated, newest-first list of every version for a plan.
     /// </summary>
-    [HttpGet("{id}/versions")]
+    [HttpGet("{planId}/versions")]
     [ProducesResponseType(typeof(PlanVersionPage), StatusCodes.Status200OK)]
     public async Task<ActionResult<PlanVersionPage>> GetVersions(
-        string id,
+        string planId,
         [FromQuery] int pageSize = 25,
         [FromQuery] string? continuationToken = null)
     {
         if (pageSize <= 0 || pageSize > 200) pageSize = 25;
 
-        var (items, next) = await _service.ListVersionsAsync(id, TenantId, pageSize, continuationToken);
+        var (items, next) = await _service.ListVersionsAsync(planId, TenantId, pageSize, continuationToken);
         return Ok(new PlanVersionPage { Items = items, ContinuationToken = next });
     }
 
@@ -286,22 +293,22 @@ public class BenefitPlansController : ControllerBase
     /// Get a single version by <c>VersionId</c>. Routes through the
     /// tenant-resolved <see cref="IBenefitPlanAdapter"/>.
     /// </summary>
-    [HttpGet("{id}/versions/{versionId}")]
+    [HttpGet("{planId}/versions/{versionId}")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<BenefitPlan>> GetVersion(string id, string versionId)
+    public async Task<ActionResult<BenefitPlan>> GetVersion(string planId, string versionId)
     {
         var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
         var response = await adapter.GetPlanVersionAsync(new BenefitPlanAdapterRequest
         {
             TenantId = TenantId,
-            PlanId = id,
+            PlanId = planId,
             VersionId = versionId,
             PlatformSettings = settings,
         });
 
         if (response.Plan == null)
-            return NotFound(new { message = $"Version '{versionId}' of plan '{id}' not found" });
+            return NotFound(new { message = $"Version '{versionId}' of plan '{planId}' not found" });
         return Ok(response.Plan.ToBenefitPlan());
     }
 
@@ -317,24 +324,24 @@ public class BenefitPlansController : ControllerBase
         catch (ArgumentException ex) { return BadRequest(new { field = ex.ParamName, message = ex.Message }); }
 
         var draft = await _service.CreateDraftAsync(plan, TenantId, ResolveActorId());
-        return CreatedAtAction(nameof(GetVersion), new { id = draft.PlanId, versionId = draft.VersionId }, draft);
+        return CreatedAtAction(nameof(GetVersion), new { planId = draft.PlanId, versionId = draft.VersionId }, draft);
     }
 
     /// <summary>
     /// Move a Draft into Published. If a current Published version exists
     /// for the same <c>PlanId</c>, atomically supersedes it.
     /// </summary>
-    [HttpPost("{id}/versions/{versionId}/publish")]
+    [HttpPost("{planId}/versions/{versionId}/publish")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BenefitPlan>> Publish(
-        string id, string versionId, [FromBody] PublishRequest? body = null)
+        string planId, string versionId, [FromBody] PublishRequest? body = null)
     {
         try
         {
             var published = await _service.PublishVersionAsync(
-                id, versionId, TenantId, ResolveActorId(), body?.EffectiveDate);
+                planId, versionId, TenantId, ResolveActorId(), body?.EffectiveDate);
             return Ok(published);
         }
         catch (PlanVersionStateException ex) when (ex.IsNotFound)
@@ -351,15 +358,15 @@ public class BenefitPlansController : ControllerBase
     /// Clone the latest Published version into a new Draft (next
     /// <c>VersionNumber</c>, predecessor link set).
     /// </summary>
-    [HttpPost("{id}/amend")]
+    [HttpPost("{planId}/amend")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<BenefitPlan>> Amend(string id)
+    public async Task<ActionResult<BenefitPlan>> Amend(string planId)
     {
         try
         {
-            var draft = await _service.AmendPublishedPlanAsync(id, TenantId, ResolveActorId());
-            return CreatedAtAction(nameof(GetVersion), new { id = draft.PlanId, versionId = draft.VersionId }, draft);
+            var draft = await _service.AmendPublishedPlanAsync(planId, TenantId, ResolveActorId());
+            return CreatedAtAction(nameof(GetVersion), new { planId = draft.PlanId, versionId = draft.VersionId }, draft);
         }
         catch (PlanVersionStateException ex) when (ex.IsNotFound)
         {
@@ -376,17 +383,17 @@ public class BenefitPlansController : ControllerBase
     /// release; this endpoint exists for API parity and currently returns
     /// 409 with an explanation.
     /// </summary>
-    [HttpPost("{id}/versions/{versionId}/supersede")]
+    [HttpPost("{planId}/versions/{versionId}/supersede")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BenefitPlan>> Supersede(
-        string id, string versionId, [FromBody] SupersedeRequest body)
+        string planId, string versionId, [FromBody] SupersedeRequest body)
     {
         try
         {
             var result = await _service.SupersedeVersionAsync(
-                id, versionId, TenantId, ResolveActorId(), body?.Reason ?? string.Empty,
+                planId, versionId, TenantId, ResolveActorId(), body?.Reason ?? string.Empty,
                 body?.EffectiveDate ?? DateTime.UtcNow);
             return Ok(result);
         }
@@ -421,20 +428,20 @@ public class BenefitPlansController : ControllerBase
     }
 }
 
-/// <summary>Body for POST <c>/{id}/versions/{versionId}/publish</c>.</summary>
+/// <summary>Body for POST <c>/{planId}/versions/{versionId}/publish</c>.</summary>
 public sealed class PublishRequest
 {
     public DateTime? EffectiveDate { get; set; }
 }
 
-/// <summary>Body for POST <c>/{id}/versions/{versionId}/supersede</c>.</summary>
+/// <summary>Body for POST <c>/{planId}/versions/{versionId}/supersede</c>.</summary>
 public sealed class SupersedeRequest
 {
     public string? Reason { get; set; }
     public DateTime? EffectiveDate { get; set; }
 }
 
-/// <summary>Page envelope for <c>GET /{id}/versions</c>.</summary>
+/// <summary>Page envelope for <c>GET /{planId}/versions</c>.</summary>
 public sealed class PlanVersionPage
 {
     public IReadOnlyList<BenefitPlan> Items { get; set; } = Array.Empty<BenefitPlan>();

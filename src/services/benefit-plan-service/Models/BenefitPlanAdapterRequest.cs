@@ -15,8 +15,8 @@ public class BenefitPlanAdapterRequest
     /// controller / repository conventions:
     /// <list type="bullet">
     ///   <item>
-    ///     <c>GetPlanAsync</c> — the persistent document <c>Id</c> (the row primary key
-    ///     used by <c>GET /api/v1/plans/{id}</c>).
+    ///     <c>GetPlanAsync</c> — the persistent document <c>Id</c> (single-version
+    ///     row primary key used by <c>GET /api/v1/plans/{id}</c>).
     ///   </item>
     ///   <item>
     ///     <c>GetPlanVersionAsync</c> — the business <c>PlanId</c> (version-chain key
@@ -27,9 +27,9 @@ public class BenefitPlanAdapterRequest
     ///     <c>GET /api/v1/benefit-plans/{planId}/member-view</c>).
     ///   </item>
     /// </list>
-    /// Required by all methods. The dual semantics mirror the historical controller
-    /// behaviour and will be consolidated when the version-chain endpoints' <c>{id}</c>
-    /// route token is renamed in a follow-up.
+    /// Required by all methods. Splitting this into two explicit fields
+    /// (<c>DocumentId</c> + <c>PlanId</c>) is tracked as a follow-up; today the
+    /// dual semantics mirror the historical controller and repository behaviour.
     /// </summary>
     public string PlanId { get; set; } = string.Empty;
 
