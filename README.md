@@ -2,14 +2,14 @@
 
 ![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
-**The payer platform that starts where your core admin stops — and grows from there.**
+**A cloud-native portfolio for healthcare claims administration — from free public tools to full payer-scale platform engagement.**
 
 CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engines.
 Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrate workloads on your timeline.
 
 [![Version](https://img.shields.io/badge/version-v4.2.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.2.0)
-[![Tests](https://img.shields.io/badge/tests-973%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
-[![Coverage](https://img.shields.io/badge/coverage-85.93%25-green)](https://codecov.io/gh/aurelianware/cloudhealthoffice) <!-- auto-updated by test-metrics workflow -->
+[![Tests](https://img.shields.io/badge/tests-2800%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
+[![Test Projects](https://img.shields.io/badge/test%20projects-44-brightgreen)](./tests/)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](./LICENSE)
 
@@ -26,6 +26,25 @@ Health plans face a January 2027 CMS-0057-F compliance deadline. The typical pat
 Cloud Health Office is a different approach. It deploys alongside your existing core admin system and handles the workloads that legacy platforms weren’t built for: real-time EDI routing, FHIR R4 APIs, prior authorization automation, and medical attachment workflows. Every module is designed to either augment or replace the corresponding function in your core system — you decide which workloads to migrate and when.
 
 Start with compliance. Expand into claims. Move at your own pace.
+
+## Product Lines
+
+Cloud Health Office is a portfolio of four complementary product lines —
+each a coherent offering on its own, each connecting naturally to the next:
+
+- **Public Tools** — free utilities (fee schedule lookup, free-tier claims
+  repricing) that establish credibility and seed the commercial funnel.
+- **Transactional Services** — per-call APIs (Claims Repricing API, Pricing
+  API) on self-serve subscription. Developer- and integrator-accessible.
+- **Managed Data Services** — subscription services for healthcare data that
+  changes constantly: state Medicaid compliance updates, CMS fee schedule
+  updates, provider verification, terminology mapping.
+- **Platform Engagement** — payer-scale relationships priced per member per
+  month (PMPM), across three layers: Compliance Accelerator, Progressive
+  Modernization, and Full CAPS Platform.
+
+Customers enter at any product line and expand over time. See
+[docs/POSITIONING.md](docs/POSITIONING.md) for the canonical framing.
 
 ## How It Works
 
@@ -46,8 +65,8 @@ Start with compliance. Expand into claims. Move at your own pace.
 |Portal Pages         |50       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                                                |
 |CI/CD Workflows      |18       |GitHub Actions — build, test, deploy, security scan                                                         |
 |Claims Scrubbing     |20+ rules|Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits                                         |
-|Automated Tests      |973      |C# xUnit, TypeScript Jest, Python pytest                                                                    |
-|Lines of Code        |~204,000 |C#, TypeScript, Razor, Python, YAML, Shell, PowerShell (excludes docs)                                      |
+|Automated Tests      |2800     |C# xUnit, TypeScript Jest, Python pytest                                                                    |
+|Test Projects        |44       |Repositories and suites covered by automated test execution                                                |
 
 ### Services
 
@@ -277,7 +296,7 @@ cloudhealthoffice/
 |Documentation    |150,000  |Architecture, ADRs, deployment guides, features, security, sales|
 |**Total**        |**~500,000+**|                                                             |
 
-3K+ automated tests across C# (xUnit), TypeScript (Jest), and Python (pytest).
+~2,800 automated tests across 44 test projects in C# (xUnit), TypeScript (Jest), and Python (pytest).
 Built by a solo founder with 25+ years of payer IT experience and AI-assisted development.
 
 ## Deployment Options
