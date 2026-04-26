@@ -155,6 +155,23 @@ public class BenefitPlan
 
     [JsonPropertyName("supersededByVersionId")]
     public string? SupersededByVersionId { get; set; }
+
+    // ---------------------------------------------------------------------
+    // Plan-Year Definition (5.3 — Plan-Year Definition Foundation)
+    //
+    // Optional. Plans created before this feature deserialize with a null
+    // definition and an empty accumulator-target list, which the
+    // PlanYearScheduler treats as opt-out (no events emitted).
+    // EffectiveDate / TerminationDate above are preserved verbatim and
+    // remain authoritative for plan activation. See
+    // docs/architecture/plan-year-definition.md.
+    // ---------------------------------------------------------------------
+
+    [JsonPropertyName("planYearDefinition")]
+    public PlanYearDefinition? PlanYearDefinition { get; set; }
+
+    [JsonPropertyName("accumulatorTargets")]
+    public List<AccumulatorTarget> AccumulatorTargets { get; set; } = new();
 }
 
 /// <summary>
