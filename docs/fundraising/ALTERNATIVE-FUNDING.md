@@ -8,6 +8,8 @@
 
 While venture capital is the primary funding strategy, this document evaluates alternative funding sources that may be appropriate for Cloud Health Office based on stage, market, and strategic objectives. These options can serve as complements to VC funding or alternatives if VC timing doesn't align.
 
+Cloud Health Office (CHO) operates four product lines — **Public Tools**, **Transactional Services**, **Managed Data Services**, and **Platform Engagement** (payer-scale PMPM across Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform) — and several alternative funding instruments below align differently to each. Revenue-based financing fits Transactional Services / Managed Data Services (recurring revenue collateral); SBIR/STTR fits Public Tools and Platform Engagement R&D; strategic corporate investment fits Platform Engagement distribution. Match instrument to product line during evaluation. Canonical breakdown: [POSITIONING.md](../POSITIONING.md).
+
 ---
 
 ## Alternative Funding Options Matrix

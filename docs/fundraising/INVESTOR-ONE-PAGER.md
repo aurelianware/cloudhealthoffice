@@ -21,7 +21,13 @@
 
 ## The Company
 
-**Cloud Health Office** is the first source-available, Azure-native platform for healthcare claims administration. We deliver Layer 1 CMS-0057-F compliance in weeks (vs. the 6-18 months of traditional implementations), with a Layer 2 progressive-modernization path (appeals shipped; see [POSITIONING.md](../POSITIONING.md)) and a Layer 3 full-CAPS platform for new entrants.
+**Cloud Health Office** (CHO) is the first source-available, Azure-native platform for healthcare claims administration. We deliver Layer 1 CMS-0057-F compliance in weeks (vs. the 6-18 months of traditional implementations), with a Layer 2 progressive-modernization path (appeals shipped; see [POSITIONING.md](../POSITIONING.md)) and a Layer 3 full-CAPS platform for new entrants.
+
+---
+
+## Portfolio
+
+CHO operates four product lines, each with distinct unit economics: **Public Tools** (free fee schedule lookup and free-tier claims repricing — funnel-top), **Transactional Services** (per-call APIs on self-serve subscription, including the Claims Repricing API and Pricing API — recurring SaaS metrics), **Managed Data Services** (recurring subscriptions for state Medicaid compliance, CMS fee schedule updates, provider verification, and terminology — high-margin recurring), and **Platform Engagement** (payer-scale relationships priced per member per month (PMPM), with three layers — Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, and Layer 3 — Full CAPS Platform — multi-year contract economics). The "$8.2B TAM" frame below is anchored in Platform Engagement; the recurring-revenue lines underneath are independently investable. Canonical breakdown: [POSITIONING.md](../POSITIONING.md) and [FINANCIAL-MODEL.md](../sales-materials/FINANCIAL-MODEL.md).
 
 ---
 
@@ -92,11 +98,13 @@
 
 ## Business Model
 
-| Tier | Annual | Target Segment |
-|------|--------|----------------|
-| **Starter** | $10,788 | Regional payers, evaluation |
-| **Professional** | $32,388 | Mid-market, production |
-| **Enterprise** | $86,388 | Large plans, unlimited scale |
+These are modeling segments, not customer-facing pricing tiers — Cloud Health Office's customer-facing pricing is PMPM, pilot-scoped, with founding-partner terms in each Platform Engagement layer (Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform). Annualized figures below are internal modeled projections used to produce ARR targets, not list prices.
+
+| Modeled Segment | Annual | Target Profile |
+|-----------------|--------|----------------|
+| **Small** | $10,788 | Regional payers, evaluation |
+| **Mid-Market** | $32,388 | Mid-market, production |
+| **Large** | $86,388 | Large plans, unlimited scale |
 
 **Revenue Streams**: 80% Subscription | 12% Professional Services | 5% Premium Support | 3% Partner Revenue Share
 

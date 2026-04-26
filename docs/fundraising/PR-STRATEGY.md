@@ -8,6 +8,8 @@
 
 This strategy outlines how Cloud Health Office will build market awareness, establish founder credibility, and create inbound interest through PR and thought leadership activities. These activities support both customer acquisition and fundraising by positioning Cloud Health Office as the expert voice on healthcare EDI modernization and CMS compliance.
 
+Cloud Health Office (CHO) operates four product lines, each generating its own PR/press angle: **Public Tools** (free fee schedule lookup, free-tier claims repricing — practitioner-relevant utility, broad-funnel news), **Transactional Services** (per-call APIs — developer-relations and self-serve SaaS storylines), **Managed Data Services** (recurring healthcare-data subscriptions — compliance and operations storylines), and **Platform Engagement** (payer-scale PMPM relationships across Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform — strategic-buyer and category-consolidation storylines). The activities below mix angles across product lines deliberately; coverage in any single line reinforces the others. Canonical breakdown: [POSITIONING.md](../POSITIONING.md).
+
 ---
 
 ## Strategic Objectives

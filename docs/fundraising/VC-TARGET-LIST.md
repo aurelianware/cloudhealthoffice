@@ -8,6 +8,8 @@
 
 This document identifies and prioritizes venture capital firms for Cloud Health Office's **$2M Seed Round**. Targets are selected based on investment thesis alignment with healthcare IT, SaaS, and regulatory-driven markets.
 
+Cloud Health Office (CHO) operates four product lines with distinct unit economics — **Public Tools** (free, funnel-top), **Transactional Services** (per-call APIs, self-serve subscription with recurring SaaS metrics), **Managed Data Services** (recurring healthcare-data subscriptions, high-margin recurring), and **Platform Engagement** (payer-scale PMPM relationships across Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform — multi-year contract economics). Different VC theses align differently to each product line: Enterprise SaaS firms find Transactional Services / Managed Data Services most legible; healthcare-vertical firms tend to underwrite Platform Engagement; firms that underwrite category consolidation evaluate the portfolio as a whole. Map each target below to which product lines best fit its thesis. Canonical breakdown: [POSITIONING.md](../POSITIONING.md) and [FINANCIAL-MODEL.md](../sales-materials/FINANCIAL-MODEL.md).
+
 ### Investment Overview
 
 | Metric | Value |

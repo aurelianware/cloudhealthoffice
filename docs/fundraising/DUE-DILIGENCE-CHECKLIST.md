@@ -8,6 +8,8 @@
 
 This checklist ensures Cloud Health Office is prepared for investor due diligence across legal, financial, technical, commercial, and team dimensions. Complete these items before first investor meetings to accelerate the fundraising process.
 
+Cloud Health Office (CHO) operates four product lines with distinct unit economics — **Public Tools** (free, funnel-top), **Transactional Services** (per-call APIs, self-serve subscription), **Managed Data Services** (recurring healthcare-data subscriptions), and **Platform Engagement** (payer-scale PMPM relationships across three layers — Layer 1 — Compliance Accelerator, Layer 2 — Progressive Modernization, Layer 3 — Full CAPS Platform). Each is independently diligenceable. Diligence items below apply across product lines unless explicitly scoped; commercial and technical items most often refer to Platform Engagement (the most architecturally complex line). Canonical breakdown: [`docs/POSITIONING.md`](../POSITIONING.md) and [`docs/sales-materials/FINANCIAL-MODEL.md`](../sales-materials/FINANCIAL-MODEL.md).
+
 ---
 
 ## Critical Disclosures (Read First)

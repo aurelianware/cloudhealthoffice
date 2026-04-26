@@ -51,6 +51,12 @@ This script provides a structured framework for 30-minute investor meetings. Ada
 
 ## Part 2: Solution Demo (Minutes 2-8)
 
+### Portfolio Context (30 seconds)
+
+> "Before I walk through the platform, here's how we organize the work. Cloud Health Office runs four product lines: **Public Tools** — free utilities like fee schedule lookup that bring practitioners and payers into our funnel; **Transactional Services** — per-call APIs on self-serve subscription, like our Claims Repricing API and Pricing API; **Managed Data Services** — recurring subscriptions for state Medicaid compliance, CMS fee schedule updates, and provider verification; and **Platform Engagement** — payer-scale relationships priced per member per month, with three layers from Layer 1 — Compliance Accelerator through Layer 3 — Full CAPS Platform.
+>
+> Each line has different unit economics. The demo I'm about to show is Platform Engagement Layer 1 — the compliance accelerator. The recurring-revenue lines underneath are independently investable SaaS metrics. Canonical breakdown is in our positioning doc."
+
 ### Platform Overview (60 seconds)
 
 > "Cloud Health Office is the first source-available, Azure-native EDI platform that delivers complete CMS-0057-F compliance. We've pre-built everything a health plan needs:
