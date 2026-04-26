@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
@@ -9,16 +10,29 @@ namespace BenefitPlanService.Tests.Fakes;
 /// version-chain semantics. Used by service- and controller-level tests
 /// to avoid requiring a live Mongo/Cosmos.
 /// </summary>
+/// <remarks>
+/// All store and fetch operations deep-clone via JSON round-trip so that
+/// external mutations of a returned object cannot corrupt the stored document
+/// — matching the behaviour of real Cosmos / Mongo round-trips and preventing
+/// tests from becoming order-dependent due to shared object references.
+/// </remarks>
 public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
 {
+    private static readonly JsonSerializerOptions _jsonOpts = new(JsonSerializerDefaults.Web);
     private readonly List<BenefitPlan> _docs = new();
     public IReadOnlyList<BenefitPlan> Docs => _docs;
 
     /// <summary>Set true to simulate a transactional batch failure.</summary>
     public bool FailNextPublish { get; set; }
 
+    private static BenefitPlan Clone(BenefitPlan plan)
+        => JsonSerializer.Deserialize<BenefitPlan>(JsonSerializer.Serialize(plan, _jsonOpts), _jsonOpts)!;
+
     public Task<BenefitPlan?> GetByIdAsync(string id, string tenantId)
-        => Task.FromResult(_docs.FirstOrDefault(d => d.Id == id && d.TenantId == tenantId));
+    {
+        var doc = _docs.FirstOrDefault(d => d.Id == id && d.TenantId == tenantId);
+        return Task.FromResult(doc is null ? null : Clone(doc));
+    }
 
     public Task<BenefitPlan?> GetByPlanIdAsync(string planId, string tenantId)
         => GetLatestPublishedAsync(planId, tenantId, DateTime.UtcNow);
@@ -33,13 +47,13 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
                 && (d.TerminationDate == null || d.TerminationDate >= asOf))
             .OrderByDescending(d => d.VersionNumber)
             .FirstOrDefault();
-        return Task.FromResult<BenefitPlan?>(match);
+        return Task.FromResult(match is null ? null : Clone(match));
     }
 
     public Task<BenefitPlan?> GetVersionAsync(string planId, string versionId, string tenantId)
     {
         var match = _docs.FirstOrDefault(d => d.TenantId == tenantId && d.PlanId == planId && d.VersionId == versionId);
-        return Task.FromResult<BenefitPlan?>(match);
+        return Task.FromResult(match is null ? null : Clone(match));
     }
 
     public Task<(IReadOnlyList<BenefitPlan> Items, string? ContinuationToken)> ListVersionsAsync(
@@ -55,7 +69,7 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
             .Skip(skip)
             .ToList();
 
-        var slice = ordered.Take(pageSize).ToList();
+        var slice = ordered.Take(pageSize).Select(Clone).ToList();
         var next = ordered.Count > pageSize ? (skip + pageSize).ToString() : null;
         return Task.FromResult<(IReadOnlyList<BenefitPlan>, string?)>((slice, next));
     }
@@ -70,7 +84,7 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
             q = q.Where(d => d.PlanType == pt);
         if (!string.IsNullOrEmpty(metalLevel) && Enum.TryParse<MetalLevel>(metalLevel, true, out var ml))
             q = q.Where(d => d.MetalLevel == ml);
-        return Task.FromResult(q.OrderBy(d => d.PlanName).Skip((page - 1) * pageSize).Take(pageSize));
+        return Task.FromResult(q.OrderBy(d => d.PlanName).Skip((page - 1) * pageSize).Take(pageSize).Select(Clone));
     }
 
     public Task<IEnumerable<Benefit>> GetBenefitsAsync(string planId, string tenantId, string? serviceCategory)
@@ -80,7 +94,8 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
             .OrderByDescending(d => d.VersionNumber)
             .FirstOrDefault();
         if (plan == null) return Task.FromResult(Enumerable.Empty<Benefit>());
-        var benefits = plan.Benefits.AsEnumerable();
+        var cloned = Clone(plan);
+        var benefits = cloned.Benefits.AsEnumerable();
         if (!string.IsNullOrEmpty(serviceCategory))
             benefits = benefits.Where(b => b.ServiceCategory == serviceCategory);
         return Task.FromResult(benefits);
@@ -89,8 +104,8 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
     public Task<BenefitPlan> CreateAsync(BenefitPlan plan)
     {
         if (string.IsNullOrEmpty(plan.Id)) plan.Id = Guid.NewGuid().ToString();
-        _docs.Add(plan);
-        return Task.FromResult(plan);
+        _docs.Add(Clone(plan));
+        return Task.FromResult(Clone(plan));
     }
 
     public Task<BenefitPlan> UpdateAsync(BenefitPlan plan)
@@ -104,8 +119,8 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
                 $"Plan version {existing.VersionId} is Superseded and is read-only.");
 
         if (existing != null) _docs.Remove(existing);
-        _docs.Add(plan);
-        return Task.FromResult(plan);
+        _docs.Add(Clone(plan));
+        return Task.FromResult(Clone(plan));
     }
 
     public Task DeleteAsync(string id, string tenantId)
@@ -118,8 +133,8 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
     {
         if (string.IsNullOrEmpty(draft.Id)) draft.Id = Guid.NewGuid().ToString();
         draft.VersionState = PlanVersionState.Draft;
-        _docs.Add(draft);
-        return Task.FromResult(draft);
+        _docs.Add(Clone(draft));
+        return Task.FromResult(Clone(draft));
     }
 
     public Task<BenefitPlan> UpdateDraftAsync(BenefitPlan draft)
@@ -131,8 +146,8 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
             throw new PlanVersionStateException(existing.PlanId, existing.VersionId, existing.VersionState,
                 $"Plan version {existing.VersionId} is {existing.VersionState} and cannot be edited.");
         _docs.Remove(existing);
-        _docs.Add(draft);
-        return Task.FromResult(draft);
+        _docs.Add(Clone(draft));
+        return Task.FromResult(Clone(draft));
     }
 
     public Task<BenefitPlan> PublishAndSupersedeAsync(BenefitPlan draftToPublish, BenefitPlan? predecessor)
@@ -150,15 +165,15 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
         {
             var existingDraft = _docs.FirstOrDefault(d => d.Id == draftToPublish.Id);
             if (existingDraft != null) _docs.Remove(existingDraft);
-            _docs.Add(draftToPublish);
+            _docs.Add(Clone(draftToPublish));
 
             if (predecessor != null)
             {
                 var existingPred = _docs.FirstOrDefault(d => d.Id == predecessor.Id);
                 if (existingPred != null) _docs.Remove(existingPred);
-                _docs.Add(predecessor);
+                _docs.Add(Clone(predecessor));
             }
-            return Task.FromResult(draftToPublish);
+            return Task.FromResult(Clone(draftToPublish));
         }
         catch
         {
