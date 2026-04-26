@@ -246,10 +246,10 @@
   .price-block { margin-bottom: 8px; }
   .platform-price {
     font-family: 'Space Mono', monospace;
-    font-size: 40px;
+    font-size: 28px;
     font-weight: 700;
-    letter-spacing: -2px;
-    line-height: 1;
+    letter-spacing: -1px;
+    line-height: 1.1;
   }
   .price-period {
     font-size: 14px;
@@ -320,6 +320,7 @@
     text-decoration: none;
     margin-top: 8px;
   }
+  .pricing-card .cta-btn { margin-top: auto; }
   .cta-outline {
     background: transparent;
     border: 1px solid var(--border);
@@ -599,7 +600,7 @@
     line-height: 1.6;
     margin-bottom: 10px;
   }
-  .layer-row strong {
+  .layer-row > strong {
     color: var(--text-muted);
     font-family: 'Space Mono', monospace;
     font-size: 10px;
@@ -655,7 +656,7 @@
     <div class="card-desc">Free utilities for healthcare data lookup and calculation. No signup, no credit card, no commercial conversation required.</div>
 
     <div class="price-block">
-      <div class="platform-price" style="font-size:1.75rem;">Free</div>
+      <div class="platform-price">Free</div>
       <div class="pmpm-price"><span>no commercial relationship required</span></div>
     </div>
 
@@ -675,7 +676,7 @@
       <li>Self-serve consumer signup is in progress &mdash; see Transactional Services</li>
     </ul>
 
-    <a href="/claims-repricing" class="cta-btn cta-outline" style="margin-top:auto;">Try Public Tools</a>
+    <a href="/claims-repricing" class="cta-btn cta-outline">Try Public Tools</a>
   </div>
 
   <!-- TRANSACTIONAL SERVICES -->
@@ -685,7 +686,7 @@
     <div class="card-desc">Per-call APIs for healthcare calculations. Designed for developers integrating into billing systems, TPAs, clearinghouses, and provider tooling.</div>
 
     <div class="price-block">
-      <div class="platform-price" style="font-size:1.75rem;">Pay per use</div>
+      <div class="platform-price">Pay per use</div>
       <div class="pmpm-price"><span>free tier available &middot; self-serve subscription in progress</span></div>
     </div>
 
@@ -705,7 +706,7 @@
       <li>Contact for early access while activation completes</li>
     </ul>
 
-    <a href="/pricing-api" class="cta-btn cta-outline" style="margin-top:auto;">View API Pricing</a>
+    <a href="/pricing-api" class="cta-btn cta-outline">View API Pricing</a>
   </div>
 
   <!-- MANAGED DATA SERVICES -->
@@ -715,7 +716,7 @@
     <div class="card-desc">Subscription services for healthcare data that changes constantly. Recurring value at a fraction of the cost of consultants or commercial vendors.</div>
 
     <div class="price-block">
-      <div class="platform-price" style="font-size:1.75rem;">Custom subscription</div>
+      <div class="platform-price">Custom subscription</div>
       <div class="pmpm-price"><span>productization in progress &middot; pilot terms negotiated per service</span></div>
     </div>
 
@@ -736,7 +737,7 @@
       <li>Included for any Platform Engagement customer</li>
     </ul>
 
-    <a href="mailto:sales@cloudhealthoffice.com?subject=Managed%20Data%20Services" class="cta-btn cta-outline" style="margin-top:auto;">Discuss Subscription</a>
+    <a href="mailto:sales@cloudhealthoffice.com?subject=Managed%20Data%20Services" class="cta-btn cta-outline">Discuss Subscription</a>
   </div>
 
   <!-- PLATFORM ENGAGEMENT (featured) -->
@@ -746,7 +747,7 @@
     <div class="card-desc">Payer-scale relationships across three layers: Compliance Accelerator, Progressive Modernization, Full CAPS Platform. Multi-year contracts.</div>
 
     <div class="price-block">
-      <div class="platform-price" style="font-size:1.75rem;">PMPM</div>
+      <div class="platform-price">PMPM</div>
       <div class="pmpm-price"><span>indicative within each layer &middot; pilot-specific terms negotiated per engagement</span></div>
     </div>
 
@@ -763,10 +764,10 @@
     <ul class="feature-list">
       <li>Multi-year contracts; expansion is an amendment, not a renegotiation</li>
       <li>Founding-partner terms available for first pilots in each layer</li>
-      <li>Indicative ranges in <code>FINANCIAL-MODEL.md</code>; pilot terms set per engagement</li>
+      <li>Indicative ranges available on request; pilot terms set per engagement</li>
     </ul>
 
-    <a href="mailto:sales@cloudhealthoffice.com?subject=Platform%20Engagement" class="cta-btn cta-gold" style="margin-top:auto;">Schedule a Conversation</a>
+    <a href="mailto:sales@cloudhealthoffice.com?subject=Platform%20Engagement" class="cta-btn cta-gold">Schedule a Conversation</a>
   </div>
 </div>
 
@@ -788,7 +789,7 @@
       <div class="layer-tag">Layer 2</div>
       <div class="layer-name">Progressive Modernization</div>
       <div class="layer-row"><strong>Who enters here</strong>A payer frustrated with their legacy core&rsquo;s license cost, innovation pace, or integration friction, with a CTO willing to commit to multi-year modernization only if the risk is contained one domain at a time.</div>
-      <div class="layer-row"><strong>What&rsquo;s included</strong>Domain-by-domain migration with per-tenant, per-domain operating mode &mdash; <strong style="display:inline;font-family:inherit;font-size:13px;text-transform:none;letter-spacing:0;color:var(--text-secondary);font-weight:600;margin:0;">Augment</strong> (legacy authoritative, CHO calculates in parallel for comparison) or <strong style="display:inline;font-family:inherit;font-size:13px;text-transform:none;letter-spacing:0;color:var(--text-secondary);font-weight:600;margin:0;">Replace</strong> (CHO authoritative, legacy off the critical path). Appeals is the lighthouse domain shipped end-to-end today.</div>
+      <div class="layer-row"><strong>What&rsquo;s included</strong>Domain-by-domain migration with per-tenant, per-domain operating mode &mdash; <strong>Augment</strong> (legacy authoritative, CHO calculates in parallel for comparison) or <strong>Replace</strong> (CHO authoritative, legacy off the critical path). Appeals is the lighthouse domain shipped end-to-end today.</div>
       <div class="layer-row"><strong>Commercial shape</strong>Multi-year, priced PMPM and per domain. New domains are amendments, not renegotiations.</div>
     </div>
 
@@ -878,7 +879,7 @@
 
   <div class="faq-item">
     <div class="faq-q">What does PMPM mean and how is it priced?</div>
-    <div class="faq-a">PMPM stands for per member per month &mdash; the standard unit economics for payer-scale platform relationships. Cloud Health Office&rsquo;s Platform Engagement is priced PMPM across all three layers. Pricing is indicative market-rate within each layer; specific terms are negotiated per pilot. Founding-partner terms are available for first pilot engagements in each layer. Layer 1 entry pricing is market-rate for CMS-0057-F compliance surfaces; Layer 2 PMPM expands per domain migrated; Layer 3 PMPM aspires to the range of incumbent CAPS platforms as production references accumulate.</div>
+    <div class="faq-a">PMPM stands for per member per month &mdash; the standard unit economics for payer-scale platform relationships. CHO&rsquo;s Platform Engagement is priced PMPM across all three layers. Pricing is indicative market-rate within each layer; specific terms are negotiated per pilot. Founding-partner terms are available for first pilot engagements in each layer. Layer 1 entry pricing is market-rate for CMS-0057-F compliance surfaces; Layer 2 PMPM expands per domain migrated; Layer 3 PMPM aspires to the range of incumbent CAPS platforms as production references accumulate.</div>
   </div>
 
   <div class="faq-item">
