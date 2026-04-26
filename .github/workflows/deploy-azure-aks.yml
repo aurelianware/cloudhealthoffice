@@ -199,6 +199,8 @@ jobs:
       build_context: '.'
       image_name: ${{ matrix.image_name || '' }}
       push: true
+      registry: ${{ vars.ACR_LOGIN_SERVER }}
+      registry_name: ${{ vars.ACR_NAME }}
     secrets:
       azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
       azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
