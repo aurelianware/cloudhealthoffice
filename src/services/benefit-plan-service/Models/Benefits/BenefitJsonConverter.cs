@@ -70,17 +70,28 @@ public sealed class BenefitJsonConverter : JsonConverter<Benefit>
             return BenefitTypeDiscriminators.Medical;
         }
 
-        if (!root.TryGetProperty("benefitType", out var prop))
+        // Property-name lookup is case-insensitive so payloads that arrive
+        // with "BenefitType" / "BENEFITTYPE" / "benefittype" all dispatch
+        // the same way. STJ's JsonElement.TryGetProperty is case-sensitive
+        // and ignores PropertyNameCaseInsensitive on the options, so we
+        // enumerate explicitly. Discriminator value comparison further down
+        // (ResolveConcreteType) is also case-insensitive for the same reason.
+        JsonElement? prop = null;
+        foreach (var p in root.EnumerateObject())
+        {
+            if (string.Equals(p.Name, "benefitType", StringComparison.OrdinalIgnoreCase))
+            {
+                prop = p.Value;
+                break;
+            }
+        }
+
+        if (prop is null || prop.Value.ValueKind != JsonValueKind.String)
         {
             return BenefitTypeDiscriminators.Medical;
         }
 
-        if (prop.ValueKind != JsonValueKind.String)
-        {
-            return BenefitTypeDiscriminators.Medical;
-        }
-
-        var value = prop.GetString();
+        var value = prop.Value.GetString();
         return string.IsNullOrWhiteSpace(value) ? BenefitTypeDiscriminators.Medical : value;
     }
 

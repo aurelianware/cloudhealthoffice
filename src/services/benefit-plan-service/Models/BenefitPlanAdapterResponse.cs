@@ -264,7 +264,7 @@ public class AdapterBenefit
         Limitations = b.Limitations;
         AnnualMaximum = b.AnnualMaximum;
         LifetimeMaximum = b.LifetimeMaximum;
-        Rules = b.Rules?.Select(r => r).ToList();
+        Rules = b.Rules?.Select(r => r.Clone()).ToList();
     }
 }
 
@@ -451,6 +451,10 @@ public sealed class AdapterMaternityBenefit : AdapterBenefit
     public bool CoversPrenatal { get; set; }
     public bool CoversDelivery { get; set; }
     public bool CoversPostpartum { get; set; }
+
+    // Explicit camelCase wire name so the all-caps C# acronym doesn't leak
+    // through and produce `coversNICU` on the wire — matches the model.
+    [JsonPropertyName("coversNicu")]
     public bool CoversNICU { get; set; }
 
     public static AdapterMaternityBenefit FromTyped(MaternityBenefit src)

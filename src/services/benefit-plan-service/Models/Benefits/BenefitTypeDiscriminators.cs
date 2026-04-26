@@ -2,9 +2,9 @@ namespace BenefitPlanService.Models.Benefits;
 
 /// <summary>
 /// Wire values for the <c>benefitType</c> discriminator used by
-/// <see cref="Benefit"/> and <see cref="AdapterBenefit"/>. CamelCase by
-/// convention so the discriminator matches the rest of the JSON envelope
-/// emitted by this service.
+/// <see cref="Benefit"/> and <see cref="BenefitPlanService.Models.AdapterBenefit"/>.
+/// CamelCase by convention so the discriminator matches the rest of the
+/// JSON envelope emitted by this service.
 /// </summary>
 public static class BenefitTypeDiscriminators
 {

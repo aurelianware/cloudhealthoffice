@@ -22,6 +22,6 @@ public class MaternityBenefit : Benefit
     public bool CoversPostpartum { get; set; }
 
     /// <summary>True when neonatal intensive care unit charges are covered under this benefit.</summary>
-    [JsonPropertyName("coversNICU")]
+    [JsonPropertyName("coversNicu")]
     public bool CoversNICU { get; set; }
 }

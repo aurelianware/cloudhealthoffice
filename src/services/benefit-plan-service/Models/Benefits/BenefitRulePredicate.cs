@@ -51,6 +51,23 @@ public class BenefitRulePredicate
     public int? RelatedEncounterLookbackDays { get; set; }
 
     /// <summary>
+    /// Deep-copy of the predicate. <see cref="RequiredDiagnosisCodes"/>
+    /// gets its own list (strings are immutable, so element references are
+    /// safe to share); every other field is a value type or string and
+    /// copies cleanly. Used at the adapter seam so a mutation on one side
+    /// can't bleed across.
+    /// </summary>
+    public BenefitRulePredicate Clone() => new()
+    {
+        MemberAgeMin = MemberAgeMin,
+        MemberAgeMax = MemberAgeMax,
+        MemberGender = MemberGender,
+        RequiredDiagnosisCodes = RequiredDiagnosisCodes is null ? null : new List<string>(RequiredDiagnosisCodes),
+        RequiresRelatedEncounter = RequiresRelatedEncounter,
+        RelatedEncounterLookbackDays = RelatedEncounterLookbackDays,
+    };
+
+    /// <summary>
     /// Evaluate the predicate against <paramref name="context"/>. Returns
     /// true when every set facet matches; an unset facet contributes no
     /// constraint. A predicate with no facets at all evaluates to true.
@@ -59,7 +76,7 @@ public class BenefitRulePredicate
     {
         if (context is null)
         {
-            // No context to evaluate against — refuse to gate the benefit.
+            // No context to evaluate against — fail closed, so the benefit does not apply.
             return false;
         }
 
