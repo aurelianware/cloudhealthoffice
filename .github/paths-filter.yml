@@ -32,7 +32,10 @@
 # a δ3 concern.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Per-service filters (alphabetical, case-insensitive) ────────────────────
+# ── Per-service filters (alphabetical) ──────────────────────────────────────
+# Filter NAMES match dorny output names verbatim and are case-sensitive;
+# the two PascalCase entries (CHO.TerminologyService, CloudHealthOffice.PricingApi)
+# sort against the rest by lowercase order purely for human readability.
 accumulator-service:           ['src/services/accumulator-service/**']
 appeals-service:               ['src/services/appeals-service/**']
 ar-service:                    ['src/services/ar-service/**']

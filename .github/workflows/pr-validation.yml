@@ -93,6 +93,16 @@ concurrency:
   group: pr-validation-${{ github.ref }}
   cancel-in-progress: true
 
+# Workflow-level permissions cap the GITHUB_TOKEN scope for every job below.
+# Defaulting to read-only contents matches the CodeQL "minimal starting
+# point" recommendation. The `build` job needs id-token: write to satisfy
+# the reusable workflow's job-level permission contract (even on push:false
+# runs where OIDC is never exercised — GHA validates the caller's grant
+# against the called workflow's request statically); that's granted at the
+# job level rather than widening this default.
+permissions:
+  contents: read
+
 jobs:
   # ───────────────────────────────────────────────────────────────────────
   # detect-changes: figure out which services the PR affects and emit the
@@ -136,10 +146,19 @@ jobs:
           # Per-filter outputs are 'true' / 'false' strings. dorny exposes
           # these alongside `changes` so callers can branch without parsing
           # the array. We use them to decide selective vs validate-all.
-          SHARED_LIBS: ${{ steps.filter.outputs.shared-libs }}
-          ENGINES: ${{ steps.filter.outputs.engines }}
-          BUILD_CONFIG: ${{ steps.filter.outputs.build-config }}
-          WORKFLOWS: ${{ steps.filter.outputs.workflows }}
+          #
+          # IMPORTANT: hyphenated output names (`shared-libs`, `build-config`)
+          # MUST use bracket notation. The GHA expression parser reads
+          # `steps.filter.outputs.shared-libs` as `outputs.shared - libs`
+          # (subtraction), which evaluates to NaN/empty rather than the
+          # filter's true/false string — silently breaking the validate-all
+          # gate for those two triggers. The unhyphenated outputs (engines,
+          # workflows) are safe with dot notation but use brackets too for
+          # consistency.
+          SHARED_LIBS: ${{ steps.filter.outputs['shared-libs'] }}
+          ENGINES: ${{ steps.filter.outputs['engines'] }}
+          BUILD_CONFIG: ${{ steps.filter.outputs['build-config'] }}
+          WORKFLOWS: ${{ steps.filter.outputs['workflows'] }}
         run: |
           set -euo pipefail
 
@@ -257,6 +276,14 @@ jobs:
     name: Build ${{ matrix.service }}
     needs: detect-changes
     if: needs.detect-changes.outputs.services != '[]'
+    # The reusable workflow's job-level permissions request
+    # (contents: read, id-token: write — see _build-service-image.yml lines
+    # 191-195) must be matched by the caller, otherwise GHA rejects the
+    # workflow_call statically. id-token: write is unused at runtime when
+    # push: false (no OIDC), but the static-grant check fires regardless.
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       # fail-fast: false matches the deploy-aks and docker-build conventions
       # — we want every affected service's build status visible in the same
