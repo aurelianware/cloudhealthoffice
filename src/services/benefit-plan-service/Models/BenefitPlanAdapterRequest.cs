@@ -2,14 +2,35 @@ namespace BenefitPlanService.Models;
 
 /// <summary>
 /// Vendor-neutral request envelope passed to any <see cref="Adapters.IBenefitPlanAdapter"/>.
-/// A single shape covers all three read methods; per-method required fields are documented below.
+/// A single shape covers all three read methods; per-method required fields and identifier
+/// semantics are documented on the individual properties below.
 /// </summary>
 public class BenefitPlanAdapterRequest
 {
     /// <summary>Tenant id resolved by the request middleware. Required by all methods.</summary>
     public string TenantId { get; set; } = string.Empty;
 
-    /// <summary>Plan id (the persistent <c>Id</c> on the document, not <c>PlanId</c> business key). Required by all methods.</summary>
+    /// <summary>
+    /// Plan identifier. Semantics differ by adapter method and follow the existing
+    /// controller / repository conventions:
+    /// <list type="bullet">
+    ///   <item>
+    ///     <c>GetPlanAsync</c> — the persistent document <c>Id</c> (the row primary key
+    ///     used by <c>GET /api/v1/plans/{id}</c>).
+    ///   </item>
+    ///   <item>
+    ///     <c>GetPlanVersionAsync</c> — the business <c>PlanId</c> (version-chain key
+    ///     used by <c>GET /api/v1/plans/{planId}/versions/{versionId}</c>).
+    ///   </item>
+    ///   <item>
+    ///     <c>GetMemberBenefitViewAsync</c> — the persistent document <c>Id</c> (matches
+    ///     <c>GET /api/v1/benefit-plans/{planId}/member-view</c>).
+    ///   </item>
+    /// </list>
+    /// Required by all methods. The dual semantics mirror the historical controller
+    /// behaviour and will be consolidated when the version-chain endpoints' <c>{id}</c>
+    /// route token is renamed in a follow-up.
+    /// </summary>
     public string PlanId { get; set; } = string.Empty;
 
     /// <summary>

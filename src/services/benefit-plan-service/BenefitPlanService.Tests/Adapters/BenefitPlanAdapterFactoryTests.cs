@@ -13,7 +13,7 @@ public class BenefitPlanAdapterFactoryTests
                     StubBenefitPlanAdapter cho,
                     StubBenefitPlanAdapter qnxt) BuildFactory(
         FakeHttpMessageHandler handler,
-        params (string platform, IBenefitPlanAdapter adapter)[] extra)
+        params IBenefitPlanAdapter[] extra)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -28,7 +28,7 @@ public class BenefitPlanAdapterFactoryTests
         var cho = new StubBenefitPlanAdapter("cho");
         var qnxt = new StubBenefitPlanAdapter("qnxt");
         var adapters = new List<IBenefitPlanAdapter> { cho, qnxt };
-        adapters.AddRange(extra.Select(e => e.adapter));
+        adapters.AddRange(extra);
 
         var factory = new BenefitPlanAdapterFactory(
             adapters, cache, NullLogger<BenefitPlanAdapterFactory>.Instance);
