@@ -8,7 +8,7 @@ CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engi
 Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrate workloads on your timeline.
 
 [![Version](https://img.shields.io/badge/version-v4.2.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.2.0)
-[![Tests](https://img.shields.io/badge/tests-2%2C800%2B%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
+[![Tests](https://img.shields.io/badge/tests-2800%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
 [![Test Projects](https://img.shields.io/badge/test%20projects-44-brightgreen)](./tests/)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](./LICENSE)
@@ -65,7 +65,8 @@ Customers enter at any product line and expand over time. See
 |Portal Pages         |50       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                                                |
 |CI/CD Workflows      |18       |GitHub Actions — build, test, deploy, security scan                                                         |
 |Claims Scrubbing     |20+ rules|Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits                                         |
-|Automated Tests      |~2,800 across 44 projects|C# xUnit, TypeScript Jest, Python pytest                                                  |
+|Automated Tests      |2800     |C# xUnit, TypeScript Jest, Python pytest                                                                    |
+|Test Projects        |44       |Repositories and suites covered by automated test execution                                                |
 
 ### Services
 
