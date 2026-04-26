@@ -205,6 +205,71 @@ public sealed class InMemoryPlanVersionTransitionRepository : IPlanVersionTransi
     }
 }
 
+/// <summary>
+/// In-memory <see cref="IPlanYearTransitionPublisher"/> with the same
+/// idempotency contract as the Mongo implementation: re-emitting an
+/// EventId is a no-op rather than a duplicate row.
+/// </summary>
+public sealed class FakePlanYearTransitionPublisher : IPlanYearTransitionPublisher
+{
+    public List<PlanYearTransitionEvent> Events { get; } = new();
+
+    public Task<PlanYearTransitionEvent> PublishApproachingAsync(
+        BenefitPlan plan, DateTime planYearEnd, DateTime nextPlanYearStart,
+        string? actorId, string? correlationId, CancellationToken ct = default)
+        => AppendOrReturnExisting(Build(plan, PlanYearTransitionType.ApproachingTransition,
+            planYearEnd, nextPlanYearStart, actorId, correlationId));
+
+    public Task<PlanYearTransitionEvent> PublishTransitionAsync(
+        BenefitPlan plan, DateTime planYearEnd, DateTime nextPlanYearStart,
+        string? actorId, string? correlationId, CancellationToken ct = default)
+        => AppendOrReturnExisting(Build(plan, PlanYearTransitionType.Transition,
+            planYearEnd, nextPlanYearStart, actorId, correlationId));
+
+    private Task<PlanYearTransitionEvent> AppendOrReturnExisting(PlanYearTransitionEvent e)
+    {
+        var existing = Events.FirstOrDefault(x =>
+            x.TenantId == e.TenantId && x.PlanId == e.PlanId && x.EventId == e.EventId);
+        if (existing != null) return Task.FromResult(existing);
+
+        e.Version = Events.Count(x => x.TenantId == e.TenantId && x.PlanId == e.PlanId) + 1;
+        Events.Add(e);
+        return Task.FromResult(e);
+    }
+
+    private static PlanYearTransitionEvent Build(
+        BenefitPlan plan, PlanYearTransitionType type,
+        DateTime planYearEnd, DateTime nextPlanYearStart,
+        string? actorId, string? correlationId) => new()
+        {
+            EventId = PlanYearTransitionEvent.BuildEventId(type, plan.TenantId, plan.PlanId, planYearEnd),
+            TransitionType = type,
+            TenantId = plan.TenantId,
+            PlanId = plan.PlanId,
+            FromPlanYearEnd = planYearEnd,
+            ToPlanYearStart = nextPlanYearStart,
+            ActorId = actorId,
+            CorrelationId = correlationId,
+            OccurredAt = DateTime.UtcNow
+        };
+}
+
+public sealed class FakePlanYearScheduleSource : IPlanYearScheduleSource
+{
+    public List<BenefitPlan> Plans { get; } = new();
+
+    public async IAsyncEnumerable<BenefitPlan> EnumeratePlansAsync(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        foreach (var p in Plans)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return p;
+            await Task.Yield();
+        }
+    }
+}
+
 public sealed class FakePlanVersionEventPublisher : IPlanVersionEventPublisher
 {
     public List<PlanVersionEvent> Events { get; } = new();

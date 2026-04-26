@@ -41,6 +41,8 @@ if (useMongo)
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
     builder.Services.AddScoped<IPlanVersionTransitionRepository, MongoPlanVersionTransitionRepository>();
     builder.Services.AddScoped<IPlanVersionEventPublisher, MongoPlanVersionEventPublisher>();
+    builder.Services.AddScoped<IPlanYearTransitionPublisher, MongoPlanYearTransitionPublisher>();
+    builder.Services.AddScoped<IPlanYearScheduleSource, MongoPlanYearScheduleSource>();
     // Ensures (TenantId, PlanId, EventId) and (TenantId, PlanId, Version)
     // unique indexes exist on the events collection — the publisher's
     // retry-on-duplicate loop depends on them.
@@ -53,6 +55,16 @@ if (useMongo)
               .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
             sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<ILogger<BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer>>()));
+    builder.Services.AddSingleton<IHostedService>(sp =>
+        new BenefitPlanService.HostedServices.PlanYearTransitionEventIndexInitializer(
+            sp.GetRequiredService<IMongoClient>()
+              .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<ILogger<BenefitPlanService.HostedServices.PlanYearTransitionEventIndexInitializer>>()));
+    // PlanYearScheduler periodically scans plans and emits Approaching /
+    // Transition events. Idempotency lives in the publisher (deterministic
+    // EventId), so running on multiple replicas is safe.
+    builder.Services.AddHostedService<PlanYearScheduler>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -77,6 +89,17 @@ else
             ? new NoopPlanVersionEventPublisher(sp.GetRequiredService<ILogger<NoopPlanVersionEventPublisher>>())
             : new MongoPlanVersionEventPublisher(mongo, sp.GetRequiredService<IConfiguration>(),
                 sp.GetRequiredService<ILogger<MongoPlanVersionEventPublisher>>());
+    });
+    // Cosmos-only deployments get the no-op publisher and no scheduler —
+    // the events stream lives in Mongo today (consistent with
+    // PlanVersionEvent). See docs/architecture/plan-year-definition.md.
+    builder.Services.AddScoped<IPlanYearTransitionPublisher>(sp =>
+    {
+        var mongo = sp.GetService<IMongoDatabase>();
+        return mongo == null
+            ? new NoopPlanYearTransitionPublisher(sp.GetRequiredService<ILogger<NoopPlanYearTransitionPublisher>>())
+            : new MongoPlanYearTransitionPublisher(mongo, sp.GetRequiredService<IConfiguration>(),
+                sp.GetRequiredService<ILogger<MongoPlanYearTransitionPublisher>>());
     });
     Console.WriteLine("Using Cosmos DB repository");
 }
