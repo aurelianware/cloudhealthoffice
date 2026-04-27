@@ -170,7 +170,7 @@ public class ProviderVersioningServiceTests
             ProviderTransitionType.Activate,
             ProviderTransitionType.Amend,
             ProviderTransitionType.Supersede
-        });
+        }, opts => opts.WithStrictOrdering());
     }
 
     [Fact]

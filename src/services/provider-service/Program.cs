@@ -1,5 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using ProviderService.HostedServices;
 using ProviderService.Middleware;
 using ProviderService.Repositories;
 using ProviderService.Services;
@@ -48,6 +49,7 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IProviderRepository, ProviderRepositoryMongo>();
     builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
     builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
+    builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
     Console.WriteLine("Using MongoDB database provider");
 }
 else

@@ -21,7 +21,7 @@ public class ProviderTransition
 
     /// <summary>
     /// Provider chain key — the persistent provider identifier
-    /// (<see cref="Provider.Id"/>), not the per-version <c>VersionId</c>.
+    /// (<see cref="Provider.ProviderId"/>), not the per-version <c>VersionId</c>.
     /// </summary>
     [Required]
     [JsonPropertyName("providerId")]

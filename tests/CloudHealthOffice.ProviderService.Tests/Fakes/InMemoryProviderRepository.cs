@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ProviderService.Models;
 using ProviderService.Repositories;
+using ProviderService.Services;
 
 namespace CloudHealthOffice.ProviderService.Tests.Fakes;
 
@@ -276,7 +277,7 @@ public sealed class InMemoryProviderTransitionRepository : IProviderTransitionRe
     }
 }
 
-public sealed class FakeProviderVersionEventPublisher : ProviderService.Services.IProviderVersionEventPublisher
+public sealed class FakeProviderVersionEventPublisher : IProviderVersionEventPublisher
 {
     public List<ProviderVersionEvent> Events { get; } = new();
 

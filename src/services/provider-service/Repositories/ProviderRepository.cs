@@ -152,7 +152,8 @@ public class ProviderRepository : IProviderRepository
             .WithParameter("@id", id)
             .WithParameter("@draft", ProviderVersionState.Draft.ToString());
 
-        var iterator = _container.GetItemQueryIterator<Provider>(query);
+        var iterator = _container.GetItemQueryIterator<Provider>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         while (iterator.HasMoreResults)
         {
             var page = await iterator.ReadNextAsync();
@@ -176,7 +177,8 @@ public class ProviderRepository : IProviderRepository
             .WithParameter("@npi", npi)
             .WithParameter("@draft", ProviderVersionState.Draft.ToString());
 
-        var iterator = _container.GetItemQueryIterator<Provider>(query);
+        var iterator = _container.GetItemQueryIterator<Provider>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         var results = new List<Provider>();
 
         while (iterator.HasMoreResults)
@@ -351,7 +353,8 @@ public class ProviderRepository : IProviderRepository
             .WithParameter("@active", ProviderVersionState.Active.ToString())
             .WithParameter("@asOf", asOf);
 
-        var iterator = _container.GetItemQueryIterator<Provider>(query);
+        var iterator = _container.GetItemQueryIterator<Provider>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         while (iterator.HasMoreResults)
         {
             var page = await iterator.ReadNextAsync();
@@ -372,7 +375,8 @@ public class ProviderRepository : IProviderRepository
             .WithParameter("@providerId", providerId)
             .WithParameter("@versionId", versionId);
 
-        var iterator = _container.GetItemQueryIterator<Provider>(query);
+        var iterator = _container.GetItemQueryIterator<Provider>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         while (iterator.HasMoreResults)
         {
             var page = await iterator.ReadNextAsync();

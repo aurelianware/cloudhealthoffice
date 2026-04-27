@@ -213,10 +213,13 @@ public class ProvidersController : ControllerBase
     // -----------------------------------------------------------------
     // Version-chain endpoints (5.1 — Provider Identity & Versioning)
     //
-    // Mounted only under /api/v1/providers — there is no legacy consumer
-    // for these routes, so dual-mounting is unnecessary. The {id} token
-    // is the chain key (Provider.ProviderId), distinct from per-version
-    // document Ids exposed elsewhere on this controller.
+    // These actions are relative-route actions on a controller that is
+    // dual-mounted at both /api/v1/providers and /api/Providers, so they
+    // are reachable through both prefixes. The {id} token is the chain key
+    // (Provider.ProviderId), distinct from per-version document Ids exposed
+    // elsewhere on this controller. If these routes must be v1-only, they
+    // need absolute /api/v1/providers/... route templates or a separate
+    // v1-only controller.
     // -----------------------------------------------------------------
 
     /// <summary>

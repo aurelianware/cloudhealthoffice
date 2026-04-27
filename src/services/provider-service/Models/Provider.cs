@@ -273,10 +273,10 @@ public class Provider
     //
     // A provider is an append-only chain of immutable Active versions. Each
     // row in the Providers collection is one version; the chain is keyed on
-    // (TenantId, Id) — Id is the persistent provider identifier, while
-    // VersionId is the per-version ULID. Documents written before these
-    // fields existed hydrate as VersionState=Active, VersionNumber=1,
-    // VersionId=Id (see docs/architecture/provider-versioning.md).
+    // (TenantId, ProviderId) — ProviderId is the persistent provider identifier,
+    // while Id (VersionId) is the per-version ULID row key. Documents written
+    // before these fields existed hydrate as VersionState=Active, VersionNumber=1,
+    // ProviderId=Id (see docs/architecture/provider-versioning.md).
     //
     // The legacy ProviderStatus enum is preserved as the back-compat signal:
     // hydration normalizes Status from VersionState (Active↔Active,
@@ -294,7 +294,7 @@ public class Provider
     public string VersionId { get; set; } = string.Empty;
 
     /// <summary>
-    /// 1-based monotonic sequence within <c>(TenantId, Id)</c>. Populated
+    /// 1-based monotonic sequence within <c>(TenantId, ProviderId)</c>. Populated
     /// by the service when creating new versions; left at the default for
     /// legacy documents so hydration can fix it up on read.
     /// </summary>

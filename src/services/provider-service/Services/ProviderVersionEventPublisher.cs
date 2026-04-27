@@ -58,7 +58,7 @@ public sealed class MongoProviderVersionEventPublisher : IProviderVersionEventPu
             EventId = $"activated:{version.VersionId}",
             EventType = ProviderVersionEventType.ProviderVersionActivated,
             TenantId = version.TenantId,
-            ProviderId = version.Id,
+            ProviderId = version.ProviderId,
             VersionId = version.VersionId,
             ActorId = actorId,
             CorrelationId = correlationId,
@@ -82,7 +82,7 @@ public sealed class MongoProviderVersionEventPublisher : IProviderVersionEventPu
             EventId = $"superseded:{from.VersionId}->{to.VersionId}",
             EventType = ProviderVersionEventType.ProviderVersionSuperseded,
             TenantId = from.TenantId,
-            ProviderId = from.Id,
+            ProviderId = from.ProviderId,
             VersionId = from.VersionId,
             ActorId = actorId,
             CorrelationId = correlationId,
@@ -105,7 +105,7 @@ public sealed class MongoProviderVersionEventPublisher : IProviderVersionEventPu
             EventId = $"suspended:{version.VersionId}",
             EventType = ProviderVersionEventType.ProviderVersionSuspended,
             TenantId = version.TenantId,
-            ProviderId = version.Id,
+            ProviderId = version.ProviderId,
             VersionId = version.VersionId,
             ActorId = actorId,
             CorrelationId = correlationId,
@@ -128,7 +128,7 @@ public sealed class MongoProviderVersionEventPublisher : IProviderVersionEventPu
             EventId = $"reactivated:{version.VersionId}",
             EventType = ProviderVersionEventType.ProviderVersionReactivated,
             TenantId = version.TenantId,
-            ProviderId = version.Id,
+            ProviderId = version.ProviderId,
             VersionId = version.VersionId,
             ActorId = actorId,
             CorrelationId = correlationId,
@@ -151,7 +151,7 @@ public sealed class MongoProviderVersionEventPublisher : IProviderVersionEventPu
             EventId = $"terminated:{version.VersionId}",
             EventType = ProviderVersionEventType.ProviderVersionTerminated,
             TenantId = version.TenantId,
-            ProviderId = version.Id,
+            ProviderId = version.ProviderId,
             VersionId = version.VersionId,
             ActorId = actorId,
             CorrelationId = correlationId,
@@ -250,13 +250,13 @@ public sealed class NoopProviderVersionEventPublisher : IProviderVersionEventPub
     {
         _logger.LogWarning(
             "ProviderVersionEventPublisher is not configured; dropping {EventType} for provider {ProviderId} version {VersionId}",
-            type, version.Id, version.VersionId);
+            type, version.ProviderId, version.VersionId);
         return Task.FromResult(new ProviderVersionEvent
         {
             EventId = eventId,
             EventType = type,
             TenantId = version.TenantId,
-            ProviderId = version.Id,
+            ProviderId = version.ProviderId,
             VersionId = version.VersionId,
             ActorId = actorId,
             CorrelationId = correlationId

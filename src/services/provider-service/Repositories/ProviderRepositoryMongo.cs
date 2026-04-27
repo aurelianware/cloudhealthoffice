@@ -70,10 +70,18 @@ public class ProviderRepositoryMongo : IProviderRepository
             b.And(b.Or(b.Eq(p => p.ProviderId, string.Empty), b.Exists(p => p.ProviderId, false)),
                   b.Eq(p => p.Id, id)));
 
+        // Exclude real Draft rows (non-empty VersionId + Draft state).
+        // Legacy rows have VersionId = "" and default VersionState = Draft (0)
+        // but they are not actual drafts — hydration will normalize them to Active.
+        var notRealDraft = b.Or(
+            b.Ne(p => p.VersionState, ProviderVersionState.Draft),
+            b.Eq(p => p.VersionId, string.Empty),
+            b.Exists(p => p.VersionId, false));
+
         var filter = b.And(
             b.Eq(p => p.TenantId, tenantId),
             chainFilter,
-            b.Ne(p => p.VersionState, ProviderVersionState.Draft));
+            notRealDraft);
 
         var doc = await _collection.Find(filter)
             .SortByDescending(p => p.VersionNumber)
@@ -85,10 +93,17 @@ public class ProviderRepositoryMongo : IProviderRepository
     {
         var tenantId = GetTenantId();
         var b = Builders<Provider>.Filter;
+
+        // Exclude real Draft rows but include legacy rows (empty VersionId).
+        var notRealDraft = b.Or(
+            b.Ne(p => p.VersionState, ProviderVersionState.Draft),
+            b.Eq(p => p.VersionId, string.Empty),
+            b.Exists(p => p.VersionId, false));
+
         var filter = b.And(
             b.Eq(p => p.NPI, npi),
             b.Eq(p => p.TenantId, tenantId),
-            b.Ne(p => p.VersionState, ProviderVersionState.Draft));
+            notRealDraft);
 
         var doc = await _collection.Find(filter)
             .SortByDescending(p => p.VersionNumber)
