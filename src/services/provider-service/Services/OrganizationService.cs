@@ -114,7 +114,10 @@ public class OrganizationService : IOrganizationService
 
         // Build a brand-new draft cloned from the candidate fields, but
         // wire identity (chain key, predecessor, version number) from the
-        // current head so the versioning chain stays intact.
+        // current head so the versioning chain stays intact. This is a
+        // RESTful PUT — full replacement: any field absent from the
+        // candidate is treated as "set to default" on the new version.
+        // See NetworksController.Update XML doc + network-as-organization.md.
         var draft = Clone(candidate);
         draft.Id = Guid.NewGuid().ToString();
         draft.TenantId = current.TenantId;

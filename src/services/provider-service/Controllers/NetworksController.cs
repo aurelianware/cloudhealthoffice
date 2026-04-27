@@ -130,6 +130,15 @@ public class NetworksController : ControllerBase
     /// Update a network. Internally clones the head into a new Active
     /// version and supersedes the prior one — the chain stays intact and
     /// addressable under the same <see cref="Organization.OrganizationId"/>.
+    ///
+    /// <para>
+    /// Standard REST PUT semantics — <b>full replacement</b>. Callers must
+    /// submit the complete network body; any field omitted from the
+    /// request body is treated as "set to default" on the new version
+    /// (e.g. an absent <c>Identifiers</c> array becomes empty, an absent
+    /// <c>ContactInfo</c> becomes null). For partial updates use
+    /// <c>POST</c> against future amendment endpoints rather than PUT.
+    /// </para>
     /// </summary>
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(Organization), StatusCodes.Status200OK)]

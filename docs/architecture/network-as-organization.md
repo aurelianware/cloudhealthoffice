@@ -18,9 +18,11 @@ facility — hospital, clinic, group practice). The two co-exist:
 - `Provider` (`ProviderType=Organization`) — *one facility*.
 - `Organization` (this doc) — *one payer-defined network*.
 
-Downstream services reference networks by `Organization.Id` once they need
-network-tier semantics (capability 5.5) or FHIR `Organization` projections
-(capabilities 5.7+).
+Downstream services reference networks by `OrganizationId`, the stable
+chain key, once they need network-tier semantics (capability 5.5) or FHIR
+`Organization` projections (capabilities 5.7+). The per-version `Id` is
+internal to the version chain and is never used as a cross-version
+reference.
 
 ## Topology
 
@@ -89,10 +91,16 @@ public enum NetworkType
 }
 ```
 
-Every value is explicitly numbered, `Unknown=0` is the default, and the
-converter is `JsonStringEnumConverter` (string-only, no integer parsing) so
-on-the-wire payloads stay self-describing. `OrganizationStatus` follows
-the same pattern.
+Every value is explicitly numbered and `Unknown=0` is the default.
+String-only enforcement (rejecting integer enum payloads) is delegated
+to the shared MVC JSON options registered by
+`AddCloudHealthOfficeJsonOptions`, which constructs a
+`JsonStringEnumConverter(allowIntegerValues: false)`. The new enums in
+this capability deliberately do **not** carry a type-level
+`[JsonConverter(typeof(JsonStringEnumConverter))]` attribute, because
+that constructor defaults to `allowIntegerValues: true` and would
+override the strict global converter. `OrganizationStatus` and
+`OrganizationVersionState` follow the same pattern.
 
 ## REST Surface
 
@@ -111,6 +119,13 @@ middleware to populate `HttpContext.Items["TenantId"]`.
 `PUT` always advances the version chain — it never mutates an Active row
 in place. `DELETE` does not remove documents; it flips the head to
 `Terminated` and preserves the historical chain.
+
+**PUT is RESTful full-replacement.** Callers must submit the full network
+body on every update; any field omitted from the request becomes its
+default on the new version (`Identifiers` → empty list, `ContactInfo` →
+null, etc.). Partial-update semantics are intentionally out of scope for
+this capability — they would require a separate `PATCH` endpoint with
+explicit "fields the client touched" tracking.
 
 ## partOf Hierarchy
 

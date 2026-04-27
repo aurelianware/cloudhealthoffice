@@ -177,22 +177,28 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
         if (!string.IsNullOrEmpty(parentOrganizationId))
             filter = b.And(filter, b.Eq(o => o.ParentOrganizationId, parentOrganizationId));
 
-        // Mongo lacks a single-pass GROUP BY for "head per chain" the way
-        // Cosmos does; pull all matching rows, hydrate, then keep the
-        // highest VersionNumber per OrganizationId.
-        var docs = await _collection.Find(filter)
+        // Server-side aggregation: $match → $sort → $group ($first per chain)
+        // → $replaceRoot → $sort by name. This avoids transferring every
+        // version document to the app and lets Mongo apply the indexes on
+        // (TenantId, OrganizationId, VersionNumber) for the de-duplication.
+        var heads = _collection.Aggregate()
+            .Match(filter)
             .SortByDescending(o => o.VersionNumber)
+            .Group(
+                o => o.OrganizationId,
+                g => new { Organization = g.First() })
+            .ReplaceRoot(x => x.Organization)
+            .SortBy(o => o.Name);
+
+        var totalDoc = await heads.Count().FirstOrDefaultAsync();
+        var total = (int)(totalDoc?.Count ?? 0);
+
+        var pagedDocs = await heads
+            .Skip((page - 1) * pageSize)
+            .Limit(pageSize)
             .ToListAsync();
 
-        var heads = docs
-            .Select(Hydrate)
-            .GroupBy(o => o.OrganizationId)
-            .Select(g => g.OrderByDescending(o => o.VersionNumber).First())
-            .OrderBy(o => o.Name)
-            .ToList();
-
-        var total = heads.Count;
-        var paged = heads.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        var paged = pagedDocs.Select(Hydrate).ToList();
         return (paged, total);
     }
 

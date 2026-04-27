@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace ProviderService.Models;
 
 /// <summary>
@@ -7,12 +5,14 @@ namespace ProviderService.Models;
 ///
 /// <para>
 /// Follows the PR #705 enum-handling pattern: every value is explicitly
-/// numbered, <c>Unknown = 0</c> is the safe default for documents written
-/// before this enum existed, and the converter is locked to string form
-/// (no integer parsing) so on-the-wire payloads stay self-describing.
+/// numbered and <c>Unknown = 0</c> is the safe default for documents
+/// written before this enum existed. The string-only / no-integer
+/// enforcement is delegated to the shared MVC JSON options registered by
+/// <c>AddCloudHealthOfficeJsonOptions</c> (which constructs a
+/// <c>JsonStringEnumConverter(allowIntegerValues: false)</c>) — declaring
+/// a type-level converter here would override that with the lax default.
 /// </para>
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum NetworkType
 {
     /// <summary>Default for hydrated documents that predate the field.</summary>

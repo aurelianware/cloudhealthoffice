@@ -85,6 +85,21 @@ public sealed class OrganizationVersionStateException : InvalidOperationExceptio
 /// <summary>
 /// Cosmos DB implementation of <see cref="IOrganizationRepository"/>.
 /// Mirrors <see cref="ProviderRepository"/> partition / hydration shape.
+///
+/// <para>
+/// <b>Cosmos enum serialization caveat.</b> The default Cosmos SDK
+/// serializer (Newtonsoft) ignores System.Text.Json
+/// <c>[JsonConverter]</c> attributes and persists enums as integers. The
+/// SQL queries below compare enum fields to <c>Enum.ToString()</c>, which
+/// matches the in-memory representation but not the persisted integer
+/// form. This mirrors the existing <see cref="ProviderRepository"/>
+/// pattern and works in environments that configure <c>CosmosClient</c>
+/// with a System.Text.Json serializer (or where Cosmos is exercised only
+/// via the in-memory test fakes). A platform-wide fix — registering
+/// <c>CosmosClientOptions.UseSystemTextJsonSerializerWithOptions</c> in
+/// Program.cs — would address this for both repositories at once and
+/// remains a follow-up beyond the scope of capability 5.3.
+/// </para>
 /// </summary>
 public class OrganizationRepository : IOrganizationRepository
 {

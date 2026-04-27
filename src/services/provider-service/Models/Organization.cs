@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
 
 namespace ProviderService.Models;
 
@@ -228,8 +227,10 @@ public class OrganizationContactInfo
 /// <summary>
 /// Operational status of an <see cref="Organization"/> network, separate
 /// from row lifecycle (<see cref="OrganizationVersionState"/>).
+///
+/// <para>String-only / no-integer enforcement is delegated to the shared
+/// MVC JSON options registered by <c>AddCloudHealthOfficeJsonOptions</c>.</para>
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum OrganizationStatus
 {
     Unknown = 0,
