@@ -3,24 +3,107 @@ using ProviderService.Models;
 
 namespace ProviderService.Repositories;
 
+/// <summary>
+/// Storage seam for the provider version chain. Each row in the underlying
+/// collection is one immutable version. Default reads (the non-version-aware
+/// overloads kept for backward compatibility) resolve to the latest
+/// <see cref="ProviderVersionState.Active"/> version effective today.
+/// </summary>
 public interface IProviderRepository
 {
     Task<Provider?> GetByIdAsync(string id);
     Task<Provider?> GetByNPIAsync(string npi);
     Task<IEnumerable<Provider>> SearchAsync(
-        string? name, 
-        string? specialty, 
-        string? zipCode, 
+        string? name,
+        string? specialty,
+        string? zipCode,
         string? state,
         string? planId,
         LineOfBusiness? lineOfBusiness,
         ProviderType? providerType,
         bool? acceptingNewPatients,
-        int page, 
+        int page,
         int pageSize);
     Task<Provider> CreateAsync(Provider provider);
     Task<Provider> UpdateAsync(Provider provider);
     Task DeleteAsync(string id);
+
+    // ---- Version-chain operations ------------------------------------
+
+    /// <summary>
+    /// Latest <see cref="ProviderVersionState.Active"/> version of
+    /// <paramref name="providerId"/> in effect at <paramref name="asOf"/>.
+    /// Returns null when no Active version exists (terminated, suspended,
+    /// or never activated).
+    /// </summary>
+    Task<Provider?> GetLatestActiveAsync(string providerId, DateTime asOf);
+
+    /// <summary>Look up a single version by <c>VersionId</c>.</summary>
+    Task<Provider?> GetVersionAsync(string providerId, string versionId);
+
+    /// <summary>
+    /// Newest-first list of every version for <paramref name="providerId"/>,
+    /// paginated with a continuation token.
+    /// </summary>
+    Task<(IReadOnlyList<Provider> Items, string? ContinuationToken)> ListVersionsAsync(
+        string providerId, int pageSize, string? continuationToken);
+
+    /// <summary>
+    /// Persist a new draft. Caller is responsible for setting
+    /// <c>VersionId</c>, <c>VersionNumber</c>, <c>VersionState=Draft</c>
+    /// and (for amendments) <c>PredecessorVersionId</c>.
+    /// </summary>
+    Task<Provider> CreateDraftAsync(Provider draft);
+
+    /// <summary>Update a Draft. Throws <see cref="ProviderVersionStateException"/> if the row is not Draft.</summary>
+    Task<Provider> UpdateDraftAsync(Provider draft);
+
+    /// <summary>
+    /// Atomic transition: flip <paramref name="draftToActivate"/> from Draft
+    /// to Active and (if not null) flip <paramref name="predecessor"/> from
+    /// Active/Suspended/Terminated to Superseded with
+    /// <c>SupersededByVersionId = draftToActivate.VersionId</c>. Implementations
+    /// use a transactional batch (Cosmos) or session transaction (Mongo)
+    /// when the backend supports it; otherwise they fall back to sequential
+    /// writes and log a compensating-action warning.
+    /// </summary>
+    Task<Provider> ActivateAndSupersedeAsync(Provider draftToActivate, Provider? predecessor);
+
+    /// <summary>
+    /// Persist a state-only mutation on an existing version row (Suspend
+    /// or Terminate). The service layer applies the new state and
+    /// timestamps before calling. Bypasses the Active-is-read-only guard
+    /// in <see cref="UpdateAsync"/>.
+    /// </summary>
+    Task<Provider> ReplaceVersionRowAsync(Provider version);
+}
+
+/// <summary>
+/// Thrown when a write violates the version-state invariants — e.g. an
+/// attempt to update an Active row, to activate a non-Draft row, or to
+/// reach a version that doesn't exist. The controller boundary maps
+/// <see cref="IsNotFound"/> to HTTP 404 and everything else to 409.
+/// </summary>
+public sealed class ProviderVersionStateException : InvalidOperationException
+{
+    public string ProviderId { get; }
+    public string VersionId { get; }
+    public ProviderVersionState CurrentState { get; }
+
+    /// <summary>
+    /// True when the underlying cause is "the requested provider/version
+    /// does not exist", as opposed to a state-machine violation. Set on
+    /// construction; controllers map this to HTTP 404 instead of 409.
+    /// </summary>
+    public bool IsNotFound { get; init; }
+
+    public ProviderVersionStateException(string providerId, string versionId, ProviderVersionState currentState, string message)
+        : base(message)
+    {
+        ProviderId = providerId;
+        VersionId = versionId;
+        CurrentState = currentState;
+    }
 }
 
 public class ProviderRepository : IProviderRepository
@@ -55,29 +138,43 @@ public class ProviderRepository : IProviderRepository
 
     public async Task<Provider?> GetByIdAsync(string id)
     {
+        // Resolves the chain key (ProviderId) to the latest non-Draft row.
+        // For legacy single-row chains where ProviderId is empty on disk,
+        // hydration restores ProviderId = Id, so the same call returns the
+        // same row it always did.
         var tenantId = GetTenantId();
+        var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.tenantId = @tenantId AND " +
+                "(c.providerId = @id OR (NOT IS_DEFINED(c.providerId) AND c.id = @id)) AND " +
+                "(NOT IS_DEFINED(c.versionState) OR c.versionState != @draft) " +
+                "ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@id", id)
+            .WithParameter("@draft", ProviderVersionState.Draft.ToString());
 
-        try
+        var iterator = _container.GetItemQueryIterator<Provider>(query);
+        while (iterator.HasMoreResults)
         {
-            var response = await _container.ReadItemAsync<Provider>(
-                id,
-                new PartitionKey(tenantId));
-            return response.Resource;
+            var page = await iterator.ReadNextAsync();
+            var first = page.FirstOrDefault();
+            if (first != null) return Hydrate(first);
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return null;
-        }
+        return null;
     }
 
     public async Task<Provider?> GetByNPIAsync(string npi)
     {
         var tenantId = GetTenantId();
 
+        // Skip Draft rows so NPI lookups consistently resolve to the head
+        // non-Draft version (Active / Suspended / Terminated / Superseded).
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.npi = @npi")
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.npi = @npi AND " +
+            "(NOT IS_DEFINED(c.versionState) OR c.versionState != @draft) " +
+            "ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@npi", npi);
+            .WithParameter("@npi", npi)
+            .WithParameter("@draft", ProviderVersionState.Draft.ToString());
 
         var iterator = _container.GetItemQueryIterator<Provider>(query);
         var results = new List<Provider>();
@@ -88,7 +185,7 @@ public class ProviderRepository : IProviderRepository
             results.AddRange(response);
         }
 
-        return results.FirstOrDefault();
+        return results.Select(Hydrate).FirstOrDefault();
     }
 
     public async Task<IEnumerable<Provider>> SearchAsync(
@@ -185,7 +282,7 @@ public class ProviderRepository : IProviderRepository
             results.AddRange(response);
         }
 
-        return results;
+        return results.Select(Hydrate).ToList();
     }
 
     public async Task<Provider> CreateAsync(Provider provider)
@@ -202,6 +299,27 @@ public class ProviderRepository : IProviderRepository
         var tenantId = GetTenantId();
         provider.TenantId = tenantId;
 
+        // Reject mutations on non-Draft rows. Hydration normalizes legacy
+        // rows to Active, which means updates against legacy data also
+        // surface 409 — callers must amend through the new draft path.
+        Provider? existing;
+        try
+        {
+            var read = await _container.ReadItemAsync<Provider>(provider.Id, new PartitionKey(tenantId));
+            existing = Hydrate(read.Resource);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            existing = null;
+        }
+
+        if (existing != null && existing.VersionState != ProviderVersionState.Draft)
+        {
+            throw new ProviderVersionStateException(
+                existing.ProviderId, existing.VersionId, existing.VersionState,
+                $"Provider version {existing.VersionId} is {existing.VersionState} and cannot be updated. Create an amendment via POST /amend.");
+        }
+
         var response = await _container.ReplaceItemAsync(
             provider,
             provider.Id,
@@ -213,6 +331,208 @@ public class ProviderRepository : IProviderRepository
     {
         var tenantId = GetTenantId();
         await _container.DeleteItemAsync<Provider>(id, new PartitionKey(tenantId));
+    }
+
+    public async Task<Provider?> GetLatestActiveAsync(string providerId, DateTime asOf)
+    {
+        var tenantId = GetTenantId();
+
+        // Hydration rule: rows missing versionState are treated as Active
+        // (legacy data). The query also accepts legacy rows where
+        // providerId is unset by falling back to the row's own id.
+        var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.tenantId = @tenantId AND " +
+                "(c.providerId = @providerId OR (NOT IS_DEFINED(c.providerId) AND c.id = @providerId)) AND " +
+                "(NOT IS_DEFINED(c.versionState) OR c.versionState = @active) AND " +
+                "(NOT IS_DEFINED(c.terminationDate) OR c.terminationDate = null OR c.terminationDate >= @asOf) " +
+                "ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@providerId", providerId)
+            .WithParameter("@active", ProviderVersionState.Active.ToString())
+            .WithParameter("@asOf", asOf);
+
+        var iterator = _container.GetItemQueryIterator<Provider>(query);
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync();
+            var first = page.FirstOrDefault();
+            if (first != null) return Hydrate(first);
+        }
+        return null;
+    }
+
+    public async Task<Provider?> GetVersionAsync(string providerId, string versionId)
+    {
+        var tenantId = GetTenantId();
+        var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.tenantId = @tenantId AND " +
+                "(c.providerId = @providerId OR (NOT IS_DEFINED(c.providerId) AND c.id = @providerId)) AND " +
+                "c.versionId = @versionId")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@providerId", providerId)
+            .WithParameter("@versionId", versionId);
+
+        var iterator = _container.GetItemQueryIterator<Provider>(query);
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync();
+            var first = page.FirstOrDefault();
+            if (first != null) return Hydrate(first);
+        }
+        return null;
+    }
+
+    public async Task<(IReadOnlyList<Provider> Items, string? ContinuationToken)> ListVersionsAsync(
+        string providerId, int pageSize, string? continuationToken)
+    {
+        var tenantId = GetTenantId();
+        var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.tenantId = @tenantId AND " +
+                "(c.providerId = @providerId OR (NOT IS_DEFINED(c.providerId) AND c.id = @providerId)) " +
+                "ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@providerId", providerId);
+
+        var requestOptions = new QueryRequestOptions
+        {
+            PartitionKey = new PartitionKey(tenantId),
+            MaxItemCount = pageSize
+        };
+
+        var iterator = _container.GetItemQueryIterator<Provider>(query, continuationToken, requestOptions);
+        if (!iterator.HasMoreResults)
+            return (Array.Empty<Provider>(), null);
+
+        var response = await iterator.ReadNextAsync();
+        var items = response.Select(Hydrate).ToList();
+        return (items, response.ContinuationToken);
+    }
+
+    public async Task<Provider> CreateDraftAsync(Provider draft)
+    {
+        var tenantId = GetTenantId();
+        draft.TenantId = tenantId;
+        draft.VersionState = ProviderVersionState.Draft;
+        if (string.IsNullOrEmpty(draft.Id)) draft.Id = Guid.NewGuid().ToString();
+        if (string.IsNullOrEmpty(draft.ProviderId)) draft.ProviderId = draft.Id;
+        draft.LastUpdatedDate = DateTime.UtcNow;
+
+        var response = await _container.CreateItemAsync(draft, new PartitionKey(tenantId));
+        return response.Resource;
+    }
+
+    public async Task<Provider> UpdateDraftAsync(Provider draft)
+    {
+        Provider? existing;
+        try
+        {
+            var read = await _container.ReadItemAsync<Provider>(draft.Id, new PartitionKey(draft.TenantId));
+            existing = Hydrate(read.Resource);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            existing = null;
+        }
+        if (existing == null)
+        {
+            throw new ProviderVersionStateException(draft.ProviderId, draft.VersionId, ProviderVersionState.Draft,
+                $"Draft {draft.VersionId} not found") { IsNotFound = true };
+        }
+        if (existing.VersionState != ProviderVersionState.Draft)
+        {
+            throw new ProviderVersionStateException(
+                existing.ProviderId, existing.VersionId, existing.VersionState,
+                $"Provider version {existing.VersionId} is {existing.VersionState} and cannot be edited.");
+        }
+
+        draft.LastUpdatedDate = DateTime.UtcNow;
+        draft.VersionState = ProviderVersionState.Draft;
+
+        var response = await _container.ReplaceItemAsync(draft, draft.Id, new PartitionKey(draft.TenantId));
+        return response.Resource;
+    }
+
+    public async Task<Provider> ActivateAndSupersedeAsync(Provider draftToActivate, Provider? predecessor)
+    {
+        if (draftToActivate.VersionState != ProviderVersionState.Active)
+        {
+            throw new InvalidOperationException(
+                "ActivateAndSupersedeAsync expects draftToActivate to already have VersionState=Active applied by the service layer.");
+        }
+
+        draftToActivate.LastUpdatedDate = DateTime.UtcNow;
+
+        var batch = _container.CreateTransactionalBatch(new PartitionKey(draftToActivate.TenantId))
+            .ReplaceItem(draftToActivate.Id, draftToActivate);
+
+        if (predecessor != null)
+        {
+            predecessor.LastUpdatedDate = DateTime.UtcNow;
+            batch = batch.ReplaceItem(predecessor.Id, predecessor);
+        }
+
+        using var response = await batch.ExecuteAsync();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ProviderVersionStateException(
+                draftToActivate.Id, draftToActivate.VersionId, draftToActivate.VersionState,
+                $"Atomic activate/supersede failed: {response.StatusCode}");
+        }
+
+        return draftToActivate;
+    }
+
+    public async Task<Provider> ReplaceVersionRowAsync(Provider version)
+    {
+        version.LastUpdatedDate = DateTime.UtcNow;
+        var response = await _container.ReplaceItemAsync(
+            version,
+            version.Id,
+            new PartitionKey(version.TenantId));
+        return response.Resource;
+    }
+
+    /// <summary>
+    /// Backfill identity fields on legacy rows that predate this feature
+    /// and keep the legacy <see cref="Provider.Status"/> in sync with
+    /// <see cref="Provider.VersionState"/> so existing consumers (search
+    /// filter, PcpAssignmentService) keep working unchanged.
+    /// </summary>
+    private static Provider Hydrate(Provider provider)
+    {
+        if (string.IsNullOrEmpty(provider.ProviderId))
+        {
+            // Legacy single-row chain: the document Id is also the chain key.
+            provider.ProviderId = provider.Id;
+        }
+
+        if (string.IsNullOrEmpty(provider.VersionId))
+        {
+            provider.VersionId = provider.Id;
+            provider.VersionNumber = provider.VersionNumber <= 0 ? 1 : provider.VersionNumber;
+            // Map the legacy ProviderStatus onto the version state so
+            // pre-existing rows hydrate with a sensible state.
+            provider.VersionState = provider.Status switch
+            {
+                ProviderStatus.Terminated => ProviderVersionState.Terminated,
+                ProviderStatus.Inactive => ProviderVersionState.Suspended,
+                ProviderStatus.Pending => ProviderVersionState.Draft,
+                _ => ProviderVersionState.Active
+            };
+        }
+
+        // Keep Status synced with VersionState for downstream consumers.
+        provider.Status = provider.VersionState switch
+        {
+            ProviderVersionState.Active => ProviderStatus.Active,
+            ProviderVersionState.Suspended => ProviderStatus.Inactive,
+            ProviderVersionState.Terminated => ProviderStatus.Terminated,
+            ProviderVersionState.Superseded => ProviderStatus.Inactive,
+            ProviderVersionState.Draft => ProviderStatus.Pending,
+            _ => provider.Status
+        };
+
+        return provider;
     }
 }
 

@@ -46,6 +46,8 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     });
 
     builder.Services.AddScoped<IProviderRepository, ProviderRepositoryMongo>();
+    builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
+    builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
     Console.WriteLine("Using MongoDB database provider");
 }
 else
@@ -67,7 +69,15 @@ else
 
     // Repositories
     builder.Services.AddScoped<IProviderRepository, ProviderRepository>();
+    builder.Services.AddScoped<IProviderTransitionRepository, CosmosProviderTransitionRepository>();
+    // Cosmos-only deployments don't have a provisioned events stream; the
+    // Noop publisher logs a warning so ops can spot the missing wiring
+    // without breaking the lifecycle path.
+    builder.Services.AddScoped<IProviderVersionEventPublisher, NoopProviderVersionEventPublisher>();
 }
+
+// Provider versioning service (5.1 — provider identity & versioning)
+builder.Services.AddScoped<IProviderVersioningService, ProviderVersioningService>();
 
 // MPIP rate service (FL SMMC 3.0 physician incentive program)
 builder.Services.AddScoped<IMpipRateService, MpipRateService>();

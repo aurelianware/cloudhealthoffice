@@ -16,9 +16,23 @@ public class Provider
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique identifier (Cosmos DB document id)
+    /// Unique identifier (Cosmos DB document id / Mongo _id). Per-version
+    /// — each row in the version chain has its own <c>Id</c>. Existing
+    /// callers that historically treated <c>Id</c> as the persistent
+    /// provider identifier are still supported because legacy single-row
+    /// chains satisfy <c>ProviderId == Id</c> after hydration; on
+    /// multi-version chains, the chain key is <see cref="ProviderId"/>.
     /// </summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
+
+    /// <summary>
+    /// Stable chain key — the provider entity identifier preserved across
+    /// every version row. For genesis / legacy single-row chains
+    /// <c>ProviderId == Id</c>; subsequent amend versions share the same
+    /// <c>ProviderId</c> with a new per-row <c>Id</c>. Empty on the wire
+    /// is the legacy marker; hydration sets <c>ProviderId = Id</c>.
+    /// </summary>
+    public string ProviderId { get; set; } = string.Empty;
 
     /// <summary>
     /// National Provider Identifier (10-digit)
@@ -253,6 +267,67 @@ public class Provider
     public string? IntegrityRating { get; set; }
     public DateTimeOffset? LastVerifiedAt { get; set; }
     public DateTimeOffset? NextVerificationDue { get; set; }
+
+    // ---------------------------------------------------------------------
+    // Version identity (5.1 — Provider Identity & Versioning)
+    //
+    // A provider is an append-only chain of immutable Active versions. Each
+    // row in the Providers collection is one version; the chain is keyed on
+    // (TenantId, Id) — Id is the persistent provider identifier, while
+    // VersionId is the per-version ULID. Documents written before these
+    // fields existed hydrate as VersionState=Active, VersionNumber=1,
+    // VersionId=Id (see docs/architecture/provider-versioning.md).
+    //
+    // The legacy ProviderStatus enum is preserved as the back-compat signal:
+    // hydration normalizes Status from VersionState (Active↔Active,
+    // Suspended→Inactive, Terminated→Terminated) so existing consumers
+    // (search filter `status = 'Active'`, PcpAssignmentService) continue to
+    // work without changes.
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Stable per-version identifier (ULID, Crockford base-32). Set
+    /// explicitly by the service layer when a draft or legacy v1 is
+    /// created. Empty on the wire ⇒ legacy row (predates this feature)
+    /// and is hydrated as Active v1 on read.
+    /// </summary>
+    public string VersionId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 1-based monotonic sequence within <c>(TenantId, Id)</c>. Populated
+    /// by the service when creating new versions; left at the default for
+    /// legacy documents so hydration can fix it up on read.
+    /// </summary>
+    public int VersionNumber { get; set; }
+
+    /// <summary>
+    /// Lifecycle state. Populated by the service when creating new
+    /// versions; legacy documents missing this field deserialize to the
+    /// default and are normalized to <see cref="ProviderVersionState.Active"/>
+    /// during hydration.
+    /// </summary>
+    public ProviderVersionState VersionState { get; set; }
+
+    /// <summary>
+    /// <see cref="VersionId"/> of the version this draft amends, if any.
+    /// Null for the genesis version.
+    /// </summary>
+    public string? PredecessorVersionId { get; set; }
+
+    public DateTime? ActivatedAt { get; set; }
+
+    [StringLength(200)]
+    public string? ActivatedBy { get; set; }
+
+    public DateTime? SuspendedAt { get; set; }
+
+    [StringLength(500)]
+    public string? SuspensionReason { get; set; }
+
+    public DateTime? SupersededAt { get; set; }
+
+    [StringLength(64)]
+    public string? SupersededByVersionId { get; set; }
 
     /// <summary>
     /// Full name helper property
