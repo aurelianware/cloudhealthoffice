@@ -95,7 +95,7 @@ public class NetworkParticipationBackfillServiceTests
     }
 
     [Fact]
-    public async Task RunTenant_is_idempotent_on_rerun()
+    public async Task RunTenant_is_safe_to_rerun_and_reemits_events_with_distinct_runIds()
     {
         var (service, repo, events) = BuildService();
         await repo.CreateAsync(ActiveProvider("p1", Legacy()));
@@ -104,14 +104,21 @@ public class NetworkParticipationBackfillServiceTests
         first.ParticipationsBackfilled.Should().Be(1);
         events.Events.Should().HaveCount(1);
 
-        // Second run: the participation was patched to canonical
-        // legacy-unconstrained shape — same as IsAtTypeDefaults expects —
-        // so it remains eligible. The patch is a no-op overwrite at
-        // the data level. Each run's events have a distinct
-        // backfillRunId so re-emission is by design.
+        // The backfill writes panel-gating fields to their type defaults
+        // (PanelGatingFields.LegacyUnconstrained), and eligibility is
+        // also defined as "all five fields at type defaults." So a
+        // patched row REMAINS eligible on rerun. Documented contract
+        // (see docs/architecture/network-participation-backfill.md):
+        // reruns are SAFE at the document-state level — they re-apply
+        // the same values, never corrupt data — but they are NOT
+        // skip-based idempotent at the event stream level. A new
+        // backfillRunId per invocation produces a distinct event for
+        // each run.
         var second = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest());
         second.ParticipationsBackfilled.Should().Be(1);
-        // Stored values still match defaults; safe rerun.
+        events.Events.Should().HaveCount(2);
+        events.Events[0].BackfillRunId.Should().NotBe(events.Events[1].BackfillRunId);
+        // Stored values still match defaults; rerun is value-preserving.
         repo.Docs[0].NetworkParticipations[0].PanelLimit.Should().BeNull();
     }
 

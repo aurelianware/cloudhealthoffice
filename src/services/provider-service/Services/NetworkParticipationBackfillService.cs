@@ -101,11 +101,18 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
                 await ProcessProviderAsync(tenantId, provider, defaults, backfillRunId, request, result, ct);
             }
 
-            // Fixed-step pagination: the storage filter excludes rows
-            // already patched (post-patch the participation no longer
-            // matches all-defaults), so the same page never returns the
-            // same row across loops. Skip-by-page keeps the iteration
-            // bounded.
+            // Fixed-step pagination relies on the eligible provider
+            // set being stable WITHIN a single run — i.e., this run's
+            // own patches don't shrink the set out from under the
+            // iterator. Because the backfill writes the panel-gating
+            // fields to their type defaults (LegacyUnconstrained), and
+            // eligibility is defined as "all five fields at type
+            // defaults," a patched row is still considered eligible by
+            // the storage-layer superset filter. Patched rows therefore
+            // do NOT drop out of subsequent pages, and skip-by-page is
+            // safe. (Across separate operator-triggered runs, eligible
+            // rows can re-appear; that's a documented rerun behavior,
+            // not a single-run iteration bug.)
             skip += page.Count;
             if (page.Count < pageSize) break;
         }
@@ -148,8 +155,8 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
             {
                 result.ParticipationsSkipped++;
                 ChoMetrics.NetworkParticipationBackfillOutcomes.Add(1,
-                    new KeyValuePair<string, object?>("outcome", "skipped"),
-                    new KeyValuePair<string, object?>("tenant_id", tenantId));
+                    new KeyValuePair<string, object?>("cho.outcome", "skipped"),
+                    new KeyValuePair<string, object?>("cho.tenant_id", tenantId));
                 continue;
             }
 
@@ -167,8 +174,8 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
                     Sanitize(tenantId), Sanitize(provider.ProviderId), i);
                 result.ParticipationsFailed++;
                 ChoMetrics.NetworkParticipationBackfillOutcomes.Add(1,
-                    new KeyValuePair<string, object?>("outcome", "failed"),
-                    new KeyValuePair<string, object?>("tenant_id", tenantId));
+                    new KeyValuePair<string, object?>("cho.outcome", "failed"),
+                    new KeyValuePair<string, object?>("cho.tenant_id", tenantId));
                 continue;
             }
 
@@ -182,15 +189,15 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
                 // EtagConflicts so the operator metric is conservative.
                 result.EtagConflicts++;
                 ChoMetrics.NetworkParticipationBackfillOutcomes.Add(1,
-                    new KeyValuePair<string, object?>("outcome", "etag_conflict"),
-                    new KeyValuePair<string, object?>("tenant_id", tenantId));
+                    new KeyValuePair<string, object?>("cho.outcome", "etag_conflict"),
+                    new KeyValuePair<string, object?>("cho.tenant_id", tenantId));
                 continue;
             }
 
             result.ParticipationsBackfilled++;
             ChoMetrics.NetworkParticipationBackfillOutcomes.Add(1,
-                new KeyValuePair<string, object?>("outcome", "patched"),
-                new KeyValuePair<string, object?>("tenant_id", tenantId));
+                new KeyValuePair<string, object?>("cho.outcome", "patched"),
+                new KeyValuePair<string, object?>("cho.tenant_id", tenantId));
 
             try
             {
@@ -209,9 +216,12 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
             catch (Exception ex)
             {
                 // Event publication is best-effort. The patch already
-                // landed; rerunning the backfill is idempotent (the
-                // participation no longer matches the eligibility
-                // filter, so it skips).
+                // landed; the data shape is value-preserving, so a
+                // rerun re-applies the same defaults safely. Reruns
+                // produce a NEW backfillRunId and therefore a distinct
+                // event — by design (see
+                // docs/architecture/network-participation-backfill.md
+                // "Rerun behavior").
                 _logger.LogWarning(ex,
                     "panel-gating-backfilled event publication failed tenant={Tenant} providerId={ProviderId} index={Index} runId={RunId}; patch already applied",
                     Sanitize(tenantId), Sanitize(provider.ProviderId), i, backfillRunId);

@@ -193,19 +193,23 @@ public interface IProviderRepository
     /// separate write path: the Cosmos impl uses
     /// <c>PatchItemAsync</c> with field-scoped <c>Set</c> ops on the
     /// positional participation slot, and the Mongo impl uses
-    /// <c>UpdateOneAsync</c> with <c>$set</c> on the same slot. Neither
-    /// path goes through <see cref="UpdateAsync"/>'s version-state
-    /// guard. The exemption applies ONLY to this method;
-    /// going-forward writes through <see cref="UpdateAsync"/> still
-    /// require Draft state.
+    /// <c>FindOneAndUpdateAsync</c> with <c>$set</c> on the same slot
+    /// (FindOneAndUpdate is required because the write sorts by
+    /// <c>VersionNumber</c> descending to hit the head when historical
+    /// Superseded rows exist). Neither path goes through
+    /// <see cref="UpdateAsync"/>'s version-state guard. The exemption
+    /// applies ONLY to this method; going-forward writes through
+    /// <see cref="UpdateAsync"/> still require Draft state.
     /// </para>
     ///
     /// <para>
     /// Returns <c>true</c> when the head Active version was patched;
     /// <c>false</c> when no Active head exists, the index is out of
     /// range on the read-side document, or an etag-conflict caused the
-    /// patch to skip. Idempotent: rerunning with the same inputs is a
-    /// no-op overwrite. Does not throw on missing chains.
+    /// patch to skip. Value-preserving on rerun: writing the same
+    /// type-default inputs against an already-patched row produces no
+    /// observable data change, but DOES return <c>true</c> (a fresh
+    /// patch was applied). Does not throw on missing chains.
     /// </para>
     /// </summary>
     Task<bool> UpdatePanelGatingDefaultsAsync(

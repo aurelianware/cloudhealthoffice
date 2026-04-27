@@ -192,9 +192,19 @@ Used as both:
   data corruption).
 
 A participation that has any field non-default is treated as already
-touched by panel-gating-aware code and skipped. The same logic on
-re-run produces zero patches once every legacy row has been processed
-— safe to invoke the endpoint repeatedly.
+touched by panel-gating-aware code and skipped. **Rerun behavior**:
+because this backfill writes the panel-gating fields to their type
+defaults, a patched row still satisfies
+`PanelGatingFields.IsAtTypeDefaults(participation)`. Reruns can
+therefore select and patch the same legacy row again until some
+panel-gating-aware write stores a non-default value. Repeated
+invocation is **safe at the document-state level** (the patch is
+value-preserving — same defaults written), but operators should not
+expect "zero patches after the first successful run." Reruns also
+re-emit `PanelGatingBackfilled` audit events with a fresh
+`backfillRunId` per invocation; those events are intentionally
+distinct so each operator-triggered run has an independent audit
+record.
 
 ## Participation addressing — positional indexing
 
@@ -214,10 +224,16 @@ index within the head-Active provider's
   Operators rerun the endpoint to pick up missed rows.
 - **Across operator runs:** the `backfillRunId` ULID scopes each
   event so two separate runs of the backfill produce distinct events
-  for the same row. Any rerun is idempotent at the data level (the
-  row no longer matches the eligibility filter) but not at the event
-  stream level (a rerun for a row patched by an earlier run is a
-  no-op skip and does not emit).
+  for the same row. Because the backfill writes the panel-gating
+  fields to their documented type defaults, and eligibility is also
+  defined in terms of those defaults, a rerun can still treat a
+  previously patched row as eligible. That makes reruns safe at the
+  document-state level (they reapply the same values) but **not**
+  skip-based idempotent at the event stream level — a later run may
+  patch the same row again and emit another distinct event. The only
+  way a row "drops out" of eligibility is when a panel-gating-aware
+  write surface (CreateProvider/UpdateProvider/AddNetworkParticipation
+  with populated values) stores a non-default value.
 
 A future PR (Phase 2 prerequisite for capabilities 5.7-5.10) is
 likely to introduce a stable `ParticipationId` ULID for FHIR
@@ -272,7 +288,7 @@ longer matches the eligibility filter).
 | Admin endpoint hangs | Observable via Prometheus; feature-flag-gated; tenant-scoped so blast radius bounded |
 | Single repository patch fails | Caught, logged, batch continues; failed rows logged for retry; counted as `participationsFailed` |
 | Etag conflict (concurrent CRUD) | Skipped silently; counted as `EtagConflicts`; retried on next operator-triggered run |
-| Event publication fails | Logged warning; patch already landed; no rollback (deterministic event id makes rerun idempotent at the data level) |
+| Event publication fails | Logged warning; patch already landed; no rollback. A subsequent run is value-preserving (re-applies the same defaults) and emits a fresh event under a new `backfillRunId`. |
 | Soft-validation telemetry too noisy | Configurable verbosity (`NetworkParticipationBackfill:SoftValidationLogLevel`); tunable post-merge without code change |
 
 Worst-case rollback: revert the PR. The backfill stops; existing

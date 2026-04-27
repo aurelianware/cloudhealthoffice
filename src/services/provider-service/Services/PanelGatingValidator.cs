@@ -65,13 +65,18 @@ public sealed class PanelGatingValidator : IPanelGatingValidator
 
     public void Inspect(string callSite, string tenantId, Provider provider, NetworkParticipation participation)
     {
+        if (provider == null) return;
         if (participation == null) return;
+
         // Index unknown for this surface; Add appends to the end of the
         // existing array — the resulting index is Count-1 if the caller
         // already mutated the array, or unknown otherwise. Use -1 as a
         // sentinel so dashboards can distinguish "added" from "edited
-        // by index".
-        var index = provider.NetworkParticipations.LastIndexOf(participation);
+        // by index". Guarded against null NetworkParticipations so a
+        // caller passing a freshly-constructed Provider without
+        // initialising the list doesn't throw NullReferenceException.
+        var participations = provider.NetworkParticipations;
+        var index = participations == null ? -1 : participations.LastIndexOf(participation);
         EmitIfMissing(callSite, tenantId, provider, participation, index);
     }
 
@@ -100,8 +105,8 @@ public sealed class PanelGatingValidator : IPanelGatingValidator
             participation.LineOfBusiness);
 
         ChoMetrics.PanelGatingMissingWrites.Add(1,
-            new KeyValuePair<string, object?>("caller", callSite),
-            new KeyValuePair<string, object?>("tenant_id", string.IsNullOrEmpty(tenantId) ? "unknown" : tenantId));
+            new KeyValuePair<string, object?>("cho.caller", callSite),
+            new KeyValuePair<string, object?>("cho.tenant_id", string.IsNullOrEmpty(tenantId) ? "unknown" : tenantId));
     }
 
     private static string Sanitize(string? value) =>

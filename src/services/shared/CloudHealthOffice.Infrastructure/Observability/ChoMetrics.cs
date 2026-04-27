@@ -90,24 +90,24 @@ public static class ChoMetrics
     /// the eventual hard-validation cutover — when this counter is zero
     /// across all tenants for a sustained window, the follow-up PR can
     /// flip soft warnings to 400 rejections without breaking callers.
-    /// Dimensions: caller (CreateProvider | UpdateProvider |
-    /// AddNetworkParticipation), tenant_id.
+    /// Dimensions: cho.caller (CreateProvider | UpdateProvider |
+    /// AddNetworkParticipation), cho.tenant_id.
     /// </summary>
     public static readonly Counter<long> PanelGatingMissingWrites =
         Meter.CreateCounter<long>(
-            "provider_service_panel_gating_missing_writes_total",
+            "cho.provider.panel_gating.missing_writes.total",
             unit: "{write}",
             description: "Writes to NetworkParticipation that elide panel-gating fields (5.5 soft validation)");
 
     /// <summary>
     /// Counter tracking participations patched by the
     /// <c>NetworkParticipationBackfillService</c> (capability 5.5
-    /// admin-triggered backfill). Dimensions: outcome (patched | skipped
-    /// | failed | etag_conflict), tenant_id.
+    /// admin-triggered backfill). Dimensions: cho.outcome (patched |
+    /// skipped | failed | etag_conflict), cho.tenant_id.
     /// </summary>
     public static readonly Counter<long> NetworkParticipationBackfillOutcomes =
         Meter.CreateCounter<long>(
-            "provider_service_network_participation_backfill_outcomes_total",
+            "cho.provider.network_participation.backfill.outcomes.total",
             unit: "{participation}",
             description: "Participations processed by the panel-gating backfill, by outcome");
 

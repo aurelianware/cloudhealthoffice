@@ -66,8 +66,15 @@ public sealed class NetworkParticipationBackfillAdminController : ControllerBase
     /// <c>MinAcceptedAgeYears</c>, <c>MaxAcceptedAgeYears</c>) on every
     /// participation in the specified tenant whose fields are at type
     /// defaults — i.e. has not been touched by panel-gating-aware code
-    /// yet. Idempotent: rerunning patches only the still-untouched
-    /// rows. The operation is one-shot per call; operators script
+    /// yet. **Reruns are safe but not skip-based idempotent**: the
+    /// patch writes the panel-gating fields to their type defaults, so
+    /// a patched row remains eligible until some panel-gating-aware
+    /// write surface populates real values. A rerun therefore
+    /// re-applies the same defaults (value-preserving) and emits a
+    /// fresh `PanelGatingBackfilled` event under a new
+    /// `backfillRunId`. See
+    /// `docs/architecture/network-participation-backfill.md` "Rerun
+    /// behavior". The operation is one-shot per call; operators script
     /// across tenant ids externally for multi-tenant coverage.
     /// </summary>
     [HttpPost("backfill-network-participations")]
