@@ -349,6 +349,24 @@ public class NetworkParticipation
     public string? PlanId { get; set; }
 
     /// <summary>
+    /// Stable chain key of the <see cref="Organization"/> network this
+    /// participation is contracted under (capability 5.3 / 5.4). References
+    /// <see cref="Organization.OrganizationId"/> — never a per-version <c>Id</c>.
+    ///
+    /// <para>
+    /// Nullable for backward compatibility with participations written
+    /// before capability 5.4. Legacy participations without
+    /// <c>NetworkId</c> are <b>invisible</b> to <c>GET /api/v1/networks/{id}/roster</c>
+    /// by design; the migration path is per-tenant backfill as
+    /// <see cref="Organization"/> rows are authored. Plan-level lookups
+    /// (filter on <see cref="PlanId"/> / <see cref="LineOfBusiness"/>)
+    /// continue to work unchanged.
+    /// </para>
+    /// </summary>
+    [StringLength(64)]
+    public string? NetworkId { get; set; }
+
+    /// <summary>
     /// Line of Business
     /// </summary>
     [Required]
