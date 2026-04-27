@@ -15,4 +15,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CloudHealthOffice.ProviderService.Tests" />
+  </ItemGroup>
+
 </Project>

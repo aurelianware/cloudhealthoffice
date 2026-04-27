@@ -19,15 +19,18 @@ public class NetworksController : ControllerBase
 {
     private readonly IOrganizationService _service;
     private readonly OrganizationAdapterFactory _adapterFactory;
+    private readonly INetworkRosterService _rosterService;
     private readonly ILogger<NetworksController> _logger;
 
     public NetworksController(
         IOrganizationService service,
         OrganizationAdapterFactory adapterFactory,
+        INetworkRosterService rosterService,
         ILogger<NetworksController> logger)
     {
         _service = service;
         _adapterFactory = adapterFactory;
+        _rosterService = rosterService;
         _logger = logger;
     }
 
@@ -111,6 +114,55 @@ public class NetworksController : ControllerBase
         });
 
         return Ok(response.Organizations.Select(o => o.ToOrganization()));
+    }
+
+    /// <summary>
+    /// Paginated, filterable roster of providers in this network
+    /// (capability 5.4). Filters AND-combine. <c>asOfDate</c> selects a
+    /// snapshot date — both the provider chain and the participation
+    /// must be in effect on that date. Tenant scope is enforced by the
+    /// repository — the roster only includes providers in the same
+    /// tenant as the network.
+    /// </summary>
+    [HttpGet("{id}/roster")]
+    [ProducesResponseType(typeof(NetworkRosterResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<NetworkRosterResponse>> GetRoster(
+        string id,
+        [FromQuery] NetworkRosterQuery query,
+        CancellationToken ct = default)
+    {
+        // [ApiController] runs [StringLength] / [Range] validation on the
+        // bound DTO before this action body executes, so oversized or
+        // out-of-range inputs are already rejected with a 400 at that
+        // point. TenantId and NetworkId carry [BindNever] and are set
+        // from context / route here — never from the wire.
+
+        // Tenant-scope guard: if the network isn't in this tenant we 404
+        // before touching the provider collection. The OrganizationService
+        // honors the tenant context via IHttpContextAccessor.
+        var network = await _service.GetByIdAsync(id);
+        if (network == null)
+        {
+            return NotFound(new { message = $"Network {id} not found" });
+        }
+
+        query.TenantId = TenantId;
+        query.NetworkId = id;
+
+        try
+        {
+            var response = await _rosterService.GetRosterAsync(query, ct);
+            return Ok(response);
+        }
+        catch (NetworkRosterValidationException ex)
+        {
+            _logger.LogInformation(
+                "Roster query rejected: code={Code} network={Network} tenant={Tenant}",
+                ex.ErrorCode, SanitizeForLog(id), SanitizeForLog(TenantId));
+            return BadRequest(new { error = ex.ErrorCode, message = ex.Message });
+        }
     }
 
     /// <summary>Create a new network. Activates v1 in one shot.</summary>

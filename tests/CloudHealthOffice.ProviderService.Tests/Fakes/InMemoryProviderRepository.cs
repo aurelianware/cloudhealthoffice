@@ -151,6 +151,72 @@ public sealed class InMemoryProviderRepository : IProviderRepository
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<Provider>> ListNetworkRosterAsync(
+        NetworkRosterQuery query,
+        NetworkRosterSort sort,
+        int skip,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(query.TenantId))
+            throw new ArgumentException("NetworkRosterQuery.TenantId is required.", nameof(query));
+        if (string.IsNullOrEmpty(query.NetworkId))
+            throw new ArgumentException("NetworkRosterQuery.NetworkId is required.", nameof(query));
+
+        var pageSize = Math.Clamp(query.PageSize, 1, NetworkRosterDefaults.MaxPageSize);
+        var safeSkip = Math.Max(skip, 0);
+        var asOf = (query.AsOfDate ?? DateTime.UtcNow).ToUniversalTime();
+
+        bool ParticipationMatches(NetworkParticipation n)
+        {
+            if (n.NetworkId != query.NetworkId) return false;
+            if (n.EffectiveDate > asOf) return false;
+            if (n.TerminationDate.HasValue && n.TerminationDate.Value < asOf) return false;
+            if (query.LineOfBusiness.HasValue && n.LineOfBusiness != query.LineOfBusiness.Value) return false;
+            if (!string.IsNullOrEmpty(query.Tier) && !string.Equals(n.NetworkTier, query.Tier, StringComparison.Ordinal)) return false;
+            if (query.AcceptingNewPatients.HasValue && n.AcceptingNewPatients != query.AcceptingNewPatients.Value) return false;
+            return true;
+        }
+
+        bool ProviderMatches(Provider p)
+        {
+            if (p.TenantId != query.TenantId) return false;
+            if (p.VersionState != ProviderVersionState.Active) return false;
+            if (p.TerminationDate.HasValue && p.TerminationDate.Value < asOf) return false;
+            if (!p.NetworkParticipations.Any(ParticipationMatches)) return false;
+            if (!string.IsNullOrEmpty(query.Specialty))
+            {
+                var s = query.Specialty;
+                if (!(p.PrimarySpecialty?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+                    && !(p.TaxonomyCode?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false))
+                    return false;
+            }
+            if (query.AcceptingNewPatients.HasValue && p.AcceptingNewPatients != query.AcceptingNewPatients.Value) return false;
+            return true;
+        }
+
+        var hydrated = HydratedView().Where(ProviderMatches);
+
+        IEnumerable<Provider> ordered = sort switch
+        {
+            NetworkRosterSort.NameDesc => hydrated
+                .OrderByDescending(p => p.LastName ?? string.Empty, StringComparer.Ordinal)
+                .ThenByDescending(p => p.OrganizationName ?? string.Empty, StringComparer.Ordinal)
+                .ThenByDescending(p => p.Id, StringComparer.Ordinal),
+            NetworkRosterSort.IntegrityScoreDesc => hydrated
+                // Service layer normalizes nulls-last; the fake returns the
+                // raw score-desc order to mirror real-repo semantics.
+                .OrderByDescending(p => p.IntegrityScore ?? int.MinValue)
+                .ThenBy(p => p.Id, StringComparer.Ordinal),
+            _ => hydrated
+                .OrderBy(p => p.LastName ?? string.Empty, StringComparer.Ordinal)
+                .ThenBy(p => p.OrganizationName ?? string.Empty, StringComparer.Ordinal)
+                .ThenBy(p => p.Id, StringComparer.Ordinal),
+        };
+
+        var slice = ordered.Skip(safeSkip).Take(pageSize).ToList();
+        return Task.FromResult<IReadOnlyList<Provider>>(slice);
+    }
+
     public Task<Provider?> GetLatestActiveAsync(string providerId, DateTime asOf)
     {
         var match = HydratedView()
