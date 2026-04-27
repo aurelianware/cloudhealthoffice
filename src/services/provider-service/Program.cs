@@ -53,8 +53,10 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
     builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
     builder.Services.AddScoped<IProviderVerificationEventPublisher, MongoProviderVerificationEventPublisher>();
+    builder.Services.AddScoped<INetworkParticipationEventPublisher, MongoNetworkParticipationEventPublisher>();
     builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
     builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
+    builder.Services.AddHostedService<NetworkParticipationEventIndexInitializer>();
     Console.WriteLine("Using MongoDB database provider");
 }
 else
@@ -83,6 +85,7 @@ else
     // without breaking the lifecycle path.
     builder.Services.AddScoped<IProviderVersionEventPublisher, NoopProviderVersionEventPublisher>();
     builder.Services.AddScoped<IProviderVerificationEventPublisher, NoopProviderVerificationEventPublisher>();
+    builder.Services.AddScoped<INetworkParticipationEventPublisher, NoopNetworkParticipationEventPublisher>();
 }
 
 // Provider versioning service (5.1 — provider identity & versioning)
@@ -140,6 +143,15 @@ builder.Services.AddHttpClient<IProviderVerificationClient, HttpProviderVerifica
 .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<IProviderIntegrityProjectionService, ProviderIntegrityProjectionService>();
 builder.Services.AddHostedService<IntegrityProjectionWorker>();
+
+// Network-participation panel-gating backfill (5.5 — one-shot
+// admin-triggered patch of legacy participations to legacy-unconstrained
+// defaults; pairs with controller-side soft-validation telemetry that
+// drives the eventual hard-validation cutover).
+builder.Services.Configure<NetworkParticipationBackfillOptions>(
+    builder.Configuration.GetSection(NetworkParticipationBackfillOptions.SectionName));
+builder.Services.AddScoped<IPanelGatingValidator, PanelGatingValidator>();
+builder.Services.AddScoped<INetworkParticipationBackfillService, NetworkParticipationBackfillService>();
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();

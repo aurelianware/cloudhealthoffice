@@ -165,26 +165,41 @@ not own logical Practitioner ids.
 
 - **Schema**: pure additions on an embedded sub-document. No DDL needed for
   Cosmos / Mongo; existing documents read back with `null` for new fields.
-- **Backfill**: `null` is treated as legacy unconstrained — panel open,
-  any LOB the participation already covers, no age limits. This preserves
-  current behavior for every participation that was loaded before this
-  migration.
-- **Forward writes**: every write path that emits a `NetworkParticipation`
-  needs to populate these fields going forward:
-  - `ProvidersController.AddNetworkParticipation` (existing endpoint —
-    accepts whatever the caller sends; needs the portal Provider edit dialog
-    updated to capture these inputs).
-  - any bulk-import / CAQH-sync path that materializes participations.
-  - future `CreateEditProviderDialog.razor` edits.
-
-  `TODO(provider-service)` markers are in `Provider.NetworkParticipation`
-  for the next person on that surface.
-- **Backfill window**: network ops can run a one-time backfill once the
-  fields land. Until then, every Phase-1 PCP assignment behaves as if the
-  participation has unlimited panel and accepts the member's LOB and age —
-  i.e., it gates only on credentialing, network participation, and
-  `AcceptingNewPatients`. That is the same effective contract we shipped
-  pre-5.7, so no regressions.
+- **Backfill (capability 5.5)**: shipped. `null` is treated as legacy
+  unconstrained — panel open, any LOB the participation already covers,
+  no age limits. The one-time admin-triggered backfill writes those
+  same values explicitly so consumers can distinguish "set to legacy
+  unconstrained" from "never touched." Operators run
+  `POST /api/v1/admin/providers/backfill-network-participations?tenantId=X`
+  once per tenant. Idempotent — only patches participations where all
+  five fields are at type defaults. See
+  `docs/architecture/network-participation-backfill.md` for the
+  operational contract.
+- **Forward writes**: producers writing to `NetworkParticipation` are
+  expected to populate the panel-gating fields. The contract is enforced
+  via **soft validation** in capability 5.5: writes that elide the
+  fields produce a structured warning log + Prometheus counter
+  (`provider_service_panel_gating_missing_writes_total{caller, tenant_id}`)
+  but the write proceeds. The follow-up PR flips to hard validation
+  (400 rejection) once the counter is zero across all tenants for a
+  sustained window. Affected surfaces:
+  - `ProvidersController.CreateProvider`,
+    `ProvidersController.UpdateProvider`,
+    `ProvidersController.AddNetworkParticipation` — soft-validation
+    wired in capability 5.5.
+  - `MpipController.BulkImport` — verified out of scope; materializes
+    `MpipProviderQualification` only, never `NetworkParticipation`.
+  - Any future bulk-import / CAQH-sync path will need the same
+    soft-validation hook before merge.
+  - `CreateEditProviderDialog.razor` — capability 5.5 surfaces panel-
+    gating values read-only on a new "Network Participations" tab so
+    operators can audit which participations are still legacy-
+    unconstrained. Inline edit capability is a follow-up.
+- **Backfill window**: with capability 5.5 shipped the window has
+  closed. Phase-1 PCP assignment continues to honor the legacy-
+  unconstrained semantics (panel open, any LOB, no age limits) for
+  participations that haven't been explicitly populated by an
+  authoring producer.
 
 ## Member-service ↔ coverage-service contract
 

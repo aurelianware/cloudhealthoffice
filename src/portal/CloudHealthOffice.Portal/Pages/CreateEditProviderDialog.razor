@@ -188,6 +188,72 @@
                         </MudGrid>
                     </MudTabPanel>
 
+                    <!-- Network Participations (Edit Only) — read-only view of
+                         each participation's panel-gating values. Operators
+                         author panel-gating fields via the provider-service
+                         API; this surface lets them audit which
+                         participations are still legacy-unconstrained.
+                         Capability 5.5. -->
+                    @if (_isEditMode && _participations is { Count: > 0 })
+                    {
+                        <MudTabPanel Text="Network Participations" Icon="@Icons.Material.Filled.Groups">
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-3">
+                                Panel-gating fields control which members may be assigned to this provider as a PCP.
+                                A participation marked <b>Legacy unconstrained</b> has not been touched by
+                                panel-gating-aware code yet — coverage-service treats it as accepting any age,
+                                any LOB covered by the participation, and no panel limit. Authoring panel-gating
+                                values still happens through the provider-service API; this view is read-only.
+                            </MudAlert>
+                            @foreach (var p in _participations)
+                            {
+                                <MudCard Class="mb-3" Outlined="true">
+                                    <MudCardHeader>
+                                        <CardHeaderContent>
+                                            <MudText Typo="Typo.subtitle1">
+                                                @(string.IsNullOrEmpty(p.NetworkName) ? p.NetworkId : p.NetworkName)
+                                                <span style="opacity: 0.6;"> · @p.LineOfBusiness · @(string.IsNullOrEmpty(p.PlanName) ? "(any plan)" : p.PlanName)</span>
+                                            </MudText>
+                                        </CardHeaderContent>
+                                        <CardHeaderActions>
+                                            @if (IsLegacyUnconstrained(p))
+                                            {
+                                                <MudChip Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.Warning">Legacy unconstrained</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">Panel-gating populated</MudChip>
+                                            }
+                                        </CardHeaderActions>
+                                    </MudCardHeader>
+                                    <MudCardContent>
+                                        <MudGrid>
+                                            <MudItem xs="12" md="4">
+                                                <MudField Label="Panel limit" Variant="Variant.Outlined">
+                                                    @(p.PanelLimit?.ToString() ?? "Unlimited")
+                                                </MudField>
+                                            </MudItem>
+                                            <MudItem xs="12" md="4">
+                                                <MudField Label="Panel accepted" Variant="Variant.Outlined">
+                                                    @(p.PanelAccepted is null ? "Inherit (Accepting New Patients)" : (p.PanelAccepted == true ? "Yes" : "Closed"))
+                                                </MudField>
+                                            </MudItem>
+                                            <MudItem xs="12" md="4">
+                                                <MudField Label="Accepted ages" Variant="Variant.Outlined">
+                                                    @FormatAgeRange(p.MinAcceptedAgeYears, p.MaxAcceptedAgeYears)
+                                                </MudField>
+                                            </MudItem>
+                                            <MudItem xs="12">
+                                                <MudField Label="Accepted lines of business" Variant="Variant.Outlined">
+                                                    @(p.AcceptedLobs is { Count: > 0 } ? string.Join(", ", p.AcceptedLobs) : "Any LOB covered by this participation")
+                                                </MudField>
+                                            </MudItem>
+                                        </MudGrid>
+                                    </MudCardContent>
+                                </MudCard>
+                            }
+                        </MudTabPanel>
+                    }
+
                     <!-- Status (Edit Only) -->
                     @if (_isEditMode)
                     {
@@ -253,6 +319,7 @@
 
     private CreateProviderRequest _model = new();
     private UpdateProviderRequest? _updateModel;
+    private List<NetworkAssignment> _participations = new();
 
     public async Task OpenAsync(string? providerId)
     {
@@ -285,6 +352,7 @@
                     NetworkStatus = provider.NetworkStatus
                 };
                 _model = _updateModel;
+                _participations = provider.NetworkAssignments ?? new List<NetworkAssignment>();
             }
         }
         else
@@ -342,4 +410,19 @@
     {
         MudDialog?.Close();
     }
+
+    private static bool IsLegacyUnconstrained(NetworkAssignment p) =>
+        p.PanelLimit is null
+        && p.PanelAccepted is null
+        && (p.AcceptedLobs is null || p.AcceptedLobs.Count == 0)
+        && p.MinAcceptedAgeYears is null
+        && p.MaxAcceptedAgeYears is null;
+
+    private static string FormatAgeRange(int? min, int? max) => (min, max) switch
+    {
+        (null, null) => "Any age",
+        (int lo, null) => $"{lo}+",
+        (null, int hi) => $"Up to {hi}",
+        (int lo, int hi) => $"{lo} – {hi}",
+    };
 }
