@@ -321,7 +321,10 @@ public class ProviderRepositoryMongo : IProviderRepository
             b.Eq(p => p.VersionState, ProviderVersionState.Active),
             b.Exists(p => p.VersionState, false),
             b.And(
-                b.Or(b.Exists(p => p.VersionId, false), b.Eq(p => p.VersionId, string.Empty)),
+                b.Or(
+                    b.Exists(p => p.VersionId, false),
+                    b.Eq(p => p.VersionId, null),
+                    b.Eq(p => p.VersionId, string.Empty)),
                 b.Eq(p => p.Status, ProviderStatus.Active)));
 
         var providerFilter = b.And(

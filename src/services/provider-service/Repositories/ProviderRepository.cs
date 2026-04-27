@@ -417,11 +417,11 @@ public class ProviderRepository : IProviderRepository
             // "Active" matches three shapes (mirrors Hydrate()):
             //   1. versionState == Active (current versioned shape)
             //   2. versionState absent (legacy)
-            //   3. versionId missing/empty AND status == 'Active' (legacy
+            //   3. versionId missing/null/empty AND status == 'Active' (legacy
             //      row where versionState defaulted to enum-zero on read)
             // Without (3) these legacy rows would be wrongly excluded.
             "(c.versionState = @active OR NOT IS_DEFINED(c.versionState) " +
-                "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = \"\") AND c.status = @statusActive))",
+                "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive))",
             "(NOT IS_DEFINED(c.terminationDate) OR c.terminationDate = null OR c.terminationDate >= @asOf)",
             existsClause,
         };
@@ -444,10 +444,13 @@ public class ProviderRepository : IProviderRepository
             NetworkRosterSort.NameDesc =>
                 "ORDER BY c.lastName DESC, c.organizationName DESC, c.id DESC",
             NetworkRosterSort.IntegrityScoreDesc =>
-                // Cosmos puts nulls before non-nulls on DESC; folding
-                // IS_DEFINED to a 0/1 sort key inverts that so unverified
-                // rows trail the head of the page (nulls-last semantics).
-                "ORDER BY (IS_DEFINED(c.integrityScore) ? 1 : 0) DESC, c.integrityScore DESC, c.id ASC",
+                // Cosmos can store integrityScore as null (field present
+                // but null) or absent entirely. IS_DEFINED returns 1 for
+                // both cases when null; IS_NUMBER returns true only for
+                // actual numeric values so providers with null or missing
+                // scores get hasScore=0 and sort last — nulls-last before
+                // the OFFSET/LIMIT clause.
+                "ORDER BY (IS_NUMBER(c.integrityScore) ? 1 : 0) DESC, c.integrityScore DESC, c.id ASC",
             _ =>
                 "ORDER BY c.lastName ASC, c.organizationName ASC, c.id ASC",
         };

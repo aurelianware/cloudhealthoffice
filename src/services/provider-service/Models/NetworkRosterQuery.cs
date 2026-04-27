@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace ProviderService.Models;
 
@@ -6,16 +7,20 @@ namespace ProviderService.Models;
 /// Filters, paging, and sort applied to <c>GET /api/v1/networks/{id}/roster</c>.
 ///
 /// <para>
-/// Bound from the query string by ASP.NET model binding. The route's
-/// <c>{id}</c> populates <see cref="NetworkId"/>; remaining fields come
-/// from <c>?lineOfBusiness=...&amp;specialty=...</c>. <see cref="TenantId"/>
-/// is set by the controller from <c>HttpContext.Items["TenantId"]</c>
-/// — never trusted from the wire.
+/// Bound directly from the query string as a DTO via
+/// <c>[FromQuery] NetworkRosterQuery query</c> so that
+/// <c>[ApiController]</c> model validation enforces <see cref="StringLengthAttribute"/>
+/// and <see cref="RangeAttribute"/> constraints automatically. Server-side
+/// fields that must not be bound from the wire are annotated with
+/// <c>[BindNever]</c>: <see cref="TenantId"/> (set from
+/// <c>HttpContext.Items["TenantId"]</c>) and <see cref="NetworkId"/>
+/// (set from the <c>{id}</c> route segment).
 /// </para>
 /// </summary>
 public sealed class NetworkRosterQuery
 {
     /// <summary>Tenant scope. Set by the controller, not by the caller.</summary>
+    [BindNever]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
@@ -23,6 +28,7 @@ public sealed class NetworkRosterQuery
     /// roster is being requested for. Set from the route, not the query
     /// string.
     /// </summary>
+    [BindNever]
     public string NetworkId { get; set; } = string.Empty;
 
     /// <summary>Optional LOB filter. ANDed with all other filters.</summary>
@@ -59,7 +65,8 @@ public sealed class NetworkRosterQuery
 
     /// <summary>
     /// Page size. Defaults to 100 (set in <c>NetworkRosterDefaults</c>);
-    /// hard cap of 1000 enforced by the controller via <c>Math.Clamp</c>.
+    /// hard cap of 1000 enforced via <see cref="RangeAttribute"/> by
+    /// <c>[ApiController]</c> model validation.
     /// </summary>
     [Range(1, 1000)]
     public int PageSize { get; set; } = NetworkRosterDefaults.DefaultPageSize;

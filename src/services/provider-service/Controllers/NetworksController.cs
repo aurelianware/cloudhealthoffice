@@ -130,31 +130,14 @@ public class NetworksController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<NetworkRosterResponse>> GetRoster(
         string id,
-        [FromQuery] LineOfBusiness? lineOfBusiness = null,
-        [FromQuery] string? specialty = null,
-        [FromQuery] string? tier = null,
-        [FromQuery] bool? acceptingNewPatients = null,
-        [FromQuery] DateTime? asOfDate = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = NetworkRosterDefaults.DefaultPageSize,
-        [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null,
-        [FromQuery] string? cursor = null,
+        [FromQuery] NetworkRosterQuery query,
         CancellationToken ct = default)
     {
-        // Length guards on the raw query-string values. ASP.NET binds
-        // these as scalar parameters, so the [StringLength] attributes
-        // on NetworkRosterQuery don't apply via [ApiController]
-        // validation. We reject oversized inputs explicitly to keep
-        // log volume and downstream regex / SQL evaluation bounded.
-        if (TryRejectOversize(specialty, 50, "specialty", out var problem)
-            || TryRejectOversize(tier, 20, "tier", out problem)
-            || TryRejectOversize(sortBy, 32, "sortBy", out problem)
-            || TryRejectOversize(sortDirection, 8, "sortDirection", out problem)
-            || TryRejectOversize(cursor, 2048, "cursor", out problem))
-        {
-            return BadRequest(problem);
-        }
+        // [ApiController] runs [StringLength] / [Range] validation on the
+        // bound DTO before this action body executes, so oversized or
+        // out-of-range inputs are already rejected with a 400 at that
+        // point. TenantId and NetworkId carry [BindNever] and are set
+        // from context / route here — never from the wire.
 
         // Tenant-scope guard: if the network isn't in this tenant we 404
         // before touching the provider collection. The OrganizationService
@@ -165,24 +148,8 @@ public class NetworksController : ControllerBase
             return NotFound(new { message = $"Network {id} not found" });
         }
 
-        var query = new NetworkRosterQuery
-        {
-            TenantId = TenantId,
-            NetworkId = id,
-            LineOfBusiness = lineOfBusiness,
-            Specialty = specialty,
-            Tier = tier,
-            AcceptingNewPatients = acceptingNewPatients,
-            AsOfDate = asOfDate,
-            Page = page <= 0 ? 1 : page,
-            PageSize = Math.Clamp(
-                pageSize <= 0 ? NetworkRosterDefaults.DefaultPageSize : pageSize,
-                1,
-                NetworkRosterDefaults.MaxPageSize),
-            SortBy = sortBy,
-            SortDirection = sortDirection,
-            Cursor = cursor,
-        };
+        query.TenantId = TenantId;
+        query.NetworkId = id;
 
         try
         {
@@ -285,22 +252,6 @@ public class NetworksController : ControllerBase
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
-    private static bool TryRejectOversize(string? value, int maxLength, string fieldName, out object problem)
-    {
-        if (value != null && value.Length > maxLength)
-        {
-            problem = new
-            {
-                error = "value_too_long",
-                field = fieldName,
-                message = $"'{fieldName}' exceeds the {maxLength}-character limit.",
-            };
-            return true;
-        }
-        problem = null!;
-        return false;
     }
 }
 
