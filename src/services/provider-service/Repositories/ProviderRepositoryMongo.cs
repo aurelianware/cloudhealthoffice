@@ -8,6 +8,7 @@ namespace ProviderService.Repositories;
 
 public class ProviderRepositoryMongo : IProviderRepository
 {
+    private readonly IMongoDatabase _database;
     private readonly IMongoCollection<Provider> _collection;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<ProviderRepositoryMongo> _logger;
@@ -17,6 +18,7 @@ public class ProviderRepositoryMongo : IProviderRepository
         IHttpContextAccessor httpContextAccessor,
         ILogger<ProviderRepositoryMongo> logger)
     {
+        _database = database;
         _collection = database.GetCollection<Provider>("Providers");
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
@@ -33,8 +35,12 @@ public class ProviderRepositoryMongo : IProviderRepository
             new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.LastName)),
             new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.OrganizationName)),
             new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ZipCode)),
-            // Multikey index for network participations?
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending("NetworkParticipations.PlanId"))
+            // Multikey index for network participations
+            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending("NetworkParticipations.PlanId")),
+            // Version-chain indexes
+            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ProviderId).Ascending(p => p.VersionNumber)),
+            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ProviderId).Ascending(p => p.VersionId)),
+            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ProviderId).Ascending(p => p.VersionState))
         };
         _collection.Indexes.CreateMany(models);
     }
@@ -46,7 +52,7 @@ public class ProviderRepositoryMongo : IProviderRepository
         {
            // For migration safety, we might return a default or just let it fail at runtime if strictly required.
            // throw new InvalidOperationException("TenantId not found in request context");
-           return string.Empty; 
+           return string.Empty;
         }
         return tenantId;
     }
@@ -54,21 +60,55 @@ public class ProviderRepositoryMongo : IProviderRepository
     public async Task<Provider?> GetByIdAsync(string id)
     {
         var tenantId = GetTenantId();
-        var filter = Builders<Provider>.Filter.And(
-            Builders<Provider>.Filter.Eq(p => p.Id, id),
-            Builders<Provider>.Filter.Eq(p => p.TenantId, tenantId)
-        );
-        return await _collection.Find(filter).FirstOrDefaultAsync();
+        var b = Builders<Provider>.Filter;
+
+        // The chain key is ProviderId. Legacy single-row chains have
+        // ProviderId empty on disk and rely on hydration setting it to
+        // Id; we accept both shapes here.
+        var chainFilter = b.Or(
+            b.Eq(p => p.ProviderId, id),
+            b.And(b.Or(b.Eq(p => p.ProviderId, string.Empty), b.Exists(p => p.ProviderId, false)),
+                  b.Eq(p => p.Id, id)));
+
+        // Exclude real Draft rows (non-empty VersionId + Draft state).
+        // Legacy rows have VersionId = "" and default VersionState = Draft (0)
+        // but they are not actual drafts — hydration will normalize them to Active.
+        var notRealDraft = b.Or(
+            b.Ne(p => p.VersionState, ProviderVersionState.Draft),
+            b.Eq(p => p.VersionId, string.Empty),
+            b.Exists(p => p.VersionId, false));
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            chainFilter,
+            notRealDraft);
+
+        var doc = await _collection.Find(filter)
+            .SortByDescending(p => p.VersionNumber)
+            .FirstOrDefaultAsync();
+        return doc == null ? null : Hydrate(doc);
     }
 
     public async Task<Provider?> GetByNPIAsync(string npi)
     {
         var tenantId = GetTenantId();
-        var filter = Builders<Provider>.Filter.And(
-            Builders<Provider>.Filter.Eq(p => p.NPI, npi),
-            Builders<Provider>.Filter.Eq(p => p.TenantId, tenantId)
-        );
-        return await _collection.Find(filter).FirstOrDefaultAsync();
+        var b = Builders<Provider>.Filter;
+
+        // Exclude real Draft rows but include legacy rows (empty VersionId).
+        var notRealDraft = b.Or(
+            b.Ne(p => p.VersionState, ProviderVersionState.Draft),
+            b.Eq(p => p.VersionId, string.Empty),
+            b.Exists(p => p.VersionId, false));
+
+        var filter = b.And(
+            b.Eq(p => p.NPI, npi),
+            b.Eq(p => p.TenantId, tenantId),
+            notRealDraft);
+
+        var doc = await _collection.Find(filter)
+            .SortByDescending(p => p.VersionNumber)
+            .FirstOrDefaultAsync();
+        return doc == null ? null : Hydrate(doc);
     }
 
     public async Task<IEnumerable<Provider>> SearchAsync(
@@ -85,7 +125,7 @@ public class ProviderRepositoryMongo : IProviderRepository
     {
         var tenantId = GetTenantId();
         var builder = Builders<Provider>.Filter;
-        
+
         // Base filters
         var filter = builder.And(
             builder.Eq(p => p.TenantId, tenantId),
@@ -141,8 +181,8 @@ public class ProviderRepositoryMongo : IProviderRepository
             if (lineOfBusiness.HasValue)
             {
                 var lobFilter = netBuilder.Eq(n => n.LineOfBusiness, lineOfBusiness.Value);
-                netFilter = netFilter == FilterDefinition<NetworkParticipation>.Empty 
-                    ? lobFilter 
+                netFilter = netFilter == FilterDefinition<NetworkParticipation>.Empty
+                    ? lobFilter
                     : netBuilder.And(netFilter, lobFilter);
             }
 
@@ -152,11 +192,12 @@ public class ProviderRepositoryMongo : IProviderRepository
         // Sort by LastName then OrgName
         var sort = Builders<Provider>.Sort.Ascending(p => p.LastName).Ascending(p => p.OrganizationName);
 
-        return await _collection.Find(filter)
+        var docs = await _collection.Find(filter)
             .Sort(sort)
             .Skip((page - 1) * pageSize)
             .Limit(pageSize)
             .ToListAsync();
+        return docs.Select(Hydrate).ToList();
     }
 
     public async Task<Provider> CreateAsync(Provider provider)
@@ -179,14 +220,33 @@ public class ProviderRepositoryMongo : IProviderRepository
     public async Task<Provider> UpdateAsync(Provider provider)
     {
         var tenantId = GetTenantId();
-        if (provider.TenantId != tenantId)
+        if (!string.IsNullOrEmpty(tenantId) && provider.TenantId != tenantId)
         {
             throw new InvalidOperationException("Cross-tenant updates not allowed");
         }
 
+        // Reject mutations on non-Draft rows so callers fall back to the
+        // amend → activate flow. Hydration normalizes legacy rows so that
+        // pre-feature data is treated as Active and is also read-only.
+        var existing = await _collection.Find(Builders<Provider>.Filter.And(
+                Builders<Provider>.Filter.Eq(p => p.Id, provider.Id),
+                Builders<Provider>.Filter.Eq(p => p.TenantId, provider.TenantId)))
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            var hydrated = Hydrate(existing);
+            if (hydrated.VersionState != ProviderVersionState.Draft)
+            {
+                throw new ProviderVersionStateException(
+                    hydrated.ProviderId, hydrated.VersionId, hydrated.VersionState,
+                    $"Provider version {hydrated.VersionId} is {hydrated.VersionState} and cannot be updated. Create an amendment via POST /amend.");
+            }
+        }
+
         var filter = Builders<Provider>.Filter.And(
             Builders<Provider>.Filter.Eq(p => p.Id, provider.Id),
-            Builders<Provider>.Filter.Eq(p => p.TenantId, tenantId)
+            Builders<Provider>.Filter.Eq(p => p.TenantId, provider.TenantId)
         );
 
         var result = await _collection.ReplaceOneAsync(filter, provider);
@@ -206,5 +266,243 @@ public class ProviderRepositoryMongo : IProviderRepository
             Builders<Provider>.Filter.Eq(p => p.TenantId, tenantId)
         );
         await _collection.DeleteOneAsync(filter);
+    }
+
+    private static FilterDefinition<Provider> ChainKeyFilter(string providerId)
+    {
+        var b = Builders<Provider>.Filter;
+        return b.Or(
+            b.Eq(p => p.ProviderId, providerId),
+            b.And(
+                b.Or(b.Eq(p => p.ProviderId, string.Empty), b.Exists(p => p.ProviderId, false)),
+                b.Eq(p => p.Id, providerId)));
+    }
+
+    public async Task<Provider?> GetLatestActiveAsync(string providerId, DateTime asOf)
+    {
+        var tenantId = GetTenantId();
+        var b = Builders<Provider>.Filter;
+
+        // Legacy rows lack versionState entirely. Match either Active
+        // explicitly or rows where the field is absent.
+        var stateFilter = b.Or(
+            b.Eq(x => x.VersionState, ProviderVersionState.Active),
+            b.Exists(x => x.VersionState, false));
+
+        var filter = b.And(
+            ChainKeyFilter(providerId),
+            b.Eq(x => x.TenantId, tenantId),
+            stateFilter,
+            b.Or(
+                b.Eq(x => x.TerminationDate, null),
+                b.Gte(x => x.TerminationDate, asOf)));
+
+        var doc = await _collection.Find(filter)
+            .SortByDescending(x => x.VersionNumber)
+            .FirstOrDefaultAsync();
+        return doc == null ? null : Hydrate(doc);
+    }
+
+    public async Task<Provider?> GetVersionAsync(string providerId, string versionId)
+    {
+        var tenantId = GetTenantId();
+        var b = Builders<Provider>.Filter;
+        var filter = b.And(
+            b.Eq(x => x.TenantId, tenantId),
+            ChainKeyFilter(providerId),
+            b.Eq(x => x.VersionId, versionId));
+        var doc = await _collection.Find(filter).FirstOrDefaultAsync();
+        return doc == null ? null : Hydrate(doc);
+    }
+
+    public async Task<(IReadOnlyList<Provider> Items, string? ContinuationToken)> ListVersionsAsync(
+        string providerId, int pageSize, string? continuationToken)
+    {
+        var tenantId = GetTenantId();
+        var skip = 0;
+        if (!string.IsNullOrEmpty(continuationToken) &&
+            int.TryParse(continuationToken, out var parsed) && parsed > 0)
+        {
+            skip = parsed;
+        }
+
+        var b = Builders<Provider>.Filter;
+        var filter = b.And(
+            b.Eq(x => x.TenantId, tenantId),
+            ChainKeyFilter(providerId));
+
+        var docs = await _collection.Find(filter)
+            .SortByDescending(x => x.VersionNumber)
+            .Skip(skip)
+            .Limit(pageSize + 1) // peek one extra to know whether to emit a continuation
+            .ToListAsync();
+
+        string? next = null;
+        if (docs.Count > pageSize)
+        {
+            docs.RemoveAt(docs.Count - 1);
+            next = (skip + pageSize).ToString();
+        }
+
+        var hydrated = docs.Select(Hydrate).ToList();
+        return (hydrated, next);
+    }
+
+    public async Task<Provider> CreateDraftAsync(Provider draft)
+    {
+        var tenantId = GetTenantId();
+        if (string.IsNullOrEmpty(draft.TenantId)) draft.TenantId = tenantId;
+        if (string.IsNullOrEmpty(draft.Id)) draft.Id = Guid.NewGuid().ToString();
+        if (string.IsNullOrEmpty(draft.ProviderId)) draft.ProviderId = draft.Id;
+        draft.VersionState = ProviderVersionState.Draft;
+        draft.LastUpdatedDate = DateTime.UtcNow;
+        await _collection.InsertOneAsync(draft);
+        return draft;
+    }
+
+    public async Task<Provider> UpdateDraftAsync(Provider draft)
+    {
+        var b = Builders<Provider>.Filter;
+        var filter = b.And(
+            b.Eq(x => x.Id, draft.Id),
+            b.Eq(x => x.TenantId, draft.TenantId));
+
+        var existing = await _collection.Find(filter).FirstOrDefaultAsync()
+            ?? throw new ProviderVersionStateException(draft.ProviderId, draft.VersionId, ProviderVersionState.Draft,
+                $"Draft {draft.VersionId} not found") { IsNotFound = true };
+
+        if (existing.VersionState != ProviderVersionState.Draft)
+        {
+            throw new ProviderVersionStateException(
+                existing.ProviderId, existing.VersionId, existing.VersionState,
+                $"Provider version {existing.VersionId} is {existing.VersionState} and cannot be edited.");
+        }
+
+        draft.LastUpdatedDate = DateTime.UtcNow;
+        draft.VersionState = ProviderVersionState.Draft;
+
+        await _collection.ReplaceOneAsync(filter, draft);
+        return draft;
+    }
+
+    public async Task<Provider> ActivateAndSupersedeAsync(Provider draftToActivate, Provider? predecessor)
+    {
+        if (draftToActivate.VersionState != ProviderVersionState.Active)
+        {
+            throw new InvalidOperationException(
+                "ActivateAndSupersedeAsync expects draftToActivate to already have VersionState=Active applied by the service layer.");
+        }
+
+        draftToActivate.LastUpdatedDate = DateTime.UtcNow;
+        if (predecessor != null) predecessor.LastUpdatedDate = DateTime.UtcNow;
+
+        var activateFilter = Builders<Provider>.Filter.And(
+            Builders<Provider>.Filter.Eq(x => x.Id, draftToActivate.Id),
+            Builders<Provider>.Filter.Eq(x => x.TenantId, draftToActivate.TenantId));
+
+        // Try a session transaction (replica set required); fall back to
+        // sequential writes when the deployment is a single-node Mongo
+        // instance — log a compensating-action warning so ops can spot it.
+        try
+        {
+            using var session = await _database.Client.StartSessionAsync();
+            session.StartTransaction();
+            try
+            {
+                await _collection.ReplaceOneAsync(session, activateFilter, draftToActivate);
+
+                if (predecessor != null)
+                {
+                    var predFilter = Builders<Provider>.Filter.And(
+                        Builders<Provider>.Filter.Eq(x => x.Id, predecessor.Id),
+                        Builders<Provider>.Filter.Eq(x => x.TenantId, predecessor.TenantId));
+                    await _collection.ReplaceOneAsync(session, predFilter, predecessor);
+                }
+
+                await session.CommitTransactionAsync();
+                return draftToActivate;
+            }
+            catch
+            {
+                await session.AbortTransactionAsync();
+                throw;
+            }
+        }
+        catch (NotSupportedException)
+        {
+            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, predecessor, activateFilter);
+        }
+        catch (MongoCommandException ex) when (
+            ex.CodeName == "IllegalOperation" || ex.Code == 20 || ex.Code == 263)
+        {
+            // Mongo errors when transactions aren't supported on the deployment.
+            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, predecessor, activateFilter);
+        }
+    }
+
+    private async Task<Provider> ActivateAndSupersedeWithoutTransactionAsync(
+        Provider draftToActivate,
+        Provider? predecessor,
+        FilterDefinition<Provider> activateFilter)
+    {
+        _logger.LogWarning(
+            "Mongo deployment does not support transactions; activating provider {ProviderId} version {VersionId} non-atomically. " +
+            "Operators must verify the predecessor was superseded after the call.",
+            draftToActivate.Id, draftToActivate.VersionId);
+
+        await _collection.ReplaceOneAsync(activateFilter, draftToActivate);
+
+        if (predecessor != null)
+        {
+            var predFilter = Builders<Provider>.Filter.And(
+                Builders<Provider>.Filter.Eq(x => x.Id, predecessor.Id),
+                Builders<Provider>.Filter.Eq(x => x.TenantId, predecessor.TenantId));
+            await _collection.ReplaceOneAsync(predFilter, predecessor);
+        }
+
+        return draftToActivate;
+    }
+
+    public async Task<Provider> ReplaceVersionRowAsync(Provider version)
+    {
+        version.LastUpdatedDate = DateTime.UtcNow;
+        var filter = Builders<Provider>.Filter.And(
+            Builders<Provider>.Filter.Eq(x => x.Id, version.Id),
+            Builders<Provider>.Filter.Eq(x => x.TenantId, version.TenantId));
+        await _collection.ReplaceOneAsync(filter, version);
+        return version;
+    }
+
+    private static Provider Hydrate(Provider provider)
+    {
+        if (string.IsNullOrEmpty(provider.ProviderId))
+        {
+            provider.ProviderId = provider.Id;
+        }
+
+        if (string.IsNullOrEmpty(provider.VersionId))
+        {
+            provider.VersionId = provider.Id;
+            provider.VersionNumber = provider.VersionNumber <= 0 ? 1 : provider.VersionNumber;
+            provider.VersionState = provider.Status switch
+            {
+                ProviderStatus.Terminated => ProviderVersionState.Terminated,
+                ProviderStatus.Inactive => ProviderVersionState.Suspended,
+                ProviderStatus.Pending => ProviderVersionState.Draft,
+                _ => ProviderVersionState.Active
+            };
+        }
+
+        provider.Status = provider.VersionState switch
+        {
+            ProviderVersionState.Active => ProviderStatus.Active,
+            ProviderVersionState.Suspended => ProviderStatus.Inactive,
+            ProviderVersionState.Terminated => ProviderStatus.Terminated,
+            ProviderVersionState.Superseded => ProviderStatus.Inactive,
+            ProviderVersionState.Draft => ProviderStatus.Pending,
+            _ => provider.Status
+        };
+
+        return provider;
     }
 }
