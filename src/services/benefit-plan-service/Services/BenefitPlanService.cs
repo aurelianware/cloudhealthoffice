@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 
@@ -493,27 +494,21 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         Documents = src.Documents.Select(CloneDocument).ToList(),
     };
 
-    private static Benefit CloneBenefit(Benefit b) => new()
-    {
-        ServiceCategory = b.ServiceCategory,
-        Description = b.Description,
-        CptCodes = b.CptCodes.ToList(),
-        InNetworkCopay = b.InNetworkCopay,
-        OutNetworkCopay = b.OutNetworkCopay,
-        InNetworkCoinsurance = b.InNetworkCoinsurance,
-        OutNetworkCoinsurance = b.OutNetworkCoinsurance,
-        DeductibleApplies = b.DeductibleApplies,
-        OopApplies = b.OopApplies,
-        PriorAuthRequired = b.PriorAuthRequired,
-        CopayAmount = b.CopayAmount,
-        CoinsurancePercentage = b.CoinsurancePercentage,
-        RequiresPriorAuth = b.RequiresPriorAuth,
-        VisitLimit = b.VisitLimit,
-        VisitLimitPeriod = b.VisitLimitPeriod,
-        Limitations = b.Limitations,
-        AnnualMaximum = b.AnnualMaximum,
-        LifetimeMaximum = b.LifetimeMaximum
-    };
+    // Shared options for the polymorphic benefit clone path. JsonSerializerDefaults.Web
+    // matches the wire format used by repositories and the in-memory fake, so a clone
+    // through these options preserves the subclass discriminator end-to-end.
+    private static readonly JsonSerializerOptions _benefitCloneOpts = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Deep-clones a <see cref="Benefit"/> through a polymorphic JSON
+    /// round-trip so typed subclasses (<c>PharmacyBenefit</c>,
+    /// <c>BehavioralHealthBenefit</c>, …) survive the
+    /// <c>AmendPublishedPlanAsync</c> flow. A manual property-by-property
+    /// clone would silently downgrade every subclass to base
+    /// <see cref="Benefit"/> on amendment.
+    /// </summary>
+    private static Benefit CloneBenefit(Benefit b)
+        => JsonSerializer.Deserialize<Benefit>(JsonSerializer.Serialize(b, _benefitCloneOpts), _benefitCloneOpts)!;
 
     private static NetworkTier CloneNetworkTier(NetworkTier n) => new()
     {

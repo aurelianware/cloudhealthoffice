@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using BenefitPlanService.Models.Benefits;
 
 namespace BenefitPlanService.Models;
 
@@ -175,12 +176,48 @@ public class BenefitPlan
 }
 
 /// <summary>
-/// Individual benefit within a plan
+/// Individual benefit within a plan.
+///
+/// <para>
+/// Phase 1 / 5.4 — Declarative Benefit Model. This base type carries every
+/// facet that applies to every benefit (cost-sharing, prior-auth flags,
+/// visit limits, etc.). Type-specific facets live on the concrete subclasses
+/// in <c>BenefitPlanService.Models.Benefits</c>: <see cref="MedicalBenefit"/>,
+/// <see cref="DentalBenefit"/>, <see cref="PharmacyBenefit"/>,
+/// <see cref="BehavioralHealthBenefit"/>, <see cref="VisionBenefit"/>,
+/// <see cref="DMEBenefit"/>, <see cref="MaternityBenefit"/>,
+/// <see cref="PreventiveBenefit"/>.
+/// </para>
+///
+/// <para>
+/// Wire format: a polymorphic discriminator <c>"benefitType"</c> selects the
+/// concrete subclass during deserialization. Legacy rows persisted before
+/// 5.4 carry no discriminator; they hydrate as <see cref="MedicalBenefit"/>
+/// (the catch-all default) so existing data continues to work without a
+/// migration. See <c>docs/architecture/declarative-benefit-model.md</c>.
+/// </para>
+///
+/// <para>
+/// Engine integration: <c>BenefitCalculationEngine</c> and the prior-auth
+/// rule engine continue to read this base class verbatim (Strategy A).
+/// Type-aware engine paths (e.g. preventive zero-cost-share, formulary
+/// resolution) arrive in subsequent capability prompts.
+/// </para>
 /// </summary>
+[JsonConverter(typeof(BenefitJsonConverter))]
 public class Benefit
 {
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
+
+    /// <summary>
+    /// Discriminator written to the wire so the polymorphic converter can
+    /// reconstruct the correct subclass. Each concrete subclass overrides
+    /// this; the base default is <c>"medical"</c> so legacy rows that lack
+    /// the property hydrate as <see cref="MedicalBenefit"/>.
+    /// </summary>
+    [JsonPropertyName("benefitType")]
+    public virtual string BenefitType => BenefitTypeDiscriminators.Medical;
 
     [Required]
     [JsonPropertyName("serviceCategory")]
@@ -241,6 +278,15 @@ public class Benefit
 
     [JsonPropertyName("lifetimeMaximum")]
     public decimal? LifetimeMaximum { get; set; }
+
+    /// <summary>
+    /// Optional declarative gates that restrict when this benefit applies
+    /// to a given member encounter (age range, gender, required diagnosis
+    /// codes, related-encounter lookback). Predicates are evaluated by
+    /// callers; <c>null</c> or empty means the benefit always applies.
+    /// </summary>
+    [JsonPropertyName("rules")]
+    public List<BenefitRulePredicate>? Rules { get; set; }
 }
 
 /// <summary>
