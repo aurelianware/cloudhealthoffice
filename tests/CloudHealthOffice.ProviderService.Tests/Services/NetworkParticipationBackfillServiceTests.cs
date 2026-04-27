@@ -165,13 +165,24 @@ public class NetworkParticipationBackfillServiceTests
     [Fact]
     public async Task RunTenant_does_not_emit_events_for_skipped_participations()
     {
+        // Mix of legacy + touched on the same provider so the storage
+        // filter passes (provider has at least one eligible
+        // participation) and the service-layer skip path is exercised.
+        // A provider with ONLY touched participations is excluded at
+        // the storage layer — never reaches the service.
         var (service, repo, events) = BuildService();
-        await repo.CreateAsync(ActiveProvider("p1", AlreadyTouched()));
+        await repo.CreateAsync(ActiveProvider("p1",
+            Legacy(LineOfBusiness.Commercial),
+            AlreadyTouched(LineOfBusiness.Medicare)));
 
         var result = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest());
 
+        result.ParticipationsBackfilled.Should().Be(1);
         result.ParticipationsSkipped.Should().Be(1);
-        events.Events.Should().BeEmpty();
+        // Event emitted only for the patched legacy participation; the
+        // skipped touched one produces no event.
+        events.Events.Should().HaveCount(1);
+        events.Events[0].LineOfBusiness.Should().Be(LineOfBusiness.Commercial);
     }
 
     [Fact]
