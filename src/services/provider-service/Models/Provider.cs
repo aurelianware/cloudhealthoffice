@@ -258,14 +258,50 @@ public class Provider
     [StringLength(200)]
     public string? LastUpdatedBy { get; set; }
 
+    // ── Cached integrity projection (capability 5.4.5) ──────────────
+    //
+    // Projection metadata maintained by ProviderIntegrityProjectionService.
+    // The hosted IntegrityProjectionWorker calls provider-verification-service
+    // on a schedule and writes the four fields below back onto the head
+    // Active version via IProviderRepository.UpdateIntegrityProjectionAsync —
+    // a dedicated patch path that bypasses the version-state guard on
+    // UpdateAsync. Active rows otherwise remain read-only at the
+    // application layer (PR 7.2 / 5.1 — provider versioning).
+    //
+    // These fields are *projection metadata*, NOT version-identity fields:
+    // updating them does NOT create a new VersionNumber. See
+    // docs/architecture/provider-versioning.md "Projection metadata —
+    // exempt from versioning".
+    //
+    // Read consumers: roster (capability 5.4) sorts on IntegrityScore;
+    // adjudication, FHIR projections, and the provider-profile portal
+    // card surface it. Live HTTP fetch via HttpProviderIntegrityGate
+    // remains available for fresh-or-cached decisions per consumer.
+
     /// <summary>
-    /// Cached integrity score from the ProviderVerificationService.
-    /// Updated on verification and cached for claims-time lookup.
+    /// Composite integrity score (0–100) from the most recent
+    /// verification. Null until the projection worker runs the first
+    /// time for this provider.
     /// </summary>
     public int? IntegrityScore { get; set; }
+
+    /// <summary>
+    /// Rating bucket — Clear / Advisory / Caution / Alert / Blocked /
+    /// Unknown. Mirrors <c>IntegrityRating</c> in the verification engine.
+    /// </summary>
     [StringLength(50)]
     public string? IntegrityRating { get; set; }
+
+    /// <summary>
+    /// When the score was produced by provider-verification-service.
+    /// </summary>
     public DateTimeOffset? LastVerifiedAt { get; set; }
+
+    /// <summary>
+    /// When the projection worker should re-verify this provider next.
+    /// Computed from <c>LastVerifiedAt + ShortestActiveWindow</c>; null
+    /// for never-verified rows (sweep filter picks them up too).
+    /// </summary>
     public DateTimeOffset? NextVerificationDue { get; set; }
 
     // ---------------------------------------------------------------------

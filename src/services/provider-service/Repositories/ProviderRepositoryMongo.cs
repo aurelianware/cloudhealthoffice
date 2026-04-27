@@ -613,6 +613,106 @@ public class ProviderRepositoryMongo : IProviderRepository
         return version;
     }
 
+    public async Task<bool> UpdateIntegrityProjectionAsync(
+        string tenantId,
+        string providerId,
+        int? integrityScore,
+        string? integrityRating,
+        DateTimeOffset? lastVerifiedAt,
+        DateTimeOffset? nextVerificationDue,
+        CancellationToken ct = default)
+    {
+        // $set on the four projection fields only — bypasses the
+        // version-state guard on UpdateAsync. Targets the head Active
+        // version of the chain (matching ChainKeyFilter + Active state).
+        // Hydration's "missing versionState ⇒ Active" rule means legacy
+        // rows participate too.
+        var b = Builders<Provider>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.Exists(p => p.VersionState, false),
+            b.And(
+                b.Or(b.Exists(p => p.VersionId, false), b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            ChainKeyFilter(providerId),
+            stateFilter);
+
+        var update = Builders<Provider>.Update
+            .Set(p => p.IntegrityScore, integrityScore)
+            .Set(p => p.IntegrityRating, integrityRating)
+            .Set(p => p.LastVerifiedAt, lastVerifiedAt)
+            .Set(p => p.NextVerificationDue, nextVerificationDue)
+            .Set(p => p.LastUpdatedDate, DateTime.UtcNow);
+
+        // Sort by VersionNumber desc so amendments hit the latest head when
+        // there are historical Superseded rows. Mongo's UpdateOneAsync with
+        // a Sort option requires FindOneAndUpdate semantics; use that.
+        var options = new FindOneAndUpdateOptions<Provider>
+        {
+            Sort = Builders<Provider>.Sort.Descending(p => p.VersionNumber),
+            ReturnDocument = ReturnDocument.After,
+        };
+        var updated = await _collection.FindOneAndUpdateAsync(filter, update, options, ct);
+        return updated != null;
+    }
+
+    public async Task<IReadOnlyList<Provider>> ListProvidersForIntegrityRefreshAsync(
+        string tenantId,
+        DateTimeOffset dueBefore,
+        bool includeNeverVerified,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+            throw new ArgumentException("tenantId is required.", nameof(tenantId));
+        var safeSkip = Math.Max(skip, 0);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+
+        var b = Builders<Provider>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.Exists(p => p.VersionState, false),
+            b.And(
+                b.Or(b.Exists(p => p.VersionId, false), b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
+
+        var dueFilter = includeNeverVerified
+            ? b.Or(
+                b.Exists(p => p.NextVerificationDue, false),
+                b.Eq(p => p.NextVerificationDue, null),
+                b.Lte(p => p.NextVerificationDue, dueBefore))
+            : b.And(
+                b.Exists(p => p.NextVerificationDue, true),
+                b.Ne(p => p.NextVerificationDue, null),
+                b.Lte(p => p.NextVerificationDue, dueBefore));
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            stateFilter,
+            dueFilter);
+
+        var docs = await _collection.Find(filter)
+            .Sort(Builders<Provider>.Sort.Ascending(p => p.ProviderId).Ascending(p => p.Id))
+            .Skip(safeSkip)
+            .Limit(safePageSize)
+            .ToListAsync(ct);
+        return docs.Select(Hydrate).ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> ListProviderTenantIdsAsync(CancellationToken ct = default)
+    {
+        var distinct = await _collection.DistinctAsync<string>(
+            "TenantId", FilterDefinition<Provider>.Empty, cancellationToken: ct);
+        var list = await distinct.ToListAsync(ct);
+        return list.Where(x => !string.IsNullOrEmpty(x))
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+    }
+
     private static Provider Hydrate(Provider provider)
     {
         if (string.IsNullOrEmpty(provider.ProviderId))

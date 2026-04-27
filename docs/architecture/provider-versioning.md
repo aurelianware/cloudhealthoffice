@@ -219,26 +219,76 @@ provider has an Active version — callers must amend through the new
 flow. The legacy `DELETE` path now performs a `Terminate` transition
 on the head Active version, preserving history.
 
+## Projection metadata — exempt from versioning
+
+A version-chain row is otherwise immutable once published Active —
+`UpdateAsync` rejects any write that targets a non-Draft row with
+`ProviderVersionStateException`. **Projection metadata is the one
+documented exception**: a small set of fields that are computed by
+external services on their own cadence and written back as a cached
+read-side projection. Updating them does **not** create a new
+`VersionNumber` and does **not** transition the chain through
+Draft → Active.
+
+Today the only projection-metadata fields are the integrity-score
+projection populated by capability 5.4.5
+(`docs/architecture/verification-writeback.md`):
+
+| Field | Source | Cadence |
+|---|---|---|
+| `IntegrityScore` | `provider-verification-service` | Shortest-active-window (24h) |
+| `IntegrityRating` | `provider-verification-service` | Shortest-active-window (24h) |
+| `LastVerifiedAt` | `provider-verification-service` | Shortest-active-window (24h) |
+| `NextVerificationDue` | computed locally | Shortest-active-window (24h) |
+
+The write path is `IProviderRepository.UpdateIntegrityProjectionAsync(
+tenantId, providerId, score, rating, verifiedAt, nextDue, ct)`:
+
+- **Cosmos** — `PatchItemAsync` with four `PatchOperation.Set` ops on
+  `/integrityScore`, `/integrityRating`, `/lastVerifiedAt`,
+  `/nextVerificationDue` (plus `/lastUpdatedDate`).
+- **Mongo** — `FindOneAndUpdateAsync` with `$set` on the same field
+  paths, sorted by `VersionNumber DESC` so amendments hit the latest
+  head.
+
+Both bypass the `UpdateAsync` state guard; neither writes the
+`VersionState`/`VersionNumber`/`PredecessorVersionId` fields.
+Identity-field writes against the same Active row continue to throw
+(verified by `IntegrityProjectionWritePathTests.UpdateAsync_against_active_still_throws_after_projection_patch`).
+
+**Why the carve-out**: integrity scores refresh on their own
+operational cadence (every 24h on the shortest-active-window
+schedule). Emitting a new chain version per refresh would produce
+unbounded version-chain growth and break the audit semantic that
+"each version represents an identity change." Projection metadata is
+write-side noise, not history.
+
+**Adding new projection fields**: any future capability that wants to
+join the carve-out should add a sibling repository method
+(`UpdateXxxProjectionAsync`) — not extend `UpdateIntegrityProjectionAsync`,
+not relax the `UpdateAsync` guard, not re-purpose
+`ReplaceVersionRowAsync`. Each carve-out documents its source service
+and refresh cadence in this section.
+
 ## Caveats / follow-ups
 
-- **Bus fan-out.** Decorator over `IProviderVersionEventPublisher` not
-  yet wired.
+- **Bus fan-out.** Decorator over `IProviderVersionEventPublisher`
+  not yet wired (verified — `IProviderVersionEventPublisher.cs:13-18`
+  documents the deferred decorator seam).
 - **Cross-tenant draft isolation.** Drafts are partitioned by
   `TenantId` like every other row; no extra access control beyond the
-  tenant middleware is implemented in this PR.
+  tenant middleware is implemented (verified — both repository
+  implementations partition every read on `TenantId`).
 - **Network-participation deltas.** The v2 / Active row carries the
   full `NetworkParticipations` array; downstream consumers that diff
   participations across versions can subtract by `(planId,
   effectiveDate)` keys. A dedicated participation-delta event is
   reserved for a follow-up if the downstream cost of replaying full
   arrays becomes problematic.
-- **`ProviderVerificationOrchestrator` integration.** Verification
-  results write `IntegrityScore` / `IntegrityRating` /
-  `LastVerifiedAt` / `NextVerificationDue` directly on the Active
-  version. Because Active rows are read-only at the controller
-  boundary, the orchestrator must call repository methods rather than
-  the public PUT endpoint. The repository's `ReplaceVersionRowAsync`
-  is the existing escape hatch for state-only mutations and remains
-  available for orchestrator-style writes; a follow-up will introduce
-  a dedicated `UpdateVerificationFieldsAsync` carve-out so the rest of
-  the row stays immutable.
+- **`ProviderVerificationOrchestrator` integration.** Resolved by
+  capability 5.4.5 — verification results are now written back to the
+  Provider entity via `UpdateIntegrityProjectionAsync` (see
+  "Projection metadata — exempt from versioning" above and
+  `verification-writeback.md`). The orchestrator itself stays focused
+  on producing a verification record from live data sources;
+  provider-service owns the projection write path.
