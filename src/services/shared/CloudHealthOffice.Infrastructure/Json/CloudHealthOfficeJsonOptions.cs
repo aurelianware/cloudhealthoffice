@@ -19,9 +19,6 @@ namespace CloudHealthOffice.Infrastructure.Json;
 ///   - PropertyNamingPolicy — existing services differ (PascalCase vs camelCase
 ///     on the wire). A repo-wide change would break contracts.
 ///   - DefaultIgnoreCondition — same reason.
-///   - allowIntegerValues: false — kept at framework default (true) for
-///     backward compatibility with any external caller still POSTing ints.
-///     Flipping to strict is tracked as a follow-up.
 /// </summary>
 public static class CloudHealthOfficeJsonOptions
 {
@@ -33,11 +30,25 @@ public static class CloudHealthOfficeJsonOptions
     ///     .AddCloudHealthOfficeJsonOptions();
     /// </code>
     /// </summary>
-    public static IMvcBuilder AddCloudHealthOfficeJsonOptions(this IMvcBuilder builder)
+    /// <param name="builder">The MVC builder to configure.</param>
+    /// <param name="camelCaseEnums">
+    /// When <c>true</c>, registers <see cref="JsonStringEnumConverter"/> with
+    /// <see cref="JsonNamingPolicy.CamelCase"/> so enum names are emitted in
+    /// camelCase (e.g. <c>"medicareFeeSchedule"</c>). Use this for services
+    /// whose published wire format already uses camelCase enum names.
+    /// When <c>false</c> (the default), enum names are emitted exactly as
+    /// declared (e.g. <c>"MedicareFeeSchedule"</c>).
+    /// </param>
+    public static IMvcBuilder AddCloudHealthOfficeJsonOptions(
+        this IMvcBuilder builder,
+        bool camelCaseEnums = false)
     {
         return builder.AddJsonOptions(o =>
         {
-            o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            var converter = camelCaseEnums
+                ? new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
+                : new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false);
+            o.JsonSerializerOptions.Converters.Add(converter);
         });
     }
 
@@ -60,7 +71,7 @@ public static class CloudHealthOfficeJsonOptions
             PropertyNamingPolicy   = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
-        opts.Converters.Add(new JsonStringEnumConverter());
+        opts.Converters.Add(new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false));
         // Freeze. A mutable singleton surfaces as a subtle global: any
         // caller adding a Converter here would reshape serialization for
         // every sibling service that consumes this property. MakeReadOnly

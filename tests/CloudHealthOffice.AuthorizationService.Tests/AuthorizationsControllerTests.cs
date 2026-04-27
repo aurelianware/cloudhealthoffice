@@ -14,7 +14,8 @@ public class AuthorizationsControllerTests : IClassFixture<AuthorizationApiFacto
     private readonly AuthorizationApiFactory _factory;
     private static readonly JsonSerializerOptions Json = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
     };
 
     public AuthorizationsControllerTests(AuthorizationApiFactory factory)
@@ -87,7 +88,7 @@ public class AuthorizationsControllerTests : IClassFixture<AuthorizationApiFacto
                     placeOfServiceCode = "22"
                 }
             },
-            authorizationType = 0
+            authorizationType = AuthorizationType.PreAuthorization
         };
 
         var response = await _client.PostAsJsonAsync("/api/authorizations", request, Json);

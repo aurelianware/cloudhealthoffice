@@ -504,6 +504,11 @@ public class ClinicalAttachment
 public enum AuthorizationType
 {
     /// <summary>
+    /// Not specified / default (used for uninitialized or legacy records)
+    /// </summary>
+    Unknown = 0,
+
+    /// <summary>
     /// Pre-authorization (before service)
     /// </summary>
     PreAuthorization = 1,
@@ -590,6 +595,7 @@ public enum SlaEscalationLevel
 /// </summary>
 public enum LineOfBusiness
 {
+    Unknown = 0,
     Commercial = 1,
     Medicare = 2,
     Medicaid = 3,

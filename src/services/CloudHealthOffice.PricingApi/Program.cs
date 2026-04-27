@@ -6,6 +6,7 @@ using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Middleware;
 using CloudHealthOffice.PricingApi.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using MongoDB.Driver;
 using Serilog;
@@ -52,18 +53,16 @@ try
     builder.Services.AddSingleton<IFeeScheduleLoaderService, FeeScheduleLoaderService>();
 
     // ── Controllers + JSON ──
-    // NOTE: PricingApi intentionally does NOT call AddCloudHealthOfficeJsonOptions().
-    // Its published wire format is CamelCase + WhenWritingNull with CamelCase-cased
-    // enum strings (e.g. "medicareFeeSchedule"); the shared helper registers an
-    // unnamed JsonStringEnumConverter that would emit PascalCase names and break
-    // existing consumers. Harmonizing casing is tracked as a follow-up.
-    // See docs/architecture/shared-json-options.md.
+    // PricingApi publishes camelCase properties + camelCase-cased enum names
+    // (e.g. "medicareFeeSchedule") and omits null values. The shared helper is
+    // used with camelCaseEnums: true for the string-enum contract; the remaining
+    // service-specific overrides are chained in a second AddJsonOptions call.
     builder.Services.AddControllers()
+        .AddCloudHealthOfficeJsonOptions(camelCaseEnums: true)
         .AddJsonOptions(opts =>
         {
             opts.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
             opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-            opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         });
 
     // ── Swagger / OpenAPI ──
@@ -206,3 +205,6 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+// Expose the generated Program class so WebApplicationFactory can reference it in tests.
+public partial class Program { }

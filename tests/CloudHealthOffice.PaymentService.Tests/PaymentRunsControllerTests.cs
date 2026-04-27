@@ -69,7 +69,7 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
             CreatedBy = "admin@test.com"
         };
 
-        var response = await _client.PostAsJsonAsync("/api/paymentruns", request);
+        var response = await _client.PostAsJsonAsync("/api/paymentruns", request, Json);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var created = await response.Content.ReadFromJsonAsync<PaymentRun>(Json);
@@ -139,7 +139,7 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
             CreatedBy = "admin@test.com"
         };
 
-        var response = await _client.PostAsJsonAsync("/api/paymentruns/execute", request);
+        var response = await _client.PostAsJsonAsync("/api/paymentruns/execute", request, Json);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<PaymentRun>(Json);
