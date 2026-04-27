@@ -127,6 +127,10 @@ public static class TenantMiddlewareExtensions
     public static IApplicationBuilder UseTenantMiddleware(this IApplicationBuilder builder)
         => builder.UseMiddleware<TenantMiddleware>();
 }
+
+/// <summary>
+/// Configuration options for <see cref="TenantMiddleware"/>.
+/// </summary>
 public class TenantMiddlewareOptions
 {
     /// <summary>

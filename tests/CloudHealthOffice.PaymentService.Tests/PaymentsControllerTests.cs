@@ -97,6 +97,8 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
 
         var response = await _client.PostAsJsonAsync("/api/payments", payment, Json);
 
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
         var created = await response.Content.ReadFromJsonAsync<Payment>(Json);
         Assert.NotNull(created);
         Assert.NotNull(created.Id);
