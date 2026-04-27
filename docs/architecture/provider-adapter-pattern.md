@@ -3,16 +3,16 @@
 ## Why
 
 Some tenants will eventually source their provider directory from external
-core platforms (QNXT, Facets, HealthEdge) instead of CHO's internal
-`provider-service`. This pattern introduces a thin abstraction
+core platforms (QNXT, Facets, HealthEdge) instead of Cloud Health Office's
+internal `provider-service`. This pattern introduces a thin abstraction
 (`IProviderAdapter`) selected at request time by tenant configuration,
 mirroring the existing `IBenefitPlanAdapter` and `IEligibilityAdapter`
 surfaces.
 
 For every tenant currently in production the factory resolves to the
-default `ChoProviderAdapter`, which is a near pass-through over the
-existing `IProviderRepository` — so this PR introduces the seam without
-changing observable behavior.
+default `ChoProviderAdapter` (the Cloud Health Office implementation),
+which is a near pass-through over the existing `IProviderRepository` —
+so this PR introduces the seam without changing observable behavior.
 
 ## Topology
 
@@ -47,7 +47,7 @@ public interface IProviderAdapter
 The response envelopes carry a `Platform` string, an optional
 `RawResponse` audit string, and a normalized payload (`AdapterProvider`,
 `IReadOnlyList<AdapterProvider>`, or `AdapterNetwork`). Payload shape
-mirrors the existing `Provider` so the CHO pass-through is lossless, and
+mirrors the existing `Provider` so the Cloud Health Office pass-through is lossless, and
 is structurally compatible with the planned FHIR `Practitioner` /
 `Organization` projections (Sections 5.7–5.9 of the migration spec).
 
@@ -99,10 +99,10 @@ services.AddHttpClient(ProviderTenantConfigCache.HttpClientName)
         .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
 ```
 
-This matches the benefit-plan adapter wiring. The CHO adapter has to be
-scoped because it composes the scoped `IProviderRepository`; the cache
-lifecycle is kept separate so its TTL window is meaningful across
-requests.
+This matches the benefit-plan adapter wiring. The `ChoProviderAdapter`
+has to be scoped because it composes the scoped `IProviderRepository`;
+the cache lifecycle is kept separate so its TTL window is meaningful
+across requests.
 
 ## Refactored controller endpoints
 
@@ -128,8 +128,9 @@ All other endpoints — version-chain reads (`GET /{id}/versions`,
 `POST /api/Providers`, `PUT /{id}`, `DELETE /{id}`,
 `POST /{id}/network-participations`, `PUT /{id}/credentialing`, and the
 bank-account endpoints — keep calling `IProviderRepository` and
-`IProviderVersioningService` directly. These are CHO-internal write paths
-and chain reads; expanding adapter coverage to writes is a future PR.
+`IProviderVersioningService` directly. These are Cloud Health Office
+internal write paths and chain reads; expanding adapter coverage to writes
+is a future PR.
 
 ## Adding a new adapter
 
@@ -153,7 +154,7 @@ and chain reads; expanding adapter coverage to writes is a future PR.
   HealthRules Payer provider inquiry API (HRP REST surface).
 - **Network entity** (`TODO(provider-network-5.3)`): every adapter's
   `GetNetworkAsync` throws today. Capability 5.3 introduces the Network
-  model + repository and fills in this method on the CHO adapter.
+  model + repository and fills in this method on `ChoProviderAdapter`.
 - **Verification surface** (capability 5.10): the integrity score and
   rating fields on `AdapterProvider` are populated from the cached
   values stored on `Provider` itself. The dedicated decoration seam that
@@ -186,9 +187,9 @@ notes:
 | `IntegrityScore` / `IntegrityRating` / `LastVerifiedAt` | payer-specific verification extension |
 | `VersionId` / `VersionNumber`                | `meta.versionId` / extension           |
 
-The CHO adapter today returns the existing model unchanged via the
-mapper; the QNXT/Facets/HealthEdge adapters will populate the same shape
-when implemented.
+The `ChoProviderAdapter` today returns the existing model unchanged via
+the mapper; the QNXT/Facets/HealthEdge adapters will populate the same
+shape when implemented.
 
 ## See also
 

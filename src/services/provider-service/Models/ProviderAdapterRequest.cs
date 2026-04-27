@@ -69,8 +69,9 @@ public class ProviderAdapterRequest
 
     /// <summary>
     /// Effective date used to resolve which version applies on
-    /// <c>GetNetworkRosterAsync</c> / network-status checks. Defaults to
-    /// <see cref="DateTime.UtcNow"/> when null.
+    /// <c>GetNetworkRosterAsync</c> / network-status checks. Optional; when
+    /// null, callers and adapter implementations should treat it as
+    /// <see cref="DateTime.UtcNow"/> at call time.
     /// </summary>
     public DateTime? ServiceDate { get; set; }
 

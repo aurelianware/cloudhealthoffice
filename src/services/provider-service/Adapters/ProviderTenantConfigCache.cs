@@ -10,7 +10,7 @@ namespace ProviderService.Adapters;
 /// be scoped — but the cache must outlive a single request).
 /// </summary>
 /// <remarks>
-/// Mirrors <see cref="BenefitPlanService.Adapters.BenefitPlanTenantConfigCache"/>:
+/// Mirrors <c>BenefitPlanService.Adapters.BenefitPlanTenantConfigCache</c>:
 /// 5-minute TTL, thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>,
 /// and a graceful fallback to <c>"cho"</c> on any HTTP/JSON failure so a flaky
 /// tenant-service never breaks provider reads.
@@ -55,7 +55,11 @@ public class ProviderTenantConfigCache
             var tenantUrl = _configuration["Services:TenantService"]
                 ?? "http://tenant-service.cloudhealthoffice/api/v1";
             var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-            var response = await httpClient.GetAsync($"{tenantUrl}/tenants/{tenantId}", ct);
+            // Encode the tenantId path segment defensively — the value flows
+            // from JWT/header via TenantMiddleware, and a crafted id with '/'
+            // or '?' would otherwise alter the request path or query.
+            var encodedTenantId = Uri.EscapeDataString(tenantId);
+            var response = await httpClient.GetAsync($"{tenantUrl}/tenants/{encodedTenantId}", ct);
 
             if (response.IsSuccessStatusCode)
             {

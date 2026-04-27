@@ -37,9 +37,9 @@ public class ProvidersController : ControllerBase
     }
 
     /// <summary>
-    /// Tenant id resolved by <see cref="Middleware.TenantMiddleware"/>. Throws when
-    /// the middleware did not set it (defensive — the middleware always populates
-    /// the value, defaulting to <c>"default-tenant"</c> in dev).
+    /// Tenant id resolved by <see cref="ProviderService.Middleware.TenantMiddleware"/>.
+    /// Throws when the middleware did not set it (defensive — the middleware always
+    /// populates the value, defaulting to <c>"default-tenant"</c> in dev).
     /// </summary>
     private string TenantId =>
         HttpContext.Items["TenantId"]?.ToString()

@@ -6,10 +6,10 @@ namespace ProviderService.Models;
 /// <see cref="Adapters.IProviderAdapter.GetProviderByNpiAsync"/>.
 ///
 /// <para>
-/// The payload <see cref="Provider"/> is shaped to project cleanly onto future
-/// FHIR <c>Practitioner</c> / <c>Organization</c> resources (Sections 5.7–5.9):
-/// individual-name fields map onto <c>Practitioner.name</c>, organization name
-/// onto <c>Organization.name</c>, address fields onto
+/// The payload <see cref="AdapterProvider"/> is shaped to project cleanly onto
+/// future FHIR <c>Practitioner</c> / <c>Organization</c> resources (Sections
+/// 5.7–5.9): individual-name fields map onto <c>Practitioner.name</c>,
+/// organization name onto <c>Organization.name</c>, address fields onto
 /// <c>Practitioner.address</c> / <c>Organization.address</c>, taxonomy onto
 /// <c>Practitioner.qualification</c>, and the integrity fields onto a
 /// payer-specific verification extension.
