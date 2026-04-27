@@ -48,6 +48,7 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     });
 
     builder.Services.AddScoped<IProviderRepository, ProviderRepositoryMongo>();
+    builder.Services.AddScoped<IOrganizationRepository, OrganizationRepositoryMongo>();
     builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
     builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
     builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
@@ -72,6 +73,7 @@ else
 
     // Repositories
     builder.Services.AddScoped<IProviderRepository, ProviderRepository>();
+    builder.Services.AddScoped<IOrganizationRepository, OrganizationRepository>();
     builder.Services.AddScoped<IProviderTransitionRepository, CosmosProviderTransitionRepository>();
     // Cosmos-only deployments don't have a provisioned events stream; the
     // Noop publisher logs a warning so ops can spot the missing wiring
@@ -99,6 +101,15 @@ builder.Services.AddScoped<IProviderAdapter, QnxtProviderAdapter>();
 builder.Services.AddScoped<IProviderAdapter, FacetsProviderAdapter>();
 builder.Services.AddScoped<IProviderAdapter, HealthEdgeProviderAdapter>();
 builder.Services.AddScoped<ProviderAdapterFactory>();
+
+// Organization (Network) services + adapters (5.3 — network as first-class
+// organization). Reuses ProviderTenantConfigCache because the Network
+// entity lives in provider-service and reads the same tenant config block.
+builder.Services.AddScoped<IOrganizationService, OrganizationService>();
+builder.Services.AddScoped<IOrganizationAdapter, ChoOrganizationAdapter>();
+builder.Services.AddScoped<IOrganizationAdapter, QnxtOrganizationAdapter>();
+builder.Services.AddScoped<IOrganizationAdapter, FacetsOrganizationAdapter>();
+builder.Services.AddScoped<OrganizationAdapterFactory>();
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
