@@ -210,18 +210,37 @@ share the `/api/v1/providers/...` path-prefix at the gateway layer.
 POST /api/v1/admin/providers/backfill-integrity-projection?tenantId=X&maxProviders=N
 ```
 
-Admin-callable. Iterates every Provider in the named tenant and forces
-a verification refresh — used per-tenant after this PR ships to
-populate `IntegrityScore` on legacy null rows. Idempotent: rerunning
-completes the gap from a previous partial run.
+Admin-callable. Forces an integrity-projection refresh for every Active
+provider in the named tenant, regardless of `NextVerificationDue`.
+Idempotent (last-write-wins on the four projection-metadata fields):
+use to populate legacy null projections, recover from extended
+verification-service outages, or operator-driven data-quality refresh.
 
-**Auth posture.** This endpoint is not gated at the application layer
-in this PR — provider-service does not yet have an admin-role
-middleware. Operators must restrict access at the deployment layer
-(NetworkPolicy, gateway ACL) until a platform-wide admin-auth pattern
-lands. A capitation-service-style CLI was considered (precedent:
-`SplitCapitationContracts.cs`); HTTP fits provider-service's
-existing surface better and avoids an exec environment per tenant.
+### Auth posture — defence in depth
+
+Two gates protect this route:
+
+1. **`IntegrityProjection:AdminBackfillEnabled` flag, default `false`.**
+   The controller returns `503 Service Unavailable` (NOT 404 — operators
+   need to know the endpoint exists but is gated) until configuration
+   explicitly opts in. This is a tripwire: provider-service does not
+   yet configure authentication (`Program.cs` calls `UseAuthorization()`
+   with no `AddAuthentication()`), so without this guard a
+   misconfigured gateway / NetworkPolicy could expose a route that
+   triggers large cross-service work.
+2. **Deployment-layer ACL.** Even with the flag enabled, the load-bearing
+   authorization is in the deployment layer:
+   - Kubernetes `NetworkPolicy` restricting the `/api/v1/admin/...`
+     prefix to operator pods only;
+   - Gateway / ingress ACL with mTLS or signed admin JWT;
+   - Or both.
+
+The flag is a safety net, not authentication. Enabling it without a
+deployment-layer restriction exposes the endpoint.
+
+A capitation-service-style CLI was considered (precedent:
+`SplitCapitationContracts.cs`); HTTP fits provider-service's existing
+surface better and avoids an exec environment per tenant.
 
 ## Event stream — `ProviderVerificationEvents`
 
@@ -262,6 +281,7 @@ the persistence; 5.10 ships the consumption strategy.
 {
   "IntegrityProjection": {
     "Enabled": true,
+    "AdminBackfillEnabled": false,  // opt in per environment; pair with NetworkPolicy
     "SweepInterval": "01:00:00",
     "PageSize": 100,
     "MaxProvidersPerTenantPerSweep": 1000,

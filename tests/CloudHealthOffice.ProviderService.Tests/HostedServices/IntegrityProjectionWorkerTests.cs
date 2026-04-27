@@ -1,4 +1,5 @@
 using CloudHealthOffice.ProviderService.Tests.Fakes;
+using CloudHealthOffice.ProviderService.Tests.TestHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -95,8 +96,10 @@ public class IntegrityProjectionWorkerTests
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(cts.Token);
-        // Give the first sweep time to drain.
-        await Task.Delay(500);
+        await PollUntil.UntilAsync(
+            () => repo.Docs.FirstOrDefault(d => d.Id == "p-a")?.IntegrityScore == 80
+                  && repo.Docs.FirstOrDefault(d => d.Id == "p-b")?.IntegrityScore == 60,
+            description: "both tenants patched");
         await worker.StopAsync(CancellationToken.None);
 
         repo.Docs.First(d => d.Id == "p-a").IntegrityScore.Should().Be(80);
@@ -106,14 +109,24 @@ public class IntegrityProjectionWorkerTests
     [Fact]
     public async Task Worker_skips_when_disabled()
     {
-        var disabled = new IntegrityProjectionOptions { Enabled = false };
+        var disabled = new IntegrityProjectionOptions
+        {
+            Enabled = false,
+            // Short interval so the disabled-branch loop spins fast
+            // enough that we can observe its idle behaviour briefly.
+            SweepInterval = TimeSpan.FromMilliseconds(100),
+        };
         var (worker, repo, client, _, _) = BuildWorker(disabled);
         Seed(repo, "tenant-a", "p-a", "1111111111");
         client.Seed("1111111111", 80, "Clear");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         await worker.StartAsync(cts.Token);
-        await Task.Delay(500);
+        // Wait one sweep window then assert no work happened. There's
+        // no positive condition to poll for ("nothing happened" is
+        // intrinsically time-bounded), but the window is bounded by
+        // the configured SweepInterval — not an arbitrary 500ms.
+        await Task.Delay(disabled.SweepInterval + disabled.SweepInterval);
         await worker.StopAsync(CancellationToken.None);
 
         client.Calls.Should().BeEmpty();
@@ -129,7 +142,9 @@ public class IntegrityProjectionWorkerTests
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(cts.Token);
-        await Task.Delay(500);
+        await PollUntil.UntilAsync(
+            () => events.Events.Any(e => e.ProviderId == "p-a"),
+            description: "refresh event emitted");
         await worker.StopAsync(CancellationToken.None);
 
         events.Events.Should().ContainSingle(e =>

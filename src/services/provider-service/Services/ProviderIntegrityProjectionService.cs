@@ -111,7 +111,7 @@ public sealed class ProviderIntegrityProjectionService : IProviderIntegrityProje
         {
             _logger.LogInformation(
                 "verification refresh produced no result for {ProviderId}; preserving cached projection",
-                providerId);
+                Sanitize(providerId));
             return new IntegrityProjectionRefreshResult
             {
                 ProviderId = head.ProviderId,
@@ -152,11 +152,20 @@ public sealed class ProviderIntegrityProjectionService : IProviderIntegrityProje
                 tenantId, dueBefore, includeNeverVerified, skip, pageSize, ct);
             if (page.Count == 0) break;
 
-            var npiToProvider = page.ToDictionary(p => p.NPI, p => p);
-            var npis = npiToProvider.Keys.ToList();
+            // De-dupe NPIs before the batch call: the (TenantId, NPI)
+            // index isn't unique, so a tenant can legitimately have
+            // multiple Provider rows sharing an NPI (chain history,
+            // genuine duplicates, data-quality drift). ToDictionary on
+            // a duplicated key would crash the whole sweep.
+            var npis = page.Select(p => p.NPI).Distinct().ToList();
 
             var verificationResults = await _verification.VerifyBatchAsync(npis, ct);
-            var resultByNpi = verificationResults.ToDictionary(r => r.Npi, r => r);
+            // GroupBy + First defends against the verification service
+            // returning duplicate records per NPI (server contract is
+            // one-per-NPI, but we shouldn't crash on contract drift).
+            var resultByNpi = verificationResults
+                .GroupBy(r => r.Npi)
+                .ToDictionary(g => g.Key, g => g.First());
 
             foreach (var p in page)
             {

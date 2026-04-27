@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using ProviderService.Models;
 using ProviderService.Services;
 
 namespace ProviderService.Controllers;
@@ -10,12 +12,32 @@ namespace ProviderService.Controllers;
 /// to populate <c>IntegrityScore</c> on legacy rows.
 ///
 /// <para>
-/// **Auth posture.** This endpoint is not gated at the application
-/// layer in this PR — provider-service does not yet have an admin-role
-/// middleware. Operators must restrict access at the deployment layer
-/// (NetworkPolicy, gateway ACL) until a platform-wide admin-auth
-/// pattern lands. Documented in
-/// <c>docs/architecture/verification-writeback.md</c> "Backfill activation".
+/// **Auth posture (defence in depth).** Two gates protect this route:
+/// </para>
+///
+/// <list type="number">
+///   <item>
+///     <see cref="IntegrityProjectionOptions.AdminBackfillEnabled"/>
+///     defaults to <c>false</c>. The controller returns
+///     <see cref="StatusCodes.Status503ServiceUnavailable"/> until an
+///     operator explicitly opts in via configuration. Provider-service
+///     does not yet configure authentication
+///     (<c>Program.cs</c> calls <c>UseAuthorization()</c> with no
+///     <c>AddAuthentication()</c>) — without this guard a misconfigured
+///     gateway / NetworkPolicy could expose a route that triggers
+///     large cross-service work.
+///   </item>
+///   <item>
+///     Even with the flag enabled, the deployment layer
+///     (NetworkPolicy, gateway ACL, mTLS) is the load-bearing
+///     authorization. The flag is a tripwire, not authn.
+///   </item>
+/// </list>
+///
+/// <para>
+/// See <c>docs/architecture/verification-writeback.md</c>
+/// "Backfill — admin HTTP endpoint" for the deployment-layer
+/// requirement.
 /// </para>
 /// </summary>
 [ApiController]
@@ -24,31 +46,55 @@ namespace ProviderService.Controllers;
 public sealed class IntegrityProjectionAdminController : ControllerBase
 {
     private readonly IProviderIntegrityProjectionService _projection;
+    private readonly IOptionsMonitor<IntegrityProjectionOptions> _options;
     private readonly ILogger<IntegrityProjectionAdminController> _logger;
 
     public IntegrityProjectionAdminController(
         IProviderIntegrityProjectionService projection,
+        IOptionsMonitor<IntegrityProjectionOptions> options,
         ILogger<IntegrityProjectionAdminController> logger)
     {
         _projection = projection;
+        _options = options;
         _logger = logger;
     }
 
     /// <summary>
-    /// Force-refresh integrity projections for every provider in
-    /// <paramref name="tenantId"/>. Idempotent — only patches rows
-    /// where the projection is null or older than the configured
-    /// refresh window. Re-running completes any gap from a previous
-    /// partial run.
+    /// Forces an integrity-projection refresh for every Active
+    /// provider in the specified tenant. All rows are treated as due,
+    /// regardless of <see cref="Provider.NextVerificationDue"/>.
+    /// Idempotent because last-write-wins on projection-metadata
+    /// fields. Use to populate legacy null projections, recover from
+    /// extended verification-service outages, or operator-driven
+    /// data-quality refresh.
     /// </summary>
     [HttpPost("backfill-integrity-projection")]
     [ProducesResponseType(typeof(IntegrityProjectionTenantSweepResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<IntegrityProjectionTenantSweepResult>> BackfillIntegrityProjection(
         [FromQuery] string tenantId,
         [FromQuery] int? maxProviders,
         CancellationToken ct)
     {
+        if (!_options.CurrentValue.AdminBackfillEnabled)
+        {
+            // 503 (not 404) so operators know the endpoint exists and
+            // is intentionally gated — a 404 would falsely suggest the
+            // route was never registered.
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new
+                {
+                    error = "admin_backfill_disabled",
+                    message =
+                        "Integrity-projection backfill is gated. Set " +
+                        "IntegrityProjection:AdminBackfillEnabled=true to enable, " +
+                        "and ensure the deployment layer (NetworkPolicy / gateway ACL) " +
+                        "restricts access to this route.",
+                });
+        }
+
         if (string.IsNullOrWhiteSpace(tenantId))
         {
             return BadRequest(new { error = "tenantId query parameter is required" });

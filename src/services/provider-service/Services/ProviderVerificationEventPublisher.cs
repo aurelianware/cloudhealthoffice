@@ -92,7 +92,13 @@ public sealed class MongoProviderVerificationEventPublisher : IProviderVerificat
         ProviderVerificationEvent evt, CancellationToken ct)
     {
         evt.PartitionKey = ProviderVerificationEvent.BuildPartitionKey(evt.TenantId, evt.ProviderId);
-        evt.Id = evt.EventId;
+        // Mongo maps Id ⇒ _id which must be unique across the entire
+        // collection. EventId is only unique within (TenantId,ProviderId)
+        // — two tenants verifying the same NPI at the same instant
+        // would collide on _id alone. Scope _id to PartitionKey:EventId.
+        // The (TenantId, ProviderId, EventId) UNIQUE index from the
+        // initializer remains in place as the primary idempotency guard.
+        evt.Id = $"{evt.PartitionKey}:{evt.EventId}";
         if (evt.OccurredAt == default) evt.OccurredAt = DateTime.UtcNow;
 
         var existing = await GetByEventIdAsync(evt.TenantId, evt.ProviderId, evt.EventId, ct);

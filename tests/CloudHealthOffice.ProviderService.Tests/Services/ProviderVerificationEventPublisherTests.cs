@@ -88,4 +88,26 @@ public class ProviderVerificationEventPublisherTests : IAsyncLifetime
         evt.ActorId.Should().Be("user");
         evt.CorrelationId.Should().Be("corr-1");
     }
+
+    [Fact]
+    public async Task Publish_cross_tenant_same_eventId_does_not_collide()
+    {
+        // Pre-fix: evt.Id = evt.EventId, which is only documented as
+        // unique within (TenantId, ProviderId). Two tenants verifying
+        // the same NPI at the same instant share an EventId
+        // ("refreshed:provider-001:<verifiedAtIso>") and would collide
+        // on Mongo's _id. Post-fix: _id is scoped to {PartitionKey}:{EventId},
+        // and the (TenantId, ProviderId, EventId) UNIQUE index is the
+        // primary idempotency guard.
+        var verifiedAt = DateTimeOffset.UtcNow;
+
+        var a = await _publisher.PublishRefreshedAsync(
+            "tenant-a", ProviderId, 80, "Clear", verifiedAt, verifiedAt.AddDays(1), null, null);
+        var b = await _publisher.PublishRefreshedAsync(
+            "tenant-b", ProviderId, 80, "Clear", verifiedAt, verifiedAt.AddDays(1), null, null);
+
+        a.EventId.Should().Be(b.EventId); // same NPI + same instant
+        a.Id.Should().NotBe(b.Id);        // but different _id (PartitionKey-scoped)
+        a.TenantId.Should().NotBe(b.TenantId);
+    }
 }

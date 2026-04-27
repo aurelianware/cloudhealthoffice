@@ -732,14 +732,26 @@ public class ProviderRepository : IProviderRepository
         // Resolve the head Active row by chain key. Cosmos PatchItemAsync
         // is keyed on the per-row document Id, so we have to look up the
         // row id first. The lookup query is partition-scoped.
+        //
+        // Hydration rule (mirrors Hydrate()) — three "Active" shapes,
+        // each Status-gated to keep legacy Terminated/Suspended rows
+        // out:
+        //   1. versionState = Active.
+        //   2. versionState undefined AND status = Active.
+        //   3. versionId undefined/null/empty AND status = Active.
+        // See docs/architecture/provider-versioning.md "Legacy
+        // hydration query pattern".
         var query = new QueryDefinition(
                 "SELECT TOP 1 c.id FROM c WHERE c.tenantId = @tenantId AND " +
                 "(c.providerId = @providerId OR (NOT IS_DEFINED(c.providerId) AND c.id = @providerId)) AND " +
-                "(c.versionState = @active OR NOT IS_DEFINED(c.versionState)) " +
+                "(c.versionState = @active " +
+                "OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive) " +
+                "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) " +
                 "ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@providerId", providerId)
-            .WithParameter("@active", ProviderVersionState.Active.ToString());
+            .WithParameter("@active", ProviderVersionState.Active.ToString())
+            .WithParameter("@statusActive", ProviderStatus.Active.ToString());
 
         string? rowId = null;
         var iterator = _container.GetItemQueryIterator<HeadIdResult>(
@@ -792,15 +804,25 @@ public class ProviderRepository : IProviderRepository
         var safePageSize = Math.Clamp(pageSize, 1, 1000);
 
         // Active head only — projection only writes to Active rows.
-        // Three "Active" shapes mirror Hydrate(): explicit Active,
-        // missing versionState, or legacy (no versionId + status=Active).
+        // Hydration rule (mirrors Hydrate()) — three "Active" shapes,
+        // each Status-gated to keep legacy Terminated/Suspended rows
+        // out of refresh batches:
+        //   1. versionState = Active.
+        //   2. versionState undefined AND status = Active.
+        //   3. versionId undefined/null/empty AND status = Active.
+        // See docs/architecture/provider-versioning.md "Legacy
+        // hydration query pattern".
         var sql = "SELECT * FROM c WHERE c.tenantId = @tenantId AND " +
-                  "(c.versionState = @active OR NOT IS_DEFINED(c.versionState) OR " +
-                  "((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) AND ";
+                  "(c.versionState = @active " +
+                  "OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive) " +
+                  "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) AND ";
         sql += includeNeverVerified
             ? "(NOT IS_DEFINED(c.nextVerificationDue) OR c.nextVerificationDue = null OR c.nextVerificationDue <= @dueBefore) "
             : "(IS_DEFINED(c.nextVerificationDue) AND c.nextVerificationDue != null AND c.nextVerificationDue <= @dueBefore) ";
-        sql += $"ORDER BY c.providerId ASC OFFSET {safeSkip} LIMIT {safePageSize}";
+        // Secondary sort on c.id keeps OFFSET/LIMIT pagination
+        // deterministic when multiple rows share the same providerId
+        // (legacy single-row chains where providerId may be empty).
+        sql += $"ORDER BY c.providerId ASC, c.id ASC OFFSET {safeSkip} LIMIT {safePageSize}";
 
         var query = new QueryDefinition(sql)
             .WithParameter("@tenantId", tenantId)

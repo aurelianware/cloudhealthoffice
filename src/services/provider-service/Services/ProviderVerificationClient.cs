@@ -80,8 +80,19 @@ public sealed class HttpProviderVerificationClient : IProviderVerificationClient
             var envelope = await response.Content.ReadFromJsonAsync<BatchResponse>(_json, ct);
             return envelope?.Results ?? (IReadOnlyList<VerificationResult>)Array.Empty<VerificationResult>();
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller-driven cancellation (worker shutdown, request abort) must
+            // propagate. Without this guard we'd swallow it as an "outage" and
+            // delay teardown by one full sweep cycle.
+            throw;
+        }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
+            // HTTP timeout / transport failure / non-cancellation TaskCanceled
+            // (e.g. HttpClient.Timeout fired). Treat as an outage so the
+            // projection writer preserves cached scores instead of crashing
+            // the sweep.
             _logger.LogWarning(ex,
                 "verification batch failed for {Count} NPIs; preserving cached scores",
                 npis.Count);

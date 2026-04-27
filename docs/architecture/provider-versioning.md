@@ -133,6 +133,84 @@ consumers — `coverage-service` `PcpAssignmentService` (which checks
 not need to migrate to `VersionState`; they can if they want stronger
 state assertions.
 
+## Legacy hydration query pattern
+
+Any query that filters provider rows on `VersionState` MUST mirror the
+mapping `Hydrate()` applies on read. Otherwise the query disagrees with
+what the rest of the codebase considers "Active" and silently includes
+or excludes legacy rows.
+
+### The rule
+
+A row counts as **Active** at query time when ANY of the following hold:
+
+1. `VersionState == Active` (current versioned shape).
+2. `VersionState` is missing **AND** `Status == Active` (rows that
+   pre-date capability 5.1 — `VersionState` was never persisted).
+3. `VersionId` is missing/null/empty **AND** `Status == Active` (rows
+   that defaulted `VersionState` to enum-zero `Draft` on read; the
+   `Hydrate()` fallback derives `Active` from `Status` when
+   `VersionId` is unset).
+
+Branches 2 and 3 cover two distinct shapes of legacy data depending on
+how the row was originally written; both are reachable in production.
+The `Status == Active` guard on branches 2 and 3 is non-negotiable —
+it's what excludes legacy Terminated / Suspended rows that lack
+`VersionState`.
+
+Concretely:
+
+```csharp
+// Mongo
+var b = Builders<Provider>.Filter;
+var activeFilter = b.Or(
+    b.Eq(p => p.VersionState, ProviderVersionState.Active),
+    b.And(
+        b.Exists(p => p.VersionState, false),
+        b.Eq(p => p.Status, ProviderStatus.Active)),
+    b.And(
+        b.Or(
+            b.Exists(p => p.VersionId, false),
+            b.Eq(p => p.VersionId, null),
+            b.Eq(p => p.VersionId, string.Empty)),
+        b.Eq(p => p.Status, ProviderStatus.Active)));
+```
+
+```sql
+-- Cosmos
+WHERE c.versionState = @active
+   OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive)
+   OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = "")
+       AND c.status = @statusActive)
+```
+
+### What goes wrong without the `Status` guard
+
+Treating "missing `VersionState`" alone as Active pulls in legacy
+**Terminated** and **Suspended** rows whose `VersionState` was never
+written. Symptoms:
+
+- Roster listings include providers who left the network months ago.
+- Projection writers (capability 5.4.5) patch and emit refresh events
+  for non-active providers.
+- Read-only consumers see "Active" providers that the rest of the
+  system considers terminated.
+
+The matching read site (`GetLatestActiveAsync` in both repository
+implementations) already applies the rule. Capability 5.4.5 added four
+new query sites — `UpdateIntegrityProjectionAsync` and
+`ListProvidersForIntegrityRefreshAsync`, each in Cosmos and Mongo —
+all four of which must apply the same rule.
+
+### When adding a new capability
+
+If you write a new query that touches `Provider` rows, audit it
+against this rule. The fast check: does the filter mention
+`VersionState`? If yes, both branches of the legacy fallback must
+appear together. Don't write `OR NOT IS_DEFINED(c.versionState)` (or
+`b.Exists(p => p.VersionState, false)`) without an immediate
+`AND status = active` guard.
+
 ## Atomicity
 
 `ActivateAndSupersedeAsync` flips the draft to Active and the

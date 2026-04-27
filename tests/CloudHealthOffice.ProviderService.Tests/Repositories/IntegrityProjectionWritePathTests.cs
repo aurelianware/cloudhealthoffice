@@ -137,6 +137,75 @@ public class IntegrityProjectionWritePathTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UpdateIntegrityProjection_skips_legacy_terminated_row()
+    {
+        // Legacy row: VersionState never persisted, Status=Terminated.
+        // Pre-fix the missing-VersionState branch was treated as
+        // "Active" without consulting Status, so this would have been
+        // patched. Post-fix it must be excluded.
+        var collection = _database.GetCollection<Provider>("Providers");
+        await collection.InsertOneAsync(new Provider
+        {
+            Id = "legacy-term",
+            TenantId = Tenant,
+            NPI = "9999999990",
+            ProviderType = ProviderType.Individual,
+            FirstName = "Legacy",
+            LastName = "Terminated",
+            PrimarySpecialty = "Cardiology",
+            TaxonomyCode = "207RC0000X",
+            Status = ProviderStatus.Terminated,
+            // VersionState / VersionId / VersionNumber intentionally unset
+        });
+
+        var patched = await _repo.UpdateIntegrityProjectionAsync(
+            Tenant, "legacy-term", 90, "Clear",
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(1));
+        patched.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ListProvidersForIntegrityRefresh_excludes_legacy_terminated_row()
+    {
+        // Twin of the above for the sweep query: a legacy
+        // Terminated/Suspended row must NOT show up in the
+        // refresh list.
+        var collection = _database.GetCollection<Provider>("Providers");
+        await collection.InsertOneAsync(new Provider
+        {
+            Id = "legacy-term-2",
+            TenantId = Tenant,
+            NPI = "9999999991",
+            ProviderType = ProviderType.Individual,
+            FirstName = "Legacy",
+            LastName = "Suspended",
+            PrimarySpecialty = "Cardiology",
+            TaxonomyCode = "207RC0000X",
+            Status = ProviderStatus.Inactive,
+        });
+        // Sanity: an active legacy row should still be listed.
+        await collection.InsertOneAsync(new Provider
+        {
+            Id = "legacy-active",
+            TenantId = Tenant,
+            NPI = "9999999992",
+            ProviderType = ProviderType.Individual,
+            FirstName = "Legacy",
+            LastName = "Active",
+            PrimarySpecialty = "Internal Medicine",
+            TaxonomyCode = "207R00000X",
+            Status = ProviderStatus.Active,
+        });
+
+        var rows = await _repo.ListProvidersForIntegrityRefreshAsync(
+            Tenant, DateTimeOffset.UtcNow, includeNeverVerified: true,
+            skip: 0, pageSize: 100);
+
+        rows.Select(p => p.Id).Should().NotContain("legacy-term-2");
+        rows.Select(p => p.Id).Should().Contain("legacy-active");
+    }
+
+    [Fact]
     public async Task ListProvidersForIntegrityRefresh_filters_by_due_date()
     {
         var due = await SeedActiveAsync("p-due", "5111111111");

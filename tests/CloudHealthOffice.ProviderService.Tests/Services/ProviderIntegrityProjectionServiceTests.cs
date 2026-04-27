@@ -211,4 +211,29 @@ public class ProviderIntegrityProjectionServiceTests
             "wrong-tenant", "p-other", forceRefresh: true, null, null);
         result.Should().BeNull();
     }
+
+    [Fact]
+    public async Task RefreshTenantAsync_tolerates_duplicate_NPIs_in_a_page()
+    {
+        // Two distinct provider rows sharing an NPI is a real shape:
+        // (TenantId, NPI) is not a unique index. Pre-fix this would
+        // crash in ToDictionary on the duplicate key and abort the
+        // sweep for the entire tenant.
+        Seed("p-a", "5550000000");
+        Seed("p-b", "5550000000");
+        _client.Seed("5550000000", 88, "Clear");
+
+        var result = await _svc.RefreshTenantAsync(Tenant,
+            new IntegrityProjectionTenantSweepRequest { IncludeNeverVerified = true });
+
+        // Both rows pick up the same score (last-write-wins on the
+        // chain key); the worker doesn't crash.
+        result.Patched.Should().Be(2);
+        _repo.Docs.First(d => d.Id == "p-a").IntegrityScore.Should().Be(88);
+        _repo.Docs.First(d => d.Id == "p-b").IntegrityScore.Should().Be(88);
+
+        // De-duped before the HTTP call: one NPI in the batch, not two.
+        _client.Calls.Should().ContainSingle();
+        _client.Calls[0].Should().BeEquivalentTo(new[] { "5550000000" });
+    }
 }

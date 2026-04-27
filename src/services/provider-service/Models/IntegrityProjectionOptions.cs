@@ -29,6 +29,20 @@ public sealed class IntegrityProjectionOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Defence-in-depth gate for the admin backfill endpoint
+    /// (<c>POST /api/v1/admin/providers/backfill-integrity-projection</c>).
+    /// Default <c>false</c>: a misconfigured gateway / NetworkPolicy
+    /// can't expose the endpoint just because the route is registered.
+    /// Operators must explicitly opt in by setting
+    /// <c>IntegrityProjection:AdminBackfillEnabled=true</c> in
+    /// configuration AND restrict access at the deployment layer
+    /// (NetworkPolicy, gateway ACL). When disabled, the controller
+    /// returns 503 Service Unavailable so operators know the endpoint
+    /// exists but is gated.
+    /// </summary>
+    public bool AdminBackfillEnabled { get; set; } = false;
+
+    /// <summary>
     /// How often the worker wakes up and looks for due providers. The
     /// loop is gated by per-provider <c>NextVerificationDue</c>, so a
     /// shorter sweep interval doesn't translate into more work — only
