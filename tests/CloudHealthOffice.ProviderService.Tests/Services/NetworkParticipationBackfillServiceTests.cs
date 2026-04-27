@@ -74,8 +74,8 @@ public class NetworkParticipationBackfillServiceTests
     public async Task RunTenant_patches_legacy_participations_and_emits_events()
     {
         var (service, repo, events) = BuildService();
-        repo.Docs.Add(ActiveProvider("p1", Legacy(LineOfBusiness.Commercial), Legacy(LineOfBusiness.Medicare)));
-        repo.Docs.Add(ActiveProvider("p2", Legacy(LineOfBusiness.Medicaid)));
+        await repo.CreateAsync(ActiveProvider("p1", Legacy(LineOfBusiness.Commercial), Legacy(LineOfBusiness.Medicare)));
+        await repo.CreateAsync(ActiveProvider("p2", Legacy(LineOfBusiness.Medicaid)));
 
         var result = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest
         {
@@ -98,25 +98,17 @@ public class NetworkParticipationBackfillServiceTests
     public async Task RunTenant_is_idempotent_on_rerun()
     {
         var (service, repo, events) = BuildService();
-        repo.Docs.Add(ActiveProvider("p1", Legacy()));
+        await repo.CreateAsync(ActiveProvider("p1", Legacy()));
 
         var first = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest());
         first.ParticipationsBackfilled.Should().Be(1);
         events.Events.Should().HaveCount(1);
 
-        // Second run: the participation no longer matches the eligibility
-        // filter (PanelLimit/etc still null but the AcceptedLobs were
-        // assigned a real list — the IsAtTypeDefaults check uses
-        // empty-list semantics, so the row is still considered "touched"
-        // only if other fields changed). The fake repo writes the
-        // canonical "all defaults" shape, so the participation IS still
-        // considered untouched by IsAtTypeDefaults — both runs are
-        // idempotent at the patch level (same defaults written) but
-        // events would duplicate.
-        //
-        // The deterministic EventId (backfilled:{providerId}:{idx}:{runId})
-        // changes across runs because runId is per invocation. So both
-        // runs emit; idempotency is at the participation-data level.
+        // Second run: the participation was patched to canonical
+        // legacy-unconstrained shape — same as IsAtTypeDefaults expects —
+        // so it remains eligible. The patch is a no-op overwrite at
+        // the data level. Each run's events have a distinct
+        // backfillRunId so re-emission is by design.
         var second = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest());
         second.ParticipationsBackfilled.Should().Be(1);
         // Stored values still match defaults; safe rerun.
@@ -127,7 +119,7 @@ public class NetworkParticipationBackfillServiceTests
     public async Task RunTenant_skips_already_touched_participations()
     {
         var (service, repo, _) = BuildService();
-        repo.Docs.Add(ActiveProvider("p1",
+        await repo.CreateAsync(ActiveProvider("p1",
             Legacy(LineOfBusiness.Commercial),
             AlreadyTouched(LineOfBusiness.Medicare)));
 
@@ -144,8 +136,8 @@ public class NetworkParticipationBackfillServiceTests
         var inTenant = ActiveProvider("p1", Legacy());
         var otherTenant = ActiveProvider("p2", Legacy());
         otherTenant.TenantId = "tenant-b";
-        repo.Docs.Add(inTenant);
-        repo.Docs.Add(otherTenant);
+        await repo.CreateAsync(inTenant);
+        await repo.CreateAsync(otherTenant);
 
         var result = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest());
 
@@ -159,7 +151,7 @@ public class NetworkParticipationBackfillServiceTests
     public async Task RunTenant_counts_etag_conflicts_separately_from_failures()
     {
         var (service, repo, events) = BuildService();
-        repo.Docs.Add(ActiveProvider("p1", Legacy()));
+        await repo.CreateAsync(ActiveProvider("p1", Legacy()));
         repo.FailNextPanelGatingPatchAsConflict = true;
 
         var result = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest());
@@ -174,7 +166,7 @@ public class NetworkParticipationBackfillServiceTests
     public async Task RunTenant_does_not_emit_events_for_skipped_participations()
     {
         var (service, repo, events) = BuildService();
-        repo.Docs.Add(ActiveProvider("p1", AlreadyTouched()));
+        await repo.CreateAsync(ActiveProvider("p1", AlreadyTouched()));
 
         var result = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest());
 
@@ -188,7 +180,7 @@ public class NetworkParticipationBackfillServiceTests
         var (service, repo, _) = BuildService();
         for (var i = 0; i < 5; i++)
         {
-            repo.Docs.Add(ActiveProvider($"p{i}", Legacy()));
+            await repo.CreateAsync(ActiveProvider($"p{i}", Legacy()));
         }
 
         var result = await service.RunTenantAsync(Tenant, new NetworkParticipationBackfillRequest
@@ -203,7 +195,7 @@ public class NetworkParticipationBackfillServiceTests
     public async Task RunTenant_continues_when_event_publication_fails()
     {
         var repo = new InMemoryProviderRepository { TenantId = Tenant };
-        repo.Docs.Add(ActiveProvider("p1", Legacy()));
+        await repo.CreateAsync(ActiveProvider("p1", Legacy()));
         var events = new FakeNetworkParticipationEventPublisher { ThrowOnPublish = true };
         var service = new NetworkParticipationBackfillService(
             repo, events,

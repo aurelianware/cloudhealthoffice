@@ -93,8 +93,8 @@ public class NetworkParticipationBackfillAdminControllerTests
     {
         var repo = new InMemoryProviderRepository { TenantId = "tenant-a" };
         // Seed one provider in each tenant; only the named one should be inspected.
-        repo.Docs.Add(BuildProvider("p1", "tenant-a"));
-        repo.Docs.Add(BuildProvider("p2", "tenant-b"));
+        await repo.CreateAsync(BuildProvider("p1", "tenant-a"));
+        await repo.CreateAsync(BuildProvider("p2", "tenant-b"));
 
         var controller = BuildController(adminBackfillEnabled: true, repo: repo);
         var result = await controller.BackfillNetworkParticipations(
