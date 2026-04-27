@@ -302,7 +302,7 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
     {
         _logger.LogWarning(
             "Mongo deployment does not support transactions; activating organization {OrgId} version {VersionId} non-atomically.",
-            draftToActivate.OrganizationId, draftToActivate.VersionId);
+            SanitizeForLog(draftToActivate.OrganizationId), SanitizeForLog(draftToActivate.VersionId));
 
         await _collection.ReplaceOneAsync(activateFilter, draftToActivate);
 
@@ -315,6 +315,12 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
         }
 
         return draftToActivate;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     public async Task<Organization> ReplaceVersionRowAsync(Organization version)
