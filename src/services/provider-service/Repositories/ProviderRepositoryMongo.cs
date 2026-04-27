@@ -37,6 +37,12 @@ public class ProviderRepositoryMongo : IProviderRepository
             new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ZipCode)),
             // Multikey index for network participations
             new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending("NetworkParticipations.PlanId")),
+            // Network roster (capability 5.4) — multikey on the new
+            // NetworkParticipation.NetworkId, scoped under TenantId for
+            // partition-aware lookups. Tier secondary key keeps the
+            // common (network + tier) filter index-only.
+            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending("NetworkParticipations.NetworkId")),
+            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending("NetworkParticipations.NetworkId").Ascending("NetworkParticipations.NetworkTier")),
             // Version-chain indexes
             new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ProviderId).Ascending(p => p.VersionNumber)),
             new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ProviderId).Ascending(p => p.VersionId)),
@@ -266,6 +272,97 @@ public class ProviderRepositoryMongo : IProviderRepository
             Builders<Provider>.Filter.Eq(p => p.TenantId, tenantId)
         );
         await _collection.DeleteOneAsync(filter);
+    }
+
+    public async Task<IReadOnlyList<Provider>> ListNetworkRosterAsync(
+        NetworkRosterQuery query,
+        NetworkRosterSort sort,
+        int skip,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(query.TenantId))
+            throw new ArgumentException("NetworkRosterQuery.TenantId is required.", nameof(query));
+        if (string.IsNullOrEmpty(query.NetworkId))
+            throw new ArgumentException("NetworkRosterQuery.NetworkId is required.", nameof(query));
+
+        var pageSize = Math.Clamp(query.PageSize, 1, NetworkRosterDefaults.MaxPageSize);
+        var safeSkip = Math.Max(skip, 0);
+        var asOf = (query.AsOfDate ?? DateTime.UtcNow).ToUniversalTime();
+
+        var b = Builders<Provider>.Filter;
+        var nb = Builders<NetworkParticipation>.Filter;
+
+        // Build the per-participation filter (ElemMatch). NetworkId is the
+        // primary key — without it the row is invisible to this endpoint
+        // by design (see network-roster-api.md migration note).
+        var participationFilter = nb.And(
+            nb.Eq(n => n.NetworkId, query.NetworkId),
+            nb.Or(nb.Lte(n => n.EffectiveDate, asOf), nb.Exists(n => n.EffectiveDate, false)),
+            nb.Or(nb.Eq(n => n.TerminationDate, null), nb.Gte(n => n.TerminationDate, asOf)));
+
+        if (query.LineOfBusiness.HasValue)
+            participationFilter = nb.And(participationFilter, nb.Eq(n => n.LineOfBusiness, query.LineOfBusiness.Value));
+        if (!string.IsNullOrEmpty(query.Tier))
+            participationFilter = nb.And(participationFilter, nb.Eq(n => n.NetworkTier, query.Tier));
+        if (query.AcceptingNewPatients.HasValue)
+            participationFilter = nb.And(participationFilter, nb.Eq(n => n.AcceptingNewPatients, query.AcceptingNewPatients.Value));
+
+        // Provider chain must be Active (or legacy/unset) and not
+        // terminated before AsOfDate. Hydration will normalize legacy
+        // rows on read; the filter accepts the absent-VersionState shape.
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.Exists(p => p.VersionState, false));
+
+        var providerFilter = b.And(
+            b.Eq(p => p.TenantId, query.TenantId),
+            stateFilter,
+            b.Or(b.Eq(p => p.TerminationDate, null), b.Gte(p => p.TerminationDate, asOf)),
+            b.ElemMatch(p => p.NetworkParticipations, participationFilter));
+
+        if (!string.IsNullOrEmpty(query.Specialty))
+        {
+            var rgx = new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(query.Specialty), "i");
+            providerFilter = b.And(providerFilter,
+                b.Or(b.Regex(p => p.PrimarySpecialty, rgx), b.Regex(p => p.TaxonomyCode, rgx)));
+        }
+
+        if (query.AcceptingNewPatients.HasValue)
+        {
+            providerFilter = b.And(providerFilter,
+                b.Eq(p => p.AcceptingNewPatients, query.AcceptingNewPatients.Value));
+        }
+
+        var sortDef = sort switch
+        {
+            NetworkRosterSort.NameDesc =>
+                Builders<Provider>.Sort
+                    .Descending(p => p.LastName)
+                    .Descending(p => p.OrganizationName)
+                    .Descending(p => p.Id),
+            NetworkRosterSort.IntegrityScoreDesc =>
+                // Mongo orders BSON null before any number on Descending —
+                // exactly what we don't want for a "best score first" view.
+                // The repository emits a deterministic descending order;
+                // the service layer reorders nulls to the tail (see
+                // NetworkRosterService.ApplyNullsLastForIntegrityScore).
+                Builders<Provider>.Sort
+                    .Descending(p => p.IntegrityScore)
+                    .Ascending(p => p.Id),
+            _ =>
+                Builders<Provider>.Sort
+                    .Ascending(p => p.LastName)
+                    .Ascending(p => p.OrganizationName)
+                    .Ascending(p => p.Id),
+        };
+
+        var docs = await _collection.Find(providerFilter)
+            .Sort(sortDef)
+            .Skip(safeSkip)
+            .Limit(pageSize)
+            .ToListAsync(ct);
+
+        return docs.Select(Hydrate).ToList();
     }
 
     private static FilterDefinition<Provider> ChainKeyFilter(string providerId)

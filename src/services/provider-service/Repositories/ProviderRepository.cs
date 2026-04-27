@@ -28,6 +28,27 @@ public interface IProviderRepository
     Task<Provider> UpdateAsync(Provider provider);
     Task DeleteAsync(string id);
 
+    /// <summary>
+    /// Backing query for <c>GET /api/v1/networks/{id}/roster</c>. Matches
+    /// the latest non-Draft head row for each provider in the tenant that
+    /// has a <see cref="NetworkParticipation"/> with
+    /// <c>NetworkId == query.NetworkId</c> AND every other supplied filter
+    /// AND (when <c>AsOfDate</c> is set) a participation period covering
+    /// that date. Sort + paging are applied at the repository layer so
+    /// the service never has to re-page.
+    ///
+    /// <para>
+    /// <paramref name="skip"/> is the offset already decoded from the
+    /// caller's cursor. The repository returns at most <c>pageSize</c>
+    /// rows.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<Provider>> ListNetworkRosterAsync(
+        NetworkRosterQuery query,
+        NetworkRosterSort sort,
+        int skip,
+        CancellationToken ct = default);
+
     // ---- Version-chain operations ------------------------------------
 
     /// <summary>
@@ -333,6 +354,125 @@ public class ProviderRepository : IProviderRepository
     {
         var tenantId = GetTenantId();
         await _container.DeleteItemAsync<Provider>(id, new PartitionKey(tenantId));
+    }
+
+    public async Task<IReadOnlyList<Provider>> ListNetworkRosterAsync(
+        NetworkRosterQuery query,
+        NetworkRosterSort sort,
+        int skip,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(query.TenantId))
+            throw new ArgumentException("NetworkRosterQuery.TenantId is required.", nameof(query));
+        if (string.IsNullOrEmpty(query.NetworkId))
+            throw new ArgumentException("NetworkRosterQuery.NetworkId is required.", nameof(query));
+
+        // Defensive clamp; the controller already enforces this. Skipping
+        // negative offsets prevents accidental SQL injection via the
+        // OFFSET/LIMIT literals below (we accept only int values).
+        var effectivePageSize = Math.Clamp(query.PageSize, 1, NetworkRosterDefaults.MaxPageSize);
+        var safeSkip = Math.Max(skip, 0);
+        var asOf = (query.AsOfDate ?? DateTime.UtcNow).ToUniversalTime();
+
+        var parameters = new List<(string Name, object Value)>
+        {
+            ("@tenantId", query.TenantId),
+            ("@networkId", query.NetworkId),
+            ("@active", ProviderVersionState.Active.ToString()),
+            ("@asOf", asOf),
+        };
+
+        // Participation-level filters live inside an EXISTS subquery so a
+        // single row matches when at least one participation satisfies
+        // every supplied filter. Provider-level filters stay on the outer.
+        var participationConditions = new List<string>
+        {
+            "n.networkId = @networkId",
+            "(NOT IS_DEFINED(n.effectiveDate) OR n.effectiveDate <= @asOf)",
+            "(NOT IS_DEFINED(n.terminationDate) OR n.terminationDate = null OR n.terminationDate >= @asOf)",
+        };
+        if (query.LineOfBusiness.HasValue)
+        {
+            participationConditions.Add("n.lineOfBusiness = @lineOfBusiness");
+            parameters.Add(("@lineOfBusiness", query.LineOfBusiness.Value.ToString()));
+        }
+        if (!string.IsNullOrEmpty(query.Tier))
+        {
+            participationConditions.Add("n.networkTier = @tier");
+            parameters.Add(("@tier", query.Tier));
+        }
+        if (query.AcceptingNewPatients.HasValue)
+        {
+            participationConditions.Add("n.acceptingNewPatients = @participationAcceptingNew");
+            parameters.Add(("@participationAcceptingNew", query.AcceptingNewPatients.Value));
+        }
+
+        var existsClause =
+            $"EXISTS(SELECT VALUE n FROM n IN c.networkParticipations WHERE {string.Join(" AND ", participationConditions)})";
+
+        var conditions = new List<string>
+        {
+            "c.tenantId = @tenantId",
+            "(NOT IS_DEFINED(c.versionState) OR c.versionState = @active)",
+            "(NOT IS_DEFINED(c.terminationDate) OR c.terminationDate = null OR c.terminationDate >= @asOf)",
+            existsClause,
+        };
+
+        if (!string.IsNullOrEmpty(query.Specialty))
+        {
+            conditions.Add(
+                "(CONTAINS(LOWER(c.primarySpecialty), LOWER(@specialty)) OR CONTAINS(LOWER(c.taxonomyCode), LOWER(@specialty)))");
+            parameters.Add(("@specialty", query.Specialty));
+        }
+
+        if (query.AcceptingNewPatients.HasValue)
+        {
+            conditions.Add("c.acceptingNewPatients = @providerAcceptingNew");
+            parameters.Add(("@providerAcceptingNew", query.AcceptingNewPatients.Value));
+        }
+
+        var orderBy = sort switch
+        {
+            NetworkRosterSort.NameDesc =>
+                "ORDER BY c.lastName DESC, c.organizationName DESC, c.id DESC",
+            NetworkRosterSort.IntegrityScoreDesc =>
+                // Cosmos puts nulls before non-nulls on DESC; folding
+                // IS_DEFINED to a 0/1 sort key inverts that so unverified
+                // rows trail the head of the page (nulls-last semantics).
+                "ORDER BY (IS_DEFINED(c.integrityScore) ? 1 : 0) DESC, c.integrityScore DESC, c.id ASC",
+            _ =>
+                "ORDER BY c.lastName ASC, c.organizationName ASC, c.id ASC",
+        };
+
+        var sql =
+            "SELECT * FROM c WHERE " + string.Join(" AND ", conditions) + " " +
+            orderBy + " " +
+            $"OFFSET {safeSkip} LIMIT {effectivePageSize}";
+
+        var queryDef = new QueryDefinition(sql);
+        foreach (var (name, value) in parameters)
+        {
+            queryDef = queryDef.WithParameter(name, value);
+        }
+
+        var iterator = _container.GetItemQueryIterator<Provider>(
+            queryDef,
+            requestOptions: new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(query.TenantId),
+                MaxItemCount = effectivePageSize,
+            });
+
+        var results = new List<Provider>(effectivePageSize);
+        while (iterator.HasMoreResults)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await iterator.ReadNextAsync(ct);
+            results.AddRange(page.Select(Hydrate));
+            if (results.Count >= effectivePageSize) break;
+        }
+
+        return results;
     }
 
     public async Task<Provider?> GetLatestActiveAsync(string providerId, DateTime asOf)

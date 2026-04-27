@@ -111,6 +111,12 @@ builder.Services.AddScoped<IOrganizationAdapter, QnxtOrganizationAdapter>();
 builder.Services.AddScoped<IOrganizationAdapter, FacetsOrganizationAdapter>();
 builder.Services.AddScoped<OrganizationAdapterFactory>();
 
+// Network roster (5.4 — paginated, filterable provider roster scoped to
+// a single Organization). Reads cached IntegrityScore directly from the
+// Provider row; never invokes ProviderVerificationOrchestrator on the
+// read path.
+builder.Services.AddScoped<INetworkRosterService, NetworkRosterService>();
+
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 
