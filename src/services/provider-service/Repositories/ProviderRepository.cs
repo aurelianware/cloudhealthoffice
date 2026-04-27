@@ -170,6 +170,80 @@ public interface IProviderRepository
     /// </para>
     /// </summary>
     Task<IReadOnlyList<string>> ListProviderTenantIdsAsync(CancellationToken ct = default);
+
+    // ---- Network-participation panel-gating backfill (capability 5.5) -
+
+    /// <summary>
+    /// Patch the five panel-gating fields
+    /// (<see cref="NetworkParticipation.PanelLimit"/>,
+    /// <see cref="NetworkParticipation.PanelAccepted"/>,
+    /// <see cref="NetworkParticipation.AcceptedLobs"/>,
+    /// <see cref="NetworkParticipation.MinAcceptedAgeYears"/>,
+    /// <see cref="NetworkParticipation.MaxAcceptedAgeYears"/>) on a
+    /// single <see cref="NetworkParticipation"/> within the head Active
+    /// version of <paramref name="providerId"/>, addressed by
+    /// <paramref name="participationIndex"/>. No new version row is
+    /// created; identity-version semantics from PR 7.2 are preserved.
+    ///
+    /// <para>
+    /// Panel-gating defaults applied to legacy rows during backfill are
+    /// operational maintenance, not identity changes — see
+    /// <c>docs/architecture/provider-versioning.md</c> "Operational
+    /// backfill — one-time exemption". The bypass is implemented as a
+    /// separate write path: the Cosmos impl uses
+    /// <c>PatchItemAsync</c> with field-scoped <c>Set</c> ops on the
+    /// positional participation slot, and the Mongo impl uses
+    /// <c>UpdateOneAsync</c> with <c>$set</c> on the same slot. Neither
+    /// path goes through <see cref="UpdateAsync"/>'s version-state
+    /// guard. The exemption applies ONLY to this method;
+    /// going-forward writes through <see cref="UpdateAsync"/> still
+    /// require Draft state.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns <c>true</c> when the head Active version was patched;
+    /// <c>false</c> when no Active head exists, the index is out of
+    /// range on the read-side document, or an etag-conflict caused the
+    /// patch to skip. Idempotent: rerunning with the same inputs is a
+    /// no-op overwrite. Does not throw on missing chains.
+    /// </para>
+    /// </summary>
+    Task<bool> UpdatePanelGatingDefaultsAsync(
+        string tenantId,
+        string providerId,
+        int participationIndex,
+        PanelGatingFields fields,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Page of head-Active providers in <paramref name="tenantId"/>
+    /// whose <see cref="Provider.NetworkParticipations"/> contains at
+    /// least one participation in the legacy-unconstrained shape (all
+    /// five panel-gating fields at type defaults). Stable sort
+    /// (<c>ProviderId</c> asc, <c>Id</c> asc) so <paramref name="skip"/>
+    /// pagination is deterministic across iterations.
+    ///
+    /// <para>
+    /// Used by <c>NetworkParticipationBackfillService</c>. Tenant id is
+    /// taken explicitly because the admin endpoint resolves the tenant
+    /// from a query parameter, not the usual
+    /// <see cref="IHttpContextAccessor"/> middleware.
+    /// </para>
+    ///
+    /// <para>
+    /// The eligibility filter is best-effort at the storage layer:
+    /// implementations may return a superset (rows with at least one
+    /// participation field unset). The service layer applies the
+    /// authoritative all-five-defaults check before patching, so a
+    /// false-positive page entry is just a no-op skip — never a
+    /// data-corruption risk.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<Provider>> ListProvidersForPanelGatingBackfillAsync(
+        string tenantId,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -869,9 +943,176 @@ public class ProviderRepository : IProviderRepository
         return tenants.OrderBy(x => x, StringComparer.Ordinal).ToList();
     }
 
+    public async Task<bool> UpdatePanelGatingDefaultsAsync(
+        string tenantId,
+        string providerId,
+        int participationIndex,
+        PanelGatingFields fields,
+        CancellationToken ct = default)
+    {
+        if (participationIndex < 0)
+            throw new ArgumentOutOfRangeException(nameof(participationIndex));
+        if (fields == null) throw new ArgumentNullException(nameof(fields));
+
+        // Resolve the head Active row by chain key + read its etag so we
+        // can issue a conditional patch. Mirror UpdateIntegrityProjectionAsync
+        // hydration rule: three Active shapes, each Status-gated.
+        //
+        // The Cosmos SDK default serializer (Newtonsoft.Json) is
+        // case-insensitive on property matching but does not honor
+        // System.Text.Json attributes — so we alias `_etag` (which is
+        // not a valid C# identifier prefix) to `etag` in the projection
+        // to keep HeadRowSnapshot attribute-free.
+        var query = new QueryDefinition(
+                "SELECT TOP 1 c.id, c._etag AS etag, c.networkParticipations FROM c WHERE c.tenantId = @tenantId AND " +
+                "(c.providerId = @providerId OR (NOT IS_DEFINED(c.providerId) AND c.id = @providerId)) AND " +
+                "(c.versionState = @active " +
+                "OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive) " +
+                "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) " +
+                "ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@providerId", providerId)
+            .WithParameter("@active", ProviderVersionState.Active.ToString())
+            .WithParameter("@statusActive", ProviderStatus.Active.ToString());
+
+        HeadRowSnapshot? head = null;
+        var iterator = _container.GetItemQueryIterator<HeadRowSnapshot>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        if (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            head = page.FirstOrDefault();
+        }
+
+        if (head == null || string.IsNullOrEmpty(head.Id)) return false;
+
+        // Bounds check the participation index against the read-side
+        // document. A page entry that's been mutated between the iterator
+        // read and the patch (concurrent CRUD) may have fewer
+        // participations than expected — skip rather than corrupt.
+        var participations = head.NetworkParticipations ?? new List<NetworkParticipation>();
+        if (participationIndex >= participations.Count) return false;
+
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set($"/networkParticipations/{participationIndex}/panelLimit",
+                fields.PanelLimit),
+            PatchOperation.Set($"/networkParticipations/{participationIndex}/panelAccepted",
+                fields.PanelAccepted),
+            PatchOperation.Set($"/networkParticipations/{participationIndex}/acceptedLobs",
+                fields.AcceptedLobs.ToList()),
+            PatchOperation.Set($"/networkParticipations/{participationIndex}/minAcceptedAgeYears",
+                fields.MinAcceptedAgeYears),
+            PatchOperation.Set($"/networkParticipations/{participationIndex}/maxAcceptedAgeYears",
+                fields.MaxAcceptedAgeYears),
+            PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
+        };
+
+        // Conditional patch via IfMatchEtag — a concurrent CRUD write
+        // bumps the etag and the conditional patch returns 412 Precondition
+        // Failed. The service layer counts that as an etag conflict and
+        // moves on; the operator can rerun the backfill to pick up the
+        // skipped row.
+        var patchOptions = new PatchItemRequestOptions
+        {
+            IfMatchEtag = head.Etag,
+        };
+
+        try
+        {
+            await _container.PatchItemAsync<Provider>(
+                head.Id,
+                new PartitionKey(tenantId),
+                ops,
+                patchOptions,
+                cancellationToken: ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound
+                                          || ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // NotFound: row was deleted between the lookup and the patch.
+            // PreconditionFailed: a concurrent write moved the etag —
+            // the service layer treats both as a skip.
+            return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<Provider>> ListProvidersForPanelGatingBackfillAsync(
+        string tenantId,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+            throw new ArgumentException("tenantId is required.", nameof(tenantId));
+        var safeSkip = Math.Max(skip, 0);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+
+        // Hydration rule (mirrors Hydrate()) — three "Active" shapes,
+        // each Status-gated. Storage-layer eligibility is a superset
+        // filter: any row that has at least one participation with
+        // PanelLimit unset is a candidate. The service-layer eligibility
+        // check (PanelGatingFields.IsAtTypeDefaults) is the
+        // authoritative filter — a false-positive page entry is just a
+        // no-op skip.
+        //
+        // We can't easily AND-filter all five fields in a single Cosmos
+        // SQL query without building a complex nested EXISTS over the
+        // participations array. The current shape (any participation
+        // with PanelLimit unset) catches the vast majority of legacy
+        // rows; the service layer handles the rest.
+        var sql = "SELECT * FROM c WHERE c.tenantId = @tenantId AND " +
+                  "(c.versionState = @active " +
+                  "OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive) " +
+                  "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) AND " +
+                  "EXISTS(SELECT VALUE p FROM p IN c.networkParticipations WHERE " +
+                  "  (NOT IS_DEFINED(p.panelLimit) OR p.panelLimit = null) AND " +
+                  "  (NOT IS_DEFINED(p.panelAccepted) OR p.panelAccepted = null) AND " +
+                  "  (NOT IS_DEFINED(p.acceptedLobs) OR p.acceptedLobs = null OR ARRAY_LENGTH(p.acceptedLobs) = 0) AND " +
+                  "  (NOT IS_DEFINED(p.minAcceptedAgeYears) OR p.minAcceptedAgeYears = null) AND " +
+                  "  (NOT IS_DEFINED(p.maxAcceptedAgeYears) OR p.maxAcceptedAgeYears = null)) " +
+                  $"ORDER BY c.providerId ASC, c.id ASC OFFSET {safeSkip} LIMIT {safePageSize}";
+
+        var query = new QueryDefinition(sql)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@active", ProviderVersionState.Active.ToString())
+            .WithParameter("@statusActive", ProviderStatus.Active.ToString());
+
+        var iterator = _container.GetItemQueryIterator<Provider>(
+            query,
+            requestOptions: new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(tenantId),
+                MaxItemCount = safePageSize,
+            });
+
+        var results = new List<Provider>(safePageSize);
+        while (iterator.HasMoreResults)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await iterator.ReadNextAsync(ct);
+            results.AddRange(page.Select(Hydrate));
+            if (results.Count >= safePageSize) break;
+        }
+        return results;
+    }
+
     private sealed class HeadIdResult
     {
         public string Id { get; set; } = string.Empty;
+    }
+
+    private sealed class HeadRowSnapshot
+    {
+        // Cosmos SDK default serializer (Newtonsoft.Json) matches
+        // property names case-insensitively, so PascalCase here lines up
+        // with camelCase JSON. `_etag` cannot be a C# property name, so
+        // the SELECT clause aliases it to `etag` (see callers).
+        public string Id { get; set; } = string.Empty;
+        public string? Etag { get; set; }
+        public List<NetworkParticipation>? NetworkParticipations { get; set; }
     }
 
     /// <summary>

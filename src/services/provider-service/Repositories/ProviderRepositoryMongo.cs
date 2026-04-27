@@ -745,6 +745,130 @@ public class ProviderRepositoryMongo : IProviderRepository
             .ToList();
     }
 
+    public async Task<bool> UpdatePanelGatingDefaultsAsync(
+        string tenantId,
+        string providerId,
+        int participationIndex,
+        PanelGatingFields fields,
+        CancellationToken ct = default)
+    {
+        if (participationIndex < 0)
+            throw new ArgumentOutOfRangeException(nameof(participationIndex));
+        if (fields == null) throw new ArgumentNullException(nameof(fields));
+
+        // Match the same three Active shapes as
+        // UpdateIntegrityProjectionAsync. The patch is positional within
+        // the networkParticipations array — addressed by index — and
+        // bypasses the version-state guard on UpdateAsync.
+        var b = Builders<Provider>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.And(
+                b.Exists(p => p.VersionState, false),
+                b.Eq(p => p.Status, ProviderStatus.Active)),
+            b.And(
+                b.Or(
+                    b.Exists(p => p.VersionId, false),
+                    b.Eq(p => p.VersionId, null),
+                    b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
+
+        // Bounds-check filter at the storage layer: the patch is
+        // positional, so a $set against an out-of-range array slot
+        // would extend the array with nulls. Filter on the existence
+        // of the specific path (NetworkParticipations.{idx}) so the
+        // FindOneAndUpdate returns null when the row has fewer
+        // participations than expected.
+        var sizeFilter = b.Exists($"NetworkParticipations.{participationIndex}", true);
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            ChainKeyFilter(providerId),
+            stateFilter,
+            sizeFilter);
+
+        // Positional update via array index. Mongo uses dot-notation
+        // for nested array element fields:
+        // networkParticipations.{idx}.panelLimit etc. Each $set hits
+        // exactly one slot.
+        var prefix = $"NetworkParticipations.{participationIndex}";
+        var update = Builders<Provider>.Update
+            .Set($"{prefix}.PanelLimit", fields.PanelLimit)
+            .Set($"{prefix}.PanelAccepted", fields.PanelAccepted)
+            .Set($"{prefix}.AcceptedLobs", fields.AcceptedLobs.ToList())
+            .Set($"{prefix}.MinAcceptedAgeYears", fields.MinAcceptedAgeYears)
+            .Set($"{prefix}.MaxAcceptedAgeYears", fields.MaxAcceptedAgeYears)
+            .Set(p => p.LastUpdatedDate, DateTime.UtcNow);
+
+        // Sort by VersionNumber desc so amendments hit the latest head
+        // when there are historical Superseded rows. FindOneAndUpdate
+        // is the only Mongo write that supports Sort.
+        var options = new FindOneAndUpdateOptions<Provider>
+        {
+            Sort = Builders<Provider>.Sort.Descending(p => p.VersionNumber),
+            ReturnDocument = ReturnDocument.After,
+        };
+        var updated = await _collection.FindOneAndUpdateAsync(filter, update, options, ct);
+        return updated != null;
+    }
+
+    public async Task<IReadOnlyList<Provider>> ListProvidersForPanelGatingBackfillAsync(
+        string tenantId,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+            throw new ArgumentException("tenantId is required.", nameof(tenantId));
+        var safeSkip = Math.Max(skip, 0);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+
+        var b = Builders<Provider>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.And(
+                b.Exists(p => p.VersionState, false),
+                b.Eq(p => p.Status, ProviderStatus.Active)),
+            b.And(
+                b.Or(
+                    b.Exists(p => p.VersionId, false),
+                    b.Eq(p => p.VersionId, null),
+                    b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
+
+        // Storage-layer superset filter: any row with at least one
+        // participation that has PanelLimit unset is a candidate. The
+        // service-layer eligibility check (all five fields at type
+        // defaults) is authoritative; a false-positive page entry just
+        // results in a no-op skip.
+        var eligibleParticipationFilter = b.ElemMatch(p => p.NetworkParticipations,
+            Builders<NetworkParticipation>.Filter.And(
+                Builders<NetworkParticipation>.Filter.Or(
+                    Builders<NetworkParticipation>.Filter.Exists(np => np.PanelLimit, false),
+                    Builders<NetworkParticipation>.Filter.Eq(np => np.PanelLimit, null)),
+                Builders<NetworkParticipation>.Filter.Or(
+                    Builders<NetworkParticipation>.Filter.Exists(np => np.PanelAccepted, false),
+                    Builders<NetworkParticipation>.Filter.Eq(np => np.PanelAccepted, null)),
+                Builders<NetworkParticipation>.Filter.Or(
+                    Builders<NetworkParticipation>.Filter.Exists(np => np.MinAcceptedAgeYears, false),
+                    Builders<NetworkParticipation>.Filter.Eq(np => np.MinAcceptedAgeYears, null)),
+                Builders<NetworkParticipation>.Filter.Or(
+                    Builders<NetworkParticipation>.Filter.Exists(np => np.MaxAcceptedAgeYears, false),
+                    Builders<NetworkParticipation>.Filter.Eq(np => np.MaxAcceptedAgeYears, null))));
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            stateFilter,
+            eligibleParticipationFilter);
+
+        var docs = await _collection.Find(filter)
+            .Sort(Builders<Provider>.Sort.Ascending(p => p.ProviderId).Ascending(p => p.Id))
+            .Skip(safeSkip)
+            .Limit(safePageSize)
+            .ToListAsync(ct);
+        return docs.Select(Hydrate).ToList();
+    }
+
     private static Provider Hydrate(Provider provider)
     {
         if (string.IsNullOrEmpty(provider.ProviderId))
