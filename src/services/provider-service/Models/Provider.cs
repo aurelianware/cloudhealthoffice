@@ -435,22 +435,30 @@ public class NetworkParticipation
     /// </summary>
     public ContractedRates? Rates { get; set; }
 
-    // ── PCP panel controls (roadmap 5.7) ───────────────────────────────
+    // ── PCP panel controls (capabilities 5.5 / 5.7) ─────────────────────
     //
-    // These gate PCP assignment in coverage-service. Null = legacy / unconstrained:
-    // historical participations loaded before this migration landed default to
-    // "panel open, all LOBs on the participation, no age limits" to preserve
-    // existing behavior until network ops backfills real values.
+    // These gate PCP assignment in coverage-service. Null = legacy /
+    // unconstrained: a participation that has not been touched by
+    // panel-gating-aware code defaults to "panel open, any LOB covered
+    // by the participation, no age limits."
     //
-    // TODO(provider-service): populate these on every NetworkParticipation write.
-    // Every path that materializes a NetworkParticipation must set the panel-gating
-    // fields (or leave them null = legacy unconstrained). Current write surfaces:
-    //   - ProvidersController.CreateProvider  — accepts NetworkParticipations in the Provider body
-    //   - ProvidersController.UpdateProvider  — overwrites the whole Provider (including participations)
-    //   - ProvidersController.AddNetworkParticipation — appends a single participation
-    //   - Any bulk import / CAQH-sync path that materializes participations
-    //   - Portal CreateEditProviderDialog edits (once the UI surfaces these fields)
-    // See docs/architecture/pcp-assignment.md "Provider-service contract changes".
+    // Going-forward writes through ProvidersController.CreateProvider /
+    // UpdateProvider / AddNetworkParticipation are expected to populate
+    // these fields. Producers that elide them surface a structured
+    // soft-validation warning + Prometheus counter
+    // (provider_service_panel_gating_missing_writes_total) so the
+    // follow-up hard-validation cutover can flip on telemetry-driven
+    // evidence. Capability 5.5 closes the legacy data gap with a
+    // one-time admin-triggered backfill that writes legacy-unconstrained
+    // defaults via UpdatePanelGatingDefaultsAsync (bypasses the
+    // version-immutability guard for these fields only — see
+    // docs/architecture/provider-versioning.md "Operational backfill —
+    // one-time exemption").
+    //
+    // See docs/architecture/network-participation-backfill.md for the
+    // backfill operational contract and
+    // docs/architecture/pcp-assignment.md for the consumer-side
+    // semantics in coverage-service.
 
     /// <summary>
     /// Maximum number of members that may be assigned to this provider under this

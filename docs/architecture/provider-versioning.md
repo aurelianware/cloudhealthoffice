@@ -348,6 +348,59 @@ not relax the `UpdateAsync` guard, not re-purpose
 `ReplaceVersionRowAsync`. Each carve-out documents its source service
 and refresh cadence in this section.
 
+### Operational backfill — one-time exemption
+
+Capability 5.5 introduces a **second** carve-out under this same
+banner — but with a tighter scope. The five panel-gating fields on
+`NetworkParticipation`
+(`PanelLimit`, `PanelAccepted`, `AcceptedLobs`,
+`MinAcceptedAgeYears`, `MaxAcceptedAgeYears`) are written on
+going-forward CRUD writes through `UpdateAsync` like every other
+identity field — no exemption applies there. **The exemption applies
+only to the one-time admin-triggered backfill** that patches legacy
+rows to legacy-unconstrained defaults so PCP-assignment in
+coverage-service no longer encounters truly-uninitialized
+participations.
+
+The write path is
+`IProviderRepository.UpdatePanelGatingDefaultsAsync(tenantId,
+providerId, participationIndex, fields, ct)`:
+
+- **Cosmos** — `PatchItemAsync` with five `PatchOperation.Set` ops on
+  `/networkParticipations/{idx}/panelLimit`,
+  `/networkParticipations/{idx}/panelAccepted`,
+  `/networkParticipations/{idx}/acceptedLobs`,
+  `/networkParticipations/{idx}/minAcceptedAgeYears`,
+  `/networkParticipations/{idx}/maxAcceptedAgeYears` (plus
+  `/lastUpdatedDate`). The patch is conditional on the row's
+  `_etag` so a concurrent CRUD write moves the row out from under the
+  backfill — counted as `EtagConflicts` in the operation summary,
+  retried on the next operator-triggered run.
+- **Mongo** — `FindOneAndUpdateAsync` with `$set` on the positional
+  array slot
+  (`NetworkParticipations.{idx}.PanelLimit` etc.), sorted by
+  `VersionNumber DESC` so amendments hit the latest head.
+
+Both bypass the `UpdateAsync` state guard for these five fields on a
+single positional slot only; identity-field writes through
+`UpdateAsync` continue to throw
+(verified by
+`UpdatePanelGatingDefaultsTests.UpdateAsync_against_active_still_throws_after_panel_gating_patch`).
+
+**Why this is one-time, not recurring**: the integrity-score
+projection refreshes every 24h. Panel-gating defaults, once written,
+become regular operational metadata that subsequent CRUD writes
+through `UpdateAsync` keep current. There is no scheduled sweep, no
+background service — just the admin-triggered backfill endpoint
+(`POST /api/v1/admin/providers/backfill-network-participations?tenantId=X`,
+gated by `NetworkParticipationBackfill:AdminBackfillEnabled`). After
+every tenant has been backfilled once, the carve-out becomes dormant
+code that exists for re-runs against newly-imported legacy data.
+
+See `docs/architecture/network-participation-backfill.md` for the
+backfill operational contract and
+`docs/architecture/pcp-assignment.md` for the consumer-side semantics.
+
 ## Caveats / follow-ups
 
 - **Bus fan-out.** Decorator over `IProviderVersionEventPublisher`

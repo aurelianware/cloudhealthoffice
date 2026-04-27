@@ -23,6 +23,7 @@ public class ProvidersController : ControllerBase
     private readonly IProviderVersioningService _versioning;
     private readonly ProviderAdapterFactory _adapterFactory;
     private readonly IProviderIntegrityProjectionService _integrityProjection;
+    private readonly IPanelGatingValidator _panelGatingValidator;
     private readonly ILogger<ProvidersController> _logger;
 
     public ProvidersController(
@@ -30,12 +31,14 @@ public class ProvidersController : ControllerBase
         IProviderVersioningService versioning,
         ProviderAdapterFactory adapterFactory,
         IProviderIntegrityProjectionService integrityProjection,
+        IPanelGatingValidator panelGatingValidator,
         ILogger<ProvidersController> logger)
     {
         _providerRepository = providerRepository;
         _versioning = versioning;
         _adapterFactory = adapterFactory;
         _integrityProjection = integrityProjection;
+        _panelGatingValidator = panelGatingValidator;
         _logger = logger;
     }
 
@@ -550,6 +553,12 @@ public class ProvidersController : ControllerBase
         provider.ProviderId = provider.Id;
         provider.CreatedDate = DateTime.UtcNow;
 
+        // Soft validation (5.5): warn + count when the caller supplied
+        // participations without panel-gating fields. The write proceeds
+        // unchanged; the metric drives the eventual hard-validation
+        // cutover decision.
+        _panelGatingValidator.Inspect("CreateProvider", TenantId, provider);
+
         var actor = ResolveActorId();
         var draft = await _versioning.CreateDraftAsync(provider, actor);
         var activated = await _versioning.ActivateVersionAsync(draft.ProviderId, draft.VersionId, actor);
@@ -588,6 +597,12 @@ public class ProvidersController : ControllerBase
             provider.VersionState = existing.VersionState;
             provider.CreatedDate = existing.CreatedDate;
             provider.LastUpdatedDate = DateTime.UtcNow;
+
+            // Soft validation (5.5): warn + count any participation that
+            // arrives without panel-gating fields. Fires before the
+            // repository call so even a 409 conflict on a non-Draft row
+            // surfaces the elision.
+            _panelGatingValidator.Inspect("UpdateProvider", TenantId, provider);
 
             var updated = await _providerRepository.UpdateAsync(provider);
             return Ok(updated);
@@ -664,6 +679,12 @@ public class ProvidersController : ControllerBase
 
         provider.NetworkParticipations.Add(participation);
         provider.LastUpdatedDate = DateTime.UtcNow;
+
+        // Soft validation (5.5): inspect the appended participation
+        // specifically — pre-existing participations on the row aren't
+        // this caller's responsibility, so the bulk Inspect overload
+        // would produce false-positive telemetry for legacy rows.
+        _panelGatingValidator.Inspect("AddNetworkParticipation", TenantId, provider, participation);
 
         try
         {

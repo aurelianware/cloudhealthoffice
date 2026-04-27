@@ -84,6 +84,33 @@ public static class ChoMetrics
             unit: "{attribute}",
             description: "Span attributes scrubbed by the PHI SpanProcessor");
 
+    /// <summary>
+    /// Counter tracking writes to <c>NetworkParticipation</c> that elide
+    /// the panel-gating fields (capability 5.5 soft validation). Drives
+    /// the eventual hard-validation cutover — when this counter is zero
+    /// across all tenants for a sustained window, the follow-up PR can
+    /// flip soft warnings to 400 rejections without breaking callers.
+    /// Dimensions: cho.caller (CreateProvider | UpdateProvider |
+    /// AddNetworkParticipation), cho.tenant_id.
+    /// </summary>
+    public static readonly Counter<long> PanelGatingMissingWrites =
+        Meter.CreateCounter<long>(
+            "cho.provider.panel_gating.missing_writes.total",
+            unit: "{write}",
+            description: "Writes to NetworkParticipation that elide panel-gating fields (5.5 soft validation)");
+
+    /// <summary>
+    /// Counter tracking participations patched by the
+    /// <c>NetworkParticipationBackfillService</c> (capability 5.5
+    /// admin-triggered backfill). Dimensions: cho.outcome (patched |
+    /// skipped | failed | etag_conflict), cho.tenant_id.
+    /// </summary>
+    public static readonly Counter<long> NetworkParticipationBackfillOutcomes =
+        Meter.CreateCounter<long>(
+            "cho.provider.network_participation.backfill.outcomes.total",
+            unit: "{participation}",
+            description: "Participations processed by the panel-gating backfill, by outcome");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

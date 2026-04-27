@@ -391,6 +391,78 @@ public sealed class InMemoryProviderRepository : IProviderRepository
             .ToList();
         return Task.FromResult<IReadOnlyList<string>>(distinct);
     }
+
+    /// <summary>
+    /// Set true on the next call to simulate a Cosmos PreconditionFailed
+    /// (etag conflict) so backfill-service tests can exercise the
+    /// skip-and-count branch.
+    /// </summary>
+    public bool FailNextPanelGatingPatchAsConflict { get; set; }
+
+    public Task<bool> UpdatePanelGatingDefaultsAsync(
+        string tenantId,
+        string providerId,
+        int participationIndex,
+        PanelGatingFields fields,
+        CancellationToken ct = default)
+    {
+        if (FailNextPanelGatingPatchAsConflict)
+        {
+            FailNextPanelGatingPatchAsConflict = false;
+            return Task.FromResult(false);
+        }
+
+        var head = _docs
+            .Select(d => Hydrate(Clone(d)))
+            .Where(d => d.TenantId == tenantId
+                && (d.ProviderId == providerId || d.Id == providerId)
+                && d.VersionState == ProviderVersionState.Active)
+            .OrderByDescending(d => d.VersionNumber)
+            .FirstOrDefault();
+        if (head == null) return Task.FromResult(false);
+
+        var stored = _docs.First(d => d.Id == head.Id && d.TenantId == head.TenantId);
+        if (stored.NetworkParticipations == null
+            || participationIndex < 0
+            || participationIndex >= stored.NetworkParticipations.Count)
+        {
+            return Task.FromResult(false);
+        }
+
+        var slot = stored.NetworkParticipations[participationIndex];
+        slot.PanelLimit = fields.PanelLimit;
+        slot.PanelAccepted = fields.PanelAccepted;
+        slot.AcceptedLobs = fields.AcceptedLobs.ToList();
+        slot.MinAcceptedAgeYears = fields.MinAcceptedAgeYears;
+        slot.MaxAcceptedAgeYears = fields.MaxAcceptedAgeYears;
+        stored.LastUpdatedDate = DateTime.UtcNow;
+        return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<Provider>> ListProvidersForPanelGatingBackfillAsync(
+        string tenantId,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var safeSkip = Math.Max(skip, 0);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+
+        bool HasUntouchedParticipation(Provider p) =>
+            p.NetworkParticipations != null
+            && p.NetworkParticipations.Any(PanelGatingFields.IsAtTypeDefaults);
+
+        var slice = HydratedView()
+            .Where(d => d.TenantId == tenantId
+                && d.VersionState == ProviderVersionState.Active
+                && HasUntouchedParticipation(d))
+            .OrderBy(d => d.ProviderId, StringComparer.Ordinal)
+            .ThenBy(d => d.Id, StringComparer.Ordinal)
+            .Skip(safeSkip)
+            .Take(safePageSize)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<Provider>>(slice);
+    }
 }
 
 public sealed class InMemoryProviderTransitionRepository : IProviderTransitionRepository
