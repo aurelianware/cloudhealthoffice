@@ -51,5 +51,18 @@ public class SharedJsonOptionsSmokeTests : IClassFixture<PricingApiFactory>
         Assert.Equal("\"camelCaseValue\"", json);
     }
 
+    [Fact]
+    public void JsonStringEnumConverter_RejectsIntegerEnumValues()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var options = scope.ServiceProvider
+            .GetRequiredService<IOptions<MvcJsonOptions>>().Value;
+
+        // allowIntegerValues: false — integer inputs must be rejected so callers
+        // cannot bypass the string-enum contract.
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<TestEnum>("1", options.JsonSerializerOptions));
+    }
+
     private enum TestEnum { CamelCaseValue }
 }

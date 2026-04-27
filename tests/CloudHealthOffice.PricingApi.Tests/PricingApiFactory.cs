@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using MongoDB.Driver;
 
 namespace CloudHealthOffice.PricingApi.Tests;
 
@@ -43,7 +44,8 @@ public class PricingApiFactory : WebApplicationFactory<Program>
 
             // Remove MongoDB client registrations that would try to connect
             var mongoDeps = services
-                .Where(d => d.ServiceType.FullName?.Contains("Mongo") == true)
+                .Where(d => d.ServiceType == typeof(MongoDB.Driver.IMongoClient)
+                         || d.ServiceType == typeof(MongoDB.Driver.IMongoDatabase))
                 .ToList();
             foreach (var d in mongoDeps)
                 services.Remove(d);
