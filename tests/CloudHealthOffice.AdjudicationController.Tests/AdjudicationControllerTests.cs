@@ -533,7 +533,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         };
 
         // Act
-        var response = await client.PostAsJsonAsync("/api/v1/adjudication/calculate-benefits", request);
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/calculate-benefits", request, Json);
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

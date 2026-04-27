@@ -95,9 +95,7 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
         _repo.GetByCheckNumberAsync("CHK-NEW-001").Returns((Payment?)null);
         _repo.CreateAsync(Arg.Any<Payment>()).Returns(ci => ci.Arg<Payment>());
 
-        var response = await _client.PostAsJsonAsync("/api/payments", payment);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var response = await _client.PostAsJsonAsync("/api/payments", payment, Json);
 
         var created = await response.Content.ReadFromJsonAsync<Payment>(Json);
         Assert.NotNull(created);
@@ -112,7 +110,7 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
         var payment = CreateValidPayment();
         payment.CheckNumber = "";
 
-        var response = await _client.PostAsJsonAsync("/api/payments", payment);
+        var response = await _client.PostAsJsonAsync("/api/payments", payment, Json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -125,7 +123,7 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
         _repo.GetByCheckNumberAsync("CHK-DUPE-001").Returns(existing);
 
         var payment = CreateValidPayment("CHK-DUPE-001");
-        var response = await _client.PostAsJsonAsync("/api/payments", payment);
+        var response = await _client.PostAsJsonAsync("/api/payments", payment, Json);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }

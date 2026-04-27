@@ -56,7 +56,7 @@ control.
 
 | Convention                  | Default | Why not shared today |
 | --------------------------- | ------- | -------------------- |
-| `PropertyNamingPolicy`      | framework default (PascalCase in) / camelCase out per ASP.NET defaults) | services differ on the wire |
+| `PropertyNamingPolicy`      | framework default; ASP.NET Core reads with case-insensitivity and serializes as camelCase by default | services differ on the wire |
 | `DefaultIgnoreCondition`    | framework default (emit null) | services differ on the wire |
 
 ## How to adopt in a new service
