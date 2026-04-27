@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using ProviderService.Adapters;
 using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Services;
@@ -20,17 +21,29 @@ public class ProvidersController : ControllerBase
 {
     private readonly IProviderRepository _providerRepository;
     private readonly IProviderVersioningService _versioning;
+    private readonly ProviderAdapterFactory _adapterFactory;
     private readonly ILogger<ProvidersController> _logger;
 
     public ProvidersController(
         IProviderRepository providerRepository,
         IProviderVersioningService versioning,
+        ProviderAdapterFactory adapterFactory,
         ILogger<ProvidersController> logger)
     {
         _providerRepository = providerRepository;
         _versioning = versioning;
+        _adapterFactory = adapterFactory;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Tenant id resolved by <see cref="ProviderService.Middleware.TenantMiddleware"/>.
+    /// Throws when the middleware did not set it (defensive — the middleware always
+    /// populates the value, defaulting to <c>"default-tenant"</c> in dev).
+    /// </summary>
+    private string TenantId =>
+        HttpContext.Items["TenantId"]?.ToString()
+            ?? throw new InvalidOperationException("TenantId not found in request context");
 
     /// <summary>
     /// Get provider by NPI
@@ -42,13 +55,20 @@ public class ProvidersController : ControllerBase
     {
         _logger.LogInformation("Fetching provider by NPI: {NPI}", SanitizeForLog(npi));
 
-        var provider = await _providerRepository.GetByNPIAsync(npi);
-        if (provider == null)
+        var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
+        var response = await adapter.GetProviderByNpiAsync(new ProviderAdapterRequest
+        {
+            TenantId = TenantId,
+            Npi = npi,
+            PlatformSettings = settings,
+        });
+
+        if (response.Provider == null)
         {
             return NotFound($"Provider with NPI {npi} not found");
         }
 
-        return Ok(provider);
+        return Ok(response.Provider.ToProvider());
     }
 
     /// <summary>
@@ -76,10 +96,24 @@ public class ProvidersController : ControllerBase
         // Support 'q' as alias for 'name' (portal autocomplete uses q=)
         var searchName = name ?? q;
 
-        var providers = await _providerRepository.SearchAsync(
-            searchName, specialty, zipCode, state, planId, lineOfBusiness, providerType, acceptingNewPatients, page, pageSize);
+        var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
+        var response = await adapter.SearchProvidersAsync(new ProviderAdapterRequest
+        {
+            TenantId = TenantId,
+            Name = searchName,
+            Specialty = specialty,
+            ZipCode = zipCode,
+            State = state,
+            PlanId = planId,
+            LineOfBusiness = lineOfBusiness,
+            ProviderType = providerType,
+            AcceptingNewPatients = acceptingNewPatients,
+            Page = page,
+            PageSize = pageSize,
+            PlatformSettings = settings,
+        });
 
-        return Ok(providers);
+        return Ok(response.Providers.Select(p => p.ToProvider()));
     }
 
     /// <summary>
@@ -95,9 +129,20 @@ public class ProvidersController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
-        var providers = await _providerRepository.SearchAsync(
-            null, specialty, null, state, null, null, providerType, acceptingNewPatients, page, pageSize);
-        return Ok(providers);
+        var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
+        var response = await adapter.SearchProvidersAsync(new ProviderAdapterRequest
+        {
+            TenantId = TenantId,
+            Specialty = specialty,
+            State = state,
+            ProviderType = providerType,
+            AcceptingNewPatients = acceptingNewPatients,
+            Page = page,
+            PageSize = pageSize,
+            PlatformSettings = settings,
+        });
+
+        return Ok(response.Providers.Select(p => p.ToProvider()));
     }
 
     /// <summary>
@@ -140,11 +185,23 @@ public class ProvidersController : ControllerBase
             "Checking network status for provider {Id}, plan={Plan}, lob={LOB}, date={Date}",
             SanitizeForLog(id), SanitizeForLog(planId), lineOfBusiness, checkDate);
 
-        var provider = await _providerRepository.GetByIdAsync(id);
-        if (provider == null)
+        var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
+        var adapterResponse = await adapter.GetProviderAsync(new ProviderAdapterRequest
+        {
+            TenantId = TenantId,
+            ProviderId = id,
+            PlanId = planId,
+            LineOfBusiness = lineOfBusiness,
+            ServiceDate = checkDate,
+            PlatformSettings = settings,
+        });
+
+        if (adapterResponse.Provider == null)
         {
             return NotFound($"Provider {id} not found");
         }
+
+        var provider = adapterResponse.Provider.ToProvider();
 
         // Find active network participation
         var participation = provider.NetworkParticipations
@@ -187,11 +244,22 @@ public class ProvidersController : ControllerBase
             "Fetching contracted rates for provider {Id}, plan={Plan}, lob={LOB}",
             SanitizeForLog(id), SanitizeForLog(planId), lineOfBusiness);
 
-        var provider = await _providerRepository.GetByIdAsync(id);
-        if (provider == null)
+        var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
+        var adapterResponse = await adapter.GetProviderAsync(new ProviderAdapterRequest
+        {
+            TenantId = TenantId,
+            ProviderId = id,
+            PlanId = planId,
+            LineOfBusiness = lineOfBusiness,
+            PlatformSettings = settings,
+        });
+
+        if (adapterResponse.Provider == null)
         {
             return NotFound($"Provider {id} not found");
         }
+
+        var provider = adapterResponse.Provider.ToProvider();
 
         // Find active network participation with rates
         var participation = provider.NetworkParticipations
@@ -398,13 +466,20 @@ public class ProvidersController : ControllerBase
     {
         _logger.LogInformation("Fetching provider by ID: {Id}", SanitizeForLog(id));
 
-        var provider = await _providerRepository.GetByIdAsync(id);
-        if (provider == null)
+        var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
+        var response = await adapter.GetProviderAsync(new ProviderAdapterRequest
+        {
+            TenantId = TenantId,
+            ProviderId = id,
+            PlatformSettings = settings,
+        });
+
+        if (response.Provider == null)
         {
             return NotFound($"Provider {id} not found");
         }
 
-        return Ok(provider);
+        return Ok(response.Provider.ToProvider());
     }
 
     /// <summary>

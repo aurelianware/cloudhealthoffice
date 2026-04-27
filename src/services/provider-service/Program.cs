@@ -1,5 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using ProviderService.Adapters;
 using ProviderService.HostedServices;
 using ProviderService.Middleware;
 using ProviderService.Repositories;
@@ -83,6 +84,21 @@ builder.Services.AddScoped<IProviderVersioningService, ProviderVersioningService
 
 // MPIP rate service (FL SMMC 3.0 physician incentive program)
 builder.Services.AddScoped<IMpipRateService, MpipRateService>();
+
+// Provider adapter pattern (5.2 — tenant-routed provider directory backends).
+// Cache is singleton (TTL across requests); adapters and factory are scoped
+// because the CHO adapter wraps scoped repository services. Tenant-service
+// HTTP client uses a 5-second timeout so a flaky tenant-service can't stall
+// provider reads — the cache falls back to "cho" on any failure.
+builder.Services.AddHttpClient(ProviderTenantConfigCache.HttpClientName)
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddSingleton<ProviderTenantConfigCache>();
+builder.Services.AddScoped<IProviderAdapter, ChoProviderAdapter>();
+builder.Services.AddScoped<IProviderAdapter, QnxtProviderAdapter>();
+builder.Services.AddScoped<IProviderAdapter, FacetsProviderAdapter>();
+builder.Services.AddScoped<IProviderAdapter, HealthEdgeProviderAdapter>();
+builder.Services.AddScoped<ProviderAdapterFactory>();
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
