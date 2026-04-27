@@ -97,6 +97,79 @@ public interface IProviderRepository
     /// in <see cref="UpdateAsync"/>.
     /// </summary>
     Task<Provider> ReplaceVersionRowAsync(Provider version);
+
+    // ---- Integrity projection write-back (capability 5.4.5) ----------
+
+    /// <summary>
+    /// Patch the four cached integrity-projection fields
+    /// (<see cref="Provider.IntegrityScore"/>,
+    /// <see cref="Provider.IntegrityRating"/>,
+    /// <see cref="Provider.LastVerifiedAt"/>,
+    /// <see cref="Provider.NextVerificationDue"/>) on the head Active
+    /// version of <paramref name="providerId"/>. No new version row is
+    /// created; identity-version semantics from PR 7.2 are preserved.
+    ///
+    /// <para>
+    /// These fields are *projection metadata*, not provider-identity
+    /// fields — see <c>docs/architecture/provider-versioning.md</c>
+    /// "Projection metadata — exempt from versioning". The bypass is
+    /// implemented as a separate write path: the Cosmos impl uses
+    /// <c>PatchItemAsync</c> with field-scoped <c>Set</c> ops and the
+    /// Mongo impl uses <c>UpdateOneAsync</c> with <c>$set</c> on the
+    /// four field paths only. Neither path goes through
+    /// <see cref="UpdateAsync"/>'s version-state guard.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns <c>true</c> when the head Active version was patched;
+    /// <c>false</c> when no Active head exists (Suspended / Superseded /
+    /// Terminated / never-activated). Idempotent: rerunning with the same
+    /// inputs is a no-op overwrite. Does not throw on missing chains.
+    /// </para>
+    /// </summary>
+    Task<bool> UpdateIntegrityProjectionAsync(
+        string tenantId,
+        string providerId,
+        int? integrityScore,
+        string? integrityRating,
+        DateTimeOffset? lastVerifiedAt,
+        DateTimeOffset? nextVerificationDue,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Page of head-Active providers in <paramref name="tenantId"/>
+    /// whose <see cref="Provider.NextVerificationDue"/> has elapsed
+    /// (<c>&lt;= dueBefore</c>) or is null when
+    /// <paramref name="includeNeverVerified"/> is true. Stable sort
+    /// (<c>ProviderId</c> asc) so <paramref name="skip"/> pagination is
+    /// deterministic across sweeps.
+    ///
+    /// <para>
+    /// Used by <c>IntegrityProjectionWorker</c>. Tenant id is taken
+    /// explicitly because the worker runs without an HTTP context — the
+    /// usual <see cref="IHttpContextAccessor"/> tenant resolution doesn't
+    /// apply.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<Provider>> ListProvidersForIntegrityRefreshAsync(
+        string tenantId,
+        DateTimeOffset dueBefore,
+        bool includeNeverVerified,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Distinct <see cref="Provider.TenantId"/>s across the Providers
+    /// collection. The worker uses this to iterate per-tenant on each
+    /// sweep without depending on a separate tenant catalogue.
+    ///
+    /// <para>
+    /// Cross-partition scan; the worker calls this once per sweep
+    /// interval (default 1h) so RU/IO cost is bounded.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<string>> ListProviderTenantIdsAsync(CancellationToken ct = default);
 }
 
 /// <summary>
@@ -645,6 +718,160 @@ public class ProviderRepository : IProviderRepository
             version.Id,
             new PartitionKey(version.TenantId));
         return response.Resource;
+    }
+
+    public async Task<bool> UpdateIntegrityProjectionAsync(
+        string tenantId,
+        string providerId,
+        int? integrityScore,
+        string? integrityRating,
+        DateTimeOffset? lastVerifiedAt,
+        DateTimeOffset? nextVerificationDue,
+        CancellationToken ct = default)
+    {
+        // Resolve the head Active row by chain key. Cosmos PatchItemAsync
+        // is keyed on the per-row document Id, so we have to look up the
+        // row id first. The lookup query is partition-scoped.
+        //
+        // Hydration rule (mirrors Hydrate()) — three "Active" shapes,
+        // each Status-gated to keep legacy Terminated/Suspended rows
+        // out:
+        //   1. versionState = Active.
+        //   2. versionState undefined AND status = Active.
+        //   3. versionId undefined/null/empty AND status = Active.
+        // See docs/architecture/provider-versioning.md "Legacy
+        // hydration query pattern".
+        var query = new QueryDefinition(
+                "SELECT TOP 1 c.id FROM c WHERE c.tenantId = @tenantId AND " +
+                "(c.providerId = @providerId OR (NOT IS_DEFINED(c.providerId) AND c.id = @providerId)) AND " +
+                "(c.versionState = @active " +
+                "OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive) " +
+                "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) " +
+                "ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@providerId", providerId)
+            .WithParameter("@active", ProviderVersionState.Active.ToString())
+            .WithParameter("@statusActive", ProviderStatus.Active.ToString());
+
+        string? rowId = null;
+        var iterator = _container.GetItemQueryIterator<HeadIdResult>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        if (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            rowId = page.FirstOrDefault()?.Id;
+        }
+
+        if (string.IsNullOrEmpty(rowId)) return false;
+
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set("/integrityScore", integrityScore),
+            PatchOperation.Set("/integrityRating", integrityRating),
+            PatchOperation.Set("/lastVerifiedAt", lastVerifiedAt),
+            PatchOperation.Set("/nextVerificationDue", nextVerificationDue),
+            PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
+        };
+
+        try
+        {
+            await _container.PatchItemAsync<Provider>(
+                rowId,
+                new PartitionKey(tenantId),
+                ops,
+                cancellationToken: ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Row was deleted between the lookup and the patch.
+            return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<Provider>> ListProvidersForIntegrityRefreshAsync(
+        string tenantId,
+        DateTimeOffset dueBefore,
+        bool includeNeverVerified,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+            throw new ArgumentException("tenantId is required.", nameof(tenantId));
+        var safeSkip = Math.Max(skip, 0);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+
+        // Active head only — projection only writes to Active rows.
+        // Hydration rule (mirrors Hydrate()) — three "Active" shapes,
+        // each Status-gated to keep legacy Terminated/Suspended rows
+        // out of refresh batches:
+        //   1. versionState = Active.
+        //   2. versionState undefined AND status = Active.
+        //   3. versionId undefined/null/empty AND status = Active.
+        // See docs/architecture/provider-versioning.md "Legacy
+        // hydration query pattern".
+        var sql = "SELECT * FROM c WHERE c.tenantId = @tenantId AND " +
+                  "(c.versionState = @active " +
+                  "OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive) " +
+                  "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) AND ";
+        sql += includeNeverVerified
+            ? "(NOT IS_DEFINED(c.nextVerificationDue) OR c.nextVerificationDue = null OR c.nextVerificationDue <= @dueBefore) "
+            : "(IS_DEFINED(c.nextVerificationDue) AND c.nextVerificationDue != null AND c.nextVerificationDue <= @dueBefore) ";
+        // Secondary sort on c.id keeps OFFSET/LIMIT pagination
+        // deterministic when multiple rows share the same providerId
+        // (legacy single-row chains where providerId may be empty).
+        sql += $"ORDER BY c.providerId ASC, c.id ASC OFFSET {safeSkip} LIMIT {safePageSize}";
+
+        var query = new QueryDefinition(sql)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@active", ProviderVersionState.Active.ToString())
+            .WithParameter("@statusActive", ProviderStatus.Active.ToString())
+            .WithParameter("@dueBefore", dueBefore);
+
+        var iterator = _container.GetItemQueryIterator<Provider>(
+            query,
+            requestOptions: new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(tenantId),
+                MaxItemCount = safePageSize,
+            });
+
+        var results = new List<Provider>(safePageSize);
+        while (iterator.HasMoreResults)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await iterator.ReadNextAsync(ct);
+            results.AddRange(page.Select(Hydrate));
+            if (results.Count >= safePageSize) break;
+        }
+        return results;
+    }
+
+    public async Task<IReadOnlyList<string>> ListProviderTenantIdsAsync(CancellationToken ct = default)
+    {
+        // Cross-partition; Cosmos DISTINCT VALUE is supported on simple
+        // scalars. The hosted worker calls this once per sweep so the
+        // RU cost is bounded by the sweep cadence.
+        var query = new QueryDefinition("SELECT DISTINCT VALUE c.tenantId FROM c");
+        var iterator = _container.GetItemQueryIterator<string>(query);
+        var tenants = new HashSet<string>(StringComparer.Ordinal);
+        while (iterator.HasMoreResults)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await iterator.ReadNextAsync(ct);
+            foreach (var t in page)
+            {
+                if (!string.IsNullOrEmpty(t)) tenants.Add(t);
+            }
+        }
+        return tenants.OrderBy(x => x, StringComparer.Ordinal).ToList();
+    }
+
+    private sealed class HeadIdResult
+    {
+        public string Id { get; set; } = string.Empty;
     }
 
     /// <summary>

@@ -186,28 +186,33 @@ The roster path **never** invokes
 from the cached column on the Provider row. This satisfies the "no
 real-time multi-source call on the roster query path" constraint.
 
-## Known gap — verification write-back
+## Verification write-back — resolved by capability 5.4.5
 
-`Provider.IntegrityScore`, `IntegrityRating`, and `LastVerifiedAt` exist
-as columns on the Provider entity (see `Models/Provider.cs`). They are
-**not** currently written by `provider-verification-service` —
-verification runs end-to-end and exposes the score via a live HTTP
-endpoint, but no path persists the score back onto the Provider row.
+`Provider.IntegrityScore`, `IntegrityRating`, `LastVerifiedAt`, and
+`NextVerificationDue` are now populated by capability 5.4.5
+(`docs/architecture/verification-writeback.md`).
 
-Practical impact for this endpoint: until verification write-back lands,
-`integrityScore` is `null` for ~all roster rows. The nulls-last sort
-handles it gracefully; the field surface is forward-compatible.
+`IntegrityProjectionWorker` (a `BackgroundService` in provider-service)
+sweeps due providers per tenant on a schedule, calls
+`provider-verification-service` over HTTP via
+`POST /api/v1/providers/verify/batch`, and patches the four projection
+fields onto the head Active row via
+`IProviderRepository.UpdateIntegrityProjectionAsync`.
 
-Tracked as a separate capability — see the verification roadmap. A
-candidate implementation:
+For roster operators:
 
-1. Add a hosted projection in `provider-service` that subscribes to
-   verification events and patches `Provider.IntegrityScore` /
-   `IntegrityRating` / `LastVerifiedAt` on the head Active version.
-2. Or extend `provider-verification-service` to call back into
-   `provider-service` after each verification.
-
-Either approach is out of scope for 5.4.
+- After 5.4.5 ships and the per-tenant backfill runs (admin endpoint
+  `POST /api/v1/admin/providers/backfill-integrity-projection?tenantId=X`),
+  the `integrityScore` envelope on each roster row reflects the
+  cached projection from the most recent verification. No change to
+  roster code or schema.
+- The nulls-last sort (`NetworkRosterService.ApplyNullsLastForIntegrityScore`)
+  continues to work correctly during the backfill window — partially
+  populated tenants will have some null and some populated rows, and
+  nulls-last sort handles both cleanly.
+- Live HTTP fetch via `HttpProviderIntegrityGate` in
+  `benefit-plan-service` remains available for adjudication —
+  fresh-or-cached migration is capability 5.10's decision.
 
 ## Deferred — distance sort
 
