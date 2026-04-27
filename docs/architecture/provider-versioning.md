@@ -348,6 +348,48 @@ not relax the `UpdateAsync` guard, not re-purpose
 `ReplaceVersionRowAsync`. Each carve-out documents its source service
 and refresh cadence in this section.
 
+### Credentialing projection (capability 5.6)
+
+The credentialing-status fields on `Provider` are a projection of the
+append-only credentialing event chain
+(`docs/architecture/credentialing-workflow.md`). The chain is the
+system-of-record; these flat fields are a denormalized read-side cache
+written on each chain transition.
+
+| Field | Source | Cadence |
+|---|---|---|
+| `CredentialingStatus` | `CredentialingService` (event-sourced workflow) | On state transition (Submit / Decision / Recredential / Withdraw) |
+| `CredentialingDate` | `CredentialingService` | On `DecisionRecorded(Approved)` |
+| `RecredentialingDueDate` | `CredentialingService` | On `DecisionRecorded(Approved)` |
+
+The write path is `IProviderRepository.UpdateCredentialingProjectionAsync(
+tenantId, providerId, status, credentialingDate,
+recredentialingDueDate, ct)`:
+
+- **Cosmos** — `PatchItemAsync` with three `PatchOperation.Set` ops on
+  `/credentialingStatus`, `/credentialingDate`,
+  `/recredentialingDueDate` (plus `/lastUpdatedDate`).
+- **Mongo** — `FindOneAndUpdateAsync` with `$set` on the same field
+  paths, sorted by `VersionNumber DESC` so amendments hit the latest
+  head.
+
+Identical mechanism to the integrity projection. Identity-field writes
+against the same Active row continue to throw (verified by
+`UpdateCredentialingProjectionAsyncTests.UpdateAsync_against_active_still_throws_after_credentialing_patch`).
+
+**Why the carve-out**: credentialing decisions are workflow events with
+their own audit chain. The flat status field is what coverage-service
+and benefit-plan-service consume for fast gating reads; surfacing the
+event projection on Active rows without forcing a full version
+transition keeps both reader patterns intact.
+
+**Pre-5.6 bug closed by this carve-out**: the previous
+`PUT /providers/{id}/credentialing` endpoint called `UpdateAsync` on
+Active providers and returned 409 in every case. The endpoint is now
+rewired through `CredentialingService.RecordDecisionAsync` with
+`DecisionAuthorityType=DelegatedAuthority`; the projection patch fires
+through the new bypass method and the 409 disappears.
+
 ### Operational backfill — one-time exemption
 
 Capability 5.5 introduces a **second** carve-out under this same

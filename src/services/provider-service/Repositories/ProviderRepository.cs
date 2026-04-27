@@ -248,6 +248,43 @@ public interface IProviderRepository
         int skip,
         int pageSize,
         CancellationToken ct = default);
+
+    // ---- Credentialing projection write-back (capability 5.6) --------
+
+    /// <summary>
+    /// Patch the three credentialing-projection fields
+    /// (<see cref="Provider.CredentialingStatus"/>,
+    /// <see cref="Provider.CredentialingDate"/>,
+    /// <see cref="Provider.RecredentialingDueDate"/>) on the head Active
+    /// version of <paramref name="providerId"/>. Mirrors
+    /// <see cref="UpdateIntegrityProjectionAsync"/> — same hydration
+    /// rule, same exemption from the version-state guard.
+    ///
+    /// <para>
+    /// These fields are *projection metadata*, not provider-identity
+    /// fields — see <c>docs/architecture/provider-versioning.md</c>
+    /// "Projection metadata — exempt from versioning". The bypass is
+    /// implemented as a separate write path: the Cosmos impl uses
+    /// <c>PatchItemAsync</c> with field-scoped <c>Set</c> ops and the
+    /// Mongo impl uses <c>FindOneAndUpdateAsync</c> with <c>$set</c> on
+    /// the three field paths only. Neither path goes through
+    /// <see cref="UpdateAsync"/>'s version-state guard.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns <c>true</c> when the head Active version was patched;
+    /// <c>false</c> when no Active head exists. Idempotent — rerunning
+    /// with the same inputs is a no-op overwrite. Does not throw on
+    /// missing chains.
+    /// </para>
+    /// </summary>
+    Task<bool> UpdateCredentialingProjectionAsync(
+        string tenantId,
+        string providerId,
+        CredentialingStatus status,
+        DateTime? credentialingDate,
+        DateTime? recredentialingDueDate,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -864,6 +901,65 @@ public class ProviderRepository : IProviderRepository
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             // Row was deleted between the lookup and the patch.
+            return false;
+        }
+    }
+
+    public async Task<bool> UpdateCredentialingProjectionAsync(
+        string tenantId,
+        string providerId,
+        CredentialingStatus status,
+        DateTime? credentialingDate,
+        DateTime? recredentialingDueDate,
+        CancellationToken ct = default)
+    {
+        // Mirror UpdateIntegrityProjectionAsync: lookup head Active row by
+        // chain key, patch only the three credentialing projection fields
+        // via PatchItemAsync. No version-state guard. Hydration rule
+        // (three "Active" shapes, each Status-gated) is identical.
+        var query = new QueryDefinition(
+                "SELECT TOP 1 c.id FROM c WHERE c.tenantId = @tenantId AND " +
+                "(c.providerId = @providerId OR (NOT IS_DEFINED(c.providerId) AND c.id = @providerId)) AND " +
+                "(c.versionState = @active " +
+                "OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive) " +
+                "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) " +
+                "ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@providerId", providerId)
+            .WithParameter("@active", ProviderVersionState.Active.ToString())
+            .WithParameter("@statusActive", ProviderStatus.Active.ToString());
+
+        string? rowId = null;
+        var iterator = _container.GetItemQueryIterator<HeadIdResult>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        if (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            rowId = page.FirstOrDefault()?.Id;
+        }
+
+        if (string.IsNullOrEmpty(rowId)) return false;
+
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set("/credentialingStatus", status.ToString()),
+            PatchOperation.Set("/credentialingDate", credentialingDate),
+            PatchOperation.Set("/recredentialingDueDate", recredentialingDueDate),
+            PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
+        };
+
+        try
+        {
+            await _container.PatchItemAsync<Provider>(
+                rowId,
+                new PartitionKey(tenantId),
+                ops,
+                cancellationToken: ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
             return false;
         }
     }

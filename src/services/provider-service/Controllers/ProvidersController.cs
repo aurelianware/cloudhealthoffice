@@ -24,6 +24,7 @@ public class ProvidersController : ControllerBase
     private readonly ProviderAdapterFactory _adapterFactory;
     private readonly IProviderIntegrityProjectionService _integrityProjection;
     private readonly IPanelGatingValidator _panelGatingValidator;
+    private readonly ICredentialingService _credentialing;
     private readonly ILogger<ProvidersController> _logger;
 
     public ProvidersController(
@@ -32,6 +33,7 @@ public class ProvidersController : ControllerBase
         ProviderAdapterFactory adapterFactory,
         IProviderIntegrityProjectionService integrityProjection,
         IPanelGatingValidator panelGatingValidator,
+        ICredentialingService credentialing,
         ILogger<ProvidersController> logger)
     {
         _providerRepository = providerRepository;
@@ -39,6 +41,7 @@ public class ProvidersController : ControllerBase
         _adapterFactory = adapterFactory;
         _integrityProjection = integrityProjection;
         _panelGatingValidator = panelGatingValidator;
+        _credentialing = credentialing;
         _logger = logger;
     }
 
@@ -698,15 +701,25 @@ public class ProvidersController : ControllerBase
     }
 
     /// <summary>
-    /// Update provider credentialing status
+    /// Update provider credentialing status. Legacy endpoint preserved for
+    /// existing callers. Internally rewired through the event-sourced
+    /// credentialing workflow (capability 5.6) — emits a
+    /// <see cref="CredentialingEventType.DecisionRecorded"/> event with
+    /// <see cref="DecisionAuthorityType.DelegatedAuthority"/> and patches
+    /// the flat-field projection on <see cref="Provider"/>. Works on
+    /// Active providers (the previous implementation called
+    /// <see cref="IProviderRepository.UpdateAsync"/> and 409'd on every
+    /// non-Draft row).
     /// </summary>
     [HttpPut("{id}/credentialing")]
     [ProducesResponseType(typeof(Provider), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<Provider>> UpdateCredentialing(
         string id,
-        [FromBody] CredentialingUpdateRequest request)
+        [FromBody] CredentialingUpdateRequest request,
+        CancellationToken ct)
     {
         _logger.LogInformation(
             "Updating credentialing for provider {Id}, status={Status}",
@@ -718,20 +731,69 @@ public class ProvidersController : ControllerBase
             return NotFound($"Provider {id} not found");
         }
 
-        provider.CredentialingStatus = request.Status;
-        provider.CredentialingDate = request.CredentialingDate ?? DateTime.UtcNow;
-        provider.RecredentialingDueDate = request.RecredentialingDueDate;
-        provider.LastUpdatedDate = DateTime.UtcNow;
+        // Translate legacy status-only payload to a delegated-authority
+        // decision. Approved and Denied map directly. Pending/Expired/
+        // Suspended legacy values have no event-chain analogue — return
+        // 400 with a hint that those transitions require the explicit
+        // /credentialing/* sub-routes (or, for Suspended, await the
+        // Phase 2 SuspensionRecorded event type).
+        CredentialingDecision decision;
+        switch (request.Status)
+        {
+            case CredentialingStatus.Approved:
+                decision = CredentialingDecision.Approved;
+                break;
+            case CredentialingStatus.Denied:
+                decision = CredentialingDecision.Denied;
+                break;
+            default:
+                return BadRequest(new
+                {
+                    error = "unsupported_legacy_status",
+                    message = $"Status {request.Status} cannot be set via PUT /credentialing. " +
+                              "Use POST /credentialing/applications, /credentialing/recredential, " +
+                              "or /credentialing/decisions for workflow-driven transitions.",
+                });
+        }
+
+        var actorId = ResolveActorId();
+        var decisionRequest = new RecordDecisionRequest
+        {
+            Decision = decision,
+            DecidedAt = request.CredentialingDate ?? DateTime.UtcNow,
+            CredentialingDate = request.CredentialingDate ?? DateTime.UtcNow,
+            RecredentialingDueDate = request.RecredentialingDueDate,
+            DecisionAuthorityType = DecisionAuthorityType.DelegatedAuthority,
+            DecisionAuthorityId = actorId,
+            CommitteeMembers = null,
+            DecisionMinuteReference = null,
+            DenialReason = null,
+        };
 
         try
         {
-            var updated = await _providerRepository.UpdateAsync(provider);
-            return Ok(updated);
+            await _credentialing.RecordDecisionAsync(
+                TenantId, id, decisionRequest, actorId, HttpContext.TraceIdentifier, ct);
         }
-        catch (ProviderVersionStateException ex)
+        catch (CredentialingValidationException ex)
         {
-            return Conflict(new { message = ex.Message, providerId = ex.ProviderId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+            return BadRequest(new { error = "credentialing_validation_failed", message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                error = "credentialing_publish_failed",
+                message = ex.Message,
+            });
+        }
+
+        // Re-read so the response reflects the patched projection. The
+        // projection patch is best-effort — if the row hasn't been
+        // updated (no Active head) the response still surfaces the row
+        // as-stored.
+        var updated = await _providerRepository.GetByIdAsync(id);
+        return updated == null ? NotFound($"Provider {id} not found") : Ok(updated);
     }
 
     /// <summary>

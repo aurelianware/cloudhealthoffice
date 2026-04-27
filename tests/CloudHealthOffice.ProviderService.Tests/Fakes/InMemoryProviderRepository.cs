@@ -463,6 +463,40 @@ public sealed class InMemoryProviderRepository : IProviderRepository
             .ToList();
         return Task.FromResult<IReadOnlyList<Provider>>(slice);
     }
+
+    /// <summary>
+    /// Calls captured by <see cref="UpdateCredentialingProjectionAsync"/>
+    /// — service-level tests inspect this list to assert the projection
+    /// patch was invoked with the expected arguments.
+    /// </summary>
+    public List<(string TenantId, string ProviderId, CredentialingStatus Status, DateTime? CredentialingDate, DateTime? RecredentialingDueDate)> CredentialingProjectionPatches { get; } = new();
+
+    public Task<bool> UpdateCredentialingProjectionAsync(
+        string tenantId,
+        string providerId,
+        CredentialingStatus status,
+        DateTime? credentialingDate,
+        DateTime? recredentialingDueDate,
+        CancellationToken ct = default)
+    {
+        CredentialingProjectionPatches.Add((tenantId, providerId, status, credentialingDate, recredentialingDueDate));
+
+        var head = _docs
+            .Select(d => Hydrate(Clone(d)))
+            .Where(d => d.TenantId == tenantId
+                && (d.ProviderId == providerId || d.Id == providerId)
+                && d.VersionState == ProviderVersionState.Active)
+            .OrderByDescending(d => d.VersionNumber)
+            .FirstOrDefault();
+        if (head == null) return Task.FromResult(false);
+
+        var stored = _docs.First(d => d.Id == head.Id && d.TenantId == head.TenantId);
+        stored.CredentialingStatus = status;
+        stored.CredentialingDate = credentialingDate;
+        stored.RecredentialingDueDate = recredentialingDueDate;
+        stored.LastUpdatedDate = DateTime.UtcNow;
+        return Task.FromResult(true);
+    }
 }
 
 public sealed class InMemoryProviderTransitionRepository : IProviderTransitionRepository
