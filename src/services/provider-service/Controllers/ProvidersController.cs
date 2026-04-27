@@ -22,17 +22,20 @@ public class ProvidersController : ControllerBase
     private readonly IProviderRepository _providerRepository;
     private readonly IProviderVersioningService _versioning;
     private readonly ProviderAdapterFactory _adapterFactory;
+    private readonly IProviderIntegrityProjectionService _integrityProjection;
     private readonly ILogger<ProvidersController> _logger;
 
     public ProvidersController(
         IProviderRepository providerRepository,
         IProviderVersioningService versioning,
         ProviderAdapterFactory adapterFactory,
+        IProviderIntegrityProjectionService integrityProjection,
         ILogger<ProvidersController> logger)
     {
         _providerRepository = providerRepository;
         _versioning = versioning;
         _adapterFactory = adapterFactory;
+        _integrityProjection = integrityProjection;
         _logger = logger;
     }
 
@@ -430,6 +433,46 @@ public class ProvidersController : ControllerBase
         {
             return Conflict(new { message = ex.Message, providerId = ex.ProviderId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
         }
+    }
+
+    /// <summary>
+    /// On-demand integrity-projection refresh (capability 5.4.5). Forces
+    /// a verification round-trip outside the hosted-worker schedule and
+    /// patches the head Active version's
+    /// <see cref="Provider.IntegrityScore"/> /
+    /// <see cref="Provider.IntegrityRating"/> /
+    /// <see cref="Provider.LastVerifiedAt"/> /
+    /// <see cref="Provider.NextVerificationDue"/> fields. Used by
+    /// credentialing workflows and credential-event-driven re-verification.
+    ///
+    /// <para>
+    /// Route is <c>/{id}/verification/refresh</c> (not <c>/verify</c>) to
+    /// avoid namespace collision with verification-service's
+    /// <c>GET /api/v1/providers/{npi}/verify</c>.
+    /// </para>
+    /// </summary>
+    [HttpPost("{id}/verification/refresh")]
+    [ProducesResponseType(typeof(IntegrityProjectionRefreshResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IntegrityProjectionRefreshResult>> RefreshVerification(
+        string id,
+        [FromQuery] bool force = true,
+        CancellationToken ct = default)
+    {
+        _logger.LogInformation(
+            "on-demand verification refresh for provider {Id} force={Force}",
+            SanitizeForLog(id), force);
+
+        var result = await _integrityProjection.RefreshProviderAsync(
+            TenantId, id, forceRefresh: force,
+            actorId: ResolveActorId(),
+            correlationId: HttpContext.TraceIdentifier,
+            ct);
+        if (result == null)
+        {
+            return NotFound(new { message = $"Provider {id} not found or has no Active version" });
+        }
+        return Ok(result);
     }
 
     /// <summary>

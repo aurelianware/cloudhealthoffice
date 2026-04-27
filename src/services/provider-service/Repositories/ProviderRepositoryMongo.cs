@@ -613,6 +613,138 @@ public class ProviderRepositoryMongo : IProviderRepository
         return version;
     }
 
+    public async Task<bool> UpdateIntegrityProjectionAsync(
+        string tenantId,
+        string providerId,
+        int? integrityScore,
+        string? integrityRating,
+        DateTimeOffset? lastVerifiedAt,
+        DateTimeOffset? nextVerificationDue,
+        CancellationToken ct = default)
+    {
+        // $set on the four projection fields only — bypasses the
+        // version-state guard on UpdateAsync. Targets the head Active
+        // version of the chain (matching ChainKeyFilter + Active state).
+        //
+        // Legacy-row hydration rule (mirrors Hydrate()): a row counts as
+        // Active when ANY of the following hold:
+        //   1. VersionState == Active (current versioned shape).
+        //   2. VersionState missing AND Status == Active (rows that
+        //      pre-date capability 5.1 — never had VersionState
+        //      persisted).
+        //   3. VersionId missing/empty AND Status == Active (rows that
+        //      defaulted VersionState to enum-zero Draft on read; the
+        //      Hydrate() fallback derives Active from Status when
+        //      VersionId is unset).
+        // The Status guard on branches 2 and 3 is non-negotiable — without
+        // it, legacy Terminated/Suspended rows would be patched, violating
+        // the method contract ("returns false when no Active head exists").
+        // See docs/architecture/provider-versioning.md "Legacy hydration
+        // query pattern".
+        var b = Builders<Provider>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.And(
+                b.Exists(p => p.VersionState, false),
+                b.Eq(p => p.Status, ProviderStatus.Active)),
+            b.And(
+                b.Or(
+                    b.Exists(p => p.VersionId, false),
+                    b.Eq(p => p.VersionId, null),
+                    b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            ChainKeyFilter(providerId),
+            stateFilter);
+
+        var update = Builders<Provider>.Update
+            .Set(p => p.IntegrityScore, integrityScore)
+            .Set(p => p.IntegrityRating, integrityRating)
+            .Set(p => p.LastVerifiedAt, lastVerifiedAt)
+            .Set(p => p.NextVerificationDue, nextVerificationDue)
+            .Set(p => p.LastUpdatedDate, DateTime.UtcNow);
+
+        // Sort by VersionNumber desc so amendments hit the latest head when
+        // there are historical Superseded rows. Mongo's UpdateOneAsync with
+        // a Sort option requires FindOneAndUpdate semantics; use that.
+        var options = new FindOneAndUpdateOptions<Provider>
+        {
+            Sort = Builders<Provider>.Sort.Descending(p => p.VersionNumber),
+            ReturnDocument = ReturnDocument.After,
+        };
+        var updated = await _collection.FindOneAndUpdateAsync(filter, update, options, ct);
+        return updated != null;
+    }
+
+    public async Task<IReadOnlyList<Provider>> ListProvidersForIntegrityRefreshAsync(
+        string tenantId,
+        DateTimeOffset dueBefore,
+        bool includeNeverVerified,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+            throw new ArgumentException("tenantId is required.", nameof(tenantId));
+        var safeSkip = Math.Max(skip, 0);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+
+        // Hydration rule (mirrors Hydrate()) — three "Active" shapes,
+        // each Status-gated to keep legacy Terminated/Suspended rows
+        // out of refresh batches:
+        //   1. VersionState == Active.
+        //   2. VersionState missing AND Status == Active.
+        //   3. VersionId missing/empty AND Status == Active.
+        // See docs/architecture/provider-versioning.md "Legacy
+        // hydration query pattern".
+        var b = Builders<Provider>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.And(
+                b.Exists(p => p.VersionState, false),
+                b.Eq(p => p.Status, ProviderStatus.Active)),
+            b.And(
+                b.Or(
+                    b.Exists(p => p.VersionId, false),
+                    b.Eq(p => p.VersionId, null),
+                    b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
+
+        var dueFilter = includeNeverVerified
+            ? b.Or(
+                b.Exists(p => p.NextVerificationDue, false),
+                b.Eq(p => p.NextVerificationDue, null),
+                b.Lte(p => p.NextVerificationDue, dueBefore))
+            : b.And(
+                b.Exists(p => p.NextVerificationDue, true),
+                b.Ne(p => p.NextVerificationDue, null),
+                b.Lte(p => p.NextVerificationDue, dueBefore));
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            stateFilter,
+            dueFilter);
+
+        var docs = await _collection.Find(filter)
+            .Sort(Builders<Provider>.Sort.Ascending(p => p.ProviderId).Ascending(p => p.Id))
+            .Skip(safeSkip)
+            .Limit(safePageSize)
+            .ToListAsync(ct);
+        return docs.Select(Hydrate).ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> ListProviderTenantIdsAsync(CancellationToken ct = default)
+    {
+        var distinct = await _collection.DistinctAsync<string>(
+            "TenantId", FilterDefinition<Provider>.Empty, cancellationToken: ct);
+        var list = await distinct.ToListAsync(ct);
+        return list.Where(x => !string.IsNullOrEmpty(x))
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+    }
+
     private static Provider Hydrate(Provider provider)
     {
         if (string.IsNullOrEmpty(provider.ProviderId))

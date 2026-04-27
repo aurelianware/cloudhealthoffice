@@ -133,6 +133,84 @@ consumers — `coverage-service` `PcpAssignmentService` (which checks
 not need to migrate to `VersionState`; they can if they want stronger
 state assertions.
 
+## Legacy hydration query pattern
+
+Any query that filters provider rows on `VersionState` MUST mirror the
+mapping `Hydrate()` applies on read. Otherwise the query disagrees with
+what the rest of the codebase considers "Active" and silently includes
+or excludes legacy rows.
+
+### The rule
+
+A row counts as **Active** at query time when ANY of the following hold:
+
+1. `VersionState == Active` (current versioned shape).
+2. `VersionState` is missing **AND** `Status == Active` (rows that
+   pre-date capability 5.1 — `VersionState` was never persisted).
+3. `VersionId` is missing/null/empty **AND** `Status == Active` (rows
+   that defaulted `VersionState` to enum-zero `Draft` on read; the
+   `Hydrate()` fallback derives `Active` from `Status` when
+   `VersionId` is unset).
+
+Branches 2 and 3 cover two distinct shapes of legacy data depending on
+how the row was originally written; both are reachable in production.
+The `Status == Active` guard on branches 2 and 3 is non-negotiable —
+it's what excludes legacy Terminated / Suspended rows that lack
+`VersionState`.
+
+Concretely:
+
+```csharp
+// Mongo
+var b = Builders<Provider>.Filter;
+var activeFilter = b.Or(
+    b.Eq(p => p.VersionState, ProviderVersionState.Active),
+    b.And(
+        b.Exists(p => p.VersionState, false),
+        b.Eq(p => p.Status, ProviderStatus.Active)),
+    b.And(
+        b.Or(
+            b.Exists(p => p.VersionId, false),
+            b.Eq(p => p.VersionId, null),
+            b.Eq(p => p.VersionId, string.Empty)),
+        b.Eq(p => p.Status, ProviderStatus.Active)));
+```
+
+```sql
+-- Cosmos
+WHERE c.versionState = @active
+   OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive)
+   OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = "")
+       AND c.status = @statusActive)
+```
+
+### What goes wrong without the `Status` guard
+
+Treating "missing `VersionState`" alone as Active pulls in legacy
+**Terminated** and **Suspended** rows whose `VersionState` was never
+written. Symptoms:
+
+- Roster listings include providers who left the network months ago.
+- Projection writers (capability 5.4.5) patch and emit refresh events
+  for non-active providers.
+- Read-only consumers see "Active" providers that the rest of the
+  system considers terminated.
+
+The matching read site (`GetLatestActiveAsync` in both repository
+implementations) already applies the rule. Capability 5.4.5 added four
+new query sites — `UpdateIntegrityProjectionAsync` and
+`ListProvidersForIntegrityRefreshAsync`, each in Cosmos and Mongo —
+all four of which must apply the same rule.
+
+### When adding a new capability
+
+If you write a new query that touches `Provider` rows, audit it
+against this rule. The fast check: does the filter mention
+`VersionState`? If yes, both branches of the legacy fallback must
+appear together. Don't write `OR NOT IS_DEFINED(c.versionState)` (or
+`b.Exists(p => p.VersionState, false)`) without an immediate
+`AND status = active` guard.
+
 ## Atomicity
 
 `ActivateAndSupersedeAsync` flips the draft to Active and the
@@ -219,26 +297,76 @@ provider has an Active version — callers must amend through the new
 flow. The legacy `DELETE` path now performs a `Terminate` transition
 on the head Active version, preserving history.
 
+## Projection metadata — exempt from versioning
+
+A version-chain row is otherwise immutable once published Active —
+`UpdateAsync` rejects any write that targets a non-Draft row with
+`ProviderVersionStateException`. **Projection metadata is the one
+documented exception**: a small set of fields that are computed by
+external services on their own cadence and written back as a cached
+read-side projection. Updating them does **not** create a new
+`VersionNumber` and does **not** transition the chain through
+Draft → Active.
+
+Today the only projection-metadata fields are the integrity-score
+projection populated by capability 5.4.5
+(`docs/architecture/verification-writeback.md`):
+
+| Field | Source | Cadence |
+|---|---|---|
+| `IntegrityScore` | `provider-verification-service` | Shortest-active-window (24h) |
+| `IntegrityRating` | `provider-verification-service` | Shortest-active-window (24h) |
+| `LastVerifiedAt` | `provider-verification-service` | Shortest-active-window (24h) |
+| `NextVerificationDue` | computed locally | Shortest-active-window (24h) |
+
+The write path is `IProviderRepository.UpdateIntegrityProjectionAsync(
+tenantId, providerId, score, rating, verifiedAt, nextDue, ct)`:
+
+- **Cosmos** — `PatchItemAsync` with four `PatchOperation.Set` ops on
+  `/integrityScore`, `/integrityRating`, `/lastVerifiedAt`,
+  `/nextVerificationDue` (plus `/lastUpdatedDate`).
+- **Mongo** — `FindOneAndUpdateAsync` with `$set` on the same field
+  paths, sorted by `VersionNumber DESC` so amendments hit the latest
+  head.
+
+Both bypass the `UpdateAsync` state guard; neither writes the
+`VersionState`/`VersionNumber`/`PredecessorVersionId` fields.
+Identity-field writes against the same Active row continue to throw
+(verified by `IntegrityProjectionWritePathTests.UpdateAsync_against_active_still_throws_after_projection_patch`).
+
+**Why the carve-out**: integrity scores refresh on their own
+operational cadence (every 24h on the shortest-active-window
+schedule). Emitting a new chain version per refresh would produce
+unbounded version-chain growth and break the audit semantic that
+"each version represents an identity change." Projection metadata is
+write-side noise, not history.
+
+**Adding new projection fields**: any future capability that wants to
+join the carve-out should add a sibling repository method
+(`UpdateXxxProjectionAsync`) — not extend `UpdateIntegrityProjectionAsync`,
+not relax the `UpdateAsync` guard, not re-purpose
+`ReplaceVersionRowAsync`. Each carve-out documents its source service
+and refresh cadence in this section.
+
 ## Caveats / follow-ups
 
-- **Bus fan-out.** Decorator over `IProviderVersionEventPublisher` not
-  yet wired.
+- **Bus fan-out.** Decorator over `IProviderVersionEventPublisher`
+  not yet wired (verified — `IProviderVersionEventPublisher.cs:13-18`
+  documents the deferred decorator seam).
 - **Cross-tenant draft isolation.** Drafts are partitioned by
   `TenantId` like every other row; no extra access control beyond the
-  tenant middleware is implemented in this PR.
+  tenant middleware is implemented (verified — both repository
+  implementations partition every read on `TenantId`).
 - **Network-participation deltas.** The v2 / Active row carries the
   full `NetworkParticipations` array; downstream consumers that diff
   participations across versions can subtract by `(planId,
   effectiveDate)` keys. A dedicated participation-delta event is
   reserved for a follow-up if the downstream cost of replaying full
   arrays becomes problematic.
-- **`ProviderVerificationOrchestrator` integration.** Verification
-  results write `IntegrityScore` / `IntegrityRating` /
-  `LastVerifiedAt` / `NextVerificationDue` directly on the Active
-  version. Because Active rows are read-only at the controller
-  boundary, the orchestrator must call repository methods rather than
-  the public PUT endpoint. The repository's `ReplaceVersionRowAsync`
-  is the existing escape hatch for state-only mutations and remains
-  available for orchestrator-style writes; a follow-up will introduce
-  a dedicated `UpdateVerificationFieldsAsync` carve-out so the rest of
-  the row stays immutable.
+- **`ProviderVerificationOrchestrator` integration.** Resolved by
+  capability 5.4.5 — verification results are now written back to the
+  Provider entity via `UpdateIntegrityProjectionAsync` (see
+  "Projection metadata — exempt from versioning" above and
+  `verification-writeback.md`). The orchestrator itself stays focused
+  on producing a verification record from live data sources;
+  provider-service owns the projection write path.

@@ -320,6 +320,77 @@ public sealed class InMemoryProviderRepository : IProviderRepository
         _docs.Add(Clone(version));
         return Task.FromResult(Clone(version));
     }
+
+    public Task<bool> UpdateIntegrityProjectionAsync(
+        string tenantId,
+        string providerId,
+        int? integrityScore,
+        string? integrityRating,
+        DateTimeOffset? lastVerifiedAt,
+        DateTimeOffset? nextVerificationDue,
+        CancellationToken ct = default)
+    {
+        // Find the head Active row for the chain. Hydration normalises
+        // legacy rows (missing VersionState) to Active so they're patched
+        // too — matching the real-repo behaviour.
+        var head = _docs
+            .Select(d => Hydrate(Clone(d)))
+            .Where(d => d.TenantId == tenantId
+                && (d.ProviderId == providerId || d.Id == providerId)
+                && d.VersionState == ProviderVersionState.Active)
+            .OrderByDescending(d => d.VersionNumber)
+            .FirstOrDefault();
+        if (head == null) return Task.FromResult(false);
+
+        // Patch the underlying stored row (not the hydrated clone).
+        var stored = _docs.First(d => d.Id == head.Id && d.TenantId == head.TenantId);
+        stored.IntegrityScore = integrityScore;
+        stored.IntegrityRating = integrityRating;
+        stored.LastVerifiedAt = lastVerifiedAt;
+        stored.NextVerificationDue = nextVerificationDue;
+        stored.LastUpdatedDate = DateTime.UtcNow;
+        return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<Provider>> ListProvidersForIntegrityRefreshAsync(
+        string tenantId,
+        DateTimeOffset dueBefore,
+        bool includeNeverVerified,
+        int skip,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var safeSkip = Math.Max(skip, 0);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+
+        bool DueMatches(Provider p)
+        {
+            if (p.NextVerificationDue == null) return includeNeverVerified;
+            return p.NextVerificationDue <= dueBefore;
+        }
+
+        var slice = HydratedView()
+            .Where(d => d.TenantId == tenantId
+                && d.VersionState == ProviderVersionState.Active
+                && DueMatches(d))
+            .OrderBy(d => d.ProviderId, StringComparer.Ordinal)
+            .ThenBy(d => d.Id, StringComparer.Ordinal)
+            .Skip(safeSkip)
+            .Take(safePageSize)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<Provider>>(slice);
+    }
+
+    public Task<IReadOnlyList<string>> ListProviderTenantIdsAsync(CancellationToken ct = default)
+    {
+        var distinct = _docs
+            .Select(d => d.TenantId)
+            .Where(t => !string.IsNullOrEmpty(t))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(t => t, StringComparer.Ordinal)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<string>>(distinct);
+    }
 }
 
 public sealed class InMemoryProviderTransitionRepository : IProviderTransitionRepository

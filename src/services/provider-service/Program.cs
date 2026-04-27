@@ -3,6 +3,7 @@ using Microsoft.OpenApi.Models;
 using ProviderService.Adapters;
 using ProviderService.HostedServices;
 using ProviderService.Middleware;
+using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -51,7 +52,9 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IOrganizationRepository, OrganizationRepositoryMongo>();
     builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
     builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
+    builder.Services.AddScoped<IProviderVerificationEventPublisher, MongoProviderVerificationEventPublisher>();
     builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
+    builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
     Console.WriteLine("Using MongoDB database provider");
 }
 else
@@ -79,6 +82,7 @@ else
     // Noop publisher logs a warning so ops can spot the missing wiring
     // without breaking the lifecycle path.
     builder.Services.AddScoped<IProviderVersionEventPublisher, NoopProviderVersionEventPublisher>();
+    builder.Services.AddScoped<IProviderVerificationEventPublisher, NoopProviderVerificationEventPublisher>();
 }
 
 // Provider versioning service (5.1 — provider identity & versioning)
@@ -116,6 +120,26 @@ builder.Services.AddScoped<OrganizationAdapterFactory>();
 // Provider row; never invokes ProviderVerificationOrchestrator on the
 // read path.
 builder.Services.AddScoped<INetworkRosterService, NetworkRosterService>();
+
+// Verification write-back (5.4.5 — projection from provider-verification-service
+// onto Provider.IntegrityScore + IntegrityRating + LastVerifiedAt + NextVerificationDue).
+// HTTP — not project reference — preserves the service boundary and avoids
+// duplicating the engine's six data-source clients into provider-service.
+// IntegrityProjectionWorker iterates per-tenant on a schedule (default 1h);
+// IntegrityProjectionAdminController surfaces a one-shot backfill endpoint.
+builder.Services.Configure<IntegrityProjectionOptions>(
+    builder.Configuration.GetSection(IntegrityProjectionOptions.SectionName));
+builder.Services.AddHttpClient<IProviderVerificationClient, HttpProviderVerificationClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProviderVerification:BaseUrl"]
+        ?? "http://provider-verification-service";
+    client.BaseAddress = new Uri(baseUrl.EndsWith("/") ? baseUrl : baseUrl + "/");
+    client.Timeout = TimeSpan.FromSeconds(
+        builder.Configuration.GetValue("ProviderVerification:TimeoutSeconds", 30));
+})
+.SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<IProviderIntegrityProjectionService, ProviderIntegrityProjectionService>();
+builder.Services.AddHostedService<IntegrityProjectionWorker>();
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
