@@ -70,13 +70,18 @@ public class NetworkRosterService : INetworkRosterService
 
         var sort = ResolveSort(query);
 
-        // Cursor wins over Page when both are supplied. Filter-hash binding
-        // means tampering with filters between pages is rejected — no
-        // half-page splices.
+        // Cursor wins over Page when both are supplied. Filter-hash
+        // binding includes the cursor's claimed AsOfDate so a tampered
+        // cursor JSON (which is plain base64, not authenticated) can't
+        // smuggle a different snapshot date past the check.
         var skip = 0;
         if (!string.IsNullOrEmpty(query.Cursor))
         {
             var decoded = NetworkRosterCursor.Decode(query.Cursor);
+            // Apply the cursor's AsOfDate before computing the expected
+            // hash so a tamper of `decoded.AsOfDate` produces a hash
+            // mismatch (the original was hashed with the genuine value).
+            query.AsOfDate = decoded.AsOfDate;
             var expectedHash = ComputeFilterHash(query, sort);
             if (!CryptographicOperations.FixedTimeEquals(
                     Encoding.UTF8.GetBytes(decoded.FilterHash),
@@ -87,8 +92,6 @@ public class NetworkRosterService : INetworkRosterService
                     "Cursor filter hash does not match the supplied query. Restart pagination from page 1.");
             }
             skip = decoded.Offset;
-            // Lock AsOfDate to the cursor so re-paging doesn't drift.
-            query.AsOfDate = decoded.AsOfDate;
         }
         else if (query.Page > 1)
         {
@@ -270,14 +273,26 @@ public class NetworkRosterService : INetworkRosterService
             || n.MaxAcceptedAgeYears.HasValue;
 
     /// <summary>
-    /// Stable hash of every field that affects result ordering / membership.
-    /// Used to bind a cursor to its query so an attacker (or a buggy
-    /// client) can't smuggle a different filter set into a mid-page
-    /// continuation. We hash the canonicalized JSON representation so
-    /// field order doesn't matter.
+    /// Stable hash of every field that affects result ordering /
+    /// membership — including <c>AsOfDate</c> (normalized to UTC ticks),
+    /// since the snapshot date is part of the query's identity for
+    /// re-paging. Used to bind a cursor to its query so a tampered
+    /// cursor body produces a hash mismatch on the next page.
+    ///
+    /// <para>
+    /// Not authentication — the inputs are public — but it catches
+    /// accidental and tamper-style mismatches alike.
+    /// </para>
     /// </summary>
     internal static string ComputeFilterHash(NetworkRosterQuery query, NetworkRosterSort sort)
     {
+        // Round to seconds to keep page 1 / page 2 stable when the
+        // AsOfDate defaults to "now" — sub-second drift between calls
+        // shouldn't invalidate paging.
+        var asOfTicks = query.AsOfDate.HasValue
+            ? new DateTime(query.AsOfDate.Value.Ticks - (query.AsOfDate.Value.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc).Ticks
+            : 0L;
+
         var canonical = new
         {
             t = query.TenantId,
@@ -288,11 +303,10 @@ public class NetworkRosterService : INetworkRosterService
             ap = query.AcceptingNewPatients,
             ps = query.PageSize,
             so = sort.ToString(),
+            ao = asOfTicks,
         };
         var json = JsonSerializer.Serialize(canonical);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
-        // First 16 bytes (128 bits) is plenty — we're not authenticating,
-        // just preventing accidental reuse with mismatched filters.
         return Convert.ToHexString(bytes, 0, 16);
     }
 }

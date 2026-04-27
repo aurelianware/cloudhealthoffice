@@ -59,6 +59,36 @@ public class NetworkRosterCursorTests
     }
 
     [Fact]
+    public void FilterHash_diverges_when_AsOfDate_changes()
+    {
+        var d1 = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var d2 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var q1 = new NetworkRosterQuery { TenantId = "t1", NetworkId = "n1", PageSize = 100, AsOfDate = d1 };
+        var q2 = new NetworkRosterQuery { TenantId = "t1", NetworkId = "n1", PageSize = 100, AsOfDate = d2 };
+
+        NetworkRosterService.ComputeFilterHash(q1, NetworkRosterSort.NameAsc)
+            .Should().NotBe(NetworkRosterService.ComputeFilterHash(q2, NetworkRosterSort.NameAsc));
+    }
+
+    [Fact]
+    public void FilterHash_AsOfDate_subsecond_drift_is_ignored()
+    {
+        // Page 1 binds AsOfDate to "now" (defaulted). Page 2's cursor decode
+        // applies the encoded AsOfDate. Sub-second drift between the two
+        // calls must not invalidate the hash — we round to seconds before
+        // hashing.
+        var d1 = new DateTime(2025, 1, 1, 12, 0, 0, 100, DateTimeKind.Utc);
+        var d2 = new DateTime(2025, 1, 1, 12, 0, 0, 900, DateTimeKind.Utc);
+
+        var q1 = new NetworkRosterQuery { TenantId = "t1", NetworkId = "n1", PageSize = 100, AsOfDate = d1 };
+        var q2 = new NetworkRosterQuery { TenantId = "t1", NetworkId = "n1", PageSize = 100, AsOfDate = d2 };
+
+        NetworkRosterService.ComputeFilterHash(q1, NetworkRosterSort.NameAsc)
+            .Should().Be(NetworkRosterService.ComputeFilterHash(q2, NetworkRosterSort.NameAsc));
+    }
+
+    [Fact]
     public void ResolveSort_defaults_to_NameAsc()
     {
         NetworkRosterService.ResolveSort(new NetworkRosterQuery())

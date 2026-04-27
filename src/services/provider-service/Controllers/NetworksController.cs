@@ -142,6 +142,20 @@ public class NetworksController : ControllerBase
         [FromQuery] string? cursor = null,
         CancellationToken ct = default)
     {
+        // Length guards on the raw query-string values. ASP.NET binds
+        // these as scalar parameters, so the [StringLength] attributes
+        // on NetworkRosterQuery don't apply via [ApiController]
+        // validation. We reject oversized inputs explicitly to keep
+        // log volume and downstream regex / SQL evaluation bounded.
+        if (TryRejectOversize(specialty, 50, "specialty", out var problem)
+            || TryRejectOversize(tier, 20, "tier", out problem)
+            || TryRejectOversize(sortBy, 32, "sortBy", out problem)
+            || TryRejectOversize(sortDirection, 8, "sortDirection", out problem)
+            || TryRejectOversize(cursor, 2048, "cursor", out problem))
+        {
+            return BadRequest(problem);
+        }
+
         // Tenant-scope guard: if the network isn't in this tenant we 404
         // before touching the provider collection. The OrganizationService
         // honors the tenant context via IHttpContextAccessor.
@@ -271,6 +285,22 @@ public class NetworksController : ControllerBase
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
+    private static bool TryRejectOversize(string? value, int maxLength, string fieldName, out object problem)
+    {
+        if (value != null && value.Length > maxLength)
+        {
+            problem = new
+            {
+                error = "value_too_long",
+                field = fieldName,
+                message = $"'{fieldName}' exceeds the {maxLength}-character limit.",
+            };
+            return true;
+        }
+        problem = null!;
+        return false;
     }
 }
 

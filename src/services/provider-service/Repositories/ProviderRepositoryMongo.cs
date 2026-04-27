@@ -308,11 +308,21 @@ public class ProviderRepositoryMongo : IProviderRepository
             participationFilter = nb.And(participationFilter, nb.Eq(n => n.AcceptingNewPatients, query.AcceptingNewPatients.Value));
 
         // Provider chain must be Active (or legacy/unset) and not
-        // terminated before AsOfDate. Hydration will normalize legacy
-        // rows on read; the filter accepts the absent-VersionState shape.
+        // terminated before AsOfDate. Three shapes count as "active":
+        //   1. VersionState == Active (current versioned shape).
+        //   2. VersionState absent (legacy row pre-versioning).
+        //   3. VersionId empty/missing AND Status == Active (legacy row
+        //      where VersionState defaulted to the C# enum zero value
+        //      Draft on read — Hydrate() derives Active from Status).
+        // Without (3) those legacy rows would be excluded, which doesn't
+        // match Hydrate()'s read-side normalization elsewhere in the
+        // repo.
         var stateFilter = b.Or(
             b.Eq(p => p.VersionState, ProviderVersionState.Active),
-            b.Exists(p => p.VersionState, false));
+            b.Exists(p => p.VersionState, false),
+            b.And(
+                b.Or(b.Exists(p => p.VersionId, false), b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
 
         var providerFilter = b.And(
             b.Eq(p => p.TenantId, query.TenantId),
@@ -333,6 +343,45 @@ public class ProviderRepositoryMongo : IProviderRepository
                 b.Eq(p => p.AcceptingNewPatients, query.AcceptingNewPatients.Value));
         }
 
+        // IntegrityScoreDesc needs nulls-last across the whole result
+        // set, not just within a page. Find().Sort() places BSON null
+        // first on Descending, which would put unverified providers at
+        // the head of page 1 and push high-score rows into later pages.
+        // Solution: aggregate with a computed has-score key and sort by
+        // (hasScore desc, IntegrityScore desc, _id asc) BEFORE skip/limit.
+        // The other sorts have well-defined Mongo semantics on non-null
+        // string fields (LastName / OrganizationName), so they keep the
+        // simpler Find path.
+        if (sort == NetworkRosterSort.IntegrityScoreDesc)
+        {
+            var addFields = new MongoDB.Bson.BsonDocument("$addFields",
+                new MongoDB.Bson.BsonDocument("hasScore",
+                    new MongoDB.Bson.BsonDocument("$cond", new MongoDB.Bson.BsonArray
+                    {
+                        new MongoDB.Bson.BsonDocument("$gt", new MongoDB.Bson.BsonArray
+                        {
+                            "$IntegrityScore", MongoDB.Bson.BsonNull.Value
+                        }),
+                        1, 0
+                    })));
+            var sortStage = new MongoDB.Bson.BsonDocument("$sort", new MongoDB.Bson.BsonDocument
+            {
+                { "hasScore", -1 },
+                { "IntegrityScore", -1 },
+                { "_id", 1 },
+            });
+
+            var fluent = _collection.Aggregate()
+                .Match(providerFilter)
+                .AppendStage<Provider>(addFields)
+                .AppendStage<Provider>(sortStage)
+                .Skip(safeSkip)
+                .Limit(pageSize);
+
+            var aggDocs = await fluent.ToListAsync(ct);
+            return aggDocs.Select(Hydrate).ToList();
+        }
+
         var sortDef = sort switch
         {
             NetworkRosterSort.NameDesc =>
@@ -340,15 +389,6 @@ public class ProviderRepositoryMongo : IProviderRepository
                     .Descending(p => p.LastName)
                     .Descending(p => p.OrganizationName)
                     .Descending(p => p.Id),
-            NetworkRosterSort.IntegrityScoreDesc =>
-                // Mongo orders BSON null before any number on Descending —
-                // exactly what we don't want for a "best score first" view.
-                // The repository emits a deterministic descending order;
-                // the service layer reorders nulls to the tail (see
-                // NetworkRosterService.ApplyNullsLastForIntegrityScore).
-                Builders<Provider>.Sort
-                    .Descending(p => p.IntegrityScore)
-                    .Ascending(p => p.Id),
             _ =>
                 Builders<Provider>.Sort
                     .Ascending(p => p.LastName)

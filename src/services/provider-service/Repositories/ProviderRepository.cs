@@ -379,6 +379,7 @@ public class ProviderRepository : IProviderRepository
             ("@tenantId", query.TenantId),
             ("@networkId", query.NetworkId),
             ("@active", ProviderVersionState.Active.ToString()),
+            ("@statusActive", ProviderStatus.Active.ToString()),
             ("@asOf", asOf),
         };
 
@@ -413,7 +414,14 @@ public class ProviderRepository : IProviderRepository
         var conditions = new List<string>
         {
             "c.tenantId = @tenantId",
-            "(NOT IS_DEFINED(c.versionState) OR c.versionState = @active)",
+            // "Active" matches three shapes (mirrors Hydrate()):
+            //   1. versionState == Active (current versioned shape)
+            //   2. versionState absent (legacy)
+            //   3. versionId missing/empty AND status == 'Active' (legacy
+            //      row where versionState defaulted to enum-zero on read)
+            // Without (3) these legacy rows would be wrongly excluded.
+            "(c.versionState = @active OR NOT IS_DEFINED(c.versionState) " +
+                "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = \"\") AND c.status = @statusActive))",
             "(NOT IS_DEFINED(c.terminationDate) OR c.terminationDate = null OR c.terminationDate >= @asOf)",
             existsClause,
         };

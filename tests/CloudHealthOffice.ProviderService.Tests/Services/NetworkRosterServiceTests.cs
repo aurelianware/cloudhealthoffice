@@ -374,6 +374,83 @@ public class NetworkRosterServiceTests
     }
 
     [Fact]
+    public async Task Roster_includes_legacy_rows_with_empty_VersionId_and_Status_Active()
+    {
+        // Legacy shape: VersionId / VersionState absent on disk, Status=Active.
+        // The fake's HydratedView normalizes these to VersionState=Active —
+        // exercising the same read-path semantics that the Mongo/Cosmos
+        // queries now accept after the legacy-state-filter fix.
+        var repo = new InMemoryProviderRepository { TenantId = TenantA };
+        var svc = NewService(repo);
+
+        var legacy = new Provider
+        {
+            Id = "legacy-1",
+            // Note: ProviderId / VersionId / VersionState all defaulted (empty).
+            TenantId = TenantA,
+            NPI = "1234567890",
+            ProviderType = ProviderType.Individual,
+            FirstName = "Test",
+            LastName = "Adams",
+            PrimarySpecialty = "207R00000X",
+            TaxonomyCode = "207R00000X",
+            Status = ProviderStatus.Active,
+            AcceptingNewPatients = true,
+        };
+        legacy.NetworkParticipations.Add(new NetworkParticipation
+        {
+            NetworkId = Network1,
+            LineOfBusiness = LineOfBusiness.Commercial,
+            NetworkTier = "Tier1",
+            EffectiveDate = DateTime.UtcNow.AddYears(-1),
+            AcceptingNewPatients = true,
+        });
+        await repo.CreateAsync(legacy);
+
+        var resp = await svc.GetRosterAsync(NewQuery(Network1));
+
+        resp.Items.Should().HaveCount(1);
+        resp.Items[0].ProviderId.Should().Be("legacy-1");
+    }
+
+    [Fact]
+    public async Task Roster_cursor_AsOfDate_tamper_rejected()
+    {
+        // Tampering with the cursor's AsOfDate must produce a hash
+        // mismatch even when other fields are preserved — fix #5.
+        var repo = new InMemoryProviderRepository { TenantId = TenantA };
+        var svc = NewService(repo);
+        for (var i = 0; i < 6; i++)
+            await SeedProviderAsync(repo, $"p-{i}", $"Last-{i}", networkId: Network1);
+
+        var query = NewQuery(Network1);
+        query.PageSize = 2;
+        query.AsOfDate = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var page1 = await svc.GetRosterAsync(query);
+        page1.NextCursor.Should().NotBeNull();
+
+        // Forge a new cursor with a different AsOfDate — naive client mistake.
+        var decoded = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, object>>(
+            System.Text.Encoding.UTF8.GetString(
+                Convert.FromBase64String(PadBase64(page1.NextCursor!.Replace('-', '+').Replace('_', '/')))))!;
+        decoded["AsOfDate"] = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var tamperedJson = System.Text.Json.JsonSerializer.Serialize(decoded);
+        var tamperedToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(tamperedJson))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        var query2 = NewQuery(Network1);
+        query2.PageSize = 2;
+        query2.AsOfDate = query.AsOfDate;
+        query2.Cursor = tamperedToken;
+
+        var act = async () => await svc.GetRosterAsync(query2);
+        await act.Should().ThrowAsync<NetworkRosterValidationException>()
+            .Where(e => e.ErrorCode == "cursor_filter_mismatch");
+    }
+
+    private static string PadBase64(string s) => (s.Length % 4) switch { 2 => s + "==", 3 => s + "=", _ => s };
+
+    [Fact]
     public async Task Roster_terminated_provider_chain_excluded()
     {
         var repo = new InMemoryProviderRepository { TenantId = TenantA };
