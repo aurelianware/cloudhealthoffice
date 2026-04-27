@@ -18,7 +18,8 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
     private readonly AuthorizationApiFactory _factory;
     private static readonly JsonSerializerOptions Json = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
     };
 
     public AuthorizationsControllerExtendedTests(AuthorizationApiFactory factory)

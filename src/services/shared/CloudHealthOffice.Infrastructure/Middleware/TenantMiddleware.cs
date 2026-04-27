@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Claims;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Models;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -113,6 +114,18 @@ public class TenantMiddleware
             return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
+}
+
+/// <summary>
+/// Extension methods for registering <see cref="TenantMiddleware"/>.
+/// </summary>
+public static class TenantMiddlewareExtensions
+{
+    /// <summary>
+    /// Adds <see cref="TenantMiddleware"/> to the application pipeline.
+    /// </summary>
+    public static IApplicationBuilder UseTenantMiddleware(this IApplicationBuilder builder)
+        => builder.UseMiddleware<TenantMiddleware>();
 }
 
 /// <summary>

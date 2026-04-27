@@ -155,11 +155,11 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         // Step 1: Create run
         var createResponse = await _client.PostAsJsonAsync("/api/v1/capitation/runs", new
         {
-            runType = 1, // Monthly
+            runType = "Monthly",
             capitationPeriod = "2026-03-01T00:00:00Z",
-            criteria = new { lineOfBusiness = 0 }, // Commercial
+            criteria = new { lineOfBusiness = "Commercial" },
             createdBy = "smoke-test"
-        });
+        }, Json);
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var createdRun = await createResponse.Content.ReadFromJsonAsync<CapitationRun>(Json);
         Assert.NotNull(createdRun);
@@ -212,7 +212,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
             });
 
         // Create
-        var createResponse = await _client.PostAsJsonAsync("/api/v1/capitation/contracts", contract);
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/capitation/contracts", contract, Json);
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
 
         // Read
