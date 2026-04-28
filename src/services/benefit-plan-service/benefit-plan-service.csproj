@@ -41,6 +41,20 @@
              Link="schemas\service-category-mappings\README.md"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <!--
+      ACA OOP limits seed (capability BP 5.7). Copied to the build output
+      so AcaLimitsProvider finds the file at
+      <ContentRoot>/schemas/aca-oop-limits/limits.json regardless of
+      working-directory shape (local dev vs Dockerfile copy).
+    -->
+    <Content Include="..\..\..\schemas\aca-oop-limits\limits.json"
+             Link="schemas\aca-oop-limits\limits.json"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\schemas\aca-oop-limits\README.md"
+             Link="schemas\aca-oop-limits\README.md"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -95,6 +95,28 @@ public class BenefitPlan
     [JsonPropertyName("isActive")]
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Plan-level family accumulator pooling model (5.7). Embedded =
+    /// per-member individual + family pools tracked independently;
+    /// Aggregate = single shared family pool with an ACA 45 CFR §156.130
+    /// per-member cap (enforced at runtime once the plan is republished
+    /// after capability 5.7).
+    ///
+    /// <para>
+    /// Defaults to <see cref="FamilyAccumulatorModel.Embedded"/>, which
+    /// matches the engine's pre-5.7 implicit default. Legacy plan
+    /// documents missing this field hydrate as Embedded — see
+    /// docs/architecture/family-accumulator-models.md.
+    /// </para>
+    ///
+    /// <para>
+    /// Version-identity-bearing. Changing the model on a Published plan
+    /// requires a new version (the same as any other cost-sharing change).
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("familyAccumulatorModel")]
+    public FamilyAccumulatorModel FamilyAccumulatorModel { get; set; } = FamilyAccumulatorModel.Embedded;
+
     // ---------------------------------------------------------------------
     // Version identity (5.1 — Plan Identity & Versioning)
     //
@@ -540,4 +562,36 @@ public enum LineOfBusiness
     /// Veterans Affairs health coverage
     /// </summary>
     VA = 6
+}
+
+/// <summary>
+/// Plan-level family accumulator pooling model (capability 5.7). Mirrors
+/// <see cref="CloudHealthOffice.BenefitEngine.Domain.FamilyAccumulatorModel"/>
+/// in the engine; the service-side mirror exists so the persisted plan
+/// document never takes a runtime dependency on the engine's domain
+/// namespace, matching the boundary stance taken for <see cref="PlanType"/>.
+///
+/// <para>
+/// <see cref="ChoBenefitPlanProvider"/> projects this value onto the
+/// engine's <c>BenefitPlanConfig.FamilyAccumulatorModel</c> at adjudication
+/// time; ACA-cap enforcement on Aggregate plans is gated by
+/// <c>BenefitPlanConfig.IsAcaCapEnforced</c> (set true on republish after
+/// capability 5.7, false on legacy hydration).
+/// </para>
+/// </summary>
+public enum FamilyAccumulatorModel
+{
+    /// <summary>
+    /// Each member has individual deductible / OOP; family aggregate also
+    /// tracked. Individual met → that member's portion satisfied. Family
+    /// met → all members' portions satisfied. Default for legacy plans.
+    /// </summary>
+    Embedded = 1,
+
+    /// <summary>
+    /// One shared family pool. Plus an ACA 45 CFR §156.130 per-member
+    /// cap (enforced at runtime once <c>IsAcaCapEnforced</c> is true on
+    /// the engine config). Common in HDHP / HSA plans.
+    /// </summary>
+    Aggregate = 2
 }

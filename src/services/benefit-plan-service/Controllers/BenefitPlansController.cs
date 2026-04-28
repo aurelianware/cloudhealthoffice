@@ -100,8 +100,15 @@ public class BenefitPlansController : ControllerBase
             return BadRequest(new { field = ex.ParamName, message = ex.Message });
         }
 
-        var created = await _service.CreatePlanAsync(plan, TenantId);
-        return CreatedAtAction(nameof(GetPlan), new { id = created.Id }, created);
+        try
+        {
+            var created = await _service.CreatePlanAsync(plan, TenantId);
+            return CreatedAtAction(nameof(GetPlan), new { id = created.Id }, created);
+        }
+        catch (PlanLimitValidationException ex)
+        {
+            return BadRequest(PlanLimitValidationPayload(ex));
+        }
     }
 
     /// <summary>
@@ -138,6 +145,10 @@ public class BenefitPlansController : ControllerBase
                 return NotFound(new { message = $"Benefit plan '{id}' not found" });
             }
             return Ok(updated);
+        }
+        catch (PlanLimitValidationException ex)
+        {
+            return BadRequest(PlanLimitValidationPayload(ex));
         }
         catch (PlanVersionStateException ex)
         {
@@ -323,8 +334,15 @@ public class BenefitPlansController : ControllerBase
         try { PlanDocumentValidation.ValidateDocuments(plan.Documents); }
         catch (ArgumentException ex) { return BadRequest(new { field = ex.ParamName, message = ex.Message }); }
 
-        var draft = await _service.CreateDraftAsync(plan, TenantId, ResolveActorId());
-        return CreatedAtAction(nameof(GetVersion), new { planId = draft.PlanId, versionId = draft.VersionId }, draft);
+        try
+        {
+            var draft = await _service.CreateDraftAsync(plan, TenantId, ResolveActorId());
+            return CreatedAtAction(nameof(GetVersion), new { planId = draft.PlanId, versionId = draft.VersionId }, draft);
+        }
+        catch (PlanLimitValidationException ex)
+        {
+            return BadRequest(PlanLimitValidationPayload(ex));
+        }
     }
 
     /// <summary>
@@ -333,6 +351,7 @@ public class BenefitPlansController : ControllerBase
     /// </summary>
     [HttpPost("{planId}/versions/{versionId}/publish")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BenefitPlan>> Publish(
@@ -343,6 +362,10 @@ public class BenefitPlansController : ControllerBase
             var published = await _service.PublishVersionAsync(
                 planId, versionId, TenantId, ResolveActorId(), body?.EffectiveDate);
             return Ok(published);
+        }
+        catch (PlanLimitValidationException ex)
+        {
+            return BadRequest(PlanLimitValidationPayload(ex));
         }
         catch (PlanVersionStateException ex) when (ex.IsNotFound)
         {
@@ -360,6 +383,7 @@ public class BenefitPlansController : ControllerBase
     /// </summary>
     [HttpPost("{planId}/amend")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BenefitPlan>> Amend(string planId)
     {
@@ -367,6 +391,10 @@ public class BenefitPlansController : ControllerBase
         {
             var draft = await _service.AmendPublishedPlanAsync(planId, TenantId, ResolveActorId());
             return CreatedAtAction(nameof(GetVersion), new { planId = draft.PlanId, versionId = draft.VersionId }, draft);
+        }
+        catch (PlanLimitValidationException ex)
+        {
+            return BadRequest(PlanLimitValidationPayload(ex));
         }
         catch (PlanVersionStateException ex) when (ex.IsNotFound)
         {
@@ -419,6 +447,18 @@ public class BenefitPlansController : ControllerBase
             return header.ToString();
         return "system";
     }
+
+    private static object PlanLimitValidationPayload(PlanLimitValidationException ex) => new
+    {
+        message = ex.Message,
+        code = "PLAN_LIMIT_ACA_VIOLATION",
+        planId = ex.PlanId,
+        versionId = ex.VersionId,
+        planYear = ex.PlanYear,
+        field = ex.Field,
+        supplied = ex.Supplied,
+        cap = ex.Cap
+    };
 
     private static string SanitizeForLog(string? value)
     {

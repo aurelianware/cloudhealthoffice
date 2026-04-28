@@ -88,7 +88,19 @@ public enum AccumulatorType
     VisitCount,
     DollarLimit,
     DayCount,
-    LifetimeMax
+    LifetimeMax,
+
+    /// <summary>
+    /// Per-member ACA 45 CFR §156.130 individual out-of-pocket cap.
+    /// Only seeded by <see cref="AccumulatorWorkingSet"/> in Aggregate
+    /// mode when <c>BenefitPlanConfig.IsAcaCapEnforced</c> is true. The
+    /// adjudication engine clamps each member's contribution to
+    /// <c>min(family pool remaining, AcaIndividualCap remaining)</c> so a
+    /// single member cannot exhaust the family OOP pool past the ACA
+    /// individual ceiling. See
+    /// docs/architecture/family-accumulator-models.md.
+    /// </summary>
+    AcaIndividualCap
 }
 
 public enum AccumulatorScope

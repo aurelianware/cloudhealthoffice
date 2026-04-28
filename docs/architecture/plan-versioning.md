@@ -195,6 +195,12 @@ dedicated sibling method.
 |-------|-------|----------------|------------|
 | `NetworkTiers[].NetworkId` | provider-service `Organization` (5.3) | `UpdateNetworkTiersAsync(tenantId, planId, tiers, ct)` | 5.5 — NetworkTier as Reference to Organization |
 
+**Identity-bearing additions (NOT exempt):** `BenefitPlan.FamilyAccumulatorModel`
+(BP 5.7) is identity-bearing by design. Changing the model on a
+Published plan affects in-flight adjudications materially and requires
+a new version, just like any cost-sharing change. No bypass method is
+provided.
+
 `UpdateNetworkTiersAsync` resolves the head Published row by chain
 key, then patches the entire `NetworkTiers` collection with a single
 field-scoped op (Cosmos `PatchItemAsync` `Set("/networkTiers", tiers)`;

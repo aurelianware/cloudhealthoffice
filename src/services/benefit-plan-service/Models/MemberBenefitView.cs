@@ -45,6 +45,16 @@ public class MemberBenefitView
     [JsonPropertyName("planVersion")]
     public string PlanVersion { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Plan-level family accumulator pooling model (capability 5.7).
+    /// Surfaced as a string ("Embedded" / "Aggregate") so portal and
+    /// downstream consumers can render the model choice without taking
+    /// a code dependency on the enum. See
+    /// docs/architecture/family-accumulator-models.md.
+    /// </summary>
+    [JsonPropertyName("familyAccumulatorModel")]
+    public string FamilyAccumulatorModel { get; set; } = "Embedded";
+
     [JsonPropertyName("costSharing")]
     public CostSharing CostSharing { get; set; } = new();
 
