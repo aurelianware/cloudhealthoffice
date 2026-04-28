@@ -224,3 +224,7 @@ block alongside the rest of the Sentinel palette.
   (`ProviderIntegrityScoreExt` extension consumer).
 - `fhir-practitionerrole-projection.md` — capability 5.8.
 - `fhir-organization-projection.md` — capability 5.9.
+- `network-tier-organization-reference.md` — benefit-plan capability
+  5.5. Adds `IOrganizationLookupClient`, the second consumer of the
+  `HttpClient("ProviderService")` registration introduced here for
+  `HttpProviderIntegrityGate`.

@@ -517,13 +517,28 @@ public class AdapterNetworkTier
     public string Id { get; set; } = string.Empty;
     public string TierName { get; set; } = string.Empty;
     public int TierLevel { get; set; }
+
+    /// <summary>
+    /// Reference to <c>Organization.OrganizationId</c> in provider-service
+    /// (capability 5.5). Nullable during migration; see
+    /// <see cref="NetworkTier.NetworkId"/>.
+    /// </summary>
+    public string? NetworkId { get; set; }
+
+    /// <summary>
+    /// Legacy embedded roster snapshot. Preserved on the wire during the
+    /// 5.5 migration window. Removed in a follow-up PR.
+    /// </summary>
+    [Obsolete("Use NetworkId. See docs/architecture/network-tier-organization-reference.md.")]
     public List<string> ProviderNpis { get; set; } = new();
 
+#pragma warning disable CS0618 // Round-trip through obsolete field is required during the 5.5 migration window
     public static AdapterNetworkTier From(NetworkTier n) => new()
     {
         Id = n.Id,
         TierName = n.TierName,
         TierLevel = n.TierLevel,
+        NetworkId = n.NetworkId,
         ProviderNpis = n.ProviderNpis.ToList(),
     };
 
@@ -532,8 +547,10 @@ public class AdapterNetworkTier
         Id = Id,
         TierName = TierName,
         TierLevel = TierLevel,
+        NetworkId = NetworkId,
         ProviderNpis = ProviderNpis.ToList(),
     };
+#pragma warning restore CS0618
 }
 
 public class AdapterCostSharing

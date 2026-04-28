@@ -304,6 +304,48 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
         return draftToPublish;
     }
 
+    public async Task<bool> UpdateNetworkTiersAsync(
+        string tenantId,
+        string planId,
+        IReadOnlyList<NetworkTier> tiers,
+        CancellationToken ct = default)
+    {
+        // $set on the NetworkTiers collection only — bypasses the
+        // version-state guard on UpdateAsync. Targets the head
+        // Published version of the chain. Legacy-row hydration rule
+        // mirrors GetLatestPublishedAsync (versionState = Published OR
+        // missing) plus effective-window guards.
+        //
+        // FindOneAndUpdate lets us sort by VersionNumber desc within
+        // the same round-trip as the patch — same idiom as
+        // ProviderRepositoryMongo.UpdateIntegrityProjectionAsync.
+        var asOf = DateTime.UtcNow;
+        var b = Builders<BenefitPlan>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(x => x.VersionState, PlanVersionState.Published),
+            b.Exists(x => x.VersionState, false));
+        var filter = b.And(
+            b.Eq(x => x.TenantId, tenantId),
+            b.Eq(x => x.PlanId, planId),
+            stateFilter,
+            b.Lte(x => x.EffectiveDate, asOf),
+            b.Or(
+                b.Eq(x => x.TerminationDate, null),
+                b.Gte(x => x.TerminationDate, asOf)));
+
+        var update = Builders<BenefitPlan>.Update
+            .Set(x => x.NetworkTiers, tiers.ToList())
+            .Set(x => x.ModifiedDate, DateTime.UtcNow);
+
+        var options = new FindOneAndUpdateOptions<BenefitPlan>
+        {
+            Sort = Builders<BenefitPlan>.Sort.Descending(x => x.VersionNumber),
+            ReturnDocument = ReturnDocument.After,
+        };
+        var updated = await _collection.FindOneAndUpdateAsync(filter, update, options, ct);
+        return updated != null;
+    }
+
     private static BenefitPlan Hydrate(BenefitPlan plan)
     {
         if (string.IsNullOrEmpty(plan.VersionId))

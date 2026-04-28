@@ -67,6 +67,39 @@ public interface IBenefitPlanRepository
     /// writes and log a compensating-action warning.
     /// </summary>
     Task<BenefitPlan> PublishAndSupersedeAsync(BenefitPlan draftToPublish, BenefitPlan? predecessor);
+
+    /// <summary>
+    /// Projection-metadata bypass write: replaces the
+    /// <see cref="BenefitPlan.NetworkTiers"/> collection on the head
+    /// Published version of <paramref name="planId"/> without going
+    /// through <see cref="UpdateAsync"/>. Used by the capability 5.5
+    /// network-tier <c>NetworkId</c> backfill (and only by the
+    /// backfill).
+    ///
+    /// <para>
+    /// The Cosmos impl uses <c>PatchItemAsync</c> with a single
+    /// field-scoped <c>Set</c> op; the Mongo impl uses
+    /// <c>FindOneAndUpdateAsync</c> with a sort on
+    /// <c>VersionNumber</c> and <c>$set</c> so the head row is
+    /// resolved and patched in a single round-trip. No
+    /// <c>PlanVersionEvent</c> is emitted — the operation is a
+    /// projection-metadata refresh, not a chain transition. See
+    /// <c>docs/architecture/plan-versioning.md</c> "Projection
+    /// metadata — exempt from versioning".
+    /// </para>
+    ///
+    /// <para>
+    /// Returns <c>true</c> when the head row was patched, <c>false</c>
+    /// when no head Published row exists for the plan or the row was
+    /// removed between lookup and patch (treated as a soft miss; the
+    /// backfill records it under <c>not_found</c>).
+    /// </para>
+    /// </summary>
+    Task<bool> UpdateNetworkTiersAsync(
+        string tenantId,
+        string planId,
+        IReadOnlyList<NetworkTier> tiers,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -388,6 +421,73 @@ public class BenefitPlanRepository : IBenefitPlanRepository
         }
 
         return draftToPublish;
+    }
+
+    public async Task<bool> UpdateNetworkTiersAsync(
+        string tenantId,
+        string planId,
+        IReadOnlyList<NetworkTier> tiers,
+        CancellationToken ct = default)
+    {
+        // Resolve the head Published row by chain key. PatchItemAsync is
+        // keyed on the per-row document Id, so we look up the row id
+        // first. The lookup uses the same legacy-aware predicate as
+        // GetLatestPublishedAsync — versionState = Published OR missing,
+        // restricted to the active effective window.
+        var asOf = DateTime.UtcNow;
+        var query = new QueryDefinition(
+                "SELECT TOP 1 c.id FROM c WHERE c.tenantId = @tenantId AND c.planId = @planId AND " +
+                "(NOT IS_DEFINED(c.versionState) OR c.versionState = @published) AND " +
+                "(NOT IS_DEFINED(c.effectiveDate) OR c.effectiveDate <= @asOf) AND " +
+                "(NOT IS_DEFINED(c.terminationDate) OR c.terminationDate = null OR c.terminationDate >= @asOf) " +
+                "ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@planId", planId)
+            .WithParameter("@published", PlanVersionState.Published.ToString())
+            .WithParameter("@asOf", asOf);
+
+        string? rowId = null;
+        var iterator = _container.GetItemQueryIterator<HeadIdResult>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        if (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            rowId = page.FirstOrDefault()?.Id;
+        }
+
+        if (string.IsNullOrEmpty(rowId)) return false;
+
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set("/networkTiers", tiers),
+            PatchOperation.Set("/modifiedDate", DateTime.UtcNow),
+        };
+
+        try
+        {
+            await _container.PatchItemAsync<BenefitPlan>(
+                rowId,
+                new PartitionKey(tenantId),
+                ops,
+                cancellationToken: ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Row was deleted between lookup and patch.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Projection of the per-row document id used by the head-row
+    /// lookup in <see cref="UpdateNetworkTiersAsync"/>.
+    /// </summary>
+    private sealed record HeadIdResult
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public string Id { get; init; } = string.Empty;
     }
 
     private static BenefitPlan Hydrate(BenefitPlan plan)

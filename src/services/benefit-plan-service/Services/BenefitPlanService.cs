@@ -62,17 +62,20 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     private readonly IBenefitPlanRepository _repository;
     private readonly IPlanVersionTransitionRepository _transitions;
     private readonly IPlanVersionEventPublisher _events;
+    private readonly INetworkTierSoftValidator _networkTierValidator;
     private readonly ILogger<BenefitPlanServiceImpl> _logger;
 
     public BenefitPlanServiceImpl(
         IBenefitPlanRepository repository,
         IPlanVersionTransitionRepository transitions,
         IPlanVersionEventPublisher events,
+        INetworkTierSoftValidator networkTierValidator,
         ILogger<BenefitPlanServiceImpl> logger)
     {
         _repository = repository;
         _transitions = transitions;
         _events = events;
+        _networkTierValidator = networkTierValidator;
         _logger = logger;
     }
 
@@ -117,6 +120,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         plan.VersionState = PlanVersionState.Published;
         plan.PublishedAt = DateTime.UtcNow;
 
+        _networkTierValidator.Inspect(plan, NetworkTierWriteCaller.CreatePlan);
         return await _repository.CreateAsync(plan);
     }
 
@@ -130,6 +134,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
         plan.TenantId = tenantId;
         plan.UpdatedAt = DateTime.UtcNow;
+        _networkTierValidator.Inspect(plan, NetworkTierWriteCaller.UpdatePlan);
         // Repository raises PlanVersionStateException for Published/Superseded;
         // controller maps to 409.
         return await _repository.UpdateAsync(plan);
@@ -333,6 +338,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         // Legacy IsActive semantics ⇒ Drafts are not active.
         draft.IsActive = false;
 
+        _networkTierValidator.Inspect(draft, NetworkTierWriteCaller.CreateDraft);
         return await _repository.CreateDraftAsync(draft);
     }
 
@@ -389,6 +395,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
             predecessor.IsActive = false;
         }
 
+        _networkTierValidator.Inspect(draft, NetworkTierWriteCaller.PublishAndSupersede);
         await _repository.PublishAndSupersedeAsync(draft, predecessor);
 
         await _transitions.AppendAsync(new PlanVersionTransition
@@ -433,6 +440,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         draft.CreatedAt = DateTime.UtcNow;
         draft.UpdatedAt = DateTime.UtcNow;
 
+        _networkTierValidator.Inspect(draft, NetworkTierWriteCaller.AmendPublished);
         var stored = await _repository.CreateDraftAsync(draft);
 
         await _transitions.AppendAsync(new PlanVersionTransition
@@ -510,12 +518,15 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     private static Benefit CloneBenefit(Benefit b)
         => JsonSerializer.Deserialize<Benefit>(JsonSerializer.Serialize(b, _benefitCloneOpts), _benefitCloneOpts)!;
 
+#pragma warning disable CS0618 // Cloning ProviderNpis preserves the legacy field during the 5.5 migration window
     private static NetworkTier CloneNetworkTier(NetworkTier n) => new()
     {
         TierName = n.TierName,
         TierLevel = n.TierLevel,
+        NetworkId = n.NetworkId,
         ProviderNpis = n.ProviderNpis.ToList()
     };
+#pragma warning restore CS0618
 
     private static CostSharing CloneCostSharing(CostSharing c) => new()
     {
