@@ -180,6 +180,15 @@ builder.Services.AddSingleton<IFhirPractitionerProjector, FhirPractitionerProjec
 // mirrors the 5.7 IFhirPractitionerProjector pattern.
 builder.Services.AddSingleton<IFhirPractitionerRoleProjector, FhirPractitionerRoleProjector>();
 
+// FHIR R4 Organization projection (5.9 — provider-service is the
+// canonical source for the Organization FHIR resource; fhir-service
+// proxies /fhir/r4/Organization/* to FhirOrganizationController). Two
+// source entities (Organization network entity → type=ins; Provider with
+// ProviderType=Organization → type=prov) project into a single FHIR
+// Organization resource type. The projector is stateless (singleton-safe)
+// and mirrors the 5.7 / 5.8 projector pattern.
+builder.Services.AddSingleton<IFhirOrganizationProjector, FhirOrganizationProjector>();
+
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 

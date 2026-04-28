@@ -91,7 +91,19 @@ public static partial class ProviderDirectoryMapper
 
     /// <summary>
     /// Maps an NPI-2 (organizational) NPPES result to a FHIR Organization resource.
+    ///
+    /// <para>
+    /// <b>Deprecated (capability 5.9).</b> The Organization projection is now
+    /// served from provider-service's CHO-canonical
+    /// <c>FhirOrganizationProjector</c>; <c>ProviderDirectoryController</c>
+    /// proxies <c>/fhir/r4/Organization/*</c> there. This helper is retained
+    /// until a subsequent cleanup PR removes all NPPES helpers. The Location
+    /// path (NPPES) retains a dependency on <c>SearchNppesAsync</c> /
+    /// <c>LookupNppesAsync</c>; those are not removed here.
+    /// </para>
     /// </summary>
+    [Obsolete("Replaced by provider-service FhirOrganizationProjector (capability 5.9). " +
+              "Remove in the subsequent NPPES-cleanup PR.")]
     public static FhirOrganization MapNppesToOrganization(NppesResult nppes)
     {
         if (nppes.EnumerationType != "NPI-2")

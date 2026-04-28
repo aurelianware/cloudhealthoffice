@@ -7,9 +7,9 @@ conformance to, what we test against, and where the gaps are.
 
 | IG / profile                                     | Resources covered today                       | Posture                                                 |
 |--------------------------------------------------|-----------------------------------------------|---------------------------------------------------------|
-| US Core 6.1.0                                    | Patient, Practitioner, PractitionerRole       | Required elements asserted by unit tests                |
-| Da Vinci PDex Plan-Net 1.1.0                     | Practitioner, PractitionerRole (subset)       | Fields CHO has data for; extensions deferred to 5.17    |
-| FHIR R4 Bundle (`searchset`)                     | Practitioner, PractitionerRole search          | Hand-built JsonObject, asserted by unit tests           |
+| US Core 6.1.0                                    | Patient, Practitioner, PractitionerRole, Organization | Required elements asserted by unit tests          |
+| Da Vinci PDex Plan-Net 1.1.0                     | Practitioner, PractitionerRole, Organization (subset) | Fields CHO has data for; extensions deferred to 5.17 |
+| FHIR R4 Bundle (`searchset`)                     | Practitioner, PractitionerRole, Organization search | Hand-built JsonObject, asserted by unit tests     |
 | FHIR R4 OperationOutcome                         | All error responses                           | Typed `OperationOutcome` model + hand-built JsonObject  |
 
 `meta.profile` values emitted on each resource:
@@ -23,14 +23,21 @@ conformance to, what we test against, and where the gaps are.
   `http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitionerrole`
   and
   `http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-PractitionerRole`
+- Organization (provider-service, capability 5.9) —
+  `http://hl7.org/fhir/us/core/StructureDefinition/us-core-organization`
+  and
+  `http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-Organization`
+  (two source entities: `Organization` network → `type=ins`;
+  `Provider` with `ProviderType=Organization` → `type=prov`)
 
 ## Phase 2 / deferred
 
 | IG / capability                                  | Status                                                 |
 |--------------------------------------------------|--------------------------------------------------------|
-| Plan-Net 1.1.0 Organization                      | Capability 5.9                                         |
+| Plan-Net 1.1.0 extended Organization extensions  | Capability 5.17 (accessibility, languages, populations)|
+| Plan-Net 1.1.0 Organization.endpoint             | Phase 2 (Plan-Net publishing URLs)                     |
 | Plan-Net 1.1.0 Bundle composite                  | Capability 5.18                                        |
-| Plan-Net extended extensions                     | Capability 5.17                                        |
+| Plan-Net extended extensions (Practitioner)      | Capability 5.17                                        |
 | CMS-0057-F unauthenticated Provider Directory    | Capability 5.19                                        |
 | Inferno test suite (Provider Directory)          | Separate Phase 2 capability                            |
 | US Core 6.1.0 Practitioner.gender                | Capability 5.17 (Provider entity gains the field)      |
@@ -49,6 +56,9 @@ classes:
 - [FhirPractitionerRoleProjectorTests](../../tests/CloudHealthOffice.ProviderService.Tests/Services/FhirPractitionerRoleProjectorTests.cs)
   — provider-service PractitionerRole projection.
 
+- [FhirOrganizationProjectorTests](../../tests/CloudHealthOffice.ProviderService.Tests/Services/FhirOrganizationProjectorTests.cs)
+  — provider-service Organization projection (both source entities).
+
 Conformance regressions surface as failing unit tests. There is no
 network-driven conformance suite in CI yet (see *Inferno* below).
 
@@ -59,7 +69,7 @@ not run any Inferno suite in CI today. The Plan-Net Provider Directory
 suite would validate capability 5.7 + 5.8 + 5.9 + 5.18 once those
 capabilities ship as a Bundle composite. After 5.8, two of the four
 projection paths (Practitioner + PractitionerRole) carry CHO-canonical
-data; Inferno wiring is unblocked once 5.9 ships Organization.
+data; Inferno wiring is unblocked once 5.9 ships Organization (which it now has).
 
 A separate Phase 2 capability wires the Inferno Provider Directory
 suite to CI. Until then, conformance is structural-only via unit
