@@ -127,7 +127,10 @@ public class ProviderRepositoryMongo : IProviderRepository
         ProviderType? providerType,
         bool? acceptingNewPatients,
         int page,
-        int pageSize)
+        int pageSize,
+        string? firstName = null,
+        string? lastName = null,
+        string? city = null)
     {
         var tenantId = GetTenantId();
         var builder = Builders<Provider>.Filter;
@@ -140,8 +143,12 @@ public class ProviderRepositoryMongo : IProviderRepository
 
         if (!string.IsNullOrEmpty(name))
         {
-            // Case-insensitive regex for Name (First, Last, or Org)
-            var regex = new BsonRegularExpression(name, "i");
+            // Case-insensitive regex for Name (First, Last, or Org). Escape
+            // user input so regex metacharacters / pathological patterns
+            // can't be injected into the BSON query — matches the
+            // firstName / lastName / city handling below and the roster
+            // path in ListNetworkRosterAsync.
+            var regex = new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(name), "i");
             var nameFilter = builder.Or(
                 builder.Regex(p => p.FirstName, regex),
                 builder.Regex(p => p.LastName, regex),
@@ -150,9 +157,22 @@ public class ProviderRepositoryMongo : IProviderRepository
             filter = builder.And(filter, nameFilter);
         }
 
+        if (!string.IsNullOrEmpty(firstName))
+        {
+            var rgx = new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(firstName), "i");
+            filter = builder.And(filter, builder.Regex(p => p.FirstName, rgx));
+        }
+
+        if (!string.IsNullOrEmpty(lastName))
+        {
+            var rgx = new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(lastName), "i");
+            filter = builder.And(filter, builder.Regex(p => p.LastName, rgx));
+        }
+
         if (!string.IsNullOrEmpty(specialty))
         {
-            filter = builder.And(filter, builder.Regex(p => p.PrimarySpecialty, new BsonRegularExpression(specialty, "i")));
+            filter = builder.And(filter, builder.Regex(p => p.PrimarySpecialty,
+                new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(specialty), "i")));
         }
 
         if (!string.IsNullOrEmpty(zipCode))
@@ -163,6 +183,12 @@ public class ProviderRepositoryMongo : IProviderRepository
         if (!string.IsNullOrEmpty(state))
         {
             filter = builder.And(filter, builder.Eq(p => p.State, state));
+        }
+
+        if (!string.IsNullOrEmpty(city))
+        {
+            var rgx = new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(city), "i");
+            filter = builder.And(filter, builder.Regex(p => p.City, rgx));
         }
 
         if (providerType.HasValue)

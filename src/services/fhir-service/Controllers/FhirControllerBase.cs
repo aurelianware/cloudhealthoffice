@@ -60,6 +60,20 @@ public abstract class FhirControllerBase : ControllerBase
             OperationOutcome.IssueType.Processing,
             diagnostics));
 
+    /// <summary>
+    /// 502 Bad Gateway with a FHIR <c>OperationOutcome</c>. Used when an
+    /// upstream FHIR service this controller proxies to (e.g.
+    /// provider-service for capability 5.7 Practitioner endpoints) fails
+    /// or returns a non-FHIR error. Diagnostics is the operator-facing
+    /// reason — DO NOT pass through arbitrary upstream response bodies
+    /// here as they may leak internal detail.
+    /// </summary>
+    protected IActionResult FhirBadGateway(string diagnostics)
+        => StatusCode(502, BuildOutcome(
+            OperationOutcome.IssueSeverity.Error,
+            OperationOutcome.IssueType.Transient,
+            diagnostics));
+
     private static OperationOutcome BuildOutcome(
         OperationOutcome.IssueSeverity severity,
         OperationOutcome.IssueType code,

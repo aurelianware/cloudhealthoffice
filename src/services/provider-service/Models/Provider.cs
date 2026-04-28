@@ -6,6 +6,13 @@ namespace ProviderService.Models;
 /// <summary>
 /// Represents a healthcare provider (physician, hospital, facility).
 /// Used for network validation, claims adjudication, and provider directory.
+///
+/// <para>
+/// Individual-type rows (<see cref="ProviderType.Individual"/>) are
+/// projected to a FHIR R4 Practitioner resource by
+/// <see cref="Services.IFhirPractitionerProjector"/> (capability 5.7).
+/// Organization-type rows project as FHIR Organization in capability 5.9.
+/// </para>
 /// </summary>
 public class Provider
 {
