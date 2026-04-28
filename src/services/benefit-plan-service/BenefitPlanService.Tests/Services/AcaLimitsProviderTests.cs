@@ -11,11 +11,23 @@ namespace BenefitPlanService.Tests.Services;
 /// provider validates the file at startup so a malformed deploy fails
 /// fast rather than serve adjudications without enforcement.
 /// </summary>
-public sealed class AcaLimitsProviderTests
+public sealed class AcaLimitsProviderTests : IDisposable
 {
-    private static IAcaLimitsProvider BuildProvider(string fileContent)
+    private readonly List<string> _tempDirs = new();
+
+    public void Dispose()
+    {
+        foreach (var dir in _tempDirs)
+        {
+            try { Directory.Delete(dir, recursive: true); }
+            catch { /* best-effort */ }
+        }
+    }
+
+    private IAcaLimitsProvider BuildProvider(string fileContent)
     {
         var dir = Directory.CreateTempSubdirectory("aca-limits-test").FullName;
+        _tempDirs.Add(dir);
         var path = Path.Combine(dir, "limits.json");
         File.WriteAllText(path, fileContent);
 

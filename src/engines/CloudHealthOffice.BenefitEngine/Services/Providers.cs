@@ -81,7 +81,7 @@ public record BenefitPlanConfig
 
     /// <summary>
     /// ACA 45 CFR §156.130 per-member individual out-of-pocket cap for
-    /// the plan year. Resolved at <see cref="ChoBenefitPlanProvider"/>
+    /// the plan year. Resolved at <see cref="IBenefitPlanProvider"/>
     /// mapping time from the file-backed <c>IAcaLimitsProvider</c>. Only
     /// enforced in Aggregate mode (in Embedded mode the existing
     /// <see cref="IndividualOopMax"/> already constrains members).

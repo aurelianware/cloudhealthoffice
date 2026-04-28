@@ -14,20 +14,23 @@ namespace BenefitPlanService.Services;
 /// changed.
 ///
 /// <para>
-/// <b>Fail-closed.</b> When a plan year is not present in the loaded
-/// file, callers (the validator and the
-/// <c>ChoBenefitPlanProvider</c> mapper) treat the absence as a hard
-/// failure rather than fall back. Better to reject the plan with a
-/// structured error than silently compare against stale or missing
-/// regulatory limits.
+/// <b>Caller behavior by context.</b> When a plan year is not present in
+/// the loaded file, write-time validation treats the absence as a hard
+/// failure and rejects the plan with a structured error rather than
+/// compare against stale or missing regulatory limits. Read-time
+/// projection in <c>ChoBenefitPlanProvider</c> may, for legacy hydration,
+/// log the missing year and continue with a <c>null</c> cap instead of
+/// failing closed.
 /// </para>
 /// </summary>
 public interface IAcaLimitsProvider
 {
     /// <summary>
     /// Look up the §156.130 caps for <paramref name="planYear"/>.
-    /// Returns <c>null</c> when the plan year is not configured;
-    /// callers are expected to reject the plan rather than substitute.
+    /// Returns <c>null</c> when the plan year is not configured; callers
+    /// handle that according to context, with validation rejecting the
+    /// plan and some read-time projection paths remaining best-effort for
+    /// legacy hydration.
     /// </summary>
     AcaLimits? GetForPlanYear(int planYear);
 

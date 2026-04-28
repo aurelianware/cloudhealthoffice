@@ -351,6 +351,7 @@ public class BenefitPlansController : ControllerBase
     /// </summary>
     [HttpPost("{planId}/versions/{versionId}/publish")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BenefitPlan>> Publish(

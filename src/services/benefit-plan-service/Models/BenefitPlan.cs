@@ -579,7 +579,6 @@ public enum LineOfBusiness
 /// capability 5.7, false on legacy hydration).
 /// </para>
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum FamilyAccumulatorModel
 {
     /// <summary>
