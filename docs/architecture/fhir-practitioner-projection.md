@@ -41,8 +41,8 @@ FhirPractitionerProjector  →  IProviderRepository.GetByNPIAsync
 ```
 
 Organization, PractitionerRole, and Location stay on the NPPES path
-in this PR. Capability 5.8 redirects Organization, capability 5.9
-redirects PractitionerRole, then a cleanup PR retires the NPPES code
+in this PR. Capability 5.8 redirects PractitionerRole, capability 5.9
+redirects Organization, then a cleanup PR retires the NPPES code
 entirely and deletes the HYBRID STATE comment block.
 
 ## Service boundaries
