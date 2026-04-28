@@ -12,8 +12,8 @@ namespace ProviderService.Services;
 /// serialization deterministic for tests.
 ///
 /// <para>
-/// Returns <c>null</c> in three cases — caller maps null to FHIR
-/// <c>OperationOutcome</c> 404:
+/// Returns <c>null</c> in any of these cases — caller maps null to FHIR
+/// <c>OperationOutcome</c> 404 (read path) or skips the row (search):
 /// <list type="bullet">
 ///   <item><c>provider.ProviderType != Individual</c>. Organization-type
 ///   providers project as FHIR Organization (capability 5.9), not
@@ -24,6 +24,12 @@ namespace ProviderService.Services;
 ///   without a network reference are invisible to the FHIR surface (same
 ///   posture as the 5.4 roster API). Backfill is per-tenant operational
 ///   work tracked in <c>docs/architecture/network-participation-backfill.md</c>.</item>
+///   <item>The composite-tuple id would exceed the FHIR R4 <c>id</c>
+///   grammar's 64-character limit (e.g. an unusually long
+///   <c>NetworkId</c> stretches the encoding past the cap). Emitting a
+///   non-conformant id would silently break consumers; the row is
+///   omitted instead.</item>
+///   <item>Any required id component (NPI, NetworkId) is missing.</item>
 /// </list>
 /// </para>
 ///
@@ -63,7 +69,10 @@ public interface IFhirPractitionerRoleProjector
     /// <c>NetworkId</c>). Format: <c>{npi}-{lobInt}-{yyyymmdd}-{networkId}</c>.
     /// Returns null when any required component is missing or when the
     /// composite would exceed FHIR R4's 64-character <c>id</c> grammar
-    /// limit; caller emits 422 / skips the row in that case.
+    /// limit. Search callers skip the row in that case; the read path
+    /// surfaces the resulting non-addressable resource as a 404
+    /// <c>OperationOutcome</c> (consistent with the existing
+    /// null-handling shape).
     /// </summary>
     string? EncodeId(NetworkParticipation participation, Provider provider);
 

@@ -60,9 +60,11 @@ public sealed class FhirPractitionerRoleProjector : IFhirPractitionerRoleProject
         {
             // Composite would exceed FHIR R4 id 64-char grammar (a
             // long-form NetworkId stretches the encoding past the cap).
-            // Emitting an invalid id would silently break consumers; skip
-            // the row instead. The controller's read path returns 422
-            // separately when called with such an id.
+            // Emitting an invalid id would silently break consumers, so
+            // the row is treated as non-projectable: search omits the
+            // row, and the read path falls through to the same null-
+            // handling shape as the other cases above (404
+            // OperationOutcome).
             return null;
         }
 

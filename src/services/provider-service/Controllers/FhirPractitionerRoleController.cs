@@ -168,7 +168,8 @@ public class FhirPractitionerRoleController : ControllerBase
                     specialty,
                     page,
                     pageSize,
-                    entries);
+                    entries,
+                    ct);
             }
             else if (!string.IsNullOrEmpty(organizationId))
             {
@@ -177,7 +178,8 @@ public class FhirPractitionerRoleController : ControllerBase
                     specialty,
                     page,
                     pageSize,
-                    entries);
+                    entries,
+                    ct);
             }
             else if (!string.IsNullOrEmpty(specialty))
             {
@@ -185,7 +187,8 @@ public class FhirPractitionerRoleController : ControllerBase
                     specialty,
                     page,
                     pageSize,
-                    entries);
+                    entries,
+                    ct);
             }
             // No filters supplied → empty Bundle. FHIR doesn't require
             // Bundle.entry to be populated and an unbounded directory
@@ -210,8 +213,14 @@ public class FhirPractitionerRoleController : ControllerBase
         string? specialtyFilter,
         int page,
         int pageSize,
-        JsonArray entries)
+        JsonArray entries,
+        CancellationToken ct)
     {
+        // GetByNPIAsync / GetByIdAsync don't take a CancellationToken
+        // today (cross-service cleanup tracked separately). Honor the
+        // caller's cancellation cooperatively at the helper boundary so
+        // an aborted request short-circuits before the next repo hop.
+        ct.ThrowIfCancellationRequested();
         var provider = await _providerRepository.GetByNPIAsync(npi);
         if (provider == null
             || provider.ProviderType != ProviderType.Individual
@@ -246,7 +255,8 @@ public class FhirPractitionerRoleController : ControllerBase
         string? specialtyFilter,
         int page,
         int pageSize,
-        JsonArray entries)
+        JsonArray entries,
+        CancellationToken ct)
     {
         // Reuse the 5.4 roster repository query (Decision 8 — direct
         // repo call, skip INetworkRosterService). NetworkRosterQuery's
@@ -263,10 +273,10 @@ public class FhirPractitionerRoleController : ControllerBase
         };
         if (string.IsNullOrEmpty(query.TenantId))
         {
-            // The InMemory fake reads TenantId from query.TenantId, the
-            // real repository falls back to the same path. Empty tenant
-            // would silently match all rows in the fake; surface as an
-            // empty result.
+            // The InMemory fake reads TenantId from query.TenantId and
+            // would otherwise match all rows when it is empty. The real
+            // Cosmos / Mongo repositories require TenantId and would
+            // throw, so surface this as an empty result instead.
             return;
         }
 
@@ -274,7 +284,8 @@ public class FhirPractitionerRoleController : ControllerBase
         var rows = await _providerRepository.ListNetworkRosterAsync(
             query,
             NetworkRosterSort.NameAsc,
-            skip);
+            skip,
+            ct);
 
         var network = await _organizationRepository.GetByIdAsync(networkId);
 
@@ -302,12 +313,16 @@ public class FhirPractitionerRoleController : ControllerBase
         string specialty,
         int page,
         int pageSize,
-        JsonArray entries)
+        JsonArray entries,
+        CancellationToken ct)
     {
         // Specialty-only search routes through IProviderRepository.SearchAsync
         // (the existing 5.7 search shape). Per provider, we emit one
         // PractitionerRole per network participation with a populated
-        // NetworkId.
+        // NetworkId. SearchAsync / GetByIdAsync don't take a
+        // CancellationToken today; honor cancellation cooperatively at
+        // the helper boundary.
+        ct.ThrowIfCancellationRequested();
         var providers = await _providerRepository.SearchAsync(
             name: null,
             specialty: specialty,
