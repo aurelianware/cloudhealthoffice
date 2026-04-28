@@ -18,7 +18,7 @@ public sealed class FhirPractitionerProjector : IFhirPractitionerProjector
         ArgumentNullException.ThrowIfNull(provider);
 
         // Organization-type providers project as FHIR Organization
-        // (capability 5.9), not Practitioner. Caller maps null to 404.
+        // (capability 5.8), not Practitioner. Caller maps null to 404.
         if (provider.ProviderType == ProviderType.Organization) return null;
 
         var practitioner = new JsonObject

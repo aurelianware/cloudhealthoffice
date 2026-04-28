@@ -12,7 +12,7 @@ namespace ProviderService.Services;
 ///
 /// <para>
 /// Returns <c>null</c> when called with <see cref="ProviderType.Organization"/>
-/// — those project as FHIR Organization (capability 5.9), not Practitioner.
+/// — those project as FHIR Organization (capability 5.8), not Practitioner.
 /// Caller maps null to FHIR <c>OperationOutcome</c> 404.
 /// </para>
 ///

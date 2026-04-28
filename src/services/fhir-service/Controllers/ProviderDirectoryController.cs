@@ -73,6 +73,11 @@ public class ProviderDirectoryController : FhirControllerBase
 
     private async Task<IActionResult> ProxyPractitionerAsync(string path, CancellationToken ct)
     {
+        // `path` is derived from the user-supplied URL / query string and
+        // flows into structured-log fields below. Sanitize once up front
+        // so all log sites share the same scrubbed value (CodeQL: log
+        // entries created from user input).
+        var loggablePath = SanitizeForLog(path);
         try
         {
             using var upstream = await _providerServiceClient.GetAsync(path, ct);
@@ -88,7 +93,7 @@ public class ProviderDirectoryController : FhirControllerBase
             {
                 _logger.LogWarning(
                     "provider-service Practitioner upstream returned {Status} for {Path}",
-                    (int)upstream.StatusCode, path);
+                    (int)upstream.StatusCode, loggablePath);
                 return FhirBadGateway("Practitioner upstream is unavailable.");
             }
 
@@ -101,12 +106,23 @@ public class ProviderDirectoryController : FhirControllerBase
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "provider-service Practitioner proxy hop failed for {Path}", path);
+            _logger.LogWarning(ex, "provider-service Practitioner proxy hop failed for {Path}", loggablePath);
             return FhirBadGateway("Practitioner upstream is unreachable.");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The caller cancelled (client disconnect, server abort). Don't
+            // pretend the upstream timed out — propagate cancellation so
+            // the request pipeline returns its standard 499/aborted shape
+            // and we don't pollute logs / metrics with phantom 502s.
+            throw;
         }
         catch (TaskCanceledException ex)
         {
-            _logger.LogWarning(ex, "provider-service Practitioner proxy hop timed out for {Path}", path);
+            // HttpClient surfaces its own configured timeout as
+            // TaskCanceledException; ct was NOT cancelled (handled above).
+            // That genuinely is an upstream-too-slow → 502.
+            _logger.LogWarning(ex, "provider-service Practitioner proxy hop timed out for {Path}", loggablePath);
             return FhirBadGateway("Practitioner upstream timed out.");
         }
     }

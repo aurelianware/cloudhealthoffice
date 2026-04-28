@@ -112,10 +112,19 @@ public class FhirPractitionerController : ControllerBase
 
         // Resolve identifier=NPI:value or identifier=value to the npi
         // shortcut. FHIR token parameters use system|value or value alone.
+        // An `identifier` whose system is something OTHER than NPI is a
+        // caller error for this directory — we only index by NPI today —
+        // so reject with 400 rather than silently falling back to a
+        // broad search (FHIR token semantics say: don't ignore filters).
         var resolvedNpi = npi;
         if (string.IsNullOrEmpty(resolvedNpi) && !string.IsNullOrEmpty(identifier))
         {
             resolvedNpi = ParseNpiIdentifier(identifier);
+            if (string.IsNullOrEmpty(resolvedNpi))
+            {
+                return FhirOperationOutcome(400, "invalid",
+                    $"identifier '{SanitizeForLog(identifier)}' is not a recognized NPI token; supply system http://hl7.org/fhir/sid/us-npi or no system.");
+            }
         }
 
         if (!string.IsNullOrEmpty(resolvedNpi))
@@ -191,20 +200,23 @@ public class FhirPractitionerController : ControllerBase
         };
     }
 
-    private JsonObject WrapEntry(JsonObject resource)
+    private static JsonObject WrapEntry(JsonObject resource)
     {
-        var npi = resource["id"]?.GetValue<string>() ?? string.Empty;
-        var entry = new JsonObject
+        // Bundle.entry.fullUrl is OPTIONAL in FHIR R4 (see
+        // http://hl7.org/fhir/R4/bundle-definitions.html#Bundle.entry.fullUrl).
+        // We deliberately omit it: this controller is reached either
+        // directly OR via fhir-service's Practitioner proxy, in which case
+        // HttpContext.Request.Host is the *internal* provider-service
+        // hostname and would leak into the response. fhir-service's proxy
+        // does not yet rewrite forwarded headers and we don't want
+        // Bundle entries to look different depending on which path was
+        // taken. Consumers can construct Practitioner/{id} references
+        // themselves using the resource's `id` field.
+        return new JsonObject
         {
             ["resource"] = resource,
             ["search"] = new JsonObject { ["mode"] = "match" }
         };
-        if (!string.IsNullOrEmpty(npi))
-        {
-            var req = HttpContext.Request;
-            entry["fullUrl"] = $"{req.Scheme}://{req.Host}/fhir/Practitioner/{npi}";
-        }
-        return entry;
     }
 
     private IActionResult FhirOperationOutcome(int status, string code, string diagnostics)

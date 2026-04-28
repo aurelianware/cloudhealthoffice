@@ -174,6 +174,45 @@ public class FhirPractitionerControllerTests
             .Should().Be(expectedMatchingNpi);
     }
 
+    [Theory]
+    [InlineData("urn:other:system|1234567890")]
+    [InlineData("http://other-system.example.com|1234567890")]
+    public async Task SearchPractitioners_identifier_with_unrecognized_system_returns_400(
+        string identifier)
+    {
+        // Per FHIR token semantics, an identifier supplied with a system
+        // we don't index should NOT silently fall through to a broad
+        // search — that would ignore a caller-supplied filter.
+        await _repository.CreateAsync(IndividualProvider("1234567890", "Jane", "Doe"));
+        var result = await _controller.SearchPractitioners(
+            npi: null, identifier: identifier, given: null, family: null,
+            city: null, state: null, postalCode: null, specialty: null);
+        var content = result.Should().BeOfType<ContentResult>().Subject;
+        content.StatusCode.Should().Be(400);
+        var body = ParseFhirContent(result);
+        body["resourceType"]!.GetValue<string>().Should().Be("OperationOutcome");
+        body["issue"]!.AsArray().Single()!["code"]!.GetValue<string>().Should().Be("invalid");
+    }
+
+    [Fact]
+    public async Task SearchPractitioners_bundle_entries_omit_fullUrl()
+    {
+        // Bundle.entry.fullUrl is optional in FHIR R4. provider-service
+        // omits it because the response is reachable directly OR via
+        // fhir-service's proxy; emitting fullUrl from HttpContext.Request
+        // would leak the internal provider-service host through the
+        // proxy path.
+        await _repository.CreateAsync(IndividualProvider("1234567890", "Jane", "Doe"));
+        var result = await _controller.SearchPractitioners(
+            npi: "1234567890", identifier: null, given: null, family: null,
+            city: null, state: null, postalCode: null, specialty: null);
+        var bundle = ParseFhirContent(result);
+        var entry = bundle["entry"]!.AsArray().Single()!.AsObject();
+        entry.ContainsKey("fullUrl").Should().BeFalse();
+        entry.ContainsKey("resource").Should().BeTrue();
+        entry["search"]!["mode"]!.GetValue<string>().Should().Be("match");
+    }
+
     [Fact]
     public async Task SearchPractitioners_filters_by_family_and_given()
     {

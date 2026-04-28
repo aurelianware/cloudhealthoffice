@@ -143,8 +143,12 @@ public class ProviderRepositoryMongo : IProviderRepository
 
         if (!string.IsNullOrEmpty(name))
         {
-            // Case-insensitive regex for Name (First, Last, or Org)
-            var regex = new BsonRegularExpression(name, "i");
+            // Case-insensitive regex for Name (First, Last, or Org). Escape
+            // user input so regex metacharacters / pathological patterns
+            // can't be injected into the BSON query — matches the
+            // firstName / lastName / city handling below and the roster
+            // path in ListNetworkRosterAsync.
+            var regex = new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(name), "i");
             var nameFilter = builder.Or(
                 builder.Regex(p => p.FirstName, regex),
                 builder.Regex(p => p.LastName, regex),
@@ -167,7 +171,8 @@ public class ProviderRepositoryMongo : IProviderRepository
 
         if (!string.IsNullOrEmpty(specialty))
         {
-            filter = builder.And(filter, builder.Regex(p => p.PrimarySpecialty, new BsonRegularExpression(specialty, "i")));
+            filter = builder.And(filter, builder.Regex(p => p.PrimarySpecialty,
+                new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(specialty), "i")));
         }
 
         if (!string.IsNullOrEmpty(zipCode))
