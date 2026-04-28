@@ -399,6 +399,18 @@ public sealed class InMemoryProviderRepository : IProviderRepository
         return Task.FromResult<IReadOnlyList<string>>(distinct);
     }
 
+    public Task<long> CountStaleProvidersAsync(
+        string tenantId,
+        DateTimeOffset staleBefore,
+        CancellationToken ct = default)
+    {
+        var count = _docs
+            .Count(d => d.TenantId == tenantId
+                && d.VersionState == ProviderVersionState.Active
+                && (d.LastVerifiedAt == null || d.LastVerifiedAt < staleBefore));
+        return Task.FromResult((long)count);
+    }
+
     /// <summary>
     /// Set true on the next call to simulate a Cosmos PreconditionFailed
     /// (etag conflict) so backfill-service tests can exercise the

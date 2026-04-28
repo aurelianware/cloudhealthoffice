@@ -211,8 +211,11 @@ For roster operators:
   populated tenants will have some null and some populated rows, and
   nulls-last sort handles both cleanly.
 - Live HTTP fetch via `HttpProviderIntegrityGate` in
-  `benefit-plan-service` remains available for adjudication —
-  fresh-or-cached migration is capability 5.10's decision.
+  `benefit-plan-service` migrated to the cached-or-live pattern in
+  capability 5.10 — see `docs/architecture/integrity-score-consumption.md`
+  for the canonical decision tree. The roster path was already on the
+  canonical cached-projection path; 5.10's migration affects only the
+  adjudication critical path, leaving roster behavior unchanged.
 
 ## Deferred — distance sort
 

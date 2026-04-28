@@ -8,11 +8,32 @@ namespace BenefitPlanService.Services;
 /// this gate screens for federal program exclusions and NPI deactivation.
 /// A provider could pass enrollment validation but be on the OIG exclusion
 /// list — this gate catches that.
+///
+/// <para>
+/// The <c>HttpProviderIntegrityGate</c> implementation reads the cached
+/// projection on <c>Provider.IntegrityScore</c> by default
+/// (provider-service) and only falls back to the live
+/// provider-verification-service when the cached score is null or stale,
+/// or when callers explicitly request a fresh score. See
+/// <c>docs/architecture/integrity-score-consumption.md</c>.
+/// </para>
 /// </summary>
 public interface IProviderIntegrityGate
 {
+    /// <summary>
+    /// Resolve the integrity result for <paramref name="npi"/>.
+    /// </summary>
+    /// <param name="npi">Provider NPI.</param>
+    /// <param name="forceRefresh">
+    /// When <c>true</c> the cached-projection short-circuit is bypassed
+    /// and the gate calls <c>provider-verification-service</c> directly.
+    /// Default <c>false</c>; callers that need fresh-only semantics
+    /// (admin investigations, on-demand operator action) opt in.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
     Task<ProviderIntegrityResult> CheckAsync(
         string npi,
+        bool forceRefresh = false,
         CancellationToken ct = default);
 }
 

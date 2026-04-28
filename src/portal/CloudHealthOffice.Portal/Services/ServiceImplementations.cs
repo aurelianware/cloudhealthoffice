@@ -735,6 +735,28 @@ public class ProviderService : IProviderService
         }
     }
 
+    public async Task<ProviderIntegrityRefreshResult?> RefreshProviderVerificationAsync(string providerId)
+    {
+        var baseUrl = _configuration["Services:ProviderService"];
+        try
+        {
+            // Capability 5.10 — on-demand refresh routes through the
+            // existing 5.4.5 endpoint (POST /providers/{id}/verification/refresh
+            // on ProvidersController, NOT IntegrityProjectionAdminController).
+            var response = await _httpClient.PostAsync(
+                $"{baseUrl}/providers/{providerId}/verification/refresh",
+                content: null);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ProviderIntegrityRefreshResult>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Provider Service");
+            throw new ServiceUnavailableException("Provider Service", ex);
+        }
+    }
+
     public async Task<List<string>> GetSpecialtiesAsync()
     {
         var baseUrl = _configuration["Services:ProviderService"];

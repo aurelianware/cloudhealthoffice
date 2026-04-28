@@ -115,10 +115,20 @@ public sealed class IntegrityProjectionWorker : BackgroundService
             totalFailed += result.Failed;
             totalSkipped += result.Skipped;
 
+            // Capability 5.10 — staleness telemetry piggybacks on the
+            // existing sweep. The reporter updates the per-tenant
+            // gauge snapshot read by ChoMetrics.ProviderIntegrityScoreStaleCount.
+            // Decision 3: no new hosted service; we run the count once
+            // per sweep cycle so the gauge reflects state at sweep
+            // boundaries rather than chasing every projection write.
+            var staleness = scope.ServiceProvider
+                .GetRequiredService<IIntegrityProjectionStalenessReporter>();
+            var staleCount = await staleness.ReportTenantAsync(tenantId, ct);
+
             _logger.LogInformation(
-                "IntegrityProjectionWorker tenant sweep: tenant={Tenant} inspected={Inspected} patched={Patched} skipped={Skipped} failed={Failed} window={Window}",
+                "IntegrityProjectionWorker tenant sweep: tenant={Tenant} inspected={Inspected} patched={Patched} skipped={Skipped} failed={Failed} stale={Stale} window={Window}",
                 Sanitize(tenantId), result.Inspected, result.Patched,
-                result.Skipped, result.Failed, result.RefreshWindow);
+                result.Skipped, result.Failed, staleCount, result.RefreshWindow);
         }
 
         _logger.LogInformation(

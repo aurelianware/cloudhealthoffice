@@ -147,6 +147,10 @@ builder.Services.AddHttpClient<IProviderVerificationClient, HttpProviderVerifica
 })
 .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<IProviderIntegrityProjectionService, ProviderIntegrityProjectionService>();
+// Capability 5.10 — per-tenant staleness telemetry that piggybacks on the
+// worker sweep. No new hosted service; the reporter is a scoped helper
+// invoked from inside IntegrityProjectionWorker's per-tenant loop.
+builder.Services.AddScoped<IIntegrityProjectionStalenessReporter, IntegrityProjectionStalenessReporter>();
 builder.Services.AddHostedService<IntegrityProjectionWorker>();
 
 // Network-participation panel-gating backfill (5.5 — one-shot
