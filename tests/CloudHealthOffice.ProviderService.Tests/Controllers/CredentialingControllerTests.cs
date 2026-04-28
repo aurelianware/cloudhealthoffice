@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProviderService.Controllers;
 using ProviderService.Models;
+using ProviderService.Repositories;
 using ProviderService.Services;
 
 namespace CloudHealthOffice.ProviderService.Tests.Controllers;
