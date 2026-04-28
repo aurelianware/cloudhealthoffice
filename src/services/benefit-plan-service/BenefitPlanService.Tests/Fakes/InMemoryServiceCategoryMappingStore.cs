@@ -50,6 +50,7 @@ internal sealed class InMemoryServiceCategoryMappingStore :
     {
         CreateCallCount++;
         if (mapping.Id == Guid.Empty) mapping.Id = Guid.NewGuid();
+        if (mapping.CreatedAt == default) mapping.CreatedAt = DateTimeOffset.UtcNow;
         _mappings.Add(Clone(mapping));
         return Task.FromResult(Clone(mapping));
     }
@@ -95,8 +96,11 @@ internal sealed class InMemoryServiceCategoryMappingStore :
 
     private IReadOnlyList<ServiceCategoryMapping> Filter(string tenantId, Guid? benefitPlanId)
     {
+        // Match the production backends' newest-first ordering so resolver
+        // tests see the same iteration order in-memory as in Cosmos / Mongo.
         return _mappings
             .Where(m => m.TenantId == tenantId && m.BenefitPlanId == benefitPlanId)
+            .OrderByDescending(m => m.CreatedAt)
             .Select(Clone)
             .ToList();
     }
@@ -122,6 +126,7 @@ internal sealed class InMemoryServiceCategoryMappingStore :
         EffectiveStart = m.EffectiveStart,
         EffectiveEnd = m.EffectiveEnd,
         IsActive = m.IsActive,
+        CreatedAt = m.CreatedAt,
     };
 
     private static SystemDefaultsAppliedRecord Clone(SystemDefaultsAppliedRecord r) => new()

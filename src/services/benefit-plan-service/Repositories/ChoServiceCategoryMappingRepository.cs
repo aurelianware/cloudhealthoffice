@@ -94,6 +94,10 @@ public sealed class ChoServiceCategoryMappingRepository :
         {
             mapping.Id = Guid.NewGuid();
         }
+        if (mapping.CreatedAt == default)
+        {
+            mapping.CreatedAt = DateTimeOffset.UtcNow;
+        }
         var doc = MappingDocument.From(mapping);
         var response = await _container.CreateItemAsync(
             doc, new PartitionKey(mapping.TenantId), cancellationToken: ct);
@@ -139,14 +143,18 @@ public sealed class ChoServiceCategoryMappingRepository :
         // Tenant defaults: BenefitPlanId is unset on the document. Plan
         // overrides: BenefitPlanId equals the supplied value. The
         // <c>documentType</c> filter excludes the seeder's
-        // SystemDefaultsApplied sibling document.
+        // SystemDefaultsApplied sibling document. Newest-first ordering
+        // ensures the resolver's first-match-wins iteration prefers a
+        // freshly seeded row over an older row for the same serviceTypeCode
+        // (deterministic resolution after seeder version-bump re-apply).
         QueryDefinition query;
         if (benefitPlanId is null)
         {
             query = new QueryDefinition(
                 "SELECT * FROM c WHERE c.tenantId = @tenantId " +
                 "AND c.documentType = @docType " +
-                "AND (NOT IS_DEFINED(c.benefitPlanId) OR c.benefitPlanId = null)")
+                "AND (NOT IS_DEFINED(c.benefitPlanId) OR c.benefitPlanId = null) " +
+                "ORDER BY c.createdAt DESC")
                 .WithParameter("@tenantId", tenantId)
                 .WithParameter("@docType", DocumentTypeMapping);
         }
@@ -155,7 +163,8 @@ public sealed class ChoServiceCategoryMappingRepository :
             query = new QueryDefinition(
                 "SELECT * FROM c WHERE c.tenantId = @tenantId " +
                 "AND c.documentType = @docType " +
-                "AND c.benefitPlanId = @planId")
+                "AND c.benefitPlanId = @planId " +
+                "ORDER BY c.createdAt DESC")
                 .WithParameter("@tenantId", tenantId)
                 .WithParameter("@docType", DocumentTypeMapping)
                 .WithParameter("@planId", benefitPlanId.Value.ToString());
@@ -248,6 +257,9 @@ public sealed class ChoServiceCategoryMappingRepository :
         [System.Text.Json.Serialization.JsonPropertyName("isActive")]
         public bool IsActive { get; set; } = true;
 
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        public DateTimeOffset CreatedAt { get; set; }
+
         public static MappingDocument From(ServiceCategoryMapping m) => new()
         {
             Id = m.Id.ToString(),
@@ -259,6 +271,7 @@ public sealed class ChoServiceCategoryMappingRepository :
             EffectiveStart = m.EffectiveStart,
             EffectiveEnd = m.EffectiveEnd,
             IsActive = m.IsActive,
+            CreatedAt = m.CreatedAt,
         };
 
         public ServiceCategoryMapping ToEntity() => new()
@@ -272,6 +285,7 @@ public sealed class ChoServiceCategoryMappingRepository :
             EffectiveStart = EffectiveStart,
             EffectiveEnd = EffectiveEnd,
             IsActive = IsActive,
+            CreatedAt = CreatedAt,
         };
     }
 

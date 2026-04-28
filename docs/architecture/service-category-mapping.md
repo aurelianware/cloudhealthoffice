@@ -50,8 +50,13 @@ ships:
 
 ## Storage
 
-**Document shape**: one document per `(tenantId, benefitPlanId?, serviceTypeCode)`
-with the matching `ProcedureCodeRule` list embedded. Tenant-default
+**Document shape**: mapping documents are keyed by their per-row `Id`
+(GUID) rather than the logical tuple `(tenantId, benefitPlanId?, serviceTypeCode)`.
+The tuple is **not** a hard uniqueness constraint — multiple rows can
+exist for the same tuple after a seeder version-bump re-apply (see
+[Seed re-application](#seed-re-application) below). The resolver iterates
+mappings in **newest-first order** (`createdAt DESC`), so first-match-wins
+naturally prefers the most recent row when duplicates exist. Tenant-default
 mappings have `benefitPlanId = null`. The same collection hosts a
 `documentType="system-defaults-applied"` sibling document used by the
 seeder for per-tenant idempotency tracking.
@@ -122,12 +127,26 @@ via the seed admin endpoint.
 
 The bundle carries a positive integer `version`. The seeder records the
 last applied version per tenant in a `SystemDefaultsApplied` document
-and skips reruns at the same version. To re-apply with bundle changes,
-bump `version` and trigger the seed admin endpoint for affected
-tenants. Re-application **inserts new mapping rows alongside existing
-seeded rows** — operator-authored overrides are preserved, and
-operators clean up superseded seed rows manually via the `DELETE`
-admin endpoint when needed.
+and skips reruns at the same version.
+
+### Seed re-application
+
+To re-apply with bundle changes, bump `version` and trigger the seed
+admin endpoint for affected tenants. Re-application **inserts new
+mapping rows alongside existing seeded rows**; it does **not** replace
+or upsert prior rows — that is a deliberate choice so operator-
+authored overrides aren't silently overwritten on a version bump.
+
+Because this leaves multiple rows for the same `serviceTypeCode` after a
+re-apply, the storage backends sort `GetMappingsAsync` results by the
+mapping's `CreatedAt` field **descending**. The resolver iterates the
+result list with first-match-wins semantics, so a freshly seeded row
+naturally wins against an older row for the same procedure code. The
+ordering is deterministic across pods and across Cosmos vs Mongo.
+
+Operators clean up superseded seed rows manually via the `DELETE`
+admin endpoint when the duplicate-row debris becomes operationally
+inconvenient.
 
 See [`schemas/service-category-mappings/README.md`](../../schemas/service-category-mappings/README.md)
 for bundle authoring conventions.
@@ -178,6 +197,14 @@ effective-date filtering into `ServiceCategoryResolver` once the X12
 coherence loop closes and operators start authoring time-bounded
 mappings (e.g. annual CMS quarterly updates).
 
+The entity also carries `CreatedAt` (DateTimeOffset, populated by the
+storage backends on insert if unset). Unlike the effective-date fields
+this one **is** consumed today — the storage backends sort by
+`CreatedAt DESC` so the resolver's first-match-wins iteration is
+deterministic across seeder version-bump re-applies. `UpdatedBy`,
+`UpdatedAt`, and operator audit fields remain deferred to a service-
+wide audit-pattern initiative.
+
 ## Out of scope for BP 5.6
 
 - **Bulk import / validate endpoints** — file-format UX, partial-failure
@@ -185,8 +212,10 @@ mappings (e.g. annual CMS quarterly updates).
   surface unblocks the common authoring case.
 - **Effective-date resolver filtering** — fields are present, the
   resolver doesn't filter on them yet (deferred to BP 5.10).
-- **Audit fields** (`UpdatedBy`, `UpdatedAt`, `CreatedAt`) — deferred
-  to a service-wide audit-pattern initiative.
+- **Audit fields** (`UpdatedBy`, `UpdatedAt`) — deferred to a service-
+  wide audit-pattern initiative. `CreatedAt` is in scope (added in BP
+  5.6 to drive deterministic resolver ordering across re-applies — see
+  "Seed re-application" above).
 - **Version chain on mapping documents** — mappings are operational
   reference data; updates are last-write-wins with operational audit
   via structured request logging.

@@ -1,3 +1,4 @@
+using System.Globalization;
 using BenefitPlanService.Models;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Services;
@@ -75,6 +76,10 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
         {
             mapping.Id = Guid.NewGuid();
         }
+        if (mapping.CreatedAt == default)
+        {
+            mapping.CreatedAt = DateTimeOffset.UtcNow;
+        }
         var doc = MappingDocument.From(mapping);
         await _mappings.InsertOneAsync(doc, cancellationToken: ct);
         return doc.ToEntity();
@@ -124,7 +129,12 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
             b.Eq(x => x.DocumentType, DocumentTypeMapping),
             planFilter);
 
-        var docs = await _mappings.Find(filter).ToListAsync(ct);
+        // Newest-first ordering matches the Cosmos backend so the resolver's
+        // first-match-wins iteration prefers freshly seeded rows over older
+        // rows for the same serviceTypeCode after a seeder version-bump.
+        var docs = await _mappings.Find(filter)
+            .SortByDescending(x => x.CreatedAt)
+            .ToListAsync(ct);
         return docs.Select(d => d.ToEntity()).ToList();
     }
 
@@ -132,8 +142,13 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
 
     public async Task<SystemDefaultsAppliedRecord?> GetAsync(string tenantId, CancellationToken ct = default)
     {
+        // Filter on the deterministic _id (`system-defaults-applied:{tenant}`)
+        // alongside tenantId+documentType. The _id alone is sufficient for
+        // uniqueness; the extra predicates defend against collisions if a
+        // future schema change re-uses the id format.
         var b = Builders<AppliedRecordDocument>.Filter;
         var filter = b.And(
+            b.Eq(x => x.Id, AppliedRecordDocId(tenantId)),
             b.Eq(x => x.TenantId, tenantId),
             b.Eq(x => x.DocumentType, DocumentTypeSystemDefaultsApplied));
         var doc = await _appliedRecords.Find(filter).FirstOrDefaultAsync(ct);
@@ -142,14 +157,23 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
 
     public async Task UpsertAsync(SystemDefaultsAppliedRecord record, CancellationToken ct = default)
     {
+        // Filter must include _id so ReplaceOneAsync targets the correct
+        // document and Mongo doesn't refuse the replace because the
+        // upserted document's _id differs from a tenant+documentType match
+        // resolved by an alternative filter.
         var b = Builders<AppliedRecordDocument>.Filter;
+        var docId = AppliedRecordDocId(record.TenantId);
         var filter = b.And(
+            b.Eq(x => x.Id, docId),
             b.Eq(x => x.TenantId, record.TenantId),
             b.Eq(x => x.DocumentType, DocumentTypeSystemDefaultsApplied));
         var doc = AppliedRecordDocument.From(record);
         await _appliedRecords.ReplaceOneAsync(
             filter, doc, new ReplaceOptions { IsUpsert = true }, ct);
     }
+
+    private static string AppliedRecordDocId(string tenantId)
+        => $"system-defaults-applied:{tenantId}";
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
@@ -195,6 +219,9 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
         [BsonElement("isActive")]
         public bool IsActive { get; set; } = true;
 
+        [BsonElement("createdAt")]
+        public DateTimeOffset CreatedAt { get; set; }
+
         public static MappingDocument From(ServiceCategoryMapping m) => new()
         {
             Id = m.Id.ToString(),
@@ -203,9 +230,10 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
             ServiceTypeCode = m.ServiceTypeCode,
             ServiceTypeDescription = m.ServiceTypeDescription,
             Rules = m.Rules,
-            EffectiveStart = m.EffectiveStart?.ToString("yyyy-MM-dd"),
-            EffectiveEnd = m.EffectiveEnd?.ToString("yyyy-MM-dd"),
+            EffectiveStart = m.EffectiveStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            EffectiveEnd = m.EffectiveEnd?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             IsActive = m.IsActive,
+            CreatedAt = m.CreatedAt,
         };
 
         public ServiceCategoryMapping ToEntity() => new()
@@ -219,10 +247,18 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
             EffectiveStart = ParseDateOrNull(EffectiveStart),
             EffectiveEnd = ParseDateOrNull(EffectiveEnd),
             IsActive = IsActive,
+            CreatedAt = CreatedAt,
         };
 
+        // ParseExact + InvariantCulture ensures the persisted ISO-8601
+        // string round-trips identically regardless of the host's current
+        // culture. DateOnly.Parse without an explicit provider is
+        // culture-sensitive and can fail or silently misparse in cultures
+        // where '-' is not the canonical date separator.
         private static DateOnly? ParseDateOrNull(string? s)
-            => string.IsNullOrEmpty(s) ? null : DateOnly.Parse(s);
+            => string.IsNullOrEmpty(s)
+                ? null
+                : DateOnly.ParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
     [BsonIgnoreExtraElements]

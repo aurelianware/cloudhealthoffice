@@ -24,10 +24,13 @@ namespace BenefitPlanService.HostedServices;
 ///
 /// <para>
 /// <b>Tenant discovery.</b> The seeder does not enumerate tenants on its
-/// own; it discovers tenants on demand the first time
-/// <see cref="EnsureTenantSeededAsync"/> is invoked (lazy) by the
-/// <c>BenefitPlanLazySeedTrigger</c> middleware. The hosted service's
-/// startup pass only validates the seed file and warms the parsed bundle.
+/// own; the hosted service's startup pass only loads and validates the
+/// seed bundle. Per-tenant application is operator-triggered via the
+/// admin write API:
+/// <c>POST /api/v1/service-category-mappings/seed-system-defaults</c>
+/// (with the <c>X-Tenant-ID</c> header), which calls
+/// <see cref="EnsureTenantSeededAsync"/>. There is no middleware lazy-
+/// trigger today.
 /// </para>
 ///
 /// <para>

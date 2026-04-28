@@ -104,11 +104,14 @@ triggered via the admin write controller (config-gated by
 For pilot onboarding the operator runs:
 
 ```
-POST /api/v1/admin/service-category-mappings/seed-system-defaults?tenantId=<tenant>
+POST /api/v1/service-category-mappings/seed-system-defaults
+X-Tenant-ID: <tenant>
 ```
 
-This is idempotent — repeated calls at the same bundle version are
-no-ops.
+The tenant is resolved from the `X-Tenant-ID` header by the standard
+benefit-plan-service tenant middleware (no `tenantId` query parameter,
+no `/admin` path prefix). The call is idempotent — repeated calls at
+the same bundle version are no-ops.
 
 ## Bundle source
 

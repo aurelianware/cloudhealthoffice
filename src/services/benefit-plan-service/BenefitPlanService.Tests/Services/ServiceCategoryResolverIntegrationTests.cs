@@ -103,6 +103,58 @@ public sealed class ServiceCategoryResolverIntegrationTests
     }
 
     [Fact]
+    public async Task Newest_Mapping_Wins_When_Multiple_Rows_Share_ServiceTypeCode()
+    {
+        // Mirrors the seeder version-bump re-apply scenario: two seed rows
+        // for the same serviceTypeCode coexist in the store. The newer row
+        // (later CreatedAt) must win deterministically, so the resolver's
+        // first-match-wins semantics produce stable adjudication regardless
+        // of insertion order surfaced by the underlying store.
+        var (resolver, write) = Build();
+
+        var older = new ServiceCategoryMapping
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            BenefitPlanId = null,
+            ServiceTypeCode = "Office Visit (v1)",
+            ServiceTypeDescription = "v1",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-30),
+            Rules = new List<ProcedureCodeRule>
+            {
+                new() { Priority = 10, CodeType = "CPT", CodePattern = "99213" },
+            },
+        };
+        var newer = new ServiceCategoryMapping
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            BenefitPlanId = null,
+            ServiceTypeCode = "Office Visit (v2)",
+            ServiceTypeDescription = "v2",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Rules = new List<ProcedureCodeRule>
+            {
+                new() { Priority = 10, CodeType = "CPT", CodePattern = "99213" },
+            },
+        };
+
+        // Insert older first, then newer — store-insertion order is
+        // deliberately the opposite of the desired iteration order.
+        await write.CreateAsync(older);
+        await write.CreateAsync(newer);
+
+        var match = await resolver.ResolveAsync(
+            "tenant-a", Guid.NewGuid(),
+            procedureCode: "99213", codeType: "CPT", placeOfService: "11",
+            modifiers: Array.Empty<string>(), revenueCode: null);
+
+        match.Should().NotBeNull();
+        match!.ServiceTypeCode.Should().Be("Office Visit (v2)",
+            "newest mapping should win regardless of insertion order");
+    }
+
+    [Fact]
     public async Task Range_Match_Hits_Codes_Inside_The_Range()
     {
         var planId = Guid.NewGuid();
