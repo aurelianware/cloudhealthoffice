@@ -314,6 +314,15 @@ builder.Services.AddHttpClient(HttpProviderIntegrityGate.VerificationServiceClie
 });
 builder.Services.AddSingleton<IProviderIntegrityGate, HttpProviderIntegrityGate>();
 
+// ── FHIR InsurancePlan Projector (capability BP 5.8) ─────────────────────────
+// Stateless, hand-built JsonObject projector. Mirrors provider-service's
+// FhirPractitionerProjector / FhirOrganizationProjector — no Hl7.Fhir.R4
+// dependency. Consumed by FhirInsurancePlanController; fhir-service proxies
+// /fhir/r4/InsurancePlan/* requests to that controller via a typed
+// HttpClient("BenefitPlanService") registration on the fhir-service side.
+// See docs/architecture/fhir-insuranceplan-projection.md.
+builder.Services.AddSingleton<IFhirInsurancePlanProjector, FhirInsurancePlanProjector>();
+
 // ── Network-Tier → Organization Reference (5.5) ──────────────────────────────
 // Read-side lookup against provider-service capability 5.3 Organization
 // entity. Reuses the ProviderService HttpClient registered above. Backfill
