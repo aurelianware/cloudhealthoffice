@@ -10,13 +10,15 @@ namespace FhirService.Controllers;
 /// Provider Directory API controller — exposes FHIR R4 provider directory resources
 /// (Practitioner, PractitionerRole, Organization, Location).
 ///
-/// HYBRID STATE (Phase 1):
-///  - Practitioner:      proxied to provider-service /fhir/Practitioner (capability 5.7).
-///  - PractitionerRole:  proxied to provider-service /fhir/PractitionerRole (capability 5.8).
-///  - Organization:      still served from NPPES (capability 5.9 will redirect).
-///  - Location:          still served from NPPES.
-/// The HYBRID STATE comment block is removed once 5.9 ships and the
-/// NPPES helpers below are fully retired.
+/// Practitioner, PractitionerRole, and Organization are proxied to provider-service,
+/// which owns the canonical CHO projection for each resource type:
+///  - Practitioner:      capability 5.7 — proxied to provider-service /fhir/Practitioner
+///  - PractitionerRole:  capability 5.8 — proxied to provider-service /fhir/PractitionerRole
+///  - Organization:      capability 5.9 — proxied to provider-service /fhir/Organization
+///
+/// Location is still served from NPPES. The NPPES helpers below are retained for
+/// the Location path only; MapNppesToOrganization is deprecated and will be removed
+/// in a subsequent cleanup PR.
 ///
 /// Port of the TypeScript provider-directory-api.ts (NPPES path).
 /// </summary>
@@ -142,64 +144,36 @@ public class ProviderDirectoryController : FhirControllerBase
         }
     }
 
-    // ── Organization ─────────────────────────────────────────────────────────
+    // ── Organization (proxied to provider-service, capability 5.9) ──────────
 
-    /// <summary>GET /fhir/r4/Organization/{id} — read Organization by NPI</summary>
+    /// <summary>
+    /// GET /fhir/r4/Organization/{id} — read Organization by id.
+    /// Proxies to provider-service /fhir/Organization/{id}; provider-service
+    /// owns the canonical CHO projection (capability 5.9). The id is
+    /// shape-detected by provider-service: 10-digit NPI → Provider-as-Org
+    /// (type=prov); anything else → Organization network entity (type=ins).
+    /// </summary>
     [HttpGet("Organization/{id}")]
     [Produces("application/fhir+json")]
-    public async Task<IActionResult> ReadOrganization(string id, CancellationToken ct)
-    {
-        var nppes = await LookupNppesAsync(id, ct);
-        if (nppes is null || nppes.EnumerationType != "NPI-2")
-            return FhirNotFound("Organization", id);
+    public Task<IActionResult> ReadOrganization(string id, CancellationToken ct)
+        => ProxyProviderServiceAsync("Organization", $"fhir/Organization/{Uri.EscapeDataString(id)}", ct);
 
-        var organization = ProviderDirectoryMapper.MapNppesToOrganization(nppes);
-        return Ok(organization);
-    }
-
-    /// <summary>GET /fhir/r4/Organization?npi=&amp;name=&amp;... — search Organizations</summary>
+    /// <summary>
+    /// GET /fhir/r4/Organization?npi=&amp;name=&amp;... — search Organizations.
+    /// Forwards the FHIR search query string to provider-service
+    /// /fhir/Organization unchanged (capability 5.9). Preserves the existing
+    /// npi / name / city / state / postal-code parameter surface; adds
+    /// identifier=ORG:{orgId} for network-entity chain-key lookup and
+    /// type=prov|ins for source-entity discrimination.
+    /// </summary>
     [HttpGet("Organization")]
     [Produces("application/fhir+json")]
-    public async Task<IActionResult> SearchOrganizations(
-        [FromQuery] string? npi,
-        [FromQuery] string? name,
-        [FromQuery] string? city,
-        [FromQuery] string? state,
-        [FromQuery(Name = "postal-code")] string? postalCode,
-        [FromQuery] int _count = 50,
-        [FromQuery] int _page = 1,
-        CancellationToken ct = default)
+    public Task<IActionResult> SearchOrganizations(CancellationToken ct = default)
     {
-        _count = ClampPageSize(_count, 200);
-
-        if (!string.IsNullOrEmpty(npi))
-        {
-            var nppes = await LookupNppesAsync(npi, ct);
-            if (nppes is null || nppes.EnumerationType != "NPI-2")
-                return Ok(ProviderDirectoryMapper.CreateSearchBundle("Organization", []));
-
-            var org = ProviderDirectoryMapper.MapNppesToOrganization(nppes);
-            return Ok(ProviderDirectoryMapper.CreateSearchBundle("Organization", [org]));
-        }
-
-        var results = await SearchNppesAsync(new Dictionary<string, string?>
-        {
-            ["organization_name"] = name,
-            ["city"] = city,
-            ["state"] = state,
-            ["postal_code"] = postalCode,
-            ["enumeration_type"] = "NPI-2",
-            ["limit"] = _count.ToString(),
-            ["skip"] = ((_page - 1) * _count).ToString()
-        }, ct);
-
-        var organizations = results
-            .Where(r => r.EnumerationType == "NPI-2")
-            .Select(ProviderDirectoryMapper.MapNppesToOrganization)
-            .Cast<FhirResource>()
-            .ToList();
-
-        return Ok(ProviderDirectoryMapper.CreateSearchBundle("Organization", organizations));
+        var qs = HttpContext.Request.QueryString.HasValue
+            ? HttpContext.Request.QueryString.Value
+            : string.Empty;
+        return ProxyProviderServiceAsync("Organization", $"fhir/Organization{qs}", ct);
     }
 
     // ── PractitionerRole (proxied to provider-service, capability 5.8) ───────
