@@ -62,7 +62,7 @@ Customers enter at any product line and expand over time. See
 |X12 Parsers          |5        |275, 276, 277, 278 (Python), 834 (Node.js)                                                                 |
 |FHIR APIs            |5        |Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory                            |
 |Argo Workflows       |17       |Claims adjudication, EDI ingest, enrollment import, RFAI                                                    |
-|Portal Pages         |50       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                                                |
+|Portal Pages         |97       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                                                |
 |CI/CD Workflows      |18       |GitHub Actions — build, test, deploy, security scan                                                         |
 |Claims Scrubbing     |20+ rules|Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits                                         |
 |Automated Tests      |2800     |C# xUnit, TypeScript Jest, Python pytest                                                                    |
