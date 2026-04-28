@@ -27,7 +27,7 @@ public class TypedBenefitRoundTripTests
         var repo = new InMemoryBenefitPlanRepository();
         var transitions = new InMemoryPlanVersionTransitionRepository();
         var events = new FakePlanVersionEventPublisher();
-        var service = new BenefitPlanServiceImpl(repo, transitions, events, NullLogger<BenefitPlanServiceImpl>.Instance);
+        var service = new BenefitPlanServiceImpl(repo, transitions, events, new NoOpNetworkTierSoftValidator(), NullLogger<BenefitPlanServiceImpl>.Instance);
         return (service, repo, transitions, events);
     }
 

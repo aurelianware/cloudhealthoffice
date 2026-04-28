@@ -150,6 +150,29 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
         return Task.FromResult(Clone(draft));
     }
 
+    public Task<bool> UpdateNetworkTiersAsync(
+        string tenantId,
+        string planId,
+        IReadOnlyList<NetworkTier> tiers,
+        CancellationToken ct = default)
+    {
+        var asOf = DateTime.UtcNow;
+        var head = _docs
+            .Where(d => d.TenantId == tenantId
+                && d.PlanId == planId
+                && d.VersionState == PlanVersionState.Published
+                && d.EffectiveDate <= asOf
+                && (d.TerminationDate == null || d.TerminationDate >= asOf))
+            .OrderByDescending(d => d.VersionNumber)
+            .FirstOrDefault();
+
+        if (head is null) return Task.FromResult(false);
+
+        head.NetworkTiers = tiers.ToList();
+        head.ModifiedDate = DateTime.UtcNow;
+        return Task.FromResult(true);
+    }
+
     public Task<BenefitPlan> PublishAndSupersedeAsync(BenefitPlan draftToPublish, BenefitPlan? predecessor)
     {
         if (FailNextPublish)
@@ -252,6 +275,17 @@ public sealed class FakePlanYearTransitionPublisher : IPlanYearTransitionPublish
             CorrelationId = correlationId,
             OccurredAt = DateTime.UtcNow
         };
+}
+
+/// <summary>
+/// No-op <see cref="INetworkTierSoftValidator"/> for service-level
+/// tests that don't exercise the soft-validation telemetry path. Tests
+/// that do exercise it construct <see cref="NetworkTierSoftValidator"/>
+/// directly with their own logger / options.
+/// </summary>
+public sealed class NoOpNetworkTierSoftValidator : INetworkTierSoftValidator
+{
+    public void Inspect(BenefitPlan plan, NetworkTierWriteCaller caller) { }
 }
 
 public sealed class FakePlanYearScheduleSource : IPlanYearScheduleSource
