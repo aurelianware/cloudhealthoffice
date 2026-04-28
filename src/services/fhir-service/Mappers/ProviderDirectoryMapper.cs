@@ -130,7 +130,19 @@ public static partial class ProviderDirectoryMapper
 
     /// <summary>
     /// Maps an NPI-1 NPPES result to a FHIR PractitionerRole resource.
+    ///
+    /// <para>
+    /// <b>Deprecated (capability 5.8).</b> The PractitionerRole projection
+    /// is now served from provider-service's CHO-canonical
+    /// <c>FhirPractitionerRoleProjector</c>; <c>ProviderDirectoryController</c>
+    /// proxies <c>/fhir/r4/PractitionerRole/*</c> there. This helper is
+    /// retained until capability 5.9 retires the NPPES helpers wholesale,
+    /// then deleted alongside <c>MapNppesToOrganization</c> and
+    /// <c>MapNppesToLocation</c>.
+    /// </para>
     /// </summary>
+    [Obsolete("Replaced by provider-service FhirPractitionerRoleProjector (capability 5.8). " +
+              "Removed alongside the rest of the NPPES path in capability 5.9.")]
     public static FhirPractitionerRole MapNppesToPractitionerRole(
         NppesResult practitionerNppes,
         FhirReference? organizationRef = null)

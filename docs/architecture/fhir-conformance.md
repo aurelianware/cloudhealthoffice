@@ -5,12 +5,12 @@ conformance to, what we test against, and where the gaps are.
 
 ## In scope (Phase 1)
 
-| IG / profile                                     | Resources covered today                | Posture                                                 |
-|--------------------------------------------------|----------------------------------------|---------------------------------------------------------|
-| US Core 6.1.0                                    | Patient, Practitioner                  | Required elements asserted by unit tests                |
-| Da Vinci PDex Plan-Net 1.1.0                     | Practitioner (subset)                  | Fields CHO has data for; extensions deferred to 5.17    |
-| FHIR R4 Bundle (`searchset`)                     | Practitioner search                    | Hand-built JsonObject, asserted by unit tests           |
-| FHIR R4 OperationOutcome                         | All error responses                    | Typed `OperationOutcome` model + hand-built JsonObject  |
+| IG / profile                                     | Resources covered today                       | Posture                                                 |
+|--------------------------------------------------|-----------------------------------------------|---------------------------------------------------------|
+| US Core 6.1.0                                    | Patient, Practitioner, PractitionerRole       | Required elements asserted by unit tests                |
+| Da Vinci PDex Plan-Net 1.1.0                     | Practitioner, PractitionerRole (subset)       | Fields CHO has data for; extensions deferred to 5.17    |
+| FHIR R4 Bundle (`searchset`)                     | Practitioner, PractitionerRole search          | Hand-built JsonObject, asserted by unit tests           |
+| FHIR R4 OperationOutcome                         | All error responses                           | Typed `OperationOutcome` model + hand-built JsonObject  |
 
 `meta.profile` values emitted on each resource:
 
@@ -19,13 +19,16 @@ conformance to, what we test against, and where the gaps are.
   `http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitioner`
   and
   `http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-Practitioner`
+- PractitionerRole (provider-service, capability 5.8) —
+  `http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitionerrole`
+  and
+  `http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-PractitionerRole`
 
 ## Phase 2 / deferred
 
 | IG / capability                                  | Status                                                 |
 |--------------------------------------------------|--------------------------------------------------------|
-| Plan-Net 1.1.0 PractitionerRole                  | Capability 5.9                                         |
-| Plan-Net 1.1.0 Organization                      | Capability 5.8                                         |
+| Plan-Net 1.1.0 Organization                      | Capability 5.9                                         |
 | Plan-Net 1.1.0 Bundle composite                  | Capability 5.18                                        |
 | Plan-Net extended extensions                     | Capability 5.17                                        |
 | CMS-0057-F unauthenticated Provider Directory    | Capability 5.19                                        |
@@ -43,6 +46,8 @@ classes:
   — member-service Patient projection.
 - [FhirPractitionerProjectorTests](../../tests/CloudHealthOffice.ProviderService.Tests/Services/FhirPractitionerProjectorTests.cs)
   — provider-service Practitioner projection.
+- [FhirPractitionerRoleProjectorTests](../../tests/CloudHealthOffice.ProviderService.Tests/Services/FhirPractitionerRoleProjectorTests.cs)
+  — provider-service PractitionerRole projection.
 
 Conformance regressions surface as failing unit tests. There is no
 network-driven conformance suite in CI yet (see *Inferno* below).
@@ -52,7 +57,9 @@ network-driven conformance suite in CI yet (see *Inferno* below).
 CMS publishes Inferno test suites for ONC certification. CHO does
 not run any Inferno suite in CI today. The Plan-Net Provider Directory
 suite would validate capability 5.7 + 5.8 + 5.9 + 5.18 once those
-capabilities ship as a Bundle composite.
+capabilities ship as a Bundle composite. After 5.8, two of the four
+projection paths (Practitioner + PractitionerRole) carry CHO-canonical
+data; Inferno wiring is unblocked once 5.9 ships Organization.
 
 A separate Phase 2 capability wires the Inferno Provider Directory
 suite to CI. Until then, conformance is structural-only via unit
@@ -73,14 +80,22 @@ Defined today (see
 - `provider-integrity-score` extension (capability 5.7) — emitted on
   Practitioner; carries cached IntegrityScore + IntegrityRating +
   LastVerifiedAt from the projection added in capability 5.4.5.
+- `practitionerrole-panel-gating` extension (capability 5.8) — emitted
+  on PractitionerRole; grouped extension carrying `panel-limit`,
+  `panel-accepted`, `accepted-lobs`, `min-accepted-age-years`,
+  `max-accepted-age-years` sub-extensions sourced from the
+  panel-gating fields on `NetworkParticipation` (capability 5.5).
+- `CodeSystem/line-of-business` (capability 5.8) — internal CodeSystem
+  for the LOB codings emitted inside `accepted-lobs` sub-extensions.
 
 A legacy URL
 `https://cloudhealthoffice.com/fhir/StructureDefinition/provider-verification`
 is used by the NPPES-path enrichment in fhir-service today. The
-NPPES path retires after capabilities 5.8 and 5.9 ship. Do not
-introduce new uses of this URL.
+NPPES path retires after capability 5.9 ships. Do not introduce new
+uses of this URL.
 
 ## Cross references
 
 - [fhir-practitioner-projection.md](fhir-practitioner-projection.md) — capability 5.7 details.
-- [provider-versioning.md](provider-versioning.md) — version-state semantics that drive `Practitioner.active`.
+- [fhir-practitionerrole-projection.md](fhir-practitionerrole-projection.md) — capability 5.8 details.
+- [provider-versioning.md](provider-versioning.md) — version-state semantics that drive `Practitioner.active` and `PractitionerRole.active`.

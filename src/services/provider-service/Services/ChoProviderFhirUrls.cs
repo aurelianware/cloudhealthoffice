@@ -41,4 +41,29 @@ internal static class ChoProviderFhirUrls
 
     public const string PlanNetPractitionerProfile =
         "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-Practitioner";
+
+    public const string UsCorePractitionerRoleProfile =
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitionerrole";
+
+    public const string PlanNetPractitionerRoleProfile =
+        "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-PractitionerRole";
+
+    /// <summary>
+    /// CHO grouped extension carrying panel-gating fields on a
+    /// PractitionerRole resource (capability 5.8 Decision 9 — single
+    /// top-level extension with sub-extensions, mirroring 5.7's
+    /// <see cref="ProviderIntegrityScoreExt"/> shape). The five
+    /// sub-extensions emit only when their source field is non-null;
+    /// the parent extension is omitted entirely when all five are null.
+    /// </summary>
+    public const string PractitionerRolePanelGatingExt =
+        StructureDefinitionBase + "practitionerrole-panel-gating";
+
+    /// <summary>
+    /// Coding system used for the LOBs surfaced inside the
+    /// <c>accepted-lobs</c> sub-extension. CHO does not yet bind LOB to
+    /// an external canonical value set; we publish under a CHO base so
+    /// consumers see a stable system + code pair.
+    /// </summary>
+    public const string LineOfBusinessSystem = Base + "CodeSystem/line-of-business";
 }

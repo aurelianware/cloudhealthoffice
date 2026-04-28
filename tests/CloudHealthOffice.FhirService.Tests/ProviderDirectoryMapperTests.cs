@@ -319,6 +319,13 @@ public class ProviderDirectoryMapperTests
     }
 
     // ── NPPES → PractitionerRole Mapping ─────────────────────────────────────
+    //
+    // The NPPES PractitionerRole mapping is the legacy path replaced by
+    // capability 5.8 (provider-service FhirPractitionerRoleProjector).
+    // The helper is marked [Obsolete] so callers migrate, but these tests
+    // continue to gate the helper's behaviour until capability 5.9
+    // retires the NPPES path entirely. Suppress CS0618 for the section.
+#pragma warning disable CS0618 // PractitionerRole helper is intentionally Obsolete (capability 5.8)
 
     [Fact]
     public void MapNppesToPractitionerRole_CreatesResourceWithCorrectIdFormat()
@@ -380,6 +387,8 @@ public class ProviderDirectoryMapperTests
         role.Location.Should().HaveCount(1);
         role.Location![0].Reference.Should().Be("Location/1234567893-loc-0");
     }
+
+#pragma warning restore CS0618
 
     // ── NPPES → Location Mapping ─────────────────────────────────────────────
 
