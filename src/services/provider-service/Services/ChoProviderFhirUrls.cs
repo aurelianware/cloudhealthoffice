@@ -66,4 +66,27 @@ internal static class ChoProviderFhirUrls
     /// consumers see a stable system + code pair.
     /// </summary>
     public const string LineOfBusinessSystem = Base + "CodeSystem/line-of-business";
+
+    // ── Organization profiles + terminology (capability 5.9) ────────────
+
+    public const string UsCoreOrganizationProfile =
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-organization";
+
+    public const string PlanNetOrganizationProfile =
+        "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-Organization";
+
+    /// <summary>
+    /// FHIR R4 Organization type value set code system. Used for the
+    /// <c>type</c> coding that discriminates between a payer network
+    /// (<c>ins</c>) and a provider-organization (<c>prov</c>).
+    /// </summary>
+    public const string OrganizationTypeCodeSystem =
+        "http://terminology.hl7.org/CodeSystem/organization-type";
+
+    /// <summary>
+    /// HL7-canonical OID system for US Employer Identification Numbers
+    /// (EIN / Tax ID). Plan-Net IG 1.1.0 § 2.3 expects this system when
+    /// emitting a TaxId identifier on an Organization.
+    /// </summary>
+    public const string EinSystem = "urn:oid:2.16.840.1.113883.4.4";
 }

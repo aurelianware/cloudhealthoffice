@@ -289,6 +289,9 @@ remains but is unwired.
 ## Cross references
 
 - [fhir-practitioner-projection.md](fhir-practitioner-projection.md) — capability 5.7 details (the proxy pattern this PR extends).
+- [fhir-organization-projection.md](fhir-organization-projection.md) — capability 5.9 details.
+  After 5.9 ships, `Organization/{networkId}` references emitted by
+  PractitionerRole are resolvable via `GET /fhir/r4/Organization/{networkId}`.
 - [network-roster-api.md](network-roster-api.md) — operational roster API; capability 5.8 reuses the underlying repository query.
 - [network-as-organization.md](network-as-organization.md) — Organization entity (capability 5.3) referenced by `PractitionerRole.organization`.
 - [network-participation-backfill.md](network-participation-backfill.md) — panel-gating defaults (capability 5.5) surfaced by the panel-gating extension.
