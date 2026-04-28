@@ -288,6 +288,17 @@ public sealed class NoOpNetworkTierSoftValidator : INetworkTierSoftValidator
     public void Inspect(BenefitPlan plan, NetworkTierWriteCaller caller) { }
 }
 
+/// <summary>
+/// No-op <see cref="IPlanLimitValidator"/> for tests that don't exercise
+/// ACA-cap validation directly. Tests that do exercise it (see
+/// <c>PlanLimitValidatorTests</c>) construct
+/// <see cref="PlanLimitValidator"/> with stubbed limits and resolver.
+/// </summary>
+public sealed class NoOpPlanLimitValidator : IPlanLimitValidator
+{
+    public void Validate(BenefitPlan plan, PlanLimitWriteCaller caller) { }
+}
+
 public sealed class FakePlanYearScheduleSource : IPlanYearScheduleSource
 {
     public List<BenefitPlan> Plans { get; } = new();

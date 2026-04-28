@@ -63,6 +63,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     private readonly IPlanVersionTransitionRepository _transitions;
     private readonly IPlanVersionEventPublisher _events;
     private readonly INetworkTierSoftValidator _networkTierValidator;
+    private readonly IPlanLimitValidator _planLimitValidator;
     private readonly ILogger<BenefitPlanServiceImpl> _logger;
 
     public BenefitPlanServiceImpl(
@@ -70,12 +71,14 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         IPlanVersionTransitionRepository transitions,
         IPlanVersionEventPublisher events,
         INetworkTierSoftValidator networkTierValidator,
+        IPlanLimitValidator planLimitValidator,
         ILogger<BenefitPlanServiceImpl> logger)
     {
         _repository = repository;
         _transitions = transitions;
         _events = events;
         _networkTierValidator = networkTierValidator;
+        _planLimitValidator = planLimitValidator;
         _logger = logger;
     }
 
@@ -121,6 +124,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         plan.PublishedAt = DateTime.UtcNow;
 
         _networkTierValidator.Inspect(plan, NetworkTierWriteCaller.CreatePlan);
+        _planLimitValidator.Validate(plan, PlanLimitWriteCaller.CreatePlan);
         return await _repository.CreateAsync(plan);
     }
 
@@ -135,6 +139,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         plan.TenantId = tenantId;
         plan.UpdatedAt = DateTime.UtcNow;
         _networkTierValidator.Inspect(plan, NetworkTierWriteCaller.UpdatePlan);
+        _planLimitValidator.Validate(plan, PlanLimitWriteCaller.UpdatePlan);
         // Repository raises PlanVersionStateException for Published/Superseded;
         // controller maps to 409.
         return await _repository.UpdateAsync(plan);
@@ -339,6 +344,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         draft.IsActive = false;
 
         _networkTierValidator.Inspect(draft, NetworkTierWriteCaller.CreateDraft);
+        _planLimitValidator.Validate(draft, PlanLimitWriteCaller.CreateDraft);
         return await _repository.CreateDraftAsync(draft);
     }
 
@@ -396,6 +402,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         }
 
         _networkTierValidator.Inspect(draft, NetworkTierWriteCaller.PublishAndSupersede);
+        _planLimitValidator.Validate(draft, PlanLimitWriteCaller.PublishAndSupersede);
         await _repository.PublishAndSupersedeAsync(draft, predecessor);
 
         await _transitions.AppendAsync(new PlanVersionTransition
@@ -441,6 +448,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         draft.UpdatedAt = DateTime.UtcNow;
 
         _networkTierValidator.Inspect(draft, NetworkTierWriteCaller.AmendPublished);
+        _planLimitValidator.Validate(draft, PlanLimitWriteCaller.AmendPublished);
         var stored = await _repository.CreateDraftAsync(draft);
 
         await _transitions.AppendAsync(new PlanVersionTransition
@@ -496,6 +504,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         PlanType = src.PlanType,
         MetalLevel = src.MetalLevel,
         LineOfBusiness = src.LineOfBusiness,
+        FamilyAccumulatorModel = src.FamilyAccumulatorModel,
         Benefits = src.Benefits.Select(CloneBenefit).ToList(),
         NetworkTiers = src.NetworkTiers.Select(CloneNetworkTier).ToList(),
         CostSharing = CloneCostSharing(src.CostSharing),

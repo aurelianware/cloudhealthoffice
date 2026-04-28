@@ -9,8 +9,13 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 /// Supports both Embedded and Aggregate family accumulator models:
 ///   Embedded:  individual + family accumulators tracked independently.
 ///              Individual met → that member done. Family met → all members done.
-///   Aggregate: family-only pool. No individual sub-limit. Any member
-///              contributes to the single family pool.
+///   Aggregate: family-only pool. Per ACA 45 CFR §156.130 each member also
+///              has an ACA individual cap that bounds how much of the family
+///              pool a single member can absorb. The cap is only seeded /
+///              enforced when <see cref="BenefitPlanConfig.IsAcaCapEnforced"/>
+///              is true and <see cref="BenefitPlanConfig.AcaIndividualCap"/>
+///              is set; legacy plans pre-5.7 hydrate with both false / null
+///              and behave exactly as before (single shared family pool).
 ///
 /// QNXT equivalent: The in-memory accumulator state that QNXT's
 /// adjudication engine maintains during claim processing, then writes
@@ -55,7 +60,7 @@ public class AccumulatorWorkingSet
         // Ensure standard accumulators exist based on family model
         if (plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
         {
-            // Aggregate: only family-level accumulators exist
+            // Aggregate: family-level accumulators are the primary pool.
             EnsureAccumulator(AccumulatorType.FamilyDeductible, AccumulatorScope.Family,
                 NetworkTier.InNetwork, plan.FamilyDeductible ?? 0);
             EnsureAccumulator(AccumulatorType.FamilyDeductible, AccumulatorScope.Family,
@@ -64,6 +69,18 @@ public class AccumulatorWorkingSet
                 NetworkTier.InNetwork, plan.FamilyOopMax ?? 0);
             EnsureAccumulator(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family,
                 NetworkTier.OutOfNetwork, plan.FamilyOopMaxOon ?? plan.FamilyOopMax ?? 0);
+
+            // ACA 45 CFR §156.130 individual cap. Gated by IsAcaCapEnforced
+            // so legacy Aggregate plans don't surprise-cap mid-year. The
+            // accumulator is scoped Individual so cap state is per-member;
+            // each member's working-set hydrates only their own row.
+            if (plan.IsAcaCapEnforced && plan.AcaIndividualCap is decimal cap && cap > 0)
+            {
+                EnsureAccumulator(AccumulatorType.AcaIndividualCap, AccumulatorScope.Individual,
+                    NetworkTier.InNetwork, cap);
+                EnsureAccumulator(AccumulatorType.AcaIndividualCap, AccumulatorScope.Individual,
+                    NetworkTier.OutOfNetwork, cap);
+            }
         }
         else
         {
@@ -170,12 +187,16 @@ public class AccumulatorWorkingSet
     {
         if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
         {
-            // Aggregate: only family pool
+            // Aggregate: family pool is primary; ACA per-member cap (when
+            // enforced) clamps how much of the pool one member may absorb.
             var familyKey = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
                 AccumulatorScope.Family, networkTier);
             var family = _entries.GetValueOrDefault(familyKey);
             if (family is null) return decimal.MaxValue;
-            return Math.Max(0, family.LimitAmount - family.CurrentAccumulated);
+            var familyRemaining = Math.Max(0, family.LimitAmount - family.CurrentAccumulated);
+
+            var capRemaining = GetAcaIndividualCapRemaining(networkTier);
+            return capRemaining is decimal c ? Math.Min(familyRemaining, c) : familyRemaining;
         }
 
         // Embedded model
@@ -213,6 +234,16 @@ public class AccumulatorWorkingSet
             {
                 family.CurrentAccumulated += memberResponsibility;
                 RecordUpdate(family, memberResponsibility, "OOP-Family-Aggregate");
+            }
+
+            // ACA per-member cap accumulates in lockstep with family pool
+            // when enforced. Mirrors the Embedded dual-update pattern below.
+            var capKey = MakeKey(AccumulatorType.AcaIndividualCap,
+                AccumulatorScope.Individual, networkTier);
+            if (_entries.TryGetValue(capKey, out var cap))
+            {
+                cap.CurrentAccumulated += memberResponsibility;
+                RecordUpdate(cap, memberResponsibility, "OOP-AcaIndividualCap");
             }
             return;
         }
@@ -367,6 +398,24 @@ public class AccumulatorWorkingSet
             Amount = amount,
             Source = source
         });
+    }
+
+    /// <summary>
+    /// Per-member ACA 45 CFR §156.130 individual-cap remaining for the
+    /// given network tier. Returns null when the plan is not Aggregate
+    /// mode, when enforcement is disabled, or when no cap accumulator was
+    /// seeded — callers treat null as "no individual sub-limit applies".
+    /// </summary>
+    private decimal? GetAcaIndividualCapRemaining(NetworkTier networkTier)
+    {
+        if (_plan.FamilyAccumulatorModel != FamilyAccumulatorModel.Aggregate) return null;
+        if (!_plan.IsAcaCapEnforced) return null;
+
+        var key = MakeKey(AccumulatorType.AcaIndividualCap,
+            AccumulatorScope.Individual, networkTier);
+        if (!_entries.TryGetValue(key, out var entry)) return null;
+
+        return Math.Max(0, entry.LimitAmount - entry.CurrentAccumulated);
     }
 
     private static string MakeKey(AccumulatorType type, AccumulatorScope scope, NetworkTier tier)
