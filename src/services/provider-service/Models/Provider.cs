@@ -163,18 +163,31 @@ public class Provider
     public List<NetworkParticipation> NetworkParticipations { get; set; } = new();
 
     /// <summary>
-    /// Credentialing status
+    /// Credentialing status. Projection of the credentialing event chain
+    /// (capability 5.6) — written via
+    /// <see cref="Repositories.IProviderRepository.UpdateCredentialingProjectionAsync"/>,
+    /// NOT via <see cref="Repositories.IProviderRepository.UpdateAsync"/>.
+    /// New providers default to <see cref="CredentialingStatus.Unknown"/>
+    /// until an <see cref="CredentialingEventType.ApplicationSubmitted"/>
+    /// event opens the first chain.
     /// </summary>
     [Required]
-    public CredentialingStatus CredentialingStatus { get; set; } = CredentialingStatus.Pending;
+    public CredentialingStatus CredentialingStatus { get; set; } = CredentialingStatus.Unknown;
 
     /// <summary>
-    /// Credentialing date (initial or most recent re-credentialing)
+    /// Most recent approval date. Projection of the credentialing event
+    /// chain — set when a
+    /// <see cref="CredentialingEventType.DecisionRecorded"/> event with
+    /// <see cref="CredentialingDecision.Approved"/> lands.
     /// </summary>
     public DateTime? CredentialingDate { get; set; }
 
     /// <summary>
-    /// Next re-credentialing due date (typically every 2-3 years)
+    /// Next re-credentialing due date (typically every 2-3 years).
+    /// Projection of the credentialing event chain — set on the most
+    /// recent approval. When elapsed the projector reports
+    /// <see cref="CredentialingStatus.Expired"/> at read time even if the
+    /// stored value is still <see cref="CredentialingStatus.Approved"/>.
     /// </summary>
     public DateTime? RecredentialingDueDate { get; set; }
 
@@ -604,32 +617,59 @@ public enum ProviderType
 }
 
 /// <summary>
-/// Credentialing status
+/// Credentialing status — read-side projection of the credentialing event
+/// chain (capability 5.6). The credentialing event chain is the
+/// system-of-record; this enum is the collapsed status flag consumed by
+/// downstream services (coverage-service PCP gating, benefit-plan-service
+/// adjudication checks).
+///
+/// <para>
+/// Per PR #705 enum convention: <see cref="Unknown"/> = 0 first, explicit
+/// integer values, string serialization with
+/// <c>JsonStringEnumConverter(allowIntegerValues: false)</c>. Adding
+/// <see cref="Unknown"/>=0 in front of <see cref="Pending"/>=1 is
+/// backward-compatible: existing stored integer values map by position
+/// (Mongo's default reflection serializer reads integer 1 → Pending),
+/// and existing string values ("Pending", "Approved", etc.) continue to
+/// deserialize unchanged.
+/// </para>
 /// </summary>
 public enum CredentialingStatus
 {
     /// <summary>
-    /// Application submitted, under review
+    /// No credentialing chain has ever been opened for this provider.
+    /// Default for newly-created providers. The projector returns this
+    /// value when the event chain is empty.
+    /// </summary>
+    Unknown = 0,
+
+    /// <summary>
+    /// Application submitted or re-credentialing triggered, under review.
     /// </summary>
     Pending = 1,
 
     /// <summary>
-    /// Credentialing approved, can participate
+    /// Credentialing approved, can participate.
     /// </summary>
     Approved = 2,
 
     /// <summary>
-    /// Credentialing denied
+    /// Credentialing denied.
     /// </summary>
     Denied = 3,
 
     /// <summary>
-    /// Re-credentialing required (expired)
+    /// Most recent approval has lapsed; re-credentialing required.
+    /// Computed at projection time from
+    /// <see cref="Provider.RecredentialingDueDate"/>.
     /// </summary>
     Expired = 4,
 
     /// <summary>
-    /// Suspended (quality issues, fraud, etc.)
+    /// Suspended (quality issues, fraud, etc.). Phase 1 has no event-driven
+    /// write path for this state — it remains for read-side compatibility.
+    /// A future <c>SuspensionRecorded</c> event lands in Phase 2 alongside
+    /// appeals and peer review.
     /// </summary>
     Suspended = 5
 }
