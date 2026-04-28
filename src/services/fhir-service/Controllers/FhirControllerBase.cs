@@ -1,6 +1,7 @@
 using Hl7.Fhir.Model;
 using FhirService.Middleware;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace FhirService.Controllers;
 
@@ -109,4 +110,98 @@ public abstract class FhirControllerBase : ControllerBase
         => string.IsNullOrEmpty(value) ? string.Empty
            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
                   .Replace("\n", string.Empty, StringComparison.Ordinal);
+
+    // ── Generic upstream proxy helper ────────────────────────────────────────
+
+    /// <summary>
+    /// Forward a GET request to an upstream FHIR-emitting service and pass
+    /// the response through to the caller. Status pass-through, 5xx → 502
+    /// FHIR <c>OperationOutcome</c>, transport faults → 502, caller
+    /// cancellation propagates verbatim.
+    ///
+    /// <para>
+    /// Extracted in capability BP 5.8 so both the provider-service proxy
+    /// (capabilities 5.7 / 5.8 / 5.9) and the new benefit-plan-service
+    /// proxy (capability BP 5.8 InsurancePlan) share one
+    /// status-translation rule. Decision 5b — the helper takes the
+    /// upstream <see cref="HttpClient"/> as a parameter so callers can
+    /// keep using the typed-client pattern they already have.
+    /// </para>
+    ///
+    /// <para>
+    /// Logging uses the structured fields <c>{Upstream}</c>,
+    /// <c>{Resource}</c>, <c>{Status}</c>, <c>{Path}</c> so operators can
+    /// distinguish proxy failures by upstream service AND by resource
+    /// type (Practitioner / Organization / InsurancePlan / etc.) without
+    /// adding new log lines.
+    /// </para>
+    /// </summary>
+    protected async Task<IActionResult> ProxyUpstreamServiceAsync(
+        HttpClient upstream,
+        string upstreamLabel,
+        string resourceLabel,
+        string path,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(upstream);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        // `path` is derived from the user-supplied URL / query string and
+        // flows into structured-log fields below. Sanitize once up front
+        // so all log sites share the same scrubbed value (CodeQL: log
+        // entries created from user input).
+        var loggablePath = SanitizeForLog(path);
+        try
+        {
+            using var response = await upstream.GetAsync(path, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/fhir+json";
+
+            // Pass status + body through verbatim. The upstream service
+            // emits FHIR OperationOutcome on 4xx, so the proxy needs to
+            // forward those without rewrapping. 5xx responses are mapped
+            // to a FHIR 502 OperationOutcome — exposing upstream 5xx
+            // bodies could leak internal detail.
+            if ((int)response.StatusCode >= 500)
+            {
+                logger.LogWarning(
+                    "{Upstream} {Resource} upstream returned {Status} for {Path}",
+                    upstreamLabel, resourceLabel, (int)response.StatusCode, loggablePath);
+                return FhirBadGateway($"{resourceLabel} upstream is unavailable.");
+            }
+
+            return new ContentResult
+            {
+                Content = body,
+                ContentType = contentType,
+                StatusCode = (int)response.StatusCode,
+            };
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex,
+                "{Upstream} {Resource} proxy hop failed for {Path}",
+                upstreamLabel, resourceLabel, loggablePath);
+            return FhirBadGateway($"{resourceLabel} upstream is unreachable.");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The caller cancelled (client disconnect, server abort). Don't
+            // pretend the upstream timed out — propagate cancellation so
+            // the request pipeline returns its standard 499/aborted shape
+            // and we don't pollute logs / metrics with phantom 502s.
+            throw;
+        }
+        catch (TaskCanceledException ex)
+        {
+            // HttpClient surfaces its own configured timeout as
+            // TaskCanceledException; ct was NOT cancelled (handled above).
+            // That genuinely is an upstream-too-slow → 502.
+            logger.LogWarning(ex,
+                "{Upstream} {Resource} proxy hop timed out for {Path}",
+                upstreamLabel, resourceLabel, loggablePath);
+            return FhirBadGateway($"{resourceLabel} upstream timed out.");
+        }
+    }
 }

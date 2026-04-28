@@ -18,15 +18,14 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
     /// <summary>
     /// Cutoff that distinguishes legacy plans (hydrate with
     /// <c>IsAcaCapEnforced=false</c>) from post-5.7 publishes (which set
-    /// it true automatically). Plans with <see cref="BenefitPlan.PublishedAt"/>
-    /// at or after this UTC instant get runtime ACA cap enforcement on
-    /// Aggregate mode; legacy plans behave as they did pre-5.7 until an
-    /// operator amends + republishes them. Transition support per the
-    /// ratified plan (G8); see
-    /// <c>docs/architecture/family-accumulator-models.md</c>.
+    /// it true automatically). Re-exported here for callers that already
+    /// reference <see cref="ChoBenefitPlanProvider"/>; the canonical
+    /// definition lives on <see cref="AcaCapEnforcementPolicy.CutoffUtc"/>
+    /// because BP 5.8 surfaces the same enforcement state through the
+    /// FHIR InsurancePlan projector and both call sites must agree on
+    /// the wall-clock instant.
     /// </summary>
-    public static readonly DateTime AcaCapEnforcementCutoffUtc =
-        new(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+    public static DateTime AcaCapEnforcementCutoffUtc => AcaCapEnforcementPolicy.CutoffUtc;
 
     private readonly IBenefitPlanRepository _repo;
     private readonly IBenefitEngineTenantContext _tenantContext;
@@ -129,26 +128,12 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
     }
 
     /// <summary>
-    /// G8 gated rollout. Plans published at or after the cutoff (or that
-    /// have not been published yet, i.e. drafts) get runtime ACA cap
-    /// enforcement; legacy plans published before the cutoff hydrate with
-    /// enforcement disabled so members on existing Aggregate plans don't
-    /// see surprise mid-year caps. Re-publishing a legacy plan flips it
-    /// to enforced state automatically because PublishedAt advances.
+    /// G8 gated rollout. Delegates to <see cref="AcaCapEnforcementPolicy.IsEnforced"/>
+    /// so the engine-config projection and the FHIR InsurancePlan
+    /// projection (BP 5.8) share one decision rule.
     /// </summary>
     private static bool ResolveIsAcaCapEnforced(BenefitPlan plan)
-    {
-        if (plan.FamilyAccumulatorModel != ModelFamilyAccumulatorModel.Aggregate)
-            return false;
-
-        if (!plan.PublishedAt.HasValue) return true;
-
-        var publishedAt = plan.PublishedAt.Value.Kind == DateTimeKind.Utc
-            ? plan.PublishedAt.Value
-            : plan.PublishedAt.Value.ToUniversalTime();
-
-        return publishedAt >= AcaCapEnforcementCutoffUtc;
-    }
+        => AcaCapEnforcementPolicy.IsEnforced(plan);
 
     private static EngineFamilyAccumulatorModel MapFamilyAccumulatorModel(ModelFamilyAccumulatorModel model)
         => model switch
