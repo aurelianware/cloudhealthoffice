@@ -4,6 +4,12 @@ using FluentAssertions;
 
 namespace CloudHealthOffice.FhirService.Tests.Controllers;
 
+// CS0618: ProviderDirectoryMapper.MapNppesToPractitioner / EnrichWithVerification
+// were marked [Obsolete] in capability 5.7 — Practitioner proxies to
+// provider-service now. This class still exercises the NPPES enrichment
+// path until the mapper itself is removed in the post-5.8/5.9 cleanup PR.
+#pragma warning disable CS0618
+
 public class ProviderDirectoryVerificationTests
 {
     [Fact]

@@ -4,6 +4,13 @@ using FhirService.Models;
 
 namespace CloudHealthOffice.FhirService.Tests;
 
+// CS0618: ProviderDirectoryMapper.MapNppesToPractitioner / EnrichWithVerification
+// were marked [Obsolete] in capability 5.7. The Practitioner endpoints now
+// proxy to provider-service's projection; these mapper methods linger
+// only because this test class exercises them as part of the dying NPPES
+// path. The whole NPPES mapper retires once 5.8/5.9 ship.
+#pragma warning disable CS0618
+
 /// <summary>
 /// Unit tests for ProviderDirectoryMapper — port of the TypeScript
 /// provider-directory-api.test.ts test suite.

@@ -54,6 +54,9 @@ public static partial class ProviderDirectoryMapper
     /// <summary>
     /// Maps an NPI-1 (individual) NPPES result to a FHIR Practitioner resource.
     /// </summary>
+    [Obsolete("Replaced by provider-service /fhir/Practitioner projection (capability 5.7). " +
+              "This method remains only because ProviderDirectoryMapperTests still exercises it. " +
+              "Will be removed once 5.8/5.9 retire the NPPES path entirely.")]
     public static FhirPractitioner MapNppesToPractitioner(NppesResult nppes)
     {
         if (nppes.EnumerationType != "NPI-1")
@@ -499,6 +502,10 @@ public static partial class ProviderDirectoryMapper
     /// Provider Verification Service. Adds an extension with integrity score,
     /// rating, and exclusion status. Sets active=false for excluded providers.
     /// </summary>
+    [Obsolete("Practitioner verification enrichment now lives on the provider-service projection " +
+              "as the cho-provider-integrity-score extension (capability 5.4.5 / 5.7). " +
+              "This method remains only because ProviderDirectoryVerificationTests still exercises it. " +
+              "Will be removed once 5.8/5.9 retire the NPPES path entirely.")]
     public static void EnrichWithVerification(
         FhirPractitioner practitioner, ProviderVerificationSummary verification)
     {

@@ -200,6 +200,24 @@ builder.Services.AddHttpClient("NppesApi", client =>
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 
+// ── provider-service FHIR proxy (capability 5.7) ────────────────────────────
+// ProviderDirectoryController.ReadPractitioner / SearchPractitioners
+// proxies to provider-service's /fhir/Practitioner endpoint. Tenant
+// header propagation flows the caller's TenantId through so
+// provider-service's TenantMiddleware sees the same context (Decision
+// 5a — tenant-scoped directory). Capabilities 5.8 and 5.9 wire
+// Organization and PractitionerRole through this same client.
+builder.Services.AddHttpClient("ProviderService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ProviderServiceUrl"]
+            ?? "http://provider-service.cloudhealthoffice/");
+    client.DefaultRequestHeaders.Add("Accept", "application/fhir+json");
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<TenantHeaderPropagationHandler>()
+.AddHttpMessageHandler<CorrelationIdPropagationHandler>();
+
 // ── Da Vinci CRD / DTR / Bulk ─────────────────────────────────────────────────
 builder.Services.Configure<CrdConfig>(builder.Configuration.GetSection("Cms0057:Crd"));
 builder.Services.AddSingleton<ICrdService, CrdService>();

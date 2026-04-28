@@ -165,6 +165,13 @@ builder.Services.AddScoped<INetworkParticipationBackfillService, NetworkParticip
 builder.Services.AddSingleton<CredentialingProjector>();
 builder.Services.AddScoped<ICredentialingService, CredentialingService>();
 
+// FHIR R4 Practitioner projection (5.7 — provider-service is the
+// canonical source for the Practitioner FHIR resource; fhir-service
+// proxies /fhir/r4/Practitioner/* to FhirPractitionerController). The
+// projector is stateless (singleton-safe) and mirrors member-service's
+// IFhirPatientProjector.
+builder.Services.AddSingleton<IFhirPractitionerProjector, FhirPractitionerProjector>();
+
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 
