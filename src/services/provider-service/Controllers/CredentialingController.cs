@@ -51,6 +51,10 @@ public sealed class CredentialingController : ControllerBase
                 TenantId, id, request, ResolveActorId(), HttpContext.TraceIdentifier, ct);
             return Created(string.Empty, evt);
         }
+        catch (CredentialingNotFoundException ex)
+        {
+            return NotFound(new { error = "provider_not_found", message = ex.Message });
+        }
         catch (CredentialingValidationException ex)
         {
             return BadRequest(new { error = "credentialing_validation_failed", message = ex.Message });
@@ -86,6 +90,10 @@ public sealed class CredentialingController : ControllerBase
                 TenantId, id, eventId, request, ResolveActorId(), HttpContext.TraceIdentifier, ct);
             return Ok(evt);
         }
+        catch (CredentialingNotFoundException ex)
+        {
+            return NotFound(new { error = "provider_not_found", message = ex.Message });
+        }
         catch (CredentialingValidationException ex)
         {
             return BadRequest(new { error = "credentialing_validation_failed", message = ex.Message });
@@ -119,6 +127,10 @@ public sealed class CredentialingController : ControllerBase
             var evt = await _credentialing.RecordPrimarySourceVerificationAsync(
                 TenantId, id, request, ResolveActorId(), HttpContext.TraceIdentifier, ct);
             return Created(string.Empty, evt);
+        }
+        catch (CredentialingNotFoundException ex)
+        {
+            return NotFound(new { error = "provider_not_found", message = ex.Message });
         }
         catch (CredentialingValidationException ex)
         {
@@ -154,6 +166,10 @@ public sealed class CredentialingController : ControllerBase
                 TenantId, id, request, ResolveActorId(), HttpContext.TraceIdentifier, ct);
             return Created(string.Empty, evt);
         }
+        catch (CredentialingNotFoundException ex)
+        {
+            return NotFound(new { error = "provider_not_found", message = ex.Message });
+        }
         catch (CredentialingValidationException ex)
         {
             return BadRequest(new { error = "credentialing_validation_failed", message = ex.Message });
@@ -188,6 +204,10 @@ public sealed class CredentialingController : ControllerBase
                 TenantId, id, request, ResolveActorId(), HttpContext.TraceIdentifier, ct);
             return Created(string.Empty, evt);
         }
+        catch (CredentialingNotFoundException ex)
+        {
+            return NotFound(new { error = "provider_not_found", message = ex.Message });
+        }
         catch (CredentialingValidationException ex)
         {
             return BadRequest(new { error = "credentialing_validation_failed", message = ex.Message });
@@ -221,6 +241,10 @@ public sealed class CredentialingController : ControllerBase
             var evt = await _credentialing.TriggerRecredentialingAsync(
                 TenantId, id, request, ResolveActorId(), HttpContext.TraceIdentifier, ct);
             return Created(string.Empty, evt);
+        }
+        catch (CredentialingNotFoundException ex)
+        {
+            return NotFound(new { error = "provider_not_found", message = ex.Message });
         }
         catch (CredentialingValidationException ex)
         {

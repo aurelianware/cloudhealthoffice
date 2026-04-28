@@ -76,6 +76,18 @@ public sealed class CredentialingValidationException : InvalidOperationException
     public CredentialingValidationException(string message) : base(message) { }
 }
 
+/// <summary>
+/// Thrown when a credentialing-workflow operation targets a provider
+/// that does not exist in the tenant. Mapped to HTTP 404 by the
+/// controller. Distinct from
+/// <see cref="CredentialingValidationException"/> so callers can tell
+/// "wrong state" apart from "wrong target."
+/// </summary>
+public sealed class CredentialingNotFoundException : InvalidOperationException
+{
+    public CredentialingNotFoundException(string message) : base(message) { }
+}
+
 public sealed class CredentialingService : ICredentialingService
 {
     private readonly ICredentialingEventRepository _eventRepository;
@@ -104,6 +116,7 @@ public sealed class CredentialingService : ICredentialingService
         string? actorId, string? correlationId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
+        await EnsureProviderExistsAsync(providerId);
 
         var chain = await _eventRepository.ListAscendingAsync(tenantId, providerId, ct);
         var preState = _projector.Project(chain, DateTimeOffset.UtcNow);
@@ -143,6 +156,7 @@ public sealed class CredentialingService : ICredentialingService
         string? actorId, string? correlationId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
+        await EnsureProviderExistsAsync(providerId);
 
         var chain = await _eventRepository.ListAscendingAsync(tenantId, providerId, ct);
         var preState = _projector.Project(chain, DateTimeOffset.UtcNow);
@@ -184,6 +198,7 @@ public sealed class CredentialingService : ICredentialingService
         string? actorId, string? correlationId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
+        await EnsureProviderExistsAsync(providerId);
 
         var chain = await _eventRepository.ListAscendingAsync(tenantId, providerId, ct);
         var preState = _projector.Project(chain, DateTimeOffset.UtcNow);
@@ -228,6 +243,28 @@ public sealed class CredentialingService : ICredentialingService
             throw new CredentialingValidationException(
                 "Decision must be Approved or Denied.");
         }
+        if (string.IsNullOrEmpty(request.DecisionAuthorityId))
+        {
+            throw new CredentialingValidationException(
+                "DecisionAuthorityId is required.");
+        }
+        // Committee decisions are audit-grade — minutes and member roster
+        // must be captured at write time. The other authority types are
+        // single-actor paths where these fields don't apply.
+        if (request.DecisionAuthorityType == DecisionAuthorityType.CredentialingCommittee)
+        {
+            if (request.CommitteeMembers == null || request.CommitteeMembers.Count == 0)
+            {
+                throw new CredentialingValidationException(
+                    "CommitteeMembers is required for CredentialingCommittee decisions.");
+            }
+            if (string.IsNullOrEmpty(request.DecisionMinuteReference))
+            {
+                throw new CredentialingValidationException(
+                    "DecisionMinuteReference is required for CredentialingCommittee decisions.");
+            }
+        }
+        await EnsureProviderExistsAsync(providerId);
 
         var chain = await _eventRepository.ListAscendingAsync(tenantId, providerId, ct);
         var preState = _projector.Project(chain, DateTimeOffset.UtcNow);
@@ -315,6 +352,7 @@ public sealed class CredentialingService : ICredentialingService
         string? actorId, string? correlationId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
+        await EnsureProviderExistsAsync(providerId);
 
         var chain = await _eventRepository.ListAscendingAsync(tenantId, providerId, ct);
         var preState = _projector.Project(chain, DateTimeOffset.UtcNow);
@@ -369,6 +407,7 @@ public sealed class CredentialingService : ICredentialingService
         if (request == null) throw new ArgumentNullException(nameof(request));
         if (string.IsNullOrEmpty(applicationEventId))
             throw new ArgumentException("applicationEventId is required.", nameof(applicationEventId));
+        await EnsureProviderExistsAsync(providerId);
 
         var chain = await _eventRepository.ListAscendingAsync(tenantId, providerId, ct);
         var preState = _projector.Project(chain, DateTimeOffset.UtcNow);
@@ -420,6 +459,23 @@ public sealed class CredentialingService : ICredentialingService
         string tenantId, string providerId,
         string? continuationToken, int limit, CancellationToken ct = default)
         => _eventRepository.ListHistoryDescendingAsync(tenantId, providerId, continuationToken, limit, ct);
+
+    private async Task EnsureProviderExistsAsync(string providerId)
+    {
+        // Status-changing operations must target a real provider —
+        // otherwise the chain accumulates events for an entity that
+        // can never present a flat-field projection (the patch will
+        // return false). Reads (GetCurrentStatusAsync, GetHistoryAsync)
+        // intentionally do NOT enforce this so admins can inspect a
+        // chain even after the underlying provider row has been
+        // deleted.
+        var provider = await _providerRepository.GetByIdAsync(providerId);
+        if (provider == null)
+        {
+            throw new CredentialingNotFoundException(
+                $"Provider {providerId} not found.");
+        }
+    }
 
     private async Task PatchProjectionAsync(
         string tenantId,

@@ -162,10 +162,23 @@ public sealed class CredentialingProjector
             // each event transition with the projector's at-write-time
             // verdict; readers who consult the projector directly get a
             // fresh evaluation each time.
-            if (lastDecisionPayload.RecredentialingDueDate.HasValue
-                && lastDecisionPayload.RecredentialingDueDate.Value.ToUniversalTime() < asOf.UtcDateTime)
+            //
+            // Normalize the stored due-date to UTC explicitly. Inbound
+            // JSON often deserializes DateTime with Kind=Unspecified;
+            // calling ToUniversalTime() on those would interpret them as
+            // local time and shift the boundary by the server's
+            // timezone offset. SpecifyKind treats Unspecified as
+            // already-UTC (matching how the service writes the value).
+            if (lastDecisionPayload.RecredentialingDueDate.HasValue)
             {
-                return CredentialingStatus.Expired;
+                var due = lastDecisionPayload.RecredentialingDueDate.Value;
+                var dueUtc = due.Kind switch
+                {
+                    DateTimeKind.Utc => due,
+                    DateTimeKind.Local => due.ToUniversalTime(),
+                    _ => DateTime.SpecifyKind(due, DateTimeKind.Utc),
+                };
+                if (dueUtc < asOf.UtcDateTime) return CredentialingStatus.Expired;
             }
             return CredentialingStatus.Approved;
         }

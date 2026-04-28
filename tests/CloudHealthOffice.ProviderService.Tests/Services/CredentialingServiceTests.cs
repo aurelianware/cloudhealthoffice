@@ -108,9 +108,66 @@ public class CredentialingServiceTests
                 Decision = CredentialingDecision.Approved,
                 DecisionAuthorityType = DecisionAuthorityType.CredentialingCommittee,
                 DecisionAuthorityId = "committee-x",
+                CommitteeMembers = new[] { "m1", "m2" },
+                DecisionMinuteReference = "minutes/abc",
+                CredentialingDate = DateTime.UtcNow,
+                RecredentialingDueDate = DateTime.UtcNow.AddYears(2),
             },
             "actor-1", null);
-        await act.Should().ThrowAsync<CredentialingValidationException>();
+        await act.Should().ThrowAsync<CredentialingValidationException>()
+            .Where(ex => ex.Message.Contains("no open credentialing application"));
+    }
+
+    [Fact]
+    public async Task RecordDecisionAsync_committee_path_requires_CommitteeMembers()
+    {
+        await _service.SubmitApplicationAsync(TenantId, ProviderId,
+            new SubmitApplicationRequest { ApplicationSource = "Manual" }, "actor-1", null);
+
+        var act = () => _service.RecordDecisionAsync(TenantId, ProviderId,
+            new RecordDecisionRequest
+            {
+                Decision = CredentialingDecision.Approved,
+                DecisionAuthorityType = DecisionAuthorityType.CredentialingCommittee,
+                DecisionAuthorityId = "committee-x",
+                DecisionMinuteReference = "minutes/abc",
+                CredentialingDate = DateTime.UtcNow,
+                RecredentialingDueDate = DateTime.UtcNow.AddYears(2),
+            },
+            "actor-1", null);
+        await act.Should().ThrowAsync<CredentialingValidationException>()
+            .Where(ex => ex.Message.Contains("CommitteeMembers"));
+    }
+
+    [Fact]
+    public async Task RecordDecisionAsync_committee_path_requires_DecisionMinuteReference()
+    {
+        await _service.SubmitApplicationAsync(TenantId, ProviderId,
+            new SubmitApplicationRequest { ApplicationSource = "Manual" }, "actor-1", null);
+
+        var act = () => _service.RecordDecisionAsync(TenantId, ProviderId,
+            new RecordDecisionRequest
+            {
+                Decision = CredentialingDecision.Approved,
+                DecisionAuthorityType = DecisionAuthorityType.CredentialingCommittee,
+                DecisionAuthorityId = "committee-x",
+                CommitteeMembers = new[] { "m1" },
+                CredentialingDate = DateTime.UtcNow,
+                RecredentialingDueDate = DateTime.UtcNow.AddYears(2),
+            },
+            "actor-1", null);
+        await act.Should().ThrowAsync<CredentialingValidationException>()
+            .Where(ex => ex.Message.Contains("DecisionMinuteReference"));
+    }
+
+    [Fact]
+    public async Task SubmitApplicationAsync_throws_NotFound_for_missing_provider()
+    {
+        var act = () => _service.SubmitApplicationAsync(
+            TenantId, "missing-provider",
+            new SubmitApplicationRequest { ApplicationSource = "Manual" },
+            "actor-1", null);
+        await act.Should().ThrowAsync<CredentialingNotFoundException>();
     }
 
     [Fact]
@@ -258,6 +315,7 @@ public class CredentialingServiceTests
                 DecisionAuthorityType = DecisionAuthorityType.CredentialingCommittee,
                 DecisionAuthorityId = "c-1",
                 CommitteeMembers = new[] { "m1" },
+                DecisionMinuteReference = "minutes/abc",
                 CredentialingDate = DateTime.UtcNow,
                 RecredentialingDueDate = DateTime.UtcNow.AddYears(2),
             },

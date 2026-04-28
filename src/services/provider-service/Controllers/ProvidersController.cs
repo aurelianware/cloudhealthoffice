@@ -757,12 +757,20 @@ public class ProvidersController : ControllerBase
         }
 
         var actorId = ResolveActorId();
+        // Inbound JSON DateTime values typically deserialize with
+        // Kind=Unspecified. Explicitly treat them as UTC before lifting
+        // to DateTimeOffset so the implicit DateTime→DateTimeOffset
+        // conversion can't pick up a local-time offset.
+        var rawCredentialingDate = request.CredentialingDate ?? DateTime.UtcNow;
+        var credentialingDateUtc = DateTime.SpecifyKind(rawCredentialingDate, DateTimeKind.Utc);
         var decisionRequest = new RecordDecisionRequest
         {
             Decision = decision,
-            DecidedAt = request.CredentialingDate ?? DateTime.UtcNow,
-            CredentialingDate = request.CredentialingDate ?? DateTime.UtcNow,
-            RecredentialingDueDate = request.RecredentialingDueDate,
+            DecidedAt = new DateTimeOffset(credentialingDateUtc, TimeSpan.Zero),
+            CredentialingDate = credentialingDateUtc,
+            RecredentialingDueDate = request.RecredentialingDueDate.HasValue
+                ? DateTime.SpecifyKind(request.RecredentialingDueDate.Value, DateTimeKind.Utc)
+                : null,
             DecisionAuthorityType = DecisionAuthorityType.DelegatedAuthority,
             DecisionAuthorityId = actorId,
             CommitteeMembers = null,
@@ -774,6 +782,10 @@ public class ProvidersController : ControllerBase
         {
             await _credentialing.RecordDecisionAsync(
                 TenantId, id, decisionRequest, actorId, HttpContext.TraceIdentifier, ct);
+        }
+        catch (CredentialingNotFoundException)
+        {
+            return NotFound($"Provider {id} not found");
         }
         catch (CredentialingValidationException ex)
         {

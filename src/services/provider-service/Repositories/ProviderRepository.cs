@@ -941,9 +941,14 @@ public class ProviderRepository : IProviderRepository
 
         if (string.IsNullOrEmpty(rowId)) return false;
 
+        // Patch the enum value directly so the Cosmos SDK serializer
+        // chooses the same representation it uses for full-document
+        // writes. Calling .ToString() would force a string here even
+        // if the rest of the document stored the field differently —
+        // a future serializer-config change would silently diverge.
         var ops = new List<PatchOperation>
         {
-            PatchOperation.Set("/credentialingStatus", status.ToString()),
+            PatchOperation.Set("/credentialingStatus", status),
             PatchOperation.Set("/credentialingDate", credentialingDate),
             PatchOperation.Set("/recredentialingDueDate", recredentialingDueDate),
             PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),

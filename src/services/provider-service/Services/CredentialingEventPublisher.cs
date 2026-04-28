@@ -115,10 +115,16 @@ public sealed class MongoCredentialingEventPublisher : ICredentialingEventPublis
 }
 
 /// <summary>
-/// No-op fallback used when no Mongo publisher is available (Cosmos-only
-/// deployments without the credentialing-events stream provisioned).
-/// Logs a warning so ops can spot the missing wiring without breaking
-/// the workflow path.
+/// Fail-fast fallback used in Cosmos-only deployments without a
+/// provisioned credentialing-events stream. Unlike the integrity /
+/// version / participation Noop publishers (which are an audit
+/// supplement), the credentialing event chain IS the system-of-record
+/// for the workflow — if the chain can't be written, the projection
+/// patch must NOT proceed (otherwise Provider.CredentialingStatus
+/// would mutate without a matching audit record). Throwing
+/// <see cref="InvalidOperationException"/> here surfaces 503 from the
+/// controllers, matching the publisher-exhaustion contract in the
+/// Mongo path.
 /// </summary>
 public sealed class NoopCredentialingEventPublisher : ICredentialingEventPublisher
 {
@@ -130,18 +136,14 @@ public sealed class NoopCredentialingEventPublisher : ICredentialingEventPublish
     public Task<CredentialingEvent> PublishAsync(CredentialingEvent evt, CancellationToken ct = default)
     {
         // Sanitize user-supplied identifier before logging — defense
-        // against log injection (CRLF). Mirrors the helper in
-        // MongoCredentialingEventPublisher.
-        _logger.LogWarning(
-            "CredentialingEventPublisher is not configured; dropping {EventType} event for {ProviderId}",
+        // against log injection (CRLF).
+        _logger.LogError(
+            "CredentialingEventPublisher is not configured; refusing to publish {EventType} event for {ProviderId} " +
+            "(the credentialing event chain is the system-of-record).",
             evt?.EventType, Sanitize(evt?.ProviderId));
-        evt ??= new CredentialingEvent();
-        if (string.IsNullOrEmpty(evt.PartitionKey) && !string.IsNullOrEmpty(evt.TenantId) && !string.IsNullOrEmpty(evt.ProviderId))
-        {
-            evt.PartitionKey = CredentialingEvent.BuildPartitionKey(evt.TenantId, evt.ProviderId);
-        }
-        if (evt.OccurredAt == default) evt.OccurredAt = DateTime.UtcNow;
-        return Task.FromResult(evt);
+        throw new InvalidOperationException(
+            "CredentialingEventPublisher is not configured. Credentialing workflow endpoints require a " +
+            "provisioned events stream — check the Mongo connection or the CosmosDb:CredentialingEventsContainer setting.");
     }
 
     private static string Sanitize(string? value) =>
