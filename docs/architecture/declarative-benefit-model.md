@@ -4,6 +4,13 @@
 > shape and the predicate evaluator. Type-aware engine paths arrive in
 > capability 5.7+ (preventive zero-cost-share, embedded vs non-embedded
 > OOP) and 5.14 (formulary resolution).
+>
+> **See also:**
+> [`service-category-mapping.md`](service-category-mapping.md) (BP 5.6) —
+> resolves CPT/HCPCS to the `ServiceCategory` label used by the typed
+> benefits below; documents the X12 ↔ free-text incoherence that
+> currently links `Benefit.ServiceCategory` to the resolver's
+> `ServiceTypeCode`.
 
 ## Why
 
