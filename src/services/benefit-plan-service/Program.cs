@@ -1,9 +1,12 @@
 using Microsoft.Azure.Cosmos;
 using BenefitPlanService.Adapters;
+using BenefitPlanService.HostedServices;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.BenefitEngine.Configuration;
@@ -157,8 +160,55 @@ builder.Services.AddHttpClient<IClaimsAccumulatorSource, ClaimsServiceAccumulato
 builder.Services.AddBenefitEngine().UseRedisAccumulatorService();
 builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IBenefitPlanProvider,
                            BenefitPlanService.Services.ChoBenefitPlanProvider>();
-builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository,
-                           BenefitPlanService.Services.NullServiceCategoryMappingRepository>();
+
+// ── Service-Category Mappings (capability BP 5.6) ────────────────────────────
+// Replaces the prior NullServiceCategoryMappingRepository with a real Cosmos
+// or Mongo backend (selected by the same MongoDb:ConnectionString switch
+// that drives the BenefitPlan repository above). The same class implements
+// the read seam consumed by the resolver, the write seam consumed by the
+// admin controller, and the SystemDefaultsApplied idempotency record
+// consumed by the seeder hosted service. See
+// docs/architecture/service-category-mapping.md.
+builder.Services.Configure<ServiceCategoryMappingOptions>(
+    builder.Configuration.GetSection(ServiceCategoryMappingOptions.SectionName));
+
+// Raw storage backend — Cosmos or Mongo. The same class implements all
+// three seams (read, write, applied-record).
+if (useMongo)
+{
+    builder.Services.AddScoped<ChoServiceCategoryMappingRepositoryMongo>();
+}
+else
+{
+    builder.Services.AddScoped<ChoServiceCategoryMappingRepository>();
+}
+
+// Cache decorator over the raw backend. Holds the IMemoryCache; invalidates
+// on write. The decorator is what the rest of the service consumes.
+builder.Services.AddScoped<CachingServiceCategoryMappingRepository>(sp =>
+{
+    var cache = sp.GetRequiredService<IMemoryCache>();
+    var options = sp.GetRequiredService<IOptionsMonitor<ServiceCategoryMappingOptions>>();
+    if (useMongo)
+    {
+        var inner = sp.GetRequiredService<ChoServiceCategoryMappingRepositoryMongo>();
+        return new CachingServiceCategoryMappingRepository(inner, inner, inner, cache, options);
+    }
+    else
+    {
+        var inner = sp.GetRequiredService<ChoServiceCategoryMappingRepository>();
+        return new CachingServiceCategoryMappingRepository(inner, inner, inner, cache, options);
+    }
+});
+builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository>(
+    sp => sp.GetRequiredService<CachingServiceCategoryMappingRepository>());
+builder.Services.AddScoped<IServiceCategoryMappingWriteRepository>(
+    sp => sp.GetRequiredService<CachingServiceCategoryMappingRepository>());
+builder.Services.AddScoped<ISystemDefaultsAppliedRecordRepository>(
+    sp => sp.GetRequiredService<CachingServiceCategoryMappingRepository>());
+
+builder.Services.AddSingleton<SystemDefaultMappingSeeder>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemDefaultMappingSeeder>());
 builder.Services.AddFeeScheduleEngine().UseRepositoriesFromConfiguration(builder.Configuration);
 builder.Services.AddClaimsScrubEngine();
 builder.Services.AddNcciEngine().UseRepositoryFromConfiguration(builder.Configuration);

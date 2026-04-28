@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "source": "CHO-curated. Bundle codes are operator-friendly text labels matching common Benefit.ServiceCategory values authored by plan administrators today. X12 5010 service-type-code alignment is intentionally deferred to a future translation-layer capability — see schemas/service-category-mappings/README.md for the full rationale.",
+  "notes": "Procedure-code ranges drawn from common CPT/HCPCS layout: E&M 99201-99499, surgical 10000-69999, radiology 70000-79999, pathology 80000-89999, medicine 90000-99199, HCPCS Level II J/K/E/L codes. CDT and ASA codes are not included in this bundle. Operators ship plan-specific overrides via the admin write API (POST /api/v1/service-category-mappings).",
+  "mappings": [
+    {
+      "serviceTypeCode": "Office Visit",
+      "serviceTypeDescription": "Professional E&M visit (office, outpatient, urgent care)",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "99201", "codeRangeEnd": "99215" },
+        { "priority": 11, "codeType": "CPT", "codePattern": "99381", "codeRangeEnd": "99397", "placeOfServiceCode": "11" },
+        { "priority": 20, "codeType": "CPT", "codePattern": "99241", "codeRangeEnd": "99245" },
+        { "priority": 30, "codeType": "CPT", "codePattern": "99417", "codeRangeEnd": "99417" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Specialist Visit",
+      "serviceTypeDescription": "E&M specialty consultation (POS 11 with consult codes)",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "99202", "codeRangeEnd": "99215", "placeOfServiceCode": "11", "requiredModifier": "GC" },
+        { "priority": 20, "codeType": "CPT", "codePattern": "99241", "codeRangeEnd": "99245", "placeOfServiceCode": "11" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Inpatient Hospital",
+      "serviceTypeDescription": "Inpatient hospital admission and per-diem services",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "99221", "codeRangeEnd": "99239" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0100", "codeRangeEnd": "0219" },
+        { "priority": 30, "codeType": "CPT", "codePattern": "10000", "codeRangeEnd": "69999", "placeOfServiceCode": "21" },
+        { "priority": 31, "codeType": "CPT", "codePattern": "10000", "codeRangeEnd": "69999", "placeOfServiceCode": "22" },
+        { "priority": 32, "codeType": "CPT", "codePattern": "10000", "codeRangeEnd": "69999", "placeOfServiceCode": "23" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Outpatient Surgery",
+      "serviceTypeDescription": "Outpatient and ambulatory surgical procedures",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "10000", "codeRangeEnd": "69999", "placeOfServiceCode": "24" },
+        { "priority": 11, "codeType": "CPT", "codePattern": "10000", "codeRangeEnd": "69999", "placeOfServiceCode": "20" },
+        { "priority": 12, "codeType": "CPT", "codePattern": "10000", "codeRangeEnd": "69999", "placeOfServiceCode": "19" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0360", "codeRangeEnd": "0369" },
+        { "priority": 21, "codeType": "REV", "codePattern": "0490", "codeRangeEnd": "0499" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Emergency Room",
+      "serviceTypeDescription": "Emergency department E&M and facility services",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "99281", "codeRangeEnd": "99288" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0450", "codeRangeEnd": "0459" },
+        { "priority": 30, "codeType": "CPT", "codePattern": "99291", "codeRangeEnd": "99292" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Urgent Care",
+      "serviceTypeDescription": "Urgent care visits (POS 20 / S-codes)",
+      "rules": [
+        { "priority": 10, "codeType": "HCPCS", "codePattern": "S9088", "codeRangeEnd": "S9088" },
+        { "priority": 20, "codeType": "HCPCS", "codePattern": "S9083", "codeRangeEnd": "S9083" },
+        { "priority": 30, "codeType": "CPT", "codePattern": "99201", "codeRangeEnd": "99215", "placeOfServiceCode": "20" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Pharmacy",
+      "serviceTypeDescription": "Outpatient prescription drugs (J-codes, NDC, S0017-style infusion supplies)",
+      "rules": [
+        { "priority": 10, "codeType": "HCPCS", "codePattern": "J0000", "codeRangeEnd": "J9999" },
+        { "priority": 11, "codeType": "HCPCS", "codePattern": "Q0083", "codeRangeEnd": "Q0085" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0250", "codeRangeEnd": "0259" },
+        { "priority": 21, "codeType": "REV", "codePattern": "0635", "codeRangeEnd": "0637" },
+        { "priority": 30, "codeType": "NDC", "codePattern": "*" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Behavioral Health",
+      "serviceTypeDescription": "Mental-health and substance-use disorder services",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "90785", "codeRangeEnd": "90899" },
+        { "priority": 11, "codeType": "CPT", "codePattern": "96101", "codeRangeEnd": "96155" },
+        { "priority": 20, "codeType": "HCPCS", "codePattern": "H0001", "codeRangeEnd": "H2037" },
+        { "priority": 30, "codeType": "REV", "codePattern": "0900", "codeRangeEnd": "0919" },
+        { "priority": 40, "codeType": "CPT", "codePattern": "99201", "codeRangeEnd": "99215", "placeOfServiceCode": "53" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Preventive Care",
+      "serviceTypeDescription": "Preventive E&M, screenings, immunizations",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "99381", "codeRangeEnd": "99397" },
+        { "priority": 11, "codeType": "CPT", "codePattern": "99401", "codeRangeEnd": "99429" },
+        { "priority": 20, "codeType": "CPT", "codePattern": "90460", "codeRangeEnd": "90474" },
+        { "priority": 21, "codeType": "CPT", "codePattern": "90476", "codeRangeEnd": "90756" },
+        { "priority": 30, "codeType": "HCPCS", "codePattern": "G0101", "codeRangeEnd": "G0101" },
+        { "priority": 31, "codeType": "HCPCS", "codePattern": "G0438", "codeRangeEnd": "G0439" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Maternity",
+      "serviceTypeDescription": "Maternity care (antepartum, delivery, postpartum)",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "59000", "codeRangeEnd": "59899" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0720", "codeRangeEnd": "0729" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Imaging",
+      "serviceTypeDescription": "Radiology, MRI, CT, ultrasound",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "70000", "codeRangeEnd": "79999" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0320", "codeRangeEnd": "0359" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Laboratory",
+      "serviceTypeDescription": "Clinical pathology and laboratory services",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "80000", "codeRangeEnd": "89999" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0300", "codeRangeEnd": "0319" }
+      ]
+    },
+    {
+      "serviceTypeCode": "DME",
+      "serviceTypeDescription": "Durable medical equipment (rental and purchase)",
+      "rules": [
+        { "priority": 10, "codeType": "HCPCS", "codePattern": "E0100", "codeRangeEnd": "E9999" },
+        { "priority": 20, "codeType": "HCPCS", "codePattern": "K0001", "codeRangeEnd": "K0999" },
+        { "priority": 30, "codeType": "REV", "codePattern": "0290", "codeRangeEnd": "0299" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Vision",
+      "serviceTypeDescription": "Vision exams, refractions, contact lens services",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "92002", "codeRangeEnd": "92499" },
+        { "priority": 20, "codeType": "HCPCS", "codePattern": "V2020", "codeRangeEnd": "V2799" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Home Health",
+      "serviceTypeDescription": "Skilled home-health visits and supplies",
+      "rules": [
+        { "priority": 10, "codeType": "HCPCS", "codePattern": "G0151", "codeRangeEnd": "G0164" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0550", "codeRangeEnd": "0599" },
+        { "priority": 30, "codeType": "CPT", "codePattern": "99500", "codeRangeEnd": "99602", "placeOfServiceCode": "12" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Physical Therapy",
+      "serviceTypeDescription": "Physical, occupational, and speech therapy",
+      "rules": [
+        { "priority": 10, "codeType": "CPT", "codePattern": "97001", "codeRangeEnd": "97799" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0420", "codeRangeEnd": "0449" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Ambulance",
+      "serviceTypeDescription": "Ground and air ambulance transportation",
+      "rules": [
+        { "priority": 10, "codeType": "HCPCS", "codePattern": "A0021", "codeRangeEnd": "A0999" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0540", "codeRangeEnd": "0549" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Skilled Nursing",
+      "serviceTypeDescription": "Skilled nursing facility services",
+      "rules": [
+        { "priority": 10, "codeType": "REV", "codePattern": "0190", "codeRangeEnd": "0199" },
+        { "priority": 20, "codeType": "CPT", "codePattern": "99304", "codeRangeEnd": "99318" }
+      ]
+    }
+  ]
+}
