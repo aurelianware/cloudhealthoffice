@@ -122,15 +122,6 @@ public class BenefitEngineBuilder
         return this;
     }    
 
-    /// <summary>
-    /// Use CHO's MongoDB-backed service category mappings.
-    /// </summary>
-    public BenefitEngineBuilder UseChoServiceCategoryMappings()
-    {
-        _services.AddScoped<IServiceCategoryMappingRepository, ChoServiceCategoryMappingRepository>();
-        return this;
-    }
-
     // ── QNXT Adapter Mode ──
 
     /// <summary>
@@ -230,21 +221,6 @@ internal class ChoBenefitPlanProvider : IBenefitPlanProvider
         throw new NotImplementedException(
             "ChoBenefitPlanProvider: Implement MongoDB/Cosmos queries against " +
             "benefit-plan-service's BenefitPlan + BenefitCategory + CostShareRule collections.");
-    }
-}
-
-/// <summary>
-/// CHO-native service category mapping repository.
-/// TODO: Implement with actual MongoDB/Cosmos queries.
-/// </summary>
-internal class ChoServiceCategoryMappingRepository : IServiceCategoryMappingRepository
-{
-    public Task<IReadOnlyList<ServiceCategoryMapping>> GetMappingsAsync(
-        string tenantId, Guid? benefitPlanId, CancellationToken ct = default)
-    {
-        throw new NotImplementedException(
-            "ChoServiceCategoryMappingRepository: Implement MongoDB/Cosmos queries " +
-            "against ServiceCategoryMapping collection.");
     }
 }
 

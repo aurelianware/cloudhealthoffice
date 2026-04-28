@@ -146,6 +146,23 @@ public class ServiceCategoryMapping
     public string ServiceTypeCode { get; set; } = default!;
     public string ServiceTypeDescription { get; set; } = default!;
     public List<ProcedureCodeRule> Rules { get; set; } = [];
+
+    // Authoring metadata (capability BP 5.6). Resolver-side filtering on
+    // EffectiveStart/EffectiveEnd/IsActive is deferred — these fields are
+    // additive today so authors can record window/lifecycle intent without
+    // changing adjudication behavior. A future capability (BP 5.10 closer)
+    // wires effective-date filtering into ServiceCategoryResolver.
+    public DateOnly? EffectiveStart { get; set; }
+    public DateOnly? EffectiveEnd { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    // Insertion timestamp. Storage backends sort GetMappingsAsync results by
+    // this field DESC so the resolver's first-match-wins iteration prefers
+    // newer rows over older rows for overlapping rules — required for
+    // deterministic resolution after a seeder re-apply leaves multiple seed
+    // rows for the same serviceTypeCode in place. See
+    // docs/architecture/service-category-mapping.md "Seed re-application".
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 public class ProcedureCodeRule

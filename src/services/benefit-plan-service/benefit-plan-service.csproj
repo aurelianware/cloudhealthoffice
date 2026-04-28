@@ -27,6 +27,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      Service-category mapping seed bundle (capability BP 5.6).
+      Copied to the build output so SystemDefaultMappingSeeder finds the
+      file at <ContentRoot>/schemas/service-category-mappings/system-defaults.json
+      regardless of working-directory shape (local dev vs Dockerfile copy).
+    -->
+    <Content Include="..\..\..\schemas\service-category-mappings\system-defaults.json"
+             Link="schemas\service-category-mappings\system-defaults.json"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\schemas\service-category-mappings\README.md"
+             Link="schemas\service-category-mappings\README.md"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.59.0" />
     <PackageReference Include="MongoDB.Driver" Version="3.8.0" />
