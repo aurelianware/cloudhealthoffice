@@ -20,6 +20,13 @@
   --glow-cyan: 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2);
   --glow-green: 0 0 10px rgba(0, 255, 136, 0.4), 0 0 20px rgba(0, 255, 136, 0.2);
   --glow-circuit: 0 0 15px rgba(0, 255, 255, 0.3), 0 0 30px rgba(0, 255, 136, 0.15);
+
+  /* Integrity rating shades (capability 5.10 — Decision 9). Two ratings
+     don't map cleanly onto MudBlazor's four-color palette
+     (Success/Warning/Error/Default); these custom shades sit between the
+     platform colors so all six rating values render losslessly. */
+  --cho-rating-caution: #ff7a1a;
+  --cho-rating-blocked: #8b0028;
 }
 
 body {

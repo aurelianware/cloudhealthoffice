@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using BenefitPlanService.Adapters;
 using BenefitPlanService.Middleware;
+using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using MongoDB.Driver;
@@ -226,16 +227,32 @@ builder.Services.AddHttpClient<IOperatingModeProvider, HttpOperatingModeProvider
 // Determines CHO vs. legacy routing per claim type and line of business.
 builder.Services.AddSingleton<IClaimTypeRouter, ClaimTypeRouter>();
 
-// ── Provider Integrity Gate ──────────────────────────────────────────────────
-// Checks provider against OIG/LEIE/SAM.gov exclusion lists via
-// provider-verification-service. Cached 1 hour per NPI.
-builder.Services.AddHttpClient<IProviderIntegrityGate, HttpProviderIntegrityGate>(client =>
+// ── Provider Integrity Gate (capability 5.10 — cached-or-live) ───────────────
+// Adjudication-path gate that reads the canonical projection on
+// Provider.IntegrityScore from provider-service by default and only falls
+// back to provider-verification-service when the cached score is null,
+// stale, or callers explicitly opt in via forceRefresh: true. The 1-hour
+// MemoryCache stays as a per-pod request-coalescing layer wrapping the
+// outer ProviderIntegrityResult. See
+// docs/architecture/integrity-score-consumption.md for the canonical
+// decision tree.
+builder.Services.Configure<ProviderIntegrityGateOptions>(
+    builder.Configuration.GetSection(ProviderIntegrityGateOptions.SectionName));
+builder.Services.AddHttpClient(HttpProviderIntegrityGate.ProviderServiceClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ProviderServiceUrl"]
+        ?? "http://provider-service:8080/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+builder.Services.AddHttpClient(HttpProviderIntegrityGate.VerificationServiceClientName, client =>
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:ProviderVerificationServiceUrl"]
         ?? "http://provider-verification-service:8080/");
     client.Timeout = TimeSpan.FromSeconds(10);
 });
+builder.Services.AddSingleton<IProviderIntegrityGate, HttpProviderIntegrityGate>();
 
 // ── Terminology Crosswalk Client ─────────────────────────────────────────────
 // Resolves plan-specific procedure code mappings before fee schedule pricing.

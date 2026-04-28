@@ -1,5 +1,7 @@
 @using CloudHealthOffice.Portal.Services
 @inject IProviderService ProviderService
+@inject IUserContextService UserContextService
+@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
@@ -79,6 +81,89 @@
                                             <span class="mud-text-secondary">No claims submitted</span>
                                         }
                                     </MudText>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+
+                        <!-- Verification Integrity (capability 5.10) -->
+                        <MudItem xs="12">
+                            <MudCard Elevation="0">
+                                <MudCardContent>
+                                    <div class="d-flex align-center justify-space-between mb-2">
+                                        <MudText Typo="Typo.h6">Verification Integrity</MudText>
+                                        @{
+                                            var canRefresh = UserContextService.HasPermission("providers:verification.refresh");
+                                            var refreshTooltip = canRefresh
+                                                ? "Trigger an on-demand verification refresh from provider-verification-service."
+                                                : "Admin permission required (providers:verification.refresh).";
+                                        }
+                                        @* TODO: when PermissionGate supports RenderDisabled mode, migrate this to use the gate. *@
+                                        <MudTooltip Text="@refreshTooltip">
+                                            <MudButton Variant="Variant.Outlined"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.Refresh"
+                                                       Disabled="@(!canRefresh || _refreshing)"
+                                                       OnClick="RefreshVerificationAsync">
+                                                @(_refreshing ? "Refreshing…" : "Refresh now")
+                                            </MudButton>
+                                        </MudTooltip>
+                                    </div>
+                                    <MudDivider Class="mb-3" />
+
+                                    <MudGrid>
+                                        <MudItem xs="12" sm="4">
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">Rating</MudText>
+                                            <div class="mt-1 mb-2">
+                                                <IntegrityBadge Score="@_provider.IntegrityScore"
+                                                                Rating="@_provider.IntegrityRating"
+                                                                Compact="false" />
+                                            </div>
+                                        </MudItem>
+                                        <MudItem xs="6" sm="4">
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">Last verified</MudText>
+                                            <MudText Typo="Typo.body1">
+                                                @if (_provider.LastVerifiedAt.HasValue)
+                                                {
+                                                    @_provider.LastVerifiedAt.Value.LocalDateTime.ToString("MMMM d, yyyy h:mm tt")
+                                                }
+                                                else
+                                                {
+                                                    <span class="mud-text-secondary">Never</span>
+                                                }
+                                            </MudText>
+                                        </MudItem>
+                                        <MudItem xs="6" sm="4">
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">Next due</MudText>
+                                            <MudText Typo="Typo.body1">
+                                                @if (_provider.NextVerificationDue.HasValue)
+                                                {
+                                                    @_provider.NextVerificationDue.Value.LocalDateTime.ToString("MMMM d, yyyy")
+                                                }
+                                                else
+                                                {
+                                                    <span class="mud-text-secondary">—</span>
+                                                }
+                                            </MudText>
+                                        </MudItem>
+                                    </MudGrid>
+
+                                    @* TODO: wire to ProviderVerificationDetailPage in capability 5.X.
+                                       Today the breakdown isn't surfaced via provider-service's cached
+                                       projection (capability 5.10 stops at score + rating + verification
+                                       timing). Phase 2 capability surfaces per-source flags / dimensions
+                                       (NPPES / LEIE / PECOS / FSMB / Open Payments) and replaces this
+                                       stub with a real link. *@
+                                    <MudTooltip Text="Detailed verification breakdown — coming in a future release">
+                                        <MudButton Variant="Variant.Text"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small"
+                                                   EndIcon="@Icons.Material.Filled.ArrowForward"
+                                                   Class="mt-2"
+                                                   Disabled="true">
+                                            View detailed verification report
+                                        </MudButton>
+                                    </MudTooltip>
                                 </MudCardContent>
                             </MudCard>
                         </MudItem>
@@ -343,6 +428,7 @@
     [Parameter] public EventCallback OnProviderUpdated { get; set; }
 
     private bool _loading = false;
+    private bool _refreshing = false;
     private ProviderDetails? _provider;
     private string? _serviceError;
 
@@ -372,6 +458,48 @@
     private void Close()
     {
         MudDialog?.Close();
+    }
+
+    /// <summary>
+    /// Capability 5.10 — on-demand integrity refresh. Routes through the
+    /// portal's IProviderService wrapper around
+    /// POST /providers/{id}/verification/refresh on provider-service
+    /// (5.4.5 endpoint, NOT IntegrityProjectionAdminController). The
+    /// permission check is enforced at the portal layer; the underlying
+    /// endpoint relies on deployment-layer NetworkPolicy / gateway ACL.
+    /// </summary>
+    private async Task RefreshVerificationAsync()
+    {
+        if (_provider is null || _refreshing) return;
+        _refreshing = true;
+        try
+        {
+            var result = await ProviderService.RefreshProviderVerificationAsync(_provider.ProviderId);
+            if (result is null)
+            {
+                Snackbar.Add("Refresh returned no integrity result for this provider.", Severity.Warning);
+                return;
+            }
+
+            _provider.IntegrityScore = result.IntegrityScore;
+            _provider.IntegrityRating = result.IntegrityRating;
+            _provider.LastVerifiedAt = result.LastVerifiedAt;
+            _provider.NextVerificationDue = result.NextVerificationDue;
+            Snackbar.Add("Verification refreshed.", Severity.Success);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"Refresh failed: {ex.Message}";
+        }
+        finally
+        {
+            _refreshing = false;
+            StateHasChanged();
+        }
     }
 
     private EventCallback<string?> OnEdit => EventCallback.Factory.Create<string?>(this, async (providerId) =>

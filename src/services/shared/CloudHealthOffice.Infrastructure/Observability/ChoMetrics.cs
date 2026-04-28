@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 
 namespace CloudHealthOffice.Infrastructure.Observability;
@@ -110,6 +111,90 @@ public static class ChoMetrics
             "cho.provider.network_participation.backfill.outcomes.total",
             unit: "{participation}",
             description: "Participations processed by the panel-gating backfill, by outcome");
+
+    /// <summary>
+    /// Counter tracking <c>HttpProviderIntegrityGate</c>'s cached-or-live
+    /// decision path (capability 5.10). Dimensions: <c>cho.path</c>
+    /// (<c>cached_hit</c> | <c>stale_fallback</c> | <c>null_fallback</c>
+    /// | <c>live_only</c>) and <c>cho.rating</c> (the resolved rating
+    /// label, or <c>"unknown"</c>).
+    ///
+    /// <para>
+    /// The metric drives operational tuning of
+    /// <c>ProviderIntegrityGate:StalenessFallbackThreshold</c>: high
+    /// <c>stale_fallback</c> rates suggest the threshold is tighter than
+    /// the verification cadence; high <c>null_fallback</c> rates suggest
+    /// the projection backfill hasn't been run on that tenant. See
+    /// <c>docs/architecture/integrity-score-consumption.md</c>.
+    /// </para>
+    /// </summary>
+    public static readonly Counter<long> ProviderIntegrityGateDecisions =
+        Meter.CreateCounter<long>(
+            "cho.provider.integrity_gate.decisions.total",
+            unit: "{decision}",
+            description: "HttpProviderIntegrityGate cached-or-live decisions by path and rating");
+
+    /// <summary>
+    /// Per-tenant snapshot of providers whose <c>LastVerifiedAt</c> is
+    /// older than <c>IntegrityProjection:StalenessAlertThreshold</c>
+    /// (capability 5.10). Updated by
+    /// <c>IntegrityProjectionStalenessReporter</c> on each worker sweep
+    /// cycle; read by the observable gauge below on each scrape.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, long> IntegrityScoreStaleCounts
+        = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Observable gauge surfacing the per-tenant stale-score snapshot
+    /// (capability 5.10). Dimension: <c>cho.tenant_id</c>.
+    ///
+    /// <para>
+    /// Underscored snake_case metric name + <c>cho.*</c> tag keeps this
+    /// instrument aligned with sibling provider-service metrics in
+    /// <see cref="PanelGatingMissingWrites"/> and
+    /// <see cref="NetworkParticipationBackfillOutcomes"/>.
+    /// </para>
+    /// </summary>
+    public static readonly ObservableGauge<long> ProviderIntegrityScoreStaleCount =
+        Meter.CreateObservableGauge<long>(
+            "cho.provider.integrity_score.stale_count",
+            observeValues: () =>
+            {
+                var snapshot = IntegrityScoreStaleCounts.ToArray();
+                var measurements = new Measurement<long>[snapshot.Length];
+                for (var i = 0; i < snapshot.Length; i++)
+                {
+                    measurements[i] = new Measurement<long>(
+                        snapshot[i].Value,
+                        new KeyValuePair<string, object?>("cho.tenant_id", snapshot[i].Key));
+                }
+                return measurements;
+            },
+            unit: "{provider}",
+            description: "Providers whose cached integrity score is stale, per tenant");
+
+    /// <summary>
+    /// Update the per-tenant stale-score snapshot read by
+    /// <see cref="ProviderIntegrityScoreStaleCount"/>. Called from
+    /// <c>IntegrityProjectionStalenessReporter</c> after each worker
+    /// sweep cycle. Setting <paramref name="count"/> to a negative value
+    /// removes the entry (used when the threshold is disabled).
+    /// </summary>
+    public static void SetIntegrityScoreStaleCount(string tenantId, long count)
+    {
+        if (string.IsNullOrEmpty(tenantId)) return;
+        if (count < 0) IntegrityScoreStaleCounts.TryRemove(tenantId, out _);
+        else IntegrityScoreStaleCounts[tenantId] = count;
+    }
+
+    /// <summary>
+    /// Test hook — clears the stale-count snapshot. Production code
+    /// should never call this; tests use it to reset state between
+    /// runs. Public (rather than internal) so consumers in test
+    /// projects across assembly boundaries can reset the static
+    /// snapshot without managing <c>InternalsVisibleTo</c> entries.
+    /// </summary>
+    public static void ResetIntegrityScoreStaleCounts() => IntegrityScoreStaleCounts.Clear();
 
     private static string GetAssemblyVersion()
     {

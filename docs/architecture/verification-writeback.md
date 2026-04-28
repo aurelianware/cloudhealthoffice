@@ -263,17 +263,22 @@ planned subscriber. Cosmos-only deployments register
 `NoopProviderVerificationEventPublisher` which logs a warning per
 emit so ops can spot the missing wiring.
 
-## `HttpProviderIntegrityGate` posture — unchanged
+## `HttpProviderIntegrityGate` posture — migrated in 5.10
 
-`benefit-plan-service` continues to consume the score live via
+5.4.5 left `benefit-plan-service` consuming the score live via
 `HttpProviderIntegrityGate.CheckAsync(npi)` per adjudication request.
-The cached projection is a *forward* path that consumers can adopt as
-they're ready; the live HTTP path remains the source of truth for
-adjudication.
+Capability 5.10 (Integrity Score Surface) migrates the gate to a
+cached-or-live pattern: the gate reads `Provider.IntegrityScore` from
+provider-service first and falls back to the live verification path
+only when the cached score is null, stale beyond
+`ProviderIntegrityGate:StalenessFallbackThreshold` (default 7 days),
+or the caller explicitly opts in via `forceRefresh: true`.
 
-Capability 5.10 (Integrity Score Surface) is the right place to
-decide consumer-by-consumer migration to the cached path. 5.4.5 ships
-the persistence; 5.10 ships the consumption strategy.
+See `docs/architecture/integrity-score-consumption.md` for the
+canonical decision tree, the per-path telemetry shape
+(`cho.provider.integrity_gate.decisions.total`), and the staleness
+alerting gauge (`cho.provider.integrity_score.stale_count`) that
+5.10 piggybacks on this worker's sweep.
 
 ## Configuration
 

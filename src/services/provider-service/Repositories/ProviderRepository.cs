@@ -187,6 +187,28 @@ public interface IProviderRepository
     /// </summary>
     Task<IReadOnlyList<string>> ListProviderTenantIdsAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Count head-Active providers in <paramref name="tenantId"/> whose
+    /// <see cref="Provider.LastVerifiedAt"/> is <c>null</c> or older than
+    /// <paramref name="staleBefore"/>. Used by
+    /// <c>IntegrityProjectionStalenessReporter</c> (capability 5.10) to
+    /// publish the per-tenant
+    /// <c>cho.provider.integrity_score.stale_count</c> Prometheus gauge.
+    ///
+    /// <para>
+    /// Mirrors the hydration rule of
+    /// <see cref="ListProvidersForIntegrityRefreshAsync"/> — only
+    /// head-Active rows are considered (legacy single-row chains, missing
+    /// <c>VersionState</c> field, and explicit Active state). Per-tenant
+    /// scoped (single-partition on the Cosmos impl) so the gauge update
+    /// stays cheap on the worker hot-path.
+    /// </para>
+    /// </summary>
+    Task<long> CountStaleProvidersAsync(
+        string tenantId,
+        DateTimeOffset staleBefore,
+        CancellationToken ct = default);
+
     // ---- Network-participation panel-gating backfill (capability 5.5) -
 
     /// <summary>
@@ -1083,6 +1105,47 @@ public class ProviderRepository : IProviderRepository
             }
         }
         return tenants.OrderBy(x => x, StringComparer.Ordinal).ToList();
+    }
+
+    public async Task<long> CountStaleProvidersAsync(
+        string tenantId,
+        DateTimeOffset staleBefore,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+            throw new ArgumentException("tenantId is required.", nameof(tenantId));
+
+        // Hydration rule (mirrors Hydrate()) — three "Active" shapes,
+        // each Status-gated, identical to the refresh-list query above.
+        // A provider is stale when LastVerifiedAt is missing/null or
+        // older than staleBefore.
+        var sql = "SELECT VALUE COUNT(1) FROM c WHERE c.tenantId = @tenantId AND " +
+                  "(c.versionState = @active " +
+                  "OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive) " +
+                  "OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = \"\") AND c.status = @statusActive)) AND " +
+                  "(NOT IS_DEFINED(c.lastVerifiedAt) OR c.lastVerifiedAt = null OR c.lastVerifiedAt < @staleBefore)";
+
+        var query = new QueryDefinition(sql)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@active", ProviderVersionState.Active.ToString())
+            .WithParameter("@statusActive", ProviderStatus.Active.ToString())
+            .WithParameter("@staleBefore", staleBefore);
+
+        var iterator = _container.GetItemQueryIterator<long>(
+            query,
+            requestOptions: new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(tenantId),
+            });
+
+        long total = 0;
+        while (iterator.HasMoreResults)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await iterator.ReadNextAsync(ct);
+            foreach (var v in page) total += v;
+        }
+        return total;
     }
 
     public async Task<bool> UpdatePanelGatingDefaultsAsync(
