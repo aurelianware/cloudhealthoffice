@@ -274,4 +274,12 @@ Mongo.
   `BenefitPlan.NetworkTier` reference (capability 5.5) by joining the
   tier's `NetworkId` against this endpoint.
 - FHIR projections (5.7+) can render `PractitionerRole` collections
-  scoped to a network using the same query path.
+  scoped to a network using the same query path. Capability 5.8 wires
+  this connection: `GET /fhir/PractitionerRole?organization=Organization/{networkId}`
+  reuses `IProviderRepository.ListNetworkRosterAsync` (the same query
+  this endpoint drives) and projects each matching participation to a
+  FHIR PractitionerRole. The two surfaces are equivalent in source data
+  and complementary in shape: roster is the operational summary
+  (`NetworkRosterEntry`) for admin tooling; PractitionerRole is the
+  FHIR-canonical projection for external consumers. See
+  [fhir-practitionerrole-projection.md](fhir-practitionerrole-projection.md).
