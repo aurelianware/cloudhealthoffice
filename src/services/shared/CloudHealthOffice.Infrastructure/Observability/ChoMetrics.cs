@@ -119,8 +119,8 @@ public static class ChoMetrics
     /// when this counter is zero across all tenants for a sustained
     /// window, the follow-up PR can flip soft warnings to 400
     /// rejections without breaking callers. Dimensions:
-    /// <c>cho.caller</c> (CreatePlan | UpdatePlan | UpdateDraft |
-    /// PublishAndSupersede), <c>cho.tenant_id</c>.
+    /// <c>cho.caller</c> (CreatePlan | UpdatePlan | CreateDraft |
+    /// AmendPublished | PublishAndSupersede), <c>cho.tenant_id</c>.
     /// </summary>
     public static readonly Counter<long> NetworkTierMissingNetworkIdWrites =
         Meter.CreateCounter<long>(
@@ -129,17 +129,19 @@ public static class ChoMetrics
             description: "Writes to BenefitPlan.NetworkTiers that elide NetworkTier.NetworkId (5.5 soft validation)");
 
     /// <summary>
-    /// Counter tracking benefit plans patched by the
+    /// Counter tracking network-tier mapping outcomes emitted by the
     /// <c>NetworkTierBackfillService</c> (benefit-plan capability 5.5
-    /// admin-triggered backfill). Dimensions: <c>cho.outcome</c>
-    /// (patched | skipped | not_found | unresolved | failed),
-    /// <c>cho.tenant_id</c>.
+    /// admin-triggered backfill). A single benefit plan can contribute
+    /// multiple increments when the operator submits multiple tier
+    /// mappings against the same plan in one request. Dimensions:
+    /// <c>cho.outcome</c> (patched | skipped | not_found | unresolved |
+    /// failed), <c>cho.tenant_id</c>.
     /// </summary>
     public static readonly Counter<long> NetworkTierBackfillOutcomes =
         Meter.CreateCounter<long>(
             "cho.benefit_plan.network_tier.backfill.outcomes.total",
-            unit: "{plan}",
-            description: "Benefit plans processed by the network-tier NetworkId backfill, by outcome");
+            unit: "{mapping}",
+            description: "Network-tier mapping outcomes processed by the NetworkId backfill, by outcome");
 
     /// <summary>
     /// Counter tracking <c>HttpProviderIntegrityGate</c>'s cached-or-live

@@ -110,8 +110,21 @@ public class HttpOrganizationLookupClient : IOrganizationLookupClient
 
             return await response.Content.ReadFromJsonAsync<OrganizationLookupResult>(ct);
         }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller-driven cancellation must propagate. Swallowing this
+            // would surface as an `unresolved` outcome and obscure the
+            // actual cancellation signal from the orchestrator.
+            throw;
+        }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
+            // HttpRequestException → transport / DNS failure.
+            // TaskCanceledException without ct.IsCancellationRequested →
+            // HttpClient request timeout (the typed client's Timeout
+            // surfaces as TaskCanceledException). Treat both as
+            // "unresolved" so the caller's policy (warn + continue at
+            // write time today) applies.
             _logger.LogWarning(ex,
                 "Provider service unreachable for network {NetworkId}; treating as unresolved",
                 SanitizeForLog(networkId));

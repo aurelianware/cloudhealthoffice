@@ -217,8 +217,9 @@ default `UpdateAsync` path rejects writes against Published versions
 (create an amendment). 5.5 adds a sibling repository method that
 writes only the `NetworkTiers` collection on the head Active row via
 field-scoped patch (Cosmos `PatchItemAsync` `Set("/networkTiers", tiers)`;
-Mongo `UpdateOneAsync` with `$set`) — no PlanVersion row created, no
-`PlanVersionEvent` emitted.
+Mongo `FindOneAndUpdateAsync` with sort-by-`VersionNumber` and `$set`
+for the head-row patch in one round trip) — no PlanVersion row
+created, no `PlanVersionEvent` emitted.
 
 Identity-bearing field writes still go through `UpdateAsync` and
 respect version-state enforcement. The exemption is documented in
@@ -262,13 +263,15 @@ them were all deferred to the consumer that genuinely needs them.
 
 ## Recovery posture
 
-- **Backfill operator-supplied mapping wrong.** Re-run with corrected
-  mapping; previously-patched tiers are skipped; the corrected
-  mapping is applied against the offending tier's existing
-  `NetworkId` (which was wrong) — the rerun is idempotent on
-  already-mapped tiers, so a wrong mapping requires either a manual
-  amendment of the plan or a follow-up "force overwrite" mode (not
-  shipped in 5.5; defer to first reported incident).
+- **Backfill operator-supplied mapping wrong.** Re-run with the
+  corrected mapping only to continue patching tiers that have not yet
+  been written; previously-patched tiers are skipped (the rerun is
+  idempotent on already-mapped tiers). A tier whose existing
+  `NetworkId` was set from the wrong mapping is **not** corrected by
+  rerun under the 5.5 backfill semantics — recovery requires either a
+  manual amendment of the affected plan or a follow-up "force
+  overwrite" mode (not shipped in 5.5; defer to first reported
+  incident).
 - **`UpdateNetworkTiersAsync` interpreted as version-identity
   change.** Fast revert; the sibling-method bypass is fully
   orthogonal to the identity-write path. Tests pin the orthogonality.

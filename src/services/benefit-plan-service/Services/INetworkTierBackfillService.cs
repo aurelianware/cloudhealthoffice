@@ -139,12 +139,28 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
             return result;
         }
 
-        // Group mappings by planId so each plan is loaded and patched
-        // exactly once even when the operator submits multiple tier
-        // mappings against the same plan.
-        var byPlan = request.Mappings
-            .Where(m => !string.IsNullOrWhiteSpace(m.PlanId))
-            .GroupBy(m => m.PlanId, StringComparer.Ordinal);
+        // Validate PlanId per mapping before grouping. Mappings with a
+        // blank/whitespace PlanId are recorded as `failed` (visible in
+        // both the per-tenant counter and the operator-facing result
+        // summary) instead of being silently dropped — submitted-vs-
+        // outcome totals stay in balance and the operator gets explicit
+        // feedback.
+        var validMappings = new List<NetworkTierBackfillMapping>();
+        foreach (var mapping in request.Mappings)
+        {
+            if (string.IsNullOrWhiteSpace(mapping.PlanId))
+            {
+                RecordOutcome(tenantId, "failed", mapping, result, detail: "planId is required.");
+                result.Failed++;
+                continue;
+            }
+            validMappings.Add(mapping);
+        }
+
+        // Group surviving mappings by planId so each plan is loaded and
+        // patched exactly once even when the operator submits multiple
+        // tier mappings against the same plan.
+        var byPlan = validMappings.GroupBy(m => m.PlanId, StringComparer.Ordinal);
 
         foreach (var group in byPlan)
         {
@@ -181,7 +197,13 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
         }
 
         var tiers = plan.NetworkTiers.Select(CloneTier).ToList();
-        var changed = false;
+        // Buffer the mappings that resolved cleanly (organization
+        // exists, tier exists, NetworkId is null today). Their `patched`
+        // counter and result-summary increments are deferred until
+        // UpdateNetworkTiersAsync returns true — a Prometheus counter
+        // can't be decremented, so we never want to emit `patched` for
+        // a mapping whose write later failed.
+        var pendingPatched = new List<NetworkTierBackfillMapping>();
 
         foreach (var mapping in mappings)
         {
@@ -218,48 +240,57 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
             }
 
             tier.NetworkId = mapping.NetworkId;
-            changed = true;
-            result.Patched++;
+            pendingPatched.Add(mapping);
+        }
+
+        if (pendingPatched.Count == 0) return;
+
+        bool writeOk;
+        try
+        {
+            writeOk = await _repository.UpdateNetworkTiersAsync(tenantId, planId, tiers, ct);
+        }
+        catch (Exception ex)
+        {
+            // Repository patch threw — every pendingPatched mapping is
+            // unwritten. Surface them as `failed` (counter + summary)
+            // and continue with the next plan.
+            _logger.LogError(ex,
+                "network-tier backfill failed tenant={Tenant} planId={PlanId} runId={RunId}",
+                SanitizeForLog(tenantId), SanitizeForLog(planId), result.BackfillRunId);
+            foreach (var m in pendingPatched)
+            {
+                RecordOutcome(tenantId, "failed", m, result, detail: ex.GetType().Name);
+                result.Failed++;
+            }
+            return;
+        }
+
+        if (!writeOk)
+        {
+            // Lost-write race — head row vanished between
+            // GetLatestPublishedAsync and UpdateNetworkTiersAsync. None
+            // of the pendingPatched mappings were written; record each
+            // as `not_found`.
+            _logger.LogWarning(
+                "network-tier backfill: head row vanished mid-operation tenant={Tenant} planId={PlanId} runId={RunId}",
+                SanitizeForLog(tenantId), SanitizeForLog(planId), result.BackfillRunId);
+            foreach (var m in pendingPatched)
+            {
+                RecordOutcome(tenantId, "not_found", m, result, detail: "Head version disappeared during patch.");
+                result.NotFound++;
+            }
+            return;
+        }
+
+        // Write succeeded → emit `patched` once per mapping.
+        foreach (var m in pendingPatched)
+        {
             ChoMetrics.NetworkTierBackfillOutcomes.Add(
                 1,
                 new KeyValuePair<string, object?>("cho.outcome", "patched"),
                 new KeyValuePair<string, object?>("cho.tenant_id", tenantId));
-        }
-
-        if (!changed) return;
-
-        try
-        {
-            var ok = await _repository.UpdateNetworkTiersAsync(tenantId, planId, tiers, ct);
-            if (!ok)
-            {
-                // Lost-write race — head row was deleted between
-                // GetLatestPublishedAsync and UpdateNetworkTiersAsync.
-                // Roll back the per-mapping counters we already recorded
-                // for this plan so the totals still balance.
-                _logger.LogWarning(
-                    "network-tier backfill: head row vanished mid-operation tenant={Tenant} planId={PlanId} runId={RunId}",
-                    SanitizeForLog(tenantId), SanitizeForLog(planId), result.BackfillRunId);
-                foreach (var m in mappings)
-                {
-                    if (result.Issues.Any(i => i.PlanId == planId && i.TierName == m.TierName)) continue;
-                    RecordOutcome(tenantId, "not_found", m, result, detail: "Head version disappeared during patch.");
-                    result.NotFound++;
-                    result.Patched--; // we incremented above; undo on miss
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "network-tier backfill failed tenant={Tenant} planId={PlanId} runId={RunId}",
-                SanitizeForLog(tenantId), SanitizeForLog(planId), result.BackfillRunId);
-            foreach (var m in mappings)
-            {
-                RecordOutcome(tenantId, "failed", m, result, detail: ex.GetType().Name);
-            }
-            result.Failed += mappings.Count;
-            result.Patched -= mappings.Count;
+            result.Patched++;
         }
     }
 

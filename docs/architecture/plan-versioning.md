@@ -198,7 +198,8 @@ dedicated sibling method.
 `UpdateNetworkTiersAsync` resolves the head Published row by chain
 key, then patches the entire `NetworkTiers` collection with a single
 field-scoped op (Cosmos `PatchItemAsync` `Set("/networkTiers", tiers)`;
-Mongo `UpdateOneAsync` with `$set`). No `PlanVersionEvent` is
+Mongo `FindOneAndUpdateAsync` with sort-by-`VersionNumber` and `$set`,
+patching the head row in one round trip). No `PlanVersionEvent` is
 emitted — the operation is a projection-metadata refresh, not a chain
 transition.
 

@@ -160,7 +160,7 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
         var head = _docs
             .Where(d => d.TenantId == tenantId
                 && d.PlanId == planId
-                && (d.VersionState == PlanVersionState.Published || d.VersionState == default)
+                && d.VersionState == PlanVersionState.Published
                 && d.EffectiveDate <= asOf
                 && (d.TerminationDate == null || d.TerminationDate >= asOf))
             .OrderByDescending(d => d.VersionNumber)

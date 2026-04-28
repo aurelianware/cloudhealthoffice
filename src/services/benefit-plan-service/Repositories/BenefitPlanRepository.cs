@@ -78,8 +78,10 @@ public interface IBenefitPlanRepository
     ///
     /// <para>
     /// The Cosmos impl uses <c>PatchItemAsync</c> with a single
-    /// field-scoped <c>Set</c> op, the Mongo impl uses
-    /// <c>UpdateOneAsync</c> with <c>$set</c>. No
+    /// field-scoped <c>Set</c> op; the Mongo impl uses
+    /// <c>FindOneAndUpdateAsync</c> with a sort on
+    /// <c>VersionNumber</c> and <c>$set</c> so the head row is
+    /// resolved and patched in a single round-trip. No
     /// <c>PlanVersionEvent</c> is emitted — the operation is a
     /// projection-metadata refresh, not a chain transition. See
     /// <c>docs/architecture/plan-versioning.md</c> "Projection
@@ -90,7 +92,7 @@ public interface IBenefitPlanRepository
     /// Returns <c>true</c> when the head row was patched, <c>false</c>
     /// when no head Published row exists for the plan or the row was
     /// removed between lookup and patch (treated as a soft miss; the
-    /// backfill counts it under <c>skipped</c>).
+    /// backfill records it under <c>not_found</c>).
     /// </para>
     /// </summary>
     Task<bool> UpdateNetworkTiersAsync(

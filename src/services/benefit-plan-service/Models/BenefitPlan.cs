@@ -310,7 +310,7 @@ public class Benefit
 /// <para>
 /// <see cref="NetworkId"/> is nullable on purpose. A null value is a
 /// legacy-tier marker that drives the soft-validation counter
-/// <c>cho.benefit_plan.network_tier_missing_networkid_writes_total</c>;
+/// <c>cho.benefit_plan.network_tier_missing_networkid_writes.total</c>;
 /// the follow-up hard-validation PR flips this to <c>[Required]</c>
 /// once the counter reads zero across all tenants for a sustained
 /// window. See
