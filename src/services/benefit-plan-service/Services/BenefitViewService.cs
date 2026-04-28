@@ -42,6 +42,7 @@ public class BenefitViewService : IBenefitViewService
             EffectiveDate = plan.EffectiveDate,
             TerminationDate = plan.TerminationDate,
             PlanVersion = BuildPlanVersion(plan),
+            FamilyAccumulatorModel = plan.FamilyAccumulatorModel.ToString(),
             CostSharing = plan.CostSharing,
             Categories = plan.Benefits.Select(b => ProjectBenefit(b, plan)).ToList(),
             Documents = plan.Documents.Select(ProjectDocument).ToList(),

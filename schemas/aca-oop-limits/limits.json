@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "source": "45 CFR §156.130 / CMS Notice of Benefit and Payment Parameters",
+  "lastReviewed": "2026-04-28",
+  "limits": [
+    {
+      "planYear": 2024,
+      "individualCap": 9450,
+      "familyCap": 18900,
+      "rule": "CMS-9911-F (NBPP 2024)"
+    },
+    {
+      "planYear": 2025,
+      "individualCap": 9200,
+      "familyCap": 18400,
+      "rule": "CMS-9895-F (NBPP 2025)"
+    },
+    {
+      "planYear": 2026,
+      "individualCap": 10600,
+      "familyCap": 21200,
+      "rule": "CMS-9888-F (NBPP 2026), revised methodology",
+      "note": "Original NBPP 2026 finalization at 10150/20300 was superseded by the revised premium adjustment methodology finalized in 2025."
+    },
+    {
+      "planYear": 2027,
+      "individualCap": 12000,
+      "familyCap": 24000,
+      "rule": "Per revised methodology projection",
+      "note": "Projected from the revised premium adjustment methodology; verify against the 2027 NBPP final rule when published."
+    }
+  ]
+}

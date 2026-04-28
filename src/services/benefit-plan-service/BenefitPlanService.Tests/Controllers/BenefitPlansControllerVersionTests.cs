@@ -23,7 +23,7 @@ public class BenefitPlansControllerVersionTests
         var repo = new InMemoryBenefitPlanRepository();
         var transitions = new InMemoryPlanVersionTransitionRepository();
         var events = new FakePlanVersionEventPublisher();
-        var service = new BenefitPlanServiceImpl(repo, transitions, events, new NoOpNetworkTierSoftValidator(), NullLogger<BenefitPlanServiceImpl>.Instance);
+        var service = new BenefitPlanServiceImpl(repo, transitions, events, new NoOpNetworkTierSoftValidator(), new NoOpPlanLimitValidator(), NullLogger<BenefitPlanServiceImpl>.Instance);
         var viewService = new BenefitViewService(service, NullLogger<BenefitViewService>.Instance);
 
         // Default adapter: real CHO adapter backed by the in-memory service so

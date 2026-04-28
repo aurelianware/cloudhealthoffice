@@ -161,6 +161,16 @@ builder.Services.AddBenefitEngine().UseRedisAccumulatorService();
 builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IBenefitPlanProvider,
                            BenefitPlanService.Services.ChoBenefitPlanProvider>();
 
+// ── ACA OOP Limits + Plan-Limit Validator (capability BP 5.7) ────────────────
+// Loaded once at service startup; consumed by ChoBenefitPlanProvider when
+// projecting BenefitPlan onto BenefitPlanConfig and by IPlanLimitValidator
+// at every plan-write surface. See docs/architecture/family-accumulator-models.md.
+builder.Services.Configure<AcaOopLimitsOptions>(
+    builder.Configuration.GetSection(AcaOopLimitsOptions.SectionName));
+builder.Services.AddSingleton<IAcaLimitsProvider, AcaLimitsProvider>();
+builder.Services.AddSingleton<IPlanYearResolver, PlanYearResolver>();
+builder.Services.AddScoped<IPlanLimitValidator, PlanLimitValidator>();
+
 // ── Service-Category Mappings (capability BP 5.6) ────────────────────────────
 // Replaces the prior NullServiceCategoryMappingRepository with a real Cosmos
 // or Mongo backend (selected by the same MongoDb:ConnectionString switch

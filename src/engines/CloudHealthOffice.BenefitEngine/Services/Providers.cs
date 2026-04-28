@@ -79,6 +79,28 @@ public record BenefitPlanConfig
     // Deductible model
     public FamilyAccumulatorModel FamilyAccumulatorModel { get; init; } = FamilyAccumulatorModel.Embedded;
 
+    /// <summary>
+    /// ACA 45 CFR §156.130 per-member individual out-of-pocket cap for
+    /// the plan year. Resolved at <see cref="IBenefitPlanProvider"/>
+    /// mapping time from the file-backed <c>IAcaLimitsProvider</c>. Only
+    /// enforced in Aggregate mode (in Embedded mode the existing
+    /// <see cref="IndividualOopMax"/> already constrains members).
+    /// Null disables runtime enforcement; the
+    /// <c>IPlanLimitValidator</c> still runs at write time.
+    /// </summary>
+    public decimal? AcaIndividualCap { get; init; }
+
+    /// <summary>
+    /// Gated rollout flag for Aggregate-mode ACA cap enforcement (G8).
+    /// New plans published after capability 5.7 set this to true; legacy
+    /// plans hydrate with false so members on existing Aggregate plans
+    /// don't see surprise mid-year caps. Operators flip a legacy plan to
+    /// enforced state by re-publishing the version. Transition support,
+    /// not permanent legacy support — see
+    /// docs/architecture/family-accumulator-models.md.
+    /// </summary>
+    public bool IsAcaCapEnforced { get; init; }
+
     // ── HDHP / HSA ──
 
     /// <summary>

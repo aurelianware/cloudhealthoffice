@@ -129,6 +129,22 @@ public static class ChoMetrics
             description: "Writes to BenefitPlan.NetworkTiers that elide NetworkTier.NetworkId (5.5 soft validation)");
 
     /// <summary>
+    /// Counter tracking benefit-plan write rejections by
+    /// <c>IPlanLimitValidator</c> (capability 5.7 — ACA §156.130
+    /// individual / family OOP cap enforcement). Distinct from soft
+    /// validators: every increment corresponds to a 400 rejection.
+    /// Dimensions: <c>cho.caller</c> (one of the
+    /// <c>PlanLimitWriteCaller</c> values), <c>cho.tenant_id</c>,
+    /// <c>cho.reason</c> (PlanYearNotConfigured |
+    /// IndividualOopExceedsAcaCap | FamilyOopExceedsAcaCap).
+    /// </summary>
+    public static readonly Counter<long> PlanLimitValidationFailures =
+        Meter.CreateCounter<long>(
+            "cho.benefit_plan.plan_limit_validation_failures.total",
+            unit: "{rejection}",
+            description: "Benefit-plan write rejections from IPlanLimitValidator (5.7 ACA OOP cap enforcement)");
+
+    /// <summary>
     /// Counter tracking network-tier mapping outcomes emitted by the
     /// <c>NetworkTierBackfillService</c> (benefit-plan capability 5.5
     /// admin-triggered backfill). A single benefit plan can contribute

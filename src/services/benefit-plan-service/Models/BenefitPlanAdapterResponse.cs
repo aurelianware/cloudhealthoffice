@@ -57,6 +57,7 @@ public class AdapterBenefitPlan
     public PlanType PlanType { get; set; }
     public MetalLevel? MetalLevel { get; set; }
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
+    public FamilyAccumulatorModel FamilyAccumulatorModel { get; set; } = FamilyAccumulatorModel.Embedded;
 
     public List<AdapterBenefit> Benefits { get; set; } = new();
     public List<AdapterNetworkTier> NetworkTiers { get; set; } = new();
@@ -92,6 +93,7 @@ public class AdapterBenefitPlan
         PlanType = src.PlanType,
         MetalLevel = src.MetalLevel,
         LineOfBusiness = src.LineOfBusiness,
+        FamilyAccumulatorModel = src.FamilyAccumulatorModel,
         Benefits = src.Benefits.Select(AdapterBenefit.From).ToList(),
         NetworkTiers = src.NetworkTiers.Select(AdapterNetworkTier.From).ToList(),
         CostSharing = AdapterCostSharing.From(src.CostSharing),
@@ -124,6 +126,7 @@ public class AdapterBenefitPlan
         PlanType = PlanType,
         MetalLevel = MetalLevel,
         LineOfBusiness = LineOfBusiness,
+        FamilyAccumulatorModel = FamilyAccumulatorModel,
         Benefits = Benefits.Select(b => b.ToBenefit()).ToList(),
         NetworkTiers = NetworkTiers.Select(n => n.ToNetworkTier()).ToList(),
         CostSharing = CostSharing.ToCostSharing(),
@@ -655,6 +658,7 @@ public class AdapterMemberBenefitView
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
     public string PlanVersion { get; set; } = string.Empty;
+    public string FamilyAccumulatorModel { get; set; } = "Embedded";
     public AdapterCostSharing CostSharing { get; set; } = new();
     public List<AdapterCategorizedBenefit> Categories { get; set; } = new();
     public List<AdapterPlanDocumentLink> Documents { get; set; } = new();
@@ -671,6 +675,7 @@ public class AdapterMemberBenefitView
         EffectiveDate = v.EffectiveDate,
         TerminationDate = v.TerminationDate,
         PlanVersion = v.PlanVersion,
+        FamilyAccumulatorModel = v.FamilyAccumulatorModel,
         CostSharing = AdapterCostSharing.From(v.CostSharing),
         Categories = v.Categories.Select(AdapterCategorizedBenefit.From).ToList(),
         Documents = v.Documents.Select(AdapterPlanDocumentLink.From).ToList(),
@@ -688,6 +693,7 @@ public class AdapterMemberBenefitView
         EffectiveDate = EffectiveDate,
         TerminationDate = TerminationDate,
         PlanVersion = PlanVersion,
+        FamilyAccumulatorModel = FamilyAccumulatorModel,
         CostSharing = CostSharing.ToCostSharing(),
         Categories = Categories.Select(c => c.ToCategorizedBenefit()).ToList(),
         Documents = Documents.Select(d => d.ToPlanDocumentLink()).ToList(),

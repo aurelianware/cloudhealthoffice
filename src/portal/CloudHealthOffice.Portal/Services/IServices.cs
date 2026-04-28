@@ -314,6 +314,7 @@ public class MemberBenefitView
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
     public string PlanVersion { get; set; } = string.Empty;
+    public string FamilyAccumulatorModel { get; set; } = "Embedded";
     public MemberBenefitCostSharing CostSharing { get; set; } = new();
     public List<CategorizedBenefit> Categories { get; set; } = new();
     public List<PlanDocumentLink> Documents { get; set; } = new();
