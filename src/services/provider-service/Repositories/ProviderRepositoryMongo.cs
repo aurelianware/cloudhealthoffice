@@ -678,6 +678,53 @@ public class ProviderRepositoryMongo : IProviderRepository
         return updated != null;
     }
 
+    public async Task<bool> UpdateCredentialingProjectionAsync(
+        string tenantId,
+        string providerId,
+        CredentialingStatus status,
+        DateTime? credentialingDate,
+        DateTime? recredentialingDueDate,
+        CancellationToken ct = default)
+    {
+        // Mirror UpdateIntegrityProjectionAsync: $set on the three
+        // credentialing projection fields only — bypasses the
+        // version-state guard on UpdateAsync. Targets the head Active
+        // version of the chain (matching ChainKeyFilter + Active state).
+        // Hydration rule (three "Active" shapes, each Status-gated) is
+        // identical.
+        var b = Builders<Provider>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.And(
+                b.Exists(p => p.VersionState, false),
+                b.Eq(p => p.Status, ProviderStatus.Active)),
+            b.And(
+                b.Or(
+                    b.Exists(p => p.VersionId, false),
+                    b.Eq(p => p.VersionId, null),
+                    b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            ChainKeyFilter(providerId),
+            stateFilter);
+
+        var update = Builders<Provider>.Update
+            .Set(p => p.CredentialingStatus, status)
+            .Set(p => p.CredentialingDate, credentialingDate)
+            .Set(p => p.RecredentialingDueDate, recredentialingDueDate)
+            .Set(p => p.LastUpdatedDate, DateTime.UtcNow);
+
+        var options = new FindOneAndUpdateOptions<Provider>
+        {
+            Sort = Builders<Provider>.Sort.Descending(p => p.VersionNumber),
+            ReturnDocument = ReturnDocument.After,
+        };
+        var updated = await _collection.FindOneAndUpdateAsync(filter, update, options, ct);
+        return updated != null;
+    }
+
     public async Task<IReadOnlyList<Provider>> ListProvidersForIntegrityRefreshAsync(
         string tenantId,
         DateTimeOffset dueBefore,

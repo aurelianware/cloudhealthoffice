@@ -54,9 +54,12 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
     builder.Services.AddScoped<IProviderVerificationEventPublisher, MongoProviderVerificationEventPublisher>();
     builder.Services.AddScoped<INetworkParticipationEventPublisher, MongoNetworkParticipationEventPublisher>();
+    builder.Services.AddScoped<ICredentialingEventPublisher, MongoCredentialingEventPublisher>();
+    builder.Services.AddScoped<ICredentialingEventRepository, MongoCredentialingEventRepository>();
     builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
     builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
     builder.Services.AddHostedService<NetworkParticipationEventIndexInitializer>();
+    builder.Services.AddHostedService<CredentialingEventIndexInitializer>();
     Console.WriteLine("Using MongoDB database provider");
 }
 else
@@ -86,6 +89,8 @@ else
     builder.Services.AddScoped<IProviderVersionEventPublisher, NoopProviderVersionEventPublisher>();
     builder.Services.AddScoped<IProviderVerificationEventPublisher, NoopProviderVerificationEventPublisher>();
     builder.Services.AddScoped<INetworkParticipationEventPublisher, NoopNetworkParticipationEventPublisher>();
+    builder.Services.AddScoped<ICredentialingEventPublisher, NoopCredentialingEventPublisher>();
+    builder.Services.AddScoped<ICredentialingEventRepository, CosmosCredentialingEventRepository>();
 }
 
 // Provider versioning service (5.1 — provider identity & versioning)
@@ -152,6 +157,13 @@ builder.Services.Configure<NetworkParticipationBackfillOptions>(
     builder.Configuration.GetSection(NetworkParticipationBackfillOptions.SectionName));
 builder.Services.AddScoped<IPanelGatingValidator, PanelGatingValidator>();
 builder.Services.AddScoped<INetworkParticipationBackfillService, NetworkParticipationBackfillService>();
+
+// Credentialing workflow (5.6 — event-sourced credentialing chain
+// projected onto Provider.CredentialingStatus / CredentialingDate /
+// RecredentialingDueDate via the bypass write path mirroring 5.4.5 and
+// 5.5). The projector is a pure function — singleton-safe.
+builder.Services.AddSingleton<CredentialingProjector>();
+builder.Services.AddScoped<ICredentialingService, CredentialingService>();
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
