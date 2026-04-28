@@ -254,6 +254,17 @@ builder.Services.AddHttpClient(HttpProviderIntegrityGate.VerificationServiceClie
 });
 builder.Services.AddSingleton<IProviderIntegrityGate, HttpProviderIntegrityGate>();
 
+// ── Network-Tier → Organization Reference (5.5) ──────────────────────────────
+// Read-side lookup against provider-service capability 5.3 Organization
+// entity. Reuses the ProviderService HttpClient registered above. Backfill
+// service + admin controller realise the operator-driven NetworkId
+// mapping. See docs/architecture/network-tier-organization-reference.md.
+builder.Services.AddSingleton<IOrganizationLookupClient, HttpOrganizationLookupClient>();
+builder.Services.Configure<NetworkTierBackfillOptions>(
+    builder.Configuration.GetSection(NetworkTierBackfillOptions.SectionName));
+builder.Services.AddSingleton<INetworkTierSoftValidator, NetworkTierSoftValidator>();
+builder.Services.AddScoped<INetworkTierBackfillService, NetworkTierBackfillService>();
+
 // ── Terminology Crosswalk Client ─────────────────────────────────────────────
 // Resolves plan-specific procedure code mappings before fee schedule pricing.
 builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCrosswalkClient>(client =>

@@ -290,7 +290,32 @@ public class Benefit
 }
 
 /// <summary>
-/// Network tier (in-network, out-of-network, etc.)
+/// Plan-level network tier (capability 5.5 — NetworkTier as Reference to
+/// Organization). A tier is the operator-facing label and ranking that
+/// claim adjudication uses to bucket cost-sharing (e.g. "In-Network" tier
+/// 1 vs "Out-of-Network" tier 2). After capability 5.5, the canonical
+/// roster lives on the provider-service <c>Organization</c> entity
+/// (capability 5.3) and is referenced here by
+/// <see cref="NetworkId"/> rather than embedded as a static NPI list.
+///
+/// <para>
+/// During the migration window the legacy <see cref="ProviderNpis"/>
+/// field is preserved on the wire so existing documents continue to
+/// hydrate without a backfill — but it is no longer consulted by any
+/// production code path (verified by repo-wide audit during 5.5 plan
+/// phase). The field is removed in a follow-up PR after telemetry
+/// confirms zero remaining legacy-shape rows.
+/// </para>
+///
+/// <para>
+/// <see cref="NetworkId"/> is nullable on purpose. A null value is a
+/// legacy-tier marker that drives the soft-validation counter
+/// <c>cho.benefit_plan.network_tier_missing_networkid_writes_total</c>;
+/// the follow-up hard-validation PR flips this to <c>[Required]</c>
+/// once the counter reads zero across all tenants for a sustained
+/// window. See
+/// <c>docs/architecture/network-tier-organization-reference.md</c>.
+/// </para>
 /// </summary>
 public class NetworkTier
 {
@@ -304,6 +329,25 @@ public class NetworkTier
     [JsonPropertyName("tierLevel")]
     public int TierLevel { get; set; } // 1 = best, 2 = second, etc.
 
+    /// <summary>
+    /// Reference to the canonical <c>Organization.OrganizationId</c>
+    /// (chain key) in provider-service. Resolves the tier's roster
+    /// authoritatively at lookup time rather than from an embedded
+    /// snapshot. Nullable during the 5.5 → hard-validation rollout;
+    /// null produces a soft-validation warning + counter increment.
+    /// </summary>
+    [JsonPropertyName("networkId")]
+    public string? NetworkId { get; set; }
+
+    /// <summary>
+    /// Legacy embedded roster snapshot. Preserved on the wire during
+    /// the 5.5 migration window so existing plan documents continue to
+    /// hydrate; not consulted by any production code path. Removed in
+    /// a follow-up PR once telemetry confirms zero remaining
+    /// legacy-shape rows. New code must use <see cref="NetworkId"/>
+    /// and resolve membership via <c>IOrganizationLookupClient</c>.
+    /// </summary>
+    [Obsolete("Use NetworkId + IOrganizationLookupClient. See docs/architecture/network-tier-organization-reference.md. Field is preserved during the 5.5 migration window only.")]
     [JsonPropertyName("providerNpis")]
     public List<string> ProviderNpis { get; set; } = new();
 }

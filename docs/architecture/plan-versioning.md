@@ -159,6 +159,89 @@ member-view consolidation tracked under `TODO(deprecate-plans-route)`;
 versions endpoints will be mirrored there when that consolidation
 lands.
 
+## Projection metadata — exempt from versioning
+
+A small, deliberately-bounded set of fields on a `BenefitPlan` row is
+operationally distinct from version identity. These fields are
+patched in place on the head Published row through sibling repository
+methods that bypass the `UpdateAsync` "Published is read-only" guard.
+The exemption is the exact pattern Provider 5.4.5 / 5.5 established in
+[`provider-versioning.md`](./provider-versioning.md) under the section
+of the same name; the principle is unchanged here.
+
+### Why an exemption exists
+
+A version is identity. Cost-sharing math, benefit categories,
+network-tier definitions, plan-year boundaries, prior-auth gates — all
+of those are part of what makes one Published version distinct from
+its predecessor. Updating any of them must produce a new Draft, then a
+new Published version, with its own row in the chain.
+
+A handful of fields on the same document are *projections* of state
+managed by another service or another lifecycle. They are not part of
+the plan's identity; they are a cached read-side snapshot kept on the
+plan row for query convenience. Forcing every refresh through a full
+amendment would create a Published row per refresh — millions per
+year across a tenant population — purely to track operational metadata
+that has no benefit-design content.
+
+Both lanes coexist. Identity-bearing fields go through `UpdateAsync`
+(fails on Published); projection-metadata fields go through their
+dedicated sibling method.
+
+### Fields exempt today
+
+| Field | Owner | Sibling method | Capability |
+|-------|-------|----------------|------------|
+| `NetworkTiers[].NetworkId` | provider-service `Organization` (5.3) | `UpdateNetworkTiersAsync(tenantId, planId, tiers, ct)` | 5.5 — NetworkTier as Reference to Organization |
+
+`UpdateNetworkTiersAsync` resolves the head Published row by chain
+key, then patches the entire `NetworkTiers` collection with a single
+field-scoped op (Cosmos `PatchItemAsync` `Set("/networkTiers", tiers)`;
+Mongo `UpdateOneAsync` with `$set`). No `PlanVersionEvent` is
+emitted — the operation is a projection-metadata refresh, not a chain
+transition.
+
+### Invariants the bypass must preserve
+
+1. **No version-state writes.** The bypass method must not change
+   `VersionState`, `VersionId`, `VersionNumber`, `PredecessorVersionId`,
+   `PublishedAt`, `SupersededAt`, or any other identity field. A
+   patch op that touches any of those is a bug.
+2. **`UpdateAsync` still enforces immutability.** A regular
+   `UpdateAsync` against a Published row continues to raise
+   `PlanVersionStateException`. The projection patch and the identity
+   write are fully orthogonal — covered by
+   [`UpdateNetworkTiersAsyncTests`](../../src/services/benefit-plan-service/BenefitPlanService.Tests/Repositories/UpdateNetworkTiersAsyncTests.cs).
+3. **Single field scope.** Each bypass method patches exactly one
+   logical concern. A future field that wants the exemption must add
+   a new sibling method, not extend an existing one to cover unrelated
+   fields.
+4. **Idempotent.** Re-running the same patch is safe by construction:
+   the bypass writes deterministic values, never relative deltas.
+
+### Adding a new projection-metadata field
+
+Future capabilities that want this exemption should:
+
+1. Document the field's owner (the service / lifecycle that produces
+   the value).
+2. Add a sibling repository method named
+   `Update<Field>ProjectionAsync` (or `Update<Field>Async` when the
+   semantics are richer than a projection refresh — see
+   `UpdateNetworkTiersAsync`).
+3. Implement Cosmos and Mongo variants symmetrically. The Mongo
+   variant uses `UpdateOneAsync` with `$set`; the Cosmos variant uses
+   `PatchItemAsync` with field-scoped `Set` ops.
+4. Add a row to the table above so the exemption stays auditable.
+5. Cover both lanes in tests: the bypass succeeds against Published,
+   and the corresponding `UpdateAsync` against the same row still
+   throws.
+
+A field that doesn't meet the "managed by another service or another
+lifecycle" bar isn't projection metadata — it's identity, and the
+amendment path is the right tool.
+
 ## Caveats / follow-ups
 
 - **Terminate-without-successor.** `SupersedeVersionAsync` currently
@@ -168,3 +251,9 @@ lands.
 - **Cross-tenant draft isolation.** Drafts are partitioned by
   `TenantId` like every other row; no extra access control beyond the
   tenant middleware is implemented in this PR.
+- **Hard validation of `NetworkTier.NetworkId`.** Capability 5.5
+  ships nullable `NetworkId` with soft-validation telemetry. The
+  follow-up flips to hard validation once
+  `cho.benefit_plan.network_tier_missing_networkid_writes.total` reads
+  zero across all tenants for a sustained window. See
+  [`network-tier-organization-reference.md`](./network-tier-organization-reference.md).
