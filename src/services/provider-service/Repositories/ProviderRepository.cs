@@ -13,6 +13,19 @@ public interface IProviderRepository
 {
     Task<Provider?> GetByIdAsync(string id);
     Task<Provider?> GetByNPIAsync(string npi);
+    /// <summary>
+    /// General provider search across the tenant's head non-Draft rows.
+    /// Filters are AND-combined; null / empty values are skipped.
+    ///
+    /// <para>
+    /// <paramref name="firstName"/>, <paramref name="lastName"/>, and
+    /// <paramref name="city"/> were added in capability 5.7 to support
+    /// FHIR Practitioner search semantics (<c>given</c> / <c>family</c> /
+    /// <c>city</c>). They are optional; legacy callers (the adapter
+    /// roster path) leave them null and continue to use the combined
+    /// <paramref name="name"/> filter.
+    /// </para>
+    /// </summary>
     Task<IEnumerable<Provider>> SearchAsync(
         string? name,
         string? specialty,
@@ -23,7 +36,10 @@ public interface IProviderRepository
         ProviderType? providerType,
         bool? acceptingNewPatients,
         int page,
-        int pageSize);
+        int pageSize,
+        string? firstName = null,
+        string? lastName = null,
+        string? city = null);
     Task<Provider> CreateAsync(Provider provider);
     Task<Provider> UpdateAsync(Provider provider);
     Task DeleteAsync(string id);
@@ -409,7 +425,10 @@ public class ProviderRepository : IProviderRepository
         ProviderType? providerType,
         bool? acceptingNewPatients,
         int page,
-        int pageSize)
+        int pageSize,
+        string? firstName = null,
+        string? lastName = null,
+        string? city = null)
     {
         var tenantId = GetTenantId();
 
@@ -422,6 +441,18 @@ public class ProviderRepository : IProviderRepository
         {
             conditions.Add("(CONTAINS(LOWER(c.firstName), LOWER(@name)) OR CONTAINS(LOWER(c.lastName), LOWER(@name)) OR CONTAINS(LOWER(c.organizationName), LOWER(@name)))");
             queryDef.WithParameter("@name", name);
+        }
+
+        if (!string.IsNullOrEmpty(firstName))
+        {
+            conditions.Add("CONTAINS(LOWER(c.firstName), LOWER(@firstName))");
+            queryDef.WithParameter("@firstName", firstName);
+        }
+
+        if (!string.IsNullOrEmpty(lastName))
+        {
+            conditions.Add("CONTAINS(LOWER(c.lastName), LOWER(@lastName))");
+            queryDef.WithParameter("@lastName", lastName);
         }
 
         if (!string.IsNullOrEmpty(specialty))
@@ -440,6 +471,12 @@ public class ProviderRepository : IProviderRepository
         {
             conditions.Add("c.state = @state");
             queryDef.WithParameter("@state", state);
+        }
+
+        if (!string.IsNullOrEmpty(city))
+        {
+            conditions.Add("CONTAINS(LOWER(c.city), LOWER(@city))");
+            queryDef.WithParameter("@city", city);
         }
 
         if (providerType.HasValue)

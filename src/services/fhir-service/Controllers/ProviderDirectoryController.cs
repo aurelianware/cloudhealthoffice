@@ -8,16 +8,24 @@ namespace FhirService.Controllers;
 
 /// <summary>
 /// Provider Directory API controller — exposes FHIR R4 provider directory resources
-/// (Practitioner, PractitionerRole, Organization, Location) backed by NPPES data
-/// fetched from provider-service via HTTP.
+/// (Practitioner, PractitionerRole, Organization, Location).
 ///
-/// Port of the TypeScript provider-directory-api.ts.
+/// HYBRID STATE (Phase 1 capability 5.7):
+///  - Practitioner:      proxied to provider-service /fhir/Practitioner (CHO-canonical projection).
+///  - Organization:      still served from NPPES (capability 5.8 will redirect).
+///  - PractitionerRole:  still served from NPPES (capability 5.9 will redirect).
+///  - Location:          still served from NPPES.
+/// The HYBRID STATE comment block is removed once 5.8 + 5.9 ship and the
+/// NPPES helpers below are fully retired.
+///
+/// Port of the TypeScript provider-directory-api.ts (NPPES path).
 /// </summary>
 [Route("fhir/r4")]
 public class ProviderDirectoryController : FhirControllerBase
 {
     private readonly HttpClient _httpClient;
     private readonly HttpClient _verificationClient;
+    private readonly HttpClient _providerServiceClient;
     private readonly ILogger<ProviderDirectoryController> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -31,76 +39,76 @@ public class ProviderDirectoryController : FhirControllerBase
     {
         _httpClient = httpClientFactory.CreateClient("NppesApi");
         _verificationClient = httpClientFactory.CreateClient("ProviderVerificationService");
+        _providerServiceClient = httpClientFactory.CreateClient("ProviderService");
         _logger = logger;
     }
 
-    // ── Practitioner ─────────────────────────────────────────────────────────
+    // ── Practitioner (proxied to provider-service, capability 5.7) ───────────
 
-    /// <summary>GET /fhir/r4/Practitioner/{id} — read Practitioner by NPI</summary>
+    /// <summary>
+    /// GET /fhir/r4/Practitioner/{id} — read Practitioner by NPI.
+    /// Proxies to provider-service /fhir/Practitioner/{id}; fhir-service is
+    /// the FHIR façade and provider-service owns the projection
+    /// (capability 5.7).
+    /// </summary>
     [HttpGet("Practitioner/{id}")]
     [Produces("application/fhir+json")]
-    public async Task<IActionResult> ReadPractitioner(string id, CancellationToken ct)
-    {
-        var nppes = await LookupNppesAsync(id, ct);
-        if (nppes is null || nppes.EnumerationType != "NPI-1")
-            return FhirNotFound("Practitioner", id);
+    public Task<IActionResult> ReadPractitioner(string id, CancellationToken ct)
+        => ProxyPractitionerAsync($"fhir/Practitioner/{Uri.EscapeDataString(id)}", ct);
 
-        var practitioner = ProviderDirectoryMapper.MapNppesToPractitioner(nppes);
-
-        var verification = await GetVerificationSummaryAsync(id, ct);
-        if (verification != null)
-            ProviderDirectoryMapper.EnrichWithVerification(practitioner, verification);
-
-        return Ok(practitioner);
-    }
-
-    /// <summary>GET /fhir/r4/Practitioner?npi=&amp;given=&amp;family=&amp;... — search Practitioners</summary>
+    /// <summary>
+    /// GET /fhir/r4/Practitioner?npi=&amp;given=&amp;family=&amp;... — search Practitioners.
+    /// Forwards the FHIR search query string to provider-service
+    /// /fhir/Practitioner unchanged (capability 5.7).
+    /// </summary>
     [HttpGet("Practitioner")]
     [Produces("application/fhir+json")]
-    public async Task<IActionResult> SearchPractitioners(
-        [FromQuery] string? npi,
-        [FromQuery] string? given,
-        [FromQuery] string? family,
-        [FromQuery] string? city,
-        [FromQuery] string? state,
-        [FromQuery(Name = "postal-code")] string? postalCode,
-        [FromQuery] string? specialty,
-        [FromQuery] int _count = 50,
-        [FromQuery] int _page = 1,
-        CancellationToken ct = default)
+    public Task<IActionResult> SearchPractitioners(CancellationToken ct = default)
     {
-        _count = ClampPageSize(_count, 200);
+        var qs = HttpContext.Request.QueryString.HasValue
+            ? HttpContext.Request.QueryString.Value
+            : string.Empty;
+        return ProxyPractitionerAsync($"fhir/Practitioner{qs}", ct);
+    }
 
-        if (!string.IsNullOrEmpty(npi))
+    private async Task<IActionResult> ProxyPractitionerAsync(string path, CancellationToken ct)
+    {
+        try
         {
-            var nppes = await LookupNppesAsync(npi, ct);
-            if (nppes is null || nppes.EnumerationType != "NPI-1")
-                return Ok(ProviderDirectoryMapper.CreateSearchBundle("Practitioner", []));
+            using var upstream = await _providerServiceClient.GetAsync(path, ct);
+            var body = await upstream.Content.ReadAsStringAsync(ct);
+            var contentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/fhir+json";
 
-            var practitioner = ProviderDirectoryMapper.MapNppesToPractitioner(nppes);
-            return Ok(ProviderDirectoryMapper.CreateSearchBundle("Practitioner", [practitioner]));
+            // Pass status + body through verbatim. provider-service emits
+            // FHIR OperationOutcome on 4xx, so the proxy needs to forward
+            // those without rewrapping. 5xx responses are mapped to a
+            // FHIR 502 OperationOutcome — exposing upstream 5xx bodies
+            // could leak internal detail.
+            if ((int)upstream.StatusCode >= 500)
+            {
+                _logger.LogWarning(
+                    "provider-service Practitioner upstream returned {Status} for {Path}",
+                    (int)upstream.StatusCode, path);
+                return FhirBadGateway("Practitioner upstream is unavailable.");
+            }
+
+            return new ContentResult
+            {
+                Content = body,
+                ContentType = contentType,
+                StatusCode = (int)upstream.StatusCode
+            };
         }
-
-        var results = await SearchNppesAsync(new Dictionary<string, string?>
+        catch (HttpRequestException ex)
         {
-            ["first_name"] = given,
-            ["last_name"] = family,
-            ["city"] = city,
-            ["state"] = state,
-            ["postal_code"] = postalCode,
-            ["taxonomy_description"] = specialty,
-            ["enumeration_type"] = "NPI-1",
-            ["limit"] = _count.ToString(),
-            ["skip"] = ((_page - 1) * _count).ToString()
-        }, ct);
-
-        var practitioners = results
-            .Where(r => r.EnumerationType == "NPI-1")
-            .Select(ProviderDirectoryMapper.MapNppesToPractitioner)
-            .Cast<FhirResource>()
-            .ToList();
-
-        return Ok(ProviderDirectoryMapper.CreateSearchBundle("Practitioner", practitioners));
+            _logger.LogWarning(ex, "provider-service Practitioner proxy hop failed for {Path}", path);
+            return FhirBadGateway("Practitioner upstream is unreachable.");
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "provider-service Practitioner proxy hop timed out for {Path}", path);
+            return FhirBadGateway("Practitioner upstream timed out.");
+        }
     }
 
     // ── Organization ─────────────────────────────────────────────────────────

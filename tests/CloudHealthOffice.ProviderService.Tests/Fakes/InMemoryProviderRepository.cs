@@ -96,7 +96,8 @@ public sealed class InMemoryProviderRepository : IProviderRepository
     public Task<IEnumerable<Provider>> SearchAsync(
         string? name, string? specialty, string? zipCode, string? state,
         string? planId, LineOfBusiness? lineOfBusiness, ProviderType? providerType,
-        bool? acceptingNewPatients, int page, int pageSize)
+        bool? acceptingNewPatients, int page, int pageSize,
+        string? firstName = null, string? lastName = null, string? city = null)
     {
         IEnumerable<Provider> q = _docs.Where(d => d.TenantId == TenantId && d.Status == ProviderStatus.Active);
         if (!string.IsNullOrEmpty(name))
@@ -106,12 +107,18 @@ public sealed class InMemoryProviderRepository : IProviderRepository
                 (d.LastName ?? string.Empty).Contains(name, StringComparison.OrdinalIgnoreCase) ||
                 (d.OrganizationName ?? string.Empty).Contains(name, StringComparison.OrdinalIgnoreCase));
         }
+        if (!string.IsNullOrEmpty(firstName))
+            q = q.Where(d => (d.FirstName ?? string.Empty).Contains(firstName, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(lastName))
+            q = q.Where(d => (d.LastName ?? string.Empty).Contains(lastName, StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrEmpty(specialty))
             q = q.Where(d => d.PrimarySpecialty.Contains(specialty, StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrEmpty(zipCode))
             q = q.Where(d => d.ZipCode == zipCode);
         if (!string.IsNullOrEmpty(state))
             q = q.Where(d => d.State == state);
+        if (!string.IsNullOrEmpty(city))
+            q = q.Where(d => (d.City ?? string.Empty).Contains(city, StringComparison.OrdinalIgnoreCase));
         if (providerType.HasValue)
             q = q.Where(d => d.ProviderType == providerType.Value);
         if (acceptingNewPatients.HasValue)

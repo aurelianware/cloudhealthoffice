@@ -51,6 +51,18 @@ public static class ChoFhirCanonicalUrls
     // ── CHO appeal operations ───────────────────────────────────────────────
     public const string AppealSubmitOperation = OperationDefinitionBase + "cho-appeal-submit";
 
+    // ── CHO provider extensions (capability 5.7) ────────────────────────────
+    /// <summary>
+    /// CHO-prefixed extension carrying the cached Provider Integrity
+    /// projection (capability 5.4.5 — IntegrityScore + IntegrityRating +
+    /// LastVerifiedAt). Emitted on Practitioner resources by
+    /// provider-service's <c>FhirPractitionerProjector</c>; mirrored in
+    /// <c>provider-service/Services/ChoProviderFhirUrls.cs</c> until a
+    /// shared FHIR-infrastructure project lands.
+    /// </summary>
+    public const string ProviderIntegrityScoreExt =
+        StructureDefinitionBase + "provider-integrity-score";
+
     /// <summary>All CHO appeal resource profile URLs (not extensions).</summary>
     public static readonly IReadOnlyList<string> AllAppealResourceProfiles =
     [
