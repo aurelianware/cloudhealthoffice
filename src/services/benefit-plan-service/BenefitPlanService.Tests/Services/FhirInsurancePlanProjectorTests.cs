@@ -439,6 +439,42 @@ public sealed class FhirInsurancePlanProjectorTests
     }
 
     [Fact]
+    public void GeneralCost_emits_aca_cap_only_on_primary_in_network_tier()
+    {
+        // Decision 11 contract — the per-member cap projects on exactly
+        // one generalCost block, the lowest-TierLevel in-network tier.
+        // A plan with Tier 1 + Tier 2 Preferred (both in-network) plus
+        // an OON tier must emit the cap exactly once.
+        var plan = MakePlan();
+        plan.FamilyAccumulatorModel = FamilyAccumulatorModel.Aggregate;
+        plan.PublishedAt = AcaCapEnforcementPolicy.CutoffUtc.AddDays(1);
+        plan.NetworkTiers = new List<NetworkTier>
+        {
+            new() { TierName = "Tier 1 In-Network",  TierLevel = 1, NetworkId = "net-pri" },
+            new() { TierName = "Tier 2 Preferred",   TierLevel = 2, NetworkId = "net-sec" },
+            new() { TierName = "Out-of-Network",     TierLevel = 3, NetworkId = "net-oon" },
+        };
+        plan.CostSharing = new CostSharing
+        {
+            IndividualDeductible = 1_000m,
+            IndividualOutOfPocketMax = 5_000m,
+        };
+
+        var result = _projector.Project(plan, networks: null,
+            acaLimits: new AcaLimits(2026, 10_600m, 21_200m))!;
+
+        var planArray = result["plan"]!.AsArray();
+        var acaEntries = planArray
+            .SelectMany(p => p!["generalCost"]?.AsArray() ?? new JsonArray())
+            .Where(g =>
+                g!["type"]!["coding"]?.AsArray()[0]?["code"]?.GetValue<string>() == "aca-individual-cap")
+            .ToList();
+
+        acaEntries.Should().ContainSingle(
+            "the ACA cap must not duplicate across in-network tiers");
+    }
+
+    [Fact]
     public void GeneralCost_does_not_emit_aca_cap_for_embedded_plan()
     {
         var plan = MakePlan();

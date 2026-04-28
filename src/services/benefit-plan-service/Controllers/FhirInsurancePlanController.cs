@@ -79,6 +79,14 @@ public class FhirInsurancePlanController : ControllerBase
         {
             plan = await _repository.GetByPlanIdAsync(id, TenantId);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller cancelled (client disconnect, server abort).
+            // Propagate rather than turn it into a logged 500 — the
+            // pipeline maps cancellation to its standard 499/aborted
+            // shape and avoids polluting metrics with phantom errors.
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "InsurancePlan read failed for PlanId {PlanId}", SanitizeForLog(id));
@@ -147,41 +155,129 @@ public class FhirInsurancePlanController : ControllerBase
                 ct);
         }
 
-        IEnumerable<BenefitPlan> results;
+        // Pagination correctness — `IBenefitPlanRepository.SearchAsync`
+        // returns every version row (Draft / Published / Superseded)
+        // ordered by PlanName, with no head-Published filter. Naively
+        // paginating that and projecting in-place produces short pages
+        // (the projector returns null for non-Published) and lets a
+        // single PlanId surface multiple versions in the same response.
+        //
+        // Until the repository grows a head-Published search seam,
+        // collect across repo pages, dedupe to the head Published
+        // version per PlanId, apply the name / status / effective-window
+        // filters, then page in-memory. Capped by `RepoScanLimit` so
+        // a degenerate large-tenant scan can't run unbounded.
+        List<BenefitPlan> matches;
         try
         {
-            results = await _repository.SearchAsync(
-                tenantId: TenantId,
-                lineOfBusiness: null,
-                planType: null,
-                metalLevel: null,
-                page: page,
-                pageSize: pageSize);
+            matches = await CollectFilteredHeadVersionsAsync(name, status, ct);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            _logger.LogError(ex, "InsurancePlan search failed for tenant {TenantId}", SanitizeForLog(TenantId));
+            throw;
+        }
+        catch (Exception)
+        {
+            // CollectFilteredHeadVersionsAsync already logged the
+            // underlying repo failure; emit a FHIR-compliant error
+            // surface here.
             return FhirOperationOutcome(500, "exception", "InsurancePlan search failed.");
         }
 
-        if (!string.IsNullOrEmpty(name))
+        var pageItems = matches
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize);
+
+        return await BuildBundleResponseAsync(pageItems, ct);
+    }
+
+    /// <summary>
+    /// Hard cap on how many repo pages a single InsurancePlan search
+    /// will scan. At <c>RepoChunkSize=200</c> rows per page that's
+    /// 10,000 versions — well above any tenant's authored plan-version
+    /// count today. If a real workload pushes against this, the right
+    /// move is a head-Published seam on the repo, not raising the cap.
+    /// </summary>
+    private const int RepoScanLimit = 50;
+    private const int RepoChunkSize = 200;
+
+    private async Task<List<BenefitPlan>> CollectFilteredHeadVersionsAsync(
+        string? nameFilter, string? statusFilter, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        // PlanId → head Published version, keyed in iteration order so
+        // PlanName sort from the repo is preserved.
+        var headByPlanId = new Dictionary<string, BenefitPlan>(StringComparer.Ordinal);
+
+        for (var repoPage = 1; repoPage <= RepoScanLimit; repoPage++)
         {
-            results = results.Where(p =>
-                !string.IsNullOrEmpty(p.PlanName) &&
-                p.PlanName.Contains(name, StringComparison.OrdinalIgnoreCase));
+            ct.ThrowIfCancellationRequested();
+
+            IEnumerable<BenefitPlan> chunk;
+            try
+            {
+                chunk = await _repository.SearchAsync(
+                    tenantId: TenantId,
+                    lineOfBusiness: null,
+                    planType: null,
+                    metalLevel: null,
+                    page: repoPage,
+                    pageSize: RepoChunkSize);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "InsurancePlan search failed for tenant {TenantId} (repo page {RepoPage})",
+                    SanitizeForLog(TenantId), repoPage);
+                throw;
+            }
+
+            var chunkList = chunk as IList<BenefitPlan> ?? chunk.ToList();
+            if (chunkList.Count == 0) break;
+
+            foreach (var plan in chunkList)
+            {
+                if (plan.VersionState != PlanVersionState.Published) continue;
+                if (plan.EffectiveDate > now) continue;
+
+                // Dedupe to the head Published version per PlanId. Repo
+                // ordering is by PlanName not VersionNumber, so we keep
+                // the row with the highest VersionNumber we've seen.
+                if (headByPlanId.TryGetValue(plan.PlanId, out var existing) &&
+                    existing.VersionNumber >= plan.VersionNumber)
+                {
+                    continue;
+                }
+                headByPlanId[plan.PlanId] = plan;
+            }
+
+            if (chunkList.Count < RepoChunkSize) break; // repo exhausted
         }
 
-        if (!string.IsNullOrEmpty(status))
+        IEnumerable<BenefitPlan> filtered = headByPlanId.Values;
+
+        if (!string.IsNullOrEmpty(nameFilter))
         {
-            results = status.ToLowerInvariant() switch
+            filtered = filtered.Where(p =>
+                !string.IsNullOrEmpty(p.PlanName) &&
+                p.PlanName.Contains(nameFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrEmpty(statusFilter))
+        {
+            filtered = statusFilter.ToLowerInvariant() switch
             {
-                "active" => results.Where(p => !p.TerminationDate.HasValue || p.TerminationDate.Value >= DateTime.UtcNow),
-                "retired" => results.Where(p => p.TerminationDate.HasValue && p.TerminationDate.Value < DateTime.UtcNow),
-                _ => results,
+                "active" => filtered.Where(p => !p.TerminationDate.HasValue || p.TerminationDate.Value >= now),
+                "retired" => filtered.Where(p => p.TerminationDate.HasValue && p.TerminationDate.Value < now),
+                _ => filtered,
             };
         }
 
-        return await BuildBundleResponseAsync(results, ct);
+        return filtered.OrderBy(p => p.PlanName, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     // ── helpers ────────────────────────────────────────────────────────
@@ -215,10 +311,18 @@ public class FhirInsurancePlanController : ControllerBase
         var resolved = new List<OrganizationLookupResult>(distinctIds.Count);
         foreach (var id in distinctIds)
         {
+            ct.ThrowIfCancellationRequested();
             try
             {
                 var org = await _organizationLookup.GetOrganizationAsync(id, ct);
                 if (org is not null) resolved.Add(org);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Caller cancelled — don't keep enriching networks the
+                // response will never reach. Propagate so the pipeline
+                // returns its standard cancellation shape.
+                throw;
             }
             catch (Exception ex)
             {

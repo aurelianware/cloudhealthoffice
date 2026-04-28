@@ -386,9 +386,20 @@ public sealed class FhirInsurancePlanProjector : IFhirInsurancePlanProjector
             .ToList();
 
         var acaEnforced = AcaCapEnforcementPolicy.IsEnforced(plan);
+        var primaryInNetworkSeen = false;
 
         foreach (var tier in tiers)
         {
+            // The ACA per-member cap (Decision 11) projects on exactly
+            // ONE generalCost block — the primary in-network tier
+            // (lowest TierLevel among tiers we consider in-network).
+            // After sorting by TierLevel ASC above, the first tier that
+            // ResolveTierIsInNetwork classifies as in-network is the
+            // primary; subsequent in-network tiers (Tier 2 Preferred,
+            // etc.) must NOT duplicate the entry.
+            var isPrimaryInNetwork = !primaryInNetworkSeen && ResolveTierIsInNetwork(tier);
+            if (isPrimaryInNetwork) primaryInNetworkSeen = true;
+
             var entry = new JsonObject();
 
             // identifier — operator-authored TierName under CHO system.
@@ -413,8 +424,9 @@ public sealed class FhirInsurancePlanProjector : IFhirInsurancePlanProjector
                 BuildOrganizationReference(tier.NetworkId!, networks),
             };
 
-            // generalCost[] — deductible + OOP max for this tier.
-            var general = BuildGeneralCost(plan, tier, acaEnforced, acaLimits);
+            // generalCost[] — deductible + OOP max for this tier. Only
+            // the primary in-network tier emits the ACA cap entry.
+            var general = BuildGeneralCost(plan, tier, isPrimaryInNetwork && acaEnforced, acaLimits);
             if (general.Count > 0)
             {
                 entry["generalCost"] = general;
@@ -433,10 +445,16 @@ public sealed class FhirInsurancePlanProjector : IFhirInsurancePlanProjector
         return planArray;
     }
 
+    /// <summary>
+    /// Build <c>generalCost[]</c> for one tier. <paramref name="emitAcaCap"/>
+    /// must be true for AT MOST ONE tier in the parent <c>plan[]</c> array
+    /// (the primary in-network tier — see caller logic) so the per-member
+    /// cap doesn't duplicate across Tier 1 + Tier 2 Preferred etc.
+    /// </summary>
     private static JsonArray BuildGeneralCost(
         BenefitPlan plan,
         NetworkTier tier,
-        bool acaEnforced,
+        bool emitAcaCap,
         AcaLimits? acaLimits)
     {
         var array = new JsonArray();
@@ -477,10 +495,13 @@ public sealed class FhirInsurancePlanProjector : IFhirInsurancePlanProjector
             array.Add(BuildGeneralCostEntry("out-of-pocket-max", "Out-of-Pocket Maximum", 2, famOop,
                 $"Family out-of-pocket maximum ({(isInNetwork ? "in-network" : "out-of-network")})"));
 
-        // ACA per-member cap (Decision 11 dual emission). Only on the
-        // primary in-network tier; out-of-network tiers don't carry the
-        // ACA cap because OON OOP is independent of ACA enforcement.
-        if (isInNetwork && acaEnforced && acaLimits is not null && acaLimits.IndividualCap > 0)
+        // ACA per-member cap (Decision 11 dual emission). Caller must
+        // restrict emitAcaCap to the primary in-network tier; the
+        // isInNetwork check here is defense-in-depth in case a future
+        // refactor flips that contract — out-of-network tiers must
+        // never carry the ACA cap because OON OOP is independent of
+        // ACA enforcement.
+        if (emitAcaCap && isInNetwork && acaLimits is not null && acaLimits.IndividualCap > 0)
         {
             var entry = BuildGeneralCostEntry(
                 "aca-individual-cap",
@@ -646,11 +667,21 @@ public sealed class FhirInsurancePlanProjector : IFhirInsurancePlanProjector
     // ── helpers ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Tier is "in-network" when its TierName looks like an in-network
-    /// label or its TierLevel is 1 (the conventional best/primary tier).
-    /// Out-of-network tiers populate the OON columns on
-    /// <see cref="CostSharing"/>; in-network tiers (any of Tier 1, "In
-    /// Network", "Preferred", etc.) populate the IN columns.
+    /// Tier is "out-of-network" only when its <c>TierName</c> carries an
+    /// explicit out-of-network marker — the substring "out" + "network"
+    /// (case-insensitive), or the prefix "OON". Anything else is treated
+    /// as in-network and populates the IN columns on
+    /// <see cref="CostSharing"/>.
+    ///
+    /// <para>
+    /// <c>TierLevel</c> is intentionally NOT consulted: it's an
+    /// operator-authored ordering hint, defaults to 0 on legacy plans,
+    /// and conflating it with network classification would silently
+    /// misclassify a Tier 0 OON or a Tier 2 in-network. Future tier-name
+    /// shapes (e.g. "OOP-Preferred") that don't match either marker fall
+    /// into in-network by default — surface as a future refinement if a
+    /// concrete plan shape forces it.
+    /// </para>
     /// </summary>
     private static bool ResolveTierIsInNetwork(NetworkTier tier)
     {

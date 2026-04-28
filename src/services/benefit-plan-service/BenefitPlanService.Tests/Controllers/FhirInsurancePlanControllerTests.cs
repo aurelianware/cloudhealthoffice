@@ -187,6 +187,42 @@ public sealed class FhirInsurancePlanControllerTests
     }
 
     [Fact]
+    public async Task SearchInsurancePlans_dedupes_to_head_published_per_PlanId()
+    {
+        var (controller, repo) = Build();
+
+        // v1 published, v2 published (the head).
+        var v1 = SamplePlan(planId: "PLAN-DUPE", name: "Dupe v1");
+        v1.VersionNumber = 1;
+        await repo.CreateAsync(v1);
+
+        var v2 = SamplePlan(planId: "PLAN-DUPE", name: "Dupe v2");
+        v2.VersionNumber = 2;
+        await repo.CreateAsync(v2);
+
+        // A draft and a superseded row that must NOT surface in search.
+        var draft = SamplePlan(planId: "PLAN-DRAFT", name: "Draft");
+        draft.VersionState = PlanVersionState.Draft;
+        await repo.CreateAsync(draft);
+
+        var superseded = SamplePlan(planId: "PLAN-OLD", name: "Old");
+        superseded.VersionState = PlanVersionState.Superseded;
+        await repo.CreateAsync(superseded);
+
+        var result = await controller.SearchInsurancePlans(
+            identifier: null, name: null, status: null, _count: 50, _page: 1, default);
+
+        var content = result.Should().BeOfType<ContentResult>().Subject;
+        var bundle = JsonNode.Parse(content.Content!)!.AsObject();
+        var entries = bundle["entry"]!.AsArray();
+
+        entries.Should().HaveCount(1, "draft + superseded must be filtered, dupe collapses to head");
+        entries[0]!["resource"]!["id"]!.GetValue<string>().Should().Be("PLAN-DUPE");
+        // Head version v2 wins over v1 even though both are Published.
+        entries[0]!["resource"]!["name"]!.GetValue<string>().Should().Be("Dupe v2");
+    }
+
+    [Fact]
     public async Task ReadInsurancePlan_emits_application_fhir_json_content_type()
     {
         var (controller, repo) = Build();
