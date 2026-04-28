@@ -129,9 +129,12 @@ public sealed class NoopCredentialingEventPublisher : ICredentialingEventPublish
 
     public Task<CredentialingEvent> PublishAsync(CredentialingEvent evt, CancellationToken ct = default)
     {
+        // Sanitize user-supplied identifier before logging — defense
+        // against log injection (CRLF). Mirrors the helper in
+        // MongoCredentialingEventPublisher.
         _logger.LogWarning(
             "CredentialingEventPublisher is not configured; dropping {EventType} event for {ProviderId}",
-            evt?.EventType, evt?.ProviderId);
+            evt?.EventType, Sanitize(evt?.ProviderId));
         evt ??= new CredentialingEvent();
         if (string.IsNullOrEmpty(evt.PartitionKey) && !string.IsNullOrEmpty(evt.TenantId) && !string.IsNullOrEmpty(evt.ProviderId))
         {
@@ -140,4 +143,7 @@ public sealed class NoopCredentialingEventPublisher : ICredentialingEventPublish
         if (evt.OccurredAt == default) evt.OccurredAt = DateTime.UtcNow;
         return Task.FromResult(evt);
     }
+
+    private static string Sanitize(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
