@@ -218,6 +218,25 @@ builder.Services.AddHttpClient("ProviderService", client =>
 .AddHttpMessageHandler<TenantHeaderPropagationHandler>()
 .AddHttpMessageHandler<CorrelationIdPropagationHandler>();
 
+// ── benefit-plan-service FHIR proxy (capability BP 5.8) ─────────────────────
+// InsurancePlanController.ReadInsurancePlan / SearchInsurancePlans
+// proxies to benefit-plan-service's /fhir/InsurancePlan endpoint —
+// benefit-plan-service owns the canonical CHO InsurancePlan projection
+// (mirrors provider-service's ownership of Practitioner / PractitionerRole
+// / Organization for the rest of the Plan-Net Provider Directory bundle).
+// Tenant + correlation header propagation matches the ProviderService
+// client. See docs/architecture/fhir-insuranceplan-projection.md.
+builder.Services.AddHttpClient("BenefitPlanService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:BenefitPlanServiceUrl"]
+            ?? "http://benefit-plan-service.cloudhealthoffice/");
+    client.DefaultRequestHeaders.Add("Accept", "application/fhir+json");
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<TenantHeaderPropagationHandler>()
+.AddHttpMessageHandler<CorrelationIdPropagationHandler>();
+
 // ── Da Vinci CRD / DTR / Bulk ─────────────────────────────────────────────────
 builder.Services.Configure<CrdConfig>(builder.Configuration.GetSection("Cms0057:Crd"));
 builder.Services.AddSingleton<ICrdService, CrdService>();

@@ -7,9 +7,9 @@ conformance to, what we test against, and where the gaps are.
 
 | IG / profile                                     | Resources covered today                       | Posture                                                 |
 |--------------------------------------------------|-----------------------------------------------|---------------------------------------------------------|
-| US Core 6.1.0                                    | Patient, Practitioner, PractitionerRole, Organization | Required elements asserted by unit tests          |
-| Da Vinci PDex Plan-Net 1.1.0                     | Practitioner, PractitionerRole, Organization (subset) | Fields CHO has data for; extensions deferred to 5.17 |
-| FHIR R4 Bundle (`searchset`)                     | Practitioner, PractitionerRole, Organization search | Hand-built JsonObject, asserted by unit tests     |
+| US Core 6.1.0                                    | Patient, Practitioner, PractitionerRole, Organization, InsurancePlan | Required elements asserted by unit tests          |
+| Da Vinci PDex Plan-Net 1.1.0                     | Practitioner, PractitionerRole, Organization, InsurancePlan (subset) | Fields CHO has data for; extensions deferred to 5.17 / BP 5.9 |
+| FHIR R4 Bundle (`searchset`)                     | Practitioner, PractitionerRole, Organization, InsurancePlan search | Hand-built JsonObject, asserted by unit tests     |
 | FHIR R4 OperationOutcome                         | All error responses                           | Typed `OperationOutcome` model + hand-built JsonObject  |
 
 `meta.profile` values emitted on each resource:
@@ -29,6 +29,12 @@ conformance to, what we test against, and where the gaps are.
   `http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-Organization`
   (two source entities: `Organization` network → `type=ins`;
   `Provider` with `ProviderType=Organization` → `type=prov`)
+- InsurancePlan (benefit-plan-service, capability BP 5.8) —
+  `http://hl7.org/fhir/us/core/StructureDefinition/us-core-insuranceplan`
+  and
+  `http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-InsurancePlan`
+  (source entity: `BenefitPlan` head Published version; non-Active
+  versions return null per the empirical Provider 5.7 stance)
 
 ## Phase 2 / deferred
 
@@ -36,8 +42,11 @@ conformance to, what we test against, and where the gaps are.
 |--------------------------------------------------|--------------------------------------------------------|
 | Plan-Net 1.1.0 extended Organization extensions  | Capability 5.17 (accessibility, languages, populations)|
 | Plan-Net 1.1.0 Organization.endpoint             | Phase 2 (Plan-Net publishing URLs)                     |
+| Plan-Net 1.1.0 InsurancePlan.endpoint            | Capability BP 5.9 (Plan Documents)                     |
+| Plan-Net 1.1.0 InsurancePlan.coverageArea / contact / alias | Phase 2 (BenefitPlan needs the fields)        |
 | Plan-Net 1.1.0 Bundle composite                  | Capability 5.18                                        |
 | Plan-Net extended extensions (Practitioner)      | Capability 5.17                                        |
+| Coverage.class slice → InsurancePlan reference   | Capability BP 5.8 follow-up — see fhir-insuranceplan-projection.md |
 | CMS-0057-F unauthenticated Provider Directory    | Capability 5.19                                        |
 | Inferno test suite (Provider Directory)          | Separate Phase 2 capability                            |
 | US Core 6.1.0 Practitioner.gender                | Capability 5.17 (Provider entity gains the field)      |
@@ -58,6 +67,8 @@ classes:
 
 - [FhirOrganizationProjectorTests](../../tests/CloudHealthOffice.ProviderService.Tests/Services/FhirOrganizationProjectorTests.cs)
   — provider-service Organization projection (both source entities).
+- [FhirInsurancePlanProjectorTests](../../src/services/benefit-plan-service/BenefitPlanService.Tests/Services/FhirInsurancePlanProjectorTests.cs)
+  — benefit-plan-service InsurancePlan projection (capability BP 5.8).
 
 Conformance regressions surface as failing unit tests. There is no
 network-driven conformance suite in CI yet (see *Inferno* below).
@@ -97,6 +108,26 @@ Defined today (see
   panel-gating fields on `NetworkParticipation` (capability 5.5).
 - `CodeSystem/line-of-business` (capability 5.8) — internal CodeSystem
   for the LOB codings emitted inside `accepted-lobs` sub-extensions.
+- `insuranceplan-family-accumulator-model` extension (capability BP 5.8) —
+  emitted on InsurancePlan; `valueCode` Embedded | Aggregate sourced from
+  `BenefitPlan.FamilyAccumulatorModel` (BP 5.7).
+- `insuranceplan-aca-cap-enforced` extension (capability BP 5.8) —
+  emitted on InsurancePlan AND on the ACA-cap `plan.generalCost` entry;
+  `valueBoolean=true` only when `AcaCapEnforcementPolicy.IsEnforced(plan)`
+  returns true (Aggregate-mode + post-2026-04-28-cutoff plans).
+- `CodeSystem/plan-product-shape` (capability BP 5.8) — CHO-canonical
+  CodeSystem for the InsurancePlan.type product-shape coding (HMO / PPO /
+  EPO / POS / HDHP / Medicaid / Medicare / Commercial).
+- `CodeSystem/insuranceplan-general-cost-type` (capability BP 5.8) —
+  CHO-canonical CodeSystem for `plan.generalCost.type` (deductible /
+  out-of-pocket-max / aca-individual-cap).
+- `CodeSystem/insuranceplan-cost-qualifier` (capability BP 5.8) —
+  CHO-canonical CodeSystem for `cost.qualifiers` (in-network /
+  out-of-network / copay / coinsurance).
+- `CodeSystem/network-tier` (capability BP 5.8) — CHO-canonical system
+  for `plan.identifier` carrying the tier name.
+- `plan-id` system (capability BP 5.8) — CHO-canonical identifier
+  system for `InsurancePlan.identifier[0]` carrying `BenefitPlan.PlanId`.
 
 A legacy URL
 `https://cloudhealthoffice.com/fhir/StructureDefinition/provider-verification`
@@ -108,4 +139,7 @@ uses of this URL.
 
 - [fhir-practitioner-projection.md](fhir-practitioner-projection.md) — capability 5.7 details.
 - [fhir-practitionerrole-projection.md](fhir-practitionerrole-projection.md) — capability 5.8 details.
+- [fhir-organization-projection.md](fhir-organization-projection.md) — capability 5.9 details.
+- [fhir-insuranceplan-projection.md](fhir-insuranceplan-projection.md) — capability BP 5.8 details.
 - [provider-versioning.md](provider-versioning.md) — version-state semantics that drive `Practitioner.active` and `PractitionerRole.active`.
+- [family-accumulator-models.md](family-accumulator-models.md) — BP 5.7 (FamilyAccumulatorModel + ACA cap), source of the BP 5.8 custom extensions.

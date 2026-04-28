@@ -298,3 +298,11 @@ them were all deferred to the consumer that genuinely needs them.
   the same `HttpClient("ProviderService")` registration.
 - [`network-participation-backfill.md`](./network-participation-backfill.md)
   — Provider 5.5 backfill pattern this capability mirrors.
+- [`fhir-insuranceplan-projection.md`](./fhir-insuranceplan-projection.md) —
+  Capability BP 5.8. The `NetworkTier.NetworkId` field this capability
+  introduced is the source for `InsurancePlan.network[]` references in
+  the FHIR projection. Each tier with a non-null `NetworkId` projects
+  as `Organization/{networkId}`, dereferenceable via fhir-service's
+  `/fhir/r4/Organization/{id}` endpoint (which proxies to
+  provider-service per Provider 5.9). End-to-end Plan-Net navigation
+  resolves through this chain.

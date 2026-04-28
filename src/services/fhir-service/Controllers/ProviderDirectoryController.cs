@@ -76,73 +76,25 @@ public class ProviderDirectoryController : FhirControllerBase
     /// <summary>
     /// Generic proxy hop to provider-service for the FHIR resources
     /// where provider-service is the canonical authority (capability 5.7
-    /// — Practitioner; capability 5.8 — PractitionerRole). Status pass
-    /// through, 5xx → 502 OperationOutcome, transport faults → 502.
-    /// Resource label flows into structured-log fields so operators can
-    /// distinguish Practitioner vs PractitionerRole proxy failures.
+    /// — Practitioner; capability 5.8 — PractitionerRole; capability 5.9
+    /// — Organization). Thin wrapper over
+    /// <see cref="FhirControllerBase.ProxyUpstreamServiceAsync"/> — the
+    /// shared status-translation logic was extracted in capability BP 5.8
+    /// so both this controller and the new InsurancePlanController call
+    /// the same helper. Resource label flows into structured-log fields
+    /// so operators can distinguish proxy failures by resource type.
     /// </summary>
-    private async Task<IActionResult> ProxyProviderServiceAsync(
+    private Task<IActionResult> ProxyProviderServiceAsync(
         string resourceLabel,
         string path,
         CancellationToken ct)
-    {
-        // `path` is derived from the user-supplied URL / query string and
-        // flows into structured-log fields below. Sanitize once up front
-        // so all log sites share the same scrubbed value (CodeQL: log
-        // entries created from user input).
-        var loggablePath = SanitizeForLog(path);
-        try
-        {
-            using var upstream = await _providerServiceClient.GetAsync(path, ct);
-            var body = await upstream.Content.ReadAsStringAsync(ct);
-            var contentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/fhir+json";
-
-            // Pass status + body through verbatim. provider-service emits
-            // FHIR OperationOutcome on 4xx, so the proxy needs to forward
-            // those without rewrapping. 5xx responses are mapped to a
-            // FHIR 502 OperationOutcome — exposing upstream 5xx bodies
-            // could leak internal detail.
-            if ((int)upstream.StatusCode >= 500)
-            {
-                _logger.LogWarning(
-                    "provider-service {Resource} upstream returned {Status} for {Path}",
-                    resourceLabel, (int)upstream.StatusCode, loggablePath);
-                return FhirBadGateway($"{resourceLabel} upstream is unavailable.");
-            }
-
-            return new ContentResult
-            {
-                Content = body,
-                ContentType = contentType,
-                StatusCode = (int)upstream.StatusCode
-            };
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogWarning(ex,
-                "provider-service {Resource} proxy hop failed for {Path}",
-                resourceLabel, loggablePath);
-            return FhirBadGateway($"{resourceLabel} upstream is unreachable.");
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            // The caller cancelled (client disconnect, server abort). Don't
-            // pretend the upstream timed out — propagate cancellation so
-            // the request pipeline returns its standard 499/aborted shape
-            // and we don't pollute logs / metrics with phantom 502s.
-            throw;
-        }
-        catch (TaskCanceledException ex)
-        {
-            // HttpClient surfaces its own configured timeout as
-            // TaskCanceledException; ct was NOT cancelled (handled above).
-            // That genuinely is an upstream-too-slow → 502.
-            _logger.LogWarning(ex,
-                "provider-service {Resource} proxy hop timed out for {Path}",
-                resourceLabel, loggablePath);
-            return FhirBadGateway($"{resourceLabel} upstream timed out.");
-        }
-    }
+        => ProxyUpstreamServiceAsync(
+            _providerServiceClient,
+            "provider-service",
+            resourceLabel,
+            path,
+            _logger,
+            ct);
 
     // ── Organization (proxied to provider-service, capability 5.9) ──────────
 
