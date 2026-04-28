@@ -818,6 +818,43 @@ public class ProviderRepositoryMongo : IProviderRepository
             .ToList();
     }
 
+    public async Task<long> CountStaleProvidersAsync(
+        string tenantId,
+        DateTimeOffset staleBefore,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+            throw new ArgumentException("tenantId is required.", nameof(tenantId));
+
+        // Hydration rule (mirrors ListProvidersForIntegrityRefreshAsync) —
+        // three "Active" shapes, each Status-gated. A provider is stale
+        // when LastVerifiedAt is missing/null or older than staleBefore.
+        var b = Builders<Provider>.Filter;
+        var stateFilter = b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Active),
+            b.And(
+                b.Exists(p => p.VersionState, false),
+                b.Eq(p => p.Status, ProviderStatus.Active)),
+            b.And(
+                b.Or(
+                    b.Exists(p => p.VersionId, false),
+                    b.Eq(p => p.VersionId, null),
+                    b.Eq(p => p.VersionId, string.Empty)),
+                b.Eq(p => p.Status, ProviderStatus.Active)));
+
+        var stalenessFilter = b.Or(
+            b.Exists(p => p.LastVerifiedAt, false),
+            b.Eq(p => p.LastVerifiedAt, null),
+            b.Lt(p => p.LastVerifiedAt, staleBefore));
+
+        var filter = b.And(
+            b.Eq(p => p.TenantId, tenantId),
+            stateFilter,
+            stalenessFilter);
+
+        return await _collection.CountDocumentsAsync(filter, cancellationToken: ct);
+    }
+
     public async Task<bool> UpdatePanelGatingDefaultsAsync(
         string tenantId,
         string providerId,

@@ -253,6 +253,32 @@ public interface IProviderService
     Task<string> CreateProviderAsync(CreateProviderRequest request);
     Task UpdateProviderAsync(string providerId, UpdateProviderRequest request);
     Task<List<string>> GetSpecialtiesAsync();
+
+    /// <summary>
+    /// Trigger an on-demand verification refresh for a single provider
+    /// (capability 5.10). Wraps
+    /// <c>POST /api/v1/providers/{id}/verification/refresh</c> on
+    /// <c>provider-service</c>; the response carries the freshly
+    /// projected integrity fields that the caller can splice back into
+    /// the rendered detail view without round-tripping the full
+    /// provider record.
+    /// </summary>
+    Task<ProviderIntegrityRefreshResult?> RefreshProviderVerificationAsync(string providerId);
+}
+
+/// <summary>
+/// Subset of <c>IntegrityProjectionRefreshResult</c> that the portal
+/// renders after an on-demand refresh (capability 5.10). The shape
+/// mirrors the four cached projection fields on
+/// <c>Provider.IntegrityScore</c> in <c>provider-service</c>.
+/// </summary>
+public class ProviderIntegrityRefreshResult
+{
+    public string ProviderId { get; set; } = string.Empty;
+    public int? IntegrityScore { get; set; }
+    public string? IntegrityRating { get; set; }
+    public DateTimeOffset? LastVerifiedAt { get; set; }
+    public DateTimeOffset? NextVerificationDue { get; set; }
 }
 
 public interface IBenefitPlanService
@@ -781,6 +807,13 @@ public class ProviderListItem
     public string CredentialingStatus { get; set; } = string.Empty; // Active, Pending, Expired
     public int NetworkCount { get; set; }
     public DateTime? LastClaimDate { get; set; }
+
+    // Cached integrity projection (capability 5.10). Populated by
+    // ProviderIntegrityProjectionService in provider-service; null
+    // until the projection worker has produced a score for the
+    // provider. Rendered by IntegrityBadge on the provider grid.
+    public int? IntegrityScore { get; set; }
+    public string? IntegrityRating { get; set; }
 }
 
 public class ProviderDetails : ProviderListItem
@@ -792,6 +825,13 @@ public class ProviderDetails : ProviderListItem
     public List<NetworkAssignment> NetworkAssignments { get; set; } = new();
     public ProviderContract? Contract { get; set; }
     public ProviderPerformance? Performance { get; set; }
+
+    // Detail-only integrity projection metadata (capability 5.10).
+    // The provider list grid uses IntegrityScore + IntegrityRating
+    // (inherited from ProviderListItem); the detail card additionally
+    // surfaces verification timing for operator visibility.
+    public DateTimeOffset? LastVerifiedAt { get; set; }
+    public DateTimeOffset? NextVerificationDue { get; set; }
 }
 
 public class PracticeLocation

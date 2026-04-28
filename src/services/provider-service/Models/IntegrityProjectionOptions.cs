@@ -75,6 +75,21 @@ public sealed class IntegrityProjectionOptions
     public RefreshWindowsOptions Windows { get; set; } = new();
 
     /// <summary>
+    /// Threshold above which a provider's cached <c>LastVerifiedAt</c>
+    /// is considered stale for the purposes of operational alerting.
+    /// The <c>IntegrityProjectionStalenessReporter</c> piggybacks on the
+    /// worker sweep to count, per tenant, how many providers exceed this
+    /// threshold and exposes the result as the
+    /// <c>cho.provider.integrity_score.stale_count</c> Prometheus gauge.
+    /// Default <c>7 days</c> — matches
+    /// <c>ProviderIntegrityGate:StalenessFallbackThreshold</c> in
+    /// <c>benefit-plan-service</c> so operators get one knob to turn by
+    /// default while retaining the option to alert sooner than fall-back
+    /// kicks in. Set to <c>TimeSpan.Zero</c> to disable the gauge.
+    /// </summary>
+    public TimeSpan StalenessAlertThreshold { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>
     /// Returns the shortest configured refresh window across the active
     /// sources. NPPES at 24h dominates today; if NPPES is disabled,
     /// LEIE/SAM at 24h takes over.

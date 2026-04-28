@@ -277,7 +277,7 @@ public class AdjudicationController : ControllerBase
             claimType: claimTypeCode,
             memberId: request.MemberId))
         {
-            providerIntegrity = await _providerIntegrityGate.CheckAsync(request.ProviderNpi, ct);
+            providerIntegrity = await _providerIntegrityGate.CheckAsync(request.ProviderNpi, ct: ct);
 
             integritySpan?.SetTag("cho.integrity.passed", providerIntegrity.Passed);
             integritySpan?.SetTag("cho.integrity.score", providerIntegrity.IntegrityScore ?? -1);

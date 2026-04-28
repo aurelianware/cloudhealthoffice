@@ -1,0 +1,140 @@
+@*
+    IntegrityBadge — surfaces the cached Provider.IntegrityScore /
+    IntegrityRating projection (capability 5.10 — verification integrity
+    score surface).
+
+    Color mapping (Decision 9, ratified):
+      Clear     → MudBlazor Color.Success
+      Advisory  → MudBlazor Color.Warning
+      Caution   → custom .cho-integrity-caution (orange #ff7a1a, between
+                  Warning yellow and Error red)
+      Alert     → MudBlazor Color.Error
+      Blocked   → custom .cho-integrity-blocked (dark-red #8b0028, more
+                  severe than Error)
+      Unknown / null → MudBlazor Color.Default
+
+    Six rating values map to six distinct severity bands; MudBlazor's
+    four-color palette is insufficient to render them losslessly, so two
+    custom CSS classes are introduced and co-located with the component.
+    The other four ratings reuse the platform palette to keep the rest of
+    the badge inside MudBlazor's idiom.
+*@
+
+@if (Compact)
+{
+    <MudChip T="string"
+             Color="@_palette.MudColor"
+             Class="@($"cho-integrity-chip {_palette.CssClass}")"
+             Size="Size.Small"
+             Variant="Variant.Filled">
+        @_label
+    </MudChip>
+}
+else
+{
+    <MudTooltip Text="@_tooltip" Placement="Placement.Top">
+        <MudChip Color="@_palette.MudColor"
+                 Class="@($"cho-integrity-chip {_palette.CssClass}")"
+                 Size="Size.Small"
+                 Variant="Variant.Filled">
+            @if (Score is int s)
+            {
+                <span class="cho-integrity-score">@s</span>
+            }
+            <span>@_label</span>
+        </MudChip>
+    </MudTooltip>
+}
+
+@code {
+    /// <summary>
+    /// Composite integrity score (0–100). Null when the projection
+    /// worker hasn't produced a score for this provider yet.
+    /// </summary>
+    [Parameter] public int? Score { get; set; }
+
+    /// <summary>
+    /// Rating bucket — Clear / Advisory / Caution / Alert / Blocked /
+    /// Unknown. Persisted as a nullable string on
+    /// <c>Provider.IntegrityRating</c>; the badge tolerates null and
+    /// arbitrary casing so the same component renders projection rows
+    /// produced before the rubric was finalised.
+    /// </summary>
+    [Parameter] public string? Rating { get; set; }
+
+    /// <summary>
+    /// When true, the badge renders a dense one-line chip suitable for
+    /// the provider list grid. When false (default), the score is
+    /// inlined and a tooltip explaining the rating rubric is attached.
+    /// </summary>
+    [Parameter] public bool Compact { get; set; }
+
+    private RatingPalette _palette = RatingPalette.Unknown;
+    private string _label = "Unknown";
+    private string _tooltip = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        _palette = ResolvePalette(Rating);
+        _label = string.IsNullOrWhiteSpace(Rating) ? "Unknown" : Rating!;
+        _tooltip = BuildTooltip(_label, Score);
+    }
+
+    private static RatingPalette ResolvePalette(string? rating) =>
+        (rating ?? "Unknown").Trim().ToLowerInvariant() switch
+        {
+            "clear"    => new RatingPalette(MudBlazor.Color.Success, "cho-integrity-clear"),
+            "advisory" => new RatingPalette(MudBlazor.Color.Warning, "cho-integrity-advisory"),
+            "caution"  => new RatingPalette(MudBlazor.Color.Default, "cho-integrity-caution"),
+            "alert"    => new RatingPalette(MudBlazor.Color.Error,   "cho-integrity-alert"),
+            "blocked"  => new RatingPalette(MudBlazor.Color.Default, "cho-integrity-blocked"),
+            _          => RatingPalette.Unknown,
+        };
+
+    private static string BuildTooltip(string label, int? score)
+    {
+        var prefix = score is int s ? $"Integrity score {s} — " : "Integrity rating: ";
+        return label.Trim().ToLowerInvariant() switch
+        {
+            "clear"    => prefix + "Clear (no concerns; routine adjudication).",
+            "advisory" => prefix + "Advisory (mild concern; monitor).",
+            "caution"  => prefix + "Caution (notable concern; review at next opportunity).",
+            "alert"    => prefix + "Alert (active concern; requires attention).",
+            "blocked"  => prefix + "Blocked (do not adjudicate against this provider).",
+            _          => "Not yet verified — projection worker hasn't produced a score.",
+        };
+    }
+
+    private readonly record struct RatingPalette(MudBlazor.Color MudColor, string CssClass)
+    {
+        public static RatingPalette Unknown { get; } =
+            new(MudBlazor.Color.Default, "cho-integrity-unknown");
+    }
+}
+
+<style>
+    /* Co-located colour overrides for the two ratings that don't map
+       cleanly onto MudBlazor's four-color palette (capability 5.10
+       Decision 9). The other four ratings reuse Color.Success /
+       Color.Warning / Color.Error / Color.Default. */
+    .cho-integrity-chip {
+        font-weight: 500;
+        letter-spacing: 0.02em;
+    }
+
+    .cho-integrity-chip .cho-integrity-score {
+        margin-right: 0.4em;
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+    }
+
+    .cho-integrity-caution {
+        background-color: var(--cho-rating-caution, #ff7a1a) !important;
+        color: #1a1a1a !important;
+    }
+
+    .cho-integrity-blocked {
+        background-color: var(--cho-rating-blocked, #8b0028) !important;
+        color: #ffffff !important;
+    }
+</style>

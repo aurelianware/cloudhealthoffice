@@ -308,9 +308,11 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
             .GetConfigurationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new OperatingModeConfiguration { TenantId = TenantId });
 
-        // ProviderIntegrityGate: pass by default
+        // ProviderIntegrityGate: pass by default. The forceRefresh parameter
+        // (added in capability 5.10) defaults to false; only AdminInvestigation
+        // callers opt in. Stub matches any value for forward compatibility.
         _factory.ProviderIntegrityGate
-            .CheckAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .CheckAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new ProviderIntegrityResult { Passed = true, Rating = "Clear", IntegrityScore = 95 });
 
         // TerminologyCrosswalkClient: passthrough (no translations)

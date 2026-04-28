@@ -348,6 +348,14 @@ not relax the `UpdateAsync` guard, not re-purpose
 `ReplaceVersionRowAsync`. Each carve-out documents its source service
 and refresh cadence in this section.
 
+**Read-side consumption pattern.** The projection-metadata fields above
+are the *write* side of a multi-consumer story. The read-side
+decision tree (which consumers should call the cached projection vs
+the live verification-service vs trigger an on-demand refresh) is
+documented in `docs/architecture/integrity-score-consumption.md`
+(capability 5.10). Future carve-outs that join this section should
+update the consumption doc with their own consumer table entry.
+
 ### Credentialing projection (capability 5.6)
 
 The credentialing-status fields on `Provider` are a projection of the

@@ -175,6 +175,7 @@
                             <MudTh>Location</MudTh>
                             <MudTh>Network Status</MudTh>
                             <MudTh>Credentials</MudTh>
+                            <MudTh>Integrity</MudTh>
                             <MudTh>Networks</MudTh>
                             <MudTh>Last Claim</MudTh>
                             <MudTh>Actions</MudTh>
@@ -204,6 +205,11 @@
                                          Color="@GetCredentialStatusColor(context.CredentialingStatus)">
                                     @context.CredentialingStatus
                                 </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Integrity">
+                                <IntegrityBadge Score="@context.IntegrityScore"
+                                                Rating="@context.IntegrityRating"
+                                                Compact="true" />
                             </MudTd>
                             <MudTd DataLabel="Networks">
                                 <MudChip Size="Size.Small" Color="Color.Default">@context.NetworkCount</MudChip>
