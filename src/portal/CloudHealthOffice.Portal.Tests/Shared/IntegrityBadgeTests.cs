@@ -66,13 +66,16 @@ public class IntegrityBadgeTests : TestContext
     {
         // The compact chip only renders the rating label so the grid
         // column stays narrow; the score-and-tooltip surface is the
-        // expanded mode.
+        // expanded mode. We assert against the rendered numeric value
+        // (not the CSS class) because the component's embedded
+        // <style> block also contains the class name and would
+        // produce a false positive.
         var cut = RenderComponent<IntegrityBadge>(parameters => parameters
             .Add(p => p.Rating, "Clear")
             .Add(p => p.Score, 92)
             .Add(p => p.Compact, true));
 
-        cut.Markup.Should().NotContain("cho-integrity-score");
+        cut.FindAll("span.cho-integrity-score").Should().BeEmpty();
         cut.Markup.Should().Contain("Clear");
     }
 
@@ -84,7 +87,7 @@ public class IntegrityBadgeTests : TestContext
             .Add(p => p.Score, 55)
             .Add(p => p.Compact, false));
 
-        cut.Markup.Should().Contain("cho-integrity-score");
+        cut.FindAll("span.cho-integrity-score").Should().NotBeEmpty();
         cut.Markup.Should().Contain("55");
         cut.Markup.Should().Contain("Caution");
     }

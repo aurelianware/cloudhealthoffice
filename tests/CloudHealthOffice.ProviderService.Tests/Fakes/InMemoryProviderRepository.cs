@@ -404,7 +404,14 @@ public sealed class InMemoryProviderRepository : IProviderRepository
         DateTimeOffset staleBefore,
         CancellationToken ct = default)
     {
-        var count = _docs
+        // Apply the same hydration rule the other read methods use so
+        // legacy rows where VersionState is absent are still treated as
+        // Active when Status == Active (matches the Cosmos / Mongo
+        // hydration rule documented in
+        // docs/architecture/provider-versioning.md "Legacy hydration
+        // query pattern"). Counting against raw _docs would miss those
+        // rows and diverge from the real repositories' behavior.
+        var count = HydratedView()
             .Count(d => d.TenantId == tenantId
                 && d.VersionState == ProviderVersionState.Active
                 && (d.LastVerifiedAt == null || d.LastVerifiedAt < staleBefore));

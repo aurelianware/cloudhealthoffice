@@ -143,6 +143,26 @@ public sealed class HttpProviderIntegrityGateTests
     }
 
     [Fact]
+    public async Task CheckAsync_PassthroughResult_IsNotCached()
+    {
+        // Both endpoints fail → passthrough. The gate must NOT cache that
+        // result for the full 1-hour TTL, so a subsequent call after
+        // upstream recovers picks up the real exclusion signal instead
+        // of an hour of stale "passed".
+        var providerHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
+        var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        await gate.CheckAsync(Npi);
+        await gate.CheckAsync(Npi);
+
+        providerHandler.RequestCount.Should().Be(2,
+            "passthrough is not cached, so the second call retries provider-service");
+        verificationHandler.RequestCount.Should().Be(2,
+            "passthrough is not cached, so the second call retries verification-service");
+    }
+
+    [Fact]
     public async Task CheckAsync_ExcludedRating_OnCachedProjection_DenialCodeSurfaces()
     {
         var providerHandler = FakeHttpMessageHandler.Json(

@@ -27,10 +27,24 @@ namespace BenefitPlanService.Services;
 ///
 /// <para>
 /// The 1-hour <see cref="IMemoryCache"/> stays as a per-pod
-/// request-coalescing layer wrapping the outer <see cref="ProviderIntegrityResult"/>
-/// — every code path benefits from coalescing. Cache key is namespaced by
-/// the resolution path (<c>cached-or-live</c> vs <c>force-refresh</c>) so a
-/// force-refresh call doesn't poison the default-path cache entry.
+/// request-deduplication layer wrapping the outer
+/// <see cref="ProviderIntegrityResult"/>. Cache key is namespaced by the
+/// resolution path (<c>cached-or-live</c> vs <c>force-refresh</c>) so a
+/// force-refresh call doesn't poison the default-path cache entry. Note:
+/// this is a check-then-act pattern, not a true single-flight coalesce —
+/// concurrent first-time misses for the same NPI can each fan out to
+/// upstream once. A future tightening (e.g. <c>GetOrCreateAsync</c> or a
+/// <c>Lazy&lt;Task&lt;...&gt;&gt;</c> per key) would close that window;
+/// out of scope for 5.10 because the upstream cost is bounded by the
+/// staleness threshold and the typical hot-NPI shape doesn't produce
+/// concurrent first-time misses in practice.
+/// </para>
+///
+/// <para>
+/// Pass-through results (both upstream services unavailable) are
+/// <em>not</em> cached — operators get a recovered exclusion signal on
+/// the next adjudication call rather than waiting up to an hour for the
+/// cached pass-through to expire.
 /// </para>
 ///
 /// <para>
@@ -91,10 +105,21 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         }
 
         ProviderIntegrityResult result;
+        // Track whether the result came from a real data source. Pass-through
+        // results (both upstream services down) are NOT cached for the full
+        // 1-hour TTL so a recovered exclusion signal is picked up on the next
+        // adjudication call rather than waiting an hour. The cache is still
+        // useful for real responses (request coalescing) and for genuine
+        // pass-throughs we accept a brief retry storm during outages — that's
+        // the lesser evil compared to an hour of pretending Excluded providers
+        // pass.
+        var isPassthrough = false;
 
         if (forceRefresh)
         {
-            result = await CallVerificationServiceAsync(npi, ct) ?? Passthrough();
+            var live = await CallVerificationServiceAsync(npi, ct);
+            isPassthrough = live is null;
+            result = live ?? Passthrough();
             RecordDecision(IntegrityGatePath.LiveOnly, result.Rating);
         }
         else
@@ -107,7 +132,9 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                 // Provider not found in provider-service or transport
                 // failure — fall back to live verification rather than
                 // failing closed.
-                result = await CallVerificationServiceAsync(npi, ct) ?? Passthrough();
+                var live = await CallVerificationServiceAsync(npi, ct);
+                isPassthrough = live is null;
+                result = live ?? Passthrough();
                 RecordDecision(IntegrityGatePath.NullFallback, result.Rating);
             }
             else if (projection.Score is null || projection.LastVerifiedAt is null)
@@ -131,7 +158,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
             }
         }
 
-        _cache.Set(cacheKey, result, CacheTtl);
+        if (!isPassthrough) _cache.Set(cacheKey, result, CacheTtl);
         return result;
     }
 

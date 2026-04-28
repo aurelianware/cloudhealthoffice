@@ -33,15 +33,21 @@ public interface IIntegrityProjectionStalenessReporter
     /// <summary>
     /// Compute the per-tenant stale-provider count and update the
     /// <c>cho.provider.integrity_score.stale_count</c> gauge snapshot.
-    /// Returns the count for caller-side telemetry / structured logging;
-    /// callers may safely ignore the return value.
+    /// Returns the count for caller-side telemetry / structured logging.
     ///
     /// <para>
-    /// When <see cref="IntegrityProjectionOptions.StalenessAlertThreshold"/>
-    /// is non-positive the gauge entry for the tenant is cleared and
-    /// the count returns <c>0</c> — operators get an explicit "off"
-    /// signal rather than a stale snapshot.
+    /// Return-value contract:
     /// </para>
+    /// <list type="bullet">
+    ///   <item><c>&gt;= 0</c> — successful read, the snapshot was
+    ///     refreshed.</item>
+    ///   <item><c>0</c> with threshold disabled — the gauge entry was
+    ///     cleared (explicit "off" signal).</item>
+    ///   <item><c>-1</c> — repository read failed; the snapshot is
+    ///     unchanged. Callers should log "unknown" rather than
+    ///     conflating with a healthy zero. Sentinel chosen over
+    ///     throwing so telemetry never blocks the worker sweep.</item>
+    /// </list>
     /// </summary>
     Task<long> ReportTenantAsync(string tenantId, CancellationToken ct = default);
 }
@@ -92,11 +98,13 @@ public sealed class IntegrityProjectionStalenessReporter : IIntegrityProjectionS
         catch (Exception ex)
         {
             // Telemetry must never block the sweep. Log and continue —
-            // the next sweep refreshes the snapshot.
+            // the next sweep refreshes the snapshot. Return -1 (sentinel)
+            // so callers can distinguish "unknown due to error" from
+            // "zero stale providers".
             _logger.LogWarning(ex,
                 "IntegrityProjectionStalenessReporter failed for tenant {Tenant}; gauge snapshot unchanged",
                 Sanitize(tenantId));
-            return 0;
+            return -1;
         }
     }
 
