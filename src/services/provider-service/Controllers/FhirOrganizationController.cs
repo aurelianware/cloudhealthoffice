@@ -214,6 +214,10 @@ public class FhirOrganizationController : ControllerBase
             if (wantProv)
             {
                 ct.ThrowIfCancellationRequested();
+                // When merging both source entities, limit the provider pass to
+                // at most pageSize/2 entries so the combined total never exceeds
+                // pageSize (_count must bound the page size per FHIR convention).
+                var provPageSize = wantIns ? Math.Max(1, pageSize / 2) : pageSize;
                 var providers = await _providerRepository.SearchAsync(
                     name: name,
                     specialty: null,
@@ -224,7 +228,7 @@ public class FhirOrganizationController : ControllerBase
                     providerType: ProviderType.Organization,
                     acceptingNewPatients: null,
                     page: page,
-                    pageSize: pageSize,
+                    pageSize: provPageSize,
                     city: city);
 
                 foreach (var p in providers)
@@ -241,25 +245,55 @@ public class FhirOrganizationController : ControllerBase
                 var tenantId = HttpContext.Items["TenantId"] as string ?? string.Empty;
                 if (!string.IsNullOrEmpty(tenantId))
                 {
-                    // IOrganizationRepository.ListAsync filters the tenant via
-                    // GetTenantId() internally (same as IProviderRepository) — the
-                    // TenantId is read from HttpContext.Items["TenantId"] through
-                    // the injected IHttpContextAccessor inside the repository. We
-                    // pass null filters to list all; name/city/state/zip filtering
-                    // runs application-side on the page because the repository
-                    // does not expose a full-text name filter today.
-                    var (networks, _) = await _organizationRepository.ListAsync(
-                        networkType: null,
-                        lineOfBusiness: null,
-                        parentOrganizationId: null,
-                        page: page,
-                        pageSize: pageSize);
+                    // IOrganizationRepository.ListAsync does not expose
+                    // name/city/state/zip filters, so MatchesNetworkFilters is
+                    // applied application-side. To avoid incorrect paging
+                    // semantics (filtering after a page boundary means later
+                    // matching rows on subsequent repository pages are silently
+                    // skipped), iterate repository pages in order, skipping
+                    // the first (page-1)*insSlots filtered matches and
+                    // collecting up to insSlots results.
+                    var insSlots = pageSize - entries.Count;
+                    var filteredOffset = (page - 1) * insSlots;
+                    var filteredSeen = 0;
+                    var repositoryPage = 1;
 
-                    foreach (var network in networks)
+                    while (entries.Count < pageSize)
                     {
-                        if (!MatchesNetworkFilters(network, name, city, state, postalCode)) continue;
-                        var projected = _projector.Project(network);
-                        if (projected != null) entries.Add(WrapEntry(projected));
+                        ct.ThrowIfCancellationRequested();
+
+                        var (networks, _) = await _organizationRepository.ListAsync(
+                            networkType: null,
+                            lineOfBusiness: null,
+                            parentOrganizationId: null,
+                            page: repositoryPage,
+                            pageSize: pageSize);
+
+                        if (networks.Count == 0) break;
+
+                        foreach (var network in networks)
+                        {
+                            ct.ThrowIfCancellationRequested();
+
+                            if (!MatchesNetworkFilters(network, name, city, state, postalCode)) continue;
+
+                            if (filteredSeen < filteredOffset)
+                            {
+                                filteredSeen++;
+                                continue;
+                            }
+
+                            var projected = _projector.Project(network);
+                            if (projected != null)
+                            {
+                                entries.Add(WrapEntry(projected));
+                                if (entries.Count >= pageSize) break;
+                            }
+                        }
+
+                        if (networks.Count < pageSize) break;
+
+                        repositoryPage++;
                     }
                 }
             }

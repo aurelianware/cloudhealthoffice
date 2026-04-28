@@ -221,13 +221,15 @@ public class FhirOrganizationProjectorTests
     }
 
     [Fact]
-    public void Network_No_identifiers_emitted_when_Identifiers_list_empty()
+    public void Network_Returns_null_when_Identifiers_list_empty_or_all_invalid()
     {
+        // US Core Organization requires identifier (1..*). A network with no
+        // projectable identifiers cannot be emitted conformantly; the projector
+        // returns null so callers map this to 404 / skip-in-search.
         var network = BuildNetwork();
         network.Identifiers.Clear();
         var result = _projector.Project(network);
-
-        result!.ContainsKey("identifier").Should().BeFalse();
+        result.Should().BeNull("US Core requires at least one identifier; none available → return null");
     }
 
     [Fact]

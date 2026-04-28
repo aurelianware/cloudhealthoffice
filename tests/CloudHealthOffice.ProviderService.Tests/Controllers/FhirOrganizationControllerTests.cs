@@ -77,6 +77,9 @@ public class FhirOrganizationControllerTests
         LineOfBusiness = LineOfBusiness.Commercial,
         EffectiveDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
         ParentOrganizationId = parentId,
+        // US Core requires identifier 1..*; include at least one valid entry
+        // so the projector does not return null for these test networks.
+        Identifiers = new() { new OrganizationIdentifier { System = "urn:cho:network", Value = id } },
         LastUpdatedDate = DateTime.UtcNow,
     };
 

@@ -51,6 +51,12 @@ namespace ProviderService.Services;
 ///   FHIR Organization.name.</item>
 ///   <item>Network <c>VersionState != Active</c> — only the head Active
 ///   version is projected.</item>
+///   <item>Network <c>Name</c> is null or empty — required for FHIR
+///   Organization.name (US Core 6.1.0 requires name 1..1).</item>
+///   <item>Network has no projectable <c>Identifiers</c> (all entries have
+///   blank system or value) — US Core 6.1.0 requires identifier 1..*; a
+///   network with no resolvable identifier cannot be emitted
+///   conformantly.</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -59,7 +65,9 @@ public interface IFhirOrganizationProjector
     /// <summary>
     /// Project a payer-defined <see cref="Organization"/> network entity to a
     /// FHIR Organization with <c>type=ins</c>. Returns null when the
-    /// network version is not Active.
+    /// network version is not Active, when <see cref="Organization.Name"/> is
+    /// null or empty, or when the network has no projectable identifiers (US
+    /// Core 6.1.0 requires identifier 1..*).
     /// </summary>
     JsonObject? Project(Organization network);
 

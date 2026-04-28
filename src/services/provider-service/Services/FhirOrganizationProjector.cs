@@ -52,6 +52,10 @@ public sealed class FhirOrganizationProjector : IFhirOrganizationProjector
         org["name"] = network.Name;
 
         // ── identifier ──────────────────────────────────────────────────
+        // US Core Organization requires identifier (1..*). If no valid
+        // identifier can be projected, the resource would be non-conformant;
+        // return null so callers map this to a 404 OperationOutcome (read)
+        // or skip the row (search).
         var identifiers = new JsonArray();
         foreach (var id in network.Identifiers)
         {
@@ -68,7 +72,8 @@ public sealed class FhirOrganizationProjector : IFhirOrganizationProjector
             }
             identifiers.Add(idNode);
         }
-        if (identifiers.Count > 0) org["identifier"] = identifiers;
+        if (identifiers.Count == 0) return null;
+        org["identifier"] = identifiers;
 
         // ── telecom ─────────────────────────────────────────────────────
         if (network.ContactInfo != null)
