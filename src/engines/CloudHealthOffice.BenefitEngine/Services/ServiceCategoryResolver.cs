@@ -22,10 +22,21 @@ public interface IServiceCategoryResolver
     /// <summary>
     /// Resolve a procedure code to a service type code.
     /// Returns null if no mapping is found (which would be an adjudication error).
+    ///
+    /// <para>
+    /// <paramref name="serviceDate"/> is the claim line's service date,
+    /// used to filter mappings by their inclusive
+    /// <see cref="Domain.ServiceCategoryMapping.EffectiveStart"/> /
+    /// <see cref="Domain.ServiceCategoryMapping.EffectiveEnd"/> window
+    /// and the <see cref="Domain.ServiceCategoryMapping.IsActive"/>
+    /// kill-switch (capability BP 5.10). A claim adjudicated in 2027
+    /// for service performed on 2026-08-15 hits 2026 mappings.
+    /// </para>
     /// </summary>
     Task<ServiceCategoryMatch?> ResolveAsync(
         string tenantId,
         Guid benefitPlanId,
+        DateOnly serviceDate,
         string procedureCode,
         string codeType,
         string placeOfService,
@@ -61,6 +72,7 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
     public async Task<ServiceCategoryMatch?> ResolveAsync(
         string tenantId,
         Guid benefitPlanId,
+        DateOnly serviceDate,
         string procedureCode,
         string codeType,
         string placeOfService,
@@ -70,7 +82,8 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
     {
         // 1. Try plan-specific overrides first
         var planMappings = await _repo.GetMappingsAsync(tenantId, benefitPlanId, ct);
-        var match = FindMatch(planMappings, procedureCode, codeType, placeOfService, modifiers, revenueCode);
+        var match = FindMatch(planMappings, serviceDate, procedureCode, codeType, placeOfService, modifiers, revenueCode,
+            tenantId, "plan");
         if (match is not null)
         {
             return match with { MatchedBy = "PlanOverride" };
@@ -78,7 +91,8 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
 
         // 2. Try tenant-level defaults (BenefitPlanId = null)
         var tenantMappings = await _repo.GetMappingsAsync(tenantId, null, ct);
-        match = FindMatch(tenantMappings, procedureCode, codeType, placeOfService, modifiers, revenueCode);
+        match = FindMatch(tenantMappings, serviceDate, procedureCode, codeType, placeOfService, modifiers, revenueCode,
+            tenantId, "tenant");
         if (match is not null)
         {
             return match with { MatchedBy = "TenantDefault" };
@@ -103,13 +117,37 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
 
     private ServiceCategoryMatch? FindMatch(
         IReadOnlyList<ServiceCategoryMapping> mappings,
+        DateOnly serviceDate,
         string procedureCode,
         string codeType,
         string placeOfService,
         IReadOnlyList<string> modifiers,
-        string? revenueCode)
+        string? revenueCode,
+        string tenantId,
+        string scope)
     {
+        // Filter by IsActive + the inclusive [EffectiveStart, EffectiveEnd]
+        // window against the claim line's service date (capability BP 5.10).
+        // null bound = open; IsActive=false drops the row regardless of
+        // window. Filtering is in-memory over the cached list — the repo
+        // seam (GetMappingsAsync) is unchanged.
+        var filtered = new List<ServiceCategoryMapping>(mappings.Count);
         foreach (var mapping in mappings)
+        {
+            if (IsInEffect(mapping, serviceDate))
+            {
+                filtered.Add(mapping);
+            }
+        }
+
+        if (mappings.Count > 0 && filtered.Count < mappings.Count)
+        {
+            BenefitEngineMetrics.ScmFilteredByEffectiveWindow.Add(1,
+                new KeyValuePair<string, object?>("cho.tenant_id", tenantId),
+                new KeyValuePair<string, object?>("cho.scope", scope));
+        }
+
+        foreach (var mapping in filtered)
         {
             // Evaluate rules in priority order
             var sortedRules = mapping.Rules.OrderBy(r => r.Priority);
@@ -131,6 +169,14 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
         }
 
         return null;
+    }
+
+    private static bool IsInEffect(ServiceCategoryMapping mapping, DateOnly serviceDate)
+    {
+        if (!mapping.IsActive) return false;
+        if (mapping.EffectiveStart is { } start && serviceDate < start) return false;
+        if (mapping.EffectiveEnd is { } end && serviceDate > end) return false;
+        return true;
     }
 
     private static bool RuleMatches(
