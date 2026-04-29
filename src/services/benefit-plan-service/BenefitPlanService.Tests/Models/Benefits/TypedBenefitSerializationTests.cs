@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BenefitPlanService.Models;
 using BenefitPlanService.Models.Benefits;
+using CloudHealthOffice.BenefitEngine.Domain;
 
 namespace BenefitPlanService.Tests.Models.Benefits;
 

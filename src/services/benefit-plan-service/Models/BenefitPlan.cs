@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using BenefitPlanService.Models.Benefits;
+using CloudHealthOffice.BenefitEngine.Domain;
 
 namespace BenefitPlanService.Models;
 
