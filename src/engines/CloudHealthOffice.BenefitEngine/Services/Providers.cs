@@ -127,15 +127,50 @@ public record BenefitPlanConfig
     /// </summary>
     public InpatientPricingMethod DefaultInpatientPricingMethod { get; init; } = InpatientPricingMethod.PerLine;
 
-    // Benefit categories
+    // Benefit categories. Multiple entries may share the same
+    // ServiceTypeCode after BP 5.10 — projection no longer
+    // deduplicates so the rule gate can pick the correct benefit per
+    // member encounter via BenefitRulePredicate evaluation. Use
+    // GetCategories(code) for predicate-aware lookup;
+    // GetFirstCategory(code) is the legacy any-match shim.
     public List<BenefitCategoryConfig> Categories { get; init; } = [];
 
     // Cross-reference
     public string? QnxtPlanId { get; init; }
 
-    public BenefitCategoryConfig? GetCategory(string serviceTypeCode)
+    /// <summary>
+    /// Legacy any-match accessor — returns the first
+    /// <see cref="BenefitCategoryConfig"/> whose <c>ServiceTypeCode</c>
+    /// matches. Kept for callers that don't need predicate evaluation
+    /// (e.g. limit checks, audit lookups). For benefit selection during
+    /// adjudication go through <see cref="GetCategories"/> + the rule
+    /// gate so age/gender/diagnosis predicates are honoured.
+    /// </summary>
+    public BenefitCategoryConfig? GetFirstCategory(string serviceTypeCode)
         => Categories.FirstOrDefault(c =>
             string.Equals(c.ServiceTypeCode, serviceTypeCode, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Compatibility shim for pre-BP-5.10 callers. Behaves identically
+    /// to <see cref="GetFirstCategory"/>. Will be removed after a
+    /// deprecation cycle — see
+    /// docs/architecture/adjudication-api-stabilization.md.
+    /// </summary>
+    [Obsolete("Renamed to GetFirstCategory. New callers that need predicate-aware selection should use GetCategories + IBenefitRuleGate. See docs/architecture/adjudication-api-stabilization.md.")]
+    public BenefitCategoryConfig? GetCategory(string serviceTypeCode)
+        => GetFirstCategory(serviceTypeCode);
+
+    /// <summary>
+    /// Returns every <see cref="BenefitCategoryConfig"/> whose
+    /// <c>ServiceTypeCode</c> matches, preserving authoring order. Used
+    /// by <c>IBenefitRuleGate</c> to walk candidate benefits and pick
+    /// the first whose <see cref="BenefitCategoryConfig.Predicate"/>
+    /// is satisfied for the current member encounter.
+    /// </summary>
+    public IReadOnlyList<BenefitCategoryConfig> GetCategories(string serviceTypeCode)
+        => Categories
+            .Where(c => string.Equals(c.ServiceTypeCode, serviceTypeCode, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 }
 
 public record BenefitCategoryConfig
@@ -160,6 +195,16 @@ public record BenefitCategoryConfig
     // Cost sharing
     public IReadOnlyList<CostShareRuleConfig> InNetworkCostSharing { get; init; } = [];
     public IReadOnlyList<CostShareRuleConfig> OutOfNetworkCostSharing { get; init; } = [];
+
+    /// <summary>
+    /// Optional declarative gate (capability BP 5.10) that restricts
+    /// when this benefit applies to the member encounter. Carries the
+    /// originating <see cref="BenefitRulePredicate"/> the projection
+    /// was built from. <c>null</c> means the benefit is unconditionally
+    /// applicable for any encounter that resolves to its
+    /// <see cref="ServiceTypeCode"/>.
+    /// </summary>
+    public BenefitRulePredicate? Predicate { get; init; }
 }
 
 public record CostShareRuleConfig

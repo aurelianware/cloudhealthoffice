@@ -57,6 +57,31 @@ public record BenefitResolutionRequest
     /// COB context. Null for primary claims.
     /// </summary>
     public CobInfo? Cob { get; init; }
+
+    /// <summary>
+    /// Member demographics + diagnosis context fed into
+    /// <see cref="Domain.BenefitRulePredicate"/> evaluation during the
+    /// adjudication hot path (capability BP 5.10). Optional. When null,
+    /// the engine skips predicate evaluation entirely and treats every
+    /// candidate benefit as applicable — see Decision 3 in
+    /// <c>docs/architecture/adjudication-api-stabilization.md</c>.
+    /// </summary>
+    public MemberContext? Member { get; init; }
+}
+
+/// <summary>
+/// Optional member-and-encounter context supplied by the caller for
+/// declarative benefit-rule evaluation. Populated from coverage
+/// information / member demographics at the controller seam. When the
+/// caller can't supply a field it is left null and the predicate
+/// either ignores the missing facet (no opinion) or fails closed
+/// (context-required facets) — see <see cref="Domain.BenefitRulePredicate.Evaluate"/>.
+/// </summary>
+public record MemberContext
+{
+    public int? AgeYears { get; init; }
+    public BenefitMemberGender? Gender { get; init; }
+    public IReadOnlyCollection<string>? DiagnosisCodes { get; init; }
 }
 
 public record CobInfo
