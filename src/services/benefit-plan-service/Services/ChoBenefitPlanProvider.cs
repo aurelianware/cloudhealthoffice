@@ -2,6 +2,7 @@ using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.Infrastructure.Observability;
 using EnginePlanType = CloudHealthOffice.BenefitEngine.Domain.PlanType;
 using ModelPlanType = BenefitPlanService.Models.PlanType;
 using EngineFamilyAccumulatorModel = CloudHealthOffice.BenefitEngine.Domain.FamilyAccumulatorModel;
@@ -58,6 +59,11 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
 
     internal BenefitPlanConfig MapToConfig(BenefitPlan plan)
     {
+        // BP 5.10: project every Benefit to its own BenefitCategoryConfig
+        // and carry the originating BenefitRulePredicate (if any) so the
+        // engine's rule gate can pick the right benefit per encounter.
+        // Order matches BenefitPlan.Benefits order — the first authored
+        // benefit wins when no predicate gates the choice.
         var categories = plan.Benefits
             .Select(b => new BenefitCategoryConfig
             {
@@ -68,7 +74,8 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
                 VisitLimit = b.VisitLimit,
                 DollarLimit = b.AnnualMaximum ?? b.LifetimeMaximum,
                 InNetworkCostSharing = BuildInNetworkCostSharing(b),
-                OutOfNetworkCostSharing = BuildOutOfNetworkCostSharing(b)
+                OutOfNetworkCostSharing = BuildOutOfNetworkCostSharing(b),
+                Predicate = ProjectPredicate(plan, b),
             })
             .ToList();
 
@@ -134,6 +141,37 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
     /// </summary>
     private static bool ResolveIsAcaCapEnforced(BenefitPlan plan)
         => AcaCapEnforcementPolicy.IsEnforced(plan);
+
+    /// <summary>
+    /// Capability BP 5.10 — project the originating
+    /// <see cref="BenefitRulePredicate"/> from <see cref="Benefit.Rules"/>
+    /// onto the engine config. Multi-predicate-AND semantics is a
+    /// Phase 2 capability (Decision 4); for now we collapse to the
+    /// first non-null entry and emit a counter so operators see when
+    /// multi-predicate authoring is happening in the wild.
+    /// </summary>
+    private BenefitRulePredicate? ProjectPredicate(BenefitPlan plan, Benefit benefit)
+    {
+        if (benefit.Rules is not { Count: > 0 } rules)
+        {
+            return null;
+        }
+
+        if (rules.Count > 1)
+        {
+            ChoMetrics.PredicateMultiRuleTruncated.Add(1,
+                new KeyValuePair<string, object?>("cho.tenant_id", plan.TenantId));
+            _logger.LogWarning(
+                "Benefit projection collapsed multi-predicate rules to first entry (Phase 2): tenant={Tenant} planId={PlanId} versionId={VersionId} benefitId={BenefitId} ruleCount={RuleCount}",
+                SanitizeForLog(plan.TenantId),
+                SanitizeForLog(plan.PlanId),
+                SanitizeForLog(plan.VersionId),
+                SanitizeForLog(benefit.Id),
+                rules.Count);
+        }
+
+        return rules.FirstOrDefault(r => r is not null);
+    }
 
     private static EngineFamilyAccumulatorModel MapFamilyAccumulatorModel(ModelFamilyAccumulatorModel model)
         => model switch

@@ -160,6 +160,24 @@ public static class ChoMetrics
             description: "Network-tier mapping outcomes processed by the NetworkId backfill, by outcome");
 
     /// <summary>
+    /// Counter tracking benefits projected by
+    /// <c>ChoBenefitPlanProvider.MapToConfig</c> whose <c>Rules</c>
+    /// list carried more than one <c>BenefitRulePredicate</c>
+    /// (capability BP 5.10). The projection collapses the list to its
+    /// first non-null entry — multi-predicate-AND semantics is a
+    /// Phase 2 capability. The counter sizes that backlog: when the
+    /// counter is non-zero across tenants, multi-predicate authoring
+    /// is happening in the wild and Phase 2 design needs to land
+    /// before truncation becomes load-bearing. Dimensions:
+    /// <c>cho.tenant_id</c>.
+    /// </summary>
+    public static readonly Counter<long> PredicateMultiRuleTruncated =
+        Meter.CreateCounter<long>(
+            "cho.benefit_plan.predicate_multi_rule_truncated.total",
+            unit: "{benefit}",
+            description: "Benefits projected with Rules.Count > 1; only the first predicate is consumed (BP 5.10)");
+
+    /// <summary>
     /// Counter tracking <c>HttpProviderIntegrityGate</c>'s cached-or-live
     /// decision path (capability 5.10). Dimensions: <c>cho.path</c>
     /// (<c>cached_hit</c> | <c>stale_fallback</c> | <c>null_fallback</c>

@@ -1,7 +1,9 @@
 using BenefitPlanService.Models;
+using BenefitPlanService.Models.Benefits;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using BenefitPlanService.Tests.Fakes;
+using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using EngineFamilyAccumulatorModel = CloudHealthOffice.BenefitEngine.Domain.FamilyAccumulatorModel;
@@ -119,6 +121,88 @@ public sealed class ChoBenefitPlanProviderModelMappingTests
         var config = provider.MapToConfig(plan);
 
         config.IsAcaCapEnforced.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MapToConfig_Projects_TwoBenefitsSameServiceCategory_AsTwoEntries()
+    {
+        // BP 5.10 — projection no longer deduplicates by ServiceCategory.
+        // The rule gate consumes the duplicates and picks one per encounter.
+        var provider = Build();
+        var plan = SamplePlan();
+        plan.Benefits.Add(new MedicalBenefit { ServiceCategory = "98", Description = "Pediatric Office Visit" });
+        plan.Benefits.Add(new MedicalBenefit { ServiceCategory = "98", Description = "Adult Office Visit" });
+
+        var config = provider.MapToConfig(plan);
+
+        var pediatric = config.Categories.FirstOrDefault(c => c.ServiceTypeDescription == "Pediatric Office Visit");
+        var adult = config.Categories.FirstOrDefault(c => c.ServiceTypeDescription == "Adult Office Visit");
+        pediatric.Should().NotBeNull();
+        adult.Should().NotBeNull();
+        config.GetCategories("98").Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void MapToConfig_Carries_Predicate_From_NonEmpty_Rules()
+    {
+        var provider = Build();
+        var plan = SamplePlan();
+        plan.Benefits.Add(new MedicalBenefit
+        {
+            ServiceCategory = "98",
+            Description = "Pediatric Office Visit",
+            Rules = new List<BenefitRulePredicate>
+            {
+                new() { MemberAgeMin = 0, MemberAgeMax = 17 },
+            },
+        });
+
+        var config = provider.MapToConfig(plan);
+
+        var category = config.GetCategories("98").Single();
+        category.Predicate.Should().NotBeNull();
+        category.Predicate!.MemberAgeMax.Should().Be(17);
+    }
+
+    [Fact]
+    public void MapToConfig_NullRules_LeavesPredicateNull()
+    {
+        var provider = Build();
+        var plan = SamplePlan();
+        plan.Benefits.Add(new MedicalBenefit
+        {
+            ServiceCategory = "98",
+            Description = "Office Visit",
+            Rules = null,
+        });
+
+        var config = provider.MapToConfig(plan);
+
+        config.GetCategories("98").Single().Predicate.Should().BeNull();
+    }
+
+    [Fact]
+    public void MapToConfig_MultiplePredicates_TruncatesToFirst_AndPreservesOrder()
+    {
+        // Decision 4 — multi-predicate AND semantics is Phase 2; the
+        // projection collapses to the first non-null entry.
+        var provider = Build();
+        var plan = SamplePlan();
+        var first = new BenefitRulePredicate { MemberAgeMin = 0, MemberAgeMax = 17 };
+        var second = new BenefitRulePredicate { RequiredDiagnosisCodes = new() { "Z00.00" } };
+        plan.Benefits.Add(new MedicalBenefit
+        {
+            ServiceCategory = "98",
+            Description = "Pediatric Wellness",
+            Rules = new List<BenefitRulePredicate> { first, second },
+        });
+
+        var config = provider.MapToConfig(plan);
+
+        var category = config.GetCategories("98").Single();
+        category.Predicate.Should().NotBeNull();
+        category.Predicate!.MemberAgeMax.Should().Be(17, "first predicate is preserved; second is truncated");
+        category.Predicate.RequiredDiagnosisCodes.Should().BeNull();
     }
 
     [Fact]
