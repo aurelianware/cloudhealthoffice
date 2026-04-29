@@ -151,16 +151,6 @@ public record BenefitPlanConfig
             string.Equals(c.ServiceTypeCode, serviceTypeCode, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Compatibility shim for pre-BP-5.10 callers. Behaves identically
-    /// to <see cref="GetFirstCategory"/>. Will be removed after a
-    /// deprecation cycle — see
-    /// docs/architecture/adjudication-api-stabilization.md.
-    /// </summary>
-    [Obsolete("Renamed to GetFirstCategory. New callers that need predicate-aware selection should use GetCategories + IBenefitRuleGate. See docs/architecture/adjudication-api-stabilization.md.")]
-    public BenefitCategoryConfig? GetCategory(string serviceTypeCode)
-        => GetFirstCategory(serviceTypeCode);
-
-    /// <summary>
     /// Returns every <see cref="BenefitCategoryConfig"/> whose
     /// <c>ServiceTypeCode</c> matches, preserving authoring order. Used
     /// by <c>IBenefitRuleGate</c> to walk candidate benefits and pick
