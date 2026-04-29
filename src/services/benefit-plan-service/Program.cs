@@ -323,6 +323,15 @@ builder.Services.AddSingleton<IProviderIntegrityGate, HttpProviderIntegrityGate>
 // See docs/architecture/fhir-insuranceplan-projection.md.
 builder.Services.AddSingleton<IFhirInsurancePlanProjector, FhirInsurancePlanProjector>();
 
+// ── FHIR Endpoint Projector (capability BP 5.9) ──────────────────────────────
+// Stateless, hand-built. Projects PlanDocumentReference[] from a published
+// BenefitPlan into FHIR Endpoint resources (one per externally-addressable
+// document). Consumed by FhirEndpointController and by
+// FhirInsurancePlanProjector to populate InsurancePlan.endpoint[] with
+// Reference(Endpoint/{id}) entries. See
+// docs/architecture/fhir-endpoint-projection.md.
+builder.Services.AddSingleton<IFhirEndpointProjector, FhirEndpointProjector>();
+
 // ── Network-Tier → Organization Reference (5.5) ──────────────────────────────
 // Read-side lookup against provider-service capability 5.3 Organization
 // entity. Reuses the ProviderService HttpClient registered above. Backfill
