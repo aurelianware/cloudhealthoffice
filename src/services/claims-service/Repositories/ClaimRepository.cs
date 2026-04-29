@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using ClaimsService.Exceptions;
 using ClaimsService.Models;
 
 namespace ClaimsService.Repositories;
@@ -59,6 +60,56 @@ public interface IClaimRepository
     Task<Claim> CreateAsync(Claim claim);
     Task<Claim> UpdateAsync(Claim claim);
     Task DeleteAsync(string id);
+
+    // ── Versioning surface (5.1) ─────────────────────────────────────────
+    // Mirrors IProviderRepository / IBenefitPlanRepository. asOf is the
+    // time-travel pivot; passing DateTime.UtcNow returns the current head
+    // version. Capability 5.6 (network/credentialing-as-of-service-date)
+    // is the first consumer of asOf semantics on claims.
+
+    /// <summary>
+    /// Latest non-Draft version of the chain identified by
+    /// <paramref name="claimVersionId"/> in effect at <paramref name="asOf"/>.
+    /// "In effect" means <c>PublishedAt &lt;= asOf</c> and either
+    /// <c>SupersededAt</c> is null or <c>SupersededAt &gt; asOf</c>. Returns
+    /// null when no such version exists.
+    /// </summary>
+    Task<Claim?> GetLatestVersionAsync(string claimVersionId, DateTime asOf);
+
+    /// <summary>Look up a single version by its per-row <c>Id</c>.</summary>
+    Task<Claim?> GetVersionAsync(string claimVersionId, string versionId);
+
+    /// <summary>
+    /// Newest-first list of every version for the chain identified by
+    /// <paramref name="claimVersionId"/>, paginated with a continuation
+    /// token. Mirrors <c>IProviderRepository.ListVersionsAsync</c>.
+    /// </summary>
+    Task<(IReadOnlyList<Claim> Items, string? ContinuationToken)> ListVersionsAsync(
+        string claimVersionId, int pageSize, string? continuationToken);
+
+    /// <summary>
+    /// Projection-metadata bypass for adjudication writes. Patches only the
+    /// adjudication-related fields on the head version of
+    /// <paramref name="claimVersionId"/> for <paramref name="tenantId"/>;
+    /// does NOT create a new version row and does NOT trip the
+    /// <see cref="UpdateAsync"/> terminal-state guard.
+    ///
+    /// 5th instance of the projection-metadata bypass pattern (Provider 5.4.5
+    /// integrity, Provider 5.6 credentialing, Provider 5.7+ panel-gating, BP
+    /// 5.5 network tiers). Same justification: adjudication state is
+    /// operationally distinct from claim identity, and each adjudication run
+    /// shouldn't produce a new version. Adjustments DO produce new versions
+    /// via <see cref="UpdateAsync"/>; this bypass is for the routine path.
+    ///
+    /// Returns true on success, false when no head row was found for the
+    /// chain.
+    /// </summary>
+    Task<bool> UpdateAdjudicationProjectionAsync(
+        string tenantId,
+        string claimVersionId,
+        AdjudicationResult adjudicationResult,
+        IReadOnlyList<LineAdjudicationResult> lineResults,
+        CancellationToken ct = default);
 }
 
 public class ClaimRepository : IClaimRepository
@@ -91,6 +142,57 @@ public class ClaimRepository : IClaimRepository
         return tenantId;
     }
 
+    /// <summary>
+    /// Hydrates legacy claim documents (predating versioning fields) with
+    /// sensible defaults. Idempotent — running on a fully-versioned row
+    /// is a no-op. Mirrors <c>ProviderRepository.Hydrate</c>.
+    /// </summary>
+    private static Claim Hydrate(Claim claim)
+    {
+        if (string.IsNullOrEmpty(claim.ClaimVersionId))
+        {
+            claim.ClaimVersionId = claim.Id;
+        }
+        if (claim.VersionNumber == 0)
+        {
+            claim.VersionNumber = 1;
+        }
+        if (claim.VersionState == ClaimVersionState.Unknown)
+        {
+            claim.VersionState = MapStatusToVersionState(claim.Status);
+        }
+        return claim;
+    }
+
+    /// <summary>
+    /// Maps the legacy <see cref="ClaimStatus"/> operational signal onto a
+    /// versioning <see cref="ClaimVersionState"/>. Public so the Mongo repo
+    /// and tests share one canonical mapping; the table is documented in
+    /// docs/architecture/claim-versioning.md.
+    /// </summary>
+    public static ClaimVersionState MapStatusToVersionState(ClaimStatus status) => status switch
+    {
+        ClaimStatus.Submitted or
+        ClaimStatus.Received or
+        ClaimStatus.InAdjudication or
+        ClaimStatus.Pended => ClaimVersionState.Submitted,
+        ClaimStatus.Approved => ClaimVersionState.Adjudicated,
+        ClaimStatus.Paid or
+        ClaimStatus.PartiallyPaid => ClaimVersionState.Paid,
+        ClaimStatus.Denied => ClaimVersionState.Denied,
+        ClaimStatus.Voided => ClaimVersionState.Voided,
+        _ => ClaimVersionState.Submitted
+    };
+
+    private static bool IsTerminal(ClaimVersionState state) => state switch
+    {
+        ClaimVersionState.Paid or
+        ClaimVersionState.Denied or
+        ClaimVersionState.Voided or
+        ClaimVersionState.Adjusted => true,
+        _ => false
+    };
+
     public async Task<Claim?> GetByIdAsync(string id)
     {
         var tenantId = GetTenantId();
@@ -100,14 +202,14 @@ public class ClaimRepository : IClaimRepository
             var response = await _container.ReadItemAsync<Claim>(
                 id,
                 new PartitionKey(id));
-            
+
             // Verify tenant isolation
             if (response.Resource.TenantId != tenantId)
             {
                 return null;
             }
-            
-            return response.Resource;
+
+            return Hydrate(response.Resource);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -120,7 +222,8 @@ public class ClaimRepository : IClaimRepository
         var tenantId = GetTenantId();
 
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.claimNumber = @claimNumber")
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.claimNumber = @claimNumber " +
+            "ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@claimNumber", claimNumber);
 
@@ -133,7 +236,8 @@ public class ClaimRepository : IClaimRepository
             results.AddRange(response);
         }
 
-        return results.FirstOrDefault();
+        var head = results.FirstOrDefault();
+        return head != null ? Hydrate(head) : null;
     }
 
     public async Task<IEnumerable<Claim>> SearchAsync(
@@ -189,9 +293,9 @@ public class ClaimRepository : IClaimRepository
         }
 
         var queryText = $@"
-            SELECT * FROM c 
-            WHERE {string.Join(" AND ", conditions)} 
-            ORDER BY c.submittedDate DESC 
+            SELECT * FROM c
+            WHERE {string.Join(" AND ", conditions)}
+            ORDER BY c.submittedDate DESC
             OFFSET {(page - 1) * pageSize} LIMIT {pageSize}";
 
         var queryDef = new QueryDefinition(queryText);
@@ -209,7 +313,7 @@ public class ClaimRepository : IClaimRepository
             results.AddRange(response);
         }
 
-        return results;
+        return results.Select(Hydrate);
     }
 
     public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchForMemberAsync(
@@ -300,7 +404,7 @@ public class ClaimRepository : IClaimRepository
             items.AddRange(response);
         }
 
-        return (items, totalCount);
+        return (items.Select(Hydrate).ToList(), totalCount);
     }
 
     public async Task<ClaimsSummary> GetClaimsSummaryAsync(
@@ -315,7 +419,7 @@ public class ClaimRepository : IClaimRepository
             : "";
 
         var queryText = $@"
-            SELECT 
+            SELECT
                 COUNT(1) as TotalClaims,
                 SUM(CASE WHEN c.status = 'Approved' THEN 1 ELSE 0 END) as ApprovedClaims,
                 SUM(CASE WHEN c.status = 'Denied' THEN 1 ELSE 0 END) as DeniedClaims,
@@ -324,10 +428,10 @@ public class ClaimRepository : IClaimRepository
                 SUM(c.totalChargeAmount) as TotalChargeAmount,
                 SUM(c.adjudicationResult.allowedAmount ?? 0) as TotalAllowedAmount,
                 SUM(c.adjudicationResult.payerPayment ?? 0) as TotalPaidAmount
-            FROM c 
-            WHERE c.tenantId = @tenantId 
-            AND c.submittedDate >= @from 
-            AND c.submittedDate <= @to 
+            FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.submittedDate >= @from
+            AND c.submittedDate <= @to
             {lobCondition}";
 
         var queryDef = new QueryDefinition(queryText)
@@ -372,10 +476,10 @@ public class ClaimRepository : IClaimRepository
             SELECT AVG(
                 DateTimeDiff('day', c.submittedDate, c.adjudicatedDate)
             ) as AvgDays
-            FROM c 
-            WHERE c.tenantId = @tenantId 
-            AND c.submittedDate >= @from 
-            AND c.submittedDate <= @to 
+            FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.submittedDate >= @from
+            AND c.submittedDate <= @to
             AND c.adjudicatedDate != null
             {lobCondition}";
 
@@ -405,6 +509,30 @@ public class ClaimRepository : IClaimRepository
         var tenantId = GetTenantId();
         claim.TenantId = tenantId;
 
+        if (string.IsNullOrEmpty(claim.Id))
+        {
+            claim.Id = Guid.NewGuid().ToString();
+        }
+
+        // Initialize the version chain if the caller hasn't done so. New claims
+        // start at VersionState=Submitted (matching the existing default
+        // ClaimStatus.Submitted on uninitialized rows). Capability 5.3
+        // (Submission API) refines this to Draft → Submitted via an explicit
+        // workflow; until then, claim creation through the existing 22
+        // controller endpoints continues to behave as before.
+        if (string.IsNullOrEmpty(claim.ClaimVersionId))
+        {
+            claim.ClaimVersionId = claim.Id;
+        }
+        if (claim.VersionNumber == 0)
+        {
+            claim.VersionNumber = 1;
+        }
+        if (claim.VersionState == ClaimVersionState.Unknown)
+        {
+            claim.VersionState = MapStatusToVersionState(claim.Status);
+        }
+
         var response = await _container.CreateItemAsync(claim, new PartitionKey(claim.Id));
         return response.Resource;
     }
@@ -413,6 +541,28 @@ public class ClaimRepository : IClaimRepository
     {
         var tenantId = GetTenantId();
         claim.TenantId = tenantId;
+
+        // Reject mutations on terminal versions. Adjustments must go through
+        // the explicit "create new version with PredecessorVersionId" path
+        // (capability 5.12). This guard mirrors ProviderRepository.UpdateAsync.
+        Claim? existing;
+        try
+        {
+            var read = await _container.ReadItemAsync<Claim>(claim.Id, new PartitionKey(claim.Id));
+            existing = read.Resource.TenantId == tenantId ? Hydrate(read.Resource) : null;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            existing = null;
+        }
+
+        if (existing != null && IsTerminal(existing.VersionState))
+        {
+            throw new ClaimVersionStateException(
+                existing.ClaimVersionId, existing.Id, existing.VersionState,
+                $"Claim version {existing.Id} is in terminal state {existing.VersionState} and cannot be updated. " +
+                "Create an adjustment version via the adjustment workflow.");
+        }
 
         var response = await _container.ReplaceItemAsync(
             claim,
@@ -425,6 +575,184 @@ public class ClaimRepository : IClaimRepository
     {
         var tenantId = GetTenantId();
         await _container.DeleteItemAsync<Claim>(id, new PartitionKey(id));
+    }
+
+    // ── Versioning surface (5.1) ─────────────────────────────────────────
+
+    public async Task<Claim?> GetLatestVersionAsync(string claimVersionId, DateTime asOf)
+    {
+        var tenantId = GetTenantId();
+
+        // "In effect at asOf" means PublishedAt <= asOf AND
+        // (SupersededAt is null OR SupersededAt > asOf). For legacy rows
+        // missing PublishedAt/SupersededAt, the (NOT IS_DEFINED OR null)
+        // clauses keep them visible — hydration on read maps Status onto
+        // VersionState so the caller sees the legacy row as the head.
+        var query = new QueryDefinition(@"
+            SELECT TOP 1 *
+            FROM c
+            WHERE c.tenantId = @tenantId
+              AND (c.claimVersionId = @claimVersionId
+                   OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
+                   OR (c.claimVersionId = '' AND c.id = @claimVersionId))
+              AND c.versionState != @draft
+              AND (NOT IS_DEFINED(c.publishedAt) OR c.publishedAt = null OR c.publishedAt <= @asOf)
+              AND (NOT IS_DEFINED(c.supersededAt) OR c.supersededAt = null OR c.supersededAt > @asOf)
+            ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@claimVersionId", claimVersionId)
+            .WithParameter("@draft", ClaimVersionState.Draft.ToString())
+            .WithParameter("@asOf", asOf);
+
+        var iterator = _container.GetItemQueryIterator<Claim>(query);
+        if (!iterator.HasMoreResults) return null;
+        var page = await iterator.ReadNextAsync();
+        var head = page.FirstOrDefault();
+        return head != null ? Hydrate(head) : null;
+    }
+
+    public async Task<Claim?> GetVersionAsync(string claimVersionId, string versionId)
+    {
+        var tenantId = GetTenantId();
+
+        var query = new QueryDefinition(@"
+            SELECT TOP 1 *
+            FROM c
+            WHERE c.tenantId = @tenantId
+              AND c.id = @versionId
+              AND (c.claimVersionId = @claimVersionId
+                   OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
+                   OR (c.claimVersionId = '' AND c.id = @claimVersionId))")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@versionId", versionId)
+            .WithParameter("@claimVersionId", claimVersionId);
+
+        var iterator = _container.GetItemQueryIterator<Claim>(query);
+        if (!iterator.HasMoreResults) return null;
+        var page = await iterator.ReadNextAsync();
+        var match = page.FirstOrDefault();
+        return match != null ? Hydrate(match) : null;
+    }
+
+    public async Task<(IReadOnlyList<Claim> Items, string? ContinuationToken)> ListVersionsAsync(
+        string claimVersionId, int pageSize, string? continuationToken)
+    {
+        var tenantId = GetTenantId();
+
+        var query = new QueryDefinition(@"
+            SELECT *
+            FROM c
+            WHERE c.tenantId = @tenantId
+              AND (c.claimVersionId = @claimVersionId
+                   OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
+                   OR (c.claimVersionId = '' AND c.id = @claimVersionId))
+            ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@claimVersionId", claimVersionId);
+
+        var iterator = _container.GetItemQueryIterator<Claim>(
+            query,
+            continuationToken,
+            new QueryRequestOptions { MaxItemCount = pageSize });
+
+        if (!iterator.HasMoreResults)
+        {
+            return (Array.Empty<Claim>(), null);
+        }
+
+        var page = await iterator.ReadNextAsync();
+        var items = page.Select(Hydrate).ToList();
+        return (items, page.ContinuationToken);
+    }
+
+    public async Task<bool> UpdateAdjudicationProjectionAsync(
+        string tenantId,
+        string claimVersionId,
+        AdjudicationResult adjudicationResult,
+        IReadOnlyList<LineAdjudicationResult> lineResults,
+        CancellationToken ct = default)
+    {
+        // Resolve the head (non-terminal-but-adjudicatable) row by chain key.
+        // PatchItemAsync is keyed on the per-row document Id, so we look up
+        // the row id first. We accept any version that isn't Draft or
+        // Voided — adjudication runs against Submitted / Adjudicated rows
+        // (re-adjudication is allowed).
+        var query = new QueryDefinition(@"
+            SELECT TOP 1 c.id
+            FROM c
+            WHERE c.tenantId = @tenantId
+              AND (c.claimVersionId = @claimVersionId
+                   OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
+                   OR (c.claimVersionId = '' AND c.id = @claimVersionId))
+              AND (NOT IS_DEFINED(c.versionState)
+                   OR c.versionState = @submitted
+                   OR c.versionState = @adjudicated
+                   OR c.versionState = @unknown)
+            ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@claimVersionId", claimVersionId)
+            .WithParameter("@submitted", ClaimVersionState.Submitted.ToString())
+            .WithParameter("@adjudicated", ClaimVersionState.Adjudicated.ToString())
+            .WithParameter("@unknown", ClaimVersionState.Unknown.ToString());
+
+        string? rowId = null;
+        var iterator = _container.GetItemQueryIterator<HeadIdResult>(query);
+        if (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            rowId = page.FirstOrDefault()?.Id;
+        }
+
+        if (string.IsNullOrEmpty(rowId)) return false;
+
+        // Apply the line adjudication results to the head row's claim lines
+        // by line number. We can't patch nested array elements positionally
+        // in Cosmos without knowing indexes, so we read-modify-write the
+        // ClaimLines array. AdjudicationResult itself is a flat patch.
+        Claim? head;
+        try
+        {
+            var read = await _container.ReadItemAsync<Claim>(rowId, new PartitionKey(rowId), cancellationToken: ct);
+            head = read.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        // The adjudication orchestrator (5.5) emits one LineAdjudicationResult
+        // per ClaimLine in claim-line order; counts that disagree are a 5.5
+        // input-validation issue, not a 5.1 bypass concern. Apply when shapes
+        // match; otherwise leave existing line results untouched.
+        if (head.ClaimLines.Count == lineResults.Count)
+        {
+            for (var i = 0; i < head.ClaimLines.Count; i++)
+            {
+                head.ClaimLines[i].AdjudicationResult = lineResults[i];
+            }
+        }
+
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set("/adjudicationResult", adjudicationResult),
+            PatchOperation.Set("/claimLines", head.ClaimLines),
+            PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
+        };
+
+        try
+        {
+            await _container.PatchItemAsync<Claim>(
+                rowId,
+                new PartitionKey(rowId),
+                ops,
+                cancellationToken: ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Row deleted between lookup and patch.
+            return false;
+        }
     }
 
     public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
@@ -446,8 +774,14 @@ public class ClaimRepository : IClaimRepository
             ? "c.subscriberId = @ownerId"
             : "c.memberId = @ownerId";
 
-        // Fetch adjudication fields for all finalized claims matching the key.
-        // Projecting only the fields needed keeps RU cost low.
+        // Filter on (a) the legacy ClaimStatus values that have always counted
+        // toward accumulators AND (b) the new ClaimVersionState values that
+        // map to the same operational notion. Either clause matching keeps a
+        // row in the result set, so legacy unhydrated rows continue to count
+        // and new versioned rows count once they reach Adjudicated/Paid.
+        // Note: the legacy ClaimStatus filter compares the integer-serialized
+        // enum against string literals; that is a pre-existing oddity tracked
+        // outside 5.1's scope. The versionState clause is the forward path.
         var queryText = $@"
             SELECT c.adjudicationResult.deductibleAmount,
                    c.adjudicationResult.coinsuranceAmount,
@@ -460,7 +794,10 @@ public class ClaimRepository : IClaimRepository
               AND c.benefitPlanId  = @benefitPlanId
               AND c.serviceDateFrom >= @yearStart
               AND c.serviceDateFrom <= @yearEnd
-              AND (c.status = 'Approved' OR c.status = 'PartiallyPaid' OR c.status = 'Paid')
+              AND (
+                    c.status = 'Approved' OR c.status = 'PartiallyPaid' OR c.status = 'Paid'
+                    OR c.versionState = @adjudicated OR c.versionState = @paid
+                  )
               AND IS_DEFINED(c.adjudicationResult)";
 
         var queryDef = new QueryDefinition(queryText)
@@ -468,7 +805,9 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@ownerId",       ownerId)
             .WithParameter("@benefitPlanId", benefitPlanId)
             .WithParameter("@yearStart",     yearStart)
-            .WithParameter("@yearEnd",       yearEnd);
+            .WithParameter("@yearEnd",       yearEnd)
+            .WithParameter("@adjudicated",   ClaimVersionState.Adjudicated.ToString())
+            .WithParameter("@paid",          ClaimVersionState.Paid.ToString());
 
         var iterator = _container.GetItemQueryIterator<dynamic>(queryDef);
 
@@ -516,5 +855,10 @@ public class ClaimRepository : IClaimRepository
             if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Copay",       NetworkTier = tier, AccumulatedAmount = amount });
 
         return new AccumulatorTotalsResponse { Totals = totals };
+    }
+
+    private sealed class HeadIdResult
+    {
+        public string Id { get; set; } = string.Empty;
     }
 }
