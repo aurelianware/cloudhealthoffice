@@ -492,6 +492,14 @@ public enum PlanDocumentType
     Formulary,
     /// <summary>Summary Plan Description (ERISA).</summary>
     SPD,
+    /// <summary>
+    /// Machine-Readable Rate File (CMS Transparency in Coverage,
+    /// 45 CFR §147.211). Promoted to a first-class type in BP 5.9 so the
+    /// FHIR Endpoint projection is lossless; pre-BP-5.9 plan authors who
+    /// stored MRFs under <see cref="Other"/> continue to round-trip
+    /// without migration.
+    /// </summary>
+    MachineReadableRateFile,
     Other
 }
 

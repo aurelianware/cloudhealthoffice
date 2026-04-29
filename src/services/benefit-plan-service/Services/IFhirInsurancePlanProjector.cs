@@ -32,12 +32,17 @@ namespace BenefitPlanService.Services;
 ///
 /// <para>
 /// Plan-Net <c>InsurancePlan.endpoint</c> (payer-published URLs for SBC,
-/// formulary, machine-readable rate file) is intentionally emitted as an
-/// empty array in capability BP 5.8 — the Plan Documents → FHIR
-/// Endpoint projection is BP 5.9 territory. Plan-Net
+/// formulary, machine-readable rate file) is populated by capability
+/// BP 5.9 via the Plan Documents → FHIR Endpoint projection. Each
+/// projectable <see cref="PlanDocumentReference"/> on the plan emits one
+/// <c>Reference(Endpoint/{id})</c>; the Endpoint resources themselves
+/// are dereferenceable at <c>/fhir/r4/Endpoint/{id}</c>. Documents whose
+/// <c>Location</c> is the reserved internal <c>documentreference/{id}</c>
+/// form are skipped (Phase 2 forward-compat). See
+/// <c>docs/architecture/fhir-endpoint-projection.md</c>. Plan-Net
 /// <c>coverageArea</c>, <c>contact</c>, <c>alias</c>, and
-/// <c>administeredBy</c> are deferred to Phase 2 (CHO has no source data
-/// for them today).
+/// <c>administeredBy</c> remain deferred to Phase 2 (CHO has no source
+/// data for them today).
 /// </para>
 ///
 /// <para>
