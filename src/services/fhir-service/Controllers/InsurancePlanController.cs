@@ -1,3 +1,4 @@
+using FhirService.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FhirService.Controllers;
@@ -23,7 +24,13 @@ namespace FhirService.Controllers;
 [Route("fhir/r4")]
 public class InsurancePlanController : FhirControllerBase
 {
-    public const string BenefitPlanServiceClientName = "BenefitPlanService";
+    /// <summary>
+    /// Back-compat alias for tests that referenced the controller-local
+    /// constant before BP 5.9 extracted the canonical name into
+    /// <see cref="UpstreamClientNames.BenefitPlanService"/>. New code
+    /// should use the shared constant directly.
+    /// </summary>
+    public const string BenefitPlanServiceClientName = UpstreamClientNames.BenefitPlanService;
 
     private readonly HttpClient _benefitPlanServiceClient;
     private readonly ILogger<InsurancePlanController> _logger;
@@ -32,7 +39,7 @@ public class InsurancePlanController : FhirControllerBase
         IHttpClientFactory httpClientFactory,
         ILogger<InsurancePlanController> logger)
     {
-        _benefitPlanServiceClient = httpClientFactory.CreateClient(BenefitPlanServiceClientName);
+        _benefitPlanServiceClient = httpClientFactory.CreateClient(UpstreamClientNames.BenefitPlanService);
         _logger = logger;
     }
 

@@ -21,6 +21,19 @@ public sealed class FhirInsurancePlanProjector : IFhirInsurancePlanProjector
     private const string QualifierCopay        = "copay";
     private const string QualifierCoinsurance  = "coinsurance";
 
+    private readonly IFhirEndpointProjector _endpointProjector;
+
+    public FhirInsurancePlanProjector()
+        : this(new FhirEndpointProjector())
+    {
+    }
+
+    public FhirInsurancePlanProjector(IFhirEndpointProjector endpointProjector)
+    {
+        _endpointProjector = endpointProjector
+            ?? throw new ArgumentNullException(nameof(endpointProjector));
+    }
+
     public JsonObject? Project(BenefitPlan plan) => Project(plan, networks: null, acaLimits: null);
 
     public JsonObject? Project(
@@ -83,11 +96,13 @@ public sealed class FhirInsurancePlanProjector : IFhirInsurancePlanProjector
             resource["ownedBy"] = new JsonObject { ["display"] = plan.Payer };
         }
 
-        // ── endpoint (deferred to BP 5.9 — emit empty array) ────────
-        // Empty array is conformant FHIR cardinality 0..*. Documenting
-        // intent as an empty collection rather than omitting tells
-        // consumers "no documents projected yet" vs "field unsupported."
-        resource["endpoint"] = new JsonArray();
+        // ── endpoint (BP 5.9 — Plan Documents → Reference(Endpoint)) ─
+        // One Reference per projectable PlanDocumentReference, ordered
+        // per Decision 8 (SBC, EOC, Formulary, SPD, MRF, Other; within
+        // type, EffectiveDate desc, then Id). Internal
+        // documentreference/{id} entries are skipped — Endpoints require
+        // an external address. See fhir-endpoint-projection.md.
+        resource["endpoint"] = BuildEndpointReferences(plan);
 
         // ── network[] (top-level — Decision 10 site 1) ──────────────
         var topLevelNetworks = BuildNetworkReferences(plan.NetworkTiers, networks);
@@ -186,6 +201,35 @@ public sealed class FhirInsurancePlanProjector : IFhirInsurancePlanProjector
             productCode);
 
         return CodeableConcept(new[] { standardCoding, productCoding }, text: productCode);
+    }
+
+    // ── endpoint references (BP 5.9) ────────────────────────────────────
+
+    /// <summary>
+    /// Build the <c>endpoint[]</c> array for the projected InsurancePlan.
+    /// Defers projectability + ordering to
+    /// <see cref="IFhirEndpointProjector.OrderedProjectableDocuments(BenefitPlan)"/>
+    /// so the Reference shape and the Endpoint resource always agree.
+    ///
+    /// <para>
+    /// References are emitted as <c>{"reference":"Endpoint/{id}"}</c> per
+    /// the BP 5.8 Reference convention — no <c>display</c> field, since
+    /// the Endpoint resource itself carries the operator-authored name
+    /// and consumers fetch it via the bundled Reference. Decision 8
+    /// ordering applied.
+    /// </para>
+    /// </summary>
+    private JsonArray BuildEndpointReferences(BenefitPlan plan)
+    {
+        var array = new JsonArray();
+        foreach (var doc in _endpointProjector.OrderedProjectableDocuments(plan))
+        {
+            array.Add(new JsonObject
+            {
+                ["reference"] = $"Endpoint/{doc.Id}",
+            });
+        }
+        return array;
     }
 
     // ── network references ──────────────────────────────────────────────

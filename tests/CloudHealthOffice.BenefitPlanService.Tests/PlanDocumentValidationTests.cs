@@ -64,8 +64,8 @@ public class PlanDocumentValidationTests
     {
         var docs = new List<PlanDocumentReference>
         {
-            new() { DocType = PlanDocumentType.SBC, Location = "a", ContentHashSha256 = ValidSha256Base64 },
-            new() { DocType = PlanDocumentType.EOC, Location = "b", ContentHashSha256 = "not-base64!" },
+            new() { DocType = PlanDocumentType.SBC, Location = "https://example.com/a.pdf", ContentHashSha256 = ValidSha256Base64 },
+            new() { DocType = PlanDocumentType.EOC, Location = "https://example.com/b.pdf", ContentHashSha256 = "not-base64!" },
         };
 
         var ex = Assert.Throws<ArgumentException>(
@@ -77,5 +77,67 @@ public class PlanDocumentValidationTests
     public void ValidateDocuments_accepts_null_collection()
     {
         PlanDocumentValidation.ValidateDocuments(null);
+    }
+
+    // ── ValidateLocation (capability BP 5.9) ────────────────────────────
+
+    [Fact]
+    public void ValidateLocation_accepts_https_url()
+    {
+        PlanDocumentValidation.ValidateLocation("https://example.com/sbc.pdf", "location");
+    }
+
+    [Fact]
+    public void ValidateLocation_accepts_internal_documentreference_form()
+    {
+        PlanDocumentValidation.ValidateLocation("documentreference/abc-123", "location");
+    }
+
+    [Fact]
+    public void ValidateLocation_rejects_null_or_empty()
+    {
+        Assert.Throws<ArgumentException>(
+            () => PlanDocumentValidation.ValidateLocation(null, "location"));
+        Assert.Throws<ArgumentException>(
+            () => PlanDocumentValidation.ValidateLocation(string.Empty, "location"));
+    }
+
+    [Fact]
+    public void ValidateLocation_rejects_plain_http()
+    {
+        var ex = Assert.Throws<ArgumentException>(
+            () => PlanDocumentValidation.ValidateLocation("http://example.com/sbc.pdf", "location"));
+        Assert.Equal("location", ex.ParamName);
+        Assert.Contains("HTTPS", ex.Message);
+    }
+
+    [Fact]
+    public void ValidateLocation_rejects_relative_url()
+    {
+        var ex = Assert.Throws<ArgumentException>(
+            () => PlanDocumentValidation.ValidateLocation("/relative/sbc.pdf", "location"));
+        Assert.Equal("location", ex.ParamName);
+    }
+
+    [Fact]
+    public void ValidateLocation_rejects_documentreference_prefix_without_id()
+    {
+        var ex = Assert.Throws<ArgumentException>(
+            () => PlanDocumentValidation.ValidateLocation("documentreference/", "location"));
+        Assert.Equal("location", ex.ParamName);
+    }
+
+    [Fact]
+    public void ValidateDocuments_validates_location_field()
+    {
+        var docs = new List<PlanDocumentReference>
+        {
+            new() { DocType = PlanDocumentType.SBC, Location = "https://example.com/a.pdf" },
+            new() { DocType = PlanDocumentType.EOC, Location = "ftp://example.com/b.pdf" },
+        };
+
+        var ex = Assert.Throws<ArgumentException>(
+            () => PlanDocumentValidation.ValidateDocuments(docs));
+        Assert.Equal("documents[1].location", ex.ParamName);
     }
 }

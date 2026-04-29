@@ -129,4 +129,46 @@ internal static class ChoBenefitPlanFhirUrls
     /// </summary>
     public const string AcaCapEnforcedExt =
         StructureDefinitionBase + "insuranceplan-aca-cap-enforced";
+
+    // ── BP 5.9 Endpoint projection ───────────────────────────────────────
+
+    /// <summary>
+    /// Plan-Net IG 1.1.0 Endpoint profile. Capability BP 5.9 — every
+    /// projected <c>Endpoint</c> resource carries this profile in its
+    /// <c>meta.profile</c> alongside the FHIR R4 base.
+    /// </summary>
+    public const string PlanNetEndpointProfile =
+        "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-Endpoint";
+
+    /// <summary>
+    /// CHO-canonical CodeSystem for <c>Endpoint.connectionType</c>
+    /// (Decision 1 in BP 5.9). The HL7
+    /// <c>http://terminology.hl7.org/CodeSystem/endpoint-connection-type</c>
+    /// CodeSystem does not have a code for "static downloadable document"
+    /// — its codes are FHIR-protocol-shaped (<c>hl7-fhir-rest</c>,
+    /// <c>direct-project</c>, <c>dicom-*</c>). CHO publishes one code,
+    /// <see cref="EndpointConnectionTypeStaticDocument"/>, under this
+    /// system. A future capability swaps in a standard code if HL7
+    /// publishes one.
+    /// </summary>
+    public const string EndpointConnectionTypeSystem =
+        CodeSystemBase + "endpoint-connection-type";
+
+    /// <summary>
+    /// The single CHO-published code under
+    /// <see cref="EndpointConnectionTypeSystem"/>: the endpoint serves a
+    /// downloadable static document (PDF, JSON, etc.).
+    /// </summary>
+    public const string EndpointConnectionTypeStaticDocument = "static-document";
+
+    /// <summary>
+    /// CHO-canonical CodeSystem for <c>Endpoint.payloadType.coding</c>
+    /// (Decision 3 in BP 5.9). One code per
+    /// <see cref="Models.PlanDocumentType"/> enum value
+    /// (<c>sbc</c>, <c>eoc</c>, <c>formulary</c>, <c>spd</c>, <c>mrf</c>,
+    /// <c>other</c>). Plan-Net IG 1.1.0 does not bind <c>payloadType</c>;
+    /// no standard FHIR CodeSystem covers SBC / EOC / SPD / MRF.
+    /// </summary>
+    public const string PlanDocumentTypeSystem =
+        CodeSystemBase + "plan-document-type";
 }

@@ -48,9 +48,69 @@ public static class PlanDocumentValidation
     }
 
     /// <summary>
+    /// The reserved internal-reference prefix that
+    /// <see cref="PlanDocumentReference.Location"/> may carry once Phase 2
+    /// migrates plan documents into member-document-service. Sourced from
+    /// <see cref="FhirEndpointProjector.InternalReferencePrefix"/> so the
+    /// validator and the projector cannot drift. Copilot review BP 5.9.
+    /// </summary>
+    public const string InternalReferencePrefix = FhirEndpointProjector.InternalReferencePrefix;
+
+    /// <summary>
+    /// Validate a document <c>Location</c>. The Location must be either
+    /// an HTTPS URL (the operator-authored external address Endpoint
+    /// projection expects) or the reserved internal reference of the form
+    /// <c>documentreference/{id}</c> (Phase 2 forward-compat).
+    ///
+    /// <para>
+    /// Null or empty input is rejected — Location is <c>[Required]</c> on
+    /// the model. HTTP (plaintext) is rejected because every regulatory
+    /// surface this projection serves (ACA SBC publication, CMS
+    /// Transparency in Coverage MRFs, CMS-0057-F formulary discoverability)
+    /// requires HTTPS. Producer-boundary only — setter-side validation
+    /// would break Mongo hydration for any historical malformed document
+    /// (same trust posture as <see cref="ValidateHash"/>).
+    /// </para>
+    /// </summary>
+    public static void ValidateLocation(string? location, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            throw new ArgumentException(
+                $"{fieldName} is required.",
+                fieldName);
+        }
+
+        if (location.StartsWith(InternalReferencePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            // Reserved internal-reference form. Beyond the prefix we
+            // accept any non-empty body — the resolver in Phase 2 owns
+            // any further shape constraints. We DO require a non-empty
+            // body so "documentreference/" alone is rejected as
+            // malformed.
+            if (location.Length <= InternalReferencePrefix.Length)
+            {
+                throw new ArgumentException(
+                    $"{fieldName} must include an id after '{InternalReferencePrefix}'; got '{location}'.",
+                    fieldName);
+            }
+            return;
+        }
+
+        if (!Uri.TryCreate(location, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"{fieldName} must be an HTTPS URL or '{InternalReferencePrefix}{{id}}'; got '{location}'.",
+                fieldName);
+        }
+    }
+
+    /// <summary>
     /// Validate every document attached to a plan. Iterates each entry and
-    /// delegates to <see cref="ValidateHash"/>, labelling the field with
-    /// the document index so the caller can report which document failed.
+    /// delegates to <see cref="ValidateHash"/> and
+    /// <see cref="ValidateLocation"/>, labelling each field with the
+    /// document index so the caller can report which document failed.
     /// </summary>
     public static void ValidateDocuments(IEnumerable<PlanDocumentReference>? documents)
     {
@@ -59,6 +119,7 @@ public static class PlanDocumentValidation
         var index = 0;
         foreach (var doc in documents)
         {
+            ValidateLocation(doc.Location, $"documents[{index}].location");
             ValidateHash(doc.ContentHashSha256, $"documents[{index}].contentHashSha256");
             index++;
         }

@@ -88,11 +88,11 @@ external consumers ask for it.
 | `plan[].generalCost[]` | `CostSharing` deductible + OOP max + (Aggregate + post-cutoff) ACA cap | |
 | `plan[].specificCost[]` | per-Benefit copay + coinsurance per network tier | |
 
-### Deferred to BP 5.9 (Plan Documents)
+### Shipped in BP 5.9 (Plan Documents)
 
-| FHIR element | Why deferred |
+| FHIR element | Where it landed |
 |---|---|
-| `endpoint[]` | Plan-Net `Endpoint` references (SBC URL, formulary URL, machine-readable rate file) require the BP 5.9 Plan Documents projection. This PR emits an empty array; BP 5.9 will populate it. |
+| `endpoint[]` | Populated by BP 5.9 — one `Reference(Endpoint/{id})` per projectable `PlanDocumentReference`, ordered by `(DocType, EffectiveDate desc, Id)` per Decision 8. Endpoint resources themselves are dereferenceable at `/fhir/r4/Endpoint/{id}`. See [`fhir-endpoint-projection.md`](fhir-endpoint-projection.md). |
 
 ### Deferred to Phase 2 / future capabilities
 

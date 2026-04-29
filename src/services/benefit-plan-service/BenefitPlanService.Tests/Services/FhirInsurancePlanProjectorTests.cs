@@ -122,15 +122,123 @@ public sealed class FhirInsurancePlanProjectorTests
     }
 
     [Fact]
-    public void Emits_empty_endpoint_array_for_BP_5_9_deferral()
+    public void Emits_endpoint_references_for_published_plan_documents()
+    {
+        var plan = MakePlan();
+        plan.Documents = new List<PlanDocumentReference>
+        {
+            new()
+            {
+                Id = "doc-eoc",
+                DocType = PlanDocumentType.EOC,
+                Location = "https://example.com/eoc.pdf",
+            },
+            new()
+            {
+                Id = "doc-sbc",
+                DocType = PlanDocumentType.SBC,
+                Location = "https://example.com/sbc.pdf",
+            },
+        };
+
+        var result = _projector.Project(plan)!;
+        var endpoint = result["endpoint"]!.AsArray();
+
+        endpoint.Should().HaveCount(2);
+        // Decision 8 — SBC (consumer-facing) before EOC.
+        endpoint[0]!["reference"]!.GetValue<string>().Should().Be("Endpoint/doc-sbc");
+        endpoint[1]!["reference"]!.GetValue<string>().Should().Be("Endpoint/doc-eoc");
+
+        // BP 5.8 Reference convention — no display field; the Endpoint
+        // resource itself carries the operator-authored name.
+        endpoint[0]!.AsObject().ContainsKey("display").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Endpoint_references_skip_internal_documentreference_locations()
+    {
+        var plan = MakePlan();
+        plan.Documents = new List<PlanDocumentReference>
+        {
+            new()
+            {
+                Id = "doc-external",
+                DocType = PlanDocumentType.SBC,
+                Location = "https://example.com/sbc.pdf",
+            },
+            new()
+            {
+                Id = "doc-internal",
+                DocType = PlanDocumentType.EOC,
+                Location = "documentreference/abc-123",
+            },
+        };
+
+        var result = _projector.Project(plan)!;
+        var endpoint = result["endpoint"]!.AsArray();
+
+        endpoint.Should().HaveCount(1,
+            "internal documentreference/{id} entries are not externally addressable; " +
+            "Endpoint requires an external URL");
+        endpoint[0]!["reference"]!.GetValue<string>().Should().Be("Endpoint/doc-external");
+    }
+
+    [Fact]
+    public void Endpoint_references_order_within_DocType_by_EffectiveDate_then_Id()
+    {
+        var plan = MakePlan();
+        plan.Documents = new List<PlanDocumentReference>
+        {
+            new()
+            {
+                Id = "sbc-old",
+                DocType = PlanDocumentType.SBC,
+                Location = "https://example.com/sbc-old.pdf",
+                EffectiveDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            },
+            new()
+            {
+                Id = "sbc-new",
+                DocType = PlanDocumentType.SBC,
+                Location = "https://example.com/sbc-new.pdf",
+                EffectiveDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            },
+            new()
+            {
+                Id = "mrf",
+                DocType = PlanDocumentType.MachineReadableRateFile,
+                Location = "https://example.com/mrf.json",
+            },
+            new()
+            {
+                Id = "formulary",
+                DocType = PlanDocumentType.Formulary,
+                Location = "https://example.com/formulary.pdf",
+            },
+        };
+
+        var result = _projector.Project(plan)!;
+        var refs = result["endpoint"]!.AsArray()
+            .Select(n => n!["reference"]!.GetValue<string>()).ToList();
+
+        // Decision 8: SBC (1), EOC (2), Formulary (3), SPD (4), MRF (5), Other (6).
+        // Within DocType, EffectiveDate desc then Id.
+        refs.Should().Equal(
+            "Endpoint/sbc-new",
+            "Endpoint/sbc-old",
+            "Endpoint/formulary",
+            "Endpoint/mrf");
+    }
+
+    [Fact]
+    public void Endpoint_array_is_empty_when_plan_has_no_documents()
     {
         var plan = MakePlan();
 
         var result = _projector.Project(plan)!;
 
         result["endpoint"]!.AsArray().Should().BeEmpty(
-            "Plan Documents projection is BP 5.9; emit empty array so consumers see " +
-            "'no documents projected yet' rather than 'field unsupported'");
+            "no projectable documents → empty array (cardinality 0..*)");
     }
 
     // ── meta + profiles ─────────────────────────────────────────────────
