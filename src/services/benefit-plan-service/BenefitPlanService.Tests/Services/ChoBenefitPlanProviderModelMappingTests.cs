@@ -3,9 +3,9 @@ using BenefitPlanService.Models.Benefits;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using BenefitPlanService.Tests.Fakes;
-using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using BenefitRulePredicate = CloudHealthOffice.BenefitEngine.Domain.BenefitRulePredicate;
 using EngineFamilyAccumulatorModel = CloudHealthOffice.BenefitEngine.Domain.FamilyAccumulatorModel;
 using ModelFamilyAccumulatorModel = BenefitPlanService.Models.FamilyAccumulatorModel;
 

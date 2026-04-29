@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using BenefitPlanService.Models.Benefits;
-using CloudHealthOffice.BenefitEngine.Domain;
+using BenefitRulePredicate = CloudHealthOffice.BenefitEngine.Domain.BenefitRulePredicate;
 
 namespace BenefitPlanService.Models;
 
