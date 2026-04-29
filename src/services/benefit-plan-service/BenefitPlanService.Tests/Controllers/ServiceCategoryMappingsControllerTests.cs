@@ -132,6 +132,49 @@ public sealed class ServiceCategoryMappingsControllerTests
     }
 
     [Fact]
+    public async Task Create_Returns_400_When_EffectiveEnd_Before_EffectiveStart()
+    {
+        // Capability BP 5.10 — reject impossible effective windows at
+        // the producer boundary so the resolver doesn't silently filter
+        // them out during adjudication.
+        var (controller, _, _) = Build(adminEnabled: true, tenantId: "tenant-a");
+        var bad = ValidRequest();
+        bad.EffectiveStart = new DateOnly(2026, 6, 1);
+        bad.EffectiveEnd = new DateOnly(2026, 1, 1);
+
+        var result = await controller.Create(bad, default);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task Create_Accepts_Valid_Effective_Window()
+    {
+        var (controller, _, _) = Build(adminEnabled: true, tenantId: "tenant-a");
+        var ok = ValidRequest();
+        ok.EffectiveStart = new DateOnly(2026, 1, 1);
+        ok.EffectiveEnd = new DateOnly(2026, 12, 31);
+
+        var result = await controller.Create(ok, default);
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+    }
+
+    [Fact]
+    public async Task Update_Returns_400_When_EffectiveEnd_Before_EffectiveStart()
+    {
+        var (controller, store, _) = Build(adminEnabled: true, tenantId: "tenant-a");
+        var seeded = await store.CreateAsync(Mapping("tenant-a", null, "Office Visit"));
+        var bad = ValidRequest();
+        bad.EffectiveStart = new DateOnly(2026, 6, 1);
+        bad.EffectiveEnd = new DateOnly(2026, 1, 1);
+
+        var result = await controller.Update(seeded.Id, bad, default);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
     public async Task Update_Returns_404_For_Missing_Mapping()
     {
         var (controller, _, _) = Build(adminEnabled: true, tenantId: "tenant-a");
