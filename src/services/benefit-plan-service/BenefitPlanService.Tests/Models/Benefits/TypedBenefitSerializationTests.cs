@@ -1,6 +1,8 @@
 using System.Text.Json;
 using BenefitPlanService.Models;
 using BenefitPlanService.Models.Benefits;
+using BenefitRulePredicate = CloudHealthOffice.BenefitEngine.Domain.BenefitRulePredicate;
+using BenefitMemberGender = CloudHealthOffice.BenefitEngine.Domain.BenefitMemberGender;
 
 namespace BenefitPlanService.Tests.Models.Benefits;
 

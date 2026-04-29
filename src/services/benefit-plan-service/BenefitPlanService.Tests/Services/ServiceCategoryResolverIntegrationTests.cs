@@ -46,6 +46,7 @@ public sealed class ServiceCategoryResolverIntegrationTests
 
         var match = await resolver.ResolveAsync(
             "tenant-a", planId,
+            serviceDate: new DateOnly(2026, 4, 1),
             procedureCode: "99213", codeType: "CPT", placeOfService: "11",
             modifiers: Array.Empty<string>(), revenueCode: null);
 
@@ -66,6 +67,7 @@ public sealed class ServiceCategoryResolverIntegrationTests
 
         var match = await resolver.ResolveAsync(
             "tenant-a", planId,
+            serviceDate: new DateOnly(2026, 4, 1),
             procedureCode: "99213", codeType: "CPT", placeOfService: "11",
             modifiers: Array.Empty<string>(), revenueCode: null);
 
@@ -81,6 +83,7 @@ public sealed class ServiceCategoryResolverIntegrationTests
 
         var match = await resolver.ResolveAsync(
             "tenant-a", Guid.NewGuid(),
+            serviceDate: new DateOnly(2026, 4, 1),
             procedureCode: "99213", codeType: "CPT", placeOfService: "11",
             modifiers: Array.Empty<string>(), revenueCode: null);
 
@@ -96,6 +99,7 @@ public sealed class ServiceCategoryResolverIntegrationTests
 
         var match = await resolver.ResolveAsync(
             "tenant-a", Guid.NewGuid(),
+            serviceDate: new DateOnly(2026, 4, 1),
             procedureCode: "99213", codeType: "CPT", placeOfService: "99",
             modifiers: Array.Empty<string>(), revenueCode: null);
 
@@ -146,6 +150,7 @@ public sealed class ServiceCategoryResolverIntegrationTests
 
         var match = await resolver.ResolveAsync(
             "tenant-a", Guid.NewGuid(),
+            serviceDate: new DateOnly(2026, 4, 1),
             procedureCode: "99213", codeType: "CPT", placeOfService: "11",
             modifiers: Array.Empty<string>(), revenueCode: null);
 
@@ -174,6 +179,7 @@ public sealed class ServiceCategoryResolverIntegrationTests
         {
             var match = await resolver.ResolveAsync(
                 "tenant-a", planId,
+                serviceDate: new DateOnly(2026, 4, 1),
                 procedureCode: code, codeType: "CPT", placeOfService: "11",
                 modifiers: Array.Empty<string>(), revenueCode: null);
 
@@ -184,6 +190,7 @@ public sealed class ServiceCategoryResolverIntegrationTests
         // Outside-range fall through to POS fallback.
         var outOfRange = await resolver.ResolveAsync(
             "tenant-a", planId,
+            serviceDate: new DateOnly(2026, 4, 1),
             procedureCode: "99216", codeType: "CPT", placeOfService: "11",
             modifiers: Array.Empty<string>(), revenueCode: null);
         outOfRange!.MatchedBy.Should().Be("SystemDefault");

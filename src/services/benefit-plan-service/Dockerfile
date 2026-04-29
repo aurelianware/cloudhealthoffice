@@ -24,6 +24,13 @@ COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/ src/engines/CloudHealthOff
 COPY src/engines/CloudHealthOffice.NcciEngine/ src/engines/CloudHealthOffice.NcciEngine/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/
+# benefit-plan-service.csproj declares <Content Include="..\..\..\schemas\..."> for
+# the SystemDefaultMappingSeeder seed bundle (BP 5.6) and the AcaLimitsProvider OOP
+# limits file (BP 5.7); MSBuild copies them to the build output via
+# CopyToOutputDirectory="PreserveNewest". Without these COPY lines the build fails
+# with MSB3030 "Could not copy the file ... because it was not found."
+COPY schemas/service-category-mappings/ schemas/service-category-mappings/
+COPY schemas/aca-oop-limits/ schemas/aca-oop-limits/
 RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release --no-restore
 
 # Publish stage

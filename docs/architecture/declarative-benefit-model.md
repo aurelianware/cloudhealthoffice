@@ -135,10 +135,14 @@ Evaluation rules:
   `HasRelatedEncounter` source fails closed: we'd rather decline a
   benefit than admit one we can't verify.
 
-5.4 establishes the predicate type and its in-process evaluator. The
-calculation engine doesn't read the predicate yet (Strategy A — see
-below); 5.7 / 5.10 will wire the predicate into the adjudication hot
-path so age- and diagnosis-restricted benefits are evaluated correctly.
+5.4 established the predicate type and its in-process evaluator;
+**BP 5.10** wires it into the adjudication hot path through
+`IBenefitRuleGate` so age-, gender-, and diagnosis-restricted
+benefits are evaluated correctly. See
+[`adjudication-api-stabilization.md`](adjudication-api-stabilization.md)
+for the rule-gate placement, the null-`MemberContext` posture
+(Decision 3), and the projection-shape change that lets a plan author
+multiple benefits with the same `ServiceCategory` (Decision 1).
 
 ## Engine integration: Strategy A (deferred type-awareness)
 

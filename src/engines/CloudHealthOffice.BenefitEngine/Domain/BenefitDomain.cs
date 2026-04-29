@@ -159,11 +159,10 @@ public class ServiceCategoryMapping
     public string ServiceTypeDescription { get; set; } = default!;
     public List<ProcedureCodeRule> Rules { get; set; } = [];
 
-    // Authoring metadata (capability BP 5.6). Resolver-side filtering on
-    // EffectiveStart/EffectiveEnd/IsActive is deferred — these fields are
-    // additive today so authors can record window/lifecycle intent without
-    // changing adjudication behavior. A future capability (BP 5.10 closer)
-    // wires effective-date filtering into ServiceCategoryResolver.
+    // Authoring metadata. ServiceCategoryResolver filters mappings by
+    // these fields against the claim line's service date as of capability
+    // BP 5.10 — see docs/architecture/adjudication-api-stabilization.md
+    // for the inclusive-bound semantics and IsActive kill-switch posture.
     public DateOnly? EffectiveStart { get; set; }
     public DateOnly? EffectiveEnd { get; set; }
     public bool IsActive { get; set; } = true;

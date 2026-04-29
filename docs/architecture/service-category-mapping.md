@@ -178,28 +178,27 @@ This produces a known incoherence with X12 5010 standards:
 **operator-friendly text labels** matching the plan-author convention.
 A plan with `Benefit.ServiceCategory = "Office Visit"` adjudicates
 correctly against the seeded `Office Visit` mapping. X12 5010 alignment
-is **deferred** to a future capability (likely **BP 5.10 Adjudication
-API Stabilization** or a dedicated translation-layer follow-up) that
-introduces a `ServiceTypeCodeAlias` table joining canonical X12 codes
-to operator text labels.
+remains a **Phase 2** capability — a dedicated translation-layer
+follow-up will introduce a `ServiceTypeCodeAlias` table joining
+canonical X12 codes to operator text labels.
 
 This decision is recorded explicitly so future changes to either
 surface honour the constraint that they must remain key-equal until the
 translation-layer capability lands.
 
-## Effective-date fields (additive, deferred wiring)
+## Effective-date fields (shipped in BP 5.10)
 
 The `ServiceCategoryMapping` entity carries `EffectiveStart`,
-`EffectiveEnd`, and `IsActive` fields as of BP 5.6. **The resolver does
-not yet filter on these** — they're authoring metadata captured for
-forward compatibility. A future capability (likely BP 5.10) wires
-effective-date filtering into `ServiceCategoryResolver` once the X12
-coherence loop closes and operators start authoring time-bounded
-mappings (e.g. annual CMS quarterly updates).
+`EffectiveEnd`, and `IsActive` fields as of BP 5.6. As of **BP 5.10**
+the resolver filters on these fields against the claim line's service
+date — see
+[`adjudication-api-stabilization.md`](adjudication-api-stabilization.md)
+for the inclusive-bound semantics, the `IsActive` kill-switch posture,
+and the producer-boundary 400 on `EffectiveEnd < EffectiveStart`.
 
 The entity also carries `CreatedAt` (DateTimeOffset, populated by the
-storage backends on insert if unset). Unlike the effective-date fields
-this one **is** consumed today — the storage backends sort by
+storage backends on insert if unset). Like the effective-date fields,
+this one is consumed today — the storage backends sort by
 `CreatedAt DESC` so the resolver's first-match-wins iteration is
 deterministic across seeder version-bump re-applies. `UpdatedBy`,
 `UpdatedAt`, and operator audit fields remain deferred to a service-
@@ -210,8 +209,8 @@ wide audit-pattern initiative.
 - **Bulk import / validate endpoints** — file-format UX, partial-failure
   semantics, and dry-run mode warrant their own design pass. The CRUD
   surface unblocks the common authoring case.
-- **Effective-date resolver filtering** — fields are present, the
-  resolver doesn't filter on them yet (deferred to BP 5.10).
+- **Effective-date resolver filtering** — shipped in **BP 5.10**. See
+  [`adjudication-api-stabilization.md`](adjudication-api-stabilization.md).
 - **Audit fields** (`UpdatedBy`, `UpdatedAt`) — deferred to a service-
   wide audit-pattern initiative. `CreatedAt` is in scope (added in BP
   5.6 to drive deterministic resolver ordering across re-applies — see
@@ -219,12 +218,11 @@ wide audit-pattern initiative.
 - **Version chain on mapping documents** — mappings are operational
   reference data; updates are last-write-wins with operational audit
   via structured request logging.
-- **`BenefitRulePredicate` evaluation** — out of scope per the explicit
-  note in
-  [`BenefitRulePredicate.cs:14`](../../src/engines/CloudHealthOffice.BenefitEngine/Services/Providers.cs);
-  deferred to BP 5.7 / BP 5.10.
-- **X12 ↔ free-text translation layer** — the load-bearing future
-  capability that closes the incoherence documented above.
+- **`BenefitRulePredicate` evaluation** — shipped in **BP 5.10**. See
+  [`adjudication-api-stabilization.md`](adjudication-api-stabilization.md).
+- **X12 ↔ free-text translation layer** — Phase 2 capability;
+  unchanged from BP 5.6 — the load-bearing follow-up that closes the
+  incoherence documented above.
 
 ## Operating notes
 
