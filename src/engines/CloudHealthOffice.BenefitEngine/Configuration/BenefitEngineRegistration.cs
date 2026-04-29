@@ -37,6 +37,7 @@ public static class BenefitEngineServiceCollectionExtensions
         // Core engine (always registered)
         services.AddScoped<IBenefitCalculationEngine, BenefitCalculationEngine>();
         services.AddScoped<IServiceCategoryResolver, ServiceCategoryResolver>();
+        services.AddScoped<IBenefitRuleGate, BenefitRuleGate>();
 
         return new BenefitEngineBuilder(services);
     }

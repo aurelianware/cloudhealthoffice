@@ -497,6 +497,7 @@ public class BenefitCalculationEngineTests
             new FixedCategoryResolver("98", "Office Visit"),
             new InMemoryBenefitPlanProvider(plan),
             accService,
+            new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
             NullLogger<BenefitCalculationEngine>.Instance);
 
         await engine.ReverseClaimAsync(
@@ -521,6 +522,7 @@ public class BenefitCalculationEngineTests
             new FixedCategoryResolver("98", "Office Visit"),
             new InMemoryBenefitPlanProvider(plan),
             accService,
+            new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
             NullLogger<BenefitCalculationEngine>.Instance);
 
         var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
@@ -712,6 +714,147 @@ public class BenefitCalculationEngineTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // FEATURE 6: BENEFIT RULE PREDICATE GATING (BP 5.10)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Two benefits with the same ServiceCategory + a member context
+    /// that satisfies the second predicate ⇒ the second benefit is
+    /// selected by the rule gate.
+    /// </summary>
+    [Fact]
+    public async Task Predicate_TwoBenefitsSameCategory_AdultEncounterPicksAdultBenefit()
+    {
+        var pediatric = new BenefitCategoryConfig
+        {
+            ServiceTypeCode = "98",
+            ServiceTypeDescription = "Pediatric Office Visit",
+            IsCovered = true,
+            Predicate = new BenefitRulePredicate { MemberAgeMin = 0, MemberAgeMax = 17 },
+            InNetworkCostSharing =
+            [
+                new CostShareRuleConfig { CostShareType = CostShareType.Copay, CopayAmount = 10,
+                    CopayApplicationMode = CopayApplicationMode.InsteadOfDeductible },
+            ],
+        };
+        var adult = new BenefitCategoryConfig
+        {
+            ServiceTypeCode = "98",
+            ServiceTypeDescription = "Adult Office Visit",
+            IsCovered = true,
+            Predicate = new BenefitRulePredicate { MemberAgeMin = 18 },
+            InNetworkCostSharing =
+            [
+                new CostShareRuleConfig { CostShareType = CostShareType.Copay, CopayAmount = 50,
+                    CopayApplicationMode = CopayApplicationMode.InsteadOfDeductible },
+            ],
+        };
+        var plan = new BenefitPlanConfig
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "test-tenant",
+            PlanName = "Test",
+            IndividualDeductible = 0,
+            IndividualOopMax = 5000,
+            FamilyOopMax = 10000,
+            Categories = [pediatric, adult],
+        };
+        var engine = CreateEngine(plan, categoryCode: "98");
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 100m, 100m, "11")) with
+        {
+            Member = new MemberContext { AgeYears = 42 },
+        };
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.True(line.IsCovered);
+        Assert.Equal("Adult Office Visit", line.ServiceTypeDescription);
+        Assert.Equal(50m, line.CopayAmount);
+    }
+
+    /// <summary>
+    /// All candidate predicates reject ⇒ the engine denies with code
+    /// 96 + the predicate-specific narrative (distinct from the
+    /// "service not covered" 96).
+    /// </summary>
+    [Fact]
+    public async Task Predicate_AllRejected_DeniesWithPredicateNarrative()
+    {
+        var maternity = new BenefitCategoryConfig
+        {
+            ServiceTypeCode = "98",
+            ServiceTypeDescription = "Maternity Office Visit",
+            IsCovered = true,
+            Predicate = new BenefitRulePredicate { MemberGender = BenefitMemberGender.Female },
+        };
+        var plan = new BenefitPlanConfig
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "test-tenant",
+            PlanName = "Test",
+            Categories = [maternity],
+        };
+        var engine = CreateEngine(plan, categoryCode: "98");
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 100m, 100m, "11")) with
+        {
+            Member = new MemberContext { AgeYears = 42, Gender = BenefitMemberGender.Male },
+        };
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.False(line.IsCovered);
+        Assert.Equal("96", line.DenialReasonCode);
+        Assert.Contains("rule predicate", line.DenialReasonDescription, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Decision 3 — null MemberContext means predicates are skipped
+    /// entirely. Existing pre-BP-5.10 tests (which never supply
+    /// MemberContext) keep working unchanged: the first candidate is
+    /// returned regardless of its predicate.
+    /// </summary>
+    [Fact]
+    public async Task Predicate_NullMemberContext_PicksFirstCandidate_BackwardsCompatible()
+    {
+        var pediatric = new BenefitCategoryConfig
+        {
+            ServiceTypeCode = "98",
+            ServiceTypeDescription = "Pediatric Office Visit",
+            IsCovered = true,
+            Predicate = new BenefitRulePredicate { MemberAgeMin = 0, MemberAgeMax = 17 },
+            InNetworkCostSharing =
+            [
+                new CostShareRuleConfig { CostShareType = CostShareType.Copay, CopayAmount = 10,
+                    CopayApplicationMode = CopayApplicationMode.InsteadOfDeductible },
+            ],
+        };
+        var plan = new BenefitPlanConfig
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "test-tenant",
+            PlanName = "Test",
+            IndividualDeductible = 0,
+            IndividualOopMax = 5000,
+            FamilyOopMax = 10000,
+            Categories = [pediatric],
+        };
+        var engine = CreateEngine(plan, categoryCode: "98");
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 100m, 100m, "11"));
+        // Member is null — engine must skip the predicate.
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.True(line.IsCovered);
+        Assert.Equal(10m, line.CopayAmount);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // TEST HELPER
     // ═══════════════════════════════════════════════════════════════════
 
@@ -731,10 +874,11 @@ public class BenefitCalculationEngineTests
             plan, existingDeductible, existingOop, existingVisitCount, categoryCode,
             familyModel, familyDeductible, existingFamilyDeductible, existingFamilyOop);
         var categoryResolver = new FixedCategoryResolver(categoryCode,
-            plan.GetCategory(categoryCode)?.ServiceTypeDescription ?? "Unknown");
+            plan.GetFirstCategory(categoryCode)?.ServiceTypeDescription ?? "Unknown");
+        var ruleGate = new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance);
 
         return new BenefitCalculationEngine(
-            categoryResolver, planProvider, accumulatorService,
+            categoryResolver, planProvider, accumulatorService, ruleGate,
             NullLogger<BenefitCalculationEngine>.Instance);
     }
 }
@@ -909,9 +1053,9 @@ internal class FixedCategoryResolver : IServiceCategoryResolver
     }
 
     public Task<ServiceCategoryMatch?> ResolveAsync(
-        string tenantId, Guid benefitPlanId, string procedureCode,
-        string codeType, string placeOfService, IReadOnlyList<string> modifiers,
-        string? revenueCode, CancellationToken ct)
+        string tenantId, Guid benefitPlanId, DateOnly serviceDate,
+        string procedureCode, string codeType, string placeOfService,
+        IReadOnlyList<string> modifiers, string? revenueCode, CancellationToken ct)
     {
         return Task.FromResult<ServiceCategoryMatch?>(new ServiceCategoryMatch
         {

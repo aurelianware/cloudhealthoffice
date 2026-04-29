@@ -185,8 +185,9 @@ nudge to surface the cap before submit.
 
 ## Out of scope for 5.7
 
-- `BenefitRulePredicate` evaluation in the calc engine (deferred to
-  5.10).
+- `BenefitRulePredicate` evaluation in the calc engine — shipped in
+  **BP 5.10**; see
+  [`adjudication-api-stabilization.md`](adjudication-api-stabilization.md).
 - `Unknown=0` migration on `FamilyAccumulatorModel` and
   `AccumulatorType` enums (deferred to a follow-up "BenefitEngine enum
   hygiene" PR — see PR #705 convention).

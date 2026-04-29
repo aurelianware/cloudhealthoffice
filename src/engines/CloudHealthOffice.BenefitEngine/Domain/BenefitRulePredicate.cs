@@ -1,18 +1,21 @@
 using System.Text.Json.Serialization;
 
-namespace BenefitPlanService.Models.Benefits;
+namespace CloudHealthOffice.BenefitEngine.Domain;
 
 /// <summary>
-/// Declarative gate that restricts when a <see cref="Benefit"/> applies to
-/// a given member encounter. All facets are optional — an unset facet is
+/// Declarative gate that restricts when a benefit applies to a given
+/// member encounter. All facets are optional — an unset facet is
 /// "no opinion" and never blocks the benefit. A predicate evaluates to
 /// true (benefit applies) only when every set facet matches the supplied
 /// <see cref="BenefitRuleEvaluationContext"/>.
 ///
 /// <para>
-/// 5.4 introduces the predicate shape and its in-process evaluator.
-/// Wiring it into the <c>BenefitCalculationEngine</c> hot path is deferred
-/// (Strategy A); 5.7 / 5.10 will exercise predicates during adjudication.
+/// BP 5.4 introduced the predicate shape and its in-process evaluator;
+/// BP 5.10 (Adjudication API Stabilization) consumes it from the
+/// <c>BenefitCalculationEngine</c> hot path through
+/// <c>IBenefitRuleGate</c>. The type lives in the engine domain so the
+/// engine and the benefit-plan-service can share it without a
+/// circular reference.
 /// </para>
 /// </summary>
 public class BenefitRulePredicate

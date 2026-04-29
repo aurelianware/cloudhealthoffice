@@ -309,6 +309,17 @@ public sealed class ServiceCategoryMappingsController : ControllerBase
                 return BadRequest(new { error = "rule_code_type_required" });
             }
         }
+        // Capability BP 5.10 — reject impossible effective windows at
+        // the producer boundary so the resolver doesn't have to silently
+        // filter them out at adjudication time.
+        if (request.EffectiveStart is { } start && request.EffectiveEnd is { } end && end < start)
+        {
+            return BadRequest(new
+            {
+                error = "effective_window_invalid",
+                message = "effectiveEnd must be on or after effectiveStart",
+            });
+        }
         return null;
     }
 
