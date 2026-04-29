@@ -69,9 +69,10 @@ public class BenefitRuleGateTests
         var plan = PlanWith(first, second);
         var request = Request(plan.Id, member: null);
 
-        var picked = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
+        var result = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
 
-        Assert.Same(first, picked);
+        Assert.Same(first, result.Selected);
+        Assert.Equal(2, result.CandidateCount);
     }
 
     [Fact]
@@ -82,9 +83,10 @@ public class BenefitRuleGateTests
         var plan = PlanWith(first, second);
         var request = Request(plan.Id, member: new MemberContext { AgeYears = 30 });
 
-        var picked = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
+        var result = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
 
-        Assert.Same(first, picked);
+        Assert.Same(first, result.Selected);
+        Assert.Equal(2, result.CandidateCount);
     }
 
     [Fact]
@@ -97,33 +99,36 @@ public class BenefitRuleGateTests
         var plan = PlanWith(pediatric, adult);
         var request = Request(plan.Id, member: new MemberContext { AgeYears = 42 });
 
-        var picked = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
+        var result = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
 
-        Assert.Same(adult, picked);
+        Assert.Same(adult, result.Selected);
+        Assert.Equal(2, result.CandidateCount);
     }
 
     [Fact]
-    public void AllPredicatesReject_ReturnsNull()
+    public void AllPredicatesReject_ReturnsNullSelectedWithCandidateCount()
     {
         var pediatric = Cat(predicate: new BenefitRulePredicate { MemberAgeMin = 0, MemberAgeMax = 17 });
         var senior = Cat(predicate: new BenefitRulePredicate { MemberAgeMin = 65 });
         var plan = PlanWith(pediatric, senior);
         var request = Request(plan.Id, member: new MemberContext { AgeYears = 42 });
 
-        var picked = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
+        var result = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
 
-        Assert.Null(picked);
+        Assert.Null(result.Selected);
+        Assert.Equal(2, result.CandidateCount);
     }
 
     [Fact]
-    public void NoCandidates_ReturnsNull()
+    public void NoCandidates_ReturnsNullSelectedWithZeroCandidateCount()
     {
         var plan = PlanWith();
         var request = Request(plan.Id, member: new MemberContext { AgeYears = 42 });
 
-        var picked = Gate().PickApplicable(plan, "98", request, line: null);
+        var result = Gate().PickApplicable(plan, "98", request, line: null);
 
-        Assert.Null(picked);
+        Assert.Null(result.Selected);
+        Assert.Equal(0, result.CandidateCount);
     }
 
     [Fact]
@@ -135,9 +140,9 @@ public class BenefitRuleGateTests
         var plan = PlanWith(unconditional, pediatric);
         var request = Request(plan.Id, member: new MemberContext { AgeYears = 42 });
 
-        var picked = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
+        var result = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
 
-        Assert.Same(unconditional, picked);
+        Assert.Same(unconditional, result.Selected);
     }
 
     [Fact]
@@ -153,9 +158,9 @@ public class BenefitRuleGateTests
             member: new MemberContext { AgeYears = 28 },
             dx: "Z34.00");
 
-        var picked = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
+        var result = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
 
-        Assert.Same(maternity, picked);
+        Assert.Same(maternity, result.Selected);
     }
 
     [Fact]
@@ -167,8 +172,9 @@ public class BenefitRuleGateTests
         var request = Request(plan.Id,
             member: new MemberContext { AgeYears = 28, Gender = BenefitMemberGender.Male });
 
-        var picked = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
+        var result = Gate().PickApplicable(plan, "98", request, request.Lines[0]);
 
-        Assert.Null(picked);
+        Assert.Null(result.Selected);
+        Assert.Equal(1, result.CandidateCount);
     }
 }

@@ -317,18 +317,18 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             };
         }
 
-        var candidates = plan.GetCategories(categoryMatch.ServiceTypeCode);
-        if (candidates.Count == 0)
+        var gateResult = _ruleGate.PickApplicable(plan, categoryMatch.ServiceTypeCode, request, firstLine);
+        if (gateResult.CandidateCount == 0)
         {
             return new BenefitResolutionResult
             {
                 Success = false,
                 DenialReasonCode = "96",
-                DenialReasonDescription = "Service not covered under this plan"
+                DenialReasonDescription = $"No benefit configured for service type {categoryMatch.ServiceTypeCode}"
             };
         }
 
-        var benefitCategory = _ruleGate.PickApplicable(plan, categoryMatch.ServiceTypeCode, request, firstLine);
+        var benefitCategory = gateResult.Selected;
         if (benefitCategory is null)
         {
             return new BenefitResolutionResult
@@ -345,7 +345,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             {
                 Success = false,
                 DenialReasonCode = "96",
-                DenialReasonDescription = "Service not covered under this plan"
+                DenialReasonDescription = $"{benefitCategory.ServiceTypeDescription} is not covered under this plan"
             };
         }
 
@@ -372,7 +372,11 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 LineNumber = line.LineNumber,
                 IsCovered = true,
                 ServiceTypeCode = categoryMatch.ServiceTypeCode,
-                ServiceTypeDescription = categoryMatch.ServiceTypeDescription,
+                // Use the picked benefit's description so plans authoring
+                // multiple benefits per service-type code (e.g. Pediatric
+                // vs Adult Office Visit) report the selected benefit's
+                // label rather than the resolver/system label.
+                ServiceTypeDescription = benefitCategory.ServiceTypeDescription,
                 AuthRequired = benefitCategory.AuthRequired,
                 AuthFound = true,
                 BilledAmount = line.BilledAmount,
@@ -449,34 +453,38 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 "No benefit category mapping for procedure code");
         }
 
-        var candidates = plan.GetCategories(categoryMatch.ServiceTypeCode);
-        if (candidates.Count == 0)
-        {
-            return CreateDeniedLine(line, billedAmount, allowedAmount,
-                "96", "Non-covered charge(s)",
-                $"No benefit configured for service type {categoryMatch.ServiceTypeCode}");
-        }
-
         // Capability BP 5.10: route through the rule gate so plans that
         // author multiple benefits with the same ServiceCategory (e.g.
         // pediatric vs adult Office Visit) pick the right one per
-        // member encounter. Returns null only when every candidate's
-        // BenefitRulePredicate rejects.
-        var benefitCategory = _ruleGate.PickApplicable(plan, categoryMatch.ServiceTypeCode, request, line);
+        // member encounter. The result distinguishes "no benefit
+        // configured" (CandidateCount == 0) from "configured but every
+        // predicate rejected" (CandidateCount > 0, Selected == null).
+        var gateResult = _ruleGate.PickApplicable(plan, categoryMatch.ServiceTypeCode, request, line);
+        if (gateResult.CandidateCount == 0)
+        {
+            return CreateDeniedLine(line, billedAmount, allowedAmount,
+                "96", $"No benefit configured for service type {categoryMatch.ServiceTypeCode}",
+                serviceTypeCode: categoryMatch.ServiceTypeCode,
+                serviceTypeDescription: categoryMatch.ServiceTypeDescription);
+        }
+
+        var benefitCategory = gateResult.Selected;
         if (benefitCategory is null)
         {
             return CreateDeniedLine(line, billedAmount, allowedAmount,
-                "96", "Non-covered charge(s)",
+                "96",
                 $"Benefit category {categoryMatch.ServiceTypeCode} matched but no rule predicate is satisfied for this member encounter",
-                categoryMatch.ServiceTypeCode, categoryMatch.ServiceTypeDescription);
+                serviceTypeCode: categoryMatch.ServiceTypeCode,
+                serviceTypeDescription: categoryMatch.ServiceTypeDescription);
         }
 
         if (!benefitCategory.IsCovered)
         {
             return CreateDeniedLine(line, billedAmount, allowedAmount,
-                "96", "Non-covered charge(s)",
-                $"{categoryMatch.ServiceTypeDescription} is not covered under this plan",
-                categoryMatch.ServiceTypeCode, categoryMatch.ServiceTypeDescription);
+                "96",
+                $"{benefitCategory.ServiceTypeDescription} is not covered under this plan",
+                serviceTypeCode: categoryMatch.ServiceTypeCode,
+                serviceTypeDescription: benefitCategory.ServiceTypeDescription);
         }
 
         var limitCheck = CheckLimits(benefitCategory, accumulators, line);
@@ -485,7 +493,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             return CreateDeniedLine(line, billedAmount, allowedAmount,
                 limitCheck.DenialCode!, limitCheck.DenialDescription!,
                 limitCheck.DenialDescription,
-                categoryMatch.ServiceTypeCode, categoryMatch.ServiceTypeDescription);
+                categoryMatch.ServiceTypeCode, benefitCategory.ServiceTypeDescription);
         }
 
         var networkTierForRules = request.IsEmergency ? NetworkTier.InNetwork : request.NetworkTier;
@@ -497,7 +505,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             line, billedAmount, allowedAmount,
             costShareRules, accumulators, request.NetworkTier,
             request.IsEmergency, plan,
-            categoryMatch.ServiceTypeCode, categoryMatch.ServiceTypeDescription,
+            categoryMatch.ServiceTypeCode, benefitCategory.ServiceTypeDescription,
             benefitCategory.AuthRequired);
 
         if (request.Cob is { PayerSequence: 2 } cob)

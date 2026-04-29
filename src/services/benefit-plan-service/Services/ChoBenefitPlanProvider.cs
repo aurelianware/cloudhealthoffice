@@ -152,7 +152,8 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
     /// </summary>
     private BenefitRulePredicate? ProjectPredicate(BenefitPlan plan, Benefit benefit)
     {
-        if (benefit.Rules is not { Count: > 0 } rules)
+        var rules = benefit.Rules;
+        if (rules is null || rules.Count == 0)
         {
             return null;
         }
