@@ -50,13 +50,11 @@ public static class PlanDocumentValidation
     /// <summary>
     /// The reserved internal-reference prefix that
     /// <see cref="PlanDocumentReference.Location"/> may carry once Phase 2
-    /// migrates plan documents into member-document-service. Until then
-    /// the format is documented but not produced by any active code path.
-    /// Mirrors the constant used by
+    /// migrates plan documents into member-document-service. Sourced from
     /// <see cref="FhirEndpointProjector.InternalReferencePrefix"/> so the
-    /// validator and the projector agree on the literal.
+    /// validator and the projector cannot drift. Copilot review BP 5.9.
     /// </summary>
-    public const string InternalReferencePrefix = "documentreference/";
+    public const string InternalReferencePrefix = FhirEndpointProjector.InternalReferencePrefix;
 
     /// <summary>
     /// Validate a document <c>Location</c>. The Location must be either

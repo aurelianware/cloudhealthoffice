@@ -93,7 +93,7 @@ internal sealed class FhirEndpointProjector : IFhirEndpointProjector
         // ── meta ─────────────────────────────────────────────────────
         resource["meta"] = new JsonObject
         {
-            ["lastUpdated"] = ToFhirInstant(ResolveLastUpdated(plan, document)),
+            ["lastUpdated"] = ToFhirInstant(ResolveLastUpdated(plan)),
             ["profile"] = new JsonArray(
                 ChoBenefitPlanFhirUrls.PlanNetEndpointProfile),
         };
@@ -217,9 +217,11 @@ internal sealed class FhirEndpointProjector : IFhirEndpointProjector
 
     /// <summary>
     /// Decision 8 ordering — SBC consumer-facing first; matches member-app
-    /// consumer expectations.
+    /// consumer expectations. Exposed (assembly-internal) so
+    /// <see cref="Controllers.FhirEndpointController"/> can apply the same
+    /// ordering across plans when sorting the cross-plan search bundle.
     /// </summary>
-    private static int DocTypeOrdinal(PlanDocumentType docType) => docType switch
+    internal static int DocTypeOrdinal(PlanDocumentType docType) => docType switch
     {
         PlanDocumentType.SBC                     => 1,
         PlanDocumentType.EOC                     => 2,
@@ -236,9 +238,17 @@ internal sealed class FhirEndpointProjector : IFhirEndpointProjector
         return PlanDocumentTypeDisplay(document.DocType);
     }
 
-    private static DateTime ResolveLastUpdated(BenefitPlan plan, PlanDocumentReference document)
+    /// <summary>
+    /// FHIR <c>meta.lastUpdated</c> is "the instant the resource was last
+    /// updated by the server" — NOT the document's effective window date.
+    /// Future-dated documents (status=off per Decision 5) would otherwise
+    /// produce a future <c>lastUpdated</c>, which violates the FHIR
+    /// contract and breaks consumer cache-freshness logic. Mirror the
+    /// InsurancePlan projector: prefer the plan's modify/publish/create
+    /// timestamps. Copilot review BP 5.9.
+    /// </summary>
+    private static DateTime ResolveLastUpdated(BenefitPlan plan)
     {
-        if (document.EffectiveDate.HasValue) return document.EffectiveDate.Value;
         if (plan.ModifiedDate.HasValue) return plan.ModifiedDate.Value;
         if (plan.PublishedAt.HasValue) return plan.PublishedAt.Value;
         if (plan.UpdatedAt != default) return plan.UpdatedAt;

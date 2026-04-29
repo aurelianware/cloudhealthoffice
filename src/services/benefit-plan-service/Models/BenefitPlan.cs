@@ -481,26 +481,41 @@ public class PlanDocumentReference
     public string? DisplayName { get; set; }
 }
 
+/// <summary>
+/// Plan document type discriminator.
+///
+/// <para>
+/// Numeric values are explicit and APPEND-ONLY. The Mongo backend
+/// (<c>BenefitPlanRepositoryMongo</c>) serializes enums as Int32 by
+/// default — inserting a new value mid-list would shift the integer
+/// codes of every value after it and silently corrupt every persisted
+/// <c>docType</c> field. New entries must be appended after
+/// <c>Other</c> with the next unused integer.
+/// </para>
+/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PlanDocumentType
 {
     /// <summary>Summary of Benefits and Coverage (ACA mandated).</summary>
-    SBC,
+    SBC = 0,
     /// <summary>Evidence of Coverage / Certificate of Coverage.</summary>
-    EOC,
+    EOC = 1,
     /// <summary>Drug formulary.</summary>
-    Formulary,
+    Formulary = 2,
     /// <summary>Summary Plan Description (ERISA).</summary>
-    SPD,
+    SPD = 3,
+    /// <summary>Catch-all for plan documents that don't fit the named types.</summary>
+    Other = 4,
     /// <summary>
     /// Machine-Readable Rate File (CMS Transparency in Coverage,
     /// 45 CFR §147.211). Promoted to a first-class type in BP 5.9 so the
     /// FHIR Endpoint projection is lossless; pre-BP-5.9 plan authors who
     /// stored MRFs under <see cref="Other"/> continue to round-trip
-    /// without migration.
+    /// without migration. Appended after <c>Other</c> with explicit value
+    /// 5 so existing persisted Mongo Int32 codes for <c>Other</c> keep
+    /// their meaning.
     /// </summary>
-    MachineReadableRateFile,
-    Other
+    MachineReadableRateFile = 5,
 }
 
 /// <summary>

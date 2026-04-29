@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using FhirService.Controllers;
+using FhirService.Services;
 using FluentAssertions;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Http;
@@ -38,7 +39,7 @@ public class EndpointControllerProxyTests
 
     public EndpointControllerProxyTests()
     {
-        _factory.Setup(f => f.CreateClient(InsurancePlanController.BenefitPlanServiceClientName))
+        _factory.Setup(f => f.CreateClient(UpstreamClientNames.BenefitPlanService))
             .Returns(() => new HttpClient(_benefitPlanHandler)
             {
                 BaseAddress = new Uri("http://benefit-plan-service.test/")

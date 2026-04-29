@@ -139,10 +139,24 @@ public class FhirEndpointController : ControllerBase
             }
         }
 
+        // status is also a FHIR token (system|value | bare value). Run it
+        // through ParseTokenValue so a system|value pair with an unknown
+        // system yields no-match semantics consistent with _id and
+        // connection-type. Copilot review BP 5.9.
+        string? resolvedStatus = null;
+        if (!string.IsNullOrEmpty(status))
+        {
+            resolvedStatus = ParseTokenValue(status);
+            if (string.IsNullOrEmpty(resolvedStatus))
+            {
+                return BuildBundle(Array.Empty<JsonObject>());
+            }
+        }
+
         List<JsonObject> matches;
         try
         {
-            matches = await CollectAllEndpointsAsync(status, ct);
+            matches = await CollectAllEndpointsAsync(resolvedStatus, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -189,31 +203,47 @@ public class FhirEndpointController : ControllerBase
     private async Task<List<JsonObject>> CollectAllEndpointsAsync(
         string? statusFilter, CancellationToken ct)
     {
-        var endpoints = new List<JsonObject>();
-
+        // First collect (plan, document) pairs; sort across plans by the
+        // canonical Decision 8 key BEFORE projecting + paging so paging is
+        // deterministic regardless of repository iteration order. Copilot
+        // review BP 5.9 — Decision 8 ordering must apply to the bundle, not
+        // just to the per-plan slice.
+        var pairs = new List<(BenefitPlan Plan, PlanDocumentReference Document)>();
         await foreach (var plan in EnumerateHeadPublishedPlansAsync(ct))
         {
             if (plan.Documents is null || plan.Documents.Count == 0) continue;
 
             foreach (var doc in _projector.OrderedProjectableDocuments(plan))
             {
-                var projected = _projector.Project(plan, doc);
-                if (projected is null) continue;
-
-                if (!string.IsNullOrEmpty(statusFilter)
-                    && !string.Equals(
-                        projected["status"]?.GetValue<string>(),
-                        statusFilter,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                endpoints.Add(projected);
+                pairs.Add((plan, doc));
             }
+        }
+
+        var sortedPairs = pairs
+            .OrderBy(p => FhirEndpointProjector.DocTypeOrdinal(p.Document.DocType))
+            .ThenByDescending(p => p.Document.EffectiveDate ?? DateTime.MinValue)
+            .ThenBy(p => p.Document.Id, StringComparer.Ordinal);
+
+        var endpoints = new List<JsonObject>();
+        foreach (var (plan, doc) in sortedPairs)
+        {
+            var projected = _projector.Project(plan, doc);
+            if (projected is null) continue;
+
+            if (!string.IsNullOrEmpty(statusFilter)
+                && !string.Equals(
+                    projected["status"]?.GetValue<string>(),
+                    statusFilter,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            endpoints.Add(projected);
         }
         return endpoints;
     }
+
 
     private async IAsyncEnumerable<BenefitPlan> EnumerateHeadPublishedPlansAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
@@ -267,7 +297,15 @@ public class FhirEndpointController : ControllerBase
             if (chunkList.Count < RepoChunkSize) break;
         }
 
-        foreach (var plan in seenHead.Values)
+        // Dictionary value enumeration order is not contractually
+        // guaranteed; emit in a stable order so callers (FindEndpointAsync
+        // / CollectAllEndpointsAsync) see the same plan sequence across
+        // runs. Sort by PlanName then PlanId, matching the BP 5.8
+        // InsurancePlan search ordering. Copilot review BP 5.9.
+        var ordered = seenHead.Values
+            .OrderBy(p => p.PlanName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.PlanId, StringComparer.Ordinal);
+        foreach (var plan in ordered)
         {
             yield return plan;
         }

@@ -1,3 +1,4 @@
+using FhirService.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FhirService.Controllers;
@@ -26,8 +27,11 @@ public class EndpointController : FhirControllerBase
         IHttpClientFactory httpClientFactory,
         ILogger<EndpointController> logger)
     {
+        // Pull the typed HttpClient name from UpstreamClientNames so the
+        // controller doesn't take a dependency on a sibling controller's
+        // implementation detail. Copilot review BP 5.9.
         _benefitPlanServiceClient =
-            httpClientFactory.CreateClient(InsurancePlanController.BenefitPlanServiceClientName);
+            httpClientFactory.CreateClient(UpstreamClientNames.BenefitPlanService);
         _logger = logger;
     }
 
