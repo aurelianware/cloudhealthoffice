@@ -58,20 +58,24 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
     {
         var planId = Guid.NewGuid().ToString();
         var serviceDate = new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc);
-        var inbound = new
+        // Send the typed AdapterClaim so System.Text.Json's enum binder
+        // resolves LineOfBusiness/ClaimType correctly. Anonymous-object
+        // payloads with string enum values fail the controller's model
+        // binding (no JsonStringEnumConverter on the inbound path).
+        var inbound = new AdapterClaim
         {
             ClaimNumber = "E2E-001",
             MemberId = "MEM-1",
             BillingProviderNPI = "1234567890",
             BenefitPlanId = planId,
-            LineOfBusiness = "Commercial",
-            ClaimType = "Professional",
+            LineOfBusiness = LineOfBusiness.Commercial,
+            ClaimType = ClaimType.Professional,
             PlaceOfServiceCode = "11",
             ServiceDateFrom = serviceDate,
             ServiceDateTo = serviceDate,
-            ClaimLines = new[]
+            ClaimLines = new List<AdapterClaimLine>
             {
-                new
+                new()
                 {
                     LineNumber = 1,
                     ProcedureCode = "99213",

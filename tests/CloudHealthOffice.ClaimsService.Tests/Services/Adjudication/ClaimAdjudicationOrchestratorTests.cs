@@ -308,6 +308,7 @@ public class ClaimAdjudicationOrchestratorTests
             stages,
             _eventPublisher,
             _messageBus,
+            new AdjudicationTenantContext(),
             Options.Create(options ?? new AdjudicationPipelineOptions()),
             NullLogger<ClaimAdjudicationOrchestrator>.Instance);
     }
