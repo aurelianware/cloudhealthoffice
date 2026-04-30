@@ -26,7 +26,7 @@ public class UpdateCredentialingProjectionAsyncTests : IAsyncLifetime
     {
         _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
         var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase($"credentialing_projection_writepath_{Guid.NewGuid():N}");
+        _database = client.GetDatabase($"cp_writepath_{Guid.NewGuid():N}");
         var ctx = new DefaultHttpContext();
         ctx.Items["TenantId"] = Tenant;
         var accessor = new HttpContextAccessor { HttpContext = ctx };
