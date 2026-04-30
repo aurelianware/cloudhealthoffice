@@ -76,7 +76,7 @@ public static class CloudHealthOfficeJsonOptions
         // caller adding a Converter here would reshape serialization for
         // every sibling service that consumes this property. MakeReadOnly
         // converts future mutation into a clear InvalidOperationException.
-        opts.MakeReadOnly();
+        opts.MakeReadOnly(populateMissingResolver: true);
         return opts;
     }
 }
