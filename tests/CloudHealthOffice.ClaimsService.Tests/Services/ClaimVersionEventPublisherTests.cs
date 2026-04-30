@@ -113,8 +113,12 @@ public class ClaimVersionEventPublisherTests : IAsyncLifetime
     public async Task Cross_tenant_chains_are_isolated()
     {
         // Two different tenants with the same ClaimVersionId must each
-        // start at Version=1. The Document _id="{TenantId}:{EventId}"
-        // construction is what prevents cross-tenant collision.
+        // start at Version=1. Cross-tenant safety holds at three layers:
+        //   - the unique compound index on (TenantId, ClaimVersionId, EventId)
+        //   - the partition key shape "{TenantId}:{ClaimVersionId}"
+        //   - the document _id "{PartitionKey}:{EventId}" (tenant-prefixed)
+        // so a deterministic EventId from one tenant cannot mask a write
+        // from another.
         var t1 = new Claim
         {
             Id = "t1-row", ClaimVersionId = "shared-chain", TenantId = "tenant-1",
@@ -135,6 +139,11 @@ public class ClaimVersionEventPublisherTests : IAsyncLifetime
         e2.Version.Should().Be(1);
         e1.PartitionKey.Should().Be("tenant-1:shared-chain");
         e2.PartitionKey.Should().Be("tenant-2:shared-chain");
+        // Distinct Mongo _id values prove the cross-tenant isolation at
+        // the document level, not just the application-level index.
+        e1.Id.Should().NotBe(e2.Id);
+        e1.Id.Should().StartWith("tenant-1:");
+        e2.Id.Should().StartWith("tenant-2:");
     }
 
     [Fact]
@@ -170,14 +179,17 @@ public class ClaimVersionEventPublisherTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Document_id_equals_event_id_for_dedup()
+    public async Task Document_id_is_tenant_scoped_for_dedup()
     {
-        // The publisher sets Mongo _id = EventId so the unique index on
-        // (TenantId, ClaimVersionId, EventId) plus the row-id uniqueness
-        // both fire on a duplicate write.
+        // The publisher sets Mongo _id = "{PartitionKey}:{EventId}" — i.e.
+        // "{TenantId}:{ClaimVersionId}:{EventId}" — so a deterministic
+        // EventId cannot collide across tenants/chains at the document
+        // level. The application-level unique index on
+        // (TenantId, ClaimVersionId, EventId) also fires; both layers
+        // catch a duplicate write.
         var version = Sample("V3");
         var evt = await _publisher.PublishVersionSubmittedAsync(version, null, null);
-        evt.Id.Should().Be(evt.EventId);
         evt.EventId.Should().Be($"submitted:{version.Id}");
+        evt.Id.Should().Be($"{Tenant}:{ClaimVersionId}:submitted:{version.Id}");
     }
 }

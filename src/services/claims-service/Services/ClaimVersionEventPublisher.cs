@@ -200,7 +200,14 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
     private async Task<ClaimVersionEvent> AppendAsync(ClaimVersionEvent evt, CancellationToken ct)
     {
         evt.PartitionKey = ClaimVersionEvent.BuildPartitionKey(evt.TenantId, evt.ClaimVersionId);
-        evt.Id = evt.EventId;
+        // Mongo enforces global uniqueness on _id, so a deterministic EventId
+        // alone (e.g. "submitted:{VersionId}") would collide if the same
+        // VersionId ever appeared in a different tenant or chain (imports,
+        // backfills, accidental id-reuse). Tenant-scoping the _id with the
+        // partition key gives true cross-tenant isolation while preserving
+        // the deterministic-EventId idempotency story (the unique index on
+        // (TenantId, ClaimVersionId, EventId) is what callers rely on).
+        evt.Id = $"{evt.PartitionKey}:{evt.EventId}";
         if (evt.OccurredAt == default) evt.OccurredAt = DateTime.UtcNow;
 
         var existing = await GetByEventIdAsync(evt.TenantId, evt.ClaimVersionId, evt.EventId, ct);

@@ -221,22 +221,19 @@ public class ClaimRepository : IClaimRepository
     {
         var tenantId = GetTenantId();
 
+        // TOP 1 + ORDER BY versionNumber DESC keeps RU cost bounded — only
+        // the head version is needed; pulling every version-row for the
+        // claim into memory just to take the first wastes RUs at scale.
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.claimNumber = @claimNumber " +
+            "SELECT TOP 1 * FROM c WHERE c.tenantId = @tenantId AND c.claimNumber = @claimNumber " +
             "ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@claimNumber", claimNumber);
 
         var iterator = _container.GetItemQueryIterator<Claim>(query);
-        var results = new List<Claim>();
-
-        while (iterator.HasMoreResults)
-        {
-            var response = await iterator.ReadNextAsync();
-            results.AddRange(response);
-        }
-
-        var head = results.FirstOrDefault();
+        if (!iterator.HasMoreResults) return null;
+        var page = await iterator.ReadNextAsync();
+        var head = page.FirstOrDefault();
         return head != null ? Hydrate(head) : null;
     }
 
@@ -556,7 +553,20 @@ public class ClaimRepository : IClaimRepository
             existing = null;
         }
 
-        if (existing != null && IsTerminal(existing.VersionState))
+        if (existing == null)
+        {
+            // Surface a domain-specific not-found rather than letting the
+            // ReplaceItemAsync 404 bubble through ExceptionHandlingMiddleware
+            // as a 500. Controllers map IsNotFound to HTTP 404.
+            throw new ClaimVersionStateException(
+                claim.ClaimVersionId, claim.Id, claim.VersionState,
+                $"Claim version {claim.Id} not found for update.")
+            {
+                IsNotFound = true
+            };
+        }
+
+        if (IsTerminal(existing.VersionState))
         {
             throw new ClaimVersionStateException(
                 existing.ClaimVersionId, existing.Id, existing.VersionState,
@@ -564,11 +574,25 @@ public class ClaimRepository : IClaimRepository
                 "Create an adjustment version via the adjustment workflow.");
         }
 
-        var response = await _container.ReplaceItemAsync(
-            claim,
-            claim.Id,
-            new PartitionKey(claim.Id));
-        return response.Resource;
+        try
+        {
+            var response = await _container.ReplaceItemAsync(
+                claim,
+                claim.Id,
+                new PartitionKey(claim.Id));
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Race: the row was deleted between the pre-read above and the
+            // replace. Same domain-specific not-found surface.
+            throw new ClaimVersionStateException(
+                claim.ClaimVersionId, claim.Id, claim.VersionState,
+                $"Claim version {claim.Id} not found for update (deleted concurrently).")
+            {
+                IsNotFound = true
+            };
+        }
     }
 
     public async Task DeleteAsync(string id)
@@ -585,9 +609,12 @@ public class ClaimRepository : IClaimRepository
 
         // "In effect at asOf" means PublishedAt <= asOf AND
         // (SupersededAt is null OR SupersededAt > asOf). For legacy rows
-        // missing PublishedAt/SupersededAt, the (NOT IS_DEFINED OR null)
-        // clauses keep them visible — hydration on read maps Status onto
-        // VersionState so the caller sees the legacy row as the head.
+        // missing PublishedAt/SupersededAt/versionState, the (NOT IS_DEFINED
+        // OR null) clauses keep them visible — hydration on read maps
+        // Status onto VersionState so the caller sees the legacy row as the
+        // head. The versionState predicate uses (NOT IS_DEFINED OR ...)
+        // because Cosmos SQL evaluates undefined-vs-anything as undefined
+        // (≠ true), which would silently drop legacy rows.
         var query = new QueryDefinition(@"
             SELECT TOP 1 *
             FROM c
@@ -595,7 +622,7 @@ public class ClaimRepository : IClaimRepository
               AND (c.claimVersionId = @claimVersionId
                    OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
                    OR (c.claimVersionId = '' AND c.id = @claimVersionId))
-              AND c.versionState != @draft
+              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null OR c.versionState != @draft)
               AND (NOT IS_DEFINED(c.publishedAt) OR c.publishedAt = null OR c.publishedAt <= @asOf)
               AND (NOT IS_DEFINED(c.supersededAt) OR c.supersededAt = null OR c.supersededAt > @asOf)
             ORDER BY c.versionNumber DESC")
@@ -719,6 +746,14 @@ public class ClaimRepository : IClaimRepository
         {
             return false;
         }
+
+        // The query above accepts rows with NOT IS_DEFINED(c.versionState)
+        // so legacy claims (no version fields) can still receive
+        // adjudication writes. But a legacy row with Status=Paid hydrates
+        // to VersionState=Paid — which is terminal and must NOT be patched.
+        // Hydrate then enforce the terminal-state guard before mutating.
+        head = Hydrate(head);
+        if (IsTerminal(head.VersionState)) return false;
 
         // The adjudication orchestrator (5.5) emits one LineAdjudicationResult
         // per ClaimLine in claim-line order; counts that disagree are a 5.5

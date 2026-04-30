@@ -8,8 +8,13 @@ namespace ClaimsService.Exceptions;
 /// Voided, Adjusted) or a row that doesn't exist. Mirrors
 /// <c>ProviderVersionStateException</c> and <c>PlanVersionStateException</c>.
 ///
-/// The controller boundary maps <see cref="IsNotFound"/> to HTTP 404 and
-/// everything else to 409.
+/// 5.1 does NOT introduce a controller-boundary mapping — claims-service
+/// controllers continue to flow through <c>ExceptionHandlingMiddleware</c>,
+/// which renders <see cref="InvalidOperationException"/> as HTTP 500.
+/// Capability 5.3 (Submission API refactor) introduces the explicit
+/// 404/409 mapping that consumes <see cref="IsNotFound"/>; until then,
+/// the structured fields here exist for downstream consumers (5.5
+/// adjudication, 5.12 adjustment workflow) to inspect programmatically.
 /// </summary>
 public sealed class ClaimVersionStateException : InvalidOperationException
 {
@@ -20,7 +25,8 @@ public sealed class ClaimVersionStateException : InvalidOperationException
     /// <summary>
     /// True when the underlying cause is "the requested claim/version does
     /// not exist", as opposed to a state-machine violation. Set on
-    /// construction; controllers map this to HTTP 404 instead of 409.
+    /// construction; capability 5.3 will surface this as HTTP 404 once
+    /// the controller boundary is refactored.
     /// </summary>
     public bool IsNotFound { get; init; }
 

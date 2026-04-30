@@ -148,7 +148,7 @@ no-ops on an existing matching spec, so re-runs are safe.
 
 ```
 ClaimVersionEvent
-├── Id                       == EventId (cross-tenant collision-safe)
+├── Id                       "{PartitionKey}:{EventId}" — tenant-scoped Mongo _id
 ├── PartitionKey             "{TenantId}:{ClaimVersionId}"
 ├── TenantId
 ├── ClaimVersionId           chain key
@@ -161,6 +161,16 @@ ClaimVersionEvent
 ├── ActorId, CorrelationId
 └── Payload                  state-specific JSON
 ```
+
+Cross-tenant isolation holds at three layers:
+1. The unique compound index `(TenantId, ClaimVersionId, EventId)` —
+   the application-level idempotency contract.
+2. The `PartitionKey` shape `{TenantId}:{ClaimVersionId}` — keeps
+   tenants on disjoint Cosmos / Mongo partitions when the events
+   collection is multi-tenant-shared.
+3. The Mongo `_id` shape `{PartitionKey}:{EventId}` — guarantees
+   that a deterministic EventId from one tenant cannot mask a write
+   from another even if the unique index is somehow dropped.
 
 State transitions are encoded by `EventType`, not by explicit
 `FromState` / `ToState` fields — this matches the Provider/Plan event

@@ -314,7 +314,18 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         if (result.MatchedCount == 0)
         {
-            throw new Exception($"Claim with ID {claim.Id} not found for update.");
+            // Surface a domain-specific not-found rather than a generic
+            // Exception so the controller boundary can map to 404 (via
+            // IsNotFound) instead of falling through ExceptionHandlingMiddleware
+            // as a 500. Mirrors ProviderVersionStateException usage.
+            throw new ClaimVersionStateException(
+                claim.ClaimVersionId,
+                claim.Id,
+                claim.VersionState,
+                $"Claim version {claim.Id} not found for update.")
+            {
+                IsNotFound = true
+            };
         }
 
         return claim;
@@ -451,6 +462,14 @@ public class ClaimRepositoryMongo : IClaimRepository
             .FirstOrDefaultAsync(ct);
 
         if (head == null) return false;
+
+        // The filter accepts VersionState=Unknown so legacy rows (no
+        // version fields) can still receive adjudication writes. But a
+        // legacy row with Status=Paid hydrates to VersionState=Paid —
+        // terminal, and must NOT be patched. Hydrate then enforce the
+        // terminal-state guard before mutating.
+        head = Hydrate(head);
+        if (IsTerminal(head.VersionState)) return false;
 
         // Apply line adjudication results in claim-line order when shapes
         // agree. Mismatched counts → leave existing line results untouched.
