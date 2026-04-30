@@ -12,12 +12,19 @@ COPY src/Directory.Build.props src/
 COPY src/services/claims-service/claims-service.csproj src/services/claims-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/services/shared/CloudHealthOffice.Events/CloudHealthOffice.Events.csproj src/services/shared/CloudHealthOffice.Events/
+# 5.5 — BenefitCalculationStage calls IBenefitCalculationEngine via the
+# HttpBenefitCalculationEngineClient shim, which transitively pulls in
+# BenefitEngine + OperatingMode at compile time.
+COPY src/engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj src/engines/CloudHealthOffice.BenefitEngine/
+COPY src/engines/CloudHealthOffice.OperatingMode/CloudHealthOffice.OperatingMode.csproj src/engines/CloudHealthOffice.OperatingMode/
 RUN dotnet restore src/services/claims-service/claims-service.csproj
 
 # Copy source code and build
 COPY src/services/claims-service/ src/services/claims-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/services/shared/CloudHealthOffice.Events/ src/services/shared/CloudHealthOffice.Events/
+COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
+COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.OperatingMode/
 RUN dotnet build src/services/claims-service/claims-service.csproj -c Release --no-restore
 
 # Publish stage

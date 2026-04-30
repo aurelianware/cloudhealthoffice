@@ -278,6 +278,60 @@ resource sbTopicEdi837ClaimsSubRiskScorer 'Microsoft.ServiceBus/namespaces/topic
   }
 }
 
+// ─── Claim version events (capability 5.5 — adjudication pipeline) ───
+//
+// Canonical lifecycle topic for the claims-service adjudication pipeline.
+// 5.5 ships the producer (ClaimSubmissionService dual-emit + orchestrator
+// adjudicated emission) and one subscription (adjudication-orchestrator).
+// Future capabilities add their own subscriptions filtered by the
+// MessageType application property:
+//   5.10 remittance generation       → MessageType=ClaimVersionAdjudicated
+//   5.12 adjustment workflow         → MessageType=ClaimVersionAdjusted
+//
+// Native Service Bus duplicate detection is enabled so the deterministic
+// MessageId values the producer sets ("submitted:{ClaimVersionId}",
+// "adjudicated:{ClaimVersionId}") catch retries cleanly.
+resource sbTopicClaimVersionEvents 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'claim-version-events'
+  properties: {
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P14D'
+    requiresDuplicateDetection: true
+    duplicateDetectionHistoryTimeWindow: 'PT1H'
+  }
+}
+
+resource sbTopicClaimVersionEventsSubAdjudication 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2022-10-01-preview' = {
+  parent: sbTopicClaimVersionEvents
+  name: 'adjudication-orchestrator'
+  properties: {
+    maxDeliveryCount: 10
+    lockDuration: 'PT5M'
+    deadLetteringOnMessageExpiration: true
+    deadLetteringOnFilterEvaluationExceptions: true
+  }
+}
+
+// Correlation filter — only ClaimVersionSubmitted messages drive the
+// adjudication pipeline. Adjudicated/Paid/etc. messages emitted onto the
+// same topic by the orchestrator and other future producers are routed
+// to other subscriptions (5.10/5.12). Replacing the default $Default rule
+// with this named correlation filter happens automatically when the
+// rules collection is declared.
+resource sbTopicClaimVersionEventsSubAdjudicationRule 'Microsoft.ServiceBus/namespaces/topics/subscriptions/rules@2022-10-01-preview' = {
+  parent: sbTopicClaimVersionEventsSubAdjudication
+  name: 'submitted-only'
+  properties: {
+    filterType: 'CorrelationFilter'
+    correlationFilter: {
+      properties: {
+        MessageType: 'ClaimVersionSubmitted'
+      }
+    }
+  }
+}
+
 // Build SB connection string AFTER sbAuth exists
 var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
   ? sbAuth.listKeys().primaryConnectionString
@@ -554,6 +608,7 @@ output cosmosDbConnectionId string = enableManagedApiConnections && enableCosmos
 output claimRiskScorerFunctionName string = enableClaimRiskScorer ? claimRiskScorerFunc.name : 'disabled'
 output claimRiskScorerFunctionUrl string = enableClaimRiskScorer ? 'https://${claimRiskScorerFunc.properties.defaultHostName}' : 'disabled'
 output edi837ClaimsTopicName string = sbTopicEdi837Claims.name
+output claimVersionEventsTopicName string = sbTopicClaimVersionEvents.name
 
 // Deployment Key Vault outputs
 output deploymentKeyVaultName string = enableDeploymentKeyVault ? deploymentKeyVault.outputs.keyVaultName : 'disabled'

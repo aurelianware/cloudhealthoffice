@@ -1,12 +1,18 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
+using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using ClaimsService.Adapters;
 using ClaimsService.EDI.Florida;
 using ClaimsService.Fhir;
 using ClaimsService.HostedServices;
+using ClaimsService.Models.Adjudication;
+using ClaimsService.Models.Messaging;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using ClaimsService.Services.Adjudication;
+using ClaimsService.Services.Adjudication.Stages;
+using ClaimsService.Services.Resolution;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -123,7 +129,101 @@ builder.Services.AddScoped<ClaimAdapterFactory>();
 // event emission. Both POST /api/v1/claims and the deprecated
 // legacy POST /api/claims route through this single seam so the
 // version-event chain has no gaps.
+//
+// 5.5 modification: ClaimSubmissionService also emits a
+// ClaimVersionSubmittedMessage onto the claim-version-events Service
+// Bus topic so the adjudication orchestrator picks it up.
 builder.Services.AddScoped<IClaimSubmissionService, ClaimSubmissionService>();
+
+// ─── Capability 5.5 — adjudication pipeline ────────────────────────
+// Service Bus messaging shared abstraction. Resolves to InMemory in
+// Development / when no connection string is configured. In production
+// requires Messaging:ServiceBusConnectionString.
+builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
+
+// IMemoryCache backs the resolution decorators. Not previously
+// registered in claims-service — see the 5.5 plan, drift C.
+builder.Services.AddMemoryCache();
+
+// Per-tenant pipeline configuration. Phase 1 is service-wide; per-tenant
+// override is deferred to Phase 2.
+builder.Services.Configure<AdjudicationPipelineOptions>(
+    builder.Configuration.GetSection(AdjudicationPipelineOptions.SectionName));
+
+// Resolution clients — typed HttpClient + caching decorator. 5-second
+// timeout matches ClaimTenantConfigCache and HttpProviderService so a
+// flaky downstream service can't stall the pipeline.
+builder.Services.AddHttpClient(HttpBenefitPlanResolver.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:BenefitPlanService"]
+        ?? "http://benefit-plan-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<HttpBenefitPlanResolver>();
+builder.Services.AddScoped<IBenefitPlanResolver>(sp =>
+    new CachingBenefitPlanResolver(
+        sp.GetRequiredService<HttpBenefitPlanResolver>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+
+builder.Services.AddHttpClient(HttpMemberResolver.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:MemberService"]
+        ?? "http://member-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<HttpMemberResolver>();
+builder.Services.AddScoped<IMemberResolver>(sp =>
+    new CachingMemberResolver(
+        sp.GetRequiredService<HttpMemberResolver>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+
+// BenefitCalculationEngine — HTTP shim against benefit-plan-service's
+// /api/v1/adjudication/calculate-benefits endpoint. The engine ships as
+// a class library (BP 5.10) but its host-side collaborators
+// (IBenefitPlanProvider, IAccumulatorService) are wired in
+// benefit-plan-service against benefit-plan-service's data stores.
+// Standing them up inside claims-service would mean importing the
+// entire plan + accumulator data layer — that's a Phase 2 split. The
+// HTTP shim consumes the canonical engine through the same surface
+// portal/preview features already use.
+builder.Services.AddScoped<
+    CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine,
+    HttpBenefitCalculationEngineClient>();
+
+// Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
+// 5.4-5.9 replace the stub registrations via services.RemoveAll<>()
+// + AddScoped<IClaimAdjudicationStage, RealStage>().
+builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
+
+builder.Services.AddScoped<IClaimAdjudicationOrchestrator, ClaimAdjudicationOrchestrator>();
+
+// Subscription hosted service — the orchestrator's Service Bus
+// trigger. Factory shape defers subscription creation to ExecuteAsync
+// so the bus is fully initialised before we Subscribe.
+builder.Services.AddHostedService(sp =>
+    new SubscriptionHostedService(
+        services => services.GetRequiredService<IMessageBus>().Subscribe<ClaimVersionSubmittedMessage>(
+            ClaimVersionEventTopics.TopicName,
+            async (msg, ctx, ct) =>
+            {
+                using var scope = services.CreateScope();
+                var orchestrator = scope.ServiceProvider
+                    .GetRequiredService<IClaimAdjudicationOrchestrator>();
+                await orchestrator.AdjudicateAsync(msg, ctx, ct);
+            },
+            new SubscriptionOptions(SubscriptionName: ClaimVersionEventTopics.AdjudicationSubscriptionName)),
+        sp,
+        sp.GetRequiredService<ILogger<SubscriptionHostedService>>()));
 
 builder.Services.AddChoObservability(builder.Configuration);
 

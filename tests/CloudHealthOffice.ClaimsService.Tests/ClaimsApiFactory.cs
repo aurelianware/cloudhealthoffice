@@ -3,8 +3,10 @@ using ClaimsService.EDI.Florida;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using CloudHealthOffice.BenefitEngine.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
@@ -22,6 +24,20 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // 5.5 — force the no-op messaging backend so the orchestrator's
+        // SubscriptionHostedService starts a subscription that never
+        // dispatches, and ClaimSubmissionService's SendAsync silently
+        // succeeds. Tests that need actual adjudication-pipeline
+        // behaviour use a dedicated integration factory with
+        // Messaging:Backend=InMemory.
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Messaging:Backend"] = "Null",
+            });
+        });
 
         builder.ConfigureServices(services =>
         {
@@ -72,6 +88,20 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             {
                 services.Remove(descriptor);
             }
+
+            // 5.5 — replace the production IBenefitCalculationEngine HTTP
+            // shim so unrelated controller tests don't trigger a real HTTP
+            // call to benefit-plan-service. The SubscriptionHostedService
+            // stays registered but consumes a NullMessageBus subscription
+            // (configured above) so it's a true no-op for unrelated tests.
+            var enginePos = services
+                .Where(d => d.ServiceType == typeof(IBenefitCalculationEngine))
+                .ToList();
+            foreach (var descriptor in enginePos)
+            {
+                services.Remove(descriptor);
+            }
+            services.AddSingleton(Substitute.For<IBenefitCalculationEngine>());
 
             services.AddSingleton(ClaimRepository);
             services.AddSingleton(AcknowledgmentService);

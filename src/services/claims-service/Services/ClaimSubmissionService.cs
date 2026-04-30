@@ -1,5 +1,7 @@
 using ClaimsService.Adapters;
 using ClaimsService.Models;
+using ClaimsService.Models.Messaging;
+using CloudHealthOffice.Infrastructure.Messaging;
 
 namespace ClaimsService.Services;
 
@@ -125,15 +127,18 @@ public class ClaimSubmissionService : IClaimSubmissionService
 {
     private readonly ClaimAdapterFactory _adapterFactory;
     private readonly IClaimVersionEventPublisher _eventPublisher;
+    private readonly IMessageBus _messageBus;
     private readonly ILogger<ClaimSubmissionService> _logger;
 
     public ClaimSubmissionService(
         ClaimAdapterFactory adapterFactory,
         IClaimVersionEventPublisher eventPublisher,
+        IMessageBus messageBus,
         ILogger<ClaimSubmissionService> logger)
     {
         _adapterFactory = adapterFactory;
         _eventPublisher = eventPublisher;
+        _messageBus = messageBus;
         _logger = logger;
     }
 
@@ -221,6 +226,42 @@ public class ClaimSubmissionService : IClaimSubmissionService
             _logger.LogError(ex,
                 "ClaimVersionSubmitted event emission failed for claim {ClaimId} (chain {ClaimVersionId}); " +
                 "submission persisted, audit chain has a gap",
+                SanitizeForLog(created.Id), SanitizeForLog(created.ClaimVersionId));
+        }
+
+        // 5.5 dual-emit — Service Bus topic notification triggers the
+        // adjudication orchestrator. Mongo append-only above is the
+        // system-of-record audit chain; this is the trigger transport.
+        // Same degraded-mode posture: failure here logs but does not
+        // fail the submission. Operators replay missed messages from
+        // the audit chain.
+        try
+        {
+            var sbMessage = new ClaimVersionSubmittedMessage
+            {
+                TenantId = tenantId,
+                ClaimId = created.Id,
+                ClaimVersionId = created.ClaimVersionId,
+                VersionNumber = created.VersionNumber,
+                ActorId = actorId,
+                CorrelationId = correlationId,
+            };
+            var sendOptions = new SendOptions(
+                MessageId: $"submitted:{created.ClaimVersionId}",
+                CorrelationId: correlationId,
+                Properties: new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [ClaimVersionEventTopics.MessageTypeProperty] = ClaimVersionMessageTypes.Submitted,
+                });
+
+            await _messageBus.SendAsync(
+                ClaimVersionEventTopics.TopicName, sbMessage, sendOptions, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "ClaimVersionSubmitted Service Bus emission failed for claim {ClaimId} (chain {ClaimVersionId}); " +
+                "submission persisted, adjudication will not auto-trigger",
                 SanitizeForLog(created.Id), SanitizeForLog(created.ClaimVersionId));
         }
 
