@@ -2,6 +2,7 @@ using System.Net.Http;
 using ClaimsService.Adapters;
 using ClaimsService.Models;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Messaging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -21,6 +22,7 @@ public class ClaimSubmissionServiceTests
 {
     private readonly IClaimAdapter _adapter = Substitute.For<IClaimAdapter>();
     private readonly IClaimVersionEventPublisher _publisher = Substitute.For<IClaimVersionEventPublisher>();
+    private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly ClaimAdapterFactory _factory;
     private readonly ClaimSubmissionService _sut;
 
@@ -43,7 +45,7 @@ public class ClaimSubmissionServiceTests
             NullLogger<ClaimAdapterFactory>.Instance);
 
         _sut = new ClaimSubmissionService(
-            _factory, _publisher, NullLogger<ClaimSubmissionService>.Instance);
+            _factory, _publisher, _messageBus, NullLogger<ClaimSubmissionService>.Instance);
     }
 
     [Fact]

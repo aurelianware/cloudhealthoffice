@@ -10,6 +10,11 @@
   <ItemGroup>
     <ProjectReference Include="../shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="../shared/CloudHealthOffice.Events/CloudHealthOffice.Events.csproj" />
+    <!-- Capability 5.5 — BenefitCalculationStage calls IBenefitCalculationEngine
+         (BP 5.10) directly. The engine ships as a class library so the same
+         calculation runs in claims-service (adjudication pipeline) and
+         benefit-plan-service (preview / what-if surface). -->
+    <ProjectReference Include="../../engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

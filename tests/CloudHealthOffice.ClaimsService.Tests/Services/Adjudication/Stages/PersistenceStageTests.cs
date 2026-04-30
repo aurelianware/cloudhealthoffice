@@ -1,0 +1,104 @@
+using ClaimsService.Models;
+using ClaimsService.Repositories;
+using ClaimsService.Services.Adjudication;
+using ClaimsService.Services.Adjudication.Stages;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using Xunit;
+
+namespace CloudHealthOffice.ClaimsService.Tests.Services.Adjudication.Stages;
+
+public class PersistenceStageTests
+{
+    private readonly IClaimRepository _repository = Substitute.For<IClaimRepository>();
+    private readonly PersistenceStage _sut;
+
+    public PersistenceStageTests()
+    {
+        _sut = new PersistenceStage(_repository, NullLogger<PersistenceStage>.Instance);
+    }
+
+    [Fact]
+    public void OrderingAndRequirementContract_MatchSpec()
+    {
+        Assert.Equal("Persistence", _sut.Name);
+        Assert.Equal(999, _sut.Order);
+        Assert.True(_sut.IsRequired);
+    }
+
+    [Fact]
+    public async Task Execute_CallsBypassMethod_NotRegularUpdate()
+    {
+        var ctx = BuildContext();
+        ctx.AdjudicationResult = new AdjudicationResult { AllowedAmount = 75m };
+        ctx.LineAdjudicationResults = new List<LineAdjudicationResult>
+        {
+            new() { AllowedAmount = 75m, PaidAmount = 50m, PatientResponsibility = 25m },
+        };
+        _repository.UpdateAdjudicationProjectionAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<AdjudicationResult>(),
+            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        await _repository.Received(1).UpdateAdjudicationProjectionAsync(
+            "tenant-1",
+            "ver-1",
+            Arg.Is<AdjudicationResult>(a => a.AllowedAmount == 75m),
+            Arg.Is<IReadOnlyList<LineAdjudicationResult>>(l => l.Count == 1),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_BypassReturnsFalse_StageReturnsReject()
+    {
+        var ctx = BuildContext();
+        _repository.UpdateAdjudicationProjectionAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<AdjudicationResult>(),
+            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Reject, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Execute_RepositoryThrows_BubblesException()
+    {
+        var ctx = BuildContext();
+        _repository.UpdateAdjudicationProjectionAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<AdjudicationResult>(),
+            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>())
+            .Throws(new InvalidOperationException("cosmos down"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.ExecuteAsync(ctx, CancellationToken.None));
+    }
+
+    private static ClaimAdjudicationContext BuildContext() => new()
+    {
+        TenantId = "tenant-1",
+        ClaimVersionId = "ver-1",
+        Claim = new AdapterClaim
+        {
+            TenantId = "tenant-1",
+            Id = "ver-1",
+            ClaimVersionId = "ver-1",
+            MemberId = "MEM-1",
+            BillingProviderNPI = "1234567890",
+        },
+    };
+}
