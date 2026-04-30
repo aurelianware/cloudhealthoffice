@@ -118,6 +118,13 @@ builder.Services.AddScoped<IClaimAdapter, FacetsClaimAdapter>();
 builder.Services.AddScoped<IClaimAdapter, HealthEdgeClaimAdapter>();
 builder.Services.AddScoped<ClaimAdapterFactory>();
 
+// Canonical claim submission orchestration (5.3). Wraps the
+// adapter call with structural validation and ClaimVersionSubmitted
+// event emission. Both POST /api/v1/claims and the deprecated
+// legacy POST /api/claims route through this single seam so the
+// version-event chain has no gaps.
+builder.Services.AddScoped<IClaimSubmissionService, ClaimSubmissionService>();
+
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
