@@ -2,6 +2,7 @@ using EphemeralMongo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
+using ProviderService.HostedServices;
 using ProviderService.Models;
 using ProviderService.Services;
 
@@ -23,7 +24,7 @@ public class CredentialingEventPublisherTests : IAsyncLifetime
     private IMongoDatabase _database = null!;
     private MongoCredentialingEventPublisher _publisher = null!;
 
-    public Task InitializeAsync()
+    public async Task InitializeAsync()
     {
         _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
         var client = new MongoClient(_runner.ConnectionString);
@@ -31,7 +32,11 @@ public class CredentialingEventPublisherTests : IAsyncLifetime
         var config = new ConfigurationBuilder().Build();
         _publisher = new MongoCredentialingEventPublisher(
             _database, config, NullLogger<MongoCredentialingEventPublisher>.Instance);
-        return Task.CompletedTask;
+        // Ensure the unique (TenantId, ProviderId, Version) index so the
+        // publisher's retry loop is exercised correctly under concurrency.
+        var indexer = new CredentialingEventIndexInitializer(
+            _database, config, NullLogger<CredentialingEventIndexInitializer>.Instance);
+        await indexer.StartAsync(CancellationToken.None);
     }
 
     public Task DisposeAsync()
