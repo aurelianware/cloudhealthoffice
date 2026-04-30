@@ -145,6 +145,10 @@ public class ChoClaimAdapter : IClaimAdapter
         var domain = request.Claim.ToClaim();
         var created = await _repository.CreateAsync(domain);
 
+        _logger.LogDebug(
+            "ChoClaimAdapter submitted claim {ClaimId} (chain {ClaimVersionId} v{VersionNumber}) for tenant {TenantId}",
+            created.Id, created.ClaimVersionId, created.VersionNumber, request.TenantId);
+
         return new ClaimAdapterResponse
         {
             Platform = Platform,

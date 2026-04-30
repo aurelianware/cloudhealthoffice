@@ -95,22 +95,20 @@ public class ClaimTenantConfigCacheTests
     {
         // Failure responses are cached with the default — repeated calls during
         // the TTL window do NOT hammer tenant-service. Mirrors Provider/BP.
-        var cache = Build(FakeHttpMessageHandler.Status(System.Net.HttpStatusCode.InternalServerError));
+        var handler = FakeHttpMessageHandler.Status(System.Net.HttpStatusCode.InternalServerError);
+        var cache = Build(handler);
 
-        await cache.GetAsync("t-7");
-        await cache.GetAsync("t-7");
+        var first = await cache.GetAsync("t-7");
+        var second = await cache.GetAsync("t-7");
 
-        // Two calls, only one HTTP miss expected — but the failure body still
-        // populates the cache. Assert the second call returns cho without
-        // invoking the handler again would require handler tracking; we assert
-        // the simpler invariant: the cache returns cho consistently and Clear
-        // resets it.
-        var afterClear = await cache.GetAsync("t-7");
-        afterClear.Platform.Should().Be("cho");
+        first.Platform.Should().Be("cho");
+        second.Platform.Should().Be("cho");
+        handler.RequestCount.Should().Be(1);
 
         cache.Clear();
         var afterReset = await cache.GetAsync("t-7");
         afterReset.Platform.Should().Be("cho");
+        handler.RequestCount.Should().Be(2);
     }
 
     [Fact]

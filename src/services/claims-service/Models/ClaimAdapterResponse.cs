@@ -7,12 +7,13 @@ namespace ClaimsService.Models;
 /// <c>SubmitClaimAsync</c>.
 ///
 /// <para>
-/// The payload <see cref="Claim"/> is shaped to project cleanly onto a future
-/// FHIR <c>Claim</c> / <c>ClaimResponse</c> resource (capability 5.11): the
-/// version-chain fields map onto <c>Claim.identifier</c> +
-/// <c>ClaimResponse.related</c>, the line items map onto <c>Claim.item</c>,
-/// the diagnosis codes map onto <c>Claim.diagnosis</c>, and the adjudication
-/// fields map onto <c>ClaimResponse.adjudication</c>.
+/// The payload <see cref="AdapterClaim"/> exposed by <see cref="Claim"/> is
+/// shaped to project cleanly onto a future FHIR <c>Claim</c> /
+/// <c>ClaimResponse</c> resource (capability 5.11): the version-chain fields
+/// map onto <c>Claim.identifier</c> + <c>ClaimResponse.related</c>, the line
+/// items map onto <c>Claim.item</c>, the diagnosis codes map onto
+/// <c>Claim.diagnosis</c>, and the adjudication fields map onto
+/// <c>ClaimResponse.adjudication</c>.
 /// </para>
 /// </summary>
 public class ClaimAdapterResponse
