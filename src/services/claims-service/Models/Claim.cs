@@ -277,6 +277,82 @@ public class Claim
     [StringLength(50)]
     public string? EDI835ControlNumber { get; set; }
 
+    // Version identity (5.1 — Claim Identity & Versioning)
+    //
+    // A claim is an append-only chain of immutable terminal versions. Each
+    // row in the Claims collection is one version; the chain is keyed on
+    // (TenantId, ClaimVersionId) — ClaimVersionId is the persistent claim
+    // identifier, while Id is the per-version document key. Documents
+    // written before these fields existed hydrate to ClaimVersionId=Id,
+    // VersionNumber=1, and a VersionState derived from the legacy
+    // ClaimStatus (Submitted/Pended → Submitted; Approved → Adjudicated;
+    // Paid/PartiallyPaid → Paid; Denied → Denied; Voided → Voided). See
+    // docs/architecture/claim-versioning.md.
+    //
+    // The legacy ClaimStatus enum is preserved as the operational
+    // sub-state signal: ClaimStatus.Pended, .Received, .InAdjudication,
+    // .Approved, .PartiallyPaid all remain transient pipeline outcomes
+    // within their respective ClaimVersionState. This avoids breaking the
+    // 22 existing controller endpoints and the accumulator-service Kafka
+    // contract while introducing the audit chain semantics.
+
+    /// <summary>
+    /// Stable per-chain identifier — same value across every version of a
+    /// single claim. Set explicitly by the service layer when a draft is
+    /// created. Empty on the wire ⇒ legacy row (predates this feature) and
+    /// is hydrated to <c>Id</c> on read.
+    /// </summary>
+    public string ClaimVersionId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 1-based monotonic sequence within <c>(TenantId, ClaimVersionId)</c>.
+    /// Populated by the service when creating new versions; left at the
+    /// default for legacy documents so hydration can fix it up on read.
+    /// </summary>
+    public int VersionNumber { get; set; }
+
+    /// <summary>
+    /// Lifecycle state of this claim version. Populated by the service when
+    /// creating new versions; legacy documents missing this field
+    /// deserialize to <see cref="ClaimVersionState.Unknown"/> and are
+    /// normalized during hydration based on the legacy <see cref="Status"/>
+    /// value.
+    /// </summary>
+    public ClaimVersionState VersionState { get; set; }
+
+    /// <summary>
+    /// <see cref="Id"/> of the version this draft amends, if any. Null for
+    /// the genesis version. Populated by the adjustment workflow (5.12).
+    /// </summary>
+    [StringLength(64)]
+    public string? PredecessorVersionId { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when this version transitioned out of <c>Draft</c>
+    /// (i.e. when <c>Submitted</c> was first reached). Mirrors
+    /// <c>BenefitPlan.PublishedAt</c>.
+    /// </summary>
+    public DateTime? PublishedAt { get; set; }
+
+    /// <summary>Actor who published the version (left Draft).</summary>
+    [StringLength(200)]
+    public string? PublishedBy { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when this version was superseded by an adjustment.
+    /// Set together with <see cref="SupersededByVersionId"/> when the
+    /// version transitions to <see cref="ClaimVersionState.Adjusted"/>.
+    /// </summary>
+    public DateTime? SupersededAt { get; set; }
+
+    /// <summary>
+    /// <see cref="Id"/> of the adjustment version that replaced this one.
+    /// Set together with <see cref="SupersededAt"/> when the version
+    /// transitions to <see cref="ClaimVersionState.Adjusted"/>.
+    /// </summary>
+    [StringLength(64)]
+    public string? SupersededByVersionId { get; set; }
+
     /// <summary>
     /// Audit: Record creation timestamp
     /// </summary>

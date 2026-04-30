@@ -3,6 +3,7 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Observability;
 using ClaimsService.EDI.Florida;
 using ClaimsService.Fhir;
+using ClaimsService.HostedServices;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 
@@ -26,6 +27,12 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
 {
     builder.Services.AddScoped<IClaimRepository, ClaimRepositoryMongo>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryMongo>();
+
+    // Claim version event publisher (5.1) — Mongo append-only stream is the
+    // system-of-record for the version chain. Mirrors
+    // MongoProviderVersionEventPublisher / MongoPlanVersionEventPublisher.
+    builder.Services.AddScoped<IClaimVersionEventPublisher, MongoClaimVersionEventPublisher>();
+    builder.Services.AddHostedService<ClaimVersionEventIndexInitializer>();
 }
 else
 {
@@ -43,6 +50,11 @@ else
 
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryCosmos>();
+
+    // Cosmos-only deployments don't have a provisioned events stream; the
+    // Noop publisher logs a warning so ops can spot the missing wiring
+    // without breaking the lifecycle path.
+    builder.Services.AddScoped<IClaimVersionEventPublisher, NoopClaimVersionEventPublisher>();
 }
 
 // FHIR R4 ExplanationOfBenefit projector — hand-built JsonObject to avoid
