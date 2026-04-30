@@ -7,7 +7,7 @@ namespace ClaimsService.Models;
 /// <c>SubmitClaimAsync</c>.
 ///
 /// <para>
-/// The payload <see cref="AdapterClaim"/> exposed by <see cref="Claim"/> is
+/// The payload <see cref="AdapterClaim"/> exposed by <see cref="ClaimAdapterResponse.Claim"/> is
 /// shaped to project cleanly onto a future FHIR <c>Claim</c> /
 /// <c>ClaimResponse</c> resource (capability 5.11): the version-chain fields
 /// map onto <c>Claim.identifier</c> + <c>ClaimResponse.related</c>, the line
