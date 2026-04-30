@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Observability;
+using ClaimsService.Adapters;
 using ClaimsService.EDI.Florida;
 using ClaimsService.Fhir;
 using ClaimsService.HostedServices;
@@ -101,6 +102,21 @@ builder.Services.AddScoped<IMpipAdjudicationEnhancer, MpipAdjudicationEnhancer>(
 builder.Services.AddSingleton<ClaimEventPublisher>();
 builder.Services.AddSingleton<IClaimEventPublisher>(sp => sp.GetRequiredService<ClaimEventPublisher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ClaimEventPublisher>());
+
+// Claim adapter pattern (5.2 — tenant-routed claims backends). Cache is
+// singleton (TTL across requests); adapters and factory are scoped because
+// the CHO adapter wraps the scoped IClaimRepository. Tenant-service HTTP
+// client uses a 5-second timeout so a flaky tenant-service can't stall claim
+// reads — the cache falls back to "cho" on any failure.
+builder.Services.AddHttpClient(ClaimTenantConfigCache.HttpClientName)
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddSingleton<ClaimTenantConfigCache>();
+builder.Services.AddScoped<IClaimAdapter, ChoClaimAdapter>();
+builder.Services.AddScoped<IClaimAdapter, QnxtClaimAdapter>();
+builder.Services.AddScoped<IClaimAdapter, FacetsClaimAdapter>();
+builder.Services.AddScoped<IClaimAdapter, HealthEdgeClaimAdapter>();
+builder.Services.AddScoped<ClaimAdapterFactory>();
 
 builder.Services.AddChoObservability(builder.Configuration);
 
