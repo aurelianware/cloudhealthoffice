@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
@@ -16,6 +17,7 @@ public class ClaimsController : ControllerBase
     private readonly IClaimAcknowledgmentService _ackService;
     private readonly IMpipAdjudicationEnhancer _mpipEnhancer;
     private readonly IClaimEventPublisher _eventPublisher;
+    private readonly IClaimSubmissionService _submissionService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ClaimsController> _logger;
 
@@ -25,6 +27,7 @@ public class ClaimsController : ControllerBase
         IClaimAcknowledgmentService ackService,
         IMpipAdjudicationEnhancer mpipEnhancer,
         IClaimEventPublisher eventPublisher,
+        IClaimSubmissionService submissionService,
         IConfiguration configuration,
         ILogger<ClaimsController> logger)
     {
@@ -33,6 +36,7 @@ public class ClaimsController : ControllerBase
         _ackService = ackService;
         _mpipEnhancer = mpipEnhancer;
         _eventPublisher = eventPublisher;
+        _submissionService = submissionService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -60,37 +64,102 @@ public class ClaimsController : ControllerBase
         HttpContext?.Items["TenantId"]?.ToString() ?? string.Empty;
 
     /// <summary>
-    /// Submit new claim (837 transaction)
+    /// Submit new claim (837 transaction). Deprecated — use
+    /// <c>POST /api/v1/claims</c> which accepts <c>AdapterClaim</c>
+    /// and emits <c>ClaimVersionSubmitted</c> events. Internally
+    /// routes through <see cref="IClaimSubmissionService"/> so the
+    /// audit chain stays continuous until capability 5.13 removes
+    /// this endpoint.
     /// </summary>
     [HttpPost]
+    [Obsolete("Use POST /api/v1/claims instead. The canonical V1 surface accepts AdapterClaim DTOs " +
+              "and emits ClaimVersionSubmitted events. Legacy POST /api/claims will be removed in " +
+              "capability 5.13 (Phase 1 closer).")]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<Claim>> SubmitClaim([FromBody] Claim claim)
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+    public async Task<IActionResult> SubmitClaim([FromBody] Claim claim, CancellationToken ct = default)
     {
+        // RFC 8594 deprecation signal on every response from the legacy
+        // submission path. Sunset is intentionally omitted — capability
+        // 5.13 sets it when removal actually schedules.
+        Response.Headers["Deprecation"] = "true";
+        Response.Headers["Link"] = "</api/v1/claims>; rel=\"successor-version\"";
+
         _logger.LogInformation(
-            "Submitting claim for member {MemberId}, provider {ProviderNPI}, service date {ServiceDate}",
+            "Legacy claim submission for member {MemberId}, provider {ProviderNPI}, service date {ServiceDate}",
             SanitizeForLog(claim.MemberId), SanitizeForLog(claim.BillingProviderNPI), claim.ServiceDateFrom);
 
-        // Validate claim
-        if (claim.ClaimLines.Count == 0)
+        var tenantId = GetTenantId();
+        var actorId = ResolveActorId();
+        var correlationId = ResolveCorrelationId();
+
+        // Map domain Claim → AdapterClaim. The 5.2 round-trip mapper is
+        // loss-less per SubmitClaimAsync_round_trips_AdapterClaim_losslessly,
+        // so the canonical submission service can do its work and we map
+        // the response back to domain shape for the legacy 201 contract.
+        var result = await _submissionService.SubmitAsync(
+            AdapterClaim.From(claim), tenantId, actorId, correlationId, ct);
+
+        if (!result.Success)
         {
-            return BadRequest("Claim must have at least one service line");
+            return MapSubmissionFailure(result);
         }
 
-        // Calculate total charge (sum of lines)
-        claim.TotalChargeAmount = claim.ClaimLines.Sum(l => l.ChargeAmount * l.Units);
-
-        claim.Id = Guid.NewGuid().ToString();
-        claim.Status = ClaimStatus.Submitted;
-        claim.SubmittedDate = DateTime.UtcNow;
-        claim.CreatedDate = DateTime.UtcNow;
-        claim.LastUpdatedDate = DateTime.UtcNow;
-
-        var created = await _claimRepository.CreateAsync(claim);
-
-        _logger.LogInformation("Claim {ClaimNumber} submitted successfully", SanitizeForLog(claim.ClaimNumber));
+        var created = result.Claim!.ToClaim();
+        _logger.LogInformation(
+            "Claim {ClaimNumber} submitted successfully (legacy path)",
+            SanitizeForLog(created.ClaimNumber));
 
         return CreatedAtAction(nameof(GetClaimById), new { id = created.Id }, created);
+    }
+
+    private IActionResult MapSubmissionFailure(ClaimSubmissionResult result)
+    {
+        var errors = result.Errors.Select(e => new
+        {
+            field = e.Field,
+            code = e.Code,
+            message = e.Message
+        });
+
+        return result.FailureKind switch
+        {
+            ClaimSubmissionFailureKind.NotImplemented => StatusCode(
+                StatusCodes.Status501NotImplemented,
+                new
+                {
+                    error = "Claim submission is not implemented for this tenant's configured platform",
+                    errors
+                }),
+            _ => BadRequest(new
+            {
+                error = "Claim submission validation failed",
+                errors
+            }),
+        };
+    }
+
+    private string ResolveActorId()
+    {
+        var sub = HttpContext.User?.FindFirst("sub")?.Value;
+        if (!string.IsNullOrEmpty(sub)) return sub;
+        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) &&
+            !string.IsNullOrEmpty(header.ToString()))
+        {
+            return header.ToString();
+        }
+        return "system";
+    }
+
+    private string? ResolveCorrelationId()
+    {
+        if (HttpContext.Request.Headers.TryGetValue("X-Correlation-Id", out var header) &&
+            !string.IsNullOrEmpty(header.ToString()))
+        {
+            return header.ToString();
+        }
+        return Activity.Current?.Id;
     }
 
     /// <summary>

@@ -1,31 +1,40 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
+using ClaimsService.Adapters;
 using ClaimsService.Fhir;
 using ClaimsService.Models;
-using ClaimsService.Repositories;
 using NSubstitute;
+using NSubstitute.ClearExtensions;
 using Xunit;
 
 namespace CloudHealthOffice.ClaimsService.Tests;
 
 /// <summary>
 /// v1 member-scoped claims surface — covers the /api/v1/claims route,
-/// amountRange/claimType filter pass-through, and the FHIR EOB projection
-/// produced by <see cref="ExplanationOfBenefitProjector"/>.
+/// adapter-routed reads (capability 5.3 migrated this from
+/// IClaimRepository.SearchForMemberAsync), filter pass-through, and
+/// the FHIR EOB projection produced by
+/// <see cref="ExplanationOfBenefitProjector"/>.
 /// </summary>
 public class ClaimsV1MemberSearchTests : IClassFixture<ClaimsApiFactory>
 {
     private readonly ClaimsApiFactory _factory;
     private readonly HttpClient _client;
-    private readonly IClaimRepository _repo;
+    private readonly IClaimAdapter _adapter;
 
     public ClaimsV1MemberSearchTests(ClaimsApiFactory factory)
     {
         _factory = factory;
-        _repo = factory.ClaimRepository;
+        _adapter = factory.ClaimAdapter;
         _client = factory.CreateClient();
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
+
+        // Reset the shared adapter substitute between tests since the
+        // factory is shared across the class fixture. ClearSubstitute()
+        // clears both received calls AND configured returns; we re-establish
+        // Platform="cho" because ClaimAdapterFactory routes by it.
+        _adapter.ClearSubstitute();
+        _adapter.Platform.Returns("cho");
     }
 
     [Fact]
@@ -39,13 +48,16 @@ public class ClaimsV1MemberSearchTests : IClassFixture<ClaimsApiFactory>
     public async Task SearchMemberClaims_ReturnsEobWrapperWithProjectedResources()
     {
         var claim = BuildClaim("MEM-42", "CLM-A1");
-        _repo.SearchForMemberAsync(
-                "MEM-42",
-                Arg.Any<DateTime?>(), Arg.Any<DateTime?>(), Arg.Any<ClaimStatus?>(),
-                Arg.Any<string?>(), Arg.Any<ClaimType?>(),
-                Arg.Any<decimal?>(), Arg.Any<decimal?>(),
-                Arg.Any<int>(), Arg.Any<int>())
-            .Returns((new List<Claim> { claim }, 1));
+        _adapter
+            .SearchClaimsForMemberAsync(
+                Arg.Is<ClaimMemberSearchAdapterRequest>(r => r.MemberId == "MEM-42"),
+                Arg.Any<CancellationToken>())
+            .Returns(new ClaimSearchAdapterResponse
+            {
+                Platform = "cho",
+                Claims = new[] { AdapterClaim.From(claim) },
+                TotalCount = 1,
+            });
 
         var response = await _client.GetAsync("/api/v1/claims?memberId=MEM-42&pageSize=5");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -68,26 +80,59 @@ public class ClaimsV1MemberSearchTests : IClassFixture<ClaimsApiFactory>
     [Fact]
     public async Task SearchMemberClaims_ForwardsAmountAndClaimTypeFilters()
     {
-        _repo.SearchForMemberAsync(
-                "MEM-99",
-                Arg.Any<DateTime?>(), Arg.Any<DateTime?>(), Arg.Any<ClaimStatus?>(),
-                Arg.Any<string?>(), Arg.Any<ClaimType?>(),
-                Arg.Any<decimal?>(), Arg.Any<decimal?>(),
-                Arg.Any<int>(), Arg.Any<int>())
-            .Returns((new List<Claim>(), 0));
+        _adapter
+            .SearchClaimsForMemberAsync(
+                Arg.Any<ClaimMemberSearchAdapterRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ClaimSearchAdapterResponse
+            {
+                Platform = "cho",
+                Claims = Array.Empty<AdapterClaim>(),
+                TotalCount = 0,
+            });
 
         var response = await _client.GetAsync(
             "/api/v1/claims?memberId=MEM-99&amountMin=100&amountMax=500&claimType=Institutional&status=Paid");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        await _repo.Received(1).SearchForMemberAsync(
-            "MEM-99",
-            Arg.Any<DateTime?>(), Arg.Any<DateTime?>(),
-            ClaimStatus.Paid,
-            Arg.Any<string?>(),
-            ClaimType.Institutional,
-            100m, 500m,
-            Arg.Any<int>(), Arg.Any<int>());
+        await _adapter.Received(1).SearchClaimsForMemberAsync(
+            Arg.Is<ClaimMemberSearchAdapterRequest>(r =>
+                r.MemberId == "MEM-99" &&
+                r.AmountMin == 100m &&
+                r.AmountMax == 500m &&
+                r.ClaimType == ClaimType.Institutional &&
+                r.Status == ClaimStatus.Paid),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SearchMemberClaims_NullTotalCount_FallsBackToPageSize()
+    {
+        // Defensive fallback for adapters that don't surface a total
+        // (vendor stubs would, in theory, though they currently throw
+        // NotImplementedException before this path).
+        var claims = new[]
+        {
+            AdapterClaim.From(BuildClaim("MEM-50", "CLM-B1")),
+            AdapterClaim.From(BuildClaim("MEM-50", "CLM-B2")),
+        };
+        _adapter
+            .SearchClaimsForMemberAsync(
+                Arg.Any<ClaimMemberSearchAdapterRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ClaimSearchAdapterResponse
+            {
+                Platform = "cho",
+                Claims = claims,
+                TotalCount = null,
+            });
+
+        var response = await _client.GetAsync("/api/v1/claims?memberId=MEM-50");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(2, doc.RootElement.GetProperty("total").GetInt32());
     }
 
     [Fact]

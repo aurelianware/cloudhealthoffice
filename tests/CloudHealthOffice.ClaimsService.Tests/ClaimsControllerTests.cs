@@ -14,12 +14,14 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     private readonly HttpClient _client;
     private readonly IClaimRepository _repo;
     private readonly IClaimAcknowledgmentService _ackService;
+    private readonly IClaimSubmissionService _submissionService;
 
     public ClaimsControllerTests(ClaimsApiFactory factory)
     {
         _factory = factory;
         _repo = factory.ClaimRepository;
         _ackService = factory.AcknowledgmentService;
+        _submissionService = factory.SubmissionService;
         _client = factory.CreateClient();
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
     }
@@ -62,81 +64,67 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // SUBMIT CLAIM
+    // SUBMIT CLAIM (legacy POST /api/claims)
+    //
+    // Capability 5.3 routed legacy submission through IClaimSubmissionService;
+    // the controller is a thin adapter that maps Claim ↔ AdapterClaim around
+    // the canonical service. Detailed validation / event-emission coverage
+    // lives on ClaimSubmissionServiceTests; the tests below assert the
+    // controller wires correctly and emits the deprecation signal.
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task SubmitClaim_ValidClaim_Returns201WithIdAssigned()
+    public async Task SubmitClaim_ValidClaim_RoutesThroughSubmissionService_Returns201()
     {
         var claim = CreateValidClaim();
 
-        _repo.CreateAsync(Arg.Any<Claim>())
-            .Returns(ci => ci.Arg<Claim>());
-
-        var response = await _client.PostAsJsonAsync("/api/claims", claim);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-
-        var created = await response.Content.ReadFromJsonAsync<Claim>();
-        Assert.NotNull(created);
-        Assert.NotNull(created.Id);
-        Assert.NotEmpty(created.Id);
-        Assert.Equal(ClaimStatus.Submitted, created.Status);
-    }
-
-    [Fact]
-    public async Task SubmitClaim_ZeroLines_Returns400()
-    {
-        var claim = CreateValidClaim(lines: new List<ClaimLine>());
-
-        var response = await _client.PostAsJsonAsync("/api/claims", claim);
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task SubmitClaim_CalculatesTotalChargeFromLines()
-    {
-        var serviceDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc);
-        var lines = new List<ClaimLine>
-        {
-            new()
-            {
-                LineNumber = 1,
-                ProcedureCode = "99213",
-                ChargeAmount = 150.00m,
-                Units = 2,
-                ServiceDateFrom = serviceDate,
-                ServiceDateTo = serviceDate,
-                DiagnosisPointers = new List<int> { 1 }
-            },
-            new()
-            {
-                LineNumber = 2,
-                ProcedureCode = "85025",
-                ChargeAmount = 35.50m,
-                Units = 1,
-                ServiceDateFrom = serviceDate,
-                ServiceDateTo = serviceDate,
-                DiagnosisPointers = new List<int> { 1 }
-            }
-        };
-        var claim = CreateValidClaim(lines: lines);
-
-        Claim? capturedClaim = null;
-        _repo.CreateAsync(Arg.Any<Claim>())
+        _submissionService
+            .SubmitAsync(Arg.Any<AdapterClaim>(), "test-tenant",
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
-                capturedClaim = ci.Arg<Claim>();
-                return capturedClaim;
+                var inbound = ci.Arg<AdapterClaim>();
+                inbound.Id = "assigned-by-adapter";
+                inbound.ClaimVersionId = "assigned-by-adapter";
+                inbound.VersionNumber = 1;
+                inbound.VersionState = ClaimVersionState.Submitted;
+                inbound.Status = ClaimStatus.Submitted;
+                return ClaimSubmissionResult.Ok(inbound);
             });
 
         var response = await _client.PostAsJsonAsync("/api/claims", claim);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.NotNull(capturedClaim);
-        // 150 * 2 + 35.50 * 1 = 335.50
-        Assert.Equal(335.50m, capturedClaim.TotalChargeAmount);
+        Assert.True(response.Headers.Contains("Deprecation"));
+
+        var created = await response.Content.ReadFromJsonAsync<Claim>();
+        Assert.NotNull(created);
+        Assert.Equal("assigned-by-adapter", created.Id);
+        Assert.Equal(ClaimStatus.Submitted, created.Status);
+    }
+
+    [Fact]
+    public async Task SubmitClaim_ValidationFailure_Returns400_WithDeprecationHeader()
+    {
+        var claim = CreateValidClaim(lines: new List<ClaimLine>());
+
+        _submissionService
+            .SubmitAsync(Arg.Any<AdapterClaim>(), Arg.Any<string>(),
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ClaimSubmissionResult.ValidationFailed(new[]
+            {
+                new ValidationError
+                {
+                    Field = "ClaimLines",
+                    Code = "MinCount",
+                    Message = "Claim must have at least one service line"
+                }
+            }));
+
+        var response = await _client.PostAsJsonAsync("/api/claims", claim);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.True(response.Headers.Contains("Deprecation"));
     }
 
     // ═══════════════════════════════════════════════════════════════════

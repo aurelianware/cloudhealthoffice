@@ -514,9 +514,9 @@ public class ClaimRepository : IClaimRepository
         // Initialize the version chain if the caller hasn't done so. New claims
         // start at VersionState=Submitted (matching the existing default
         // ClaimStatus.Submitted on uninitialized rows). Capability 5.3
-        // (Submission API) refines this to Draft → Submitted via an explicit
-        // workflow; until then, claim creation through the existing 22
-        // controller endpoints continues to behave as before.
+        // (Submission API) ratified this Submitted-on-create behavior — there
+        // is no Draft state in the canonical payer submission flow; Draft is
+        // reserved for the future adjustment workflow (capability 5.12).
         if (string.IsNullOrEmpty(claim.ClaimVersionId))
         {
             claim.ClaimVersionId = claim.Id;

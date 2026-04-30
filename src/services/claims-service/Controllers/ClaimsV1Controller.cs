@@ -1,42 +1,113 @@
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Text.Json.Nodes;
+using ClaimsService.Adapters;
 using ClaimsService.Fhir;
 using ClaimsService.Models;
-using ClaimsService.Repositories;
+using ClaimsService.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaimsService.Controllers;
 
 /// <summary>
-/// v1 claims API used by the portal Member Details dialog. Exposes a
-/// member-scoped search that projects each matching <see cref="Claim"/> into a
-/// FHIR R4 <c>ExplanationOfBenefit</c> resource — the payer-facing 835-shaped
-/// representation the Claims tab consumes. Paired with the legacy
-/// <c>/api/claims</c> surface (which stays as-is for existing callers).
+/// v1 claims API — the canonical surface for claim submission and
+/// member-scoped search.
+///
+/// <para>
+/// <b>POST</b> — capability 5.3 ships the canonical
+/// <c>POST /api/v1/claims</c> submission endpoint. Accepts an
+/// <see cref="AdapterClaim"/> (vendor-neutral DTO from 5.2),
+/// orchestrates validation + adapter call + version-event emission
+/// through <see cref="IClaimSubmissionService"/>, and returns the
+/// created claim version. Legacy <c>POST /api/claims</c> is marked
+/// <c>[Obsolete]</c> and routes through the same service so the
+/// audit chain is continuous regardless of which surface a caller
+/// picks.
+/// </para>
+///
+/// <para>
+/// <b>GET</b> — member-scoped search powering the portal Member
+/// Details Claims tab. Reads through the tenant-routed
+/// <see cref="IClaimAdapter"/> (5.2) and projects each
+/// <see cref="AdapterClaim"/> onto a FHIR R4 ExplanationOfBenefit
+/// resource via <see cref="IExplanationOfBenefitProjector"/>. The
+/// response shape (<see cref="EobSearchResponse"/>) is unchanged
+/// from the pre-5.3 repo-routed implementation — portal contract
+/// preserved.
+/// </para>
 /// </summary>
 [ApiController]
 [Route("api/v1/claims")]
 [Produces("application/json")]
 public class ClaimsV1Controller : ControllerBase
 {
-    private readonly IClaimRepository _claimRepository;
+    private readonly ClaimAdapterFactory _adapterFactory;
+    private readonly IClaimSubmissionService _submissionService;
     private readonly IExplanationOfBenefitProjector _eobProjector;
     private readonly ILogger<ClaimsV1Controller> _logger;
 
     public ClaimsV1Controller(
-        IClaimRepository claimRepository,
+        ClaimAdapterFactory adapterFactory,
+        IClaimSubmissionService submissionService,
         IExplanationOfBenefitProjector eobProjector,
         ILogger<ClaimsV1Controller> logger)
     {
-        _claimRepository = claimRepository;
+        _adapterFactory = adapterFactory;
+        _submissionService = submissionService;
         _eobProjector = eobProjector;
         _logger = logger;
     }
 
     /// <summary>
+    /// Submit a new claim through the canonical V1 surface. Accepts
+    /// <see cref="AdapterClaim"/> directly so the wire shape stays
+    /// stable as the internal <see cref="Claim"/> domain model
+    /// evolves. On success, emits a <c>ClaimVersionSubmitted</c>
+    /// audit event to the Mongo append-only stream.
+    /// </summary>
+    [HttpPost]
+    [ProducesResponseType(typeof(AdapterClaim), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+    public async Task<IActionResult> SubmitClaim(
+        [FromBody] AdapterClaim claim,
+        CancellationToken ct = default)
+    {
+        if (claim is null)
+        {
+            return BadRequest(new { error = "Request body is required" });
+        }
+
+        var tenantId = GetTenantId();
+
+        _logger.LogInformation(
+            "v1 claim submission: member={Member}, provider={Provider}, lines={LineCount}",
+            SanitizeForLog(claim.MemberId), SanitizeForLog(claim.BillingProviderNPI),
+            claim.ClaimLines?.Count ?? 0);
+
+        var actorId = ResolveActorId();
+        var correlationId = ResolveCorrelationId();
+
+        var result = await _submissionService.SubmitAsync(
+            claim, tenantId, actorId, correlationId, ct);
+
+        if (!result.Success)
+        {
+            return MapFailure(result);
+        }
+
+        var created = result.Claim!;
+        return CreatedAtAction(
+            nameof(SearchMemberClaims),
+            new { memberId = created.MemberId },
+            created);
+    }
+
+    /// <summary>
     /// Search claims for a member. Returns a small wrapper
-    /// <c>{ total, page, pageSize, resources[] }</c> where <c>resources</c> is
-    /// a FHIR <c>ExplanationOfBenefit</c> array (one per matching claim).
+    /// <c>{ total, page, pageSize, resources[] }</c> where <c>resources</c>
+    /// is a FHIR <c>ExplanationOfBenefit</c> array (one per matching
+    /// claim).
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(EobSearchResponse), StatusCodes.Status200OK)]
@@ -51,25 +122,51 @@ public class ClaimsV1Controller : ControllerBase
         [FromQuery] decimal? amountMin = null,
         [FromQuery] decimal? amountMax = null,
         [FromQuery, Range(1, int.MaxValue)] int page = 1,
-        [FromQuery, Range(1, 100)] int pageSize = 20)
+        [FromQuery, Range(1, 100)] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(memberId))
             return BadRequest(new { error = "memberId is required" });
+
+        var tenantId = TryGetTenantId();
 
         _logger.LogInformation(
             "v1 claims member search: member={Member}, status={Status}, type={Type}, amount=[{Min},{Max}]",
             SanitizeForLog(memberId), status, claimType, amountMin, amountMax);
 
-        var (claims, total) = await _claimRepository.SearchForMemberAsync(
-            memberId, serviceDateFrom, serviceDateTo, status,
-            providerNPI, claimType, amountMin, amountMax,
-            page, pageSize);
+        var adapter = await _adapterFactory.GetAdapterAsync(tenantId, ct);
+        var adapterResponse = await adapter.SearchClaimsForMemberAsync(
+            new ClaimMemberSearchAdapterRequest
+            {
+                TenantId = tenantId,
+                MemberId = memberId,
+                ServiceDateFrom = serviceDateFrom,
+                ServiceDateTo = serviceDateTo,
+                Status = status,
+                ProviderNPI = providerNPI,
+                ClaimType = claimType,
+                AmountMin = amountMin,
+                AmountMax = amountMax,
+                Page = page,
+                PageSize = pageSize,
+            },
+            ct);
 
         var resources = new JsonArray();
-        foreach (var claim in claims)
+        foreach (var adapterClaim in adapterResponse.Claims)
         {
-            resources.Add(_eobProjector.Project(claim));
+            // Round-trip AdapterClaim → Claim for the existing projector
+            // contract. The 5.2 mapper is loss-less per
+            // SubmitClaimAsync_round_trips_AdapterClaim_losslessly.
+            // Capability 5.11 may evolve the projector to consume
+            // AdapterClaim directly; that's 5.11's scope.
+            resources.Add(_eobProjector.Project(adapterClaim.ToClaim()));
         }
+
+        // Adapters that don't surface a TotalCount fall back to the page
+        // size — defensive, only reachable for vendor adapters that
+        // currently throw NotImplementedException on this method anyway.
+        var total = adapterResponse.TotalCount ?? adapterResponse.Claims.Count;
 
         return Ok(new EobSearchResponse
         {
@@ -78,6 +175,68 @@ public class ClaimsV1Controller : ControllerBase
             PageSize = pageSize,
             Resources = resources
         });
+    }
+
+    private IActionResult MapFailure(ClaimSubmissionResult result)
+    {
+        var errors = result.Errors.Select(e => new
+        {
+            field = e.Field,
+            code = e.Code,
+            message = e.Message
+        });
+
+        return result.FailureKind switch
+        {
+            ClaimSubmissionFailureKind.NotImplemented => StatusCode(
+                StatusCodes.Status501NotImplemented,
+                new
+                {
+                    error = "Claim submission is not implemented for this tenant's configured platform",
+                    errors
+                }),
+            _ => BadRequest(new
+            {
+                error = "Claim submission validation failed",
+                errors
+            }),
+        };
+    }
+
+    private string GetTenantId()
+    {
+        var tenantId = HttpContext?.Items["TenantId"]?.ToString();
+        if (string.IsNullOrEmpty(tenantId))
+        {
+            throw new InvalidOperationException(
+                "TenantId not found in HttpContext. Ensure tenant middleware is configured.");
+        }
+        return tenantId;
+    }
+
+    private string TryGetTenantId() =>
+        HttpContext?.Items["TenantId"]?.ToString() ?? string.Empty;
+
+    private string ResolveActorId()
+    {
+        var sub = HttpContext.User?.FindFirst("sub")?.Value;
+        if (!string.IsNullOrEmpty(sub)) return sub;
+        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) &&
+            !string.IsNullOrEmpty(header.ToString()))
+        {
+            return header.ToString();
+        }
+        return "system";
+    }
+
+    private string? ResolveCorrelationId()
+    {
+        if (HttpContext.Request.Headers.TryGetValue("X-Correlation-Id", out var header) &&
+            !string.IsNullOrEmpty(header.ToString()))
+        {
+            return header.ToString();
+        }
+        return Activity.Current?.Id;
     }
 
     private static string SanitizeForLog(string? value)
