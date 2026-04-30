@@ -45,6 +45,7 @@ public class IntegrityProjectionWorkerTests
         services.AddSingleton<IProviderVerificationEventPublisher>(events);
         services.AddSingleton(Options.Create(opts));
         services.AddSingleton<IProviderIntegrityProjectionService, ProviderIntegrityProjectionService>();
+        services.AddSingleton<IIntegrityProjectionStalenessReporter, FakeIntegrityProjectionStalenessReporter>();
         services.AddLogging();
         var sp = services.BuildServiceProvider();
 
