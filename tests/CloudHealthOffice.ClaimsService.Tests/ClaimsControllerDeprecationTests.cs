@@ -5,6 +5,7 @@ using ClaimsService.Controllers;
 using ClaimsService.Models;
 using ClaimsService.Services;
 using NSubstitute;
+using NSubstitute.ClearExtensions;
 using Xunit;
 
 namespace CloudHealthOffice.ClaimsService.Tests;
@@ -34,7 +35,7 @@ public class ClaimsControllerDeprecationTests : IClassFixture<ClaimsApiFactory>
         _client = factory.CreateClient();
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
 
-        _service.ClearReceivedCalls();
+        _service.ClearSubstitute();
     }
 
     [Fact]

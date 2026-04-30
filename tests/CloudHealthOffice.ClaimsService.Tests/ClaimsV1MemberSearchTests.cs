@@ -4,6 +4,7 @@ using ClaimsService.Adapters;
 using ClaimsService.Fhir;
 using ClaimsService.Models;
 using NSubstitute;
+using NSubstitute.ClearExtensions;
 using Xunit;
 
 namespace CloudHealthOffice.ClaimsService.Tests;
@@ -28,10 +29,12 @@ public class ClaimsV1MemberSearchTests : IClassFixture<ClaimsApiFactory>
         _client = factory.CreateClient();
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
 
-        // Reset the adapter mock between tests since the factory is shared
-        // across the class fixture. Configure each test's expectations
-        // explicitly.
-        _adapter.ClearReceivedCalls();
+        // Reset the shared adapter substitute between tests since the
+        // factory is shared across the class fixture. ClearSubstitute()
+        // clears both received calls AND configured returns; we re-establish
+        // Platform="cho" because ClaimAdapterFactory routes by it.
+        _adapter.ClearSubstitute();
+        _adapter.Platform.Returns("cho");
     }
 
     [Fact]

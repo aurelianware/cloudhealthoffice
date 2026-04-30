@@ -4,6 +4,7 @@ using System.Text.Json;
 using ClaimsService.Models;
 using ClaimsService.Services;
 using NSubstitute;
+using NSubstitute.ClearExtensions;
 using Xunit;
 
 namespace CloudHealthOffice.ClaimsService.Tests;
@@ -13,7 +14,7 @@ namespace CloudHealthOffice.ClaimsService.Tests;
 /// <c>POST /api/v1/claims</c>). Asserts:
 /// <list type="bullet">
 ///   <item>201 with the canonical AdapterClaim on success</item>
-///   <item>400 ProblemDetails-shaped body on validation failure</item>
+///   <item>400 body with top-level <c>error</c> and <c>errors[]</c> fields on validation failure</item>
 ///   <item>501 when the tenant routes to a stub vendor adapter</item>
 ///   <item>actorId / correlationId resolution from HttpContext flow into the service</item>
 /// </list>
@@ -34,7 +35,7 @@ public class ClaimsV1ControllerSubmissionTests : IClassFixture<ClaimsApiFactory>
         _client = factory.CreateClient();
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
 
-        _service.ClearReceivedCalls();
+        _service.ClearSubstitute();
     }
 
     [Fact]
