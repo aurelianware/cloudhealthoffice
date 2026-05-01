@@ -148,7 +148,12 @@ public class ClaimToNcciScrubRequestMapperTests
     [Fact]
     public void IsLineEngineValid_accepts_5_char_code_and_in_range_units()
     {
-        var line = new AdapterClaimLine { ProcedureCode = "99213", Units = 1m };
+        var line = new AdapterClaimLine
+        {
+            ProcedureCode = "99213",
+            Units = 1m,
+            ServiceDateFrom = new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc),
+        };
         Assert.True(ClaimToNcciScrubRequestMapper.IsLineEngineValid(line));
     }
 
@@ -159,7 +164,28 @@ public class ClaimToNcciScrubRequestMapperTests
     [InlineData(null)]
     public void IsLineEngineValid_rejects_invalid_procedure_codes(string? code)
     {
-        var line = new AdapterClaimLine { ProcedureCode = code!, Units = 1m };
+        var line = new AdapterClaimLine
+        {
+            ProcedureCode = code!,
+            Units = 1m,
+            ServiceDateFrom = new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc),
+        };
+        Assert.False(ClaimToNcciScrubRequestMapper.IsLineEngineValid(line));
+    }
+
+    [Fact]
+    public void IsLineEngineValid_rejects_default_service_date()
+    {
+        // Engine quarter resolution + same-DOS pair grouping both depend
+        // on the line's ServiceDate; a default DateTime would non-
+        // deterministically resolve to the current UTC quarter and could
+        // group otherwise-distinct lines. Filter at the boundary.
+        var line = new AdapterClaimLine
+        {
+            ProcedureCode = "99213",
+            Units = 1m,
+            ServiceDateFrom = default,
+        };
         Assert.False(ClaimToNcciScrubRequestMapper.IsLineEngineValid(line));
     }
 

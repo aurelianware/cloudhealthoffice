@@ -55,16 +55,20 @@ public static class ClaimToNcciScrubRequestMapper
 
     /// <summary>
     /// True when the claim line carries enough field shape to satisfy
-    /// the engine's data-annotation validation. Lines that fail are
-    /// silently dropped; if no valid lines remain the stage falls back
-    /// to a soft-pass with a structured warning rather than letting the
-    /// engine throw at the boundary.
+    /// the engine's data-annotation validation AND a non-default
+    /// service date (the engine resolves quarter / pair-grouping by
+    /// the line's <c>ServiceDate</c> and a missing date would be
+    /// non-deterministic). Lines that fail are silently dropped; if no
+    /// valid lines remain the stage falls back to a soft-pass with a
+    /// structured warning rather than letting the engine throw at the
+    /// boundary.
     /// </summary>
     public static bool IsLineEngineValid(AdapterClaimLine line) =>
         !string.IsNullOrWhiteSpace(line.ProcedureCode)
         && line.ProcedureCode!.Length == 5
         && line.Units >= 0.01m
-        && line.Units <= 9999m;
+        && line.Units <= 9999m
+        && line.ServiceDateFrom != default;
 
     // 837P/837I/837D are the engine's expected wire-format strings. The
     // platform enum is 1-based (Professional=1, Institutional=2,
@@ -83,9 +87,11 @@ public static class ClaimToNcciScrubRequestMapper
         ProcedureCode = line.ProcedureCode,
         Modifiers = line.Modifiers?.Where(m => !string.IsNullOrEmpty(m)).ToList() ?? new List<string>(),
         Units = line.Units,
-        ServiceDate = line.ServiceDateFrom == default
-            ? DateOnly.FromDateTime(DateTime.UtcNow)
-            : DateOnly.FromDateTime(line.ServiceDateFrom),
+        // Caller has already filtered out lines with default ServiceDateFrom
+        // via IsLineEngineValid, so the conversion is unconditional —
+        // no DateTime.UtcNow fallback that would non-deterministically
+        // resolve to the current quarter for malformed claim data.
+        ServiceDate = DateOnly.FromDateTime(line.ServiceDateFrom),
         PlaceOfServiceCode = line.PlaceOfServiceCode,
     };
 

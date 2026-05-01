@@ -300,14 +300,35 @@ claims-service-derived fields. The implementation lives in
 
 ```
 ncci.mode             = PendForReview | Deny | SoftValidation
-ncci.engine_status    = success | exception | missing_table
+ncci.engine_status    = success | exception | mapper_invalid_lines
 ncci.outcome          = approve | pend | deny | softpass | softvalidation
-ncci.pairs_checked    = <int>
-ncci.mues_checked     = <int>
-ncci.failures         = <int>
+ncci.pairs_checked    = <int>          (success only)
+ncci.mues_checked     = <int>          (success only)
+ncci.failures         = <int>          (success only)
 claim.versionId       = <ClaimVersionId>
 tenant.id             = <TenantId>
 ```
+
+`engine_status` values:
+
+- **`success`** — engine call returned. Note that a tenant with no
+  NCCI / MUE table loaded surfaces here as `success` with
+  `pairs_checked` / `mues_checked` populated but `failures = 0` — the
+  engine's repository lookups return null on every key and the loops
+  emit no failures (Decision 11). 5.7 doesn't positively detect
+  missing-table to keep the stage simple; if production needs that
+  signal, add a pre-flight `INcciEditService.GetTableVersionAsync`
+  guard in a follow-up.
+- **`exception`** — engine threw; the synthetic snapshot path applied
+  (Decision 8).
+- **`mapper_invalid_lines`** — every claim line failed
+  `IsLineEngineValid` (procedure code not 5-char CPT/HCPCS, units
+  outside [0.01, 9999], or missing service date). The stage falls back
+  to a soft-pass without calling the engine, since the engine's
+  `[Required] [MinLength(1)]` validation on `ServiceLines` would throw
+  at the boundary. This is a data-quality signal — 5.4 scrubbing
+  should have rejected the claim upstream, so non-zero counts here
+  indicate a scrubbing-rule gap.
 
 These hang off the orchestrator's parent span so traces show the full
 adjudication run.

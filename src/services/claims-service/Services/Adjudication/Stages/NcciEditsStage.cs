@@ -104,11 +104,15 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
             // Engine [Required] [MinLength(1)] would throw — treat as a
             // structured soft-pass so an upstream data-quality gap does
             // not stall the pipeline. Telemetry surfaces it for ops.
+            // Distinct from the engine-side missing-table soft-pass: this
+            // is a mapper-side data-quality signal (e.g., line procedure
+            // codes that aren't 5-char CPT/HCPCS, units out of [0.01,9999],
+            // or missing service dates).
             _logger.LogInformation(
                 "NcciEditsStage soft-pass for claim {ClaimVersionId}: no engine-valid lines after mapper filtering",
                 SanitizeForLog(context.ClaimVersionId));
             activity?.SetTag("ncci.outcome", "softpass");
-            activity?.SetTag("ncci.engine_status", "missing_table");
+            activity?.SetTag("ncci.engine_status", "mapper_invalid_lines");
             return ClaimAdjudicationStageResult.Pass(StageName);
         }
 
