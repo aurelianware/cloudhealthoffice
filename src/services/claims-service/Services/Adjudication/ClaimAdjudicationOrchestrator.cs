@@ -23,6 +23,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     private readonly IReadOnlyList<IClaimAdjudicationStage> _stages;
     private readonly IClaimVersionEventPublisher _eventPublisher;
     private readonly IMessageBus _messageBus;
+    private readonly IAdjudicationTenantContext _tenantContext;
     private readonly AdjudicationPipelineOptions _options;
     private readonly ILogger<ClaimAdjudicationOrchestrator> _logger;
 
@@ -33,6 +34,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         IEnumerable<IClaimAdjudicationStage> stages,
         IClaimVersionEventPublisher eventPublisher,
         IMessageBus messageBus,
+        IAdjudicationTenantContext tenantContext,
         IOptions<AdjudicationPipelineOptions> options,
         ILogger<ClaimAdjudicationOrchestrator> logger)
     {
@@ -42,6 +44,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         _stages = stages.OrderBy(s => s.Order).ToList();
         _eventPublisher = eventPublisher;
         _messageBus = messageBus;
+        _tenantContext = tenantContext;
         _options = options.Value;
         _logger = logger;
     }
@@ -56,6 +59,11 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             throw new ArgumentException("TenantId is required", nameof(message));
         if (string.IsNullOrEmpty(message.ClaimVersionId))
             throw new ArgumentException("ClaimVersionId is required", nameof(message));
+
+        // Pin the tenant id onto the scope so the engine + resolver
+        // HTTP shims (which run from this background subscription, with
+        // no HttpContext) can still send X-Tenant-ID downstream.
+        _tenantContext.TenantId = message.TenantId;
 
         _logger.LogInformation(
             "Adjudication starting for tenant {TenantId} claim {ClaimVersionId} (delivery {DeliveryCount})",
@@ -84,8 +92,12 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         // Idempotency: the version already has adjudication data → skip
         // and complete the message. This catches Service Bus redeliveries
         // after a previous successful adjudication that crashed before
-        // completing the message (Decision 12).
-        if (claim.AdjudicationResult is not null && claim.AdjudicationResult.AllowedAmount > 0m)
+        // completing the message (Decision 12). Any non-null
+        // AdjudicationResult — including denials with AllowedAmount=0 —
+        // counts; the bypass write only fires after a stage produces an
+        // outcome, so its presence is a reliable "pipeline already ran"
+        // marker.
+        if (claim.AdjudicationResult is not null)
         {
             _logger.LogInformation(
                 "Claim {ClaimVersionId} already adjudicated; skipping pipeline run",
@@ -174,8 +186,11 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         CancellationToken ct)
     {
         var finalOutcome = ResolveFinalOutcome(context);
+        // Reason follows the same precedence rule as outcome
+        // (Reject > Deny > Pend > Pass) so the emitted message's Outcome
+        // and Reason agree on which stage drove the result.
         var finalReason = context.StageResults
-            .Where(r => r.Outcome != ClaimAdjudicationOutcome.Pass && !string.IsNullOrEmpty(r.Reason))
+            .Where(r => r.Outcome == finalOutcome && !string.IsNullOrEmpty(r.Reason))
             .Select(r => r.Reason!)
             .FirstOrDefault();
 
@@ -238,16 +253,18 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     private static ClaimAdjudicationOutcome ResolveFinalOutcome(ClaimAdjudicationContext context)
     {
         // Reject takes precedence over Deny over Pend. Pass only when no
-        // non-pass result was recorded.
-        var nonPersistence = context.StageResults
-            .Where(r => !string.Equals(r.StageName, Stages.PersistenceStage.StageName, StringComparison.Ordinal))
-            .ToList();
+        // non-pass result was recorded by any stage — including
+        // PersistenceStage, whose Reject (e.g.
+        // UpdateAdjudicationProjectionAsync returned false) MUST surface
+        // on the emitted event so subscribers don't see a Pass for a
+        // claim whose adjudication never persisted.
+        var results = context.StageResults;
 
-        if (nonPersistence.Any(r => r.Outcome == ClaimAdjudicationOutcome.Reject))
+        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Reject))
             return ClaimAdjudicationOutcome.Reject;
-        if (nonPersistence.Any(r => r.Outcome == ClaimAdjudicationOutcome.Deny))
+        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Deny))
             return ClaimAdjudicationOutcome.Deny;
-        if (nonPersistence.Any(r => r.Outcome == ClaimAdjudicationOutcome.Pend))
+        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Pend))
             return ClaimAdjudicationOutcome.Pend;
         return ClaimAdjudicationOutcome.Pass;
     }
