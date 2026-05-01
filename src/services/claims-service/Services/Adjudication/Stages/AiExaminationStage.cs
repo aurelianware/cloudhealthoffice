@@ -128,7 +128,7 @@ public sealed class AiExaminationStage : IClaimAdjudicationStage
             ActivityKind.Internal);
         activity?.SetTag("claim.versionId", context.ClaimVersionId);
         activity?.SetTag("tenant.id", context.TenantId);
-        activity?.SetTag("ai.mode", _options.AiMode.ToString());
+        activity?.SetTag("ai_examination.mode", _options.AiMode.ToString());
 
         // Operational kill switch (Gap E.1) — stage runs, telemetry
         // captures usage, no Kafka emission.

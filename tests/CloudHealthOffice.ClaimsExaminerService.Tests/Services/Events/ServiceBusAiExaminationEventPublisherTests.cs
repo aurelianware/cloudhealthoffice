@@ -61,11 +61,12 @@ public class ServiceBusAiExaminationEventPublisherTests
         // re-emissions with a different recommendation are dropped by the
         // broker as duplicates of the same logical completion.
         SendOptions? captured = null;
-        await _bus.SendAsync(
-            Arg.Any<string>(),
-            Arg.Any<ClaimAiExaminationCompletedEvent>(),
-            Arg.Do<SendOptions>(o => captured = o),
-            Arg.Any<CancellationToken>());
+        _bus.When(b => b.SendAsync(
+                Arg.Any<string>(),
+                Arg.Any<ClaimAiExaminationCompletedEvent>(),
+                Arg.Any<SendOptions>(),
+                Arg.Any<CancellationToken>()))
+            .Do(call => captured = call.Arg<SendOptions>());
 
         await _sut.PublishCompletedAsync(
             ClaimId, TenantId, Examination("Approve"), correlationId: null, CancellationToken.None);
@@ -78,11 +79,12 @@ public class ServiceBusAiExaminationEventPublisherTests
     public async Task MessageType_application_property_is_set()
     {
         SendOptions? captured = null;
-        await _bus.SendAsync(
-            Arg.Any<string>(),
-            Arg.Any<ClaimAiExaminationCompletedEvent>(),
-            Arg.Do<SendOptions>(o => captured = o),
-            Arg.Any<CancellationToken>());
+        _bus.When(b => b.SendAsync(
+                Arg.Any<string>(),
+                Arg.Any<ClaimAiExaminationCompletedEvent>(),
+                Arg.Any<SendOptions>(),
+                Arg.Any<CancellationToken>()))
+            .Do(call => captured = call.Arg<SendOptions>());
 
         await _sut.PublishCompletedAsync(
             ClaimId, TenantId, Examination(), correlationId: null, CancellationToken.None);
@@ -99,11 +101,12 @@ public class ServiceBusAiExaminationEventPublisherTests
     public async Task CorrelationId_is_propagated_to_SendOptions()
     {
         SendOptions? captured = null;
-        await _bus.SendAsync(
-            Arg.Any<string>(),
-            Arg.Any<ClaimAiExaminationCompletedEvent>(),
-            Arg.Do<SendOptions>(o => captured = o),
-            Arg.Any<CancellationToken>());
+        _bus.When(b => b.SendAsync(
+                Arg.Any<string>(),
+                Arg.Any<ClaimAiExaminationCompletedEvent>(),
+                Arg.Any<SendOptions>(),
+                Arg.Any<CancellationToken>()))
+            .Do(call => captured = call.Arg<SendOptions>());
 
         await _sut.PublishCompletedAsync(
             ClaimId, TenantId, Examination(),
@@ -118,11 +121,12 @@ public class ServiceBusAiExaminationEventPublisherTests
     public async Task Payload_carries_disposition_confidence_and_correlation()
     {
         ClaimAiExaminationCompletedEvent? captured = null;
-        await _bus.SendAsync(
-            Arg.Any<string>(),
-            Arg.Do<ClaimAiExaminationCompletedEvent>(e => captured = e),
-            Arg.Any<SendOptions>(),
-            Arg.Any<CancellationToken>());
+        _bus.When(b => b.SendAsync(
+                Arg.Any<string>(),
+                Arg.Any<ClaimAiExaminationCompletedEvent>(),
+                Arg.Any<SendOptions>(),
+                Arg.Any<CancellationToken>()))
+            .Do(call => captured = call.Arg<ClaimAiExaminationCompletedEvent>());
 
         await _sut.PublishCompletedAsync(
             ClaimId, TenantId, Examination("Deny", 0.78),

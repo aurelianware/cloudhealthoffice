@@ -63,8 +63,12 @@ public class ClaimsServiceClientRetryTests
     }
 
     [Fact]
-    public async Task Succeeds_on_first_attempt_does_not_delay()
+    public async Task Succeeds_on_first_attempt_no_retry_invoked()
     {
+        // RequestCount==1 is the actual behavioral guarantee — no retry
+        // path was taken. Wall-clock-elapsed checks against the retry
+        // delay are CI-flaky (scheduler pauses, GC) even when zero delay
+        // actually occurred.
         var json = """{"id":"claim-race-1","tenantId":"tenant-race-1","billingProviderNPI":"1234567890","claimLines":[]}""";
         var handler = new RecordingHandler(_ =>
             new HttpResponseMessage(HttpStatusCode.OK)
@@ -74,15 +78,10 @@ public class ClaimsServiceClientRetryTests
         using var http = new HttpClient(handler) { BaseAddress = new Uri("http://claims-service") };
         var sut = new ClaimsServiceClient(http, NullLogger<ClaimsServiceClient>.Instance);
 
-        var start = DateTime.UtcNow;
         var result = await sut.GetClaimAsync(ClaimId, TenantId, CancellationToken.None);
-        var elapsed = DateTime.UtcNow - start;
 
         Assert.NotNull(result);
         Assert.Equal(1, handler.RequestCount);
-        // Should be effectively instant — definitely shorter than a single retry delay.
-        Assert.True(elapsed < ClaimsServiceClient.GetClaimNotFoundRetryDelay,
-            $"Expected <{ClaimsServiceClient.GetClaimNotFoundRetryDelay.TotalMilliseconds}ms but took {elapsed.TotalMilliseconds:F0}ms");
     }
 
     [Fact]

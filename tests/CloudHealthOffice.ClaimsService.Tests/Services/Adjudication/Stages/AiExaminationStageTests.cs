@@ -155,10 +155,11 @@ public class AiExaminationStageTests
         ctx.PendDetails = pendDetails;
 
         Claim? captured = null;
-        await _publisher.PublishClaimPendedAsync(
-            Arg.Do<Claim>(c => captured = c),
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
+        _publisher.When(p => p.PublishClaimPendedAsync(
+                Arg.Any<Claim>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()))
+            .Do(call => captured = call.Arg<Claim>());
 
         await NewStage().ExecuteAsync(ctx, CancellationToken.None);
 
