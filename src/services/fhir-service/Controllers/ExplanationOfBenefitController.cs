@@ -1,6 +1,5 @@
 using System.Text;
 using FhirService.Services;
-using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FhirService.Controllers;
