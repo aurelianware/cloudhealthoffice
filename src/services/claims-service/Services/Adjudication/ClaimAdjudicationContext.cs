@@ -104,4 +104,16 @@ public class ClaimAdjudicationContext
     /// downstream stage.
     /// </summary>
     public PendDetails? PendDetails { get; set; }
+
+    /// <summary>
+    /// Coordination of Benefits outcome populated by
+    /// <see cref="Stages.CoordinationOfBenefitsStage"/> (capability 5.8).
+    /// Null until the COB stage runs. Phase 1 (α posture, mirrors 5.4
+    /// scrubbing): not persisted via PersistenceStage; lives on the
+    /// context for downstream stages (5.9 AI examiner may consume) and
+    /// for the <c>cho.claims.adjudication.cob.*</c> telemetry. Phase 2
+    /// priorEob work extends <see cref="AdjudicationResult"/> with the
+    /// CHO-secondary persistence fields.
+    /// </summary>
+    public CobOutcome? CobResult { get; set; }
 }
