@@ -1,4 +1,5 @@
 using ClaimsService.Models;
+using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Resolution;
 using BenefitEngineModels = CloudHealthOffice.BenefitEngine.Models;
 
@@ -49,4 +50,35 @@ public class ClaimAdjudicationContext
 
     /// <summary>True once a non-persistence stage has short-circuited the run.</summary>
     public bool ShortCircuited { get; set; }
+
+    /// <summary>
+    /// Network-membership lookup for the billing provider, populated by
+    /// <see cref="Stages.NetworkCredentialingStage"/> (capability 5.6) for
+    /// the FIRST plan tier that matched. Null when no tier matched OR the
+    /// upstream lookup degraded; consumed by
+    /// <see cref="Stages.BenefitCalculationStage"/> via
+    /// <see cref="MatchedNetworkTier"/> to drive cost-share tiering.
+    /// </summary>
+    public Resolution.NetworkMembership? BillingProviderNetworkMembership { get; set; }
+
+    /// <summary>
+    /// Credentialing-status snapshot for the billing provider as of the
+    /// claim's earliest service date. Populated by capability 5.6.
+    /// </summary>
+    public Resolution.CredentialingStatusSnapshot? BillingProviderCredentialingStatus { get; set; }
+
+    /// <summary>
+    /// Plan tier the billing provider matched, or <c>null</c> when none
+    /// matched (out-of-network). Set by capability 5.6 alongside
+    /// <see cref="BillingProviderNetworkMembership"/>.
+    /// </summary>
+    public ResolvedNetworkTier? MatchedNetworkTier { get; set; }
+
+    /// <summary>
+    /// Per-check enforcement outcomes accumulated by
+    /// <see cref="Stages.NetworkCredentialingStage"/>. Surfaced on the
+    /// audit trail and consumed by remittance generation (capability 5.10)
+    /// for adjustment-reason emission.
+    /// </summary>
+    public List<EnforcementOutcome> EnforcementOutcomes { get; } = new();
 }
