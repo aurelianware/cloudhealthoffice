@@ -4,6 +4,7 @@ using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.NcciEngine.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -109,6 +110,16 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());
             services.AddSingleton(AuditRepository);
             services.AddSingleton(VersionEventPublisher);
+
+            // 5.7 — NcciEngine's repository implementation got removed by
+            // the Cosmos/Mongo filter above. The engine's INcciEditService
+            // still depends on INcciRepository — register a substitute so
+            // ServiceProvider validation succeeds. Controller-level tests
+            // don't drive the adjudication pipeline, so the substitute
+            // never gets called; integration tests that need real NCCI
+            // behavior wire their own repository directly (see
+            // AdjudicationWithNcciEndToEndTests).
+            services.AddSingleton(Substitute.For<INcciRepository>());
 
             // V1 controller depends on ClaimAdapterFactory directly (5.2 +
             // 5.3 wiring). Register a real factory whose only registered

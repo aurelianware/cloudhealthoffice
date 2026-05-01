@@ -14,6 +14,7 @@ using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.ClaimsScrubEngine.Configuration;
+using CloudHealthOffice.NcciEngine.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -227,17 +228,24 @@ builder.Services.AddScoped<ICredentialingStatusClient>(sp =>
 // per-tenant rule overrides remain a Phase 2 surface.
 builder.Services.AddClaimsScrubEngine();
 
+// 5.7 — NCCI / MUE engine (class library). Auto-detect repository binds
+// to whichever backend AddChoInfrastructure registered (IMongoDatabase
+// when MongoDb:ConnectionString is set; CosmosClient otherwise). Seed
+// data is operator-controlled (Phase 1 — engine ScrubAsync is
+// graceful when a tenant's table is empty, surfacing zero failures
+// with telemetry rather than throwing).
+builder.Services.AddNcciEngine().UseRepositoryFromConfiguration(builder.Configuration);
+
 // Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
 // 5.4-5.9 each replace one stub registration with the real stage that
-// wraps the corresponding engine. 5.6 (NetworkCredentialingStage) and
-// 5.4 (ScrubbingStage) both swap the registration in place rather than
-// going through services.RemoveAll<>() — the stub never shipped to
-// production so there's nothing to remove. 5.7-5.9 stubs follow the
-// same pattern when their capabilities ship.
+// wraps the corresponding engine. 5.4/5.6/5.7 swap the registration in
+// place rather than going through services.RemoveAll<>() — the stub
+// never shipped to production so there's nothing to remove. 5.8/5.9
+// stubs follow the same pattern when their capabilities ship.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
-builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStubStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStubStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();

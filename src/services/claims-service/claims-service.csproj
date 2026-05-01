@@ -30,6 +30,13 @@
          Same in-process pattern as BenefitEngine; replaces the
          decommissioned claims-scrubbing-service. -->
     <ProjectReference Include="../../engines/CloudHealthOffice.ClaimsScrubEngine/CloudHealthOffice.ClaimsScrubEngine.csproj" />
+    <!-- Capability 5.7 — NcciEditsStage drives every claim through the
+         NCCI engine class library for Column 1/2 (PTP) and MUE checks
+         between BenefitCalculation (Order=300) and CoB (Order=500).
+         Engine ships as a class library; auto-detect repository binds
+         to whichever backend (Mongo / Cosmos) AddChoInfrastructure
+         already registered for the host. -->
+    <ProjectReference Include="../../engines/CloudHealthOffice.NcciEngine/CloudHealthOffice.NcciEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>
