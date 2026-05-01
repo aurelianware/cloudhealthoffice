@@ -128,9 +128,9 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     private sealed class FakeClaimsServiceHandler : HttpMessageHandler
     {
         // Minimal EOB shape that satisfies all FHIR cardinality-1 fields
-        // (status, type, use, patient). The Hl7.Fhir Bundle deserializer
-        // rejects entries missing any of these, which the tests rely on
-        // for round-trip parsing.
+        // (status, type, use, patient, insurance). The Hl7.Fhir Bundle
+        // deserializer rejects entries missing any of these, which the
+        // tests rely on for round-trip parsing.
         private static string FakeEob(string id, string patientId) =>
             "{" +
               "\"resourceType\":\"ExplanationOfBenefit\"," +
@@ -142,7 +142,8 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
               "\"insurer\":{\"display\":\"CloudHealthOffice\"}," +
               "\"provider\":{\"display\":\"Test Provider\"}," +
               "\"created\":\"2026-01-15T00:00:00Z\"," +
-              "\"outcome\":\"complete\"" +
+              "\"outcome\":\"complete\"," +
+              "\"insurance\":[{\"focal\":true,\"coverage\":{\"display\":\"Test Coverage\"}}]" +
             "}";
 
         protected override Task<HttpResponseMessage> SendAsync(
