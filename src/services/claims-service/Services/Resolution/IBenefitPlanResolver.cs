@@ -40,4 +40,40 @@ public class ResolvedBenefitPlan
 
     public string? PlanName { get; init; }
     public string? PlanType { get; init; }
+
+    /// <summary>
+    /// In-network tier list for the plan, sorted by
+    /// <see cref="ResolvedNetworkTier.TierLevel"/> ascending (1 = best).
+    /// Populated by capability 5.6 from <c>BenefitPlan.networkTiers</c>;
+    /// consumed by <c>NetworkCredentialingStage</c> to drive the
+    /// "first matching tier wins" enforcement walk.
+    ///
+    /// <para>
+    /// Empty for legacy plans whose tier list isn't populated; the
+    /// enforcement stage treats an empty list as "out-of-network only"
+    /// and applies the configured fail-mode for membership.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ResolvedNetworkTier> NetworkTiers { get; init; } =
+        Array.Empty<ResolvedNetworkTier>();
+}
+
+/// <summary>
+/// Pipeline-local projection of <c>BenefitPlanService.Models.NetworkTier</c>.
+/// Carries only the fields the enforcement walk needs — <see cref="NetworkId"/>
+/// is the cross-service handle into provider-service; tier name/level
+/// surface on the enforcement outcome for audit.
+/// </summary>
+public sealed class ResolvedNetworkTier
+{
+    public required string TierName { get; init; }
+    public int TierLevel { get; init; }
+
+    /// <summary>
+    /// Reference to <c>Organization.OrganizationId</c> in provider-service.
+    /// Nullable during the BP 5.5 → hard-validation rollout window;
+    /// the enforcement stage skips tiers whose NetworkId is null and
+    /// emits a soft-validation telemetry signal.
+    /// </summary>
+    public string? NetworkId { get; init; }
 }

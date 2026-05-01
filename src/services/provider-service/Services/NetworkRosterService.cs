@@ -21,6 +21,30 @@ namespace ProviderService.Services;
 public interface INetworkRosterService
 {
     Task<NetworkRosterResponse> GetRosterAsync(NetworkRosterQuery query, CancellationToken ct = default);
+
+    /// <summary>
+    /// Single-membership lookup for capability 5.6 enforcement
+    /// (<c>GET /api/v1/networks/{id}/members/{npi}</c>). Returns
+    /// <c>null</c> when no participation row exists for
+    /// (<paramref name="tenantId"/>, <paramref name="networkId"/>,
+    /// <paramref name="npi"/>) at all — the controller maps that to a
+    /// 404. A non-null result with <c>IsActiveMember=false</c> means a
+    /// participation row exists but the supplied <paramref name="asOf"/>
+    /// date falls outside its [EffectiveDate, TerminationDate) window.
+    ///
+    /// <para>
+    /// Read path mirrors the embedded-list shape used by
+    /// <see cref="GetRosterAsync"/>: NetworkParticipations live on the
+    /// Provider document (capability 5.4 — there is no separate
+    /// participation events stream).
+    /// </para>
+    /// </summary>
+    Task<NetworkMembershipResponse?> GetMembershipAsync(
+        string tenantId,
+        string networkId,
+        string npi,
+        DateTime asOf,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -49,6 +73,92 @@ public class NetworkRosterService : INetworkRosterService
     {
         _repository = repository;
         _logger = logger;
+    }
+
+    public async Task<NetworkMembershipResponse?> GetMembershipAsync(
+        string tenantId,
+        string networkId,
+        string npi,
+        DateTime asOf,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+            throw new ArgumentException("tenantId is required.", nameof(tenantId));
+        if (string.IsNullOrEmpty(networkId))
+            throw new ArgumentException("networkId is required.", nameof(networkId));
+        if (string.IsNullOrEmpty(npi))
+            throw new ArgumentException("npi is required.", nameof(npi));
+
+        var asOfUtc = asOf.Kind switch
+        {
+            DateTimeKind.Utc => asOf,
+            DateTimeKind.Local => asOf.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(asOf, DateTimeKind.Utc),
+        };
+
+        // The repo's GetByNPIAsync is tenant-scoped via context; the
+        // controller ensures the same tenant lens is in scope before this
+        // call. NPI uniqueness within a tenant is the chain-key
+        // contract from capability 5.4.
+        var provider = await _repository.GetByNPIAsync(npi);
+        if (provider is null) return null;
+
+        // Look across every participation row for this network on the
+        // provider; pick the one whose [Effective, Termination) window
+        // covers asOf. If no row covers it, return the most recently
+        // terminated row so the response can describe "terminated"
+        // rather than collapsing the case to 404.
+        var matchesNetwork = provider.NetworkParticipations
+            .Where(n => n.NetworkId == networkId)
+            .ToList();
+        if (matchesNetwork.Count == 0) return null;
+
+        var active = matchesNetwork.FirstOrDefault(n =>
+            n.EffectiveDate <= asOfUtc &&
+            (n.TerminationDate is null || n.TerminationDate.Value > asOfUtc));
+
+        if (active is not null)
+        {
+            return new NetworkMembershipResponse
+            {
+                NetworkId = networkId,
+                Npi = npi,
+                ProviderId = provider.ProviderId,
+                IsActiveMember = true,
+                AsOfDate = asOfUtc,
+                EffectiveFrom = active.EffectiveDate,
+                EffectiveTo = active.TerminationDate,
+                ParticipationStatus = "active",
+                LineOfBusiness = active.LineOfBusiness,
+                NetworkTier = active.NetworkTier,
+            };
+        }
+
+        // Pick the participation row with the most-recent EffectiveDate
+        // for descriptive status. Future-dated participation surfaces
+        // as "future"; past-terminated as "terminated".
+        var descriptive = matchesNetwork
+            .OrderByDescending(n => n.EffectiveDate)
+            .First();
+        var status = descriptive.EffectiveDate > asOfUtc
+            ? "future"
+            : descriptive.TerminationDate.HasValue && descriptive.TerminationDate.Value <= asOfUtc
+                ? "terminated"
+                : "inactive";
+
+        return new NetworkMembershipResponse
+        {
+            NetworkId = networkId,
+            Npi = npi,
+            ProviderId = provider.ProviderId,
+            IsActiveMember = false,
+            AsOfDate = asOfUtc,
+            EffectiveFrom = descriptive.EffectiveDate,
+            EffectiveTo = descriptive.TerminationDate,
+            ParticipationStatus = status,
+            LineOfBusiness = descriptive.LineOfBusiness,
+            NetworkTier = descriptive.NetworkTier,
+        };
     }
 
     public async Task<NetworkRosterResponse> GetRosterAsync(NetworkRosterQuery query, CancellationToken ct = default)

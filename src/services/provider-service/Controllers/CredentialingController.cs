@@ -271,6 +271,62 @@ public sealed class CredentialingController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Projected credentialing status for the provider as of the supplied
+    /// date (capability 5.6). Consumer-facing surface for claims-service
+    /// adjudication: the <paramref name="asOfDate"/> is the claim's
+    /// service date, anchoring credentialing-status enforcement to when
+    /// the service was rendered rather than when the claim is processed.
+    /// Returns a trimmed projection (see
+    /// <see cref="CredentialingStatusResponse"/>) — internal projection
+    /// fields like <c>CurrentApplicationEventId</c> belong to the admin
+    /// <c>/status</c> + <c>/history</c> surface, not to cross-service
+    /// enforcement.
+    /// </summary>
+    [HttpGet("status-as-of")]
+    [ProducesResponseType(typeof(CredentialingStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CredentialingStatusResponse>> GetStatusAsOf(
+        string id,
+        [FromQuery] DateTime? asOfDate,
+        CancellationToken ct)
+    {
+        if (asOfDate is null)
+        {
+            return BadRequest(new
+            {
+                error = "missing_as_of_date",
+                message = "asOfDate query parameter is required (ISO-8601 UTC).",
+            });
+        }
+
+        // Normalize Unspecified-kind input to UTC. Inbound query strings
+        // typically deserialize with Kind=Unspecified; treating that as
+        // UTC matches how the projector interprets stored decision dates
+        // (see CredentialingProjector.ComputeStatus).
+        var asOfUtc = asOfDate.Value.Kind switch
+        {
+            DateTimeKind.Utc => asOfDate.Value,
+            DateTimeKind.Local => asOfDate.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(asOfDate.Value, DateTimeKind.Utc),
+        };
+
+        var projection = await _credentialing.GetStatusAsOfAsync(
+            TenantId, id, new DateTimeOffset(asOfUtc, TimeSpan.Zero), ct);
+
+        return Ok(new CredentialingStatusResponse
+        {
+            ProviderId = id,
+            AsOfDate = asOfUtc,
+            Status = projection.Status.ToString(),
+            CredentialingDate = projection.CredentialingDate,
+            RecredentialingDueDate = projection.RecredentialingDueDate,
+            LastDecisionAuthorityId = projection.LastDecisionAuthorityId,
+            LastDecisionAuthorityType = projection.LastDecisionAuthorityType?.ToString(),
+            LastDecidedAt = projection.LastDecidedAt,
+        });
+    }
+
     /// <summary>Newest-first paged history of credentialing events for the provider.</summary>
     [HttpGet("history")]
     [ProducesResponseType(typeof(CredentialingHistoryPage), StatusCodes.Status200OK)]

@@ -150,6 +150,12 @@ builder.Services.AddMemoryCache();
 builder.Services.Configure<AdjudicationPipelineOptions>(
     builder.Configuration.GetSection(AdjudicationPipelineOptions.SectionName));
 
+// 5.6 enforcement posture (network membership + credentialing). Phase 1
+// is service-wide; per-tenant override deferred to Phase 2 alongside
+// the pipeline options.
+builder.Services.Configure<TenantEnforcementPolicyOptions>(
+    builder.Configuration.GetSection(TenantEnforcementPolicyOptions.SectionName));
+
 // Resolution clients — typed HttpClient + caching decorator. 5-second
 // timeout matches ClaimTenantConfigCache and HttpProviderService so a
 // flaky downstream service can't stall the pipeline.
@@ -200,11 +206,30 @@ builder.Services.AddScoped<
 // HttpContext. Scoped lifetime keeps each orchestrator run isolated.
 builder.Services.AddScoped<IAdjudicationTenantContext, AdjudicationTenantContext>();
 
+// 5.6 — enforcement clients (network membership + credentialing status)
+// against provider-service. Reuses the existing ProviderService named
+// HttpClient registration above. Each client gets a caching decorator;
+// TTLs differ by domain (5-min membership vs 1-hour credentialing).
+builder.Services.AddScoped<HttpProviderMembershipClient>();
+builder.Services.AddScoped<IProviderMembershipClient>(sp =>
+    new CachingProviderMembershipClient(
+        sp.GetRequiredService<HttpProviderMembershipClient>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+
+builder.Services.AddScoped<HttpCredentialingStatusClient>();
+builder.Services.AddScoped<ICredentialingStatusClient>(sp =>
+    new CachingCredentialingStatusClient(
+        sp.GetRequiredService<HttpCredentialingStatusClient>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+
 // Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
 // 5.4-5.9 replace the stub registrations via services.RemoveAll<>()
-// + AddScoped<IClaimAdjudicationStage, RealStage>().
+// + AddScoped<IClaimAdjudicationStage, RealStage>(). 5.6 wires the
+// real NetworkCredentialingStage directly without going through the
+// remove/re-add dance because the stub never made it past 5.5; the
+// pattern in the comment remains the convention for 5.4 / 5.7-5.9.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStubStage>();
-builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStubStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStubStage>();
