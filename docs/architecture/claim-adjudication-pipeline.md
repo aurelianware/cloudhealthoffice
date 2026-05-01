@@ -4,12 +4,13 @@
 > stage interface, BenefitCalculation + Persistence stages, five stub
 > stages, Service Bus trigger transport, and resolver clients. Capabilities
 > 5.4 / 5.6 / 5.7 / 5.8 / 5.9 each replace one stub stage via DI swap.
-> 5.4 (Scrubbing), 5.6 (NetworkCredentialing), 5.7 (NcciEdits), and 5.8
-> (CoordinationOfBenefits) are now live — see
+> All five are now live — **6/6 pipeline stages real after 5.9, May
+> 2026**. See
 > [`claim-scrubbing-pipeline.md`](./claim-scrubbing-pipeline.md),
 > [`network-credentialing-enforcement.md`](./network-credentialing-enforcement.md),
-> [`claim-ncci-pipeline.md`](./claim-ncci-pipeline.md), and
-> [`claim-cob-pipeline.md`](./claim-cob-pipeline.md) for the
+> [`claim-ncci-pipeline.md`](./claim-ncci-pipeline.md),
+> [`claim-cob-pipeline.md`](./claim-cob-pipeline.md), and
+> [`claim-ai-examination.md`](./claim-ai-examination.md) for the
 > stage-specific architecture.
 
 ## Why this exists
@@ -47,8 +48,8 @@ POST /api/v1/claims                                     (capability 5.3)
    │       200  NetworkCredentialingStage    ★ real (5.6)         │
    │       300  BenefitCalculationStage      ★ real (5.5)         │
    │       400  NcciEditsStage               ★ real (5.7)         │
-   │       500  CoordinationOfBenefitsStubStage (5.8 replaces)    │
-   │       600  AiExaminationStubStage       (5.9 replaces)       │
+   │       500  CoordinationOfBenefitsStage  ★ real (5.8)         │
+   │       600  AiExaminationStage           ★ real (5.9)         │
    │       999  PersistenceStage             ★ real (5.5)         │
    └──────────────────────────────────────────────────────────────┘
                               │
@@ -99,8 +100,11 @@ mode); the audit chain captures every submission either way.
 
 When the orchestrator consumes a `ClaimVersionSubmittedMessage`, all
 stages run sequentially in the message handler. Async-between-stages is
-not in scope. If 5.9 (AI examination) needs async semantics it adds a
-separate subscription rather than fragmenting the main pipeline.
+not in scope. 5.9 (AI examination) takes exactly that path: the
+synchronous pipeline-stage emits a `ClaimPendedEvent` to Kafka and
+returns Pend; the AI work itself runs entirely in
+claims-examiner-service via a separate Kafka consumer. See
+[`claim-ai-examination.md`](./claim-ai-examination.md).
 
 ### D6 — Stage ordering is fixed in code, not config
 

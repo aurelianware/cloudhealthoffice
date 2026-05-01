@@ -120,3 +120,45 @@ public enum CobEnforcementMode
     /// </summary>
     SoftValidation,
 }
+
+/// <summary>
+/// Posture <see cref="Services.Adjudication.Stages.AiExaminationStage"/>
+/// adopts when handling NCCI bundling pends with modifier-addressable
+/// edits. Capability 5.9.
+///
+/// <para>
+/// <b>Required mode deferred (Plan-First Gap H.3).</b> The current
+/// <c>IClaimEventPublisher.PublishClaimPendedAsync</c> contract swallows
+/// all Kafka producer failures internally and returns <c>Task</c>; the
+/// stage cannot observe whether the event actually reached the broker.
+/// A <c>Required</c> mode that forks Pend-vs-Pass on degraded Kafka
+/// would be functionally identical to <see cref="BestEffort"/> until the
+/// publisher gains a delivery signal — shipping it as a stub would
+/// mislead operators reading the enum. <c>Required</c> lands as an
+/// additive enum value in a focused follow-up once the publisher
+/// contract evolves (e.g., <c>Task&lt;bool&gt; TryPublishClaimPendedAsync</c>
+/// or an <c>IsAvailable</c> probe).
+/// </para>
+/// </summary>
+public enum AiEnforcementMode
+{
+    /// <summary>
+    /// Default — eligibility filter passes → stage emits the Kafka event
+    /// and returns Pend with reason <c>pending-ai-examination</c>;
+    /// pipeline continues to PersistenceStage. AI examination is
+    /// advisory; the absence of a recommendation never blocks claim
+    /// processing because the pend is already structured (NCCI failures
+    /// have a human work-queue path independent of AI).
+    /// </summary>
+    BestEffort,
+
+    /// <summary>
+    /// Operational kill switch. Stage runs but short-circuits to Pass
+    /// with telemetry tag <c>outcome="not_applicable"</c>,
+    /// <c>reason="ai-disabled-by-policy"</c> (Plan-First Gap E.1) so
+    /// dashboards show kill-switch usage at a glance. Used during
+    /// incident response — distinct from removing the stage from
+    /// <c>EnabledStages</c>, which would also suppress telemetry.
+    /// </summary>
+    Disabled,
+}

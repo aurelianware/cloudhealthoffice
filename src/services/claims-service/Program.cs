@@ -272,16 +272,16 @@ builder.Services.AddScoped<ICoverageClient>(sp =>
 
 // Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
 // 5.4-5.9 each replace one stub registration with the real stage that
-// wraps the corresponding engine. 5.4/5.6/5.7/5.8 swap the registration
+// wraps the corresponding engine. 5.4/5.6/5.7/5.8/5.9 swap the registration
 // in place rather than going through services.RemoveAll<>() — the stub
-// never shipped to production so there's nothing to remove. 5.9 stub
-// follows the same pattern when its capability ships.
+// never shipped to production so there's nothing to remove. 6/6 pipeline
+// stages real after 5.9.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>();
-builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 
 builder.Services.AddScoped<IClaimAdjudicationOrchestrator, ClaimAdjudicationOrchestrator>();

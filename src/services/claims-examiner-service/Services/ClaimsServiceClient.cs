@@ -25,6 +25,22 @@ public interface IClaimsServiceClient
 
 public class ClaimsServiceClient : IClaimsServiceClient
 {
+    /// <summary>
+    /// Capability 5.9 — bounded retry on 404 from <c>GET /api/claims/{id}</c>.
+    /// Mitigates the AiExaminationStage emission → PersistenceStage
+    /// persistence race (Plan-First Decision 16 / D.1): the stage emits the
+    /// Kafka event at Order=600 but the claim isn't persisted until
+    /// Order=999. If the consumer races persistence, the GET 404s.
+    /// 3 attempts × 250 ms backoff covers PersistenceStage's typical
+    /// latency comfortably; if a claim genuinely doesn't exist after
+    /// retry exhaustion, log and return — consumer commits offset, claim
+    /// remains pended-without-AI. Operations alarm on the
+    /// <c>cho.claims_examiner.claim_not_found</c> counter to catch any
+    /// systemic latency regression.
+    /// </summary>
+    internal const int GetClaimNotFoundMaxAttempts = 3;
+    internal static readonly TimeSpan GetClaimNotFoundRetryDelay = TimeSpan.FromMilliseconds(250);
+
     private readonly HttpClient _http;
     private readonly ILogger<ClaimsServiceClient> _logger;
 
@@ -42,18 +58,35 @@ public class ClaimsServiceClient : IClaimsServiceClient
 
     public async Task<ClaimSnapshot?> GetClaimAsync(string claimId, string tenantId, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, $"/api/claims/{claimId}");
-        req.Headers.Add("X-Tenant-ID", tenantId);
-
-        using var response = await _http.SendAsync(req, ct);
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        for (var attempt = 1; attempt <= GetClaimNotFoundMaxAttempts; attempt++)
         {
-            _logger.LogWarning("Claim {ClaimId} not found in claims-service", claimId);
-            return null;
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"/api/claims/{claimId}");
+            req.Headers.Add("X-Tenant-ID", tenantId);
+
+            using var response = await _http.SendAsync(req, ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                if (attempt < GetClaimNotFoundMaxAttempts)
+                {
+                    _logger.LogDebug(
+                        "Claim {ClaimId} not yet visible (attempt {Attempt}/{Max}); retrying after {DelayMs}ms (Phase 1 stage→persistence race mitigation)",
+                        claimId, attempt, GetClaimNotFoundMaxAttempts,
+                        GetClaimNotFoundRetryDelay.TotalMilliseconds);
+                    await Task.Delay(GetClaimNotFoundRetryDelay, ct);
+                    continue;
+                }
+
+                _logger.LogWarning(
+                    "Claim {ClaimId} not found after {Max} attempts; AI examination skipped",
+                    claimId, GetClaimNotFoundMaxAttempts);
+                return null;
+            }
+
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ClaimSnapshot>(JsonOptions, ct);
         }
 
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ClaimSnapshot>(JsonOptions, ct);
+        return null;
     }
 
     public async Task<bool> SetAiExaminationAsync(

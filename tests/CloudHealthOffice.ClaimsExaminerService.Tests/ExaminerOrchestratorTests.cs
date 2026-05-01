@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using ClaimsExaminerService.Models;
 using ClaimsExaminerService.Services;
 using ClaimsExaminerService.Services.Anthropic;
+using ClaimsExaminerService.Services.Events;
 using ClaimsExaminerService.Services.Examiner;
 using CloudHealthOffice.Events;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,6 +17,7 @@ public class ExaminerOrchestratorTests
     private readonly IClaimsServiceClient _claims = Substitute.For<IClaimsServiceClient>();
     private readonly IAnthropicClient _anthropic = Substitute.For<IAnthropicClient>();
     private readonly IProviderRfaiHistoryClient _rfaiHistory = Substitute.For<IProviderRfaiHistoryClient>();
+    private readonly IAiExaminationEventPublisher _eventPublisher = Substitute.For<IAiExaminationEventPublisher>();
     private readonly ExaminerPromptBuilder _prompts = new();
 
     public ExaminerOrchestratorTests()
@@ -29,7 +31,7 @@ public class ExaminerOrchestratorTests
     }
 
     private ExaminerOrchestrator NewSut() => new(
-        _claims, _anthropic, _prompts, _rfaiHistory, NullLogger<ExaminerOrchestrator>.Instance);
+        _claims, _anthropic, _prompts, _rfaiHistory, _eventPublisher, NullLogger<ExaminerOrchestrator>.Instance);
 
     [Fact]
     public async Task Skips_Event_With_Non_NCCI_Pend_Code()
