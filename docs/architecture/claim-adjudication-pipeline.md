@@ -284,3 +284,7 @@ Capabilities 5.4 / 5.6 / 5.7 / 5.8 / 5.9 each ship a real stage that:
   that stays independent of this Service Bus topic
 - [`benefit-plan-adapter-pattern.md`](./benefit-plan-adapter-pattern.md)
   — plan resolution surface the resolver decorator caches
+- [`claim-fhir-projection.md`](./claim-fhir-projection.md) —
+  capability 5.11 FHIR ExplanationOfBenefit projection that consumes
+  the post-adjudication state this pipeline produces (totals, denial
+  CARC, NCCI edit failures, AI-examination disposition)
