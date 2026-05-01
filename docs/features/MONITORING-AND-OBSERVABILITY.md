@@ -147,19 +147,12 @@ spec:
                 - name: body
                   value: '{"cpt_codes": ["99213", "99214"]}'
           
-          # Step 5: Run claims scrubbing
-          - name: scrub-claim
-            dependencies: [validate-codes]
-            template: http-call
-            arguments:
-              parameters:
-                - name: url
-                  value: "http://claims-scrubbing-service.cloudhealthoffice:3004/api/v1/scrub"
-                - name: method
-                  value: "POST"
-                - name: body
-                  value: '{"claim_id": "{{workflow.parameters.claim-id}}"}'
-          
+          # Step 5: (decommissioned) Pre-adjudication scrubbing now
+          # runs in-process inside claims-service via the
+          # CloudHealthOffice.ClaimsScrubEngine class library at
+          # adjudication pipeline Order=100 (capability 5.4); no
+          # separate HTTP call is needed.
+
           # Step 6: Run adjudication engine
           - name: adjudicate
             dependencies: [verify-provider, get-benefits, scrub-claim]
