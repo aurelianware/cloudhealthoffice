@@ -165,6 +165,55 @@ public class NetworksController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Single-membership lookup (capability 5.6). Returns whether
+    /// <paramref name="npi"/> is an active member of network
+    /// <paramref name="id"/> on <c>asOf</c> (defaults to UtcNow). Used by
+    /// claims-service's <c>NetworkCredentialingStage</c> at adjudication
+    /// time. Body-shaped status: 200 with <c>IsActiveMember=false</c>
+    /// when the NPI participates but isn't active for the date; 404 only
+    /// when no participation row for this NPI exists in the network at
+    /// all. Uniform body shape keeps the consumer-side cache key
+    /// stable across the active/inactive distinction.
+    /// </summary>
+    [HttpGet("{id}/members/{npi}")]
+    [ProducesResponseType(typeof(NetworkMembershipResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<NetworkMembershipResponse>> GetMember(
+        string id,
+        string npi,
+        [FromQuery] DateTime? asOf = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(npi))
+        {
+            return BadRequest(new { error = "missing_npi", message = "npi route segment is required." });
+        }
+
+        // Tenant-scope guard: confirm the network belongs to this tenant
+        // before scanning the provider collection. Mirrors the same guard
+        // GetRoster runs.
+        var network = await _service.GetByIdAsync(id);
+        if (network == null)
+        {
+            return NotFound(new { message = $"Network {id} not found" });
+        }
+
+        var asOfUtc = (asOf ?? DateTime.UtcNow);
+        var result = await _rosterService.GetMembershipAsync(TenantId, id, npi, asOfUtc, ct);
+        if (result is null)
+        {
+            return NotFound(new
+            {
+                error = "not_a_member",
+                message = $"NPI {SanitizeForLog(npi)} has no participation row in network {SanitizeForLog(id)}.",
+            });
+        }
+
+        return Ok(result);
+    }
+
     /// <summary>Create a new network. Activates v1 in one shot.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(Organization), StatusCodes.Status201Created)]

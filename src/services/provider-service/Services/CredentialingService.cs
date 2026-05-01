@@ -60,6 +60,20 @@ public interface ICredentialingService
     Task<CredentialingProjectionResult> GetCurrentStatusAsync(
         string tenantId, string providerId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Project the credentialing chain as of <paramref name="asOfDate"/>.
+    /// Capability 5.6 enforcement consumer: claims-service calls this with
+    /// the claim's service date so a provider credentialed AFTER the
+    /// service date doesn't auto-pay an earlier-dated claim.
+    /// </summary>
+    /// <remarks>
+    /// Trivial sibling of <see cref="GetCurrentStatusAsync"/>; the
+    /// projector already accepts arbitrary <c>asOf</c> values. No I/O
+    /// difference between the two paths beyond the date passed through.
+    /// </remarks>
+    Task<CredentialingProjectionResult> GetStatusAsOfAsync(
+        string tenantId, string providerId, DateTimeOffset asOfDate, CancellationToken ct = default);
+
     Task<CredentialingHistoryPage> GetHistoryAsync(
         string tenantId, string providerId,
         string? continuationToken, int limit, CancellationToken ct = default);
@@ -453,6 +467,13 @@ public sealed class CredentialingService : ICredentialingService
     {
         var chain = await _eventRepository.ListAscendingAsync(tenantId, providerId, ct);
         return _projector.Project(chain, DateTimeOffset.UtcNow);
+    }
+
+    public async Task<CredentialingProjectionResult> GetStatusAsOfAsync(
+        string tenantId, string providerId, DateTimeOffset asOfDate, CancellationToken ct = default)
+    {
+        var chain = await _eventRepository.ListAscendingAsync(tenantId, providerId, ct);
+        return _projector.Project(chain, asOfDate);
     }
 
     public Task<CredentialingHistoryPage> GetHistoryAsync(

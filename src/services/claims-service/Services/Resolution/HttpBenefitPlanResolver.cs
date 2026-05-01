@@ -75,12 +75,27 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
 
             Guid? planGuid = Guid.TryParse(dto.Id, out var parsed) ? parsed : null;
 
+            // Project the wire-shape NetworkTier[] down to the
+            // pipeline-local view. Sort by TierLevel asc (1 = best) so the
+            // enforcement stage can walk in priority order without
+            // re-sorting on every claim.
+            var tiers = (dto.NetworkTiers ?? new List<NetworkTierDto>())
+                .OrderBy(t => t.TierLevel)
+                .Select(t => new ResolvedNetworkTier
+                {
+                    TierName = t.TierName ?? string.Empty,
+                    TierLevel = t.TierLevel,
+                    NetworkId = string.IsNullOrWhiteSpace(t.NetworkId) ? null : t.NetworkId,
+                })
+                .ToList();
+
             return new ResolvedBenefitPlan
             {
                 Id = dto.Id ?? planId,
                 PlanGuid = planGuid,
                 PlanName = dto.PlanName,
                 PlanType = dto.PlanType,
+                NetworkTiers = tiers,
             };
         }
         catch (Exception ex) when (ex is HttpRequestException
@@ -102,5 +117,13 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
         public string? Id { get; set; }
         public string? PlanName { get; set; }
         public string? PlanType { get; set; }
+        public List<NetworkTierDto>? NetworkTiers { get; set; }
+    }
+
+    private sealed class NetworkTierDto
+    {
+        public string? TierName { get; set; }
+        public int TierLevel { get; set; }
+        public string? NetworkId { get; set; }
     }
 }
