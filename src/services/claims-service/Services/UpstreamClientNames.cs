@@ -28,4 +28,9 @@ public static class UpstreamClientNames
 
     /// <summary>reference-data-service — terminology lookups.</summary>
     public const string ReferenceDataService = "ReferenceDataService";
+
+    /// <summary>coverage-service — capability 5.8 Coordination of Benefits
+    /// /member/{id}/cob lookup driving CHO-primary vs CHO-secondary
+    /// detection.</summary>
+    public const string CoverageService = "CoverageService";
 }

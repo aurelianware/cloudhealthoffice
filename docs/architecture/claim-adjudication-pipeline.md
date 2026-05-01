@@ -4,11 +4,12 @@
 > stage interface, BenefitCalculation + Persistence stages, five stub
 > stages, Service Bus trigger transport, and resolver clients. Capabilities
 > 5.4 / 5.6 / 5.7 / 5.8 / 5.9 each replace one stub stage via DI swap.
-> 5.4 (Scrubbing), 5.6 (NetworkCredentialing), and 5.7 (NcciEdits) are
-> now live — see
+> 5.4 (Scrubbing), 5.6 (NetworkCredentialing), 5.7 (NcciEdits), and 5.8
+> (CoordinationOfBenefits) are now live — see
 > [`claim-scrubbing-pipeline.md`](./claim-scrubbing-pipeline.md),
 > [`network-credentialing-enforcement.md`](./network-credentialing-enforcement.md),
-> and [`claim-ncci-pipeline.md`](./claim-ncci-pipeline.md) for the
+> [`claim-ncci-pipeline.md`](./claim-ncci-pipeline.md), and
+> [`claim-cob-pipeline.md`](./claim-cob-pipeline.md) for the
 > stage-specific architecture.
 
 ## Why this exists

@@ -33,4 +33,14 @@ public class TenantEnforcementPolicyOptions
     /// is operationally harsh.
     /// </summary>
     public NcciEnforcementMode NcciMode { get; set; } = NcciEnforcementMode.PendForReview;
+
+    /// <summary>
+    /// Posture for CHO-secondary detection (capability 5.8). Default
+    /// <see cref="CobEnforcementMode.PendForSecondary"/> mirrors
+    /// <see cref="NcciMode"/>'s pend-by-default semantic — Phase 1 ships
+    /// CHO-primary adjudication only and CHO-secondary calculation is
+    /// genuinely unimplemented, so pending is the honest outcome rather
+    /// than denying or silently passing.
+    /// </summary>
+    public CobEnforcementMode CobMode { get; set; } = CobEnforcementMode.PendForSecondary;
 }

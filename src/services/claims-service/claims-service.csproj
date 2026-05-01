@@ -37,6 +37,14 @@
          to whichever backend (Mongo / Cosmos) AddChoInfrastructure
          already registered for the host. -->
     <ProjectReference Include="../../engines/CloudHealthOffice.NcciEngine/CloudHealthOffice.NcciEngine.csproj" />
+    <!-- Capability 5.8 — CoordinationOfBenefitsStage uses the CobEngine
+         class library for payer-order determination at Order=500.
+         Engine is pure-calculation (no I/O, no repository); claims-service
+         registers ICobCalculationService + IPayerOrderService directly in
+         Program.cs (no AddCobEngine extension exists — see plan
+         Decision 1b). Phase 1 exercises only IPayerOrderService for
+         audit-trail rule labelling on detected CHO-secondary scenarios. -->
+    <ProjectReference Include="../../engines/CloudHealthOffice.CobEngine/CloudHealthOffice.CobEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>
