@@ -202,6 +202,14 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             var domainClaim = context.Claim.ToClaim();
             domainClaim.AdjudicationResult = context.AdjudicationResult;
+            // 5.7 — surface deterministic edit-failure pend reason on
+            // the audit event when NCCI / MUE populated it. Mirrors the
+            // PendDetails write through the projection bypass so
+            // subscribers see the same shape as the head row.
+            if (context.PendDetails is not null)
+            {
+                domainClaim.PendDetails = context.PendDetails;
+            }
             await _eventPublisher
                 .PublishVersionAdjudicatedAsync(domainClaim, context.ActorId, context.CorrelationId, ct)
                 .ConfigureAwait(false);

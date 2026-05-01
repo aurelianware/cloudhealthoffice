@@ -437,7 +437,8 @@ public class ClaimRepositoryMongo : IClaimRepository
         string claimVersionId,
         AdjudicationResult adjudicationResult,
         IReadOnlyList<LineAdjudicationResult> lineResults,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        PendDetails? pendDetails = null)
     {
         var b = Builders<Claim>.Filter;
 
@@ -485,6 +486,14 @@ public class ClaimRepositoryMongo : IClaimRepository
             .Set(c => c.AdjudicationResult, adjudicationResult)
             .Set(c => c.ClaimLines, head.ClaimLines)
             .Set(c => c.LastUpdatedDate, DateTime.UtcNow);
+
+        // 5.7 — project deterministic pend reason when the adjudication
+        // pipeline populated it. See Cosmos sibling for the
+        // null-leaves-untouched contract.
+        if (pendDetails is not null)
+        {
+            update = update.Set(c => c.PendDetails, pendDetails);
+        }
 
         var rowFilter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, head.Id));
         var result = await _collection.UpdateOneAsync(rowFilter, update, cancellationToken: ct);

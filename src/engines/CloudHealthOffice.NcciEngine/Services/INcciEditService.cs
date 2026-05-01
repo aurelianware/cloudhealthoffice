@@ -6,9 +6,9 @@ namespace CloudHealthOffice.NcciEngine.Services;
 /// <summary>
 /// Core NCCI/MUE editing service.
 ///
-/// Consumers (adjudication workflow, claims scrubbing service) call
-/// <see cref="ScrubAsync"/> once per claim to detect bundling and
-/// unit-limit violations before payment.
+/// Consumers (claims-service NcciEditsStage in capability 5.7; future
+/// state-Medicaid EDI ingest) call <see cref="ScrubAsync"/> once per
+/// claim to detect bundling and unit-limit violations before payment.
 /// </summary>
 public interface INcciEditService
 {
