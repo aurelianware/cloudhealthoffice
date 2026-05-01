@@ -68,6 +68,15 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
                     IssuerSigningKey = _signingKey
                 };
             });
+
+            // Capability 5.11 — the EOB controller is now a thin proxy over
+            // claims-service. The legacy ContentNegotiation tests covered
+            // controller routing / response shape through the old mock-data
+            // path; preserve that coverage by stubbing the typed
+            // ClaimsService HttpClient with a fake handler that returns the
+            // canned Bundle the old MockFhirDataAdapter used to produce.
+            services.AddHttpClient(FhirService.Controllers.ExplanationOfBenefitController.ClaimsServiceClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => new FakeClaimsServiceHandler());
         });
 
         builder.UseEnvironment("Development");
@@ -107,6 +116,64 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>
+    /// Minimal canned-response stand-in for claims-service used by the
+    /// fhir-service ExplanationOfBenefit proxy. Mirrors the legacy
+    /// <c>MockFhirDataAdapter.Eobs</c> seed so existing fhir-service
+    /// integration tests (ContentNegotiation, etc.) keep passing after
+    /// capability 5.11 migrated the EOB controller to a proxy.
+    /// </summary>
+    private sealed class FakeClaimsServiceHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            const string searchPath = "/fhir/ExplanationOfBenefit";
+            const string readPrefix = "/fhir/ExplanationOfBenefit/";
+
+            if (path.StartsWith(readPrefix, StringComparison.Ordinal))
+            {
+                var id = path[readPrefix.Length..];
+                if (id is "eob-001" or "eob-002" or "eob-003")
+                {
+                    return Task.FromResult(JsonResponse(System.Net.HttpStatusCode.OK,
+                        $"{{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"{id}\"}}"));
+                }
+                return Task.FromResult(JsonResponse(System.Net.HttpStatusCode.NotFound,
+                    "{\"resourceType\":\"OperationOutcome\",\"issue\":[{\"severity\":\"error\",\"code\":\"not-found\"}]}"));
+            }
+
+            if (path == searchPath)
+            {
+                var query = request.RequestUri.Query;
+                var (entries, total) =
+                    query.Contains("patient=pat-001", StringComparison.Ordinal)
+                        ? (
+                            "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"eob-001\"}}," +
+                            "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"eob-002\"}}",
+                            2)
+                    : query.Contains("patient=pat-002", StringComparison.Ordinal)
+                        ? (
+                            "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"eob-003\"}}",
+                            1)
+                    : (string.Empty, 0);
+
+                var body = $"{{\"resourceType\":\"Bundle\",\"type\":\"searchset\",\"total\":{total},\"entry\":[{entries}]}}";
+                return Task.FromResult(JsonResponse(System.Net.HttpStatusCode.OK, body));
+            }
+
+            return Task.FromResult(JsonResponse(System.Net.HttpStatusCode.NotFound,
+                "{\"resourceType\":\"OperationOutcome\"}"));
+        }
+
+        private static HttpResponseMessage JsonResponse(System.Net.HttpStatusCode status, string body) =>
+            new(status)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/fhir+json"),
+            };
     }
 
     private sealed class NoOpPriorAuthRuleEngine : IPriorAuthRuleEngine
