@@ -101,6 +101,18 @@ public interface IClaimRepository
     /// shouldn't produce a new version. Adjustments DO produce new versions
     /// via <see cref="UpdateAsync"/>; this bypass is for the routine path.
     ///
+    /// <para>
+    /// 5.7 — <paramref name="pendDetails"/> is an optional fourth field on
+    /// the projection. <see cref="PendDetails"/> is "operationally distinct
+    /// from claim identity" by the same logic as
+    /// <see cref="AdjudicationResult"/> and is the deterministic
+    /// edit-failure surface populated by NCCI / MUE / future authorization
+    /// stages. Pass null when no pend reason applies (the current head's
+    /// PendDetails is left untouched). Pass non-null to project the
+    /// snapshot — the AI examiner (5.9) and remittance generator (5.10)
+    /// read from this field on the head row.
+    /// </para>
+    ///
     /// Returns true on success, false when no head row was found for the
     /// chain.
     /// </summary>
@@ -109,7 +121,8 @@ public interface IClaimRepository
         string claimVersionId,
         AdjudicationResult adjudicationResult,
         IReadOnlyList<LineAdjudicationResult> lineResults,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        PendDetails? pendDetails = null);
 }
 
 public class ClaimRepository : IClaimRepository
@@ -697,7 +710,8 @@ public class ClaimRepository : IClaimRepository
         string claimVersionId,
         AdjudicationResult adjudicationResult,
         IReadOnlyList<LineAdjudicationResult> lineResults,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        PendDetails? pendDetails = null)
     {
         // Resolve the head (non-terminal-but-adjudicatable) row by chain key.
         // PatchItemAsync is keyed on the per-row document Id, so we look up
@@ -773,6 +787,18 @@ public class ClaimRepository : IClaimRepository
             PatchOperation.Set("/claimLines", head.ClaimLines),
             PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
         };
+
+        // 5.7 — project deterministic pend reason when the adjudication
+        // pipeline (NCCI / MUE / future authorization stages) populated
+        // it. Null leaves the head row's existing PendDetails untouched
+        // so a clean re-adjudication doesn't drop a prior pend reason
+        // unless the new pipeline run replaces it. To explicitly clear
+        // a stale pend, the orchestrator can pass an empty PendDetails
+        // — but the v1 stage path doesn't do that today.
+        if (pendDetails is not null)
+        {
+            ops.Add(PatchOperation.Set("/pendDetails", pendDetails));
+        }
 
         try
         {

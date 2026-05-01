@@ -89,4 +89,19 @@ public class ClaimAdjudicationContext
     /// warning context but do not gate on it (Reject already short-circuits).
     /// </summary>
     public ScrubbingOutcome? ScrubbingResult { get; set; }
+
+    /// <summary>
+    /// Deterministic edit-failure pend reason populated by
+    /// <see cref="Stages.NcciEditsStage"/> (capability 5.7). Null when
+    /// NCCI / MUE produced no failures (or the stage was disabled).
+    /// Forwarded to the projection-bypass write so the head row carries
+    /// the snapshot for portal queries and downstream consumers (5.9 AI
+    /// examiner, 5.10 remittance) — see
+    /// <see cref="Repositories.IClaimRepository.UpdateAdjudicationProjectionAsync"/>.
+    /// Distinct from <see cref="AdjudicationResult"/> by design (see
+    /// <see cref="ClaimsService.Models.PendDetails"/>) so the
+    /// deterministic reason cannot be silently overwritten by a
+    /// downstream stage.
+    /// </summary>
+    public PendDetails? PendDetails { get; set; }
 }

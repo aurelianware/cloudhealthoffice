@@ -34,3 +34,42 @@ public enum CredentialingEnforcementMode
     FailOpen,
     SoftValidation,
 }
+
+/// <summary>
+/// Posture <see cref="Services.Adjudication.Stages.NcciEditsStage"/> adopts
+/// when the NCCI / MUE engine produces edit failures. Capability 5.7.
+///
+/// <para>
+/// Different default than <see cref="NetworkEnforcementMode"/> /
+/// <see cref="CredentialingEnforcementMode"/>: NCCI failures often have
+/// a legitimate -59/X{EPSU} modifier-override path, so auto-denial
+/// without human review is operationally harsh. The work queue is the
+/// right channel for "this might be a bundling violation, but might be
+/// a legitimate distinct-procedure case" — hence
+/// <see cref="PendForReview"/> as the production default.
+/// </para>
+/// </summary>
+public enum NcciEnforcementMode
+{
+    /// <summary>
+    /// Default — failed edits produce a Pend outcome and surface in the
+    /// work queue for human review (and, for NE001 with modifier
+    /// addressability, the AI examiner). Pipeline continues so
+    /// downstream stages can decorate the audit trail.
+    /// </summary>
+    PendForReview,
+
+    /// <summary>
+    /// Failed edits produce a terminal Deny outcome; pipeline
+    /// short-circuits to PersistenceStage. Selected by tenants confident
+    /// their NCCI configuration is mature enough for hard auto-denial.
+    /// </summary>
+    Deny,
+
+    /// <summary>
+    /// Failed edits are recorded on the audit trail but the stage
+    /// returns Pass. Used during initial rollout to capture which
+    /// claims would have pended/denied without altering payment flow.
+    /// </summary>
+    SoftValidation,
+}

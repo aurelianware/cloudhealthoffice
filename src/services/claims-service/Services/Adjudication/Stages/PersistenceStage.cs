@@ -58,7 +58,8 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                     context.ClaimVersionId,
                     context.AdjudicationResult,
                     context.LineAdjudicationResults,
-                    ct)
+                    ct,
+                    pendDetails: context.PendDetails)
                 .ConfigureAwait(false);
 
             if (!written)

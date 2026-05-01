@@ -7,8 +7,10 @@ namespace CloudHealthOffice.NcciEngine.Models;
 // NCCI ENGINE — REQUEST / RESPONSE MODELS
 //
 // These types are the public contract consumed by adjudication
-// workflows (e.g., the Argo ClaimsAdjudicationWorkflow) and the
-// claims scrubbing service.
+// workflows. Capability 5.7 wires this engine into claims-service via
+// NcciEditsStage at Order=400 in the adjudication pipeline; future
+// callers (state-Medicaid EDI, authorization-service pre-checks) bring
+// their own mapper onto the same request shape.
 // ═══════════════════════════════════════════════════════════════════
 
 /// <summary>

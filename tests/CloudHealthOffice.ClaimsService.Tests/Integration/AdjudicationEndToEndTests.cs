@@ -9,6 +9,7 @@ using ClaimsService.Services.Resolution;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.Infrastructure.Messaging;
+using CloudHealthOffice.NcciEngine.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -200,6 +201,17 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
 
                 services.AddSingleton(Repository);
                 services.AddSingleton(Substitute.For<IClaimVersionEventPublisher>());
+
+                // 5.7 — NcciEngine's repository implementation gets removed
+                // by the Cosmos/Mongo filter above. INcciEditService still
+                // depends on INcciRepository — register a substitute so
+                // ServiceProvider validation succeeds. The substitute
+                // returns null from GetEditPair / GetMueEntry, which makes
+                // the engine's ScrubAsync return Passed=true with zero
+                // failures (the missing-table soft-pass posture). The 5.5
+                // E2E test exercises BenefitCalculation, not NCCI failure
+                // paths — that's covered by AdjudicationWithNcciEndToEndTests.
+                services.AddSingleton(Substitute.For<INcciRepository>());
 
                 var engine = Substitute.For<IBenefitCalculationEngine>();
                 engine.CalculateAsync(

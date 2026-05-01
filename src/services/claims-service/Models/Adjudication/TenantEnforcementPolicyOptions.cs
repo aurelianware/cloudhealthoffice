@@ -3,7 +3,8 @@ namespace ClaimsService.Models.Adjudication;
 /// <summary>
 /// Service-wide enforcement-posture configuration consumed by
 /// <see cref="Services.Adjudication.Stages.NetworkCredentialingStage"/>
-/// (capability 5.6). Bound from configuration section
+/// (capability 5.6) and <see cref="Services.Adjudication.Stages.NcciEditsStage"/>
+/// (capability 5.7). Bound from configuration section
 /// <c>Adjudication:Enforcement</c>.
 ///
 /// <para>
@@ -23,4 +24,13 @@ public class TenantEnforcementPolicyOptions
 
     public CredentialingEnforcementMode CredentialingMode { get; set; }
         = CredentialingEnforcementMode.FailClosed;
+
+    /// <summary>
+    /// Posture for NCCI / MUE edit failures (capability 5.7). Default
+    /// <see cref="NcciEnforcementMode.PendForReview"/> diverges from the
+    /// other modes' FailClosed default because NCCI failures often have
+    /// a legitimate modifier-override path; auto-denial without review
+    /// is operationally harsh.
+    /// </summary>
+    public NcciEnforcementMode NcciMode { get; set; } = NcciEnforcementMode.PendForReview;
 }
