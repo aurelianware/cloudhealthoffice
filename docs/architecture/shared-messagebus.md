@@ -11,7 +11,7 @@ channel.
 `IMessageBus` covers **durable async work dispatch** between CHO services:
 work queues, pub-sub topics, and scheduled delivery. It is deliberately
 **not** a Kafka facade. High-throughput streaming analytics
-(accumulator-service, authorization-service, claims-scrubbing-service,
+(accumulator-service, authorization-service,
 rfai-service, enrollment-import-service) remain on their own dedicated
 Kafka clients; those pipelines need Kafka-specific semantics
 (partitioning, compaction, change-feed replay) that don't belong on a

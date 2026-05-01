@@ -28,34 +28,6 @@ updates:
         update-types: ["version-update:semver-major"]
 
   # ============================================================
-  # npm — Claims Scrubbing Service
-  # ============================================================
-  - package-ecosystem: "npm"
-    directory: "/src/services/claims-scrubbing-service"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "02:00"
-    open-pull-requests-limit: 5
-    reviewers:
-      - "aurelianware"
-    labels:
-      - "dependencies"
-      - "npm"
-      - "claims-scrubbing"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    groups:
-      claims-scrubbing-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-
-  # ============================================================
   # npm — X12 834 Parser container
   # ============================================================
   - package-ecosystem: "npm"
@@ -96,7 +68,6 @@ updates:
       - "/src/services/benefit-plan-service"
       - "/src/services/capitation-service"
       - "/src/services/CHO.TerminologyService"
-      - "/src/services/claims-scrubbing-service"
       - "/src/services/claims-service"
       - "/src/services/CloudHealthOffice.PricingApi"
       - "/src/services/coverage-service"

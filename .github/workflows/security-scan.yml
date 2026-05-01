@@ -43,16 +43,6 @@ jobs:
           # the bar project-wide. Config: .audit-ci.json at repo root.
           npx --yes audit-ci@^7 --config .audit-ci.json
 
-      - name: Check claims-scrubbing-service
-        run: |
-          if [ -d "services/claims-scrubbing-service" ]; then
-            cd services/claims-scrubbing-service
-            npm ci
-            npm audit --omit=dev --audit-level=moderate
-          else
-            echo "⚠️  claims-scrubbing-service not found, skipping"
-          fi
-
       - name: Upload audit results
         uses: actions/upload-artifact@v4
         if: always()

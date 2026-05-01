@@ -17,6 +17,9 @@ COPY src/services/shared/CloudHealthOffice.Events/CloudHealthOffice.Events.cspro
 # BenefitEngine + OperatingMode at compile time.
 COPY src/engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.OperatingMode/CloudHealthOffice.OperatingMode.csproj src/engines/CloudHealthOffice.OperatingMode/
+# 5.4 — ScrubbingStage drives every claim through the shared scrub
+# engine class library at adjudication pipeline Order=100.
+COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/CloudHealthOffice.ClaimsScrubEngine.csproj src/engines/CloudHealthOffice.ClaimsScrubEngine/
 RUN dotnet restore src/services/claims-service/claims-service.csproj
 
 # Copy source code and build
@@ -25,6 +28,7 @@ COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/C
 COPY src/services/shared/CloudHealthOffice.Events/ src/services/shared/CloudHealthOffice.Events/
 COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.OperatingMode/
+COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/ src/engines/CloudHealthOffice.ClaimsScrubEngine/
 RUN dotnet build src/services/claims-service/claims-service.csproj -c Release --no-restore
 
 # Publish stage

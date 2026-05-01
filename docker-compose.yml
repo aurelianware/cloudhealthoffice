@@ -122,21 +122,6 @@ services:
       retries: 10
     profiles: [core, finance]
 
-  claims-scrubbing-service:
-    build:
-      context: .
-      dockerfile: src/services/claims-scrubbing-service/Dockerfile
-    ports:
-      - "5010:8080"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - MongoDb__ConnectionString=mongodb://mongo:27017
-      - MongoDb__DatabaseName=ClaimsScrubDB
-    depends_on:
-      mongo:
-        condition: service_healthy
-    profiles: [core]
-
   benefit-plan-service:
     build:
       context: .

@@ -260,7 +260,7 @@ curl http://claims-service.cloudhealthoffice/health
 ## Next Steps
 
 1. **Configure actual x12-parser** - Replace stub with real 837 parser
-2. **Add validation** - Integrate with claims-scrubbing-service
+2. **Add validation** - Structural scrubbing runs in-process inside claims-service via the `CloudHealthOffice.ClaimsScrubEngine` class library at adjudication pipeline Order=100 (capability 5.4)
 3. **Error handling** - Route invalid claims to work queue
 4. **Monitoring** - Add Prometheus metrics
 5. **Alerting** - Configure alerts for failed workflows

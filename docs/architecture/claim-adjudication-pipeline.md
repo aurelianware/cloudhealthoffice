@@ -4,6 +4,9 @@
 > stage interface, BenefitCalculation + Persistence stages, five stub
 > stages, Service Bus trigger transport, and resolver clients. Capabilities
 > 5.4 / 5.6 / 5.7 / 5.8 / 5.9 each replace one stub stage via DI swap.
+> 5.4 (Scrubbing) and 5.6 (NetworkCredentialing) are now live — see
+> [`claim-scrubbing-pipeline.md`](./claim-scrubbing-pipeline.md) for
+> the structural-validation stage.
 
 ## Why this exists
 
@@ -36,8 +39,8 @@ POST /api/v1/claims                                     (capability 5.3)
    │   ├── resolve plan (cached)  • resolve member (cached)       │
    │   └── iterate stages by Order ascending:                     │
    │                                                              │
-   │       100  ScrubbingStubStage           (5.4 replaces)       │
-   │       200  NetworkCredentialingStubStage (5.6 replaces)      │
+   │       100  ScrubbingStage               ★ real (5.4)         │
+   │       200  NetworkCredentialingStage    ★ real (5.6)         │
    │       300  BenefitCalculationStage      ★ real (5.5)         │
    │       400  NcciEditsStubStage           (5.7 replaces)       │
    │       500  CoordinationOfBenefitsStubStage (5.8 replaces)    │
@@ -259,6 +262,8 @@ Capabilities 5.4 / 5.6 / 5.7 / 5.8 / 5.9 each ship a real stage that:
 
 ## Cross-references
 
+- [`claim-scrubbing-pipeline.md`](./claim-scrubbing-pipeline.md) —
+  structural validation at Order=100 (capability 5.4)
 - [`claim-versioning.md`](./claim-versioning.md) — version chain that
   PersistenceStage's bypass writes against
 - [`claim-adapter-pattern.md`](./claim-adapter-pattern.md) — adapter

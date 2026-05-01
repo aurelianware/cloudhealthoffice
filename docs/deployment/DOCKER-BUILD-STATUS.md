@@ -20,10 +20,9 @@
 7. ✅ **benefit-plan-service** - `ghcr.io/aurelianware/cloudhealthoffice-benefit-plan-service:latest`
 8. ✅ **reference-data-service** - `ghcr.io/aurelianware/cloudhealthoffice-reference-data-service:latest`
 9. ✅ **sponsor-service** - `ghcr.io/aurelianware/cloudhealthoffice-sponsor-service:latest`
-10. ✅ **claims-scrubbing-service** - `ghcr.io/aurelianware/cloudhealthoffice-claims-scrubbing-service:latest`
 
 ### Frontend (1)
-11. ✅ **portal** (Blazor Server) - `ghcr.io/aurelianware/cloudhealthoffice-portal:latest`
+10. ✅ **portal** (Blazor Server) - `ghcr.io/aurelianware/cloudhealthoffice-portal:latest`
 
 ---
 

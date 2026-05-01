@@ -185,7 +185,6 @@ jobs:
             {"service":"capitation-service"},
             {"service":"CHO.TerminologyService","image_name":"cloudhealthoffice-terminology-service"},
             {"service":"claims-examiner-service"},
-            {"service":"claims-scrubbing-service"},
             {"service":"claims-service"},
             {"service":"CloudHealthOffice.PricingApi","image_name":"cloudhealthoffice-pricing-api"},
             {"service":"consent-service"},

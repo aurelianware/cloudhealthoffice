@@ -11,7 +11,7 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   # Self-hosted Kafka is cluster-internal and plaintext; no SASL in this
-  # environment. Matches claims-scrubbing-service-config.
+  # environment.
   Kafka__BootstrapServers: "kafka.cloudhealthoffice:9092"
   Kafka__ClaimPendedTopic: "claims.pended.v1"
   Kafka__ConsumerGroupId: "claims-examiner-service"

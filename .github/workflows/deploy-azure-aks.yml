@@ -161,7 +161,6 @@ jobs:
           - benefit-plan-service
           - reference-data-service
           - sponsor-service
-          - claims-scrubbing-service
           - tenant-service
           - enrollment-import-service
           - trading-partner-service
