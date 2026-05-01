@@ -23,6 +23,9 @@ COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/CloudHealthOffice.ClaimsScr
 # 5.7 — NcciEditsStage drives every claim through the NCCI engine
 # class library at adjudication pipeline Order=400.
 COPY src/engines/CloudHealthOffice.NcciEngine/CloudHealthOffice.NcciEngine.csproj src/engines/CloudHealthOffice.NcciEngine/
+# 5.8 — CoordinationOfBenefitsStage uses the CobEngine class library
+# for payer-order rule labelling at adjudication pipeline Order=500.
+COPY src/engines/CloudHealthOffice.CobEngine/CloudHealthOffice.CobEngine.csproj src/engines/CloudHealthOffice.CobEngine/
 RUN dotnet restore src/services/claims-service/claims-service.csproj
 
 # Copy source code and build
@@ -33,6 +36,7 @@ COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.
 COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.OperatingMode/
 COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/ src/engines/CloudHealthOffice.ClaimsScrubEngine/
 COPY src/engines/CloudHealthOffice.NcciEngine/ src/engines/CloudHealthOffice.NcciEngine/
+COPY src/engines/CloudHealthOffice.CobEngine/ src/engines/CloudHealthOffice.CobEngine/
 RUN dotnet build src/services/claims-service/claims-service.csproj -c Release --no-restore
 
 # Publish stage

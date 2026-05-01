@@ -236,17 +236,51 @@ builder.Services.AddClaimsScrubEngine();
 // with telemetry rather than throwing).
 builder.Services.AddNcciEngine().UseRepositoryFromConfiguration(builder.Configuration);
 
+// 5.8 — CobEngine services. Pure-calculation, stateless, no I/O —
+// Singleton lifetime is correct (plan Decision 1b: no AddCobEngine
+// extension exists; direct DI is the established convention for this
+// engine). ICobCalculationService registers but is unused in 5.8 stage
+// logic — Phase 2 priorEob work exercises it for CHO-secondary
+// calculation. CoordinationOfBenefitsStage exercises only
+// IPayerOrderService for audit-trail rule labelling.
+builder.Services.AddSingleton<
+    CloudHealthOffice.CobEngine.Services.ICobCalculationService,
+    CloudHealthOffice.CobEngine.Services.CobCalculationService>();
+builder.Services.AddSingleton<
+    CloudHealthOffice.CobEngine.Services.IPayerOrderService,
+    CloudHealthOffice.CobEngine.Services.PayerOrderService>();
+
+// 5.8 — CoverageService HTTP client + cached resolution-client triple.
+// 5-minute TTL mirrors network-membership (coverage records can
+// terminate without explicit signal — open-enrollment loss, mid-year
+// term — vs. credentialing's 1-hour TTL where transitions are explicit
+// audit-trailed events). 5-second timeout mirrors the other resolution
+// clients so a flaky coverage-service can't stall the pipeline.
+builder.Services.AddHttpClient(UpstreamClientNames.CoverageService, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:CoverageService"]
+        ?? "http://coverage-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<HttpCoverageClient>();
+builder.Services.AddScoped<ICoverageClient>(sp =>
+    new CachingCoverageClient(
+        sp.GetRequiredService<HttpCoverageClient>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+
 // Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
 // 5.4-5.9 each replace one stub registration with the real stage that
-// wraps the corresponding engine. 5.4/5.6/5.7 swap the registration in
-// place rather than going through services.RemoveAll<>() — the stub
-// never shipped to production so there's nothing to remove. 5.8/5.9
-// stubs follow the same pattern when their capabilities ship.
+// wraps the corresponding engine. 5.4/5.6/5.7/5.8 swap the registration
+// in place rather than going through services.RemoveAll<>() — the stub
+// never shipped to production so there's nothing to remove. 5.9 stub
+// follows the same pattern when its capability ships.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
-builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStubStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStubStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 

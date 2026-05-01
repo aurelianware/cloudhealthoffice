@@ -73,3 +73,50 @@ public enum NcciEnforcementMode
     /// </summary>
     SoftValidation,
 }
+
+/// <summary>
+/// Posture <see cref="Services.Adjudication.Stages.CoordinationOfBenefitsStage"/>
+/// adopts when CHO is detected as <em>secondary</em> (or tertiary) — i.e.
+/// another payer holds primary responsibility for the claim. Phase 1 ships
+/// CHO-primary adjudication only; the engine's
+/// <c>CobCalculationService</c> for CHO-secondary calculation is registered
+/// but not exercised by the stage (Phase 2 priorEob work). Capability 5.8.
+///
+/// <para>
+/// Different default than the other modes: pending is the correct posture
+/// when a capability is genuinely unimplemented — ops gets a queue with a
+/// structured pend reason (<c>cob-secondary-not-supported-phase-1</c>)
+/// rather than a denial that silently masks Phase 2 sizing. Coverage-service
+/// degradation always pends regardless of the mode (see
+/// <see cref="Services.Adjudication.Stages.CoordinationOfBenefitsStage"/>);
+/// "unable to determine coverage state" isn't structurally a denial.
+/// </para>
+/// </summary>
+public enum CobEnforcementMode
+{
+    /// <summary>
+    /// Default — CHO-secondary scenarios produce a Pend outcome with the
+    /// stable pend reason <c>cob-secondary-not-supported-phase-1</c> so
+    /// the work queue and Phase-2 sizing telemetry both pick them up.
+    /// Pipeline continues so downstream stages can decorate the audit
+    /// trail (mirrors <see cref="NcciEnforcementMode.PendForReview"/>).
+    /// </summary>
+    PendForSecondary,
+
+    /// <summary>
+    /// CHO-secondary scenarios produce a terminal Deny outcome; pipeline
+    /// short-circuits to PersistenceStage. Selected by tenants who want
+    /// hard-block on secondary-payer claims rather than queueing them
+    /// for Phase 2. Coverage-service degradation still pends (the absence
+    /// of coverage data is not a denial).
+    /// </summary>
+    Deny,
+
+    /// <summary>
+    /// CHO-secondary scenarios are recorded on the audit trail (telemetry
+    /// + <see cref="ClaimAdjudicationContext.CobResult"/>) but the stage
+    /// returns Pass. Used during initial rollout to capture
+    /// CHO-secondary frequency without affecting payment flow.
+    /// </summary>
+    SoftValidation,
+}
