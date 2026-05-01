@@ -194,6 +194,12 @@ builder.Services.AddScoped<
     CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine,
     HttpBenefitCalculationEngineClient>();
 
+// Scoped tenant context — the orchestrator pins the tenant id on this
+// holder before stages run so the HTTP shim can send X-Tenant-ID
+// downstream from a background Service Bus subscription that has no
+// HttpContext. Scoped lifetime keeps each orchestrator run isolated.
+builder.Services.AddScoped<IAdjudicationTenantContext, AdjudicationTenantContext>();
+
 // Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
 // 5.4-5.9 replace the stub registrations via services.RemoveAll<>()
 // + AddScoped<IClaimAdjudicationStage, RealStage>().

@@ -22,10 +22,14 @@ namespace ClaimsService.Services.Adjudication;
 public interface IClaimAdjudicationStage
 {
     /// <summary>
-    /// Stable, lower-case identifier — used both for telemetry tags and as
-    /// the key into <see cref="Models.Adjudication.AdjudicationPipelineOptions.EnabledStages"/>.
-    /// Stub-stage replacements (5.4-5.9) MUST keep the same Name so the
-    /// per-tenant enablement config keeps working unchanged.
+    /// Stable identifier — used both for telemetry tags and as the key
+    /// into <see cref="Models.Adjudication.AdjudicationPipelineOptions.EnabledStages"/>.
+    /// Stage names use PascalCase (e.g. <c>"Scrubbing"</c>,
+    /// <c>"Persistence"</c>); the EnabledStages dictionary is built with
+    /// <see cref="StringComparer.OrdinalIgnoreCase"/> so config-side
+    /// casing variants resolve correctly. Stub-stage replacements
+    /// (5.4-5.9) MUST keep the same Name so the per-tenant enablement
+    /// config keeps working unchanged.
     /// </summary>
     string Name { get; }
 

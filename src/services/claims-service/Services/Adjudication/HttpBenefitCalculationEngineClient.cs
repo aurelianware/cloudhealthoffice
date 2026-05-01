@@ -44,15 +44,18 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IAdjudicationTenantContext _tenantContext;
     private readonly ILogger<HttpBenefitCalculationEngineClient> _logger;
 
     public HttpBenefitCalculationEngineClient(
         IHttpClientFactory httpClientFactory,
         IHttpContextAccessor httpContextAccessor,
+        IAdjudicationTenantContext tenantContext,
         ILogger<HttpBenefitCalculationEngineClient> logger)
     {
         _httpClientFactory = httpClientFactory;
         _httpContextAccessor = httpContextAccessor;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -127,8 +130,19 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             "Capability 5.12 (Adjustment Workflow) revisits the reversal surface.");
     }
 
+    /// <summary>
+    /// Tenant id sourced from the scoped <see cref="IAdjudicationTenantContext"/>
+    /// first (set by the orchestrator before each pipeline run from a
+    /// background subscription) and falling back to the inbound HTTP
+    /// request's resolved tenant. Either route ensures benefit-plan-service
+    /// receives the <c>X-Tenant-ID</c> header it requires regardless of
+    /// whether the engine is invoked from the orchestrator or from a
+    /// future synchronous controller path.
+    /// </summary>
     private string? ResolveTenantId()
     {
+        if (!string.IsNullOrEmpty(_tenantContext.TenantId)) return _tenantContext.TenantId;
+
         var ctx = _httpContextAccessor.HttpContext;
         if (ctx is null) return null;
         if (ctx.Items.TryGetValue("TenantId", out var value) && value is string s) return s;

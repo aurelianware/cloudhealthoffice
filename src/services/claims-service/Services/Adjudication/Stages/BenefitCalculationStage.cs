@@ -147,6 +147,10 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         var claim = context.Claim;
         var serviceDate = DateOnly.FromDateTime(claim.ServiceDateFrom);
 
+        var pointerToCode = claim.DiagnosisCodes
+            .Where(d => !string.IsNullOrWhiteSpace(d.Code))
+            .ToDictionary(d => d.PointerNumber, d => d.Code);
+
         return new BenefitResolutionRequest
         {
             ClaimId = claim.Id,
@@ -155,11 +159,11 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             BenefitPlanId = planGuid,
             ServiceDate = serviceDate,
             NetworkTier = NetworkTier.InNetwork,
-            Lines = claim.ClaimLines.Select(BuildLine).ToList(),
+            Lines = claim.ClaimLines.Select(l => BuildLine(l, claim, pointerToCode)).ToList(),
             AllowedAmounts = new Dictionary<int, decimal>(),
             ClaimType = MapClaimType(claim.ClaimType),
             LineOfBusiness = (int)claim.LineOfBusiness,
-            Member = BuildMemberContext(context.ResolvedMember, claim),
+            Member = BuildMemberContext(context.ResolvedMember, claim, serviceDate),
         };
     }
 
@@ -178,28 +182,59 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         _ => "837P",
     };
 
-    private static ClaimLineInput BuildLine(AdapterClaimLine line) => new()
+    private static ClaimLineInput BuildLine(
+        AdapterClaimLine line,
+        AdapterClaim claim,
+        IReadOnlyDictionary<int, string> pointerToCode)
     {
-        LineNumber = line.LineNumber,
-        ProcedureCode = line.ProcedureCode,
-        Modifiers = line.Modifiers.ToList(),
-        RevenueCode = line.RevenueCode,
-        PlaceOfService = line.PlaceOfServiceCode ?? string.Empty,
-        BilledAmount = line.ChargeAmount * line.Units,
-        Units = line.Units,
-        DiagnosisCodes = new List<string>(),
-    };
+        // POS falls back to the claim-level value when the line override
+        // is missing — ServiceCategoryResolver uses POS for rule matching
+        // and for system-level fallback inference, so dropping it would
+        // shift category resolution.
+        var pos = !string.IsNullOrEmpty(line.PlaceOfServiceCode)
+            ? line.PlaceOfServiceCode
+            : claim.PlaceOfServiceCode;
 
-    private static MemberContext? BuildMemberContext(ResolvedMember? member, AdapterClaim claim)
+        // Map the line's DiagnosisPointers (e.g. [1, 3]) to the
+        // corresponding ICD codes from the claim-level diagnosis list.
+        // Unknown pointers (no diagnosis at that position) drop silently
+        // — the engine treats missing diagnoses as "no opinion" rather
+        // than an error.
+        var diagnosesForLine = line.DiagnosisPointers
+            .Where(pointerToCode.ContainsKey)
+            .Select(p => pointerToCode[p])
+            .ToList();
+
+        return new ClaimLineInput
+        {
+            LineNumber = line.LineNumber,
+            ProcedureCode = line.ProcedureCode,
+            Modifiers = line.Modifiers.ToList(),
+            RevenueCode = line.RevenueCode,
+            PlaceOfService = pos ?? string.Empty,
+            BilledAmount = line.ChargeAmount * line.Units,
+            Units = line.Units,
+            DiagnosisCodes = diagnosesForLine,
+        };
+    }
+
+    private static MemberContext? BuildMemberContext(
+        ResolvedMember? member,
+        AdapterClaim claim,
+        DateOnly serviceDate)
     {
         if (member is null && claim.DiagnosisCodes.Count == 0) return null;
 
         int? age = null;
         if (member?.DateOfBirth is DateTime dob)
         {
-            var today = DateTime.UtcNow.Date;
-            age = today.Year - dob.Year;
-            if (dob.Date > today.AddYears(-age.Value)) age--;
+            // Age at the encounter, not at adjudication time. For
+            // retrospective claims this can shift the age band by years
+            // and change which benefit rules apply (pediatric / adult /
+            // senior / Medicare-eligible).
+            var encounter = serviceDate.ToDateTime(TimeOnly.MinValue);
+            age = encounter.Year - dob.Year;
+            if (dob.Date > encounter.AddYears(-age.Value)) age--;
         }
 
         BenefitMemberGender? gender = member?.Gender switch
