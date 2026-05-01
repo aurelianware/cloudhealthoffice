@@ -83,7 +83,7 @@ public class FhirExplanationOfBenefitControllerTests : IClassFixture<ClaimsApiFa
         var response = await _client.GetAsync("/fhir/ExplanationOfBenefit");
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadAsStringAsync();
-        body.Should().Contain("'patient' or '_id' parameter");
+        body.Should().Contain("patient or _id search parameter");
     }
 
     [Fact]

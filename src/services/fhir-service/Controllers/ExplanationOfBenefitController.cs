@@ -91,8 +91,8 @@ public class ExplanationOfBenefitController : FhirControllerBase
         if (string.IsNullOrEmpty(effectivePatient) && string.IsNullOrEmpty(explicitId))
         {
             return Task.FromResult(FhirBadRequest(
-                "ExplanationOfBenefit search requires 'patient' or '_id' parameter. " +
-                "Provide a patient-scoped token or an explicit 'patient' search parameter."));
+                "ExplanationOfBenefit search requires either the patient or _id search parameter. " +
+                "Provide a patient-scoped token or an explicit patient search parameter."));
         }
 
         var path = "fhir/ExplanationOfBenefit" + BuildUpstreamQueryString(query, effectivePatient);

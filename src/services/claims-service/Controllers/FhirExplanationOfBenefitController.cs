@@ -155,7 +155,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
         if (string.IsNullOrEmpty(patient) && string.IsNullOrEmpty(id))
         {
             return FhirOperationOutcome(400, "invalid",
-                "ExplanationOfBenefit search requires 'patient' or '_id' parameter.");
+                "ExplanationOfBenefit search requires either the patient or _id search parameter.");
         }
 
         var pageSize = Math.Clamp(count, 1, MaxPageSize);
