@@ -53,7 +53,12 @@ public class HttpCoverageClient : ICoverageClient
     {
         _ = forceRefresh;
 
-        if (string.IsNullOrWhiteSpace(memberId)) return Empty;
+        // Mirrors HttpCredentialingStatusClient / HttpProviderMembershipClient:
+        // blank input → null (degraded), distinct from the canonical
+        // "empty list = CHO is the only coverage" 404 path. The stage
+        // already short-circuits with Reject before ever calling here
+        // when MemberId is blank (Copilot review #737/5).
+        if (string.IsNullOrWhiteSpace(memberId)) return null;
 
         try
         {

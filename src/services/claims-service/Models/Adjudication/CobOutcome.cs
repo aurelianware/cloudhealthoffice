@@ -39,9 +39,18 @@ public sealed class CobOutcome
     /// Phase 2 priority sizing.</summary>
     public bool IsMedicarePrimary { get; init; }
 
-    /// <summary>Stable pend-reason emitted to the work queue when the
-    /// stage produced a Pend outcome; <c>null</c> when Pass / Deny.
-    /// Phase 1 values: <c>cob-secondary-not-supported-phase-1</c>,
+    /// <summary>Stable machine reason code for the scenario, set whenever
+    /// CHO is not the primary payer or coverage state is unknown — i.e.
+    /// for <see cref="CobScenario.ChoSecondaryDetected"/>,
+    /// <see cref="CobScenario.ChoTertiaryDetected"/>, and
+    /// <see cref="CobScenario.None"/>. The code is stable across modes —
+    /// it stays set even when the tenant's <see cref="CobEnforcementMode"/>
+    /// rendered the stage's outcome non-Pend (Deny mode → still set;
+    /// SoftValidation mode → still set for telemetry continuity). Only
+    /// <see cref="CobScenario.ChoPrimaryNoSecondary"/> and
+    /// <see cref="CobScenario.ChoPrimaryWithSecondary"/> leave it
+    /// <c>null</c>. Phase 1 values:
+    /// <c>cob-secondary-not-supported-phase-1</c>,
     /// <c>cob-coverage-service-unavailable</c>.</summary>
     public string? PendReason { get; init; }
 
@@ -67,10 +76,13 @@ public enum CobScenario
     /// <summary>No coverage data was available — the stage degraded.
     /// Coverage-service was unavailable / returned an unparseable
     /// response. <see cref="CobOutcome.PendReason"/> is
-    /// <c>cob-coverage-service-unavailable</c>; the stage produces Pend
-    /// regardless of <see cref="CobEnforcementMode"/> per Decision 7
-    /// ("unable to determine coverage state" isn't structurally a
-    /// denial scenario).</summary>
+    /// <c>cob-coverage-service-unavailable</c>. Outcome by mode
+    /// (Decision 7 — "unable to determine coverage state" isn't
+    /// structurally a denial scenario):
+    /// <see cref="CobEnforcementMode.PendForSecondary"/> → Pend;
+    /// <see cref="CobEnforcementMode.Deny"/> → Pend (NOT Deny);
+    /// <see cref="CobEnforcementMode.SoftValidation"/> → Pass (telemetry
+    /// captures the degradation but no policy effect).</summary>
     None,
 
     /// <summary>Coverage-service confirmed CHO is the only coverage

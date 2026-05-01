@@ -374,6 +374,58 @@ public class CoordinationOfBenefitsStageTests
         Assert.True(resolved > DateTime.UtcNow.AddSeconds(-5));
     }
 
+    [Fact]
+    public void ResolveEarliestServiceDate_uses_line_dates_when_header_is_default()
+    {
+        // Copilot review #737/4 — naive seed-from-header would never
+        // pick up the line date because `line.ServiceDateFrom < default`
+        // is structurally false. The fix treats default as null and
+        // falls back to UtcNow only when ALL dates are missing.
+        var lineDate = new DateTime(2025, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var claim = new AdapterClaim
+        {
+            Id = "claim-1",
+            MemberId = MemberId,
+            BillingProviderNPI = "1234567890",
+            ServiceDateFrom = default,
+            ServiceDateTo = default,
+            ClaimLines = new List<AdapterClaimLine>
+            {
+                new() { LineNumber = 1, ProcedureCode = "99213",
+                        ServiceDateFrom = lineDate, ServiceDateTo = lineDate },
+            },
+        };
+
+        var resolved = CoordinationOfBenefitsStage.ResolveEarliestServiceDate(claim);
+        Assert.Equal(lineDate, resolved);
+    }
+
+    [Fact]
+    public void ResolveEarliestServiceDate_picks_min_of_header_and_lines()
+    {
+        var headerDate = new DateTime(2025, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        var earlierLine = new DateTime(2025, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var laterLine = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var claim = new AdapterClaim
+        {
+            Id = "claim-1",
+            MemberId = MemberId,
+            BillingProviderNPI = "1234567890",
+            ServiceDateFrom = headerDate,
+            ServiceDateTo = headerDate,
+            ClaimLines = new List<AdapterClaimLine>
+            {
+                new() { LineNumber = 1, ProcedureCode = "99213",
+                        ServiceDateFrom = laterLine, ServiceDateTo = laterLine },
+                new() { LineNumber = 2, ProcedureCode = "99214",
+                        ServiceDateFrom = earlierLine, ServiceDateTo = earlierLine },
+            },
+        };
+
+        var resolved = CoordinationOfBenefitsStage.ResolveEarliestServiceDate(claim);
+        Assert.Equal(earlierLine, resolved);
+    }
+
     [Theory]
     [InlineData(CobScenario.ChoPrimaryNoSecondary)]
     [InlineData(CobScenario.ChoPrimaryWithSecondary)]

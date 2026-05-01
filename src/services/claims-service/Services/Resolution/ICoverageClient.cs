@@ -32,8 +32,10 @@ public interface ICoverageClient
     /// Returns the COB entries for <paramref name="memberId"/> as of
     /// <paramref name="asOfDate"/>. An empty list means CHO is the only
     /// coverage (NOT a degradation signal). <c>null</c> means transport
-    /// failure or unparseable response — the stage applies the mode-driven
-    /// degradation policy (Pend regardless of <see cref="Models.Adjudication.CobEnforcementMode"/>).
+    /// failure or unparseable response — the stage's degradation posture
+    /// (Decision 7) pends in <c>PendForSecondary</c> and <c>Deny</c>
+    /// modes ("unable to determine coverage state" is not structurally a
+    /// denial), and passes with telemetry in <c>SoftValidation</c> mode.
     /// </summary>
     Task<IReadOnlyList<CobEntry>?> GetCobEntriesAsync(
         string tenantId,

@@ -43,9 +43,13 @@ namespace ClaimsService.Services.Adjudication.Stages;
 ///     <see cref="CobScenario.ChoTertiaryDetected"/>; mode-driven
 ///     outcome.</description></item>
 ///   <item><description>Coverage-service degraded (<c>null</c> from the
-///     client) → <c>Pend</c> regardless of mode (Decision 7); "unable to
-///     determine coverage state" is not structurally a denial.
-///     <see cref="CobScenario.None"/>.</description></item>
+///     client) → <c>Pend</c> in <c>PendForSecondary</c> AND <c>Deny</c>
+///     modes (Decision 7 — "unable to determine coverage state" is
+///     not structurally a denial); <c>Pass</c> in <c>SoftValidation</c>
+///     mode with telemetry capturing the degradation. Either way
+///     <see cref="ClaimAdjudicationContext.CobResult"/> is set with
+///     <see cref="CobScenario.None"/> and the
+///     <c>cob-coverage-service-unavailable</c> pend reason.</description></item>
 /// </list>
 ///
 /// <para>
@@ -434,23 +438,31 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
     };
 
     /// <summary>
-    /// Earliest service date across the claim header and every line — the
-    /// most-restrictive interpretation, matching 5.6's
-    /// <c>NetworkCredentialingStage</c> behaviour. Coverage-service returns
+    /// Earliest non-default service date across the claim header and every
+    /// line — the most-restrictive interpretation. Coverage-service returns
     /// COB entries active on the supplied date; using the earliest service
-    /// date catches mid-claim COB transitions on multi-line claims.
+    /// date catches mid-claim COB transitions on multi-line claims. Falls
+    /// back to <see cref="DateTime.UtcNow"/> only when ALL dates are
+    /// missing/default (unlike the naive seeded-from-header approach which
+    /// would falsely fall back when the header is default but lines have
+    /// real dates — Copilot review #737/4).
     /// </summary>
     internal static DateTime ResolveEarliestServiceDate(ClaimsService.Models.AdapterClaim claim)
     {
-        var earliest = claim.ServiceDateFrom;
+        DateTime? earliest = claim.ServiceDateFrom == default
+            ? null
+            : claim.ServiceDateFrom;
+
         foreach (var line in claim.ClaimLines)
         {
-            if (line.ServiceDateFrom != default && line.ServiceDateFrom < earliest)
+            if (line.ServiceDateFrom == default) continue;
+            if (earliest is null || line.ServiceDateFrom < earliest)
             {
                 earliest = line.ServiceDateFrom;
             }
         }
-        return earliest == default ? DateTime.UtcNow : earliest;
+
+        return earliest ?? DateTime.UtcNow;
     }
 
     private static string SanitizeForLog(string? value) =>
