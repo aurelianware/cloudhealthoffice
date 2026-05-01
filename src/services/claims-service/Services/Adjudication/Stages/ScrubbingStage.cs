@@ -78,10 +78,16 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
         }
         catch (Exception ex)
         {
+            // Don't put ex.Message on the audit trail — mapper exceptions
+            // can wrap claim data (member ids, NPIs, dates) into the message
+            // string, which would persist as PHI on the version record.
+            // Full exception detail goes to ILogger only.
             _logger.LogError(ex,
                 "ClaimToX12837Mapper threw for claim {ClaimVersionId}; treating as Reject",
                 SanitizeForLog(context.ClaimVersionId));
-            context.ScrubbingResult = BuildExceptionOutcome(ex, "MAPPER_EXCEPTION", ex.Message);
+            context.ScrubbingResult = BuildExceptionOutcome(
+                ex, "MAPPER_EXCEPTION",
+                $"Scrubbing mapper threw: {ex.GetType().Name}");
             activity?.SetTag("scrubbing.decision", ScrubbingDecision.RejectStructural.ToString());
             return ClaimAdjudicationStageResult.Reject(
                 StageName,

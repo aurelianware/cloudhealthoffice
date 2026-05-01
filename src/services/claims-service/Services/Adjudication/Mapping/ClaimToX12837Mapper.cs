@@ -115,10 +115,9 @@ public static class ClaimToX12837Mapper
 
     private static EngineModels.ProviderAddress SentinelAddress() => new()
     {
-        // Default rules don't inspect provider address fields. Sentinel
-        // empties keep the record well-formed; if a future rule starts
-        // reading them, mapper picks up the real values from a
-        // BillingProviderAddress field on AdapterClaim added in 5.2 follow-up.
+        // Default rules don't inspect provider address fields; AdapterClaim
+        // doesn't carry a billing-provider address. Empty sentinels keep
+        // the X12 record well-formed.
         Line1 = string.Empty,
         City = string.Empty,
         State = string.Empty,
