@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using ClaimsExaminerService.Models;
 using ClaimsExaminerService.Services.Anthropic;
+using ClaimsExaminerService.Services.Events;
 using CloudHealthOffice.Events;
 
 namespace ClaimsExaminerService.Services.Examiner;
@@ -22,6 +23,7 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
     private readonly IAnthropicClient _anthropic;
     private readonly IExaminerPromptBuilder _promptBuilder;
     private readonly IProviderRfaiHistoryClient _rfaiHistory;
+    private readonly IAiExaminationEventPublisher _eventPublisher;
     private readonly ILogger<ExaminerOrchestrator> _logger;
 
     public ExaminerOrchestrator(
@@ -29,12 +31,14 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         IAnthropicClient anthropic,
         IExaminerPromptBuilder promptBuilder,
         IProviderRfaiHistoryClient rfaiHistory,
+        IAiExaminationEventPublisher eventPublisher,
         ILogger<ExaminerOrchestrator> logger)
     {
         _claimsClient = claimsClient;
         _anthropic = anthropic;
         _promptBuilder = promptBuilder;
         _rfaiHistory = rfaiHistory;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -136,7 +140,16 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
 
         var examination = ProjectToDto(result, _promptBuilder.PromptVersion);
 
-        await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, examination, ct);
+        var written = await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, examination, ct);
+        if (written)
+        {
+            // Capability 5.9 — terminal completion event for downstream
+            // consumers (5.10 remittance). Only emit when the write-back
+            // actually landed; a 409 means a human already acted on the
+            // claim and the AI advisory is moot.
+            await _eventPublisher.PublishCompletedAsync(
+                evt.ClaimId, evt.TenantId, examination, evt.EventId, ct);
+        }
     }
 
     /// <summary>
@@ -198,6 +211,15 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
             GeneratedAt = DateTime.UtcNow
         };
 
-        await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, fallback, ct);
+        var written = await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, fallback, ct);
+        if (written)
+        {
+            // EscalateToHuman is still a terminal AI recommendation —
+            // downstream consumers (5.10 remittance) decide what to do
+            // with it. Emit the completion event so they're not left
+            // waiting for one that never comes.
+            await _eventPublisher.PublishCompletedAsync(
+                evt.ClaimId, evt.TenantId, fallback, evt.EventId, ct);
+        }
     }
 }

@@ -43,4 +43,14 @@ public class TenantEnforcementPolicyOptions
     /// than denying or silently passing.
     /// </summary>
     public CobEnforcementMode CobMode { get; set; } = CobEnforcementMode.PendForSecondary;
+
+    /// <summary>
+    /// Posture for AI-backed examination (capability 5.9). Default
+    /// <see cref="AiEnforcementMode.BestEffort"/> — AI examination is
+    /// advisory; its absence shouldn't block claim processing because
+    /// NCCI failures already have a human work-queue path independent
+    /// of AI. <see cref="AiEnforcementMode.Disabled"/> is the operational
+    /// kill switch.
+    /// </summary>
+    public AiEnforcementMode AiMode { get; set; } = AiEnforcementMode.BestEffort;
 }

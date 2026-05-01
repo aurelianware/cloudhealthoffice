@@ -116,4 +116,20 @@ public class ClaimAdjudicationContext
     /// CHO-secondary persistence fields.
     /// </summary>
     public CobOutcome? CobResult { get; set; }
+
+    /// <summary>
+    /// AI-backed examination invocation outcome populated by
+    /// <see cref="Stages.AiExaminationStage"/> (capability 5.9). Null
+    /// until the stage runs. α posture (mirrors 5.4 scrubbing / 5.8 CoB):
+    /// not persisted via PersistenceStage; lives on the context for the
+    /// <c>cho.claims.adjudication.ai_examination.*</c> telemetry. The
+    /// actual AI recommendation is written back to
+    /// <see cref="ClaimsService.Models.Claim.AiExamination"/>
+    /// asynchronously by claims-examiner-service via the existing
+    /// <c>PUT /api/claims/{id}/ai-examination</c> endpoint — so this
+    /// outcome captures only what the pipeline stage decided about
+    /// invocation (filter pass/skip + Kafka emission), not the
+    /// recommendation itself.
+    /// </summary>
+    public AiExaminationOutcome? AiExaminationResult { get; set; }
 }
