@@ -158,6 +158,12 @@ public class FhirExplanationOfBenefitController : ControllerBase
                 "ExplanationOfBenefit search requires either the patient or _id search parameter.");
         }
 
+        // Normalize FHIR-typed references — `patient=Patient/123` is
+        // equivalent to `patient=123` per FHIR search semantics. Without
+        // this strip the repository read and the _id-vs-patient compare
+        // both miss when callers use the typed form.
+        var normalizedPatient = StripPatientPrefix(patient);
+
         var pageSize = Math.Clamp(count, 1, MaxPageSize);
         var pageNumber = Math.Max(1, page);
 
@@ -176,8 +182,8 @@ public class FhirExplanationOfBenefitController : ControllerBase
                 {
                     return BuildBundleResponse(Array.Empty<Claim>(), total: 0);
                 }
-                if (!string.IsNullOrEmpty(patient) &&
-                    !string.Equals(single.MemberId, patient, StringComparison.Ordinal))
+                if (!string.IsNullOrEmpty(normalizedPatient) &&
+                    !string.Equals(single.MemberId, normalizedPatient, StringComparison.Ordinal))
                 {
                     // _id resolved but the resource doesn't belong to the
                     // requested patient. Returning an empty bundle rather
@@ -189,7 +195,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
             }
 
             var (items, totalCount) = await _repository.SearchForMemberAsync(
-                memberId: patient!,
+                memberId: normalizedPatient!,
                 serviceDateFrom: null,
                 serviceDateTo: null,
                 status: null,
@@ -271,6 +277,21 @@ public class FhirExplanationOfBenefitController : ControllerBase
 
     private string TryGetTenantId() =>
         HttpContext?.Items["TenantId"]?.ToString() ?? string.Empty;
+
+    /// <summary>
+    /// FHIR search parameters that target a Reference type accept either
+    /// a bare logical id or a typed reference (e.g. <c>Patient/123</c>).
+    /// claims-service stores raw member ids, so strip the optional
+    /// <c>Patient/</c> prefix before using the value as a memberId.
+    /// </summary>
+    private static string? StripPatientPrefix(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        const string prefix = "Patient/";
+        return value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? value[prefix.Length..]
+            : value;
+    }
 
     private static string SanitizeForLog(string? value)
     {

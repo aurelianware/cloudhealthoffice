@@ -207,6 +207,28 @@ public class ExplanationOfBenefitControllerProxyTests
     }
 
     [Fact]
+    public async Task SearchEobs_strips_FHIR_typed_reference_from_explicit_patient_param()
+    {
+        // FHIR search params accept either bare ids or typed references
+        // (`patient=Patient/MEM-7`). Without stripping, the upstream
+        // receives `Patient/MEM-7` and the repository read for memberId
+        // silently misses.
+        var ctx = new DefaultHttpContext();
+        ctx.Request.QueryString = new QueryString("?patient=Patient/MEM-7");
+        _controller.ControllerContext = new ControllerContext { HttpContext = ctx };
+
+        _claimsHandler.Respond(_ => Json(HttpStatusCode.OK,
+            "{\"resourceType\":\"Bundle\",\"type\":\"searchset\",\"total\":0,\"entry\":[]}"));
+
+        await _controller.SearchEobs(default);
+
+        var req = _claimsHandler.Calls.Single();
+        req.RequestUri!.Query.Should().Contain("patient=MEM-7");
+        req.RequestUri.Query.Should().NotContain("Patient%2FMEM-7",
+            "the Patient/ prefix must be stripped before forwarding");
+    }
+
+    [Fact]
     public async Task SearchEobs_with_id_param_forwards_without_requiring_patient()
     {
         var ctx = new DefaultHttpContext();

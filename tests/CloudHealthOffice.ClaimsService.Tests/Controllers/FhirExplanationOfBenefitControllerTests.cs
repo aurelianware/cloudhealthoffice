@@ -149,6 +149,20 @@ public class FhirExplanationOfBenefitControllerTests : IClassFixture<ClaimsApiFa
     }
 
     [Fact]
+    public async Task SearchEobs_strips_FHIR_typed_reference_from_patient_param()
+    {
+        // Callers may send `patient=Patient/MEM-7`; the controller must
+        // strip the prefix before reading from the repo (which stores
+        // raw member ids) and before comparing against an _id-resolved
+        // claim's MemberId.
+        await _client.GetAsync("/fhir/ExplanationOfBenefit?patient=Patient/MEM-7");
+
+        await _factory.ClaimRepository.Received(1).SearchForMemberAsync(
+            "MEM-7", null, null, null, null, null, null, null,
+            Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    [Fact]
     public async Task SearchEobs_by_id_returns_single_entry_when_found()
     {
         _factory.ClaimRepository

@@ -77,7 +77,13 @@ public class ExplanationOfBenefitController : FhirControllerBase
     public Task<IActionResult> SearchEobs(CancellationToken ct = default)
     {
         var query = HttpContext.Request.Query;
-        var explicitPatient = query["patient"].FirstOrDefault();
+        // Normalize FHIR-typed reference form — `patient=Patient/123` is
+        // equivalent to `patient=123` per FHIR search semantics, and
+        // claims-service stores raw member ids. Without the strip, an
+        // upstream search for `Patient/{id}` silently returns empty.
+        // SmartPatientId is already normalized by the middleware so it
+        // doesn't need the same treatment, but mirror it here for symmetry.
+        var explicitPatient = StripPatientPrefix(query["patient"].FirstOrDefault());
         var explicitId = query["_id"].FirstOrDefault();
 
         // SMART scope enforcement middleware already rejects a mismatched
@@ -97,6 +103,15 @@ public class ExplanationOfBenefitController : FhirControllerBase
 
         var path = "fhir/ExplanationOfBenefit" + BuildUpstreamQueryString(query, effectivePatient);
         return ProxyClaimsServiceAsync("ExplanationOfBenefit", path, ct);
+    }
+
+    private static string? StripPatientPrefix(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        const string prefix = "Patient/";
+        return value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? value[prefix.Length..]
+            : value;
     }
 
     /// <summary>
