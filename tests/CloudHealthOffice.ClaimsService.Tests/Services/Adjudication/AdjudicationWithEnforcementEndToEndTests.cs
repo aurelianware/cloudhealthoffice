@@ -252,6 +252,7 @@ public class AdjudicationWithEnforcementEndToEndTests
             new IClaimAdjudicationStage[] { stage, persistence },
             _eventPublisher,
             _messageBus,
+            new AdjudicationTenantContext(),
             Options.Create(new AdjudicationPipelineOptions()),
             NullLogger<ClaimAdjudicationOrchestrator>.Instance);
     }
