@@ -1,9 +1,11 @@
 using ClaimsExaminerService.Services;
 using ClaimsExaminerService.Services.Anthropic;
+using ClaimsExaminerService.Services.Events;
 using ClaimsExaminerService.Services.Examiner;
 using ClaimsExaminerService.Services.Kafka;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
+using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -57,6 +59,14 @@ builder.Services.AddSingleton<IProviderRfaiHistoryClient, NoOpProviderRfaiHistor
 // configured the consumer logs a warning and exits cleanly, so dev environments
 // without Kafka still come up.
 builder.Services.AddHostedService<ClaimPendedConsumer>();
+
+// Capability 5.9 — Service Bus producer for the AI examination completion
+// event. Same backend-resolution semantics as claims-service: Auto resolves
+// to ServiceBus when Messaging:ServiceBusConnectionString is configured,
+// InMemory otherwise. Singleton because Service Bus client is thread-safe
+// and per-call construction would defeat connection pooling.
+builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
+builder.Services.AddSingleton<IAiExaminationEventPublisher, ServiceBusAiExaminationEventPublisher>();
 
 builder.Services.AddChoObservability(builder.Configuration);
 
