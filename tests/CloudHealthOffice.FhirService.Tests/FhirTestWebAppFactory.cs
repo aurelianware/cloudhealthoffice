@@ -75,7 +75,7 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             // path; preserve that coverage by stubbing the typed
             // ClaimsService HttpClient with a fake handler that returns the
             // canned Bundle the old MockFhirDataAdapter used to produce.
-            services.AddHttpClient(FhirService.Controllers.ExplanationOfBenefitController.ClaimsServiceClientName)
+            services.AddHttpClient(global::FhirService.Controllers.ExplanationOfBenefitController.ClaimsServiceClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => new FakeClaimsServiceHandler());
         });
 
@@ -127,6 +127,24 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     /// </summary>
     private sealed class FakeClaimsServiceHandler : HttpMessageHandler
     {
+        // Minimal EOB shape that satisfies all FHIR cardinality-1 fields
+        // (status, type, use, patient). The Hl7.Fhir Bundle deserializer
+        // rejects entries missing any of these, which the tests rely on
+        // for round-trip parsing.
+        private static string FakeEob(string id, string patientId) =>
+            "{" +
+              "\"resourceType\":\"ExplanationOfBenefit\"," +
+              $"\"id\":\"{id}\"," +
+              "\"status\":\"active\"," +
+              "\"use\":\"claim\"," +
+              "\"type\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/claim-type\",\"code\":\"professional\"}]}," +
+              $"\"patient\":{{\"reference\":\"Patient/{patientId}\"}}," +
+              "\"insurer\":{\"display\":\"CloudHealthOffice\"}," +
+              "\"provider\":{\"display\":\"Test Provider\"}," +
+              "\"created\":\"2026-01-15T00:00:00Z\"," +
+              "\"outcome\":\"complete\"" +
+            "}";
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -137,10 +155,16 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             if (path.StartsWith(readPrefix, StringComparison.Ordinal))
             {
                 var id = path[readPrefix.Length..];
-                if (id is "eob-001" or "eob-002" or "eob-003")
+                var patient = id switch
+                {
+                    "eob-001" or "eob-002" => "pat-001",
+                    "eob-003" => "pat-002",
+                    _ => null,
+                };
+                if (patient is not null)
                 {
                     return Task.FromResult(JsonResponse(System.Net.HttpStatusCode.OK,
-                        $"{{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"{id}\"}}"));
+                        FakeEob(id, patient)));
                 }
                 return Task.FromResult(JsonResponse(System.Net.HttpStatusCode.NotFound,
                     "{\"resourceType\":\"OperationOutcome\",\"issue\":[{\"severity\":\"error\",\"code\":\"not-found\"}]}"));
@@ -152,12 +176,12 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
                 var (entries, total) =
                     query.Contains("patient=pat-001", StringComparison.Ordinal)
                         ? (
-                            "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"eob-001\"}}," +
-                            "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"eob-002\"}}",
+                            "{\"resource\":" + FakeEob("eob-001", "pat-001") + "}," +
+                            "{\"resource\":" + FakeEob("eob-002", "pat-001") + "}",
                             2)
                     : query.Contains("patient=pat-002", StringComparison.Ordinal)
                         ? (
-                            "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"eob-003\"}}",
+                            "{\"resource\":" + FakeEob("eob-003", "pat-002") + "}",
                             1)
                     : (string.Empty, 0);
 
