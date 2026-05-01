@@ -66,13 +66,20 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
         {
             ClaimNumber = "E2E-001",
             MemberId = "MEM-1",
-            BillingProviderNPI = "1234567890",
+            // Luhn-valid NPI (PV001) and a diagnosis code (DC004) —
+            // both required by capability 5.4's ScrubbingStage which
+            // now runs at Order=100 ahead of BenefitCalculation.
+            BillingProviderNPI = "1234567893",
             BenefitPlanId = planId,
             LineOfBusiness = LineOfBusiness.Commercial,
             ClaimType = ClaimType.Professional,
             PlaceOfServiceCode = "11",
             ServiceDateFrom = serviceDate,
             ServiceDateTo = serviceDate,
+            DiagnosisCodes = new List<AdapterDiagnosisCode>
+            {
+                new() { Code = "Z00.00", PointerNumber = 1 },
+            },
             ClaimLines = new List<AdapterClaimLine>
             {
                 new()
@@ -83,6 +90,7 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                     Units = 1m,
                     ServiceDateFrom = serviceDate,
                     ServiceDateTo = serviceDate,
+                    DiagnosisPointers = new List<int> { 1 },
                 }
             },
         };
@@ -245,6 +253,12 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                         MemberId = ci.ArgAt<string>(1),
                         SubscriberMemberId = ci.ArgAt<string>(1),
                         IsSubscriber = true,
+                        // Required for capability 5.4's ScrubbingStage:
+                        // engine rule DC002 (Subscriber DOB Required) is
+                        // an Error and rejects the claim before it
+                        // reaches BenefitCalculationStage when DOB is
+                        // missing.
+                        DateOfBirth = new DateTime(1980, 6, 15, 0, 0, 0, DateTimeKind.Utc),
                     });
                 services.AddSingleton(memberResolver);
             });

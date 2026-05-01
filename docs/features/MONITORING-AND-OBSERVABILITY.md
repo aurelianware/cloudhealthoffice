@@ -147,22 +147,17 @@ spec:
                 - name: body
                   value: '{"cpt_codes": ["99213", "99214"]}'
           
-          # Step 5: Run claims scrubbing
-          - name: scrub-claim
-            dependencies: [validate-codes]
-            template: http-call
-            arguments:
-              parameters:
-                - name: url
-                  value: "http://claims-scrubbing-service.cloudhealthoffice:3004/api/v1/scrub"
-                - name: method
-                  value: "POST"
-                - name: body
-                  value: '{"claim_id": "{{workflow.parameters.claim-id}}"}'
-          
-          # Step 6: Run adjudication engine
+          # Pre-adjudication scrubbing was a separate HTTP call against
+          # claims-scrubbing-service in earlier revisions of this
+          # workflow. As of capability 5.4 it runs in-process inside
+          # claims-service via the CloudHealthOffice.ClaimsScrubEngine
+          # class library at adjudication pipeline Order=100, so the
+          # adjudication step calls a single endpoint that scrubs and
+          # adjudicates atomically.
+
+          # Step 5: Run adjudication engine (scrubbing happens in-process)
           - name: adjudicate
-            dependencies: [verify-provider, get-benefits, scrub-claim]
+            dependencies: [verify-provider, get-benefits]
             template: adjudication-engine
             arguments:
               parameters:
@@ -172,10 +167,8 @@ spec:
                   value: "{{tasks.verify-provider.outputs.result}}"
                 - name: benefit-result
                   value: "{{tasks.get-benefits.outputs.result}}"
-                - name: scrubbing-result
-                  value: "{{tasks.scrub-claim.outputs.result}}"
           
-          # Step 7: Generate EOB (Explanation of Benefits)
+          # Step 6: Generate EOB (Explanation of Benefits)
           - name: generate-eob
             dependencies: [adjudicate]
             template: generate-eob
@@ -208,7 +201,6 @@ spec:
           - name: eligibility-result
           - name: provider-result
           - name: benefit-result
-          - name: scrubbing-result
       container:
         image: acr.azurecr.io/cho/adjudication-engine:latest
         env:
@@ -218,8 +210,6 @@ spec:
             value: "{{inputs.parameters.provider-result}}"
           - name: BENEFIT_DATA
             value: "{{inputs.parameters.benefit-result}}"
-          - name: SCRUBBING_DATA
-            value: "{{inputs.parameters.scrubbing-result}}"
 ```
 
 ## Cost

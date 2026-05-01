@@ -414,19 +414,6 @@ services:
         condition: service_healthy
     healthcheck: *service-healthcheck
 
-  claims-scrubbing-service:
-    build:
-      context: .
-      dockerfile: src/services/claims-scrubbing-service/Dockerfile
-    ports:
-      - "5020:8080"
-    environment:
-      <<: *common-env
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    healthcheck: *service-healthcheck
-
   encounter-service:
     build:
       context: .

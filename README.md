@@ -74,8 +74,7 @@ Customers enter at any product line and expand over time. See
 
 |Service                  |Purpose                                      |X12 Transactions|
 |-------------------------|---------------------------------------------|----------------|
-|claims-service           |Claim lifecycle and adjudication             |837P/I/D, 835   |
-|claims-scrubbing-service |Pre-adjudication validation engine           |837 inbound     |
+|claims-service           |Claim lifecycle and adjudication; in-process structural scrubbing via ClaimsScrubEngine |837P/I/D, 835   |
 |eligibility-service      |Real-time and batch eligibility              |270/271         |
 |authorization-service    |Prior auth management                        |278             |
 |attachment-service       |Medical attachment correlation, RFAI, 824 ack|275, 277, 824   |

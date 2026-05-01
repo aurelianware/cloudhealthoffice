@@ -9,7 +9,6 @@ Complete migration of Cloud Health Office components from Azure Static Web Apps 
 ### Existing Components
 - **Static Web App** (`site/`): Marketing site, login, portal pages hosted on Azure Static Web Apps
 - **Eligibility Service** (`services/eligibility-service/`): X12 270/271 + FHIR eligibility checks (TypeScript/Node.js)
-- **Claims Scrubbing Service** (`services/claims-scrubbing-service/`): Claims validation
 - **Migration Wizard** (`tools/migration-wizard/`): Blazor web app for legacy system migration
 - **EDI Workflows**: X12 275/277/278/837 (Kubernetes CronJobs) ✅ Already in cluster
 

@@ -730,8 +730,8 @@ For Kubernetes deployments, container images must be built and pushed to GitHub 
 
 The `.github/workflows/docker-build.yml` workflow automatically builds all container images on push to `main`:
 
-**18 Container Images Built:**
-- **10 Microservices**: member-service, coverage-service, claims-service, eligibility-service, authorization-service, provider-service, benefit-plan-service, reference-data-service, sponsor-service, claims-scrubbing-service
+**17 Container Images Built:**
+- **9 Microservices**: member-service, coverage-service, claims-service, eligibility-service, authorization-service, provider-service, benefit-plan-service, reference-data-service, sponsor-service
 - **2 UI**: portal (Blazor), site (static)
 - **6 Utility Containers**: x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor
 

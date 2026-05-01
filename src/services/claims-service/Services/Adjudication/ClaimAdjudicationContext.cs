@@ -81,4 +81,12 @@ public class ClaimAdjudicationContext
     /// for adjustment-reason emission.
     /// </summary>
     public List<EnforcementOutcome> EnforcementOutcomes { get; } = new();
+
+    /// <summary>
+    /// Pre-adjudication scrubbing outcome populated by
+    /// <see cref="Stages.ScrubbingStage"/> (capability 5.4). Null until
+    /// the scrubbing stage runs; downstream stages may inspect for
+    /// warning context but do not gate on it (Reject already short-circuits).
+    /// </summary>
+    public ScrubbingOutcome? ScrubbingResult { get; set; }
 }

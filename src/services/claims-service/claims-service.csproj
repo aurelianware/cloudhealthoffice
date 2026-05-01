@@ -8,6 +8,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Pre-existing visibility for unit tests that exercise internal
+         helpers (e.g. NetworkCredentialingStage.ResolveEarliestServiceDate
+         in 5.6's tests). Without this the test project failed to build —
+         landed alongside 5.4 to unblock the new ScrubbingStage tests. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>CloudHealthOffice.ClaimsService.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="../shared/CloudHealthOffice.Events/CloudHealthOffice.Events.csproj" />
     <!-- Capability 5.5 — BenefitCalculationStage calls IBenefitCalculationEngine
@@ -15,6 +25,11 @@
          calculation runs in claims-service (adjudication pipeline) and
          benefit-plan-service (preview / what-if surface). -->
     <ProjectReference Include="../../engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj" />
+    <!-- Capability 5.4 — ScrubbingStage drives every claim through the
+         shared scrub engine class library before downstream stages run.
+         Same in-process pattern as BenefitEngine; replaces the
+         decommissioned claims-scrubbing-service. -->
+    <ProjectReference Include="../../engines/CloudHealthOffice.ClaimsScrubEngine/CloudHealthOffice.ClaimsScrubEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

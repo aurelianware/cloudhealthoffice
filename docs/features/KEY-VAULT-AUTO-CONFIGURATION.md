@@ -17,7 +17,6 @@ The services in Cloud Health Office now support automatic configuration from Azu
 ## Supported Services
 
 - **eligibility-service**: Auto-loads Cosmos DB, Event Grid, and backend API secrets
-- **claims-scrubbing-service**: Auto-loads Cosmos DB, Storage, Kafka, and backend API secrets
 
 ## Quick Start
 
@@ -128,11 +127,6 @@ The following secrets are automatically loaded by both services:
 ### Backend API
 - `BACKEND_BASE_URL`: Claims backend API base URL
 - `BACKEND_API_TOKEN`: Backend API authentication token
-
-### Kafka (claims-scrubbing-service only)
-- `KAFKA_BOOTSTRAP_SERVERS`: Kafka bootstrap servers
-- `KAFKA_SASL_USERNAME`: Kafka SASL username
-- `KAFKA_SASL_PASSWORD`: Kafka SASL password
 
 ## Development Mode
 

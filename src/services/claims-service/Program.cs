@@ -13,6 +13,7 @@ using ClaimsService.Services;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
 using ClaimsService.Services.Resolution;
+using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -222,13 +223,18 @@ builder.Services.AddScoped<ICredentialingStatusClient>(sp =>
         sp.GetRequiredService<HttpCredentialingStatusClient>(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
 
+// 5.4 — Claims Scrub Engine (class library). Default standard rule set;
+// per-tenant rule overrides remain a Phase 2 surface.
+builder.Services.AddClaimsScrubEngine();
+
 // Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
-// 5.4-5.9 replace the stub registrations via services.RemoveAll<>()
-// + AddScoped<IClaimAdjudicationStage, RealStage>(). 5.6 wires the
-// real NetworkCredentialingStage directly without going through the
-// remove/re-add dance because the stub never made it past 5.5; the
-// pattern in the comment remains the convention for 5.4 / 5.7-5.9.
-builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStubStage>();
+// 5.4-5.9 each replace one stub registration with the real stage that
+// wraps the corresponding engine. 5.6 (NetworkCredentialingStage) and
+// 5.4 (ScrubbingStage) both swap the registration in place rather than
+// going through services.RemoveAll<>() — the stub never shipped to
+// production so there's nothing to remove. 5.7-5.9 stubs follow the
+// same pattern when their capabilities ship.
+builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStubStage>();

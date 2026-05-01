@@ -123,7 +123,7 @@ Complete X12 transaction support: 270/271, 276/277, 278, 834, 835, 837 (P/I enco
 - [ ] Port 20+ TypeScript validation rules (DC, CV, DL, AL, PV, MV categories) to C#
 - [ ] Port ~40 TypeScript tests to xUnit
 - [ ] Wire into AdjudicationController: scrub → NCCI → benefit calc → rate resolution
-- [ ] Deprecate TypeScript `claims-scrubbing-service` (keep for reference)
+- [x] Decommission `claims-scrubbing-service` — scrubbing runs in-process via `CloudHealthOffice.ClaimsScrubEngine` (capability 5.4)
 
 **Why:** Unifies pre-adjudication validation under one runtime. Eliminates the TypeScript/C# split for the claims pipeline.
 
