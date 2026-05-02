@@ -77,7 +77,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType.FullName?.Contains("Mongo") == true
                          || d.ImplementationType?.FullName?.Contains("Cosmos") == true
                          || d.ImplementationType?.FullName?.Contains("Mongo") == true
-                         || d.ImplementationType?.FullName?.Contains("ClaimVersionEventIndexInitializer") == true)
+                         || d.ImplementationType?.FullName?.Contains("ClaimVersionEventIndexInitializer") == true
+                         || d.ImplementationType?.FullName?.Contains("ClaimAdjustmentIndexInitializer") == true)
                 .ToList();
 
             foreach (var descriptor in cosmosDescriptors)

@@ -344,7 +344,7 @@ public class ClaimAdjustmentServiceTests
     }
 
     [Fact]
-    public async Task CreateAdjustment_SubmissionFails_ReturnsSubmissionFailedAndDoesNotSupersede()
+    public async Task CreateAdjustment_SubmissionFails_ReturnsSubmissionFailedAndReleasesChainLock()
     {
         var p = PaidPredecessor();
         _claimRepository.GetByIdAsync("pred-1").Returns(p);
@@ -352,16 +352,40 @@ public class ClaimAdjustmentServiceTests
         _submissionService
             .SubmitAsync(Arg.Any<AdapterClaim>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ClaimSubmissionResult.ValidationFailed(errors)));
+        _adjustmentRepository.DeleteAsync(default!, default!, default).ReturnsForAnyArgs(true);
 
         var sut = CreateService();
         var result = await sut.CreateAdjustmentAsync(
             "pred-1", Request(), "idem-1", "t1", "actor-1", "corr-1");
 
         Assert.Equal(ClaimAdjustmentOutcome.SubmissionFailed, result.Outcome);
+        Assert.Equal(ClaimSubmissionFailureKind.Validation, result.SubmissionFailureKind);
         Assert.Single(result.SubmissionErrors);
         await _claimRepository.DidNotReceiveWithAnyArgs().MarkSupersededProjectionAsync(
             default!, default!, default!, default, default, default);
-        await _adjustmentRepository.DidNotReceiveWithAnyArgs().CreateAsync(default!, default);
+        // Placeholder was inserted (chain lock acquired) then released on failure.
+        await _adjustmentRepository.Received(1).CreateAsync(Arg.Any<ClaimAdjustment>(), Arg.Any<CancellationToken>());
+        await _adjustmentRepository.Received(1).DeleteAsync("t1", Arg.Any<string>(), Arg.Any<CancellationToken>());
+        // Final-stage UpdateAsync (NewClaimId set) must NOT have run.
+        await _adjustmentRepository.DidNotReceiveWithAnyArgs().UpdateAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task CreateAdjustment_AdapterNotImplemented_Returns501FailureKind()
+    {
+        var p = PaidPredecessor();
+        _claimRepository.GetByIdAsync("pred-1").Returns(p);
+        _submissionService
+            .SubmitAsync(Arg.Any<AdapterClaim>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ClaimSubmissionResult.AdapterNotImplemented("vendor stub")));
+        _adjustmentRepository.DeleteAsync(default!, default!, default).ReturnsForAnyArgs(true);
+
+        var sut = CreateService();
+        var result = await sut.CreateAdjustmentAsync(
+            "pred-1", Request(), "idem-1", "t1", "actor-1", "corr-1");
+
+        Assert.Equal(ClaimAdjustmentOutcome.SubmissionFailed, result.Outcome);
+        Assert.Equal(ClaimSubmissionFailureKind.NotImplemented, result.SubmissionFailureKind);
     }
 
     [Fact]
@@ -404,12 +428,13 @@ public class ClaimAdjustmentServiceTests
     }
 
     [Fact]
-    public async Task CreateAdjustment_SupersessionFails_ReturnsSubmissionFailed()
+    public async Task CreateAdjustment_SupersessionFails_ReturnsSubmissionFailedAndReleasesChainLock()
     {
         var p = PaidPredecessor();
         _claimRepository.GetByIdAsync("pred-1").Returns(p);
         _claimRepository.MarkSupersededProjectionAsync(default!, default!, default!, default, default, default)
             .ReturnsForAnyArgs(false);
+        _adjustmentRepository.DeleteAsync(default!, default!, default).ReturnsForAnyArgs(true);
         StubSubmissionSuccess();
 
         var sut = CreateService();
@@ -417,7 +442,11 @@ public class ClaimAdjustmentServiceTests
             "pred-1", Request(), "idem-1", "t1", "actor-1", "corr-1");
 
         Assert.Equal(ClaimAdjustmentOutcome.SubmissionFailed, result.Outcome);
-        await _adjustmentRepository.DidNotReceiveWithAnyArgs().CreateAsync(default!, default);
+        // Placeholder was inserted (chain lock acquired) then released.
+        await _adjustmentRepository.Received(1).CreateAsync(Arg.Any<ClaimAdjustment>(), Arg.Any<CancellationToken>());
+        await _adjustmentRepository.Received(1).DeleteAsync("t1", Arg.Any<string>(), Arg.Any<CancellationToken>());
+        // Final-stage UpdateAsync (NewClaimId set) must NOT have run.
+        await _adjustmentRepository.DidNotReceiveWithAnyArgs().UpdateAsync(default!, default);
     }
 
     [Fact]

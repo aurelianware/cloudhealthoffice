@@ -307,6 +307,11 @@ public class ClaimFinalizationService : IClaimFinalizationService
             throw new ArgumentException("claimId is required", nameof(claimId));
         if (string.IsNullOrWhiteSpace(tenantId))
             throw new ArgumentException("tenantId is required", nameof(tenantId));
+        // Reason is required by the docstring + audit trail. Enforced
+        // here so callers (5.12b ReversalRunService) cannot accidentally
+        // emit empty-reason ClaimVersionVoided events.
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new ArgumentException("Reason is required for the audit trail", nameof(request));
 
         var claim = await _claimRepository.GetByIdAsync(claimId);
         if (claim == null || claim.TenantId != tenantId)
@@ -361,8 +366,25 @@ public class ClaimFinalizationService : IClaimFinalizationService
             return ClaimVoidResult.NotFound($"Claim {claimId} not found (race or concurrent delete)");
         }
 
-        // Refetch so the post-Void payload is what flows into events.
-        var updated = await _claimRepository.GetByIdAsync(claim.Id) ?? claim;
+        // Refetch so the post-Void payload is what flows into events. If
+        // the refetch returns null (concurrent delete between projection
+        // write and refetch — extremely rare), fall back to the in-memory
+        // claim BUT mutate it to the post-Void state so the version event
+        // and Kafka emit reflect the actual transition rather than the
+        // pre-Void Status/VersionState. The projection write succeeded;
+        // the row exists in the post-Void state by definition.
+        var updated = await _claimRepository.GetByIdAsync(claim.Id);
+        if (updated == null)
+        {
+            claim.Status = ClaimStatus.Voided;
+            claim.VersionState = ClaimVersionState.Voided;
+            claim.LastUpdatedDate = voidedAt;
+            claim.LastUpdatedBy = actorId;
+            updated = claim;
+            _logger.LogWarning(
+                "Void refetch returned null for claim {ClaimId}; emitting events from in-memory post-Void state",
+                Sanitize(claim.Id));
+        }
 
         try
         {

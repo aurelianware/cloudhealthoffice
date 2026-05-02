@@ -90,11 +90,24 @@ public class AdjudicationController : ControllerBase
     private string TenantId => HttpContext.GetTenantId()
         ?? throw new InvalidOperationException("Tenant context missing");
 
+    /// <summary>
+    /// Replace control characters (CR, LF, tab, etc.) with underscore so
+    /// caller-controlled string values cannot forge log lines or split a
+    /// single log entry into multiple. Mirrors
+    /// <c>RelationshipShim.SanitizeForLog</c> in member-service so CodeQL's
+    /// cs/log-forging rule recognizes it as a sanitizer (the prior
+    /// CR/LF-only Replace pattern was not picked up as a sanitizer).
+    /// </summary>
     private static string SanitizeForLog(string? value)
     {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var buffer = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            buffer.Append(char.IsControl(ch) ? '_' : ch);
+        }
+        if (buffer.Length > 256) buffer.Length = 256;
+        return buffer.ToString();
     }
 
     // ═══════════════════════════════════════════════════════════════════

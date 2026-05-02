@@ -45,9 +45,11 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
 
     // 5.12a — ClaimAdjustment aggregate persistence (Mongo per Gap 4
     // ratification). Indexes (chain-uniqueness for depth=1, idempotency,
-    // status+createdAt for ReversalRun batch queries) created on first
-    // resolution.
+    // status+createdAt for ReversalRun batch queries) are created once
+    // at startup by ClaimAdjustmentIndexInitializer so scoped repository
+    // resolution stays side-effect free.
     builder.Services.AddScoped<IClaimAdjustmentRepository, ClaimAdjustmentRepositoryMongo>();
+    builder.Services.AddHostedService<ClaimAdjustmentIndexInitializer>();
 }
 else
 {

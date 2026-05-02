@@ -1,5 +1,4 @@
 using ClaimsService.Models;
-using Microsoft.AspNetCore.Http;
 using MongoDB.Driver;
 
 namespace ClaimsService.Repositories;
@@ -61,39 +60,29 @@ public interface IClaimAdjustmentRepository
     /// the repository layer — the service layer owns the lifecycle ordering.
     /// </summary>
     Task<ClaimAdjustment> UpdateAsync(ClaimAdjustment adjustment, CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete an adjustment row. Used by the service layer to release the
+    /// chain-uniqueness lock when an early-stage failure leaves a placeholder
+    /// row blocking the chain (e.g. submission rejected, supersession write
+    /// failed before any version events fired). Returns true if a row was
+    /// removed; false if no row matched.
+    /// </summary>
+    Task<bool> DeleteAsync(string tenantId, string id, CancellationToken ct = default);
 }
 
 public sealed class ClaimAdjustmentRepositoryMongo : IClaimAdjustmentRepository
 {
     private readonly IMongoCollection<ClaimAdjustment> _collection;
-    private readonly ILogger<ClaimAdjustmentRepositoryMongo> _logger;
 
     public ClaimAdjustmentRepositoryMongo(
         IMongoDatabase database,
-        IConfiguration configuration,
-        ILogger<ClaimAdjustmentRepositoryMongo> logger)
+        IConfiguration configuration)
     {
         var collectionName = configuration["CosmosDb:ClaimAdjustmentsContainer"] ?? "ClaimAdjustments";
         _collection = database.GetCollection<ClaimAdjustment>(collectionName);
-        _logger = logger;
-
-        var keys = Builders<ClaimAdjustment>.IndexKeys;
-        var indexes = new List<CreateIndexModel<ClaimAdjustment>>
-        {
-            // Depth=1 invariant: at most one adjustment per chain per tenant.
-            new(
-                keys.Ascending(x => x.TenantId).Ascending(x => x.ClaimVersionId),
-                new CreateIndexOptions { Unique = true, Name = "tenant_chain_unique" }),
-            // Idempotency lookup.
-            new(
-                keys.Ascending(x => x.TenantId).Ascending(x => x.IdempotencyKey),
-                new CreateIndexOptions { Unique = true, Name = "tenant_idempotency_unique" }),
-            // List filter — status + createdAt for the ReversalRun batch query.
-            new(keys.Ascending(x => x.TenantId).Ascending(x => x.Status).Descending(x => x.CreatedAt)),
-            // Predecessor lookup for the chain-scoped GET endpoint.
-            new(keys.Ascending(x => x.TenantId).Ascending(x => x.PredecessorClaimId)),
-        };
-        _collection.Indexes.CreateMany(indexes);
+        // Index creation moved to ClaimAdjustmentIndexInitializer hosted
+        // service so scoped repository resolution stays side-effect free.
     }
 
     public async Task<ClaimAdjustment> CreateAsync(ClaimAdjustment adjustment, CancellationToken ct = default)
@@ -163,6 +152,14 @@ public sealed class ClaimAdjustmentRepositoryMongo : IClaimAdjustmentRepository
         }
         return adjustment;
     }
+
+    public async Task<bool> DeleteAsync(string tenantId, string id, CancellationToken ct = default)
+    {
+        var b = Builders<ClaimAdjustment>.Filter;
+        var filter = b.And(b.Eq(x => x.TenantId, tenantId), b.Eq(x => x.Id, id));
+        var result = await _collection.DeleteOneAsync(filter, ct);
+        return result.DeletedCount > 0;
+    }
 }
 
 /// <summary>
@@ -210,4 +207,7 @@ public sealed class ClaimAdjustmentRepositoryCosmosNoop : IClaimAdjustmentReposi
         throw new NotImplementedException(
             "ClaimAdjustment persistence requires MongoDB. Cosmos persistence is deferred (Gap 4 ratification).");
     }
+
+    public Task<bool> DeleteAsync(string tenantId, string id, CancellationToken ct = default)
+        => Task.FromResult(false);
 }

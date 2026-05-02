@@ -77,7 +77,7 @@ public enum ClaimAdjustmentOutcome
     ConflictingAdjustment = 6,
     /// <summary>Predecessor claim id not found for the tenant → 404.</summary>
     PredecessorNotFound = 7,
-    /// <summary>Submission service rejected the corrected payload (validation or vendor adapter NotImplemented). 400 / 501.</summary>
+    /// <summary>Submission service rejected the corrected payload (validation or vendor adapter NotImplemented). 400 / 501; check <see cref="ClaimAdjustmentResult.SubmissionFailureKind"/>.</summary>
     SubmissionFailed = 8,
 }
 
@@ -91,6 +91,16 @@ public class ClaimAdjustmentResult
 
     /// <summary>Carried through on <see cref="ClaimAdjustmentOutcome.SubmissionFailed"/> so the controller can surface field-level detail.</summary>
     public IReadOnlyList<ValidationError> SubmissionErrors { get; init; } = Array.Empty<ValidationError>();
+
+    /// <summary>
+    /// Discriminates the underlying submission failure kind so the
+    /// controller can map <see cref="ClaimSubmissionFailureKind.Validation"/>
+    /// to 400 and <see cref="ClaimSubmissionFailureKind.NotImplemented"/>
+    /// to 501. Null for non-submission failure outcomes and for
+    /// non-submission-driven failure paths
+    /// (e.g. supersession write failure).
+    /// </summary>
+    public ClaimSubmissionFailureKind? SubmissionFailureKind { get; init; }
 
     public static ClaimAdjustmentResult Created(ClaimAdjustment adjustment, AdapterClaim newVersion) =>
         new() { Outcome = ClaimAdjustmentOutcome.Created, Adjustment = adjustment, NewVersion = newVersion };
@@ -113,8 +123,17 @@ public class ClaimAdjustmentResult
     public static ClaimAdjustmentResult PredecessorNotFound(string message) =>
         new() { Outcome = ClaimAdjustmentOutcome.PredecessorNotFound, Message = message };
 
-    public static ClaimAdjustmentResult SubmissionFailed(string message, IReadOnlyList<ValidationError> errors) =>
-        new() { Outcome = ClaimAdjustmentOutcome.SubmissionFailed, Message = message, SubmissionErrors = errors };
+    public static ClaimAdjustmentResult SubmissionFailed(
+        string message,
+        IReadOnlyList<ValidationError> errors,
+        ClaimSubmissionFailureKind? failureKind = null) =>
+        new()
+        {
+            Outcome = ClaimAdjustmentOutcome.SubmissionFailed,
+            Message = message,
+            SubmissionErrors = errors,
+            SubmissionFailureKind = failureKind,
+        };
 }
 
 public class ClaimAdjustmentService : IClaimAdjustmentService
@@ -234,7 +253,60 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
                 $"Chain {chainKey} already has an in-flight adjustment {inflight.Id} in status {inflight.Status}");
         }
 
-        // Step 5 — prepare the corrected claim payload. Override
+        // Step 5 — acquire the chain lock by inserting a placeholder
+        // ClaimAdjustment row BEFORE supersession + submission. The
+        // unique index on (TenantId, ClaimVersionId) is the
+        // serialization point: a concurrent request for the same chain
+        // collides at insert time and gets a clean 409 with no
+        // side effects. Without this early insert, two requests could
+        // both pass the in-memory inflight check, both supersede +
+        // submit, and only THEN one would lose at the duplicate-key
+        // step — by which point the loser already has a new version
+        // persisted and supersession events emitted. NewClaimId is
+        // empty until step 7's update.
+        var adjustment = new ClaimAdjustment
+        {
+            TenantId = tenantId,
+            ClaimVersionId = chainKey,
+            PredecessorClaimId = predecessor.Id,
+            PredecessorVersionId = predecessor.Id,
+            NewClaimId = string.Empty,
+            AdjustmentReason = request.AdjustmentReason,
+            Notes = request.Notes,
+            Status = ClaimAdjustmentStatus.AwaitingReadjudication,
+            IdempotencyKey = idempotencyKey,
+            RequestHash = requestHash,
+            CreatedBy = actorId,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        try
+        {
+            await _adjustmentRepository.CreateAsync(adjustment, ct);
+        }
+        catch (MongoDB.Driver.MongoWriteException ex) when (ex.WriteError?.Category == MongoDB.Driver.ServerErrorCategory.DuplicateKey)
+        {
+            // Lost the race for this chain or idempotency key. Re-fetch
+            // and surface the appropriate 409 — supersession + version
+            // events have NOT yet fired, so this is a clean rejection.
+            var raceExisting = await _adjustmentRepository.GetByIdempotencyKeyAsync(tenantId, idempotencyKey, ct);
+            if (raceExisting != null)
+            {
+                return string.Equals(raceExisting.RequestHash, requestHash, StringComparison.Ordinal)
+                    ? ClaimAdjustmentResult.AlreadyExists(raceExisting)
+                    : ClaimAdjustmentResult.IdempotencyConflict(raceExisting,
+                        $"Idempotency-Key '{idempotencyKey}' already used with a different request body");
+            }
+            var raceChain = await _adjustmentRepository.GetByClaimVersionIdAsync(tenantId, chainKey, ct);
+            if (raceChain != null)
+            {
+                return ClaimAdjustmentResult.ConflictingAdjustment(raceChain,
+                    $"Chain {chainKey} already has an in-flight adjustment {raceChain.Id} in status {raceChain.Status}");
+            }
+            throw;
+        }
+
+        // Step 6 — prepare the corrected claim payload. Override
         // identity-bearing fields so the new version is a fresh row that
         // joins the existing chain. Per Gap 6, zero stale signals from the
         // predecessor (AI rationale, pend reasons, prior adjudication) so
@@ -273,11 +345,25 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             var errSummary = string.Join("; ", submission.Errors.Select(e => $"{e.Field}:{e.Code}"));
             _logger.LogWarning(
-                "Adjustment submission failed for predecessor {ClaimId}: {ErrorSummary}",
-                Sanitize(predecessor.Id), Sanitize(errSummary));
+                "Adjustment submission failed for predecessor {ClaimId} ({FailureKind}): {ErrorSummary}",
+                Sanitize(predecessor.Id), submission.FailureKind, Sanitize(errSummary));
+            // Release the chain lock — no version was created, no
+            // supersession occurred. Operator can retry against a clean
+            // chain. Failure to delete is logged but doesn't change the
+            // returned outcome (a stale Failed-state row would block
+            // the chain; that's surfaced via support).
+            await TryReleaseChainLockAsync(adjustment, ct);
+            // Preserve the failure-kind discriminator so the controller
+            // can map Validation → 400 and NotImplemented → 501. The
+            // message text differs by kind so the operator-facing copy
+            // matches the disposition.
+            var message = submission.FailureKind == ClaimSubmissionFailureKind.NotImplemented
+                ? "Adapter for this tenant does not implement claim submission"
+                : "Corrected claim failed validation";
             return ClaimAdjustmentResult.SubmissionFailed(
-                "Corrected claim failed validation",
-                submission.Errors);
+                message,
+                submission.Errors,
+                submission.FailureKind);
         }
 
         var newVersion = submission.Claim!;
@@ -296,12 +382,13 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             _logger.LogError(
                 "Failed to supersede predecessor {ClaimId} after new version {NewClaimId} was created; manual triage required",
                 Sanitize(predecessor.Id), Sanitize(newVersion.Id));
-            // Do not roll back the new version — the audit chain shows the
-            // submission, the operator can re-trigger supersession, and a
-            // ReversalRun will not pick this up because no ClaimAdjustment
-            // row exists yet. Surface as SubmissionFailed so the caller
-            // sees a non-2xx; failure-mode posture matches 5.10's
-            // partial-failure stance.
+            // Release the chain lock so retry is possible. The new
+            // version row is left behind on the audit chain (operator
+            // can re-trigger supersession via a fresh adjustment with
+            // a new Idempotency-Key, or operations can intervene
+            // manually). Surface as SubmissionFailed so the caller
+            // sees a non-2xx.
+            await TryReleaseChainLockAsync(adjustment, ct);
             return ClaimAdjustmentResult.SubmissionFailed(
                 "Predecessor supersession failed after new version was created; contact operations",
                 Array.Empty<ValidationError>());
@@ -380,53 +467,16 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
                 Sanitize(predecessor.Id));
         }
 
-        // Step 11 — persist the ClaimAdjustment aggregate. Status starts
-        // at AwaitingReadjudication (Decision 18) — the new version's
-        // pipeline is running asynchronously via Service Bus; transition
-        // to PendingReversal is owned by the orchestrator-finalize
-        // callback path (5.12b).
-        var adjustment = new ClaimAdjustment
-        {
-            TenantId = tenantId,
-            ClaimVersionId = chainKey,
-            PredecessorClaimId = predecessor.Id,
-            PredecessorVersionId = predecessor.Id,
-            NewClaimId = newVersion.Id,
-            AdjustmentReason = request.AdjustmentReason,
-            Notes = request.Notes,
-            Status = ClaimAdjustmentStatus.AwaitingReadjudication,
-            IdempotencyKey = idempotencyKey,
-            RequestHash = requestHash,
-            CreatedBy = actorId,
-            CreatedAt = DateTime.UtcNow,
-        };
-
-        try
-        {
-            await _adjustmentRepository.CreateAsync(adjustment, ct);
-        }
-        catch (MongoDB.Driver.MongoWriteException ex) when (ex.WriteError?.Category == MongoDB.Driver.ServerErrorCategory.DuplicateKey)
-        {
-            // Race: a parallel adjustment for the same chain or idempotency
-            // key landed first. Re-fetch and surface as an idempotency or
-            // chain-conflict result. The pre-checks above narrow the window
-            // but cannot eliminate it without distributed locks.
-            var raceExisting = await _adjustmentRepository.GetByIdempotencyKeyAsync(tenantId, idempotencyKey, ct);
-            if (raceExisting != null)
-            {
-                return string.Equals(raceExisting.RequestHash, requestHash, StringComparison.Ordinal)
-                    ? ClaimAdjustmentResult.AlreadyExists(raceExisting)
-                    : ClaimAdjustmentResult.IdempotencyConflict(raceExisting,
-                        $"Idempotency-Key '{idempotencyKey}' already used with a different request body");
-            }
-            var raceChain = await _adjustmentRepository.GetByClaimVersionIdAsync(tenantId, chainKey, ct);
-            if (raceChain != null)
-            {
-                return ClaimAdjustmentResult.ConflictingAdjustment(raceChain,
-                    $"Chain {chainKey} already has an in-flight adjustment {raceChain.Id} in status {raceChain.Status}");
-            }
-            throw;
-        }
+        // Step 11 — finalize the placeholder ClaimAdjustment row with
+        // the NewClaimId now that submission + supersession have
+        // succeeded. The placeholder was inserted in step 5; this is
+        // the post-success update. Status remains
+        // AwaitingReadjudication (Decision 18) — the new version's
+        // pipeline is running asynchronously via Service Bus;
+        // transition to PendingReversal is owned by the
+        // orchestrator-finalize callback path (5.12b).
+        adjustment.NewClaimId = newVersion.Id;
+        await _adjustmentRepository.UpdateAsync(adjustment, ct);
 
         _logger.LogInformation(
             "Adjustment {AdjustmentId} created: predecessor {PredecessorClaimId} (chain {ChainKey} v{PredecessorVersion}) → " +
@@ -440,6 +490,26 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             Sanitize(request.AdjustmentReason));
 
         return ClaimAdjustmentResult.Created(adjustment, newVersion);
+    }
+
+    private async Task TryReleaseChainLockAsync(ClaimAdjustment placeholder, CancellationToken ct)
+    {
+        try
+        {
+            var deleted = await _adjustmentRepository.DeleteAsync(placeholder.TenantId, placeholder.Id, ct);
+            if (!deleted)
+            {
+                _logger.LogWarning(
+                    "Chain-lock release for adjustment {AdjustmentId} on chain {ClaimVersionId} matched 0 rows; chain may stay locked",
+                    Sanitize(placeholder.Id), Sanitize(placeholder.ClaimVersionId));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to release chain lock for adjustment {AdjustmentId} on chain {ClaimVersionId}; chain may stay locked",
+                Sanitize(placeholder.Id), Sanitize(placeholder.ClaimVersionId));
+        }
     }
 
     internal static string ComputeRequestHash(string predecessorClaimId, ClaimAdjustmentRequest request)

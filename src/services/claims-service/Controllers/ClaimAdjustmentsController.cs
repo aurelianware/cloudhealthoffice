@@ -25,16 +25,13 @@ public class ClaimAdjustmentsController : ControllerBase
 {
     private readonly IClaimAdjustmentService _adjustmentService;
     private readonly IClaimAdjustmentRepository _adjustmentRepository;
-    private readonly ILogger<ClaimAdjustmentsController> _logger;
 
     public ClaimAdjustmentsController(
         IClaimAdjustmentService adjustmentService,
-        IClaimAdjustmentRepository adjustmentRepository,
-        ILogger<ClaimAdjustmentsController> logger)
+        IClaimAdjustmentRepository adjustmentRepository)
     {
         _adjustmentService = adjustmentService;
         _adjustmentRepository = adjustmentRepository;
-        _logger = logger;
     }
 
     /// <summary>
@@ -67,7 +64,11 @@ public class ClaimAdjustmentsController : ControllerBase
         }
         if (!ModelState.IsValid)
         {
-            return BadRequest(new { error = "Validation failed", details = ModelState });
+            // ValidationProblem produces a sanitized ProblemDetails body
+            // that surfaces only validation errors — never the inbound
+            // payload. Echoing ModelState directly can leak PHI from the
+            // submitted claim into the 400 response.
+            return ValidationProblem(ModelState);
         }
 
         var tenantId = GetTenantId();
@@ -106,11 +107,21 @@ public class ClaimAdjustmentsController : ControllerBase
                 error = result.Message,
                 predecessorClaimId = result.Predecessor!.Id,
             }),
-            ClaimAdjustmentOutcome.SubmissionFailed => BadRequest(new
+            ClaimAdjustmentOutcome.SubmissionFailed => result.SubmissionFailureKind switch
             {
-                error = result.Message,
-                errors = result.SubmissionErrors.Select(e => new { field = e.Field, code = e.Code, message = e.Message }),
-            }),
+                ClaimSubmissionFailureKind.NotImplemented => StatusCode(
+                    StatusCodes.Status501NotImplemented,
+                    new
+                    {
+                        error = result.Message,
+                        errors = result.SubmissionErrors.Select(e => new { field = e.Field, code = e.Code, message = e.Message }),
+                    }),
+                _ => BadRequest(new
+                {
+                    error = result.Message,
+                    errors = result.SubmissionErrors.Select(e => new { field = e.Field, code = e.Code, message = e.Message }),
+                }),
+            },
             _ => StatusCode(StatusCodes.Status500InternalServerError,
                 new { error = "Unhandled adjustment outcome" }),
         };
@@ -159,7 +170,11 @@ public class ClaimAdjustmentsController : ControllerBase
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(new { error = "Validation failed", details = ModelState });
+            // ValidationProblem produces a sanitized ProblemDetails body
+            // that surfaces only validation errors — never the inbound
+            // payload. Echoing ModelState directly can leak PHI from the
+            // submitted claim into the 400 response.
+            return ValidationProblem(ModelState);
         }
 
         var tenantId = GetTenantId();

@@ -132,6 +132,8 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             throw new ArgumentException("memberId is required", nameof(memberId));
         if (string.IsNullOrWhiteSpace(originalClaimId))
             throw new ArgumentException("originalClaimId is required", nameof(originalClaimId));
+        if (benefitPlanId == Guid.Empty)
+            throw new ArgumentException("benefitPlanId is required", nameof(benefitPlanId));
 
         var client = _httpClientFactory.CreateClient(HttpClientName);
         var payload = new ReverseClaimRequest
