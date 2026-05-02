@@ -170,6 +170,7 @@ public class AdjudicationWithScrubbingEndToEndTests
             _eventPublisher,
             _messageBus,
             new AdjudicationTenantContext(),
+            Substitute.For<IClaimAdjustmentService>(),
             Options.Create(new AdjudicationPipelineOptions()),
             NullLogger<ClaimAdjudicationOrchestrator>.Instance);
     }

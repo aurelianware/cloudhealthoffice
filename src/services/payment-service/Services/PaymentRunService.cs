@@ -190,9 +190,11 @@ public class PaymentRunService : IPaymentRunService
             var claimToEnvelopeId = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var env in envelopes)
             {
+                // PaymentRun envelopes always carry PaymentRunId (ReversalRunId stays null).
                 var record = await _envelopeRepository.CreateAsync(new EraEnvelopeRecord
                 {
                     PaymentRunId = paymentRun.Id,
+                    ReversalRunId = null,
                     TradingPartnerId = env.TradingPartnerId,
                     EdiContent = env.EdiContent,
                     ClaimCount = env.ClaimCount,

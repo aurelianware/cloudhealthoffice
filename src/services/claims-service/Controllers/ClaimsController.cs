@@ -708,6 +708,61 @@ public class ClaimsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Void a Paid/PartiallyPaid/Adjusted claim (5.12b). Routes to
+    /// <see cref="IClaimFinalizationService.VoidAsync"/>; idempotent on
+    /// re-invocation (returns <see cref="ClaimVoidOutcome.AlreadyVoided"/>
+    /// → 200 OK). Sent by <c>payment-service</c> ReversalRunService during
+    /// reversal-run execution; the optional
+    /// <c>ReversalRunId</c> body field correlates the void to the
+    /// originating ReversalRun and triggers the adjustment-lifecycle
+    /// transition (PendingReversal → Active) when the predecessor was
+    /// part of an in-flight adjustment chain.
+    ///
+    /// <para>Pattern parity with <c>POST /api/claims/{id}/remittance</c>
+    /// (the Adjudicated → Paid surface from 5.10).</para>
+    /// </summary>
+    [HttpPost("{id}/void")]
+    [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<Claim>> VoidClaim(
+        string id,
+        [FromBody] ClaimVoidRequest? request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request body is required" });
+        }
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return BadRequest(new { message = "Reason is required for the audit trail" });
+        }
+
+        _logger.LogInformation(
+            "Voiding claim {Id}; ReversalRun={ReversalRunId}",
+            SanitizeForLog(id), SanitizeForLog(request.ReversalRunId));
+
+        var result = await _finalizationService.VoidAsync(
+            id, request, GetTenantId(), TryGetActorId(), TryGetCorrelationId(), ct);
+
+        return result.Outcome switch
+        {
+            ClaimVoidOutcome.Voided => Ok(result.Claim),
+            ClaimVoidOutcome.AlreadyVoided => Ok(result.Claim),
+            ClaimVoidOutcome.NotFound => NotFound(new { message = result.Message ?? $"Claim {id} not found" }),
+            ClaimVoidOutcome.InvalidSourceState => UnprocessableEntity(new
+            {
+                message = result.Message,
+                currentStatus = result.Claim?.Status.ToString(),
+                currentVersionState = result.Claim?.VersionState.ToString(),
+            }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError),
+        };
+    }
+
     private async Task<ActionResult<Claim>> ProcessZeroPaymentRemittanceAsync(string id, RemittanceUpdate remittance)
     {
         var claim = await _claimRepository.GetByIdAsync(id);

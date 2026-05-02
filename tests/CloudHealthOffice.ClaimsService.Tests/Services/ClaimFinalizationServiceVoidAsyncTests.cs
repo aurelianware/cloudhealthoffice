@@ -19,9 +19,10 @@ public class ClaimFinalizationServiceVoidAsyncTests
     private readonly IClaimRepository _repo = Substitute.For<IClaimRepository>();
     private readonly IClaimVersionEventPublisher _versionPublisher = Substitute.For<IClaimVersionEventPublisher>();
     private readonly IClaimEventPublisher _kafkaPublisher = Substitute.For<IClaimEventPublisher>();
+    private readonly IClaimAdjustmentService _adjustmentService = Substitute.For<IClaimAdjustmentService>();
 
     private ClaimFinalizationService CreateService() =>
-        new(_repo, _versionPublisher, _kafkaPublisher, NullLogger<ClaimFinalizationService>.Instance);
+        new(_repo, _versionPublisher, _kafkaPublisher, _adjustmentService, NullLogger<ClaimFinalizationService>.Instance);
 
     private static Claim PaidClaim(string id = "c1", string tenantId = "t1") => new()
     {

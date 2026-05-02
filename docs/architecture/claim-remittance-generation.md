@@ -8,7 +8,11 @@
 > `SuggestedCarc`/`SuggestedRarc` fields. See
 > [`claim-adjudication-pipeline.md`](./claim-adjudication-pipeline.md)
 > for the upstream pipeline that produces the Adjudicated state this
-> capability acts on.
+> capability acts on. **5.12b extends the `BatchEraGeneratorService`
+> + `EraEnvelopeRecord` infrastructure to operator-initiated 835
+> reversal envelopes** — see [`claim-reversal-run.md`](./claim-reversal-run.md)
+> for the reversal-mode mechanics. PaymentRun continues to operate
+> unchanged; reversal-mode is opt-in via `EraPaymentInput.IsReversal`.
 
 ## Why this exists
 
