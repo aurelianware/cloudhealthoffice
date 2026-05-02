@@ -3,7 +3,7 @@ namespace ClaimsService.Models.Migrations;
 /// <summary>
 /// Operator-supplied request body for the
 /// <c>POST /api/v1/admin/claims/cosmos-migration/run</c> endpoint
-/// (capability 5.1b — Cosmos partition-key migration to <c>/TenantId</c>).
+/// (capability 5.1b — Cosmos partition-key migration to <c>/tenantId</c>).
 ///
 /// <para>
 /// The endpoint is idempotent: re-running with the same source/target

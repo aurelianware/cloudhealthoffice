@@ -10,7 +10,7 @@ namespace ClaimsService.Controllers;
 /// migration that copies claim documents from the legacy
 /// <c>Claims</c> container (<c>/memberId</c> Bicep / <c>/Id</c>
 /// runtime) to the canonical <c>ClaimsV2</c> container
-/// (<c>/TenantId</c>) — capability 5.1b.
+/// (<c>/tenantId</c>) — capability 5.1b.
 ///
 /// <para>
 /// Authorization is layered: the deployment layer (NetworkPolicy /
@@ -101,7 +101,7 @@ public sealed class AdminMigrationController : ControllerBase
             var result = await _migration.RunAsync(request, ct);
             return Ok(result);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("already in progress", StringComparison.Ordinal))
+        catch (MigrationAlreadyRunningException)
         {
             return Conflict(new
             {

@@ -17,7 +17,7 @@ namespace ClaimsService.Services.Migrations;
 ///   <item>The legacy <c>Claims</c> container has no canonical
 ///   tenant partition, so the migration walks the entire container
 ///   cross-partition; the target <c>ClaimsV2</c> container is
-///   partitioned by <c>/TenantId</c>, so writes are partition-keyed
+///   partitioned by <c>/tenantId</c>, so writes are partition-keyed
 ///   per row.</item>
 ///   <item>Hydration runs before each write so legacy rows
 ///   (pre-versioning fields) land in <c>ClaimsV2</c> with
@@ -81,12 +81,14 @@ public sealed class ClaimMigrationService : IClaimMigrationService
         // One-at-a-time: a second concurrent run would double-count
         // outcomes and produce confusing telemetry. Operators get 409
         // from the controller; the service itself is the source of
-        // truth for the running flag.
+        // truth for the running flag. Distinct exception type rather
+        // than a plain InvalidOperationException so the controller's
+        // 409 mapping doesn't depend on string-matching a message.
         lock (_stateLock)
         {
             if (_running)
             {
-                throw new InvalidOperationException("A claim migration run is already in progress.");
+                throw new MigrationAlreadyRunningException();
             }
             _running = true;
         }
@@ -280,7 +282,7 @@ public sealed class ClaimMigrationService : IClaimMigrationService
     /// <summary>
     /// Query the target container for the subset of <paramref name="batch"/>
     /// IDs already present. The query groups by <see cref="Claim.TenantId"/>
-    /// because /TenantId is the target partition key — a per-tenant query is
+    /// because /tenantId is the target partition key — a per-tenant query is
     /// partition-scoped. A document with a missing TenantId can't be
     /// migrated regardless, so it is excluded from the existence check.
     /// </summary>

@@ -193,7 +193,7 @@ resource membersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/co
 }
 
 // Claims Container — legacy partition key /memberId (Bicep declaration)
-// /Id (runtime ClaimRepository) — both diverged from canonical /TenantId
+// /Id (runtime ClaimRepository) — both diverged from canonical /tenantId
 // established in Provider/BP/AiExaminationAudit. Capability 5.1b migrates
 // claim documents to the ClaimsV2 container declared below; this old
 // container is preserved during a 30-day rollback window then removed in
@@ -228,7 +228,7 @@ resource claimsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
   }
 }
 
-// ClaimsV2 Container — capability 5.1b canonical /TenantId partition.
+// ClaimsV2 Container — capability 5.1b canonical /tenantId partition.
 // Pattern parity with Provider, BenefitPlan, and AiExaminationAudit;
 // eliminates cross-partition fan-out on the versioning surface
 // (GetLatestVersionAsync / GetVersionAsync / ListVersionsAsync /

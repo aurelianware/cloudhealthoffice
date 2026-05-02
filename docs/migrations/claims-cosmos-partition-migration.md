@@ -1,14 +1,14 @@
-# Operator runbook — Claims Cosmos partition migration to `/TenantId` (5.1b)
+# Operator runbook — Claims Cosmos partition migration to `/tenantId` (5.1b)
 
 Status: capability 5.1b shipped. This runbook covers the operator
 sequence for moving production claim documents from the legacy
 `Claims` Cosmos container (`/memberId` Bicep declaration, `/Id`
 runtime partition) to the canonical `ClaimsV2` container
-(`/TenantId` partition).
+(`/tenantId` partition).
 
 Architecture context: see
 [`docs/architecture/claim-versioning.md`](../architecture/claim-versioning.md)
-section "Cosmos partition key — `/TenantId` (5.1b)" for the why.
+section "Cosmos partition key — `/tenantId` (5.1b)" for the why.
 This runbook covers the how.
 
 ## Why migrate
@@ -18,7 +18,7 @@ This runbook covers the how.
   `UpdateAdjudicationProjectionAsync`, `Mark*ProjectionAsync`).
   Meaningful Cosmos RU savings at scale.
 - Pattern parity with Provider, BenefitPlan, and AiExaminationAudit
-  (all already partition by `/TenantId`).
+  (all already partition by `/tenantId`).
 - Tenant isolation enforced at the storage layer — defense in depth
   beyond filter-clause isolation.
 

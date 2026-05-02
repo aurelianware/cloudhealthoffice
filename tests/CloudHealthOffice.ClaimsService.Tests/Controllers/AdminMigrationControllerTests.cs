@@ -87,8 +87,7 @@ public sealed class AdminMigrationControllerTests
     public async Task Run_Returns_409_When_Service_Reports_Run_In_Progress()
     {
         var (controller, service) = Build(enabled: true);
-        service.NextException = new InvalidOperationException(
-            "A claim migration run is already in progress.");
+        service.NextException = new MigrationAlreadyRunningException();
 
         var response = await controller.Run(new ClaimMigrationRequest(), default);
 

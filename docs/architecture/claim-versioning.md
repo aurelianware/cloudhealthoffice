@@ -1,7 +1,7 @@
 # Claim Identity & Versioning
 
 Status: 5.1a — initial implementation (versioning fields + event chain).
-5.1b — Cosmos partition-key migration to `/TenantId` (infra-coordinated).
+5.1b — Cosmos partition-key migration to `/tenantId` (infra-coordinated).
 Service: `src/services/claims-service`
 
 Cross-references:
@@ -243,11 +243,11 @@ versioned entity's identity. Writing to a projection field doesn't
 change what the entity *is*, only what we *know about its operational
 status right now*.
 
-## Cosmos partition key — `/TenantId` (5.1b)
+## Cosmos partition key — `/tenantId` (5.1b)
 
 5.1b moved the Claims Cosmos container from the legacy `/memberId`
 Bicep declaration / `/Id` runtime partition to the canonical
-`/TenantId` partition. Pattern parity with Provider, Benefit Plan,
+`/tenantId` partition. Pattern parity with Provider, Benefit Plan,
 and AiExaminationAudit. The change eliminates cross-partition
 fan-out on the versioning surface (`GetLatestVersionAsync`,
 `GetVersionAsync`, `ListVersionsAsync`,
@@ -325,7 +325,7 @@ future engineers:
 `GetByIdAsync`, `MarkSupersededProjectionAsync`, and
 `MarkVoidedProjectionAsync` still perform an in-memory
 `response.Resource.TenantId == tenantId` check after the
-partition-keyed read. With `/TenantId` partitioning a cross-tenant
+partition-keyed read. With `/tenantId` partitioning a cross-tenant
 lookup surfaces as Cosmos 404 already, but the explicit equality
 check is intentionally retained: it makes the tenant-isolation
 contract explicit at the read point and catches any future code
@@ -368,7 +368,7 @@ common `IClaimRepository` interface.
 ## Out of scope for 5.1a
 
 - **Cosmos partition-key migration** — shipped in 5.1b (see
-  "Cosmos partition key — `/TenantId` (5.1b)" above).
+  "Cosmos partition key — `/tenantId` (5.1b)" above).
 - **Kafka `claims.versions.v1` broader-stream topic** — Phase 2, when a
   consumer materializes.
 - **`ClaimEventPublisher` Kafka emission refactor** — preserved

@@ -3,7 +3,7 @@ namespace ClaimsService.Models.Migrations;
 /// <summary>
 /// Per-call summary returned to the operator after the migration
 /// endpoint completes (capability 5.1b — Cosmos partition-key
-/// migration to <c>/TenantId</c>).
+/// migration to <c>/tenantId</c>).
 ///
 /// <para>
 /// Counters are intentionally explicit rather than derived (e.g.

@@ -4,7 +4,7 @@ namespace ClaimsService.Services.Migrations;
 /// Configuration for the capability 5.1b Cosmos partition-key migration
 /// (legacy <c>Claims</c> container with <c>/memberId</c> Bicep
 /// declaration / <c>/Id</c> runtime partition → canonical
-/// <c>ClaimsV2</c> container with <c>/TenantId</c> partition).
+/// <c>ClaimsV2</c> container with <c>/tenantId</c> partition).
 ///
 /// <para>
 /// Mirrors the configuration shape established by
@@ -38,7 +38,7 @@ public sealed class ClaimMigrationOptions
     public string SourceContainerName { get; set; } = "Claims";
 
     /// <summary>
-    /// Target container name (canonical <c>/TenantId</c> partition,
+    /// Target container name (canonical <c>/tenantId</c> partition,
     /// declared in Bicep at <c>cosmos-db.bicep</c>). Default
     /// <c>"ClaimsV2"</c> per Decision 4 (Cosmos containers cannot be
     /// renamed; version-suffix convention).

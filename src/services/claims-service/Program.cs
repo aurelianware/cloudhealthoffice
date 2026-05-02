@@ -71,7 +71,7 @@ else
 
     // 5.1b — Cosmos partition-key migration tooling. Resolves the source
     // (legacy /memberId Bicep / /Id runtime) and target (canonical
-    // /TenantId) containers from the configured database; the migration
+    // /tenantId) containers from the configured database; the migration
     // service is the only consumer that ever sees both containers.
     // Singleton because it owns the running-flag + last-run state shared
     // across requests; the underlying Cosmos containers are thread-safe.

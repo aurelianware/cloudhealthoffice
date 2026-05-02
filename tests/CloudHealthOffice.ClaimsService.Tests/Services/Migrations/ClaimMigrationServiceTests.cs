@@ -271,7 +271,7 @@ public class ClaimMigrationServiceTests
 
         var first = _sut.RunAsync(new ClaimMigrationRequest { DryRun = false });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<MigrationAlreadyRunningException>(
             () => _sut.RunAsync(new ClaimMigrationRequest { DryRun = false }));
 
         // Release the first run.

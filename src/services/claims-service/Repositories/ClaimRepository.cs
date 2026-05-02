@@ -209,13 +209,16 @@ public class ClaimRepository : IClaimRepository
     /// sensible defaults. Idempotent — running on a fully-versioned row
     /// is a no-op. Mirrors <c>ProviderRepository.Hydrate</c>.
     ///
-    /// Public so the 5.1b Cosmos partition migration can canonicalize
-    /// rows during the copy from the legacy <c>Claims</c> container into
-    /// the canonical <c>ClaimsV2</c> container — the new container then
-    /// starts fully hydrated and downstream readers don't need to
-    /// re-Hydrate post-migration.
+    /// Internal (not public) so the 5.1b Cosmos partition migration can
+    /// canonicalize rows during the copy from the legacy <c>Claims</c>
+    /// container into the canonical <c>ClaimsV2</c> container — the new
+    /// container then starts fully hydrated and downstream readers don't
+    /// need to re-Hydrate post-migration. Same-assembly consumers
+    /// (<c>ClaimMigrationService</c>) call directly; tests reach via the
+    /// existing <c>InternalsVisibleTo</c> attribute on
+    /// <c>claims-service.csproj</c>.
     /// </summary>
-    public static Claim Hydrate(Claim claim)
+    internal static Claim Hydrate(Claim claim)
     {
         if (string.IsNullOrEmpty(claim.ClaimVersionId))
         {
@@ -271,7 +274,7 @@ public class ClaimRepository : IClaimRepository
                 id,
                 new PartitionKey(tenantId));
 
-            // 5.1b: with /TenantId partition, a cross-tenant lookup throws
+            // 5.1b: with /tenantId partition, a cross-tenant lookup throws
             // CosmosException 404 (caught below) rather than returning a
             // foreign-tenant document. The in-memory tenant equality check
             // is intentionally retained as defense in depth: it makes the
@@ -1011,7 +1014,7 @@ public class ClaimRepository : IClaimRepository
         CancellationToken ct = default)
     {
         // Pre-read confirms the row exists and (defense in depth) belongs
-        // to the supplied tenant. With the 5.1b /TenantId partition, a
+        // to the supplied tenant. With the 5.1b /tenantId partition, a
         // cross-tenant claimId surfaces as Cosmos 404 (caught below); the
         // explicit TenantId equality check is intentionally retained
         // alongside the partition-key boundary for the same reasons
