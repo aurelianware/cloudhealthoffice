@@ -7,24 +7,33 @@ namespace PaymentService.Services;
 /// (claim-level 2100 loop and per-line 2110 loop). Pure mapper —
 /// stateless, no I/O — Singleton in DI.
 ///
-/// Mapping precedence per 5.10 Decision 6:
+/// Two distinct surfaces with their own emission rules per 5.10
+/// Decision 6:
+///
+/// <c>MapClaimAdjustments</c> (header CAS, 2100 loop):
+///   1. Standard adjudication adjustments from
+///      <c>AdjudicationResult.AdjustmentReasons</c> (typed CARC objects,
+///      group + reason + amount) emit first — covers normal payment
+///      scenarios (e.g., PR-1 deductible $500, PR-2 coinsurance $80,
+///      CO-45 contractual).
+///   2. Header-level denial from <c>AdjudicationResult.DenialReasonCode</c>
+///      appends as a <c>CO</c> entry only when no entry from step 1
+///      already carries that reason code — avoids double-CAS for the
+///      same denial reason.
+///
+/// <c>MapLineAdjustments</c> (per-line CAS, 2110 loop, keyed by
+/// <c>AffectedLineNumbers</c>):
 ///   1. Per-line edits from <c>PendDetails.EditFailures</c> with
 ///      <c>SuggestedCarc</c>/<c>SuggestedRarc</c> populated by 5.7's
 ///      <c>NcciEditsStage</c>. Each affected line emits one CAS group
 ///      with the suggested CARC and (optionally) RARC.
-///   2. Header-level denial from <c>AdjudicationResult.DenialReasonCode</c>
-///      when claim was denied without specific edit failures (CO-group
-///      contractual denial).
-///   3. Standard adjudication adjustments from
-///      <c>AdjudicationResult.AdjustmentReasons</c> (typed CARC objects,
-///      group + reason + amount) and <c>RemarkCodes</c> for normal
-///      payment scenarios (e.g., PR-1 deductible $500, PR-2 coinsurance $80).
 ///
 /// Fallback CARC <c>237</c> mirrors the 5.11 EOB projector default
-/// when an edit failure populates <c>SuggestedCarc=null</c> (unknown
-/// adjustment reason); RARC is omitted entirely when null. The 237
-/// fallback never overrides an explicit CARC from the precedence chain
-/// above.
+/// when a per-line edit failure populates <c>SuggestedCarc=null</c>
+/// (unknown adjustment reason); RARC is omitted entirely when null.
+/// The 237 fallback only fires inside <c>MapLineAdjustments</c> — the
+/// header path always carries explicit CARCs from the adjudication
+/// pipeline.
 /// </summary>
 public interface ICarcRarcMappingService
 {

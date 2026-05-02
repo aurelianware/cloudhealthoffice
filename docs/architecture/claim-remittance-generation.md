@@ -172,6 +172,23 @@ Fallback CARC `237` (mirrors 5.11 EOB projector default) only fires
 when an edit failure has `SuggestedCarc=null`. The fallback never
 overrides an explicit CARC from the precedence chain above.
 
+## Check number allocation
+
+A PaymentRun allocates **one check number per trading partner envelope**.
+When `GroupByProvider=true` and multiple providers route to the same
+trading partner, all of their `Payment` records share that single check
+number — keeping the envelope's BPR/TRN consistent with every CLP loop's
+finalize CheckNumber. Provider groups whose NPI doesn't resolve to a
+trading partner allocate their own check (preserves legacy per-payment
+semantics for the `PaymentsController` GET 835 endpoint) but are
+excluded from envelope emission and from finalization. The
+`PaymentRun.Warnings` collection captures these "no trading partner
+configured" cases so an operator can fix the configuration and re-run.
+
+`PaymentRun.CheckNumberStart` / `CheckNumberEnd` reflect the contiguous
+range actually allocated by the run — start equals the first allocated
+number, end equals `NextCheckNumber - 1`.
+
 ## Trading partner resolution (Decision 14)
 
 5.10 adds a `BillingProviderNpis: List<string>` field to

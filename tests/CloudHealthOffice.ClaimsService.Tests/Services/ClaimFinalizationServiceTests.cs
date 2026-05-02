@@ -181,4 +181,38 @@ public class ClaimFinalizationServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() =>
             CreateService().FinalizeAsync(claim.Id, request, "t1", null, null));
     }
+
+    [Fact]
+    public async Task FinalizeAsync_WithEdiControlNumber_PersistsControlNumberInSameWrite()
+    {
+        var claim = ApprovedClaim();
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+        _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
+
+        var request = Request();
+        request.EdiControlNumber = "PR-20260501-A1B2";
+
+        var result = await CreateService().FinalizeAsync(claim.Id, request, "t1", null, null);
+
+        Assert.Equal(ClaimFinalizationOutcome.Finalized, result.Outcome);
+        Assert.Equal("PR-20260501-A1B2", result.Claim!.EDI835ControlNumber);
+        await _repo.Received(1).UpdateAsync(
+            Arg.Is<Claim>(c => c.EDI835ControlNumber == "PR-20260501-A1B2" && c.Status == ClaimStatus.Paid));
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_WithoutEdiControlNumber_LeavesExistingValueUntouched()
+    {
+        var claim = ApprovedClaim();
+        claim.EDI835ControlNumber = "EXISTING-CTRL";
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+        _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
+
+        var request = Request();
+        request.EdiControlNumber = null;
+
+        var result = await CreateService().FinalizeAsync(claim.Id, request, "t1", null, null);
+
+        Assert.Equal("EXISTING-CTRL", result.Claim!.EDI835ControlNumber);
+    }
 }

@@ -639,9 +639,6 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
-    /// Process 835 remittance (payment/denial notification)
-    /// </summary>
-    /// <summary>
     /// Process remittance for a claim (835 transaction). Sent by
     /// payment-service during PaymentRun execution and by manual
     /// remittance-posting tools. 5.10 routes Paid transitions through
@@ -681,7 +678,8 @@ public class ClaimsController : ControllerBase
             PaymentDate = remittance.PaymentDate,
             PayerPayment = remittance.PaymentAmount,
             PaymentRunId = remittance.PaymentRunId,
-            EraEnvelopeId = remittance.EraEnvelopeId
+            EraEnvelopeId = remittance.EraEnvelopeId,
+            EdiControlNumber = remittance.ControlNumber
         };
 
         var result = await _finalizationService.FinalizeAsync(
@@ -691,14 +689,9 @@ public class ClaimsController : ControllerBase
         {
             case ClaimFinalizationOutcome.Finalized:
             case ClaimFinalizationOutcome.AlreadyFinalized:
-                if (!string.IsNullOrEmpty(remittance.ControlNumber)
-                    && result.Claim is not null
-                    && result.Outcome == ClaimFinalizationOutcome.Finalized
-                    && !string.Equals(result.Claim.EDI835ControlNumber, remittance.ControlNumber, StringComparison.Ordinal))
-                {
-                    result.Claim.EDI835ControlNumber = remittance.ControlNumber;
-                    await _claimRepository.UpdateAsync(result.Claim);
-                }
+                // EDI835ControlNumber is persisted by ClaimFinalizationService
+                // as part of the same non-terminal write — a follow-up
+                // UpdateAsync would trip the repository's terminal-state guard.
                 return Ok(result.Claim);
 
             case ClaimFinalizationOutcome.NotFound:

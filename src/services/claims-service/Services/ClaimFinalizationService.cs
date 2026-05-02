@@ -83,6 +83,11 @@ public class ClaimFinalizationResult
 /// <c>AdjudicationResult.PaymentDate</c>; PayerPayment overrides the
 /// existing <c>AdjudicationResult.PayerPayment</c> only when supplied
 /// (per-claim PaymentRun amounts win over pre-adjudication estimates).
+/// EdiControlNumber, when supplied, flows into
+/// <c>Claim.EDI835ControlNumber</c> as part of the same finalize
+/// write — keeping both updates inside the single non-terminal
+/// transition (the repository's terminal-state guard rejects any
+/// follow-up write once <c>VersionState=Paid</c>).
 /// </summary>
 public class ClaimFinalizationRequest
 {
@@ -91,6 +96,7 @@ public class ClaimFinalizationRequest
     public decimal? PayerPayment { get; set; }
     public string? PaymentRunId { get; set; }
     public string? EraEnvelopeId { get; set; }
+    public string? EdiControlNumber { get; set; }
 }
 
 public class ClaimFinalizationService : IClaimFinalizationService
@@ -186,6 +192,11 @@ public class ClaimFinalizationService : IClaimFinalizationService
         if (request.PayerPayment.HasValue)
         {
             claim.AdjudicationResult.PayerPayment = request.PayerPayment.Value;
+        }
+
+        if (!string.IsNullOrEmpty(request.EdiControlNumber))
+        {
+            claim.EDI835ControlNumber = request.EdiControlNumber;
         }
 
         var updated = await _claimRepository.UpdateAsync(claim);

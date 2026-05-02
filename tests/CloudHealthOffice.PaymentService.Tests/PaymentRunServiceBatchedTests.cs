@@ -187,10 +187,12 @@ public class PaymentRunServiceBatchedTests
         Assert.Contains("/api/claims/c1/remittance", finalizeCalls[0].Uri.AbsolutePath);
         Assert.Contains("\"checkNumber\"", finalizeCalls[0].Body);
         Assert.Contains("\"paymentRunId\"", finalizeCalls[0].Body);
+        // EraEnvelopeId audit-trail crumb populated from the persisted record.
+        Assert.Contains("\"eraEnvelopeId\":\"env-1\"", finalizeCalls[0].Body);
     }
 
     [Fact]
-    public async Task ExecutePaymentRunAsync_UnresolvedTradingPartner_AddsWarning()
+    public async Task ExecutePaymentRunAsync_UnresolvedTradingPartner_AddsWarningAndSkipsFinalize()
     {
         var run = PendingRun();
         _runRepo.GetByIdAsync(run.Id).Returns(run);
@@ -213,6 +215,50 @@ public class PaymentRunServiceBatchedTests
 
         Assert.Equal(PaymentRunStatus.Completed, result.Status);
         Assert.Contains(result.Warnings, w => w.Contains("NPI-MISSING"));
+
+        // Claims that didn't resolve to a trading partner are excluded from
+        // finalize — empty CheckNumber would be rejected by claims-service
+        // validation.
+        var finalizeCalls = _claimsHandler.RecordedRequests
+            .Where(r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/remittance"))
+            .ToList();
+        Assert.Empty(finalizeCalls);
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_MultipleProvidersSameTradingPartner_ShareSingleCheckNumber()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+
+        var claims = new[]
+        {
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A1", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved },
+            new ClaimDto { Id = "c2", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-A2", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m2", Status = ClaimStatus.Approved }
+        };
+        SetupClaimsResponse(claims);
+
+        // Both NPIs route to the same trading partner — should share one check number.
+        var tp = new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() };
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "NPI-A1", "Production").Returns(tp);
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "NPI-A2", "Production").Returns(tp);
+
+        var capturedPayments = new List<Payment>();
+        _paymentRepo.CreateAsync(Arg.Any<Payment>())
+            .Returns(call =>
+            {
+                var p = call.Arg<Payment>();
+                capturedPayments.Add(p);
+                return p;
+            });
+        _batchGen.GenerateBatch(Arg.Any<IEnumerable<EraPaymentInput>>(), Arg.Any<IReadOnlyDictionary<string, TradingPartnerInfo>>())
+            .Returns(Array.Empty<EraEnvelope>());
+
+        await CreateService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(2, capturedPayments.Count);
+        Assert.Equal(capturedPayments[0].CheckNumber, capturedPayments[1].CheckNumber);
     }
 
     [Fact]

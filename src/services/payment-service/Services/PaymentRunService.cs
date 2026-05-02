@@ -112,18 +112,52 @@ public class PaymentRunService : IPaymentRunService
                 environment,
                 paymentRun.Warnings);
 
-            // Step 4: Generate one Payment per provider group; populate
+            // Step 4: Allocate one check number per trading partner. Multiple
+            //         provider groups under the same partner share that check
+            //         so the batched envelope's TRN matches every CLP loop's
+            //         finalize CheckNumber. Provider groups whose NPI doesn't
+            //         resolve to a trading partner allocate their own check
+            //         (legacy per-payment semantics) but are excluded from
+            //         envelope emission and from finalization.
+            var checkByTradingPartner = new Dictionary<string, string>(StringComparer.Ordinal);
+            var checkNumberStart = paymentRun.NextCheckNumber;
+
+            // Step 5: Generate one Payment per provider group; populate
             //         ClaimAdjustments and ServiceLine adjustments via
             //         ICarcRarcMappingService so downstream Generate835
             //         emits CAS segments correctly for denials/cost-share.
             var eraInputs = new List<EraPaymentInput>();
             foreach (var group in claimGroups)
             {
-                var (payment, tradingPartnerId) = await GeneratePaymentForClaimsAsync(
+                var providerNpi = group.Value.First().PayToProviderNPI ?? group.Value.First().BillingProviderNPI;
+                string? tradingPartnerId = null;
+                if (!string.IsNullOrEmpty(providerNpi)
+                    && resolvedTradingPartners.TryGetValue(providerNpi, out var partner))
+                {
+                    tradingPartnerId = partner.TradingPartnerId;
+                }
+
+                string checkNumber;
+                if (!string.IsNullOrEmpty(tradingPartnerId))
+                {
+                    if (!checkByTradingPartner.TryGetValue(tradingPartnerId, out var existing))
+                    {
+                        existing = (paymentRun.NextCheckNumber++).ToString().PadLeft(10, '0');
+                        checkByTradingPartner[tradingPartnerId] = existing;
+                    }
+                    checkNumber = existing;
+                }
+                else
+                {
+                    checkNumber = (paymentRun.NextCheckNumber++).ToString().PadLeft(10, '0');
+                }
+
+                var payment = await GeneratePaymentForClaimsAsync(
                     group.Value,
                     paymentRun,
                     group.Key,
-                    resolvedTradingPartners);
+                    tradingPartnerId,
+                    checkNumber);
 
                 paymentRun.PaymentIds.Add(payment.Id);
                 paymentRun.ClaimIds.AddRange(group.Value.Select(c => c.Id));
@@ -141,13 +175,19 @@ public class PaymentRunService : IPaymentRunService
             }
 
             paymentRun.TotalClaims = claims.Count;
-            paymentRun.CheckNumberStart = paymentRun.NextCheckNumber.ToString();
-            paymentRun.CheckNumberEnd = (paymentRun.NextCheckNumber + paymentRun.PaymentIds.Count - 1).ToString();
+            paymentRun.CheckNumberStart = checkNumberStart.ToString().PadLeft(10, '0');
+            paymentRun.CheckNumberEnd = paymentRun.NextCheckNumber > checkNumberStart
+                ? (paymentRun.NextCheckNumber - 1).ToString().PadLeft(10, '0')
+                : checkNumberStart.ToString().PadLeft(10, '0');
 
-            // Step 5: Batched 835 generation — one envelope per trading partner.
+            // Step 6: Batched 835 generation — one envelope per trading partner.
             var partnerInfos = BuildTradingPartnerInfos(resolvedTradingPartners);
             var envelopes = _batchEraGenerator.GenerateBatch(eraInputs, partnerInfos);
 
+            // Map claim id → persisted EraEnvelope id so the finalize call can
+            // carry the audit-trail crumb. Built as we persist so a retry can
+            // reproduce the same association deterministically.
+            var claimToEnvelopeId = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var env in envelopes)
             {
                 var record = await _envelopeRepository.CreateAsync(new EraEnvelopeRecord
@@ -161,12 +201,21 @@ public class PaymentRunService : IPaymentRunService
                     ClaimIds = env.ClaimIds.ToList()
                 });
                 paymentRun.EraEnvelopeIds.Add(record.Id);
+                foreach (var claimId in env.ClaimIds)
+                {
+                    claimToEnvelopeId[claimId] = record.Id;
+                }
             }
 
-            // Step 6: Finalize each claim via the claims-service
+            // Step 7: Finalize each claim via the claims-service
             //         POST /api/claims/{id}/remittance endpoint. Idempotent
             //         on the server side (5.10 ClaimFinalizationService).
-            await FinalizeClaimsAsync(claims, paymentRun, eraInputs, paymentRun.Warnings);
+            //         Only claims that landed in a generated envelope are
+            //         finalized — claims whose trading partner didn't resolve
+            //         are surfaced via PaymentRun.Warnings instead, so a
+            //         later run can retry once trading-partner config is
+            //         fixed.
+            await FinalizeClaimsAsync(claims, paymentRun, eraInputs, claimToEnvelopeId, paymentRun.Warnings);
 
             paymentRun.Status = PaymentRunStatus.Completed;
             paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
@@ -351,22 +400,15 @@ public class PaymentRunService : IPaymentRunService
         return seen;
     }
 
-    private async Task<(Payment Payment, string? TradingPartnerId)> GeneratePaymentForClaimsAsync(
+    private async Task<Payment> GeneratePaymentForClaimsAsync(
         List<ClaimDto> claims,
         PaymentRun paymentRun,
         string providerKey,
-        Dictionary<string, TradingPartnerSummary> resolvedPartners)
+        string? tradingPartnerId,
+        string checkNumber)
     {
         var firstClaim = claims.First();
-        var checkNumber = (paymentRun.NextCheckNumber++).ToString().PadLeft(10, '0');
         var providerNpi = firstClaim.PayToProviderNPI ?? firstClaim.BillingProviderNPI;
-
-        string? tradingPartnerId = null;
-        if (!string.IsNullOrEmpty(providerNpi)
-            && resolvedPartners.TryGetValue(providerNpi, out var partner))
-        {
-            tradingPartnerId = partner.TradingPartnerId;
-        }
 
         var payment = new Payment
         {
@@ -421,7 +463,7 @@ public class PaymentRunService : IPaymentRunService
         };
 
         var created = await _paymentRepository.CreateAsync(payment);
-        return (created, tradingPartnerId);
+        return created;
     }
 
     private static ClaimAdjudicationSnapshot BuildAdjudicationSnapshot(ClaimDto claim)
@@ -469,11 +511,14 @@ public class PaymentRunService : IPaymentRunService
         List<ClaimDto> claims,
         PaymentRun paymentRun,
         List<EraPaymentInput> eraInputs,
+        IReadOnlyDictionary<string, string> claimToEnvelopeId,
         List<string> warnings)
     {
-        // Map each claim to the payment + envelope it ended up in so the
-        // finalize call carries the audit-trail crumbs (PaymentRunId,
-        // EraEnvelopeId). Single-pass dictionary build keeps this O(N).
+        // Map each claim to the payment it landed in so the finalize call
+        // carries the right CheckNumber, PaymentDate, and PaymentAmount.
+        // Claims absent from this map were skipped (no trading partner
+        // resolved); they are not finalized — surface as a single
+        // PaymentRun warning per skipped claim and move on.
         var claimToPayment = new Dictionary<string, Payment>(StringComparer.Ordinal);
         foreach (var input in eraInputs)
         {
@@ -485,25 +530,31 @@ public class PaymentRunService : IPaymentRunService
 
         foreach (var claim in claims)
         {
+            if (!claimToPayment.TryGetValue(claim.Id, out var payment))
+            {
+                // Claim was filtered out of envelope emission upstream
+                // (no trading partner resolved). Don't call finalize —
+                // the empty CheckNumber would be rejected by the
+                // claims-service validation. The original "no trading
+                // partner" warning was already recorded.
+                _logger.LogDebug(
+                    "Claim {ClaimId} skipped from finalize — not in any generated envelope",
+                    SanitizeForLog(claim.Id));
+                continue;
+            }
+
             try
             {
-                Payment? payment = null;
-                claimToPayment.TryGetValue(claim.Id, out payment);
-
-                var checkNumber = payment?.CheckNumber ?? string.Empty;
-                var paymentDate = payment?.PaymentDate ?? paymentRun.PaymentDate;
-                var payerPayment = payment is null
-                    ? (claim.ApprovedAmount ?? claim.TotalChargeAmount)
-                    : payment.ClaimPayments.First(cp => cp.ClaimId == claim.Id).PaymentAmount;
+                var clp = payment.ClaimPayments.First(cp => cp.ClaimId == claim.Id);
 
                 var body = new RemittancePostBody
                 {
                     ControlNumber = paymentRun.PaymentRunNumber,
-                    CheckNumber = checkNumber,
-                    PaymentDate = paymentDate,
-                    PaymentAmount = payerPayment,
+                    CheckNumber = payment.CheckNumber,
+                    PaymentDate = payment.PaymentDate,
+                    PaymentAmount = clp.PaymentAmount,
                     PaymentRunId = paymentRun.Id,
-                    EraEnvelopeId = null
+                    EraEnvelopeId = claimToEnvelopeId.TryGetValue(claim.Id, out var envelopeId) ? envelopeId : null
                 };
 
                 var response = await _claimsServiceClient.PostAsJsonAsync($"/api/claims/{claim.Id}/remittance", body);

@@ -38,6 +38,10 @@ namespace PaymentService.Services;
 ///     trading partner's configured payee identity
 ///   - PLB segments only fire when explicit ProviderAdjustments are
 ///     supplied on the batch input
+///   - The envelope's BPR/TRN reflects the first input Payment's check
+///     number; the caller (PaymentRunService) is expected to allocate
+///     a single check per trading partner so every CLP loop's
+///     downstream finalize CheckNumber matches the envelope-level TRN
 /// </summary>
 public interface IBatchEraGeneratorService
 {
