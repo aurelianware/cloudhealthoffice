@@ -22,6 +22,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimAdapter ClaimAdapter { get; } = CreateChoStubAdapter();
     public IClaimVersionEventPublisher VersionEventPublisher { get; } = Substitute.For<IClaimVersionEventPublisher>();
     public IClaimFinalizationService FinalizationService { get; } = Substitute.For<IClaimFinalizationService>();
+    public IClaimAdjustmentRepository AdjustmentRepository { get; } = Substitute.For<IClaimAdjustmentRepository>();
+    public IClaimAdjustmentService AdjustmentService { get; } = Substitute.For<IClaimAdjustmentService>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -52,6 +54,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(IAiExaminationAuditRepository)
                          || d.ServiceType == typeof(IClaimSubmissionService)
                          || d.ServiceType == typeof(IClaimFinalizationService)
+                         || d.ServiceType == typeof(IClaimAdjustmentService)
+                         || d.ServiceType == typeof(IClaimAdjustmentRepository)
                          || d.ServiceType == typeof(IClaimAdapter)
                          || d.ServiceType == typeof(ClaimAdapterFactory)
                          || d.ServiceType == typeof(ClaimTenantConfigCache))
@@ -73,7 +77,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType.FullName?.Contains("Mongo") == true
                          || d.ImplementationType?.FullName?.Contains("Cosmos") == true
                          || d.ImplementationType?.FullName?.Contains("Mongo") == true
-                         || d.ImplementationType?.FullName?.Contains("ClaimVersionEventIndexInitializer") == true)
+                         || d.ImplementationType?.FullName?.Contains("ClaimVersionEventIndexInitializer") == true
+                         || d.ImplementationType?.FullName?.Contains("ClaimAdjustmentIndexInitializer") == true)
                 .ToList();
 
             foreach (var descriptor in cosmosDescriptors)
@@ -113,6 +118,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(AuditRepository);
             services.AddSingleton(VersionEventPublisher);
             services.AddSingleton(FinalizationService);
+            services.AddSingleton(AdjustmentRepository);
+            services.AddSingleton(AdjustmentService);
 
             // 5.7 — NcciEngine's repository implementation got removed by
             // the Cosmos/Mongo filter above. The engine's INcciEditService

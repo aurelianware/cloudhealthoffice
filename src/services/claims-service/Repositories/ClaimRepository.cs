@@ -123,6 +123,55 @@ public interface IClaimRepository
         IReadOnlyList<LineAdjudicationResult> lineResults,
         CancellationToken ct = default,
         PendDetails? pendDetails = null);
+
+    /// <summary>
+    /// Supersession projection bypass for capability 5.12. Patches
+    /// <c>SupersededAt</c>, <c>SupersededByVersionId</c>, and
+    /// <c>VersionState=Adjusted</c> on a single claim row identified by
+    /// <paramref name="tenantId"/> + <paramref name="claimId"/> regardless
+    /// of its current terminal state. Required because the
+    /// <see cref="UpdateAsync"/> terminal-state guard would reject a
+    /// Paid → Adjusted transition (Paid is terminal).
+    ///
+    /// <para>
+    /// 6th instance of the projection-metadata bypass pattern (Provider
+    /// 5.4.5 integrity, Provider 5.6 credentialing, Provider 5.7+
+    /// panel-gating, BP 5.5 network tiers, Claims 5.5 adjudication
+    /// projection). The <c>Status</c> field is not touched here — the
+    /// predecessor stays Paid until the 5.12b ReversalRun explicitly
+    /// transitions it to Voided via <see cref="MarkVoidedProjectionAsync"/>.
+    /// </para>
+    ///
+    /// Returns true on success, false when no row matched the filter.
+    /// </summary>
+    Task<bool> MarkSupersededProjectionAsync(
+        string tenantId,
+        string claimId,
+        string supersessorVersionId,
+        DateTime supersededAt,
+        string? actorId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Void projection bypass for capability 5.12 — terminal transition
+    /// from Paid/Adjusted → Voided. Patches <c>Status=Voided</c>,
+    /// <c>VersionState=Voided</c>, and <c>LastUpdatedDate/By</c>.
+    /// Bypasses the <see cref="UpdateAsync"/> terminal-state guard (the
+    /// guard exists to force adjustments through the explicit-new-version
+    /// path; this method IS that explicit path's terminal write).
+    ///
+    /// Wired in 5.12a so <see cref="Services.IClaimFinalizationService.VoidAsync"/>
+    /// has a write path; actual invocation occurs in 5.12b's
+    /// <c>ReversalRunService</c>.
+    ///
+    /// Returns true on success, false when no row matched the filter.
+    /// </summary>
+    Task<bool> MarkVoidedProjectionAsync(
+        string tenantId,
+        string claimId,
+        DateTime voidedAt,
+        string? actorId,
+        CancellationToken ct = default);
 }
 
 public class ClaimRepository : IClaimRepository
@@ -916,6 +965,97 @@ public class ClaimRepository : IClaimRepository
             if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Copay",       NetworkTier = tier, AccumulatedAmount = amount });
 
         return new AccumulatorTotalsResponse { Totals = totals };
+    }
+
+    public async Task<bool> MarkSupersededProjectionAsync(
+        string tenantId,
+        string claimId,
+        string supersessorVersionId,
+        DateTime supersededAt,
+        string? actorId,
+        CancellationToken ct = default)
+    {
+        // Pre-read for tenant isolation — Cosmos partition is claim.Id; we
+        // read by id then enforce tenant match before patching. Mirrors the
+        // tenant-isolation pattern in GetByIdAsync.
+        Claim? existing;
+        try
+        {
+            var read = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(claimId), cancellationToken: ct);
+            existing = read.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        if (existing == null || existing.TenantId != tenantId) return false;
+
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set("/supersededAt", supersededAt),
+            PatchOperation.Set("/supersededByVersionId", supersessorVersionId),
+            PatchOperation.Set("/versionState", ClaimVersionState.Adjusted),
+            PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
+            PatchOperation.Set("/lastUpdatedBy", actorId),
+        };
+
+        try
+        {
+            await _container.PatchItemAsync<Claim>(
+                claimId,
+                new PartitionKey(claimId),
+                ops,
+                cancellationToken: ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> MarkVoidedProjectionAsync(
+        string tenantId,
+        string claimId,
+        DateTime voidedAt,
+        string? actorId,
+        CancellationToken ct = default)
+    {
+        Claim? existing;
+        try
+        {
+            var read = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(claimId), cancellationToken: ct);
+            existing = read.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        if (existing == null || existing.TenantId != tenantId) return false;
+
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set("/status", ClaimStatus.Voided),
+            PatchOperation.Set("/versionState", ClaimVersionState.Voided),
+            PatchOperation.Set("/lastUpdatedDate", voidedAt),
+            PatchOperation.Set("/lastUpdatedBy", actorId),
+        };
+
+        try
+        {
+            await _container.PatchItemAsync<Claim>(
+                claimId,
+                new PartitionKey(claimId),
+                ops,
+                cancellationToken: ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
     }
 
     private sealed class HeadIdResult

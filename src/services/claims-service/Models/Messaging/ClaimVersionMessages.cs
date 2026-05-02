@@ -32,6 +32,7 @@ internal static class ClaimVersionMessageTypes
 {
     public const string Submitted = "ClaimVersionSubmitted";
     public const string Adjudicated = "ClaimVersionAdjudicated";
+    public const string Reversed = "ClaimVersionReversed";
 }
 
 /// <summary>
@@ -86,4 +87,45 @@ public class ClaimVersionAdjudicatedMessage
     public string? CorrelationId { get; init; }
 
     public DateTimeOffset AdjudicatedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// Emitted by <see cref="Services.IClaimAdjustmentService"/> after the
+/// predecessor version has been superseded as part of a 5.12 adjustment
+/// workflow. Distinct from <c>ClaimVersionSuperseded</c>: this message
+/// signals downstream consumers (audit/lineage, future FHIR _history,
+/// payment-service ReversalRun queue) that the predecessor's accumulator
+/// impact and provider payment must be reversed.
+///
+/// <para>
+/// The new version's pipeline run emits a separate
+/// <see cref="ClaimVersionSubmittedMessage"/> via the standard submission
+/// path; this message is purely the supersession + reversal-intent signal.
+/// </para>
+/// </summary>
+public class ClaimVersionReversedMessage
+{
+    public required string TenantId { get; init; }
+
+    /// <summary>The predecessor claim row id (the version being reversed).</summary>
+    public required string ClaimId { get; init; }
+
+    /// <summary>Chain key — stable across all versions of the claim.</summary>
+    public required string ClaimVersionId { get; init; }
+
+    /// <summary>The predecessor's per-version VersionId.</summary>
+    public required string PredecessorVersionId { get; init; }
+
+    /// <summary>The new (replacement) claim row id created by the adjustment.</summary>
+    public required string SupersessorClaimId { get; init; }
+
+    /// <summary>Operator-supplied reason for the adjustment (audit context).</summary>
+    public required string AdjustmentReason { get; init; }
+
+    /// <summary>Caller identity propagated through the audit chain.</summary>
+    public string? ActorId { get; init; }
+
+    public string? CorrelationId { get; init; }
+
+    public DateTimeOffset OccurredAt { get; init; } = DateTimeOffset.UtcNow;
 }
