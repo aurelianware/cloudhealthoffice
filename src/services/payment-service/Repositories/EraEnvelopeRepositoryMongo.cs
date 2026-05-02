@@ -7,7 +7,14 @@ public interface IEraEnvelopeRepository
 {
     Task<EraEnvelopeRecord?> GetByIdAsync(string id);
     Task<IEnumerable<EraEnvelopeRecord>> GetByPaymentRunIdAsync(string paymentRunId);
-    Task<IEnumerable<EraEnvelopeRecord>> SearchAsync(string? paymentRunId, string? tradingPartnerId);
+    /// <summary>
+    /// 5.12b — fetch envelopes produced by a given <c>ReversalRun</c>.
+    /// Mirror of <see cref="GetByPaymentRunIdAsync"/> for the reversal
+    /// path; returns the empty sequence for a run id that has not yet
+    /// (or did not) emit any envelopes.
+    /// </summary>
+    Task<IEnumerable<EraEnvelopeRecord>> GetByReversalRunIdAsync(string reversalRunId);
+    Task<IEnumerable<EraEnvelopeRecord>> SearchAsync(string? paymentRunId, string? tradingPartnerId, string? reversalRunId = null);
     Task<EraEnvelopeRecord> CreateAsync(EraEnvelopeRecord record);
 }
 
@@ -53,7 +60,16 @@ public class EraEnvelopeRepositoryMongo : IEraEnvelopeRepository
         return await _collection.Find(filter).SortBy(x => x.TradingPartnerId).ToListAsync();
     }
 
-    public async Task<IEnumerable<EraEnvelopeRecord>> SearchAsync(string? paymentRunId, string? tradingPartnerId)
+    public async Task<IEnumerable<EraEnvelopeRecord>> GetByReversalRunIdAsync(string reversalRunId)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<EraEnvelopeRecord>.Filter.And(
+            Builders<EraEnvelopeRecord>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<EraEnvelopeRecord>.Filter.Eq(x => x.ReversalRunId, reversalRunId));
+        return await _collection.Find(filter).SortBy(x => x.TradingPartnerId).ToListAsync();
+    }
+
+    public async Task<IEnumerable<EraEnvelopeRecord>> SearchAsync(string? paymentRunId, string? tradingPartnerId, string? reversalRunId = null)
     {
         var tenantId = GetTenantId();
         var filters = new List<FilterDefinition<EraEnvelopeRecord>>
@@ -65,6 +81,8 @@ public class EraEnvelopeRepositoryMongo : IEraEnvelopeRepository
             filters.Add(Builders<EraEnvelopeRecord>.Filter.Eq(x => x.PaymentRunId, paymentRunId));
         if (!string.IsNullOrEmpty(tradingPartnerId))
             filters.Add(Builders<EraEnvelopeRecord>.Filter.Eq(x => x.TradingPartnerId, tradingPartnerId));
+        if (!string.IsNullOrEmpty(reversalRunId))
+            filters.Add(Builders<EraEnvelopeRecord>.Filter.Eq(x => x.ReversalRunId, reversalRunId));
 
         return await _collection
             .Find(Builders<EraEnvelopeRecord>.Filter.And(filters))
@@ -137,7 +155,20 @@ public class InMemoryEraEnvelopeRepository : IEraEnvelopeRepository
         }
     }
 
-    public Task<IEnumerable<EraEnvelopeRecord>> SearchAsync(string? paymentRunId, string? tradingPartnerId)
+    public Task<IEnumerable<EraEnvelopeRecord>> GetByReversalRunIdAsync(string reversalRunId)
+    {
+        var tenantId = GetTenantId();
+        lock (_lock)
+        {
+            var matches = _records
+                .Where(r => r.TenantId == tenantId && r.ReversalRunId == reversalRunId)
+                .OrderBy(r => r.TradingPartnerId)
+                .ToList();
+            return Task.FromResult<IEnumerable<EraEnvelopeRecord>>(matches);
+        }
+    }
+
+    public Task<IEnumerable<EraEnvelopeRecord>> SearchAsync(string? paymentRunId, string? tradingPartnerId, string? reversalRunId = null)
     {
         var tenantId = GetTenantId();
         lock (_lock)
@@ -146,6 +177,7 @@ public class InMemoryEraEnvelopeRepository : IEraEnvelopeRepository
                 .Where(r => r.TenantId == tenantId)
                 .Where(r => string.IsNullOrEmpty(paymentRunId) || r.PaymentRunId == paymentRunId)
                 .Where(r => string.IsNullOrEmpty(tradingPartnerId) || r.TradingPartnerId == tradingPartnerId)
+                .Where(r => string.IsNullOrEmpty(reversalRunId) || r.ReversalRunId == reversalRunId)
                 .OrderByDescending(r => r.GeneratedAt)
                 .ToList();
             return Task.FromResult<IEnumerable<EraEnvelopeRecord>>(matches);

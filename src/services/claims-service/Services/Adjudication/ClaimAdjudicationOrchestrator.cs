@@ -2,6 +2,7 @@ using ClaimsService.Adapters;
 using ClaimsService.Models;
 using ClaimsService.Models.Adjudication;
 using ClaimsService.Models.Messaging;
+using ClaimsService.Services;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.Infrastructure.Messaging;
 using Microsoft.Extensions.Options;
@@ -24,6 +25,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     private readonly IClaimVersionEventPublisher _eventPublisher;
     private readonly IMessageBus _messageBus;
     private readonly IAdjudicationTenantContext _tenantContext;
+    private readonly IClaimAdjustmentService _adjustmentService;
     private readonly AdjudicationPipelineOptions _options;
     private readonly ILogger<ClaimAdjudicationOrchestrator> _logger;
 
@@ -35,6 +37,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         IClaimVersionEventPublisher eventPublisher,
         IMessageBus messageBus,
         IAdjudicationTenantContext tenantContext,
+        IClaimAdjustmentService adjustmentService,
         IOptions<AdjudicationPipelineOptions> options,
         ILogger<ClaimAdjudicationOrchestrator> logger)
     {
@@ -45,6 +48,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         _eventPublisher = eventPublisher;
         _messageBus = messageBus;
         _tenantContext = tenantContext;
+        _adjustmentService = adjustmentService;
         _options = options.Value;
         _logger = logger;
     }
@@ -255,6 +259,31 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             _logger.LogError(ex,
                 "ClaimVersionAdjudicated Service Bus emission failed for claim {ClaimVersionId}",
                 SanitizeForLog(context.ClaimVersionId));
+        }
+
+        // 3) Adjustment lifecycle callback (5.12b Premise A — orchestrator
+        //    -finalize callback). If the new version is the
+        //    NewClaimId of an in-flight ClaimAdjustment, transition the
+        //    adjustment from AwaitingReadjudication to PendingReversal
+        //    (Pass/Deny) or Failed (Reject). No-op for fresh non-adjustment
+        //    submissions. Failure is non-blocking: adjudication has already
+        //    persisted; the lifecycle transition can be re-driven by a
+        //    follow-up sweep (Phase 2) or operator intervention.
+        try
+        {
+            await _adjustmentService
+                .OnNewVersionFinalizedAsync(
+                    context.TenantId,
+                    context.Claim.Id,
+                    finalOutcome,
+                    ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Adjustment lifecycle callback failed for new version {ClaimId}; pipeline persisted, adjustment may stay in AwaitingReadjudication",
+                SanitizeForLog(context.Claim.Id));
         }
     }
 
