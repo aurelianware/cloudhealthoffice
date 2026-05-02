@@ -13,7 +13,7 @@ closer at
 
 For broader product positioning see
 [`docs/POSITIONING.md`](../POSITIONING.md). For commercial-readiness
-sequencing across CHO, see
+sequencing across Cloud Health Office, see
 [`docs/roadmap/CHO-Roadmap-Readme.md`](../roadmap/CHO-Roadmap-Readme.md)
 — note that the roadmap's "Phase 1" / "Phase 2" axis tracks
 **commercial-readiness milestones** and is distinct from
@@ -26,8 +26,8 @@ domain-internal phasing tracked here.
 | Domain | Phase 1 | Phase 2 | Closer doc | Notes |
 |--------|---------|---------|-----------|-------|
 | **Claims** (claims-service, claims-examiner-service, payment-service customer surface) | ✅ Complete (May 2026) | 🚧 Backlog cataloged | [claims-phase-1-closer.md](../architecture/claims-phase-1-closer.md) | 14 capabilities (5.1a-5.12b). Phase 2 backlog: [claims-phase-2-backlog.md](../roadmap/claims-phase-2-backlog.md) |
-| **Provider** (provider-service, provider-verification-service) | ✅ Complete (April 2026) | 🚧 Backlog implicit per per-capability docs | — (per-capability docs only; closer pattern not retro-applied) | Pattern parity with Claims closer is a future option |
-| **Benefit Plan** (benefit-plan-service) | ✅ Complete (April 2026) | 🚧 Backlog implicit per per-capability docs | — (per-capability docs only) | Pattern parity with Claims closer is a future option |
+| **Provider** (provider-service, provider-verification-service) | ✅ Complete (April 2026) | 🚧 Backlog implicit in per-capability docs | — (per-capability docs only; closer pattern not retro-applied) | Pattern parity with Claims closer is a future option |
+| **Benefit Plan** (benefit-plan-service) | ✅ Complete (April 2026) | 🚧 Backlog implicit in per-capability docs | — (per-capability docs only) | Pattern parity with Claims closer is a future option |
 | **Coverage** (coverage-service) | 🚧 Active | ⏳ Planned | — | Phase 2 cross-service dependencies named in Claims Phase 2 backlog (CobEntry contract fixes; FHIR Coverage projection) |
 | **Member** (member-service) | 🚧 Active | ⏳ Planned | — | Patient Access API contributions tracked separately |
 | **AR / Appeals / Authorization / Capitation / Eligibility / Encounter / FFS / FHIR / Premium-billing / Risk-adjustment / Trading-partner / etc.** | Various | Various | — | Out of scope for this MODULE-STATUS revision; future revisions extend |

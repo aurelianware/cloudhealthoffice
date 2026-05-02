@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Claims Phase 1 — Closure
 
-Closes the Claims-domain Phase 1 effort spanning 14 capabilities (5.1a–5.12b). Phase 1 delivers a full claim lifecycle end-to-end: submit → adjudicate (6-stage pipeline) → pay (operator-initiated batched 835) → adjust (re-adjudication via predecessor chain) → reverse (operator-initiated batched negative 835).
+Closes the Cloud Health Office Claims-domain Phase 1 effort spanning 14 capabilities (5.1a–5.12b). Phase 1 delivers a full claim lifecycle end-to-end: submit → adjudicate (7-stage pipeline: Scrubbing 100 / Network 200 / BenefitCalculation 300 / NCCI 400 / CoB 500 / AI Examination 600 / Persistence 999) → pay (operator-initiated batched 835) → adjust (re-adjudication via predecessor chain) → reverse (operator-initiated batched negative 835).
 
 **No new functionality.** This release is documentation-driven: capability matrix, end-to-end narrative, architectural-pattern index, Phase 2 backlog catalog, CMS-0057-F readiness assessment, canonical V1 API surface reference, and a portfolio module-status register.
 
@@ -40,7 +40,7 @@ Closes the Claims-domain Phase 1 effort spanning 14 capabilities (5.1a–5.12b).
 
 #### Closer pattern established
 
-Claims 5.13 establishes the **closer pattern** for service-level / domain-level Phase 1 / Phase 2 closures across CHO. Future Provider Phase 2, BenefitPlan Phase 2, and other domain closures can mirror the structure: capability matrix → operational narrative → pattern index → phase boundary → diligence-readiness posture, with separate registries for backlog, compliance posture, and API surface.
+Claims 5.13 establishes the **closer pattern** for service-level / domain-level Phase 1 / Phase 2 closures across Cloud Health Office. Future Provider Phase 2, BenefitPlan Phase 2, and other domain closures can mirror the structure: capability matrix → operational narrative → pattern index → phase boundary → diligence-readiness posture, with separate registries for backlog, compliance posture, and API surface.
 
 #### No code changes
 

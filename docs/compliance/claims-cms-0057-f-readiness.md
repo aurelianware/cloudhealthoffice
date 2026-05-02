@@ -1,8 +1,9 @@
 # CMS-0057-F Readiness — Claims Domain
 
-**Scope:** Cloud Health Office Claims-domain compliance posture
-relative to the CMS Interoperability and Prior Authorization Final
-Rule (CMS-0057-F).
+**Scope:** Cloud Health Office (CHO) Claims-domain compliance
+posture relative to the CMS Interoperability and Prior
+Authorization Final Rule (CMS-0057-F). Subsequent uses of "CHO" in
+this document refer to Cloud Health Office.
 **Status as of:** May 2026 (Claims Phase 1 close)
 **Compliance deadline:** **January 1, 2027** (Patient Access API
 expansion mandate; provider-directory and prior-auth components

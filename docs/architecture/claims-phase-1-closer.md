@@ -12,10 +12,12 @@ Phase 2 deferrals. This closer narrates the lifecycle as a single
 operational journey, indexes the cross-cutting patterns, and points
 readers outward.
 
-For the broader CHO product context (Public Tools, Transactional
-Services, Managed Data Services, Platform Engagement), see
+For the broader Cloud Health Office (CHO) product context — four
+product lines: Public Tools, Transactional Services, Managed Data
+Services, Platform Engagement — see
 [`docs/POSITIONING.md`](../POSITIONING.md). Claims is part of
-**Platform Engagement Layer 1**.
+**Platform Engagement Layer 1**. Subsequent uses of "CHO" in this
+document refer to Cloud Health Office.
 
 For the complete Phase 2 work backlog harvested from per-capability
 deferrals, see
@@ -40,9 +42,9 @@ For the 5.1b operator runbook (Cosmos partition migration to
 | **5.1a** | [#725](https://github.com/aurelianware/cloudhealthoffice/pull/725) | ✅ | Claim identity + version-chain foundation. `Claim.Id` is per-version (renamed from prior `_id` reuse); appends to a Mongo `claim_version_events` stream as the system-of-record version chain; introduces `IClaimVersionEventPublisher`. | [claim-versioning.md](./claim-versioning.md) |
 | **5.1b** | [#743](https://github.com/aurelianware/cloudhealthoffice/pull/743) | ✅ | Cosmos partition-key migration to `/tenantId` for the `Claims` container. Pattern parity with Provider/BP/AiExaminationAudit migrations. Operator-driven runbook ships in `docs/migrations/`. | [claim-versioning.md](./claim-versioning.md) (5.1b section) |
 | **5.2** | [#728](https://github.com/aurelianware/cloudhealthoffice/pull/728) | ✅ | Adapter pattern foundation. `IClaimAdapter` + `AdapterClaim` insulate engine surfaces (NCCI, COB, AI examiner, scrub) from the persisted `Claim` shape. Fourth instance of the cross-service adapter pattern. | [claim-adapter-pattern.md](./claim-adapter-pattern.md) |
-| **5.3** | [#729](https://github.com/aurelianware/cloudhealthoffice/pull/729) | ✅ | Canonical V1 submission API. `POST /api/v1/claims` ships as the canonical surface; `ClaimsV1Controller` legacy paths preserved as `[Obsolete]`. Routes 277CA generation through `IClaimAcknowledgmentService`. | [claim-submission-api.md](./claim-submission-api.md) |
+| **5.3** | [#729](https://github.com/aurelianware/cloudhealthoffice/pull/729) | ✅ | Canonical V1 submission API. `POST /api/v1/claims` on `ClaimsV1Controller` ships as the canonical surface (accepts `AdapterClaim`); the versionless legacy `POST /api/claims` on `ClaimsController` is preserved as `[Obsolete]` with RFC 8594 `Deprecation` / `Link` headers and routes through the same `IClaimSubmissionService` for continuous audit chain. Routes 277CA generation through `IClaimAcknowledgmentService`. | [claim-submission-api.md](./claim-submission-api.md) |
 | **5.4** | [#734](https://github.com/aurelianware/cloudhealthoffice/pull/734) | ✅ | Pre-adjudication scrubbing stage (`ClaimsScrubEngine` C# port). Decommissions standalone `claims-scrubbing-service` — scrubbing is now in-process at the pipeline boundary. | [claim-scrubbing-pipeline.md](./claim-scrubbing-pipeline.md) |
-| **5.5** | [#731](https://github.com/aurelianware/cloudhealthoffice/pull/731) (+ [#732](https://github.com/aurelianware/cloudhealthoffice/pull/732)) | ✅ | Adjudication pipeline foundation. 6-stage orchestrator (`IClaimAdjudicationOrchestrator`); `IClaimAdjudicationStage` contract; PersistenceStage projects `AdjudicationResult` + `PendDetails`. | [claim-adjudication-pipeline.md](./claim-adjudication-pipeline.md) |
+| **5.5** | [#731](https://github.com/aurelianware/cloudhealthoffice/pull/731) (+ [#732](https://github.com/aurelianware/cloudhealthoffice/pull/732)) | ✅ | Adjudication pipeline foundation. Order-driven orchestrator (`IClaimAdjudicationOrchestrator`); `IClaimAdjudicationStage` contract; ships `BenefitCalculationStage` (Order=300) and the terminal `PersistenceStage` (Order=999) which projects `AdjudicationResult` + `PendDetails`. | [claim-adjudication-pipeline.md](./claim-adjudication-pipeline.md) |
 | **5.6** | [#733](https://github.com/aurelianware/cloudhealthoffice/pull/733) | ✅ | Network & credentialing enforcement stage. First production `EnforcementOutcome` projection; cached resolution-client pattern for provider lookup. | [claim-adjudication-pipeline.md](./claim-adjudication-pipeline.md) (NetworkStage section) |
 | **5.7** | [#736](https://github.com/aurelianware/cloudhealthoffice/pull/736) | ✅ | NCCI / MUE edits enforcement. Projection-metadata bypass extension. First production consumer of engine-suggested CARC/RARC codes that 5.10 surfaces in 835. | [claim-ncci-pipeline.md](./claim-ncci-pipeline.md) |
 | **5.8** | [#737](https://github.com/aurelianware/cloudhealthoffice/pull/737) | ✅ | Coordination of Benefits stage with Phase 2 hook stub. Detection-only posture: CHO-secondary scenarios pend with stable reason `cob-secondary-not-supported-phase-1`. CHO-primary calculation completes fully via `CobEngine`. | [claim-cob-pipeline.md](./claim-cob-pipeline.md) |
@@ -86,18 +88,20 @@ paths preserved with `[Obsolete]` — is enumerated in
 
 ### 2. Adjudicate (capabilities 5.4, 5.5, 5.6, 5.7, 5.8, 5.9)
 
-Submission triggers the 6-stage adjudication pipeline. Each stage
-runs in order and either passes the context forward or pends/denies
-the claim with a stable machine reason.
+Submission triggers the 7-stage adjudication pipeline. Stages
+execute in `IClaimAdjudicationStage.Order` ascending; each either
+passes the context forward or pends/denies the claim with a stable
+machine reason. The orderings below are the live values in code.
 
 | Order | Stage | Capability | Outcome on failure |
 |-------|-------|-----------|---------------------|
-| 100 | Scrubbing | 5.4 | `Pend` with `ScrubbingResult` reason codes |
-| 200 | Network & credentialing | 5.6 | `Pend` with `EnforcementOutcome` |
-| 300 | NCCI / MUE edits | 5.7 | `Pend` with `PendDetails.EditFailures` (suggested CARC/RARC populated) |
-| 400 | Coordination of Benefits | 5.8 | `Pend` with `cob-secondary-not-supported-phase-1` (CHO-secondary) or proceed (CHO-primary) |
-| 500 | AI Examination | 5.9 | Soft `Pend` with `AiExamination` advisory (Off/SoftValidation modes only) |
-| 600 | Persistence | 5.5 | Projects `AdjudicationResult`, `PendDetails`, `EnforcementOutcome`, `AiExamination` onto the `Claim` document |
+| 100 | `ScrubbingStage` | 5.4 | `Pend` with `ScrubbingResult` reason codes |
+| 200 | `NetworkCredentialingStage` | 5.6 | `Pend` with `EnforcementOutcome` |
+| 300 | `BenefitCalculationStage` | 5.5 | Calculates allowed/copay/coinsurance via `IBenefitCalculationEngine`; failures pend with calculation-error reasons |
+| 400 | `NcciEditsStage` | 5.7 | `Pend` with `PendDetails.EditFailures` (suggested CARC/RARC populated) |
+| 500 | `CoordinationOfBenefitsStage` | 5.8 | `Pend` with `cob-secondary-not-supported-phase-1` (CHO-secondary) or proceed (CHO-primary) |
+| 600 | `AiExaminationStage` | 5.9 | Soft `Pend` with `AiExamination` advisory (Off/SoftValidation modes only) |
+| 999 | `PersistenceStage` | 5.5 | Terminal write — projects `AdjudicationResult`, `PendDetails`, `EnforcementOutcome`, `AiExamination` onto the `Claim` document |
 
 The orchestrator emits `ClaimVersionAdjudicated` at the terminal stage
 boundary. CHO-primary claims that pass all stages reach `Adjudicated`
@@ -138,7 +142,7 @@ The flow:
 
 1. **Adjustment chain (5.12a)** — `ClaimAdjustment` aggregate persists
    the predecessor reference, transitions the claim to
-   `AwaitingReadjudication`, and re-runs the 6-stage pipeline.
+   `AwaitingReadjudication`, and re-runs the 7-stage pipeline.
    Successful re-adjudication emits
    `ClaimVersionAdjudicated` (the new version becomes the chain head).
    Depth is capped at 1 in Phase 1 (Mongo unique index on

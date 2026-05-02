@@ -7,11 +7,13 @@ markers across the 12 architecture docs at
 cross-capability deferrals named in
 [`docs/architecture/claims-phase-1-closer.md`](../architecture/claims-phase-1-closer.md).
 
-This document is the canonical source of truth for Claims-domain
-Phase 2 work. Items are added as new Phase 1 work surfaces deferrals
-and as Phase 2 work itself surfaces follow-ups. Sequencing is
-**indicative, not committed** — actual sequencing depends on pilot
-priorities, regulatory deadlines, and dependency resolution.
+This document is the canonical source of truth for Cloud Health
+Office (CHO) Claims-domain Phase 2 work. Items are added as new
+Phase 1 work surfaces deferrals and as Phase 2 work itself surfaces
+follow-ups. Sequencing is **indicative, not committed** — actual
+sequencing depends on pilot priorities, regulatory deadlines, and
+dependency resolution. Subsequent uses of "CHO" in this document
+refer to Cloud Health Office.
 
 For Phase 1 status, see
 [`docs/architecture/claims-phase-1-closer.md`](../architecture/claims-phase-1-closer.md).

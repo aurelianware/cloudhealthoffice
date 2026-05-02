@@ -28,8 +28,8 @@ for the planned pattern-parity follow-up.
 
 | Service | Controller | Verbs | Section |
 |---------|-----------|-------|---------|
-| claims-service | ClaimsController | 22 | [Claims](#claims-controller) |
-| claims-service | ClaimsV1Controller | 2 | [ClaimsV1 (legacy / deprecated)](#claimsv1-controller-legacy) |
+| claims-service | ClaimsController (versionless surface; hosts the `[Obsolete]` legacy `POST /api/claims`) | 22 | [Claims (versionless)](#claims-controller-versionless) |
+| claims-service | ClaimsV1Controller (canonical V1 submission + member-scoped FHIR-shaped search) | 2 | [ClaimsV1 (canonical V1)](#claimsv1-controller-canonical-v1) |
 | claims-service | ClaimAdjustmentsController | 4 | [Adjustments](#claim-adjustments-controller) |
 | claims-service | FhirExplanationOfBenefitController | 2 | [FHIR EOB](#fhir-explanation-of-benefit-controller) |
 | claims-service | AdminMigrationController | 2 | [Admin migration (operator-only)](#admin-migration-controller-operator-only) |
@@ -99,17 +99,23 @@ Several endpoints implement explicit idempotency:
 
 Base URL: `https://<claims-host>`.
 
-### Claims controller
+### Claims controller (versionless)
 
-`Route("api/claims")` — primary CRUD + status surface.
-Capability source: 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.12a.
+`Route("api/claims")` — versionless CRUD + status surface that
+predates the canonical `/api/v1/claims` submission path. Hosts the
+single `[Obsolete]` legacy submission endpoint plus all the
+versionless lifecycle endpoints (status, pend, adjudication,
+remittance, void, work-queue, etc.).
+Capability source: 5.3 (legacy submission deprecation), 5.4, 5.5,
+5.6, 5.7, 5.8, 5.9, 5.10, 5.12a, 5.12b.
 See [claim-submission-api.md](../architecture/claim-submission-api.md),
 [claim-adjudication-pipeline.md](../architecture/claim-adjudication-pipeline.md),
 [claim-remittance-generation.md](../architecture/claim-remittance-generation.md),
 [claim-adjustment-workflow.md](../architecture/claim-adjustment-workflow.md).
 
-| Verb | Path | Purpose | Idempotency | Capability |
-|------|------|---------|-------------|------------|
+| Verb | Path | Purpose | Status / Idempotency | Capability |
+|------|------|---------|----------------------|------------|
+| POST | `/api/claims` | Legacy claim submission | **`[Obsolete]`** — use `POST /api/v1/claims` (canonical V1). Adds `Deprecation: true` and `Link: </api/v1/claims>; rel="successor-version"` response headers per RFC 8594. Routes through the same `IClaimSubmissionService` so the audit chain stays continuous. | 5.3 |
 | GET | `/api/claims/recent` | Recent claims for tenant | Read-only | 5.3 |
 | GET | `/api/claims/{id}` | Get claim by id | Read-only | 5.3 |
 | GET | `/api/claims/number/{claimNumber}` | Get claim by claim number | Read-only | 5.3 |
@@ -121,7 +127,7 @@ See [claim-submission-api.md](../architecture/claim-submission-api.md),
 | PUT | `/api/claims/{id}/ai-examination` | Set AI examination result | State-transition; persists `AiExamination` projection | 5.9 |
 | GET | `/api/claims/{id}/ai-examination/audit` | AI examination audit history | Read-only | 5.9 |
 | POST | `/api/claims/{id}/ai-examination/agreement` | Operator agreement / disagreement on AI advisory | Idempotent per-operator-action | 5.9 |
-| POST | `/api/claims/{id}/remittance` | Per-claim 835 generation (legacy / replay) | Idempotent | 5.10 |
+| POST | `/api/claims/{id}/remittance` | Per-claim finalize + 835 generation (also the cross-service `FinalizeAsync` target invoked by `PaymentRun`) | **Idempotent dual-emit** — emits `claims.finalized.v1` once | 5.10 |
 | POST | `/api/claims/{id}/void` | Void claim (used by ReversalRun) | **Idempotent dual-emit** — emits `ClaimVersionVoided` once | 5.12b |
 | GET | `/api/claims/summary` | Tenant-level summary metrics | Read-only | 5.3 |
 | GET | `/api/claims/{id}/277ca` | Generate / retrieve 277CA acknowledgment | Pull-shaped (event-driven is Phase 2 — see backlog 6.3) | 5.3 |
@@ -131,29 +137,35 @@ See [claim-submission-api.md](../architecture/claim-submission-api.md),
 | GET | `/api/claims/work-queue/items` | Work-queue items list | Read-only | 5.5 |
 | POST | `/api/claims/work-queue/{claimId}/assign` | Assign to examiner | Idempotent assignment | 5.5 |
 | POST | `/api/claims/work-queue/{claimId}/override` | Operator override (Pend → Approved) | State-transition; persists override audit | 5.5 |
-| POST | `/api/claims/{id}/finalize` | Finalize claim (called by PaymentRun) | **Idempotent dual-emit** — emits `claims.finalized.v1` once | 5.10 |
 
-> **Note on `POST /api/claims/{id}/finalize`:** The endpoint exists on
-> the controller and is the cross-service target of
-> `PaymentRun.FinalizeAsync(claimId)`; counted within the 22 verbs
-> on this controller.
+> **22 verbs total**, including the legacy `[Obsolete]` `POST /api/claims`
+> at the top of the table.
+>
+> **Cross-service finalize note.** `PaymentRun.FinalizeAsync(claimId)`
+> in payment-service calls into this controller's
+> `POST /api/claims/{id}/remittance` (capability 5.10); the response
+> is the canonical idempotent dual-emit. There is no separate
+> `/finalize` route — `/remittance` is the finalize entry point.
 
-### ClaimsV1 controller (legacy)
+### ClaimsV1 controller (canonical V1)
 
-`Route("api/v1/claims")` — legacy V1 surface marked `[Obsolete]`.
-Capability source: 5.3 deprecation. See
+`Route("api/v1/claims")` — **canonical V1 surface** for claim
+submission and member-scoped search.
+Capability source: 5.3. See
 [claim-submission-api.md](../architecture/claim-submission-api.md).
 
 | Verb | Path | Purpose | Status | Capability |
 |------|------|---------|--------|------------|
-| POST | `/api/v1/claims` | Submit claim (legacy) | **Deprecated** — use canonical V1 path | 5.3 |
-| GET | `/api/v1/claims` | List claims (legacy) | **Deprecated** — `EobSearchResponse` shape | 5.3 |
+| POST | `/api/v1/claims` | Submit claim (canonical) | **Canonical V1** — accepts `AdapterClaim` (vendor-neutral DTO from 5.2); orchestrates validation + submission + version-event emission via `IClaimSubmissionService`; returns 201 with the created claim version | 5.3 |
+| GET | `/api/v1/claims` | Member-scoped FHIR-shaped search powering the portal Member Details Claims tab | Read-only; projects through `IClaimAdapter` (5.2) and `IExplanationOfBenefitProjector` to FHIR R4 EOB; response shape `EobSearchResponse` | 5.3 |
 
-> **Deprecation posture:** `[Obsolete]` attribute on the controller
-> class; routes preserved for backward compatibility through Phase 2.
-> Removal targeted post-pilot once trading-partner integrations have
-> migrated. Response includes `Deprecation` header per
-> draft-ietf-httpapi-deprecation-header.
+> **Stability posture.** This is the canonical V1 surface for
+> claim submission. Wire shape (`AdapterClaim` request body) stays
+> stable as the internal `Claim` domain model evolves. The legacy
+> versionless `POST /api/claims` on `ClaimsController` is `[Obsolete]`
+> and routes through the same `IClaimSubmissionService` so callers
+> on either path produce a continuous audit chain; legacy removal
+> is post-pilot, after trading-partner integrations have migrated.
 
 ### Claim Adjustments controller
 
@@ -296,9 +308,12 @@ Both surfaces serve the OpenAPI v3 spec at `/swagger/v1/swagger.json`
 
 - **`/api/v1/*` paths** — V1 stability commitment. Breaking changes
   require a `/api/v2/*` parallel path before V1 deprecation.
-- **`/api/claims/*` paths** — versionless surface used by the CHO
-  portal. Breaking changes coordinated with portal release notes;
-  not committed to external consumers.
+- **`/api/claims/*` paths** — versionless surface used by the
+  Cloud Health Office portal. Breaking changes coordinated with
+  portal release notes; not committed to external consumers. The
+  one `[Obsolete]` route on this surface — `POST /api/claims` —
+  is scheduled for removal post-pilot (see ClaimsController section
+  above).
 - **`/fhir/*` paths** — FHIR R4 conformance. Search-param
   expansion is additive; breaking changes follow FHIR versioning.
 - **`/api/PaymentRuns`, `/api/ReversalRuns`** — operator-facing
