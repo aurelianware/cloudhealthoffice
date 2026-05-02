@@ -261,6 +261,41 @@ public static class ChoMetrics
     /// </summary>
     public static void ResetIntegrityScoreStaleCounts() => IntegrityScoreStaleCounts.Clear();
 
+    /// <summary>
+    /// Counter tracking claims-service Cosmos partition-key migration
+    /// runs (capability 5.1b). One increment per
+    /// <c>POST /api/v1/admin/claims/cosmos-migration/run</c>
+    /// invocation. Dimensions: <c>cho.outcome</c> (success | partial |
+    /// failed), <c>cho.dry_run</c> (true | false).
+    /// </summary>
+    public static readonly Counter<long> ClaimsCosmosMigrationRuns =
+        Meter.CreateCounter<long>(
+            "cho.claims.cosmos_migration.runs.total",
+            unit: "{run}",
+            description: "Cosmos partition-key migration runs by outcome (5.1b)");
+
+    /// <summary>
+    /// Counter tracking individual document outcomes within a Cosmos
+    /// partition-key migration run (capability 5.1b). Dimensions:
+    /// <c>cho.outcome</c> (written | would_write | skipped | errored).
+    /// </summary>
+    public static readonly Counter<long> ClaimsCosmosMigrationDocuments =
+        Meter.CreateCounter<long>(
+            "cho.claims.cosmos_migration.documents.total",
+            unit: "{document}",
+            description: "Documents processed per migration run, by outcome (5.1b)");
+
+    /// <summary>
+    /// Histogram tracking Cosmos partition-key migration duration
+    /// (capability 5.1b). Dimensions: <c>cho.outcome</c>,
+    /// <c>cho.dry_run</c>.
+    /// </summary>
+    public static readonly Histogram<double> ClaimsCosmosMigrationDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claims.cosmos_migration.duration",
+            unit: "s",
+            description: "Cosmos partition-key migration run duration in seconds (5.1b)");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

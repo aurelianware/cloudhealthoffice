@@ -192,7 +192,13 @@ resource membersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/co
   }
 }
 
-// Claims Container
+// Claims Container — legacy partition key /memberId (Bicep declaration)
+// /Id (runtime ClaimRepository) — both diverged from canonical /tenantId
+// established in Provider/BP/AiExaminationAudit. Capability 5.1b migrates
+// claim documents to the ClaimsV2 container declared below; this old
+// container is preserved during a 30-day rollback window then removed in
+// a focused follow-up Bicep PR. Cosmos containers cannot be renamed —
+// hence the version-suffix ClaimsV2 over an in-place repartition.
 resource claimsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
   parent: cosmosDatabase
   name: 'Claims'
@@ -201,6 +207,44 @@ resource claimsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
       id: 'Claims'
       partitionKey: {
         paths: ['/memberId']
+        kind: 'Hash'
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+        excludedPaths: [
+          {
+            path: '/"_etag"/?'
+          }
+        ]
+      }
+      defaultTtl: -1
+    }
+  }
+}
+
+// ClaimsV2 Container — capability 5.1b canonical /tenantId partition.
+// Pattern parity with Provider, BenefitPlan, and AiExaminationAudit;
+// eliminates cross-partition fan-out on the versioning surface
+// (GetLatestVersionAsync / GetVersionAsync / ListVersionsAsync /
+// UpdateAdjudicationProjectionAsync / Mark*ProjectionAsync). The
+// claims-service migration tooling
+// (POST /api/v1/admin/claims/cosmos-migration/run) copies documents
+// from `Claims` here, hydrating any legacy ClaimVersionId="" rows so
+// this container starts fully canonicalized.
+resource claimsV2Container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+  parent: cosmosDatabase
+  name: 'ClaimsV2'
+  properties: {
+    resource: {
+      id: 'ClaimsV2'
+      partitionKey: {
+        paths: ['/tenantId']
         kind: 'Hash'
       }
       indexingPolicy: {

@@ -12,6 +12,7 @@ using ClaimsService.Repositories;
 using ClaimsService.Services;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
+using ClaimsService.Services.Migrations;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
@@ -67,6 +68,17 @@ else
 
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryCosmos>();
+
+    // 5.1b — Cosmos partition-key migration tooling. Resolves the source
+    // (legacy /memberId Bicep / /Id runtime) and target (canonical
+    // /tenantId) containers from the configured database; the migration
+    // service is the only consumer that ever sees both containers.
+    // Singleton because it owns the running-flag + last-run state shared
+    // across requests; the underlying Cosmos containers are thread-safe.
+    builder.Services.Configure<ClaimMigrationOptions>(
+        builder.Configuration.GetSection(ClaimMigrationOptions.SectionName));
+    builder.Services.AddSingleton<IClaimMigrationContainerResolver, CosmosClaimMigrationContainerResolver>();
+    builder.Services.AddSingleton<IClaimMigrationService, ClaimMigrationService>();
 
     // Cosmos-only deployments don't have a provisioned events stream; the
     // Noop publisher logs a warning so ops can spot the missing wiring
