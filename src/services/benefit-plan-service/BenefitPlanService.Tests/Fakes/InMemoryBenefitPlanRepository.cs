@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BenefitPlanService.Models;
+using BenefitPlanService.Models.Benefits;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 
@@ -18,7 +19,16 @@ namespace BenefitPlanService.Tests.Fakes;
 /// </remarks>
 public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
 {
-    private static readonly JsonSerializerOptions _jsonOpts = new(JsonSerializerDefaults.Web);
+    // BenefitJsonConverter registered here (not via [JsonConverter] on Benefit) so
+    // that WithoutSelf() can strip it from a copy when serializing concrete subtypes,
+    // preventing the attribute-inheritance stack overflow.
+    private static readonly JsonSerializerOptions _jsonOpts = BuildJsonOpts();
+    private static JsonSerializerOptions BuildJsonOpts()
+    {
+        var o = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        o.Converters.Add(new BenefitJsonConverter());
+        return o;
+    }
     private readonly List<BenefitPlan> _docs = new();
     public IReadOnlyList<BenefitPlan> Docs => _docs;
 

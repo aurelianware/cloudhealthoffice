@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BenefitPlanService.Models;
+using BenefitPlanService.Models.Benefits;
 using BenefitPlanService.Repositories;
 
 namespace BenefitPlanService.Services;
@@ -514,7 +515,16 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     // Shared options for the polymorphic benefit clone path. JsonSerializerDefaults.Web
     // matches the wire format used by repositories and the in-memory fake, so a clone
     // through these options preserves the subclass discriminator end-to-end.
-    private static readonly JsonSerializerOptions _benefitCloneOpts = new(JsonSerializerDefaults.Web);
+    // BenefitJsonConverter is registered here (not via [JsonConverter] on Benefit)
+    // so that WithoutSelf() can reliably strip it from a copy when serializing
+    // concrete subtypes, preventing the inherited-attribute stack overflow.
+    private static readonly JsonSerializerOptions _benefitCloneOpts = BuildBenefitCloneOpts();
+    private static JsonSerializerOptions BuildBenefitCloneOpts()
+    {
+        var o = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        o.Converters.Add(new BenefitJsonConverter());
+        return o;
+    }
 
     /// <summary>
     /// Deep-clones a <see cref="Benefit"/> through a polymorphic JSON
