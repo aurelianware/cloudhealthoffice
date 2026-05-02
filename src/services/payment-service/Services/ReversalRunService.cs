@@ -22,7 +22,7 @@ namespace PaymentService.Services;
 /// </summary>
 public interface IReversalRunService
 {
-    Task<ReversalRun> CreateReversalRunAsync(ReversalRunCriteria criteria, string? createdBy = null);
+    Task<ReversalRun> CreateReversalRunAsync(ReversalRunCriteria criteria, string? createdBy = null, string? description = null);
     Task<ReversalRun> ExecuteReversalRunAsync(string reversalRunId);
     Task<ReversalRun> GetReversalRunAsync(string reversalRunId);
     Task<IEnumerable<ReversalRun>> GetReversalRunsAsync(DateTime? from = null, DateTime? to = null);
@@ -60,12 +60,16 @@ public class ReversalRunService : IReversalRunService
         _configuration = configuration;
     }
 
-    public async Task<ReversalRun> CreateReversalRunAsync(ReversalRunCriteria criteria, string? createdBy = null)
+    public async Task<ReversalRun> CreateReversalRunAsync(
+        ReversalRunCriteria criteria,
+        string? createdBy = null,
+        string? description = null)
     {
         var run = new ReversalRun
         {
             ReversalRunNumber = $"RR-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N").Substring(0, 6).ToUpper()}",
             Criteria = criteria,
+            Description = description,
             CreatedBy = createdBy,
             Status = ReversalRunStatus.Pending,
         };
@@ -111,7 +115,10 @@ public class ReversalRunService : IReversalRunService
             // Step 2 — fetch the predecessor claim for each adjustment.
             //          We need its AdjudicationResult / ClaimLines /
             //          billing-provider NPI to build the sign-flipped
-            //          reversal Payment.
+            //          reversal Payment. The fetch also lets us apply
+            //          ProviderNPI post-filter (the claims-service list
+            //          endpoint doesn't natively filter by predecessor
+            //          NPI).
             var predecessors = new Dictionary<string, ClaimDto>(StringComparer.Ordinal);
             foreach (var adj in adjustments)
             {
@@ -123,6 +130,27 @@ public class ReversalRunService : IReversalRunService
                     continue;
                 }
                 predecessors[adj.PredecessorClaimId] = pred;
+            }
+
+            // Step 2b — apply ProviderNPI post-filter. Adjustments whose
+            //           predecessor NPI doesn't match are dropped from the
+            //           batch silently (operator-supplied filter; not a
+            //           warning condition).
+            if (!string.IsNullOrEmpty(run.Criteria.ProviderNPI))
+            {
+                var npi = run.Criteria.ProviderNPI;
+                adjustments = adjustments
+                    .Where(a => predecessors.TryGetValue(a.PredecessorClaimId, out var p)
+                        && string.Equals(p.PayToProviderNPI ?? p.BillingProviderNPI, npi, StringComparison.Ordinal))
+                    .ToList();
+                if (adjustments.Count == 0)
+                {
+                    run.Warnings.Add($"No PendingReversal adjustments matched ProviderNPI={npi}");
+                    run.Status = ReversalRunStatus.Completed;
+                    run.ExecutionCompletedAt = DateTime.UtcNow;
+                    run.ExecutionDurationSeconds = (run.ExecutionCompletedAt.Value - run.ExecutionStartedAt!.Value).TotalSeconds;
+                    return await _reversalRunRepository.UpdateAsync(run);
+                }
             }
 
             // Step 3 — resolve trading partners for the surviving batch,
@@ -273,33 +301,62 @@ public class ReversalRunService : IReversalRunService
         // Explicit-override path — operator hand-curated batch.
         if (criteria.AdjustmentIds is { Count: > 0 } explicitIds)
         {
-            var collected = new List<ClaimAdjustmentDto>();
+            var explicitMatches = new List<ClaimAdjustmentDto>();
             foreach (var id in explicitIds)
             {
                 var single = await FetchAdjustmentAsync(id);
                 if (single != null && single.Status == ClaimAdjustmentDtoStatus.PendingReversal)
-                    collected.Add(single);
+                    explicitMatches.Add(single);
             }
-            return collected;
+            return explicitMatches;
         }
 
-        // Filter path — page through the claims-service surface; PageSize
-        // matches the 5.12a controller cap (200).
-        var query = new List<string> { "status=PendingReversal", "page=1", "pageSize=200" };
-        if (criteria.AdjustmentDateFrom.HasValue)
-            query.Add($"createdFrom={criteria.AdjustmentDateFrom.Value:O}");
-        if (criteria.AdjustmentDateTo.HasValue)
-            query.Add($"createdTo={criteria.AdjustmentDateTo.Value:O}");
+        // Filter path — page through the claims-service surface. PageSize
+        // matches the 5.12a controller cap (200); we iterate pages until
+        // we've collected everything matching the filters so a batch with
+        // >200 PendingReversal adjustments doesn't silently drop the
+        // remainder. Hard cap at MaxPagesPerRun pages (= 50,000 adjustments)
+        // as a runaway-pagination guard; runs hitting the cap surface a
+        // warning and the operator re-runs to catch the rest.
+        const int pageSize = 200;
+        const int maxPagesPerRun = 250;
 
-        var url = "/api/v1/adjustments?" + string.Join("&", query);
-        var response = await _claimsServiceClient.GetAsync(url);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(
-                $"claims-service GET /api/v1/adjustments returned {response.StatusCode}");
+        var collected = new List<ClaimAdjustmentDto>();
+        for (var pageNumber = 1; pageNumber <= maxPagesPerRun; pageNumber++)
+        {
+            var query = new List<string>
+            {
+                "status=PendingReversal",
+                $"page={pageNumber}",
+                $"pageSize={pageSize}",
+            };
+            if (criteria.AdjustmentDateFrom.HasValue)
+                query.Add($"createdFrom={criteria.AdjustmentDateFrom.Value:O}");
+            if (criteria.AdjustmentDateTo.HasValue)
+                query.Add($"createdTo={criteria.AdjustmentDateTo.Value:O}");
 
-        var page = await response.Content.ReadFromJsonAsync<ClaimAdjustmentListResponseDto>()
-            ?? new ClaimAdjustmentListResponseDto();
-        return page.Items?.ToList() ?? new List<ClaimAdjustmentDto>();
+            var url = "/api/v1/adjustments?" + string.Join("&", query);
+            var response = await _claimsServiceClient.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(
+                    $"claims-service GET /api/v1/adjustments returned {response.StatusCode}");
+
+            var page = await response.Content.ReadFromJsonAsync<ClaimAdjustmentListResponseDto>()
+                ?? new ClaimAdjustmentListResponseDto();
+            var items = page.Items ?? new List<ClaimAdjustmentDto>();
+            if (items.Count == 0) break;
+
+            collected.AddRange(items);
+
+            // Last page either when the response is short or when we've
+            // reached the reported total. Total is the canonical signal
+            // (Items.Count == pageSize on a non-final page is possible);
+            // fall back to count-based termination when Total is unset.
+            if (page.Total > 0 && collected.Count >= page.Total) break;
+            if (items.Count < pageSize) break;
+        }
+
+        return collected;
     }
 
     private async Task<ClaimAdjustmentDto?> FetchAdjustmentAsync(string adjustmentId)
@@ -456,6 +513,12 @@ public class ReversalRunService : IReversalRunService
     {
         foreach (var (adj, pred) in adjustmentsToVoid)
         {
+            // Pull the envelope id we persisted for this claim so warning
+            // messages and structured logs let operators trace which
+            // reversal envelope contained the claim being voided. The map
+            // is keyed by ClaimId; absence (rare — claim filtered out of
+            // envelope emission upstream) falls back to "<none>".
+            var envelopeId = claimToEnvelopeId.TryGetValue(pred.Id, out var envId) ? envId : "<none>";
             try
             {
                 var body = new ClaimVoidPostBody
@@ -473,20 +536,20 @@ public class ReversalRunService : IReversalRunService
                 {
                     var bodyText = await response.Content.ReadAsStringAsync();
                     run.Warnings.Add(
-                        $"Void of predecessor {pred.Id} for adjustment {adj.Id} returned {(int)response.StatusCode}");
+                        $"Void of predecessor {pred.Id} for adjustment {adj.Id} (envelope {envelopeId}) returned {(int)response.StatusCode}");
                     _logger.LogWarning(
-                        "Void of predecessor {ClaimId} for adjustment {AdjustmentId} returned {Status}: {Body}",
-                        SanitizeForLog(pred.Id), SanitizeForLog(adj.Id),
+                        "Void of predecessor {ClaimId} for adjustment {AdjustmentId} (envelope {EnvelopeId}) returned {Status}: {Body}",
+                        SanitizeForLog(pred.Id), SanitizeForLog(adj.Id), SanitizeForLog(envelopeId),
                         response.StatusCode, SanitizeForLog(bodyText));
                 }
             }
             catch (Exception ex)
             {
                 run.Warnings.Add(
-                    $"Void of predecessor {pred.Id} for adjustment {adj.Id} threw: {ex.Message}");
+                    $"Void of predecessor {pred.Id} for adjustment {adj.Id} (envelope {envelopeId}) threw: {ex.Message}");
                 _logger.LogError(ex,
-                    "Void of predecessor {ClaimId} for adjustment {AdjustmentId} threw",
-                    SanitizeForLog(pred.Id), SanitizeForLog(adj.Id));
+                    "Void of predecessor {ClaimId} for adjustment {AdjustmentId} (envelope {EnvelopeId}) threw",
+                    SanitizeForLog(pred.Id), SanitizeForLog(adj.Id), SanitizeForLog(envelopeId));
             }
         }
     }

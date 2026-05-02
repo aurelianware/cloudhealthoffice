@@ -35,10 +35,11 @@ public class ReversalRunsController : ControllerBase
     public async Task<ActionResult<ReversalRun>> CreateReversalRun([FromBody] CreateReversalRunRequest request)
     {
         _logger.LogInformation(
-            "Creating reversal run with criteria: LOB={LOB}, Provider={Provider}",
-            request.Criteria.LineOfBusiness, SanitizeForLog(request.Criteria.ProviderNPI));
+            "Creating reversal run with criteria: Provider={Provider}",
+            SanitizeForLog(request.Criteria.ProviderNPI));
 
-        var run = await _reversalRunService.CreateReversalRunAsync(request.Criteria, request.CreatedBy);
+        var run = await _reversalRunService.CreateReversalRunAsync(
+            request.Criteria, request.CreatedBy, request.Description);
         return CreatedAtAction(nameof(GetReversalRunById), new { id = run.Id }, run);
     }
 
@@ -49,7 +50,8 @@ public class ReversalRunsController : ControllerBase
     public async Task<ActionResult<ReversalRun>> CreateAndExecuteReversalRun([FromBody] CreateReversalRunRequest request)
     {
         _logger.LogInformation("Creating and executing reversal run");
-        var run = await _reversalRunService.CreateReversalRunAsync(request.Criteria, request.CreatedBy);
+        var run = await _reversalRunService.CreateReversalRunAsync(
+            request.Criteria, request.CreatedBy, request.Description);
         var executed = await _reversalRunService.ExecuteReversalRunAsync(run.Id);
         return Ok(executed);
     }
@@ -66,6 +68,10 @@ public class ReversalRunsController : ControllerBase
         {
             var run = await _reversalRunService.ExecuteReversalRunAsync(id);
             return Ok(run);
+        }
+        catch (InvalidOperationException ex) when (IsNotFound(ex))
+        {
+            return NotFound(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -113,11 +119,23 @@ public class ReversalRunsController : ControllerBase
             await _reversalRunService.CancelReversalRunAsync(id);
             return NoContent();
         }
+        catch (InvalidOperationException ex) when (IsNotFound(ex))
+        {
+            return NotFound(new { message = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(ex.Message);
         }
     }
+
+    // The service throws InvalidOperationException for both not-found
+    // and state-violation cases. Distinguish via the message prefix the
+    // service always emits ("Reversal run {id} not found") so the
+    // controller can return 404 vs 400 to match the declared response
+    // types.
+    private static bool IsNotFound(InvalidOperationException ex) =>
+        ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase);
 
     private static string SanitizeForLog(string? value)
     {

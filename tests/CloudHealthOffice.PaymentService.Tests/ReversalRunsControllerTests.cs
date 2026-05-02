@@ -40,21 +40,24 @@ public class ReversalRunsControllerTests : IClassFixture<PaymentApiFactory>
         TenantId = "test-tenant",
         ReversalRunNumber = "RR-20260502-AB12CD",
         Status = ReversalRunStatus.Pending,
-        Criteria = new ReversalRunCriteria { LineOfBusiness = LineOfBusiness.Commercial },
+        Criteria = new ReversalRunCriteria { ProviderNPI = "1234567890" },
         CreatedBy = "operator-1",
+        Description = "March 2026 reversal cycle",
     };
 
     [Fact]
-    public async Task CreateReversalRun_ValidCriteria_Returns201()
+    public async Task CreateReversalRun_ValidCriteria_Returns201_AndForwardsDescription()
     {
         var run = PendingRun();
-        _runService.CreateReversalRunAsync(Arg.Any<ReversalRunCriteria>(), Arg.Any<string?>())
+        _runService.CreateReversalRunAsync(
+            Arg.Any<ReversalRunCriteria>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns(run);
 
         var request = new CreateReversalRunRequest
         {
-            Criteria = new ReversalRunCriteria { LineOfBusiness = LineOfBusiness.Commercial },
+            Criteria = new ReversalRunCriteria { ProviderNPI = "1234567890" },
             CreatedBy = "operator-1",
+            Description = "March 2026 reversal cycle",
         };
 
         var response = await _client.PostAsJsonAsync("/api/reversalruns", request, Json);
@@ -63,6 +66,12 @@ public class ReversalRunsControllerTests : IClassFixture<PaymentApiFactory>
         var created = await response.Content.ReadFromJsonAsync<ReversalRun>(Json);
         Assert.NotNull(created);
         Assert.Equal(ReversalRunStatus.Pending, created.Status);
+
+        // Plumbed through: controller forwards Description to the service.
+        await _runService.Received(1).CreateReversalRunAsync(
+            Arg.Any<ReversalRunCriteria>(),
+            "operator-1",
+            "March 2026 reversal cycle");
     }
 
     [Fact]
@@ -90,6 +99,18 @@ public class ReversalRunsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.PostAsync("/api/reversalruns/rr-already-running/execute", null);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRun_NotFound_Returns404()
+    {
+        _runService.ExecuteReversalRunAsync("rr-execute-missing")
+            .Returns<ReversalRun>(_ =>
+                throw new InvalidOperationException("Reversal run rr-execute-missing not found"));
+
+        var response = await _client.PostAsync("/api/reversalruns/rr-execute-missing/execute", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -152,5 +173,17 @@ public class ReversalRunsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.PostAsync("/api/reversalruns/rr-cancel-running/cancel", null);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CancelReversalRun_NotFound_Returns404()
+    {
+        _runService.CancelReversalRunAsync("rr-cancel-missing")
+            .Returns<Task>(_ =>
+                throw new InvalidOperationException("Reversal run rr-cancel-missing not found"));
+
+        var response = await _client.PostAsync("/api/reversalruns/rr-cancel-missing/cancel", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

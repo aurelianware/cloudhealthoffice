@@ -16,11 +16,17 @@ namespace PaymentService.Models;
 ///
 /// <para>
 /// Pure data shape; lifecycle owned by <c>IReversalRunService</c>.
-/// Idempotency on creation is operator-supplied via the
-/// <c>Idempotency-Key</c> header (Decision 5; pattern parity with
-/// PaymentRun); idempotency on execute is the run's own
-/// <see cref="Status"/> guard (Pending → Running → Completed; Completed
-/// re-execution is a no-op).
+/// Phase 1 has no creation idempotency — operators click "Run
+/// reversals" and a fresh run is persisted each time (pattern parity
+/// with PaymentRun, which also has no Idempotency-Key support today).
+/// Re-execution is guarded by <see cref="Status"/>: only
+/// <see cref="ReversalRunStatus.Pending"/> runs can be executed; calling
+/// <c>ExecuteReversalRunAsync</c> on a Running/Completed/Failed/Cancelled
+/// run throws <see cref="InvalidOperationException"/>. Idempotency on
+/// the cross-service void calls is enforced by claims-service
+/// (<c>AlreadyVoided</c> outcome → 200 OK), so re-running a
+/// successfully-completed reversal cycle against a fresh ReversalRun is
+/// safe even though the run row itself isn't reused.
 /// </para>
 /// </summary>
 public class ReversalRun
@@ -101,17 +107,28 @@ public class ReversalRun
 }
 
 /// <summary>
-/// Filter criteria for materializing the adjustment batch. Maps to
-/// <c>GET /api/v1/adjustments?status=PendingReversal&amp;...</c> on
-/// claims-service. <see cref="AdjustmentIds"/> is the explicit-override
-/// path for operator hand-curated batches.
+/// Filter criteria for materializing the adjustment batch. The
+/// claims-service <c>GET /api/v1/adjustments</c> surface natively
+/// supports status + date-range + pagination; <see cref="ProviderNPI"/>
+/// is applied as a post-fetch filter on the predecessor claim's
+/// billing/pay-to NPI by <c>ReversalRunService</c>.
+/// <see cref="AdjustmentIds"/> is the explicit-override path for
+/// operator hand-curated batches and bypasses all other filters.
+///
+/// <para>
+/// Phase 1 omits a Line-of-Business filter — the cross-service
+/// <c>ClaimDto</c> shape doesn't carry LineOfBusiness today, so a
+/// post-fetch LOB filter would silently drop everything. Phase 2 may
+/// extend the claim wire shape and re-introduce the filter.
+/// </para>
 /// </summary>
 public class ReversalRunCriteria
 {
-    /// <summary>Filter by line of business (Phase 1 — same enumeration as PaymentRunCriteria).</summary>
-    public LineOfBusiness? LineOfBusiness { get; set; }
-
-    /// <summary>Filter by billing/pay-to provider NPI on the predecessor claim.</summary>
+    /// <summary>
+    /// Filter by billing/pay-to provider NPI on the predecessor claim.
+    /// Applied post-fetch by <c>ReversalRunService</c> against
+    /// <c>ClaimDto.PayToProviderNPI ?? ClaimDto.BillingProviderNPI</c>.
+    /// </summary>
     [StringLength(10)]
     public string? ProviderNPI { get; set; }
 
@@ -123,7 +140,7 @@ public class ReversalRunCriteria
 
     /// <summary>
     /// Explicit override — when supplied, the run consumes only these
-    /// adjustment ids regardless of the date/LOB/NPI filters above.
+    /// adjustment ids regardless of the date/NPI filters above.
     /// Empty list (the default) means "use the filter criteria".
     /// </summary>
     public List<string> AdjustmentIds { get; set; } = new();
