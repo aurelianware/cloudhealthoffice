@@ -602,6 +602,67 @@ public class AdjudicationController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/reverse-claim
+    //
+    // Capability 5.12a — exposes the existing
+    // IBenefitCalculationEngine.ReverseClaimAsync surface over HTTP.
+    // The engine method has been wired through
+    // ChoAccumulatorService.ReverseAsync with IsReversed=true journaling
+    // since BP 5.10; only the HTTP surface was missing. claims-service
+    // calls this endpoint via HttpBenefitCalculationEngineClient.
+    //
+    // Idempotent: the engine's ReverseAsync call is keyed on
+    // OriginalClaimId; a second call against the same claim is a no-op.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Reverse the accumulator impact of a previously adjudicated claim
+    /// (capability 5.12). Idempotent on <c>OriginalClaimId</c>. Returns
+    /// 204 No Content on success.
+    /// </summary>
+    [HttpPost("reverse-claim")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReverseClaim(
+        [FromBody] ReverseClaimRequest request,
+        CancellationToken ct)
+    {
+        if (request is null)
+        {
+            return BadRequest(new { error = "Request body is required" });
+        }
+        if (string.IsNullOrWhiteSpace(request.MemberId))
+        {
+            return BadRequest(new { error = "MemberId is required" });
+        }
+        if (string.IsNullOrWhiteSpace(request.OriginalClaimId))
+        {
+            return BadRequest(new { error = "OriginalClaimId is required" });
+        }
+        if (request.BenefitPlanId == Guid.Empty)
+        {
+            return BadRequest(new { error = "BenefitPlanId is required" });
+        }
+
+        _logger.LogInformation(
+            "Reversing claim {OriginalClaimId} for member {MemberId}, plan {PlanId}, service date {ServiceDate}",
+            SanitizeForLog(request.OriginalClaimId),
+            SanitizeForLog(request.MemberId),
+            request.BenefitPlanId,
+            request.ServiceDate);
+
+        await _benefitEngine.ReverseClaimAsync(
+            request.MemberId,
+            request.SubscriberId ?? string.Empty,
+            request.BenefitPlanId,
+            request.ServiceDate,
+            request.OriginalClaimId,
+            ct);
+
+        return NoContent();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // POST /api/v1/adjudication/resolve-rates
     //
     // Standalone rate resolution (replaces Argo step 7).
@@ -1029,4 +1090,19 @@ public record AdjudicationLineResponse
     public string? ServiceTypeCode { get; init; }
     public bool IsCovered { get; init; }
     public List<AdjustmentReason> AdjustmentReasons { get; init; } = [];
+}
+
+/// <summary>
+/// Wire payload for <c>POST /api/v1/adjudication/reverse-claim</c>
+/// (capability 5.12). Mirrors the
+/// <see cref="IBenefitCalculationEngine.ReverseClaimAsync"/> signature
+/// directly so the controller is a thin adapter over the engine call.
+/// </summary>
+public class ReverseClaimRequest
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string? SubscriberId { get; set; }
+    public Guid BenefitPlanId { get; set; }
+    public DateOnly ServiceDate { get; set; }
+    public string OriginalClaimId { get; set; } = string.Empty;
 }

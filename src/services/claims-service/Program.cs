@@ -42,6 +42,12 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     // MongoProviderVersionEventPublisher / MongoPlanVersionEventPublisher.
     builder.Services.AddScoped<IClaimVersionEventPublisher, MongoClaimVersionEventPublisher>();
     builder.Services.AddHostedService<ClaimVersionEventIndexInitializer>();
+
+    // 5.12a — ClaimAdjustment aggregate persistence (Mongo per Gap 4
+    // ratification). Indexes (chain-uniqueness for depth=1, idempotency,
+    // status+createdAt for ReversalRun batch queries) created on first
+    // resolution.
+    builder.Services.AddScoped<IClaimAdjustmentRepository, ClaimAdjustmentRepositoryMongo>();
 }
 else
 {
@@ -64,6 +70,12 @@ else
     // Noop publisher logs a warning so ops can spot the missing wiring
     // without breaking the lifecycle path.
     builder.Services.AddScoped<IClaimVersionEventPublisher, NoopClaimVersionEventPublisher>();
+
+    // 5.12a — Cosmos-only deployments throw on adjustment writes per
+    // Gap 4 ratification. Reads return null/empty; the noop is fail-loud
+    // on writes so the missing capability surfaces immediately rather
+    // than silently dropping audit data.
+    builder.Services.AddScoped<IClaimAdjustmentRepository, ClaimAdjustmentRepositoryCosmosNoop>();
 }
 
 // FHIR R4 ExplanationOfBenefit projector — hand-built JsonObject to avoid
@@ -82,6 +94,14 @@ builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentServi
 // non-zero-payment remittances; zero-payment Denied transitions stay
 // on the legacy direct-write path until 5.12.
 builder.Services.AddScoped<IClaimFinalizationService, ClaimFinalizationService>();
+
+// 5.12a — Adjustment workflow service. Owns the supersession transition,
+// invokes IClaimSubmissionService for re-adjudication, emits
+// ClaimVersionSuperseded + ClaimVersionReversed events. Lifecycle ratified
+// by Decision 18: AwaitingReadjudication → PendingReversal → Active.
+// 5.12b's payment-service ReversalRunService consumes the resulting
+// PendingReversal rows.
+builder.Services.AddScoped<IClaimAdjustmentService, ClaimAdjustmentService>();
 
 // Inter-service HTTP clients
 builder.Services.AddHttpClient("ProviderService", client =>

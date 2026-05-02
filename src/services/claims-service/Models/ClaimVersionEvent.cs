@@ -12,13 +12,14 @@ namespace ClaimsService.Models;
 /// <see cref="EventId"/> for idempotency, monotonic per-aggregate
 /// <see cref="Version"/>, partition key <c>{TenantId}:{ClaimVersionId}</c>.
 ///
-/// Six event types cover the lifecycle transitions of a claim version:
+/// Seven event types cover the lifecycle transitions of a claim version:
 /// <see cref="ClaimVersionEventType.ClaimVersionSubmitted"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionAdjudicated"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionPaid"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionDenied"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionSuperseded"/>,
-/// <see cref="ClaimVersionEventType.ClaimVersionVoided"/>.
+/// <see cref="ClaimVersionEventType.ClaimVersionVoided"/>,
+/// <see cref="ClaimVersionEventType.ClaimVersionReversed"/>.
 ///
 /// Notes:
 /// - <c>Pended</c> is not a version transition; pended claims remain in
@@ -102,5 +103,12 @@ public enum ClaimVersionEventType
     ClaimVersionDenied = 4,
     /// <summary>This version was superseded by an adjustment version. Mirrors <c>ProviderVersionSuperseded</c>.</summary>
     ClaimVersionSuperseded = 5,
-    ClaimVersionVoided = 6
+    ClaimVersionVoided = 6,
+    /// <summary>
+    /// This version's accumulator impact (deductible/OOPM applied, payment to provider) was reversed
+    /// as part of a 5.12 adjustment workflow. Distinct from <see cref="ClaimVersionSuperseded"/>:
+    /// supersession marks the chain transition; <see cref="ClaimVersionReversed"/> signals downstream
+    /// consumers (audit/lineage, future FHIR _history) that the prior accumulator state must be unwound.
+    /// </summary>
+    ClaimVersionReversed = 7
 }
