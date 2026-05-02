@@ -104,17 +104,6 @@ public class OperationOutcomeTests
     }
 
     [Fact]
-    public async Task SearchEob_ByPatient_ReturnsMatchingEobs()
-    {
-        var adapter = CreateAdapter();
-        var (items, total) = await adapter.SearchEobsAsync(
-            new EobSearchParams { Patient = "pat-001" }, "tenant-a");
-
-        total.Should().Be(2); // eob-001, eob-002
-        items.All(e => e.Patient!.Reference == "Patient/pat-001").Should().BeTrue();
-    }
-
-    [Fact]
     public async Task GetCoverage_KnownId_ReturnsCoverage()
     {
         var adapter = CreateAdapter();

@@ -227,7 +227,6 @@ public class BenefitPlan
 /// resolution) arrive in subsequent capability prompts.
 /// </para>
 /// </summary>
-[JsonConverter(typeof(BenefitJsonConverter))]
 public class Benefit
 {
     [JsonPropertyName("id")]

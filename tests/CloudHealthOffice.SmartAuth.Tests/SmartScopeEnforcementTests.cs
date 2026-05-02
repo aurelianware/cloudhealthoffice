@@ -265,6 +265,15 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
                     IssuerSigningKey = _signingKey
                 };
             });
+
+            // Capability 5.11 — the EOB controller is now a thin proxy over
+            // claims-service. The legacy SMART tests covered routing /
+            // scope-enforcement / patient-binding behavior through the old
+            // mock-data path; preserve that coverage by stubbing the typed
+            // ClaimsService HttpClient with a fake handler that returns the
+            // canned Bundle the old MockFhirDataAdapter used to produce.
+            services.AddHttpClient(global::FhirService.Controllers.ExplanationOfBenefitController.ClaimsServiceClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => new FakeClaimsServiceHandler());
         });
 
         builder.UseEnvironment("Development");
@@ -301,5 +310,88 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>
+    /// Minimal canned-response stand-in for claims-service used by the
+    /// fhir-service ExplanationOfBenefit proxy. Mirrors the legacy
+    /// <c>MockFhirDataAdapter.Eobs</c> seed: pat-001 owns eob-001 +
+    /// eob-002, pat-002 owns eob-003. Read-by-id returns 200 for the
+    /// known ids and 404 otherwise. Search returns the matching subset.
+    /// </summary>
+    private sealed class FakeClaimsServiceHandler : HttpMessageHandler
+    {
+        // Minimal EOB shape that satisfies all FHIR cardinality-1 fields
+        // (status, type, use, patient, insurance). The Hl7.Fhir Bundle
+        // deserializer rejects entries missing any of these, which the
+        // tests rely on for round-trip parsing.
+        private static string FakeEob(string id, string patientId) =>
+            "{" +
+              "\"resourceType\":\"ExplanationOfBenefit\"," +
+              $"\"id\":\"{id}\"," +
+              "\"status\":\"active\"," +
+              "\"use\":\"claim\"," +
+              "\"type\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/claim-type\",\"code\":\"professional\"}]}," +
+              $"\"patient\":{{\"reference\":\"Patient/{patientId}\"}}," +
+              "\"insurer\":{\"display\":\"CloudHealthOffice\"}," +
+              "\"provider\":{\"display\":\"Test Provider\"}," +
+              "\"created\":\"2026-01-15T00:00:00Z\"," +
+              "\"outcome\":\"complete\"," +
+              "\"insurance\":[{\"focal\":true,\"coverage\":{\"display\":\"Test Coverage\"}}]" +
+            "}";
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            const string searchPath = "/fhir/ExplanationOfBenefit";
+            const string readPrefix = "/fhir/ExplanationOfBenefit/";
+
+            if (path.StartsWith(readPrefix, StringComparison.Ordinal))
+            {
+                var id = path[readPrefix.Length..];
+                var patient = id switch
+                {
+                    "eob-001" or "eob-002" => "pat-001",
+                    "eob-003" => "pat-002",
+                    _ => null,
+                };
+                if (patient is not null)
+                {
+                    return Task.FromResult(JsonResponse(HttpStatusCode.OK,
+                        FakeEob(id, patient)));
+                }
+                return Task.FromResult(JsonResponse(HttpStatusCode.NotFound,
+                    "{\"resourceType\":\"OperationOutcome\",\"issue\":[{\"severity\":\"error\",\"code\":\"not-found\"}]}"));
+            }
+
+            if (path == searchPath)
+            {
+                var query = request.RequestUri.Query;
+                var (entries, total) =
+                    query.Contains("patient=pat-001", StringComparison.Ordinal)
+                        ? (
+                            "{\"resource\":" + FakeEob("eob-001", "pat-001") + "}," +
+                            "{\"resource\":" + FakeEob("eob-002", "pat-001") + "}",
+                            2)
+                    : query.Contains("patient=pat-002", StringComparison.Ordinal)
+                        ? (
+                            "{\"resource\":" + FakeEob("eob-003", "pat-002") + "}",
+                            1)
+                    : (string.Empty, 0);
+
+                var body = $"{{\"resourceType\":\"Bundle\",\"type\":\"searchset\",\"total\":{total},\"entry\":[{entries}]}}";
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, body));
+            }
+
+            return Task.FromResult(JsonResponse(HttpStatusCode.NotFound,
+                "{\"resourceType\":\"OperationOutcome\"}"));
+        }
+
+        private static HttpResponseMessage JsonResponse(HttpStatusCode status, string body) =>
+            new(status)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/fhir+json"),
+            };
     }
 }

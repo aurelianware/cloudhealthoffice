@@ -30,7 +30,7 @@ function ensureOutputDir(): void {
 
 function buildResource(type: string, profile: string): CapabilityStatementRestResource {
   return {
-    type,
+    type: type as CapabilityStatementRestResource['type'],
     profile,
     interaction: [
       { code: 'read' },
