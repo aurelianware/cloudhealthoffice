@@ -2,6 +2,7 @@ using PaymentService.Models;
 using PaymentService.Repositories;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PaymentService.Services;
 
@@ -18,7 +19,10 @@ public class PaymentRunService : IPaymentRunService
 {
     private readonly IPaymentRepository _paymentRepository;
     private readonly IPaymentRunRepository _paymentRunRepository;
-    private readonly IEraGeneratorService _eraGenerator;
+    private readonly IBatchEraGeneratorService _batchEraGenerator;
+    private readonly ICarcRarcMappingService _carcRarcMapper;
+    private readonly IEraEnvelopeRepository _envelopeRepository;
+    private readonly ITradingPartnersClient _tradingPartnersClient;
     private readonly HttpClient _claimsServiceClient;
     private readonly ILogger<PaymentRunService> _logger;
     private readonly IConfiguration _configuration;
@@ -26,14 +30,20 @@ public class PaymentRunService : IPaymentRunService
     public PaymentRunService(
         IPaymentRepository paymentRepository,
         IPaymentRunRepository paymentRunRepository,
-        IEraGeneratorService eraGenerator,
+        IBatchEraGeneratorService batchEraGenerator,
+        ICarcRarcMappingService carcRarcMapper,
+        IEraEnvelopeRepository envelopeRepository,
+        ITradingPartnersClient tradingPartnersClient,
         IHttpClientFactory httpClientFactory,
         ILogger<PaymentRunService> logger,
         IConfiguration configuration)
     {
         _paymentRepository = paymentRepository;
         _paymentRunRepository = paymentRunRepository;
-        _eraGenerator = eraGenerator;
+        _batchEraGenerator = batchEraGenerator;
+        _carcRarcMapper = carcRarcMapper;
+        _envelopeRepository = envelopeRepository;
+        _tradingPartnersClient = tradingPartnersClient;
         _claimsServiceClient = httpClientFactory.CreateClient("ClaimsService");
         _logger = logger;
         _configuration = configuration;
@@ -51,25 +61,18 @@ public class PaymentRunService : IPaymentRunService
         };
 
         var created = await _paymentRunRepository.CreateAsync(paymentRun);
-        
         _logger.LogInformation("Created payment run {PaymentRunNumber}", created.PaymentRunNumber);
-
         return created;
     }
 
     public async Task<PaymentRun> ExecutePaymentRunAsync(string paymentRunId)
     {
         var paymentRun = await _paymentRunRepository.GetByIdAsync(paymentRunId);
-        
         if (paymentRun == null)
-        {
             throw new InvalidOperationException($"Payment run {paymentRunId} not found");
-        }
 
         if (paymentRun.Status != PaymentRunStatus.Pending)
-        {
             throw new InvalidOperationException($"Payment run {paymentRunId} is not in Pending status");
-        }
 
         paymentRun.Status = PaymentRunStatus.Running;
         paymentRun.ExecutionStartedAt = DateTime.UtcNow;
@@ -77,10 +80,11 @@ public class PaymentRunService : IPaymentRunService
 
         try
         {
-            // Step 1: Fetch approved/finalized claims from claims service
+            // Step 1: Fetch approved/finalized claims from claims-service
             var claims = await FetchApprovedClaimsAsync(paymentRun.Criteria);
-            
-            _logger.LogInformation("Found {ClaimCount} approved claims for payment run {PaymentRunNumber}",
+
+            _logger.LogInformation(
+                "Found {ClaimCount} approved claims for payment run {PaymentRunNumber}",
                 claims.Count, paymentRun.PaymentRunNumber);
 
             if (!claims.Any())
@@ -92,51 +96,101 @@ public class PaymentRunService : IPaymentRunService
                 return await _paymentRunRepository.UpdateAsync(paymentRun);
             }
 
-            // Step 2: Group claims by provider if requested
+            // Step 2: Group claims by provider (existing semantics)
             var claimGroups = GroupClaimsByProvider(claims, paymentRun.Criteria);
 
-            // Step 3: Generate payments for each group
+            // Step 3: Resolve trading partners for each unique billing
+            //         provider NPI in the run. Run-scoped cache (no global
+            //         singleton); credentialing-style 1-hour TTL doesn't
+            //         apply here because each PaymentRun is a fresh
+            //         lookup batch.
+            var environment = _configuration["TradingPartners:Environment"] ?? "Production";
+            var tenantId = paymentRun.TenantId;
+            var resolvedTradingPartners = await ResolveTradingPartnersAsync(
+                claims.Select(c => c.PayToProviderNPI ?? c.BillingProviderNPI).Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal),
+                tenantId,
+                environment,
+                paymentRun.Warnings);
+
+            // Step 4: Generate one Payment per provider group; populate
+            //         ClaimAdjustments and ServiceLine adjustments via
+            //         ICarcRarcMappingService so downstream Generate835
+            //         emits CAS segments correctly for denials/cost-share.
+            var eraInputs = new List<EraPaymentInput>();
             foreach (var group in claimGroups)
             {
-                var payment = await GeneratePaymentForClaimsAsync(
-                    group.Value, 
-                    paymentRun, 
-                    group.Key);
+                var (payment, tradingPartnerId) = await GeneratePaymentForClaimsAsync(
+                    group.Value,
+                    paymentRun,
+                    group.Key,
+                    resolvedTradingPartners);
 
                 paymentRun.PaymentIds.Add(payment.Id);
                 paymentRun.ClaimIds.AddRange(group.Value.Select(c => c.Id));
                 paymentRun.TotalPaymentAmount += payment.TotalPaymentAmount;
+
+                if (!string.IsNullOrEmpty(tradingPartnerId))
+                {
+                    eraInputs.Add(new EraPaymentInput { TradingPartnerId = tradingPartnerId, Payment = payment });
+                }
+                else
+                {
+                    paymentRun.Warnings.Add(
+                        $"Payment {payment.CheckNumber} skipped from batched 835 — no trading partner resolved");
+                }
             }
 
             paymentRun.TotalClaims = claims.Count;
             paymentRun.CheckNumberStart = paymentRun.NextCheckNumber.ToString();
             paymentRun.CheckNumberEnd = (paymentRun.NextCheckNumber + paymentRun.PaymentIds.Count - 1).ToString();
 
-            // Step 4: Update claim statuses to Paid
-            await UpdateClaimStatusesToPaidAsync(paymentRun.ClaimIds);
+            // Step 5: Batched 835 generation — one envelope per trading partner.
+            var partnerInfos = BuildTradingPartnerInfos(resolvedTradingPartners);
+            var envelopes = _batchEraGenerator.GenerateBatch(eraInputs, partnerInfos);
+
+            foreach (var env in envelopes)
+            {
+                var record = await _envelopeRepository.CreateAsync(new EraEnvelopeRecord
+                {
+                    PaymentRunId = paymentRun.Id,
+                    TradingPartnerId = env.TradingPartnerId,
+                    EdiContent = env.EdiContent,
+                    ClaimCount = env.ClaimCount,
+                    TotalPaymentAmount = env.TotalPaymentAmount,
+                    ControlNumber = env.ControlNumber,
+                    ClaimIds = env.ClaimIds.ToList()
+                });
+                paymentRun.EraEnvelopeIds.Add(record.Id);
+            }
+
+            // Step 6: Finalize each claim via the claims-service
+            //         POST /api/claims/{id}/remittance endpoint. Idempotent
+            //         on the server side (5.10 ClaimFinalizationService).
+            await FinalizeClaimsAsync(claims, paymentRun, eraInputs, paymentRun.Warnings);
 
             paymentRun.Status = PaymentRunStatus.Completed;
             paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
             paymentRun.ExecutionDurationSeconds = (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds;
 
-            _logger.LogInformation("Payment run {PaymentRunNumber} completed: {ClaimCount} claims, {PaymentCount} payments, ${TotalAmount:N2}",
-                paymentRun.PaymentRunNumber, paymentRun.TotalClaims, paymentRun.PaymentIds.Count, paymentRun.TotalPaymentAmount);
+            _logger.LogInformation(
+                "Payment run {PaymentRunNumber} completed: {ClaimCount} claims, {PaymentCount} payments, {EnvelopeCount} envelopes, ${TotalAmount:N2}",
+                paymentRun.PaymentRunNumber, paymentRun.TotalClaims, paymentRun.PaymentIds.Count,
+                paymentRun.EraEnvelopeIds.Count, paymentRun.TotalPaymentAmount);
 
             return await _paymentRunRepository.UpdateAsync(paymentRun);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error executing payment run {PaymentRunId}", SanitizeForLog(paymentRunId));
-            
+
             paymentRun.Status = PaymentRunStatus.Failed;
             paymentRun.Errors.Add($"Execution failed: {ex.Message}");
             paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
-            paymentRun.ExecutionDurationSeconds = paymentRun.ExecutionStartedAt.HasValue 
-                ? (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds 
+            paymentRun.ExecutionDurationSeconds = paymentRun.ExecutionStartedAt.HasValue
+                ? (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds
                 : 0;
 
             await _paymentRunRepository.UpdateAsync(paymentRun);
-            
             throw;
         }
     }
@@ -144,12 +198,8 @@ public class PaymentRunService : IPaymentRunService
     public async Task<PaymentRun> GetPaymentRunAsync(string paymentRunId)
     {
         var paymentRun = await _paymentRunRepository.GetByIdAsync(paymentRunId);
-        
         if (paymentRun == null)
-        {
             throw new InvalidOperationException($"Payment run {paymentRunId} not found");
-        }
-
         return paymentRun;
     }
 
@@ -163,66 +213,58 @@ public class PaymentRunService : IPaymentRunService
     public async Task CancelPaymentRunAsync(string paymentRunId)
     {
         var paymentRun = await _paymentRunRepository.GetByIdAsync(paymentRunId);
-        
         if (paymentRun == null)
-        {
             throw new InvalidOperationException($"Payment run {paymentRunId} not found");
-        }
 
         if (paymentRun.Status == PaymentRunStatus.Running)
-        {
             throw new InvalidOperationException("Cannot cancel a running payment run");
-        }
 
         paymentRun.Status = PaymentRunStatus.Cancelled;
         await _paymentRunRepository.UpdateAsync(paymentRun);
     }
 
-    // Private helper methods
+    // ── Private helpers ────────────────────────────────────────────────
 
     private async Task<List<ClaimDto>> FetchApprovedClaimsAsync(PaymentRunCriteria criteria)
     {
         var queryParams = new List<string>();
 
-        // Build query string
         if (criteria.LineOfBusiness.HasValue)
             queryParams.Add($"lineOfBusiness={(int)criteria.LineOfBusiness.Value}");
-        
         if (!string.IsNullOrEmpty(criteria.ProviderNPI))
             queryParams.Add($"providerNPI={criteria.ProviderNPI}");
-
         if (criteria.ServiceDateFrom.HasValue)
             queryParams.Add($"serviceDateFrom={criteria.ServiceDateFrom.Value:yyyy-MM-dd}");
-
         if (criteria.ServiceDateTo.HasValue)
             queryParams.Add($"serviceDateTo={criteria.ServiceDateTo.Value:yyyy-MM-dd}");
 
-        // Fetch claims with Approved status
-        queryParams.Add("status=5"); // Approved
-        
+        // claims-service ClaimStatus.Approved == 5
+        queryParams.Add("status=5");
+
         var queryString = string.Join("&", queryParams);
         var response = await _claimsServiceClient.GetAsync($"/api/claims/search?{queryString}&pageSize=5000");
 
         if (!response.IsSuccessStatusCode)
-        {
             throw new InvalidOperationException($"Failed to fetch claims from claims service: {response.StatusCode}");
-        }
 
         var claims = await response.Content.ReadFromJsonAsync<List<ClaimDto>>() ?? new List<ClaimDto>();
 
-        // Apply additional filters
+        // Phase 1 — apply post-fetch filters that aren't on the
+        // claims-service /search endpoint surface yet. SubmissionDate
+        // is the most useful for finance-cycle-tied PaymentRuns; the
+        // others are operator manual-selection knobs.
+        if (criteria.SubmissionDateFrom.HasValue)
+            claims = claims.Where(c => !c.SubmittedDate.HasValue || c.SubmittedDate.Value >= criteria.SubmissionDateFrom.Value).ToList();
+        if (criteria.SubmissionDateTo.HasValue)
+            claims = claims.Where(c => !c.SubmittedDate.HasValue || c.SubmittedDate.Value <= criteria.SubmissionDateTo.Value).ToList();
         if (criteria.MinClaimAmount.HasValue)
             claims = claims.Where(c => c.TotalChargeAmount >= criteria.MinClaimAmount.Value).ToList();
-
         if (criteria.MaxClaimAmount.HasValue)
             claims = claims.Where(c => c.TotalChargeAmount <= criteria.MaxClaimAmount.Value).ToList();
-
         if (criteria.IncludeClaimIds.Any())
             claims = claims.Where(c => criteria.IncludeClaimIds.Contains(c.Id)).ToList();
-
         if (criteria.ExcludeClaimIds.Any())
             claims = claims.Where(c => !criteria.ExcludeClaimIds.Contains(c.Id)).ToList();
-
         if (criteria.MemberIds.Any())
             claims = claims.Where(c => criteria.MemberIds.Contains(c.MemberId)).ToList();
 
@@ -232,14 +274,11 @@ public class PaymentRunService : IPaymentRunService
     private Dictionary<string, List<ClaimDto>> GroupClaimsByProvider(List<ClaimDto> claims, PaymentRunCriteria criteria)
     {
         if (!criteria.GroupByProvider)
-        {
             return new Dictionary<string, List<ClaimDto>> { { "ALL", claims } };
-        }
 
         var groups = claims.GroupBy(c => c.PayToProviderNPI ?? c.BillingProviderNPI)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Apply max claims per payment limit if specified
         if (criteria.MaxClaimsPerPayment.HasValue)
         {
             var result = new Dictionary<string, List<ClaimDto>>();
@@ -260,13 +299,74 @@ public class PaymentRunService : IPaymentRunService
         return groups;
     }
 
-    private async Task<Payment> GeneratePaymentForClaimsAsync(
-        List<ClaimDto> claims, 
+    private async Task<Dictionary<string, TradingPartnerSummary>> ResolveTradingPartnersAsync(
+        IEnumerable<string> npis,
+        string tenantId,
+        string environment,
+        List<string> warnings)
+    {
+        var resolved = new Dictionary<string, TradingPartnerSummary>(StringComparer.Ordinal);
+
+        foreach (var npi in npis)
+        {
+            if (resolved.ContainsKey(npi)) continue;
+            var partner = await _tradingPartnersClient.GetByBillingProviderNpiAsync(tenantId, npi, environment);
+            if (partner != null)
+            {
+                resolved[npi] = partner;
+            }
+            else
+            {
+                warnings.Add($"No trading partner configured for billing-provider NPI {npi}");
+            }
+        }
+
+        return resolved;
+    }
+
+    private IReadOnlyDictionary<string, TradingPartnerInfo> BuildTradingPartnerInfos(
+        Dictionary<string, TradingPartnerSummary> resolved)
+    {
+        var seen = new Dictionary<string, TradingPartnerInfo>(StringComparer.Ordinal);
+        foreach (var partner in resolved.Values)
+        {
+            if (seen.ContainsKey(partner.TradingPartnerId)) continue;
+
+            seen[partner.TradingPartnerId] = new TradingPartnerInfo
+            {
+                InterchangeSenderId = partner.X12Config?.SenderId
+                    ?? _configuration["Era:InterchangeSenderId"] ?? "SENDER",
+                InterchangeReceiverId = partner.X12Config?.ReceiverId
+                    ?? _configuration["Era:InterchangeReceiverId"] ?? "RECEIVER",
+                ApplicationSenderId = partner.X12Config?.SenderId
+                    ?? _configuration["Era:ApplicationSenderId"] ?? "SENDER",
+                ApplicationReceiverId = partner.X12Config?.ReceiverId
+                    ?? _configuration["Era:ApplicationReceiverId"] ?? "RECEIVER",
+                PayerRoutingNumber = _configuration["Era:PayerRoutingNumber"],
+                PayerAccountNumber = _configuration["Era:PayerAccountNumber"],
+                PayeeRoutingNumber = _configuration["Era:PayeeRoutingNumber"],
+                PayeeAccountNumber = _configuration["Era:PayeeAccountNumber"],
+            };
+        }
+        return seen;
+    }
+
+    private async Task<(Payment Payment, string? TradingPartnerId)> GeneratePaymentForClaimsAsync(
+        List<ClaimDto> claims,
         PaymentRun paymentRun,
-        string providerKey)
+        string providerKey,
+        Dictionary<string, TradingPartnerSummary> resolvedPartners)
     {
         var firstClaim = claims.First();
         var checkNumber = (paymentRun.NextCheckNumber++).ToString().PadLeft(10, '0');
+        var providerNpi = firstClaim.PayToProviderNPI ?? firstClaim.BillingProviderNPI;
+
+        string? tradingPartnerId = null;
+        if (!string.IsNullOrEmpty(providerNpi)
+            && resolvedPartners.TryGetValue(providerNpi, out var partner))
+        {
+            tradingPartnerId = partner.TradingPartnerId;
+        }
 
         var payment = new Payment
         {
@@ -277,99 +377,169 @@ public class PaymentRunService : IPaymentRunService
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
             PayerId = _configuration["Payer:Id"] ?? "CHO",
             PayeeName = firstClaim.ProviderName ?? providerKey,
-            PayeeNPI = firstClaim.PayToProviderNPI ?? firstClaim.BillingProviderNPI,
+            PayeeNPI = providerNpi,
+            TradingPartnerId = tradingPartnerId,
             Status = PaymentStatus.Posted,
-            ClaimPayments = claims.Select(claim => new ClaimPayment
+            ClaimPayments = claims.Select(claim =>
             {
-                ClaimId = claim.Id,
-                PatientControlNumber = claim.ClaimNumber,
-                ClaimStatusCode = "1", // Processed as primary
-                ChargeAmount = claim.TotalChargeAmount,
-                PaymentAmount = claim.ApprovedAmount ?? claim.TotalChargeAmount,
-                PatientResponsibilityAmount = claim.PatientResponsibility ?? 0,
-                PayerClaimControlNumber = claim.PayerClaimControlNumber,
-                MemberId = claim.MemberId,
-                RenderingProviderNPI = claim.RenderingProviderNPI,
-                ServiceLines = new List<ServiceLinePayment>() // Populated from claim service lines
+                var snapshot = BuildAdjudicationSnapshot(claim);
+                var headerCas = _carcRarcMapper.MapClaimAdjustments(snapshot);
+                var perLineCas = _carcRarcMapper.MapLineAdjustments(snapshot);
+
+                var serviceLines = (claim.ServiceLines ?? new List<ClaimServiceLineDto>())
+                    .Select(sl => new ServiceLinePayment
+                    {
+                        LineNumber = sl.LineNumber,
+                        ProcedureCode = sl.ProcedureCode,
+                        ChargeAmount = sl.ChargeAmount,
+                        PaymentAmount = sl.PaidAmount ?? sl.ChargeAmount,
+                        RevenueCode = sl.RevenueCode,
+                        Units = sl.Units,
+                        ServiceDateFrom = sl.ServiceDateFrom,
+                        ServiceDateTo = sl.ServiceDateTo,
+                        Adjustments = perLineCas.TryGetValue(sl.LineNumber, out var lineAdj)
+                            ? lineAdj.ToList()
+                            : new List<ServiceLineAdjustment>()
+                    })
+                    .ToList();
+
+                return new ClaimPayment
+                {
+                    ClaimId = claim.Id,
+                    PatientControlNumber = claim.ClaimNumber,
+                    ClaimStatusCode = headerCas.Any(a => a.GroupCode == "CO" && claim.Status == ClaimStatus.Denied) ? "3" : "1",
+                    ChargeAmount = claim.TotalChargeAmount,
+                    PaymentAmount = claim.ApprovedAmount ?? claim.TotalChargeAmount,
+                    PatientResponsibilityAmount = claim.PatientResponsibility ?? 0,
+                    PayerClaimControlNumber = claim.PayerClaimControlNumber,
+                    MemberId = claim.MemberId,
+                    RenderingProviderNPI = claim.RenderingProviderNPI,
+                    ClaimAdjustments = headerCas.ToList(),
+                    ServiceLines = serviceLines
+                };
             }).ToList()
         };
 
         var created = await _paymentRepository.CreateAsync(payment);
-
-        // Generate 835 ERA immediately and store inline.
-        // In production this would be written to blob storage and the URL stored here;
-        // for now the raw EDI string is persisted directly so the GET /{id}/835
-        // endpoint can also re-generate on demand without reading this field.
-        try
-        {
-            var tp = new TradingPartnerInfo
-            {
-                InterchangeSenderId   = _configuration["Era:InterchangeSenderId"]   ?? "SENDER",
-                InterchangeReceiverId = _configuration["Era:InterchangeReceiverId"] ?? "RECEIVER",
-                ApplicationSenderId   = _configuration["Era:ApplicationSenderId"]   ?? "SENDER",
-                ApplicationReceiverId = _configuration["Era:ApplicationReceiverId"] ?? "RECEIVER",
-                PayerRoutingNumber    = _configuration["Era:PayerRoutingNumber"],
-                PayerAccountNumber    = _configuration["Era:PayerAccountNumber"],
-                PayeeRoutingNumber    = _configuration["Era:PayeeRoutingNumber"],
-                PayeeAccountNumber    = _configuration["Era:PayeeAccountNumber"],
-            };
-
-            created.RawEdiFileUrl = _eraGenerator.Generate835(created, tp);
-            created = await _paymentRepository.UpdateAsync(created);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "835 generation failed for payment {CheckNumber}; payment was still created",
-                SanitizeForLog(created.CheckNumber));
-        }
-
-        return created;
+        return (created, tradingPartnerId);
     }
 
-    private async Task UpdateClaimStatusesToPaidAsync(List<string> claimIds)
+    private static ClaimAdjudicationSnapshot BuildAdjudicationSnapshot(ClaimDto claim)
     {
-        foreach (var claimId in claimIds)
+        var snapshot = new ClaimAdjudicationSnapshot
+        {
+            ClaimId = claim.Id,
+            DenialReasonCode = claim.AdjudicationResult?.DenialReasonCode,
+            DenialReason = claim.AdjudicationResult?.DenialReason,
+        };
+
+        if (claim.AdjudicationResult?.AdjustmentReasons is { Count: > 0 } reasons)
+        {
+            snapshot.AdjustmentReasons = reasons.Select(r => new ClaimAdjustmentReasonView
+            {
+                GroupCode = r.GroupCode,
+                ReasonCode = r.ReasonCode,
+                Amount = r.Amount,
+                Description = r.Description
+            }).ToList();
+        }
+
+        if (claim.AdjudicationResult?.RemarkCodes is { Count: > 0 } remarks)
+        {
+            snapshot.RemarkCodes = remarks.ToList();
+        }
+
+        if (claim.PendDetails?.EditFailures is { Count: > 0 } failures)
+        {
+            snapshot.EditFailures = failures.Select(f => new EditFailureView
+            {
+                EditType = f.EditType,
+                RuleId = f.RuleId,
+                Message = f.Message,
+                AffectedLineNumbers = f.AffectedLineNumbers?.ToList() ?? new List<int>(),
+                SuggestedCarc = f.SuggestedCarc,
+                SuggestedRarc = f.SuggestedRarc
+            }).ToList();
+        }
+
+        return snapshot;
+    }
+
+    private async Task FinalizeClaimsAsync(
+        List<ClaimDto> claims,
+        PaymentRun paymentRun,
+        List<EraPaymentInput> eraInputs,
+        List<string> warnings)
+    {
+        // Map each claim to the payment + envelope it ended up in so the
+        // finalize call carries the audit-trail crumbs (PaymentRunId,
+        // EraEnvelopeId). Single-pass dictionary build keeps this O(N).
+        var claimToPayment = new Dictionary<string, Payment>(StringComparer.Ordinal);
+        foreach (var input in eraInputs)
+        {
+            foreach (var cp in input.Payment.ClaimPayments)
+            {
+                claimToPayment[cp.ClaimId] = input.Payment;
+            }
+        }
+
+        foreach (var claim in claims)
         {
             try
             {
-                var updateRequest = new { Status = ClaimStatus.Paid };
-                var response = await _claimsServiceClient.PutAsJsonAsync($"/api/claims/{claimId}/status", updateRequest);
-                
+                Payment? payment = null;
+                claimToPayment.TryGetValue(claim.Id, out payment);
+
+                var checkNumber = payment?.CheckNumber ?? string.Empty;
+                var paymentDate = payment?.PaymentDate ?? paymentRun.PaymentDate;
+                var payerPayment = payment is null
+                    ? (claim.ApprovedAmount ?? claim.TotalChargeAmount)
+                    : payment.ClaimPayments.First(cp => cp.ClaimId == claim.Id).PaymentAmount;
+
+                var body = new RemittancePostBody
+                {
+                    ControlNumber = paymentRun.PaymentRunNumber,
+                    CheckNumber = checkNumber,
+                    PaymentDate = paymentDate,
+                    PaymentAmount = payerPayment,
+                    PaymentRunId = paymentRun.Id,
+                    EraEnvelopeId = null
+                };
+
+                var response = await _claimsServiceClient.PostAsJsonAsync($"/api/claims/{claim.Id}/remittance", body);
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("Failed to update claim {ClaimId} status to Paid: {StatusCode}", 
-                        SanitizeForLog(claimId), response.StatusCode);
+                    var bodyText = await response.Content.ReadAsStringAsync();
+                    warnings.Add($"Finalize call for claim {claim.Id} returned {(int)response.StatusCode}");
+                    _logger.LogWarning(
+                        "Finalize call for claim {ClaimId} returned {Status}: {Body}",
+                        SanitizeForLog(claim.Id), response.StatusCode, SanitizeForLog(bodyText));
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating claim {ClaimId} status", SanitizeForLog(claimId));
+                warnings.Add($"Finalize call for claim {claim.Id} threw: {ex.Message}");
+                _logger.LogError(ex, "Error finalizing claim {ClaimId}", SanitizeForLog(claim.Id));
             }
         }
     }
 
     private async Task<int> GetNextCheckNumberAsync()
     {
-        // Get last payment run's next check number, or start from configured base
         var recentRuns = await _paymentRunRepository.SearchAsync(
-            DateTime.UtcNow.AddYears(-1), 
+            DateTime.UtcNow.AddYears(-1),
             DateTime.UtcNow);
 
         var lastRun = recentRuns.OrderByDescending(r => r.CreatedAt).FirstOrDefault();
-        
         if (lastRun != null && lastRun.NextCheckNumber > 0)
-        {
             return lastRun.NextCheckNumber;
-        }
 
-        // Default starting check number
         return int.Parse(_configuration["Payment:StartingCheckNumber"] ?? "1000000");
     }
 
     private static string SanitizeForLog(string? value)
     {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
+        if (string.IsNullOrEmpty(value)) return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
@@ -392,4 +562,90 @@ public class ClaimDto
     public ClaimStatus Status { get; set; }
     public DateTime ServiceDateFrom { get; set; }
     public DateTime? SubmittedDate { get; set; }
+
+    /// <summary>Full claim adjudication result (5.10 — consumed by CARC/RARC mapper).</summary>
+    public ClaimAdjudicationDto? AdjudicationResult { get; set; }
+
+    /// <summary>Pend details with edit failures (5.10 — consumed by CARC/RARC mapper for per-line CAS).</summary>
+    public PendDetailsDto? PendDetails { get; set; }
+
+    /// <summary>
+    /// Claim service lines (5.10 — populated into ServiceLinePayment for
+    /// SVC segments). Deserialized from claims-service's
+    /// <c>Claim.ClaimLines</c> property; aliased here as
+    /// <c>ServiceLines</c> to keep payment-service's downstream
+    /// terminology consistent with the 835 model.
+    /// </summary>
+    [JsonPropertyName("claimLines")]
+    public List<ClaimServiceLineDto>? ServiceLines { get; set; }
+}
+
+/// <summary>Mirrors <c>ClaimsService.Models.AdjudicationResult</c> for the fields used by 5.10.</summary>
+public class ClaimAdjudicationDto
+{
+    public decimal AllowedAmount { get; set; }
+    public decimal PayerPayment { get; set; }
+    public decimal DeductibleAmount { get; set; }
+    public decimal CoinsuranceAmount { get; set; }
+    public decimal CopayAmount { get; set; }
+    public decimal PatientResponsibility { get; set; }
+    public string? DenialReasonCode { get; set; }
+    public string? DenialReason { get; set; }
+    public List<ClaimAdjustmentReasonDto>? AdjustmentReasons { get; set; }
+    public List<string>? RemarkCodes { get; set; }
+    public string? CheckNumber { get; set; }
+    public DateTime? PaymentDate { get; set; }
+}
+
+public class ClaimAdjustmentReasonDto
+{
+    public string GroupCode { get; set; } = string.Empty;
+    public string ReasonCode { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string? Description { get; set; }
+}
+
+public class PendDetailsDto
+{
+    public string PendCode { get; set; } = string.Empty;
+    public string? PendReason { get; set; }
+    public List<EditFailureDto>? EditFailures { get; set; }
+}
+
+public class EditFailureDto
+{
+    public string EditType { get; set; } = string.Empty;
+    public string RuleId { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public List<int>? AffectedLineNumbers { get; set; }
+    public string? SuggestedCarc { get; set; }
+    public string? SuggestedRarc { get; set; }
+}
+
+public class ClaimServiceLineDto
+{
+    public int LineNumber { get; set; }
+    public string ProcedureCode { get; set; } = string.Empty;
+    public decimal ChargeAmount { get; set; }
+    public decimal? PaidAmount { get; set; }
+    public string? RevenueCode { get; set; }
+    public decimal Units { get; set; } = 1;
+    public DateTime? ServiceDateFrom { get; set; }
+    public DateTime? ServiceDateTo { get; set; }
+}
+
+internal class RemittancePostBody
+{
+    [JsonPropertyName("controlNumber")]
+    public string ControlNumber { get; set; } = string.Empty;
+    [JsonPropertyName("checkNumber")]
+    public string? CheckNumber { get; set; }
+    [JsonPropertyName("paymentDate")]
+    public DateTime PaymentDate { get; set; }
+    [JsonPropertyName("paymentAmount")]
+    public decimal PaymentAmount { get; set; }
+    [JsonPropertyName("paymentRunId")]
+    public string? PaymentRunId { get; set; }
+    [JsonPropertyName("eraEnvelopeId")]
+    public string? EraEnvelopeId { get; set; }
 }

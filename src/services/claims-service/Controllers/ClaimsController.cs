@@ -18,6 +18,7 @@ public class ClaimsController : ControllerBase
     private readonly IMpipAdjudicationEnhancer _mpipEnhancer;
     private readonly IClaimEventPublisher _eventPublisher;
     private readonly IClaimSubmissionService _submissionService;
+    private readonly IClaimFinalizationService _finalizationService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ClaimsController> _logger;
 
@@ -28,6 +29,7 @@ public class ClaimsController : ControllerBase
         IMpipAdjudicationEnhancer mpipEnhancer,
         IClaimEventPublisher eventPublisher,
         IClaimSubmissionService submissionService,
+        IClaimFinalizationService finalizationService,
         IConfiguration configuration,
         ILogger<ClaimsController> logger)
     {
@@ -37,6 +39,7 @@ public class ClaimsController : ControllerBase
         _mpipEnhancer = mpipEnhancer;
         _eventPublisher = eventPublisher;
         _submissionService = submissionService;
+        _finalizationService = finalizationService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -638,9 +641,24 @@ public class ClaimsController : ControllerBase
     /// <summary>
     /// Process 835 remittance (payment/denial notification)
     /// </summary>
+    /// <summary>
+    /// Process remittance for a claim (835 transaction). Sent by
+    /// payment-service during PaymentRun execution and by manual
+    /// remittance-posting tools. 5.10 routes Paid transitions through
+    /// <see cref="IClaimFinalizationService"/> so the version-event
+    /// chain (<c>ClaimVersionPaid</c>) and Kafka notification
+    /// (<c>claims.finalized.v1</c>) fire alongside the legacy Status
+    /// update; idempotent when the same CheckNumber arrives twice;
+    /// returns 409 on CheckNumber mismatch and 422 when the source claim
+    /// is not in a Paid-eligible state. Zero-payment remittances retain
+    /// the legacy direct-write Denied path until 5.12 introduces a
+    /// dedicated Denied-transition flow.
+    /// </summary>
     [HttpPost("{id}/remittance")]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<Claim>> ProcessRemittance(
         string id,
         [FromBody] RemittanceUpdate remittance)
@@ -649,6 +667,56 @@ public class ClaimsController : ControllerBase
             "Processing remittance for claim {Id}, check number {CheckNumber}",
             SanitizeForLog(id), SanitizeForLog(remittance.CheckNumber));
 
+        // Zero-payment remittances stay on the legacy direct-write Denied
+        // path. Phase 1 finalization scope is Paid only; the Denied
+        // transition is part of capability 5.12.
+        if (remittance.PaymentAmount <= 0m)
+        {
+            return await ProcessZeroPaymentRemittanceAsync(id, remittance);
+        }
+
+        var request = new ClaimFinalizationRequest
+        {
+            CheckNumber = remittance.CheckNumber ?? string.Empty,
+            PaymentDate = remittance.PaymentDate,
+            PayerPayment = remittance.PaymentAmount,
+            PaymentRunId = remittance.PaymentRunId,
+            EraEnvelopeId = remittance.EraEnvelopeId
+        };
+
+        var result = await _finalizationService.FinalizeAsync(
+            id, request, GetTenantId(), TryGetActorId(), TryGetCorrelationId());
+
+        switch (result.Outcome)
+        {
+            case ClaimFinalizationOutcome.Finalized:
+            case ClaimFinalizationOutcome.AlreadyFinalized:
+                if (!string.IsNullOrEmpty(remittance.ControlNumber)
+                    && result.Claim is not null
+                    && result.Outcome == ClaimFinalizationOutcome.Finalized
+                    && !string.Equals(result.Claim.EDI835ControlNumber, remittance.ControlNumber, StringComparison.Ordinal))
+                {
+                    result.Claim.EDI835ControlNumber = remittance.ControlNumber;
+                    await _claimRepository.UpdateAsync(result.Claim);
+                }
+                return Ok(result.Claim);
+
+            case ClaimFinalizationOutcome.NotFound:
+                return NotFound(new { message = result.Message ?? $"Claim {id} not found" });
+
+            case ClaimFinalizationOutcome.Conflict:
+                return Conflict(new { message = result.Message, currentStatus = result.Claim?.Status });
+
+            case ClaimFinalizationOutcome.InvalidSourceState:
+                return UnprocessableEntity(new { message = result.Message, currentStatus = result.Claim?.Status });
+
+            default:
+                return StatusCode(StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private async Task<ActionResult<Claim>> ProcessZeroPaymentRemittanceAsync(string id, RemittanceUpdate remittance)
+    {
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
         {
@@ -657,18 +725,13 @@ public class ClaimsController : ControllerBase
 
         claim.EDI835ControlNumber = remittance.ControlNumber;
         claim.PaidDate = DateTime.UtcNow;
-        claim.Status = remittance.PaymentAmount > 0 ? ClaimStatus.Paid : ClaimStatus.Denied;
+        claim.Status = ClaimStatus.Denied;
         claim.LastUpdatedDate = DateTime.UtcNow;
 
-        // Update adjudication if not already set
-        if (claim.AdjudicationResult == null)
-        {
-            claim.AdjudicationResult = new AdjudicationResult();
-        }
-
+        claim.AdjudicationResult ??= new AdjudicationResult();
         claim.AdjudicationResult.CheckNumber = remittance.CheckNumber;
         claim.AdjudicationResult.PaymentDate = remittance.PaymentDate;
-        claim.AdjudicationResult.PayerPayment = remittance.PaymentAmount;
+        claim.AdjudicationResult.PayerPayment = 0m;
 
         var updated = await _claimRepository.UpdateAsync(claim);
 
@@ -679,6 +742,14 @@ public class ClaimsController : ControllerBase
 
         return Ok(updated);
     }
+
+    private string? TryGetActorId() =>
+        HttpContext?.User?.Identity?.Name
+        ?? HttpContext?.Request?.Headers["X-User-Id"].FirstOrDefault();
+
+    private string? TryGetCorrelationId() =>
+        HttpContext?.Request?.Headers["X-Correlation-Id"].FirstOrDefault()
+        ?? Activity.Current?.Id;
 
     /// <summary>
     /// Get claims summary statistics
