@@ -13,6 +13,10 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
     public IPaymentRunRepository PaymentRunRepository { get; } = Substitute.For<IPaymentRunRepository>();
     public IEraGeneratorService EraGeneratorService { get; } = Substitute.For<IEraGeneratorService>();
     public IPaymentRunService PaymentRunService { get; } = Substitute.For<IPaymentRunService>();
+    public IBatchEraGeneratorService BatchEraGeneratorService { get; } = Substitute.For<IBatchEraGeneratorService>();
+    public ICarcRarcMappingService CarcRarcMappingService { get; } = Substitute.For<ICarcRarcMappingService>();
+    public IEraEnvelopeRepository EraEnvelopeRepository { get; } = Substitute.For<IEraEnvelopeRepository>();
+    public ITradingPartnersClient TradingPartnersClient { get; } = Substitute.For<ITradingPartnersClient>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -25,7 +29,11 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
                 .Where(d => d.ServiceType == typeof(IPaymentRepository)
                          || d.ServiceType == typeof(IPaymentRunRepository)
                          || d.ServiceType == typeof(IEraGeneratorService)
-                         || d.ServiceType == typeof(IPaymentRunService))
+                         || d.ServiceType == typeof(IPaymentRunService)
+                         || d.ServiceType == typeof(IBatchEraGeneratorService)
+                         || d.ServiceType == typeof(ICarcRarcMappingService)
+                         || d.ServiceType == typeof(IEraEnvelopeRepository)
+                         || d.ServiceType == typeof(ITradingPartnersClient))
                 .ToList();
 
             foreach (var descriptor in descriptorsToRemove)
@@ -33,10 +41,14 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
                 services.Remove(descriptor);
             }
 
-            // Remove Cosmos/Mongo registrations that would fail without config
+            // Remove Cosmos/Mongo registrations that would fail without config.
+            // Filter both service and implementation type — EraEnvelopeRepositoryMongo
+            // would otherwise leak through as IEraEnvelopeRepository.
             var cosmosDescriptors = services
                 .Where(d => d.ServiceType.FullName?.Contains("Cosmos") == true
-                         || d.ServiceType.FullName?.Contains("Mongo") == true)
+                         || d.ServiceType.FullName?.Contains("Mongo") == true
+                         || d.ImplementationType?.FullName?.Contains("Cosmos") == true
+                         || d.ImplementationType?.FullName?.Contains("Mongo") == true)
                 .ToList();
 
             foreach (var descriptor in cosmosDescriptors)
@@ -48,6 +60,10 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(PaymentRunRepository);
             services.AddSingleton(EraGeneratorService);
             services.AddSingleton(PaymentRunService);
+            services.AddSingleton(BatchEraGeneratorService);
+            services.AddSingleton(CarcRarcMappingService);
+            services.AddSingleton(EraEnvelopeRepository);
+            services.AddSingleton(TradingPartnersClient);
         });
     }
 }

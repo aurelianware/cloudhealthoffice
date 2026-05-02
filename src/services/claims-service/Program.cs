@@ -73,6 +73,16 @@ builder.Services.AddSingleton<IExplanationOfBenefitProjector, ExplanationOfBenef
 // 277CA acknowledgment generator
 builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();
 
+// 5.10 — claim finalization (Approved/PartiallyPaid → Paid). Owns the
+// idempotent Paid transition with version-event chain advancement and
+// Kafka claims.finalized.v1 emission. Backed by the existing
+// IClaimRepository / IClaimVersionEventPublisher / IClaimEventPublisher
+// triple — no new infrastructure surfaces. The
+// ClaimsController.ProcessRemittance endpoint delegates here for
+// non-zero-payment remittances; zero-payment Denied transitions stay
+// on the legacy direct-write path until 5.12.
+builder.Services.AddScoped<IClaimFinalizationService, ClaimFinalizationService>();
+
 // Inter-service HTTP clients
 builder.Services.AddHttpClient("ProviderService", client =>
 {
