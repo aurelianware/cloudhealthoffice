@@ -208,8 +208,14 @@ public class ClaimRepository : IClaimRepository
     /// Hydrates legacy claim documents (predating versioning fields) with
     /// sensible defaults. Idempotent — running on a fully-versioned row
     /// is a no-op. Mirrors <c>ProviderRepository.Hydrate</c>.
+    ///
+    /// Public so the 5.1b Cosmos partition migration can canonicalize
+    /// rows during the copy from the legacy <c>Claims</c> container into
+    /// the canonical <c>ClaimsV2</c> container — the new container then
+    /// starts fully hydrated and downstream readers don't need to
+    /// re-Hydrate post-migration.
     /// </summary>
-    private static Claim Hydrate(Claim claim)
+    public static Claim Hydrate(Claim claim)
     {
         if (string.IsNullOrEmpty(claim.ClaimVersionId))
         {
@@ -263,9 +269,17 @@ public class ClaimRepository : IClaimRepository
         {
             var response = await _container.ReadItemAsync<Claim>(
                 id,
-                new PartitionKey(id));
+                new PartitionKey(tenantId));
 
-            // Verify tenant isolation
+            // 5.1b: with /TenantId partition, a cross-tenant lookup throws
+            // CosmosException 404 (caught below) rather than returning a
+            // foreign-tenant document. The in-memory tenant equality check
+            // is intentionally retained as defense in depth: it makes the
+            // tenant-isolation contract explicit at the read point and
+            // catches any future code path that might bypass the
+            // partition-keyed read (e.g. a cross-partition query that
+            // hydrates this method's return shape). Cheap, defensive,
+            // intentionally NOT dead code.
             if (response.Resource.TenantId != tenantId)
             {
                 return null;
@@ -292,7 +306,9 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@claimNumber", claimNumber);
 
-        var iterator = _container.GetItemQueryIterator<Claim>(query);
+        var iterator = _container.GetItemQueryIterator<Claim>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         if (!iterator.HasMoreResults) return null;
         var page = await iterator.ReadNextAsync();
         var head = page.FirstOrDefault();
@@ -363,7 +379,9 @@ public class ClaimRepository : IClaimRepository
             queryDef.WithParameter(key, value);
         }
 
-        var iterator = _container.GetItemQueryIterator<Claim>(queryDef);
+        var iterator = _container.GetItemQueryIterator<Claim>(
+            queryDef,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         var results = new List<Claim>();
 
         while (iterator.HasMoreResults)
@@ -442,7 +460,8 @@ public class ClaimRepository : IClaimRepository
         foreach (var (k, v) in parameters) countQuery.WithParameter(k, v);
 
         var totalCount = 0;
-        var countIterator = _container.GetItemQueryIterator<int>(countQuery);
+        var partitionRequestOptions = new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) };
+        var countIterator = _container.GetItemQueryIterator<int>(countQuery, requestOptions: partitionRequestOptions);
         while (countIterator.HasMoreResults)
         {
             var response = await countIterator.ReadNextAsync();
@@ -456,7 +475,7 @@ public class ClaimRepository : IClaimRepository
         foreach (var (k, v) in parameters) pageQuery.WithParameter(k, v);
 
         var items = new List<Claim>();
-        var iterator = _container.GetItemQueryIterator<Claim>(pageQuery);
+        var iterator = _container.GetItemQueryIterator<Claim>(pageQuery, requestOptions: partitionRequestOptions);
         while (iterator.HasMoreResults)
         {
             var response = await iterator.ReadNextAsync();
@@ -503,7 +522,9 @@ public class ClaimRepository : IClaimRepository
             queryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
         }
 
-        var iterator = _container.GetItemQueryIterator<dynamic>(queryDef);
+        var iterator = _container.GetItemQueryIterator<dynamic>(
+            queryDef,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         var summary = new ClaimsSummary();
 
         if (iterator.HasMoreResults)
@@ -552,7 +573,9 @@ public class ClaimRepository : IClaimRepository
             processingQueryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
         }
 
-        var processingIterator = _container.GetItemQueryIterator<dynamic>(processingQueryDef);
+        var processingIterator = _container.GetItemQueryIterator<dynamic>(
+            processingQueryDef,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         if (processingIterator.HasMoreResults)
         {
             var response = await processingIterator.ReadNextAsync();
@@ -592,7 +615,7 @@ public class ClaimRepository : IClaimRepository
             claim.VersionState = MapStatusToVersionState(claim.Status);
         }
 
-        var response = await _container.CreateItemAsync(claim, new PartitionKey(claim.Id));
+        var response = await _container.CreateItemAsync(claim, new PartitionKey(tenantId));
         return response.Resource;
     }
 
@@ -607,7 +630,7 @@ public class ClaimRepository : IClaimRepository
         Claim? existing;
         try
         {
-            var read = await _container.ReadItemAsync<Claim>(claim.Id, new PartitionKey(claim.Id));
+            var read = await _container.ReadItemAsync<Claim>(claim.Id, new PartitionKey(tenantId));
             existing = read.Resource.TenantId == tenantId ? Hydrate(read.Resource) : null;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -641,7 +664,7 @@ public class ClaimRepository : IClaimRepository
             var response = await _container.ReplaceItemAsync(
                 claim,
                 claim.Id,
-                new PartitionKey(claim.Id));
+                new PartitionKey(tenantId));
             return response.Resource;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -660,7 +683,7 @@ public class ClaimRepository : IClaimRepository
     public async Task DeleteAsync(string id)
     {
         var tenantId = GetTenantId();
-        await _container.DeleteItemAsync<Claim>(id, new PartitionKey(id));
+        await _container.DeleteItemAsync<Claim>(id, new PartitionKey(tenantId));
     }
 
     // ── Versioning surface (5.1) ─────────────────────────────────────────
@@ -693,7 +716,9 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@draft", ClaimVersionState.Draft.ToString())
             .WithParameter("@asOf", asOf);
 
-        var iterator = _container.GetItemQueryIterator<Claim>(query);
+        var iterator = _container.GetItemQueryIterator<Claim>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         if (!iterator.HasMoreResults) return null;
         var page = await iterator.ReadNextAsync();
         var head = page.FirstOrDefault();
@@ -716,7 +741,9 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@versionId", versionId)
             .WithParameter("@claimVersionId", claimVersionId);
 
-        var iterator = _container.GetItemQueryIterator<Claim>(query);
+        var iterator = _container.GetItemQueryIterator<Claim>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         if (!iterator.HasMoreResults) return null;
         var page = await iterator.ReadNextAsync();
         var match = page.FirstOrDefault();
@@ -742,7 +769,11 @@ public class ClaimRepository : IClaimRepository
         var iterator = _container.GetItemQueryIterator<Claim>(
             query,
             continuationToken,
-            new QueryRequestOptions { MaxItemCount = pageSize });
+            new QueryRequestOptions
+            {
+                MaxItemCount = pageSize,
+                PartitionKey = new PartitionKey(tenantId),
+            });
 
         if (!iterator.HasMoreResults)
         {
@@ -786,7 +817,9 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@unknown", ClaimVersionState.Unknown.ToString());
 
         string? rowId = null;
-        var iterator = _container.GetItemQueryIterator<HeadIdResult>(query);
+        var iterator = _container.GetItemQueryIterator<HeadIdResult>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         if (iterator.HasMoreResults)
         {
             var page = await iterator.ReadNextAsync(ct);
@@ -802,7 +835,7 @@ public class ClaimRepository : IClaimRepository
         Claim? head;
         try
         {
-            var read = await _container.ReadItemAsync<Claim>(rowId, new PartitionKey(rowId), cancellationToken: ct);
+            var read = await _container.ReadItemAsync<Claim>(rowId, new PartitionKey(tenantId), cancellationToken: ct);
             head = read.Resource;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -853,7 +886,7 @@ public class ClaimRepository : IClaimRepository
         {
             await _container.PatchItemAsync<Claim>(
                 rowId,
-                new PartitionKey(rowId),
+                new PartitionKey(tenantId),
                 ops,
                 cancellationToken: ct);
             return true;
@@ -919,7 +952,9 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@adjudicated",   ClaimVersionState.Adjudicated.ToString())
             .WithParameter("@paid",          ClaimVersionState.Paid.ToString());
 
-        var iterator = _container.GetItemQueryIterator<dynamic>(queryDef);
+        var iterator = _container.GetItemQueryIterator<dynamic>(
+            queryDef,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
 
         // Accumulate by network tier
         var deductible   = new Dictionary<string, decimal>();
@@ -975,13 +1010,16 @@ public class ClaimRepository : IClaimRepository
         string? actorId,
         CancellationToken ct = default)
     {
-        // Pre-read for tenant isolation — Cosmos partition is claim.Id; we
-        // read by id then enforce tenant match before patching. Mirrors the
-        // tenant-isolation pattern in GetByIdAsync.
+        // Pre-read confirms the row exists and (defense in depth) belongs
+        // to the supplied tenant. With the 5.1b /TenantId partition, a
+        // cross-tenant claimId surfaces as Cosmos 404 (caught below); the
+        // explicit TenantId equality check is intentionally retained
+        // alongside the partition-key boundary for the same reasons
+        // documented on GetByIdAsync.
         Claim? existing;
         try
         {
-            var read = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(claimId), cancellationToken: ct);
+            var read = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(tenantId), cancellationToken: ct);
             existing = read.Resource;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -1004,7 +1042,7 @@ public class ClaimRepository : IClaimRepository
         {
             await _container.PatchItemAsync<Claim>(
                 claimId,
-                new PartitionKey(claimId),
+                new PartitionKey(tenantId),
                 ops,
                 cancellationToken: ct);
             return true;
@@ -1025,7 +1063,7 @@ public class ClaimRepository : IClaimRepository
         Claim? existing;
         try
         {
-            var read = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(claimId), cancellationToken: ct);
+            var read = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(tenantId), cancellationToken: ct);
             existing = read.Resource;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -1047,7 +1085,7 @@ public class ClaimRepository : IClaimRepository
         {
             await _container.PatchItemAsync<Claim>(
                 claimId,
-                new PartitionKey(claimId),
+                new PartitionKey(tenantId),
                 ops,
                 cancellationToken: ct);
             return true;
