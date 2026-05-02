@@ -154,11 +154,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      # Install the gitleaks OSS CLI directly rather than the
+      # gitleaks/gitleaks-action wrapper. The CLI is MIT-licensed; the
+      # Action wrapper started enforcing a paid GITLEAKS_LICENSE check
+      # (with a fail-closed posture when its account-type lookup HTTP
+      # call times out). The CLI runs the same scan with no license
+      # gate, no behavior change for legitimate findings.
+      - name: Install gitleaks
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          set -euo pipefail
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run gitleaks
+        run: gitleaks detect --redact --verbose --no-banner --exit-code 1 --source .
 
   security-summary:
     name: Security Summary

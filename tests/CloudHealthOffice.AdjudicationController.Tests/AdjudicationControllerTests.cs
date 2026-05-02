@@ -966,6 +966,101 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
 }
 
 /// <summary>
+/// Capability 5.12a — covers the new
+/// <c>POST /api/v1/adjudication/reverse-claim</c> endpoint added per
+/// Decision 15. Verifies the controller forwards to
+/// <see cref="IBenefitCalculationEngine.ReverseClaimAsync"/> with the
+/// expected arguments and returns 204 on success / 400 on bad input.
+/// </summary>
+public class AdjudicationControllerReverseClaimTests : IClassFixture<AdjudicationControllerTests.Factory>
+{
+    private const string TenantId = "test-tenant-001";
+    private static readonly Guid PlanId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
+    private readonly AdjudicationControllerTests.Factory _factory;
+
+    public AdjudicationControllerReverseClaimTests(AdjudicationControllerTests.Factory factory) => _factory = factory;
+
+    private HttpClient CreateClient()
+    {
+        var c = _factory.CreateClient();
+        c.DefaultRequestHeaders.Add("X-Tenant-ID", TenantId);
+        return c;
+    }
+
+    [Fact]
+    public async Task ReverseClaim_HappyPath_ReturnsNoContentAndCallsEngine()
+    {
+        var client = CreateClient();
+        var body = new ReverseClaimRequest
+        {
+            MemberId = "m1",
+            SubscriberId = "sub-1",
+            BenefitPlanId = PlanId,
+            ServiceDate = new DateOnly(2026, 5, 1),
+            OriginalClaimId = "claim-99",
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/reverse-claim", body);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await _factory.BenefitEngine.Received(1).ReverseClaimAsync(
+            "m1", "sub-1", PlanId, new DateOnly(2026, 5, 1), "claim-99", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReverseClaim_MissingMemberId_Returns400()
+    {
+        var client = CreateClient();
+        var body = new ReverseClaimRequest
+        {
+            MemberId = "",
+            SubscriberId = "sub-1",
+            BenefitPlanId = PlanId,
+            ServiceDate = new DateOnly(2026, 5, 1),
+            OriginalClaimId = "claim-99",
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/reverse-claim", body);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReverseClaim_MissingOriginalClaimId_Returns400()
+    {
+        var client = CreateClient();
+        var body = new ReverseClaimRequest
+        {
+            MemberId = "m1",
+            SubscriberId = "sub-1",
+            BenefitPlanId = PlanId,
+            ServiceDate = new DateOnly(2026, 5, 1),
+            OriginalClaimId = "",
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/reverse-claim", body);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReverseClaim_EmptyBenefitPlanId_Returns400()
+    {
+        var client = CreateClient();
+        var body = new ReverseClaimRequest
+        {
+            MemberId = "m1",
+            SubscriberId = "sub-1",
+            BenefitPlanId = Guid.Empty,
+            ServiceDate = new DateOnly(2026, 5, 1),
+            OriginalClaimId = "claim-99",
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/reverse-claim", body);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+}
+
+/// <summary>
 /// DTO for the 422 error response from the /adjudicate endpoint when NCCI edits fail.
 /// </summary>
 internal record NcciErrorResponse

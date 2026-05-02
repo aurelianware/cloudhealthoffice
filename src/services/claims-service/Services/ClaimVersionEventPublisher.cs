@@ -30,6 +30,23 @@ public interface IClaimVersionEventPublisher
     Task<ClaimVersionEvent> PublishVersionDeniedAsync(Claim version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
     Task<ClaimVersionEvent> PublishVersionSupersededAsync(Claim from, Claim to, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
     Task<ClaimVersionEvent> PublishVersionVoidedAsync(Claim version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Capability 5.12. Append a <c>ClaimVersionReversed</c> event for the
+    /// <paramref name="version"/> being reversed (the predecessor in an
+    /// adjustment workflow). Distinct from
+    /// <see cref="PublishVersionSupersededAsync"/>: supersession marks
+    /// the chain transition; reversal signals downstream consumers
+    /// (audit/lineage, future FHIR _history, payment-service ReversalRun
+    /// queue) that the prior accumulator state must be unwound.
+    /// </summary>
+    Task<ClaimVersionEvent> PublishVersionReversedAsync(
+        Claim version,
+        string supersessorVersionId,
+        string adjustmentReason,
+        string? actorId,
+        string? correlationId,
+        CancellationToken ct = default);
 }
 
 public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublisher
@@ -197,6 +214,43 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
         return AppendAsync(evt, ct);
     }
 
+    public Task<ClaimVersionEvent> PublishVersionReversedAsync(
+        Claim version,
+        string supersessorVersionId,
+        string adjustmentReason,
+        string? actorId,
+        string? correlationId,
+        CancellationToken ct = default)
+    {
+        var payload = new JsonObject
+        {
+            ["versionId"] = version.Id,
+            ["versionNumber"] = version.VersionNumber,
+            ["supersessorVersionId"] = supersessorVersionId,
+            ["adjustmentReason"] = adjustmentReason,
+            ["originalCheckNumber"] = version.AdjudicationResult?.CheckNumber,
+            ["originalPayerPayment"] = version.AdjudicationResult?.PayerPayment,
+            ["originalPaidDate"] = version.PaidDate
+        };
+
+        var evt = new ClaimVersionEvent
+        {
+            // Pair the predecessor and supersessor in the event id so two
+            // adjustments against the same predecessor (Phase 2) emit
+            // distinct rows. Today the depth=1 invariant means at most one
+            // such reversal per predecessor; the pairing is forward-compat.
+            EventId = $"reversed:{version.Id}->{supersessorVersionId}",
+            EventType = ClaimVersionEventType.ClaimVersionReversed,
+            TenantId = version.TenantId,
+            ClaimVersionId = version.ClaimVersionId,
+            VersionId = version.Id,
+            ActorId = actorId,
+            CorrelationId = correlationId,
+            Payload = payload
+        };
+        return AppendAsync(evt, ct);
+    }
+
     private async Task<ClaimVersionEvent> AppendAsync(ClaimVersionEvent evt, CancellationToken ct)
     {
         evt.PartitionKey = ClaimVersionEvent.BuildPartitionKey(evt.TenantId, evt.ClaimVersionId);
@@ -298,6 +352,15 @@ public sealed class NoopClaimVersionEventPublisher : IClaimVersionEventPublisher
 
     public Task<ClaimVersionEvent> PublishVersionVoidedAsync(Claim version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
         => DropAndReturn(version, $"voided:{version.Id}", ClaimVersionEventType.ClaimVersionVoided, actorId, correlationId);
+
+    public Task<ClaimVersionEvent> PublishVersionReversedAsync(
+        Claim version,
+        string supersessorVersionId,
+        string adjustmentReason,
+        string? actorId,
+        string? correlationId,
+        CancellationToken ct = default)
+        => DropAndReturn(version, $"reversed:{version.Id}->{supersessorVersionId}", ClaimVersionEventType.ClaimVersionReversed, actorId, correlationId);
 
     private Task<ClaimVersionEvent> DropAndReturn(Claim version, string eventId, ClaimVersionEventType type, string? actorId, string? correlationId)
     {

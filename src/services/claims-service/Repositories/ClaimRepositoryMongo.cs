@@ -579,4 +579,50 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         return new AccumulatorTotalsResponse { Totals = totals };
     }
+
+    public async Task<bool> MarkSupersededProjectionAsync(
+        string tenantId,
+        string claimId,
+        string supersessorVersionId,
+        DateTime supersededAt,
+        string? actorId,
+        CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.Id, claimId));
+
+        var update = Builders<Claim>.Update
+            .Set(c => c.SupersededAt, supersededAt)
+            .Set(c => c.SupersededByVersionId, supersessorVersionId)
+            .Set(c => c.VersionState, ClaimVersionState.Adjusted)
+            .Set(c => c.LastUpdatedDate, DateTime.UtcNow)
+            .Set(c => c.LastUpdatedBy, actorId);
+
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.MatchedCount > 0;
+    }
+
+    public async Task<bool> MarkVoidedProjectionAsync(
+        string tenantId,
+        string claimId,
+        DateTime voidedAt,
+        string? actorId,
+        CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.Id, claimId));
+
+        var update = Builders<Claim>.Update
+            .Set(c => c.Status, ClaimStatus.Voided)
+            .Set(c => c.VersionState, ClaimVersionState.Voided)
+            .Set(c => c.LastUpdatedDate, voidedAt)
+            .Set(c => c.LastUpdatedBy, actorId);
+
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.MatchedCount > 0;
+    }
 }

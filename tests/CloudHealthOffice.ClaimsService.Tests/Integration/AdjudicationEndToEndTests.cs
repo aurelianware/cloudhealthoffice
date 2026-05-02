@@ -189,6 +189,7 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                              || d.ImplementationType?.FullName?.Contains("Cosmos") == true
                              || d.ImplementationType?.FullName?.Contains("Mongo") == true
                              || d.ImplementationType?.FullName?.Contains("ClaimVersionEventIndexInitializer") == true
+                             || d.ImplementationType?.FullName?.Contains("ClaimAdjustmentIndexInitializer") == true
                              || d.ServiceType == typeof(IClaimVersionEventPublisher)
                              || d.ServiceType == typeof(IBenefitCalculationEngine)
                              || d.ServiceType == typeof(IBenefitPlanResolver)
@@ -201,6 +202,16 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
 
                 services.AddSingleton(Repository);
                 services.AddSingleton(Substitute.For<IClaimVersionEventPublisher>());
+
+                // 5.12a — IClaimAdjustmentRepository is removed by the
+                // Cosmos/Mongo substring filter above (both impls have those
+                // tokens in their type names). IClaimAdjustmentService still
+                // depends on it, so register substitutes for DI validation.
+                // This integration test exercises the submission/adjudication
+                // path, not the adjustment workflow, so substitutes never
+                // get invoked.
+                services.AddSingleton(Substitute.For<IClaimAdjustmentRepository>());
+                services.AddSingleton(Substitute.For<IClaimAdjustmentService>());
 
                 // 5.7 — NcciEngine's repository implementation gets removed
                 // by the Cosmos/Mongo filter above. INcciEditService still

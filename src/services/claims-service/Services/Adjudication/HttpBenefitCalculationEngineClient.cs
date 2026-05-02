@@ -24,18 +24,21 @@ namespace ClaimsService.Services.Adjudication;
 /// </para>
 ///
 /// <para>
-/// Only <see cref="CalculateAsync"/> is wired; the other interface
-/// members (<see cref="CalculateWithModeAsync"/>,
-/// <see cref="ReverseClaimAsync"/>) throw <see cref="NotImplementedException"/>
-/// because the adjudication pipeline's <see cref="Stages.BenefitCalculationStage"/>
-/// only uses CalculateAsync (Decision 13 — Replace mode only). Adding the
-/// other surfaces is a follow-up driven by demand.
+/// 5.5 wired <see cref="CalculateAsync"/>. Capability 5.12a wires
+/// <see cref="ReverseClaimAsync"/> through to BP service's new
+/// <c>POST /api/v1/adjudication/reverse-claim</c> endpoint (Gap D15
+/// ratification — engine-side <c>BenefitCalculationEngine.ReverseClaimAsync</c>
+/// has been wired through <c>ChoAccumulatorService.ReverseAsync</c> with
+/// <c>IsReversed=true</c> journaling since BP 5.10; only the HTTP
+/// surface was missing). <see cref="CalculateWithModeAsync"/> remains
+/// deferred to Phase 2.
 /// </para>
 /// </summary>
 public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngine
 {
     public const string HttpClientName = "BenefitPlanService";
     private const string CalculatePath = "/api/v1/adjudication/calculate-benefits";
+    private const string ReversePath = "/api/v1/adjudication/reverse-claim";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -119,15 +122,68 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             "result production.");
     }
 
-    public Task ReverseClaimAsync(
+    public async Task ReverseClaimAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, DateOnly serviceDate,
         string originalClaimId,
         CancellationToken ct = default)
     {
-        throw new NotImplementedException(
-            "HttpBenefitCalculationEngineClient does not support accumulator reversal. " +
-            "Capability 5.12 (Adjustment Workflow) revisits the reversal surface.");
+        if (string.IsNullOrWhiteSpace(memberId))
+            throw new ArgumentException("memberId is required", nameof(memberId));
+        if (string.IsNullOrWhiteSpace(originalClaimId))
+            throw new ArgumentException("originalClaimId is required", nameof(originalClaimId));
+        if (benefitPlanId == Guid.Empty)
+            throw new ArgumentException("benefitPlanId is required", nameof(benefitPlanId));
+
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        var payload = new ReverseClaimRequest
+        {
+            MemberId = memberId,
+            SubscriberId = subscriberId,
+            BenefitPlanId = benefitPlanId,
+            ServiceDate = serviceDate,
+            OriginalClaimId = originalClaimId,
+        };
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ReversePath)
+        {
+            Content = JsonContent.Create(payload, options: JsonOptions),
+        };
+        var tenantId = ResolveTenantId();
+        if (!string.IsNullOrEmpty(tenantId))
+        {
+            httpRequest.Headers.Add("X-Tenant-ID", tenantId);
+        }
+
+        using var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            _logger.LogError(
+                "Benefit-plan-service reverse-claim returned {StatusCode} for original claim {OriginalClaimId}: {Body}",
+                response.StatusCode, SanitizeForLog(originalClaimId), SanitizeForLog(body));
+            // The engine contract is "throws on failure" — caller (5.12b
+            // ReversalRunService) catches and surfaces as ClaimAdjustment
+            // failure with manual triage required.
+            throw new HttpRequestException(
+                $"Benefit calculation engine reversal returned HTTP {(int)response.StatusCode} " +
+                $"for original claim {originalClaimId}");
+        }
+
+        _logger.LogInformation(
+            "Reversed accumulator impact for original claim {OriginalClaimId} (member {MemberId}, plan {PlanId})",
+            SanitizeForLog(originalClaimId), SanitizeForLog(memberId), benefitPlanId);
+    }
+
+    /// <summary>Wire payload for BP <c>POST /api/v1/adjudication/reverse-claim</c>.</summary>
+    private sealed class ReverseClaimRequest
+    {
+        public string MemberId { get; set; } = string.Empty;
+        public string SubscriberId { get; set; } = string.Empty;
+        public Guid BenefitPlanId { get; set; }
+        public DateOnly ServiceDate { get; set; }
+        public string OriginalClaimId { get; set; } = string.Empty;
     }
 
     /// <summary>
