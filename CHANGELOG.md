@@ -5,6 +5,52 @@ All notable changes to Cloud Health Office will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.0] - May 2026
+
+### Claims Phase 1 — Closure
+
+Closes the Cloud Health Office Claims-domain Phase 1 effort spanning 14 capabilities (5.1a–5.12b). Phase 1 delivers a full claim lifecycle end-to-end: submit → adjudicate (7-stage pipeline: Scrubbing 100 / Network 200 / BenefitCalculation 300 / NCCI 400 / CoB 500 / AI Examination 600 / Persistence 999) → pay (operator-initiated batched 835) → adjust (re-adjudication via predecessor chain) → reverse (operator-initiated batched negative 835).
+
+**No new functionality.** This release is documentation-driven: capability matrix, end-to-end narrative, architectural-pattern index, Phase 2 backlog catalog, CMS-0057-F readiness assessment, canonical V1 API surface reference, and a portfolio module-status register.
+
+#### Capabilities closed (PRs)
+
+- **5.1a** ([#725](https://github.com/aurelianware/cloudhealthoffice/pull/725)) — Claim Identity & Versioning (versioning fields + Mongo event chain)
+- **5.1b** ([#743](https://github.com/aurelianware/cloudhealthoffice/pull/743)) — Cosmos partition-key migration to `/tenantId`
+- **5.2** ([#728](https://github.com/aurelianware/cloudhealthoffice/pull/728)) — Adapter pattern foundation
+- **5.3** ([#729](https://github.com/aurelianware/cloudhealthoffice/pull/729)) — Claim Submission API (canonical V1 surface)
+- **5.4** ([#734](https://github.com/aurelianware/cloudhealthoffice/pull/734)) — Pre-adjudication scrubbing + claims-scrubbing-service decommission
+- **5.5** ([#731](https://github.com/aurelianware/cloudhealthoffice/pull/731), [#732](https://github.com/aurelianware/cloudhealthoffice/pull/732)) — Adjudication pipeline foundation
+- **5.6** ([#733](https://github.com/aurelianware/cloudhealthoffice/pull/733)) — Network & credentialing enforcement
+- **5.7** ([#736](https://github.com/aurelianware/cloudhealthoffice/pull/736)) — NCCI / MUE edits enforcement + projection bypass extension
+- **5.8** ([#737](https://github.com/aurelianware/cloudhealthoffice/pull/737)) — Coordination of Benefits + Phase 2 hook stub
+- **5.9** ([#738](https://github.com/aurelianware/cloudhealthoffice/pull/738)) — AI-Backed Examination pipeline stage
+- **5.10** ([#740](https://github.com/aurelianware/cloudhealthoffice/pull/740)) — Operator-initiated batched 835 remittance + cross-service finalize
+- **5.11** ([#739](https://github.com/aurelianware/cloudhealthoffice/pull/739)) — FHIR ExplanationOfBenefit projection
+- **5.12a** ([#741](https://github.com/aurelianware/cloudhealthoffice/pull/741)) — Adjustment Workflow chain + re-adjudication
+- **5.12b** ([#742](https://github.com/aurelianware/cloudhealthoffice/pull/742)) — ReversalRun batched 835 reversal + lifecycle wiring
+
+#### Documentation surfaces shipped (this release)
+
+- `docs/architecture/claims-phase-1-closer.md` — Phase 1 closer narrative (capability matrix, end-to-end lifecycle, 14-pattern architectural index, diligence-readiness checklist)
+- `docs/roadmap/claims-phase-2-backlog.md` — Phase 2 backlog (48 items across 10 categories: inbound EDI, FHIR completeness, CMS-0057-F, COB priorEob, AI examiner, cross-service event-stream depth, operational, trading-partner transmission, reference-data workflows, infrastructure follow-ups)
+- `docs/compliance/claims-cms-0057-f-readiness.md` — CMS-0057-F readiness posture (Phase 1 shipped vs Phase 2 required vs January 2027 mandate)
+- `docs/api/claims-v1-surface.md` — canonical V1 API surface (8 controllers / 47 verbs across claims-service + payment-service customer-facing surfaces)
+- `docs/status/MODULE-STATUS.md` — portfolio module-status register (initialized at Claims Phase 1 close; format mirrorable for future service-level closures)
+
+#### Closer pattern established
+
+Claims 5.13 establishes the **closer pattern** for service-level / domain-level Phase 1 / Phase 2 closures across Cloud Health Office. Future Provider Phase 2, BenefitPlan Phase 2, and other domain closures can mirror the structure: capability matrix → operational narrative → pattern index → phase boundary → diligence-readiness posture, with separate registries for backlog, compliance posture, and API surface.
+
+#### No code changes
+
+OpenAPI / Swagger surfaces continue to be served by both claims-service (via shared `AddChoInfrastructure`) and payment-service (via direct `AddSwaggerGen`) in development environments. payment-service Swagger pattern parity migration and XML-doc-driven Swagger surface enrichment are tracked as Phase 2 follow-ups.
+
+#### Outstanding follow-ups (post-close)
+
+- Legacy `Claims` Cosmos container deletion (~30-day retention window from 5.1b cutover; Bicep PR)
+- Phase 2 sequencing per `docs/roadmap/claims-phase-2-backlog.md`. Primary near-term driver: CMS-0057-F unauthenticated patient access (January 2027 mandate).
+
 ## [4.3.0] - March 2026
 
 ### Capitation Service — PMPM Provider Payments
