@@ -21,6 +21,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimSubmissionService SubmissionService { get; } = Substitute.For<IClaimSubmissionService>();
     public IClaimAdapter ClaimAdapter { get; } = CreateChoStubAdapter();
     public IClaimVersionEventPublisher VersionEventPublisher { get; } = Substitute.For<IClaimVersionEventPublisher>();
+    public IClaimFinalizationService FinalizationService { get; } = Substitute.For<IClaimFinalizationService>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -50,6 +51,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(ITenantComplianceConfigService)
                          || d.ServiceType == typeof(IAiExaminationAuditRepository)
                          || d.ServiceType == typeof(IClaimSubmissionService)
+                         || d.ServiceType == typeof(IClaimFinalizationService)
                          || d.ServiceType == typeof(IClaimAdapter)
                          || d.ServiceType == typeof(ClaimAdapterFactory)
                          || d.ServiceType == typeof(ClaimTenantConfigCache))
@@ -110,6 +112,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());
             services.AddSingleton(AuditRepository);
             services.AddSingleton(VersionEventPublisher);
+            services.AddSingleton(FinalizationService);
 
             // 5.7 — NcciEngine's repository implementation got removed by
             // the Cosmos/Mongo filter above. The engine's INcciEditService

@@ -34,6 +34,17 @@ public class TradingPartner
     [JsonPropertyName("transactionTypes")]
     public List<string> TransactionTypes { get; set; } = new();
 
+    /// <summary>
+    /// Billing-provider NPIs that route to this trading partner. Used by
+    /// payment-service (5.10 batched 835 generation) to resolve which
+    /// trading partner sends ERAs for a claim's billing provider. Empty
+    /// list means "not the routing target for any specific NPI" — the
+    /// trading partner is reached only through explicit
+    /// (tenantId, tradingPartnerId, environment) lookup.
+    /// </summary>
+    [JsonPropertyName("billingProviderNpis")]
+    public List<string> BillingProviderNpis { get; set; } = new();
+
     [JsonPropertyName("contactInfo")]
     public ContactInfo? ContactInfo { get; set; }
 

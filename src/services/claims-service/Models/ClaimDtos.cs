@@ -15,7 +15,16 @@ public class ClaimStatusUpdate
 }
 
 /// <summary>
-/// Remittance update request (835 transaction)
+/// Remittance update request (835 transaction). Sent by payment-service
+/// during PaymentRun execution to transition a claim Approved/PartiallyPaid → Paid.
+/// Also accepted from manual remittance-posting tools.
+///
+/// 5.10: the controller delegates to <c>IClaimFinalizationService</c>
+/// when this lands so the version-event chain and Kafka notification
+/// fire alongside the legacy Status update. <see cref="PaymentRunId"/>
+/// and <see cref="EraEnvelopeId"/> are optional audit-trail
+/// crumbs — present when payment-service is the caller, null when a
+/// manual posting tool drives the endpoint.
 /// </summary>
 public class RemittanceUpdate
 {
@@ -29,6 +38,14 @@ public class RemittanceUpdate
     public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
 
     public decimal PaymentAmount { get; set; }
+
+    /// <summary>Identifier of the originating payment run, for audit-trail crumbs.</summary>
+    [StringLength(100)]
+    public string? PaymentRunId { get; set; }
+
+    /// <summary>Identifier of the EraEnvelope this claim was emitted within, for audit-trail crumbs.</summary>
+    [StringLength(100)]
+    public string? EraEnvelopeId { get; set; }
 }
 
 /// <summary>

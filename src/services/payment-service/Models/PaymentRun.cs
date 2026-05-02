@@ -50,6 +50,14 @@ public class PaymentRun
     public List<string> PaymentIds { get; set; } = new();
 
     /// <summary>
+    /// Generated <c>EraEnvelopeRecord</c> ids — one per trading partner
+    /// in this run (5.10 batched 835 generation). Empty for runs that
+    /// pre-date 5.10 or whose claims didn't resolve to any trading
+    /// partner.
+    /// </summary>
+    public List<string> EraEnvelopeIds { get; set; } = new();
+
+    /// <summary>
     /// Claims included in this payment run
     /// </summary>
     public List<string> ClaimIds { get; set; } = new();

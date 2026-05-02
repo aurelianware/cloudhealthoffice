@@ -82,6 +82,16 @@ public class Payment
     public string? PayeeNPI { get; set; }
 
     /// <summary>
+    /// Identifier of the trading partner this payment routes to. Used by
+    /// <c>BatchEraGeneratorService</c> (5.10) to group N payments into
+    /// per-partner 835 envelopes. Null when the payment was created by
+    /// a flow that doesn't carry trading-partner context (legacy
+    /// per-payment generation, manual posting tools).
+    /// </summary>
+    [StringLength(100)]
+    public string? TradingPartnerId { get; set; }
+
+    /// <summary>
     /// Individual claim payment details
     /// 835: 2100 loop (one per claim)
     /// </summary>

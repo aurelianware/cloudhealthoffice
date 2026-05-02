@@ -11,7 +11,10 @@
 > [`claim-ncci-pipeline.md`](./claim-ncci-pipeline.md),
 > [`claim-cob-pipeline.md`](./claim-cob-pipeline.md), and
 > [`claim-ai-examination.md`](./claim-ai-examination.md) for the
-> stage-specific architecture.
+> stage-specific architecture. The downstream
+> [`claim-remittance-generation.md`](./claim-remittance-generation.md)
+> doc covers capability 5.10's operator-initiated finalization
+> handoff (Adjudicated → Paid via batched 835 emission).
 
 ## Why this exists
 

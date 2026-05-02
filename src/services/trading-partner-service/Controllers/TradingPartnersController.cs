@@ -41,15 +41,56 @@ public class TradingPartnersController : ControllerBase
     public async Task<ActionResult<TradingPartner>> Get(string tenantId, string tradingPartnerId, string environment)
     {
         var partner = await _repository.GetAsync(tenantId, tradingPartnerId, environment);
-        
+
         if (partner == null)
         {
-            return NotFound(new { 
-                message = $"Trading partner not found: {tenantId}/{tradingPartnerId}/{environment}" 
+            return NotFound(new {
+                message = $"Trading partner not found: {tenantId}/{tradingPartnerId}/{environment}"
             });
         }
 
         return Ok(partner);
+    }
+
+    /// <summary>
+    /// Resolve the trading partner that handles ERAs for a given
+    /// billing-provider NPI within a tenant + environment. Consumed by
+    /// payment-service during PaymentRun execution (5.10) to group
+    /// claims into per-trading-partner 835 envelopes.
+    ///
+    /// Returns 404 when no trading partner declares the NPI in its
+    /// <c>BillingProviderNpis</c> list. Multiple partners declaring the
+    /// same NPI is an operator-configuration error; the first match
+    /// (insertion order from <see cref="ITradingPartnerRepository.GetByTenantAsync"/>)
+    /// wins.
+    ///
+    /// <para>
+    /// Service-to-service surface — mirrors claims-service's
+    /// <c>GET /api/claims/search</c> by being unauthenticated at the
+    /// endpoint level (cluster-internal isolation is the auth boundary).
+    /// </para>
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("by-npi/{tenantId}/{npi}/{environment}")]
+    public async Task<ActionResult<TradingPartner>> GetByBillingProviderNpi(
+        string tenantId,
+        string npi,
+        string environment)
+    {
+        var partners = await _repository.GetByTenantAsync(tenantId);
+        var match = partners.FirstOrDefault(p =>
+            string.Equals(p.Environment, environment, StringComparison.OrdinalIgnoreCase)
+            && p.BillingProviderNpis.Contains(npi));
+
+        if (match == null)
+        {
+            return NotFound(new
+            {
+                message = $"No trading partner found for NPI {npi} in tenant {tenantId} ({environment})"
+            });
+        }
+
+        return Ok(match);
     }
 
     /// <summary>
