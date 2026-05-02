@@ -516,8 +516,10 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     // matches the wire format used by repositories and the in-memory fake, so a clone
     // through these options preserves the subclass discriminator end-to-end.
     // BenefitJsonConverter is registered here (not via [JsonConverter] on Benefit)
-    // so that WithoutSelf() can reliably strip it from a copy when serializing
-    // concrete subtypes, preventing the inherited-attribute stack overflow.
+    // to prevent infinite recursion. When the attribute is on the base class, STJ
+    // inherits it on all subclasses, causing BenefitJsonConverter to be invoked
+    // again during the inner Serialize call in Write(), even after WithoutSelf()
+    // removes it from options.Converters.
     private static readonly JsonSerializerOptions _benefitCloneOpts = BuildBenefitCloneOpts();
     private static JsonSerializerOptions BuildBenefitCloneOpts()
     {
