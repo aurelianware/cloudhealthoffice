@@ -66,17 +66,29 @@ public interface IBatchEraGeneratorService
 /// service lines + adjustments applied by
 /// <see cref="ICarcRarcMappingService"/>) plus the trading partner the
 /// envelope routes to.
+///
+/// <para>5.12b — <see cref="IsReversal"/> threads the reversal-mode
+/// signal through to the produced <see cref="EraEnvelope.IsReversal"/>
+/// so the caller can persist the envelope with
+/// <see cref="EraEnvelopeRecord.ReversalRunId"/> set in place of
+/// <see cref="EraEnvelopeRecord.PaymentRunId"/>. CLP02 reversal status
+/// "22" and CAS sign-flips are set upstream by
+/// <c>ReversalRunService</c> when constructing the
+/// <see cref="Payment"/>; the generator does not branch on this flag.</para>
 /// </summary>
 public class EraPaymentInput
 {
     public string TradingPartnerId { get; set; } = string.Empty;
     public Payment Payment { get; set; } = new();
+    public bool IsReversal { get; set; } = false;
 }
 
 /// <summary>
 /// One generated 835 envelope. Persisted by the caller as an
 /// <see cref="EraEnvelopeRecord"/> and exposed by
-/// <c>EraEnvelopesController</c>.
+/// <c>EraEnvelopesController</c>. The <c>IsReversal</c> flag is the
+/// caller's signal to set <see cref="EraEnvelopeRecord.ReversalRunId"/>
+/// rather than <see cref="EraEnvelopeRecord.PaymentRunId"/>.
 /// </summary>
 public record EraEnvelope(
     string TradingPartnerId,
@@ -84,7 +96,8 @@ public record EraEnvelope(
     int ClaimCount,
     decimal TotalPaymentAmount,
     string ControlNumber,
-    IReadOnlyList<string> ClaimIds);
+    IReadOnlyList<string> ClaimIds,
+    bool IsReversal);
 
 public class BatchEraGeneratorService : IBatchEraGeneratorService
 {
@@ -257,13 +270,23 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
             "Generated batched 835 envelope for trading partner {TradingPartnerId}: {ClaimCount} claims, {PaymentCount} payments, ${Amount:F2}, control {Control}",
             tradingPartnerId, claimCount, inputs.Count, totalAmount, controlNumber);
 
+        // All payments routed to the same partner-group share the
+        // reversal-mode signal — operators don't mix reversal and non-
+        // reversal payments in the same envelope. We mark the envelope
+        // reversal-mode iff every payment in the group carries the flag,
+        // so a malformed mixed batch fails closed (envelope persists as
+        // PaymentRun, not ReversalRun). ReversalRunService always batches
+        // pure reversal inputs.
+        var isReversal = inputs.All(i => i.IsReversal);
+
         return new EraEnvelope(
             TradingPartnerId: tradingPartnerId,
             EdiContent: edi,
             ClaimCount: claimCount,
             TotalPaymentAmount: totalAmount,
             ControlNumber: controlNumber,
-            ClaimIds: claimIds);
+            ClaimIds: claimIds,
+            IsReversal: isReversal);
     }
 
     private static string BuildClaimLoop(ClaimPayment cp, ref int segmentCount)

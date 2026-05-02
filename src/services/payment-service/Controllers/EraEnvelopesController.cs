@@ -57,17 +57,18 @@ public class EraEnvelopesController : ControllerBase
     }
 
     /// <summary>
-    /// Search envelopes by paymentRunId and/or tradingPartnerId.
-    /// Returns metadata only (no EDI bodies); use <c>GET /{id}/edi</c>
-    /// for individual content.
+    /// Search envelopes by paymentRunId, tradingPartnerId, and/or
+    /// reversalRunId (5.12b). Returns metadata only (no EDI bodies);
+    /// use <c>GET /{id}/edi</c> for individual content.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<EraEnvelopeMetadata>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<EraEnvelopeMetadata>>> Search(
         [FromQuery] string? paymentRunId = null,
-        [FromQuery] string? tradingPartnerId = null)
+        [FromQuery] string? tradingPartnerId = null,
+        [FromQuery] string? reversalRunId = null)
     {
-        var records = await _repository.SearchAsync(paymentRunId, tradingPartnerId);
+        var records = await _repository.SearchAsync(paymentRunId, tradingPartnerId, reversalRunId);
         return Ok(records.Select(EraEnvelopeMetadata.From));
     }
 }
@@ -81,6 +82,7 @@ public class EraEnvelopeMetadata
 {
     public string Id { get; set; } = string.Empty;
     public string PaymentRunId { get; set; } = string.Empty;
+    public string? ReversalRunId { get; set; }
     public string TradingPartnerId { get; set; } = string.Empty;
     public int ClaimCount { get; set; }
     public decimal TotalPaymentAmount { get; set; }
@@ -93,6 +95,7 @@ public class EraEnvelopeMetadata
     {
         Id = record.Id,
         PaymentRunId = record.PaymentRunId,
+        ReversalRunId = record.ReversalRunId,
         TradingPartnerId = record.TradingPartnerId,
         ClaimCount = record.ClaimCount,
         TotalPaymentAmount = record.TotalPaymentAmount,

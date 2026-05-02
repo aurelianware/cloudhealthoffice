@@ -24,10 +24,24 @@ public class EraEnvelopeRecord
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Originating <see cref="PaymentRun.Id"/>.</summary>
-    [Required]
+    /// <summary>
+    /// Originating <see cref="PaymentRun.Id"/>. Populated for envelopes
+    /// produced by 5.10 PaymentRun execution. Mutually exclusive with
+    /// <see cref="ReversalRunId"/>: exactly one of the two is set per
+    /// envelope. Stays as a non-nullable string default for serialization
+    /// stability with pre-5.12b rows; reversal envelopes leave this empty.
+    /// </summary>
     [StringLength(100)]
     public string PaymentRunId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Originating <see cref="ReversalRun.Id"/>. Populated for envelopes
+    /// produced by 5.12b ReversalRun execution. Mutually exclusive with
+    /// <see cref="PaymentRunId"/>. Null on PaymentRun-produced envelopes
+    /// (the steady state pre-5.12b).
+    /// </summary>
+    [StringLength(100)]
+    public string? ReversalRunId { get; set; }
 
     /// <summary>Trading partner this envelope routes to.</summary>
     [Required]

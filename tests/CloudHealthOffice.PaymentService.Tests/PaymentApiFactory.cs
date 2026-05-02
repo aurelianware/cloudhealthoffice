@@ -11,8 +11,10 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
 {
     public IPaymentRepository PaymentRepository { get; } = Substitute.For<IPaymentRepository>();
     public IPaymentRunRepository PaymentRunRepository { get; } = Substitute.For<IPaymentRunRepository>();
+    public IReversalRunRepository ReversalRunRepository { get; } = Substitute.For<IReversalRunRepository>();
     public IEraGeneratorService EraGeneratorService { get; } = Substitute.For<IEraGeneratorService>();
     public IPaymentRunService PaymentRunService { get; } = Substitute.For<IPaymentRunService>();
+    public IReversalRunService ReversalRunService { get; } = Substitute.For<IReversalRunService>();
     public IBatchEraGeneratorService BatchEraGeneratorService { get; } = Substitute.For<IBatchEraGeneratorService>();
     public ICarcRarcMappingService CarcRarcMappingService { get; } = Substitute.For<ICarcRarcMappingService>();
     public IEraEnvelopeRepository EraEnvelopeRepository { get; } = Substitute.For<IEraEnvelopeRepository>();
@@ -28,8 +30,10 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
             var descriptorsToRemove = services
                 .Where(d => d.ServiceType == typeof(IPaymentRepository)
                          || d.ServiceType == typeof(IPaymentRunRepository)
+                         || d.ServiceType == typeof(IReversalRunRepository)
                          || d.ServiceType == typeof(IEraGeneratorService)
                          || d.ServiceType == typeof(IPaymentRunService)
+                         || d.ServiceType == typeof(IReversalRunService)
                          || d.ServiceType == typeof(IBatchEraGeneratorService)
                          || d.ServiceType == typeof(ICarcRarcMappingService)
                          || d.ServiceType == typeof(IEraEnvelopeRepository)
@@ -58,8 +62,10 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
 
             services.AddSingleton(PaymentRepository);
             services.AddSingleton(PaymentRunRepository);
+            services.AddSingleton(ReversalRunRepository);
             services.AddSingleton(EraGeneratorService);
             services.AddSingleton(PaymentRunService);
+            services.AddSingleton(ReversalRunService);
             services.AddSingleton(BatchEraGeneratorService);
             services.AddSingleton(CarcRarcMappingService);
             services.AddSingleton(EraEnvelopeRepository);

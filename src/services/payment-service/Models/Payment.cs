@@ -143,6 +143,18 @@ public class Payment
     /// Trace numbers for tracking
     /// </summary>
     public List<string> TraceNumbers { get; set; } = new();
+
+    /// <summary>
+    /// True when the payment record is the negative-amount reversal of a
+    /// prior positive payment (5.12b ReversalRun). Drives downstream
+    /// signaling: <see cref="EraEnvelopeRecord.ReversalRunId"/> is set in
+    /// place of <see cref="EraEnvelopeRecord.PaymentRunId"/>, and CLP02
+    /// status code "22" (Reversal of Previous Payment) is set on the
+    /// individual <see cref="ClaimPayment.ClaimStatusCode"/>s by
+    /// <c>ReversalRunService</c>. Default false; only ReversalRunService
+    /// sets true.
+    /// </summary>
+    public bool IsReversal { get; set; } = false;
 }
 
 /// <summary>

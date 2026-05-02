@@ -14,7 +14,11 @@ new version is created as a fresh row on the same
 Plan-First ratification. 5.12b ships the payment-service
 `ReversalRunService` that batches the predecessor accumulator
 reversal (via the BP engine) + 835 reversal envelope emission +
-the predecessor's final transition to `ClaimStatus.Voided`.
+the predecessor's final transition to `ClaimStatus.Voided`. See
+[claim-reversal-run.md](claim-reversal-run.md) for the 5.12b
+detail; the lifecycle wiring described below
+(`AwaitingReadjudication → PendingReversal → Active`) is where
+the two halves compose.
 
 ## Surface
 

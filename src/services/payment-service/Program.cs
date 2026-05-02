@@ -46,6 +46,7 @@ if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 
     builder.Services.AddScoped<IPaymentRepository, PaymentRepositoryMongo>();
     builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepositoryMongo>();
+    builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepositoryMongo>();
     builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
@@ -68,6 +69,7 @@ else
 
     builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
     builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
+    builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepository>();
     // EraEnvelope persistence on Cosmos-only deployments uses the
     // in-memory fallback. payment-service's canonical store is Mongo;
     // Cosmos paths are dev-only and don't need durable EraEnvelope storage.
@@ -77,6 +79,7 @@ else
 
 // Services
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
+builder.Services.AddScoped<IReversalRunService, ReversalRunService>();
 builder.Services.AddScoped<IEraGeneratorService, EraGeneratorService>();
 
 // 5.10 — batched 835 generation. Stateless services, Singleton DI.

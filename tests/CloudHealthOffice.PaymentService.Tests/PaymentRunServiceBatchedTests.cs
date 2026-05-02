@@ -140,7 +140,8 @@ public class PaymentRunServiceBatchedTests
                         ClaimCount: g.Sum(p => p.Payment.ClaimPayments.Count),
                         TotalPaymentAmount: g.Sum(p => p.Payment.TotalPaymentAmount),
                         ControlNumber: "000000001",
-                        ClaimIds: g.SelectMany(p => p.Payment.ClaimPayments.Select(cp => cp.ClaimId)).ToList()))
+                        ClaimIds: g.SelectMany(p => p.Payment.ClaimPayments.Select(cp => cp.ClaimId)).ToList(),
+                        IsReversal: false))
                     .ToList();
             });
 
@@ -175,7 +176,7 @@ public class PaymentRunServiceBatchedTests
         _batchGen.GenerateBatch(Arg.Any<IEnumerable<EraPaymentInput>>(), Arg.Any<IReadOnlyDictionary<string, TradingPartnerInfo>>())
             .Returns(new List<EraEnvelope>
             {
-                new("TP-A", "ISA~", 1, 80m, "000000001", new[] { "c1" })
+                new("TP-A", "ISA~", 1, 80m, "000000001", new[] { "c1" }, false)
             });
 
         await CreateService().ExecutePaymentRunAsync(run.Id);

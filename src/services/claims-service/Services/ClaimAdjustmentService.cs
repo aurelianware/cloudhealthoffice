@@ -4,6 +4,7 @@ using System.Text.Json;
 using ClaimsService.Models;
 using ClaimsService.Models.Messaging;
 using ClaimsService.Repositories;
+using ClaimsService.Services.Adjudication;
 using CloudHealthOffice.Infrastructure.Messaging;
 
 namespace ClaimsService.Services;
@@ -53,6 +54,47 @@ public interface IClaimAdjustmentService
         string tenantId,
         string actorId,
         string? correlationId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Orchestrator-finalize callback (5.12b Premise A). Invoked by
+    /// <c>ClaimAdjudicationOrchestrator</c> after a new claim version's
+    /// pipeline emits <c>ClaimVersionAdjudicated</c>. If a tenant has an
+    /// in-flight <see cref="ClaimAdjustment"/> whose
+    /// <see cref="ClaimAdjustment.NewClaimId"/> matches the finalized
+    /// version, transitions the adjustment lifecycle:
+    /// <list type="bullet">
+    ///   <item><description><see cref="ClaimAdjudicationOutcome.Pass"/> / <see cref="ClaimAdjudicationOutcome.Deny"/> → <see cref="ClaimAdjustmentStatus.PendingReversal"/> (terminal pipeline state; predecessor still has accumulator impact pending ReversalRun unwind).</description></item>
+    ///   <item><description><see cref="ClaimAdjudicationOutcome.Reject"/> → <see cref="ClaimAdjustmentStatus.Failed"/> (pipeline pre-adjudication rejection — operator triage).</description></item>
+    ///   <item><description><see cref="ClaimAdjudicationOutcome.Pend"/> → no transition (still awaiting human review).</description></item>
+    /// </list>
+    /// No-op when no matching adjustment exists (handles the common case
+    /// of fresh non-adjustment submissions). Idempotent: re-invocation
+    /// against an already-PendingReversal/Failed adjustment is a logged no-op.
+    /// </summary>
+    Task OnNewVersionFinalizedAsync(
+        string tenantId,
+        string newClaimId,
+        ClaimAdjudicationOutcome outcome,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Reversal-completion callback (5.12b Premise E). Invoked by
+    /// <c>ClaimFinalizationService.VoidAsync</c> when a void with non-null
+    /// <c>ClaimVoidRequest.ReversalRunId</c> succeeds. Looks up the
+    /// in-flight adjustment whose
+    /// <see cref="ClaimAdjustment.PredecessorClaimId"/> matches the voided
+    /// claim and transitions it from <see cref="ClaimAdjustmentStatus.PendingReversal"/>
+    /// to <see cref="ClaimAdjustmentStatus.Active"/>; sets
+    /// <see cref="ClaimAdjustment.ReversalCompletedAt"/> and
+    /// <see cref="ClaimAdjustment.ReversalRunId"/>. No-op when no matching
+    /// adjustment exists (e.g. operator-initiated void without a
+    /// ReversalRun) or when the adjustment is already Active (idempotent).
+    /// </summary>
+    Task MarkActiveOnReversalAsync(
+        string tenantId,
+        string predecessorClaimId,
+        string reversalRunId,
         CancellationToken ct = default);
 }
 
@@ -490,6 +532,109 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             Sanitize(request.AdjustmentReason));
 
         return ClaimAdjustmentResult.Created(adjustment, newVersion);
+    }
+
+    public async Task OnNewVersionFinalizedAsync(
+        string tenantId,
+        string newClaimId,
+        ClaimAdjudicationOutcome outcome,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId)) return;
+        if (string.IsNullOrWhiteSpace(newClaimId)) return;
+
+        // Pend leaves the new version in human-review limbo; the adjustment
+        // stays AwaitingReadjudication until the version reaches a real
+        // terminal state (Approved/Paid/Denied) via the operator
+        // resolution path. No-op here.
+        if (outcome == ClaimAdjudicationOutcome.Pend) return;
+
+        var adjustment = await _adjustmentRepository
+            .GetByNewClaimIdAsync(tenantId, newClaimId, ct);
+        if (adjustment == null)
+        {
+            // Most fresh submissions hit this path (no in-flight adjustment
+            // for the new version). Logged at debug to keep the orchestrator
+            // path quiet on the steady state.
+            _logger.LogDebug(
+                "OnNewVersionFinalizedAsync: no adjustment found for new claim {NewClaimId}; orchestrator no-op",
+                Sanitize(newClaimId));
+            return;
+        }
+
+        // Idempotency — re-invocation is harmless. The orchestrator's
+        // event emission is at-least-once on the Service Bus contract;
+        // this callback is in-process so duplicates are rare but possible
+        // when the orchestrator retries after a transient downstream failure.
+        if (adjustment.Status != ClaimAdjustmentStatus.AwaitingReadjudication)
+        {
+            _logger.LogInformation(
+                "OnNewVersionFinalizedAsync: adjustment {AdjustmentId} already in {Status}; idempotent no-op",
+                Sanitize(adjustment.Id), adjustment.Status);
+            return;
+        }
+
+        var nextStatus = outcome switch
+        {
+            // Pass and Deny are both terminal pipeline outcomes —
+            // predecessor's accumulator impact + provider payment still
+            // need unwinding via 5.12b ReversalRun, regardless of whether
+            // the corrected version was Approved or Denied.
+            ClaimAdjudicationOutcome.Pass => ClaimAdjustmentStatus.PendingReversal,
+            ClaimAdjudicationOutcome.Deny => ClaimAdjustmentStatus.PendingReversal,
+            // Reject is pre-adjudication (scrubbing failure on the new
+            // version). Operator must triage via the supersession-rollback
+            // path; the adjustment goes Failed.
+            ClaimAdjudicationOutcome.Reject => ClaimAdjustmentStatus.Failed,
+            _ => adjustment.Status, // already filtered Pend above
+        };
+
+        adjustment.Status = nextStatus;
+        adjustment.ReadjudicationCompletedAt = DateTime.UtcNow;
+        if (nextStatus == ClaimAdjustmentStatus.Failed)
+        {
+            adjustment.FailureReason =
+                $"Re-adjudication for new version {newClaimId} resulted in pipeline outcome {outcome}";
+        }
+
+        await _adjustmentRepository.UpdateAsync(adjustment, ct);
+
+        _logger.LogInformation(
+            "Adjustment {AdjustmentId} transitioned AwaitingReadjudication → {Status} on outcome {Outcome} for new version {NewClaimId}",
+            Sanitize(adjustment.Id), nextStatus, outcome, Sanitize(newClaimId));
+    }
+
+    public async Task MarkActiveOnReversalAsync(
+        string tenantId,
+        string predecessorClaimId,
+        string reversalRunId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId)) return;
+        if (string.IsNullOrWhiteSpace(predecessorClaimId)) return;
+        if (string.IsNullOrWhiteSpace(reversalRunId)) return;
+
+        var adjustment = await _adjustmentRepository.GetByPredecessorAndStatusAsync(
+            tenantId, predecessorClaimId, ClaimAdjustmentStatus.PendingReversal, ct);
+        if (adjustment == null)
+        {
+            // Operator-initiated void without ReversalRun, or void of a
+            // claim that wasn't part of an adjustment chain. Either way
+            // the adjustment lifecycle is not what's driving this void.
+            _logger.LogDebug(
+                "MarkActiveOnReversalAsync: no PendingReversal adjustment for predecessor {ClaimId}; void completes without lifecycle transition",
+                Sanitize(predecessorClaimId));
+            return;
+        }
+
+        adjustment.Status = ClaimAdjustmentStatus.Active;
+        adjustment.ReversalRunId = reversalRunId;
+        adjustment.ReversalCompletedAt = DateTime.UtcNow;
+        await _adjustmentRepository.UpdateAsync(adjustment, ct);
+
+        _logger.LogInformation(
+            "Adjustment {AdjustmentId} transitioned PendingReversal → Active on ReversalRun {ReversalRunId} for predecessor {ClaimId}",
+            Sanitize(adjustment.Id), Sanitize(reversalRunId), Sanitize(predecessorClaimId));
     }
 
     private async Task TryReleaseChainLockAsync(ClaimAdjustment placeholder, CancellationToken ct)

@@ -47,6 +47,29 @@ public interface IClaimAdjustmentRepository
     Task<ClaimAdjustment?> GetByIdempotencyKeyAsync(string tenantId, string idempotencyKey, CancellationToken ct = default);
 
     /// <summary>
+    /// Look up by the new (replacement) claim row id (5.12b
+    /// orchestrator-finalize callback). Returns the in-flight adjustment
+    /// whose <see cref="ClaimAdjustment.NewClaimId"/> matches. Used by
+    /// <see cref="IClaimAdjustmentService.OnNewVersionFinalizedAsync"/>
+    /// to transition <c>AwaitingReadjudication → PendingReversal/Failed</c>.
+    /// </summary>
+    Task<ClaimAdjustment?> GetByNewClaimIdAsync(string tenantId, string newClaimId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Look up by predecessor claim id + status (5.12b reversal-completion
+    /// callback). Returns the adjustment whose
+    /// <see cref="ClaimAdjustment.PredecessorClaimId"/> matches and whose
+    /// <see cref="ClaimAdjustment.Status"/> equals the supplied filter.
+    /// Used by <see cref="IClaimAdjustmentService.MarkActiveOnReversalAsync"/>
+    /// to transition <c>PendingReversal → Active</c> on void success.
+    /// </summary>
+    Task<ClaimAdjustment?> GetByPredecessorAndStatusAsync(
+        string tenantId,
+        string predecessorClaimId,
+        ClaimAdjustmentStatus status,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Filter + paginate. Filters not supplied are not applied. Returns
     /// (page, totalCount). The 5.12b ReversalRunService consumes this via
     /// the controller's HTTP surface to batch <c>PendingReversal</c> rows.
@@ -114,6 +137,27 @@ public sealed class ClaimAdjustmentRepositoryMongo : IClaimAdjustmentRepository
     {
         var b = Builders<ClaimAdjustment>.Filter;
         var filter = b.And(b.Eq(x => x.TenantId, tenantId), b.Eq(x => x.IdempotencyKey, idempotencyKey));
+        return await _collection.Find(filter).FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<ClaimAdjustment?> GetByNewClaimIdAsync(string tenantId, string newClaimId, CancellationToken ct = default)
+    {
+        var b = Builders<ClaimAdjustment>.Filter;
+        var filter = b.And(b.Eq(x => x.TenantId, tenantId), b.Eq(x => x.NewClaimId, newClaimId));
+        return await _collection.Find(filter).FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<ClaimAdjustment?> GetByPredecessorAndStatusAsync(
+        string tenantId,
+        string predecessorClaimId,
+        ClaimAdjustmentStatus status,
+        CancellationToken ct = default)
+    {
+        var b = Builders<ClaimAdjustment>.Filter;
+        var filter = b.And(
+            b.Eq(x => x.TenantId, tenantId),
+            b.Eq(x => x.PredecessorClaimId, predecessorClaimId),
+            b.Eq(x => x.Status, status));
         return await _collection.Find(filter).FirstOrDefaultAsync(ct);
     }
 
@@ -193,6 +237,16 @@ public sealed class ClaimAdjustmentRepositoryCosmosNoop : IClaimAdjustmentReposi
         => Task.FromResult<ClaimAdjustment?>(null);
 
     public Task<ClaimAdjustment?> GetByIdempotencyKeyAsync(string tenantId, string idempotencyKey, CancellationToken ct = default)
+        => Task.FromResult<ClaimAdjustment?>(null);
+
+    public Task<ClaimAdjustment?> GetByNewClaimIdAsync(string tenantId, string newClaimId, CancellationToken ct = default)
+        => Task.FromResult<ClaimAdjustment?>(null);
+
+    public Task<ClaimAdjustment?> GetByPredecessorAndStatusAsync(
+        string tenantId,
+        string predecessorClaimId,
+        ClaimAdjustmentStatus status,
+        CancellationToken ct = default)
         => Task.FromResult<ClaimAdjustment?>(null);
 
     public Task<(IReadOnlyList<ClaimAdjustment> Page, int TotalCount)> ListAsync(

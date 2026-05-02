@@ -172,17 +172,20 @@ public class ClaimFinalizationService : IClaimFinalizationService
     private readonly IClaimRepository _claimRepository;
     private readonly IClaimVersionEventPublisher _versionEventPublisher;
     private readonly IClaimEventPublisher _kafkaEventPublisher;
+    private readonly IClaimAdjustmentService _adjustmentService;
     private readonly ILogger<ClaimFinalizationService> _logger;
 
     public ClaimFinalizationService(
         IClaimRepository claimRepository,
         IClaimVersionEventPublisher versionEventPublisher,
         IClaimEventPublisher kafkaEventPublisher,
+        IClaimAdjustmentService adjustmentService,
         ILogger<ClaimFinalizationService> logger)
     {
         _claimRepository = claimRepository;
         _versionEventPublisher = versionEventPublisher;
         _kafkaEventPublisher = kafkaEventPublisher;
+        _adjustmentService = adjustmentService;
         _logger = logger;
     }
 
@@ -404,6 +407,28 @@ public class ClaimFinalizationService : IClaimFinalizationService
         // accumulator un-application; this Kafka emit is observability
         // only.
         await _kafkaEventPublisher.PublishClaimFinalizedAsync(updated, tenantId, ct);
+
+        // 5.12b Premise E — adjustment lifecycle callback. When the void
+        // carries a ReversalRunId correlation, the in-flight adjustment
+        // (whose PredecessorClaimId matches this voided claim and whose
+        // Status is PendingReversal) transitions to Active. Operator-
+        // initiated voids without a ReversalRunId are no-ops here.
+        // Failure is non-blocking: the void has persisted and emitted; a
+        // follow-up sweep can re-drive the lifecycle transition.
+        if (!string.IsNullOrEmpty(request.ReversalRunId))
+        {
+            try
+            {
+                await _adjustmentService.MarkActiveOnReversalAsync(
+                    tenantId, updated.Id, request.ReversalRunId, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Adjustment Active-transition callback failed for predecessor {ClaimId}; void already persisted",
+                    Sanitize(updated.Id));
+            }
+        }
 
         _logger.LogInformation(
             "Voided claim {ClaimId}; reason='{Reason}'; ReversalRun={ReversalRunId}",
