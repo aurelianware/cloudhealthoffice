@@ -182,7 +182,7 @@ export class AzureFHIRValidator {
       'ExplanationOfBenefit': `http://hl7.org/fhir/us/core/StructureDefinition/us-core-explanationofbenefit`
     };
     
-    const profile = profileMap[resource.resourceType];
+    const profile = profileMap[resource.resourceType ?? ''];
     
     if (!profile) {
       return {
@@ -225,7 +225,7 @@ export class AzureFHIRValidator {
       }
     };
     
-    const profile = profileMap[ig]?.[resource.resourceType];
+    const profile = profileMap[ig]?.[resource.resourceType ?? ''];
     
     if (!profile) {
       return {

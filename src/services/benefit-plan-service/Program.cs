@@ -3,6 +3,7 @@ using BenefitPlanService.Adapters;
 using BenefitPlanService.HostedServices;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
+using BenefitPlanService.Models.Benefits;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using Microsoft.Extensions.Caching.Memory;
@@ -355,7 +356,11 @@ builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCross
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
 builder.Services.AddControllers()
-    .AddCloudHealthOfficeJsonOptions();
+    .AddCloudHealthOfficeJsonOptions()
+    // Register BenefitJsonConverter here (not via [JsonConverter] on Benefit) so
+    // that WithoutSelf() can reliably strip it from a copy, avoiding the
+    // attribute-inheritance stack overflow on polymorphic write.
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new BenefitJsonConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

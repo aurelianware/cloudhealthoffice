@@ -20,11 +20,6 @@ public interface IFhirDataAdapter
     Task<(IReadOnlyList<Coverage> Items, int Total)> SearchCoverageAsync(
         CoverageSearchParams search, string tenantId, CancellationToken ct = default);
 
-    // ── ExplanationOfBenefit ──────────────────────────────────────────────────
-    Task<ExplanationOfBenefit?> GetEobAsync(string id, string tenantId, CancellationToken ct = default);
-    Task<(IReadOnlyList<ExplanationOfBenefit> Items, int Total)> SearchEobsAsync(
-        EobSearchParams search, string tenantId, CancellationToken ct = default);
-
     // ── Encounter ─────────────────────────────────────────────────────────────
     Task<Encounter?> GetEncounterAsync(string id, string tenantId, CancellationToken ct = default);
     Task<(IReadOnlyList<Encounter> Items, int Total)> SearchEncountersAsync(

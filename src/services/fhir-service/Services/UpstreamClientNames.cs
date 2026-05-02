@@ -16,4 +16,14 @@ internal static class UpstreamClientNames
     /// <see cref="Controllers.EndpointController"/> (BP 5.9).
     /// </summary>
     public const string BenefitPlanService = "BenefitPlanService";
+
+    /// <summary>
+    /// Typed HttpClient for claims-service. Used by
+    /// <see cref="Controllers.ExplanationOfBenefitController"/> (capability
+    /// 5.11). Mirrors the BenefitPlanService client shape — same
+    /// TenantHeaderPropagationHandler + CorrelationIdPropagationHandler
+    /// chain so claims-service sees the same tenant + correlation context
+    /// the FHIR caller arrived with.
+    /// </summary>
+    public const string ClaimsService = "ClaimsService";
 }

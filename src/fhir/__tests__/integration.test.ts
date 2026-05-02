@@ -18,7 +18,7 @@ import {
   mapX12835ToFhirEOB 
 } from '../fhir-mapper';
 import { X12_837_Claim, X12_278_Request, X12_835_Remittance } from '../x12ClaimTypes';
-import { Bundle } from 'fhir/r4';
+import { Bundle, Claim, ServiceRequest } from 'fhir/r4';
 
 describe('CMS-0057-F Integration Tests', () => {
   
@@ -459,7 +459,7 @@ describe('CMS-0057-F Integration Tests', () => {
                 sequence: 1,
                 productOrService: { coding: [{ code: '99213' }] }
               }]
-            }
+            } as Claim
           },
           {
             request: {
@@ -473,7 +473,7 @@ describe('CMS-0057-F Integration Tests', () => {
               subject: { reference: 'Patient/12345' },
               requester: { reference: 'Practitioner/98765' },
               code: { coding: [{ code: '99213' }] }
-            }
+            } as ServiceRequest
           }
         ]
       };

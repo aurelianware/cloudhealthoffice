@@ -15,7 +15,13 @@ namespace BenefitPlanService.Tests.Models.Benefits;
 /// </summary>
 public class TypedBenefitSerializationTests
 {
-    private static readonly JsonSerializerOptions Opts = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Opts = BuildOpts();
+    private static JsonSerializerOptions BuildOpts()
+    {
+        var o = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        o.Converters.Add(new BenefitJsonConverter());
+        return o;
+    }
 
     [Fact]
     public void MedicalBenefit_round_trips_with_medical_discriminator()

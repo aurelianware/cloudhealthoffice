@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -32,6 +33,14 @@ namespace BenefitPlanService.Models.Benefits;
 /// </summary>
 public sealed class BenefitJsonConverter : JsonConverter<Benefit>
 {
+    // Cache the "without self" options copy keyed by the original instance so
+    // we reuse both the copy and its internally-built type-metadata cache.
+    // Without this, creating a new JsonSerializerOptions on every Write call
+    // caused excessive allocations and performance degradation under parallel
+    // test execution, due to each copy building its own type-metadata cache
+    // from scratch on first use.
+    private static readonly ConditionalWeakTable<JsonSerializerOptions, JsonSerializerOptions> _optionsCache = new();
+
     public override Benefit Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Null)
@@ -119,14 +128,17 @@ public sealed class BenefitJsonConverter : JsonConverter<Benefit>
 
     private static JsonSerializerOptions WithoutSelf(JsonSerializerOptions options)
     {
-        var copy = new JsonSerializerOptions(options);
-        for (var i = copy.Converters.Count - 1; i >= 0; i--)
+        return _optionsCache.GetValue(options, static original =>
         {
-            if (copy.Converters[i] is BenefitJsonConverter)
+            var copy = new JsonSerializerOptions(original);
+            for (var i = copy.Converters.Count - 1; i >= 0; i--)
             {
-                copy.Converters.RemoveAt(i);
+                if (copy.Converters[i] is BenefitJsonConverter)
+                {
+                    copy.Converters.RemoveAt(i);
+                }
             }
-        }
-        return copy;
+            return copy;
+        });
     }
 }
