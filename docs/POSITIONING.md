@@ -248,7 +248,7 @@ EDI coverage via Argo workflows: 270/271/275/276/277/278/834/837.
 Three concrete personas — all three are real:
 
 - **(a) MA startup / new entrant**: small, greenfield, no legacy platform, needs claims processing live in 6–9 months. Chose CHO because building a CAPS from scratch costs roughly ten times more than licensing one, and QNXT's seven-figure entry price plus multi-quarter setup is not viable at their stage.
-- **(b) Small regional Medicaid plan**: 50K–500K members, on an aging COTS or home-grown platform, under state-specific compliance pressure. Chose CHO because their existing platform cannot meet new state requirements and a QNXT replacement would be an 18-month multi-million-dollar project they cannot absorb.
+- **(b) Small regional Medicaid plan**: 50K–500K members, on an aging CAPS or home-grown platform, under state-specific compliance pressure. Chose CHO because their existing platform cannot meet new state requirements and a QNXT replacement would be an 18-month multi-million-dollar project they cannot absorb.
 - **(c) Mid-market commercial plan finishing Layer 2**: has already migrated appeals, capitation, and other domains through Layer 2 over two to three years. Layer 3 is the milestone where QNXT is turned off entirely. Chose this path because they have already proven CHO in production one domain at a time.
 
 #### What Layer 3 honestly is today
