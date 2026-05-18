@@ -48,7 +48,7 @@
     "handlebars": "^4.7.9",
     "inquirer": "^9.2.0",
     "marked": "^11.2.0",
-    "openai": "^6.37.0",
+    "openai": "^6.38.0",
     "ora": "^7.0.0"
   },
   "devDependencies": {
@@ -58,8 +58,8 @@
     "@types/inquirer": "^9.0.0",
     "@types/jest": "^29.0.0",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.19.40",
-    "@typescript-eslint/eslint-plugin": "^8.59.2",
+    "@types/node": "^20.19.41",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
     "@typescript-eslint/parser": "^8.57.1",
     "eslint": "^9.39.4",
     "husky": "^8.0.3",
