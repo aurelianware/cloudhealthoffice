@@ -11,9 +11,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
     <PackageReference Include="MongoDB.Driver" Version="3.8.1" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.59.0" />
-  <PackageReference Include="SharpCompress" Version="0.48.0" />
-    <PackageReference Include="StackExchange.Redis" Version="2.12.14" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.60.0" />
+  <PackageReference Include="SharpCompress" Version="0.48.1" />
+    <PackageReference Include="StackExchange.Redis" Version="2.13.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CloudHealthOffice.OperatingMode\CloudHealthOffice.OperatingMode.csproj" />
