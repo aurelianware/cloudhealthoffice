@@ -11,9 +11,8 @@ Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrat
 [![Tests](https://img.shields.io/badge/tests-2800%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
 [![Test Projects](https://img.shields.io/badge/test%20projects-44-brightgreen)](./tests/)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
-[![License](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](./LICENSE)
-
-[Website](https://cloudhealthoffice.com) · [Demo Portal](https://portal.cloudhealthoffice.com) · [API Docs](https://api.cloudhealthoffice.com) · [Contact Sales](mailto:sales@cloudhealthoffice.com)
+[![License](https://img.shields.io/badge/license-BSL%201.1-orange.s
+[Contact Sales](mailto:sales@cloudhealthoffice.com)
 
 </div>
 
