@@ -1,0 +1,36 @@
+# Cloudflare Pages headers
+# Migrated from staticwebapp.config.json "globalHeaders" + per-route headers.
+# Syntax: a path pattern on its own line, followed by indented "Header: value".
+#
+# mimeTypes from the SWA config were intentionally dropped — Cloudflare Pages
+# sets Content-Type automatically from the file extension (.svg -> image/svg+xml,
+# .css -> text/css, .js -> text/javascript, .json -> application/json,
+# .xml -> application/xml, .txt -> text/plain, .html -> text/html).
+
+# Global security headers (from globalHeaders)
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+
+# HTML pages: short cache
+/*.html
+  Cache-Control: public, max-age=3600
+
+# Fingerprint-free static assets: long, immutable cache
+/css/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/js/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/graphics/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Crawl files: short cache (Content-Type is set automatically by extension)
+/sitemap.xml
+  Cache-Control: public, max-age=3600
+
+/robots.txt
+  Cache-Control: public, max-age=3600
