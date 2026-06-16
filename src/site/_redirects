@@ -3,10 +3,11 @@
 # Syntax: <from>  <to>  <status>   (first match wins, top to bottom)
 #   301 = permanent redirect, 302 = temporary, 200 = rewrite/proxy (URL unchanged)
 #
-# NOTE: Cloudflare Pages already serves clean URLs natively (a request for
-# /pricing serves pricing.html, and /pricing.html 308-redirects to /pricing).
-# These explicit rules are kept to preserve the exact 301 canonicalization and
-# rewrite mapping from the original Azure SWA config.
+# NOTE: These explicit rules define clean-URL behavior independently of any
+# Cloudflare Pages "Clean URLs" project setting. The 301 rules pin each
+# .html -> clean-URL canonicalization to a 301, and the 200 rules map each
+# clean URL back to its .html file. This mirrors the original Azure SWA route
+# config exactly and does not rely on Pages' default redirect behavior.
 
 # ---------------------------------------------------------------------------
 # Canonical redirects: *.html  ->  clean URL (301 permanent)
