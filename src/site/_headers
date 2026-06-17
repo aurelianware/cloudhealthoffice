@@ -1,0 +1,36 @@
+# Cloudflare Pages headers
+# Migrated from staticwebapp.config.json "globalHeaders" + per-route headers.
+# Syntax: a path pattern on its own line, followed by indented "Header: value".
+#
+# mimeTypes from the SWA config were intentionally dropped — Cloudflare Pages
+# sets Content-Type automatically from the file extension (.svg -> image/svg+xml,
+# .css -> text/css, .js -> text/javascript, .json -> application/json,
+# .xml -> application/xml, .txt -> text/plain, .html -> text/html).
+#
+# IMPORTANT — path matching: Cloudflare Pages matches _headers patterns against
+# the REQUEST path, not the file that is ultimately served. Because pages are
+# served at clean URLs (e.g. /pricing, rewritten to /pricing.html via
+# _redirects), a "/*.html" rule would never match those requests. So the HTML
+# cache policy is set as the default on "/*" instead, and the long-lived asset
+# caches override it on their more specific paths. (When multiple rules match,
+# the more specific path wins for a conflicting header; "/*" is listed first so
+# the behavior is unambiguous under either precedence interpretation.)
+
+# Global: security headers + default short cache (covers HTML at clean URLs,
+# /sitemap.xml, /robots.txt, and anything else not overridden below)
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Cache-Control: public, max-age=3600
+
+# Fingerprint-free static assets: long, immutable cache (overrides the default)
+/css/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/js/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/graphics/*
+  Cache-Control: public, max-age=31536000, immutable

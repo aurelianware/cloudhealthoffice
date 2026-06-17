@@ -1,0 +1,66 @@
+# Cloudflare Pages redirects & rewrites
+# Migrated from staticwebapp.config.json "routes".
+# Syntax: <from>  <to>  <status>   (first match wins, top to bottom)
+#   301 = permanent redirect, 302 = temporary, 200 = rewrite/proxy (URL unchanged)
+#
+# NOTE: These explicit rules define clean-URL behavior independently of any
+# Cloudflare Pages "Clean URLs" project setting. The 301 rules pin each
+# .html -> clean-URL canonicalization to a 301, and the 200 rules map each
+# clean URL back to its .html file. This mirrors the original Azure SWA route
+# config exactly and does not rely on Pages' default redirect behavior.
+
+# ---------------------------------------------------------------------------
+# Canonical redirects: *.html  ->  clean URL (301 permanent)
+# ---------------------------------------------------------------------------
+/index.html                                /                                  301
+/solutions-payers.html                     /solutions-payers                  301
+/solutions-providers.html                  /solutions-providers               301
+/pricing.html                              /pricing                           301
+/platform.html                             /platform                          301
+/assessment.html                           /assessment                        301
+/insights.html                             /insights                          301
+/release-notes.html                        /release-notes                     301
+/legal/privacy-policy.html                 /legal/privacy-policy              301
+/login.html                                /login                             301
+/docs/quickstart.html                      /docs/quickstart                   301
+/docs/compliance.html                      /docs/compliance                   301
+/docs/architecture.html                    /docs/architecture                 301
+/docs/api.html                             /docs/api                          301
+/docs/deployment.html                      /docs/deployment                   301
+/docs/finance-guide.html                   /docs/finance-guide                301
+/docs/terminology-guide.html               /docs/terminology-guide            301
+/docs/provider-verification-guide.html     /docs/provider-verification-guide  301
+/docs/commercial-licensing.html            /docs/commercial-licensing         301
+
+# ---------------------------------------------------------------------------
+# Rewrites: clean URL  ->  *.html (200, URL stays clean)
+# ---------------------------------------------------------------------------
+/solutions-payers                          /solutions-payers.html             200
+/solutions-providers                       /solutions-providers.html          200
+/pricing                                   /pricing.html                      200
+/platform                                  /platform.html                     200
+/assessment                                /assessment.html                   200
+/insights                                  /insights.html                     200
+/release-notes                             /release-notes.html                200
+/legal/privacy-policy                      /legal/privacy-policy.html         200
+/login                                     /login.html                        200
+/docs                                      /docs/index.html                   200
+/docs/quickstart                           /docs/quickstart.html              200
+/docs/compliance                           /docs/compliance.html              200
+/docs/architecture                         /docs/architecture.html            200
+/docs/api                                  /docs/api.html                     200
+/docs/deployment                           /docs/deployment.html              200
+/docs/finance-guide                        /docs/finance-guide.html           200
+/docs/terminology-guide                    /docs/terminology-guide.html       200
+/docs/provider-verification-guide          /docs/provider-verification-guide.html  200
+/docs/commercial-licensing                 /docs/commercial-licensing.html    200
+
+# ---------------------------------------------------------------------------
+# NOT migrated here (cannot be done with file-based config):
+#   - /portal/*  and  /api/*  were gated by Azure AD (allowedRoles:
+#     authenticated). Protect these with Cloudflare Access (Zero Trust)
+#     instead. See CLOUDFLARE_MIGRATION.md.
+#   - The 401 -> /.auth/login/aad override is Azure-specific and is dropped.
+#   - navigationFallback / 404 rewrite -> handled by 404.html (multi-page
+#     site: a SPA catch-all is intentionally NOT added).
+# ---------------------------------------------------------------------------

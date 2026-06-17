@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page Not Found — Cloud Health Office</title>
+  <meta name="robots" content="noindex, follow" />
+  <link rel="icon" href="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <style>
+    /* Self-contained fallback so the 404 renders even if sentinel.css is missing */
+    :root {
+      --absolute-black: #000000;
+      --light-gray: #b0b0b0;
+      --neon-cyan: #00ffff;
+      --neon-green: #00ff88;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--absolute-black, #000);
+      color: var(--light-gray, #b0b0b0);
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      text-align: center;
+      padding: 24px;
+    }
+    .panel { max-width: 640px; }
+    .code {
+      font-size: clamp(72px, 18vw, 160px);
+      font-weight: 700;
+      line-height: 1;
+      margin: 0;
+      color: var(--neon-cyan, #00ffff);
+      text-shadow: 0 0 24px rgba(0, 255, 255, 0.5);
+    }
+    h1 { font-size: 1.6rem; margin: 16px 0 8px; color: #fff; }
+    p { font-size: 1.05rem; line-height: 1.6; margin: 0 0 32px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+    .btn {
+      display: inline-block;
+      padding: 12px 24px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 700;
+      border: 1px solid var(--neon-cyan, #00ffff);
+    }
+    .btn-primary { background: var(--neon-cyan, #00ffff); color: var(--absolute-black, #000); }
+    .btn-secondary { background: transparent; color: var(--neon-cyan, #00ffff); }
+    .links { margin-top: 32px; font-size: 0.95rem; }
+    .links a { color: var(--neon-green, #00ff88); margin: 0 10px; text-decoration: none; }
+    .links a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <p class="code">404</p>
+    <h1>Page not found</h1>
+    <p>The page you're looking for doesn't exist or may have moved.<br />Let's get you back on track.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/">Go to homepage</a>
+      <a class="btn btn-secondary" href="/platform">Explore the platform</a>
+    </div>
+    <nav class="links" aria-label="Helpful links">
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Documentation</a>
+      <a href="/solutions-payers">For payers</a>
+      <a href="/solutions-providers">For providers</a>
+      <a href="/insights">Insights</a>
+    </nav>
+  </main>
+</body>
+</html>
