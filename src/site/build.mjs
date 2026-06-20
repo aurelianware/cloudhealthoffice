@@ -1,7 +1,19 @@
 import { cpSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const siteRoot = process.cwd();
+const scriptDir = fileURLToPath(new URL('.', import.meta.url)).replace(/[\\/]$/, '');
+
+if (siteRoot !== scriptDir) {
+  console.error(
+    `Error: build.mjs must be run from the src/site directory.\n` +
+    `  Expected: ${scriptDir}\n` +
+    `  Current:  ${siteRoot}`
+  );
+  process.exit(1);
+}
+
 const outputDir = join(siteRoot, 'dist');
 const ignoredEntries = new Set([
   '.dockerignore',
