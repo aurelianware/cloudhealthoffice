@@ -8,7 +8,9 @@
           "clientSecretSettingName": "AZURE_AD_CLIENT_SECRET"
         },
         "login": {
-          "loginParameters": ["domain_hint=organizations"]
+          "loginParameters": [
+            "domain_hint=organizations"
+          ]
         },
         "userDetailsClaim": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
       }
@@ -174,8 +176,17 @@
       "statusCode": 301
     },
     {
+      "route": "/contact.html",
+      "redirect": "/contact",
+      "statusCode": 301
+    },
+    {
       "route": "/docs/commercial-licensing",
       "rewrite": "/docs/commercial-licensing.html"
+    },
+    {
+      "route": "/contact",
+      "rewrite": "/contact.html"
     },
     {
       "route": "/login.html",
@@ -188,11 +199,15 @@
     },
     {
       "route": "/portal/*",
-      "allowedRoles": ["authenticated"]
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/*",
-      "allowedRoles": ["authenticated"]
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/sitemap.xml",
@@ -235,7 +250,17 @@
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/portal/*", "/api/*", "/.auth/*", "/assets/*", "/css/*", "/js/*", "/graphics/*", "/sitemap.xml", "/robots.txt"]
+    "exclude": [
+      "/portal/*",
+      "/api/*",
+      "/.auth/*",
+      "/assets/*",
+      "/css/*",
+      "/js/*",
+      "/graphics/*",
+      "/sitemap.xml",
+      "/robots.txt"
+    ]
   },
   "responseOverrides": {
     "401": {

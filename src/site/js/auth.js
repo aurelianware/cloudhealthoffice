@@ -131,14 +131,13 @@ async function updateNavigation(navSelector = 'nav ul') {
     }
     const userName = await getUserDisplayName();
 
-    // Add user menu
+    // Add user welcome item
     const userMenuItem = document.createElement('li');
     userMenuItem.className = 'auth-link';
-    const portalLink = document.createElement('a');
-    portalLink.href = '/portal/';
-    portalLink.style.color = '#00ff88';
-    portalLink.textContent = `Portal (${userName})`;
-    userMenuItem.appendChild(portalLink);
+    const welcomeSpan = document.createElement('span');
+    welcomeSpan.style.color = '#00ff88';
+    welcomeSpan.textContent = `Welcome, ${userName}`;
+    userMenuItem.appendChild(welcomeSpan);
     nav.appendChild(userMenuItem);
 
     // Add logout link
