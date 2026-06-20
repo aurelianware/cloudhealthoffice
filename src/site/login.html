@@ -255,26 +255,10 @@
   </footer>
 
   <script>
-    // Check if user is already authenticated and redirect to portal
-    (async function checkAuth() {
-      const loadingMessage = document.getElementById('loadingMessage');
-      const loginContent = document.getElementById('loginContent');
-
-      loadingMessage.style.display = 'block';
-      loginContent.style.display = 'none';
-
-      const authenticated = await isAuthenticated();
-
-      if (authenticated) {
-        loadingMessage.textContent = 'Already signed in. Redirecting to portal...';
-        setTimeout(() => {
-          window.location.href = 'https://portal.cloudhealthoffice.com';
-        }, 1000);
-      } else {
-        loadingMessage.style.display = 'none';
-        loginContent.style.display = 'block';
-      }
-    })();
+    // Authentication check removed — portal is no longer publicly available.
+    // All sign-in flows route to /contact.
+    document.getElementById('loadingMessage').style.display = 'none';
+    document.getElementById('loginContent').style.display = 'block';
   </script>
 </body>
 
