@@ -38,7 +38,9 @@ const shouldInclude = (sourcePath) =>
   !/[\\/]dist([\\/]|$)/.test(sourcePath) &&
   !/[\\/]node_modules([\\/]|$)/.test(sourcePath);
 
-const plausibleScriptPattern = /\s*<!-- Privacy-friendly analytics by Plausible -->\s*\n?\s*<script[^>]*src="https:\/\/plausible\.io\/js\/pa-JQNNrBf52mV2BxHPtkLAv\.js"><\/script>\s*\n?\s*<script>window\.plausible[\s\S]*?<\/script>\s*/gi;
+const plausibleCommentPattern = /\s*<!-- Privacy-friendly analytics by Plausible -->\s*/gi;
+const plausibleLoaderPattern = /\s*<script[^>]*src="https:\/\/plausible\.io\/js\/pa-JQNNrBf52mV2BxHPtkLAv\.js"><\/script>\s*/gi;
+const plausibleInlinePattern = /\s*<script>window\.plausible[\s\S]*?<\/script>\s*/gi;
 const analyticsInjection = googleAnalyticsId
   ? [
       '<!-- Google Analytics -->',
@@ -65,7 +67,10 @@ function processHtmlFiles(directory) {
       continue;
     }
 
-    let html = readFileSync(fullPath, 'utf8').replace(plausibleScriptPattern, '\n');
+    let html = readFileSync(fullPath, 'utf8')
+      .replace(plausibleCommentPattern, '\n')
+      .replace(plausibleLoaderPattern, '\n')
+      .replace(plausibleInlinePattern, '\n');
 
     if (analyticsInjection) {
       html = html.replace('</head>', `  ${analyticsInjection}\n</head>`);
