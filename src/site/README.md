@@ -4,6 +4,10 @@
 
 This directory contains the Cloud Health Office marketing website with platform assessment, insights, and documentation.
 
+## Analytics
+
+The site build injects the Google Analytics tag for measurement ID `G-H1HCD5EYPN` into generated HTML artifacts.
+
 ## Structure
 
 ```
