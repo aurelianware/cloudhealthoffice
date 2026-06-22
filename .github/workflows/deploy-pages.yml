@@ -21,7 +21,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      GOOGLE_ANALYTICS_ID: G-H1HCD5EYPN
+      GOOGLE_ANALYTICS_ID: ${{ vars.GOOGLE_ANALYTICS_ID || 'G-H1HCD5EYPN' }}
     defaults:
       run:
         working-directory: src/site

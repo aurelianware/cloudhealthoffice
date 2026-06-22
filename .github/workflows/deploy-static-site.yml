@@ -39,7 +39,7 @@ jobs:
   deploy-site:
     runs-on: ubuntu-latest
     env:
-      GOOGLE_ANALYTICS_ID: G-H1HCD5EYPN
+      GOOGLE_ANALYTICS_ID: ${{ vars.GOOGLE_ANALYTICS_ID || 'G-H1HCD5EYPN' }}
 
     steps:
       - name: Checkout code

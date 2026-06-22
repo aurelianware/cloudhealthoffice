@@ -18,7 +18,7 @@ site/assets/cho-assessment.md  →  [build:site]  →  site/assessment.html
 1. **Source Files**: Markdown content in `site/assets/`
 2. **Build Script**: `site/js/markdown-converter.js` (uses `marked` library)
 3. **Output**: Styled HTML pages in `site/`
-4. **Analytics Injection**: `site/build.mjs` injects the Google Analytics tag for measurement ID `G-H1HCD5EYPN` into built HTML artifacts
+4. **Analytics Injection**: `src/site/build.mjs` injects the Google Analytics tag for measurement ID `G-H1HCD5EYPN` into built HTML artifacts (run as `node build.mjs` from within `src/site`)
 
 ## Running the Build
 

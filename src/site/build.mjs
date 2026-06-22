@@ -16,7 +16,17 @@ if (siteRoot !== scriptDir) {
 }
 
 const outputDir = join(siteRoot, 'dist');
-const googleAnalyticsId = process.env.GOOGLE_ANALYTICS_ID?.trim() || defaultGoogleAnalyticsId;
+const rawGoogleAnalyticsId = process.env.GOOGLE_ANALYTICS_ID;
+const googleAnalyticsId = rawGoogleAnalyticsId === undefined
+  ? defaultGoogleAnalyticsId
+  : rawGoogleAnalyticsId.trim();
+
+if (googleAnalyticsId && !/^G-[A-Z0-9]+$/i.test(googleAnalyticsId)) {
+  console.error(
+    `Error: GOOGLE_ANALYTICS_ID "${googleAnalyticsId}" is not a valid GA4 measurement ID (expected format: G-XXXXXXXXXX)`
+  );
+  process.exit(1);
+}
 const ignoredEntries = new Set([
   '.dockerignore',
   '.gitignore',
@@ -101,7 +111,7 @@ writeFileSync(join(outputDir, '.nojekyll'), '');
 if (googleAnalyticsId) {
   console.log(`Injected Google Analytics ID ${googleAnalyticsId} into site HTML`);
 } else {
-  console.warn('GOOGLE_ANALYTICS_ID is not set; generated site artifact will not include analytics');
+  console.warn('Google Analytics is disabled; generated site artifact will not include analytics');
 }
 
 console.log(`Prepared GitHub Pages artifact in ${outputDir}`);
