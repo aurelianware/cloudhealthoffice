@@ -38,10 +38,19 @@ env:
 jobs:
   deploy-site:
     runs-on: ubuntu-latest
+    env:
+      GOOGLE_ANALYTICS_ID: ${{ vars.GOOGLE_ANALYTICS_ID || 'G-H1HCD5EYPN' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: src/site/package-lock.json
 
       - name: Validate Required Secrets
         shell: bash
@@ -297,13 +306,21 @@ jobs:
             echo "No test-metrics.json found; site will use existing static values"
           fi
 
+      - name: Install site dependencies
+        working-directory: src/site
+        run: npm ci
+
+      - name: Build site artifact
+        working-directory: src/site
+        run: npm run build
+
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ steps.resolve-token.outputs.token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "/src/site"
+          app_location: "/src/site/dist"
           skip_app_build: true
           skip_api_build: true
           production_branch: "main"
