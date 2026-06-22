@@ -4,6 +4,12 @@
 
 This directory contains the Cloud Health Office marketing website with platform assessment, insights, and documentation.
 
+## Analytics
+
+The site build injects the Google Analytics tag for measurement ID `G-H1HCD5EYPN` into generated HTML artifacts.
+To override the default ID, set the `GOOGLE_ANALYTICS_ID` environment variable when running the build (e.g. `GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX npm run build`).
+Setting `GOOGLE_ANALYTICS_ID` to an empty string disables analytics injection entirely.
+
 ## Structure
 
 ```
