@@ -70,6 +70,64 @@
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
+  <!-- ===== FOUNDING PARTNER ANNOUNCEMENT BANNER ===== -->
+  <div id="fp-banner" role="region" aria-label="Founding Partner announcement" style="
+    background: linear-gradient(90deg, #001a0a 0%, #000d1a 50%, #001a0a 100%);
+    border-bottom: 1px solid rgba(0,255,136,0.3);
+    padding: 10px 20px;
+    text-align: center;
+    font-size: 0.9rem;
+    color: rgba(200,200,200,0.9);
+    position: relative;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  ">
+    <span>&#x1F3E5; Seeking our first founding partner &mdash; zero licensing, your cloud.</span>
+    <a href="#founding-partner" style="
+      color: #00ff88;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+    " aria-label="Learn more about the Founding Partner Program">Learn More &rarr;</a>
+    <button id="fp-banner-dismiss" aria-label="Dismiss founding partner banner" style="
+      background: none;
+      border: none;
+      color: rgba(200,200,200,0.5);
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+    ">&times;</button>
+  </div>
+  <script>
+    (function() {
+      var btn = document.getElementById('fp-banner-dismiss');
+      if (btn) {
+        btn.addEventListener('click', function() {
+          var banner = document.getElementById('fp-banner');
+          if (banner) {
+            banner.style.display = 'none';
+            try { sessionStorage.setItem('fp-banner-dismissed', '1'); } catch(e) {}
+          }
+        });
+      }
+      try {
+        if (sessionStorage.getItem('fp-banner-dismissed')) {
+          var banner = document.getElementById('fp-banner');
+          if (banner) banner.style.display = 'none';
+        }
+      } catch(e) {}
+    })();
+  </script>
+
   <!-- ===== NAVIGATION ===== -->
   <nav>
     <div class="nav-inner">
@@ -86,6 +144,7 @@
           <li><a href="/platform">Platform</a></li>
           <li><a href="/docs">Docs</a></li>
           <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="#founding-partner" style="color:#00ff88; font-weight:bold;">Founding Partner</a></li>
           <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
         </ul>
       </div>
@@ -113,40 +172,520 @@
         <div class="hero-badge">v4.0.0 &nbsp;&middot;&nbsp; Production SaaS &nbsp;&middot;&nbsp; 2,800 Tests &nbsp;&middot;&nbsp; Zero Vulnerabilities</div>
 
         <h1 class="hero-headline">
-          CMS-0057-F Compliance<br>
-          Without Replacing Your<br>
-          Core Admin System
+          Be Ready for CMS-0057-F.<br>
+          On Your Terms.
         </h1>
 
         <p class="hero-subheadline">
-          Meet the CMS interoperability mandate on your existing QNXT, Facets, or HealthEdge platform.<br>
-          Augment now. Modernize at your pace. <strong style="color:#00ff88;">Replace later &mdash; only if you want to.</strong>
+          CloudHealthOffice deploys in your own cloud subscription &mdash; no vendor lock-in, no data leaving your walls.<br>
+          We&rsquo;re selecting a founding partner to validate together. <strong style="color:#00ff88;">Zero licensing cost to start.</strong>
         </p>
 
         <div class="hero-cta">
-          <a href="/contact"
+          <a href="#founding-partner-form"
              class="button"
-             style="font-size:1.05rem; padding:15px 38px;">Contact Sales &rarr;</a>
-          <a href="/contact"
+             style="font-size:1.05rem; padding:15px 38px;">Apply to Be a Founding Partner &rarr;</a>
+          <a href="#cms-explainer"
              class="button button-secondary"
-             style="font-size:1.05rem; padding:15px 38px;">Contact Sales</a>
+             style="font-size:1.05rem; padding:15px 38px;">Learn about CMS-0057-F readiness &rarr;</a>
           <a href="https://github.com/aurelianware/cloudhealthoffice"
              class="button button-secondary"
              style="font-size:1.05rem; padding:15px 38px;"
              target="_blank" rel="noopener noreferrer">View Source &rarr;</a>
-          <a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access"
-             class="button button-secondary"
-             style="font-size:1.05rem; padding:15px 38px;"
-             target="_blank" rel="noopener noreferrer">CMS 0057-F Patient Access &rarr;</a>
-          <a href="/pricing-api"
-             class="button button-secondary"
-             style="font-size:1.05rem; padding:15px 38px;"
-             target="_blank" rel="noopener noreferrer">Claims Repricing API</a>                      
         </div>
       </div>
 
       <div class="hero-scroll-hint" aria-hidden="true">&darr; SCROLL</div>
     </section>
+
+    <!-- ===== CMS-0057-F EXPLAINER STRIP ===== -->
+    <section id="cms-explainer" aria-label="Why CMS-0057-F changes everything" style="
+      background: linear-gradient(90deg, #000d1a 0%, #001a0a 50%, #000d1a 100%);
+      border-top: 1px solid rgba(0,255,136,0.2);
+      border-bottom: 1px solid rgba(0,255,136,0.2);
+      padding: 40px 24px;
+    ">
+      <div style="max-width: 860px; margin: 0 auto; text-align: center;">
+        <span class="section-eyebrow" style="color:#00ff88;">CMS-0057-F</span>
+        <h2 style="font-size: clamp(1.4rem, 3vw, 2rem); color:#00ff88; text-shadow:0 0 20px rgba(0,255,136,0.3); margin: 12px 0 20px 0;">
+          Why CMS-0057-F Changes Everything
+        </h2>
+        <p style="font-size: 1rem; color: rgba(200,200,200,0.85); line-height: 1.75; margin: 0 auto 24px auto; max-width: 720px;">
+          The Making Care Primary (MCP) model under CMS-0057-F accelerates ACO accountability for total cost of care,
+          requiring ACOs and primary care practices to demonstrate real-time care coordination and accurate attribution
+          well before the compliance window closes. Health systems that wait until 2026 will spend the following year
+          firefighting, not transforming.
+          <br><br>
+          The organizations that engage now &mdash; validating workflows, building attribution logic, and proving
+          interoperability &mdash; will enter the compliance window with a working system, not a procurement.
+        </p>
+        <a href="/cms-0057f-compliance" class="button button-secondary" style="font-size:0.95rem; padding:12px 28px;">
+          Read the CMS-0057-F Summary &rarr;
+        </a>
+      </div>
+    </section>
+
+    <!-- ===== FOUNDING PARTNER PROGRAM ===== -->
+    <section id="founding-partner" aria-labelledby="fp-section-heading" style="
+      padding: 80px 24px;
+      background: linear-gradient(180deg, #000 0%, #050510 100%);
+    ">
+      <div class="section-wrapper">
+        <div class="section-header">
+          <span class="section-eyebrow" style="color:#00ff88;">Limited Availability</span>
+          <h2 id="fp-section-heading" class="section-title" style="color:#00ff88; text-shadow:0 0 30px rgba(0,255,136,0.3);">
+            Founding Partner Program
+          </h2>
+          <p class="section-subtitle">
+            We are partnering with one healthcare organization to deploy CloudHealthOffice in their own cloud
+            subscription, co-develop priority workflows, and validate CMS-0057-F readiness together &mdash;
+            at zero licensing cost.
+          </p>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature-card" style="border-color: rgba(0,255,136,0.2);">
+            <div class="feature-icon" aria-hidden="true">&#x2601;&#xFE0F;</div>
+            <h3 style="color:#00ff88;">Zero Licensing Cost</h3>
+            <p>Host on your Azure, AWS, or GCP subscription. We provide the platform. You own your data &mdash; and keep ownership permanently, regardless of what happens to the vendor relationship.</p>
+          </div>
+
+          <div class="feature-card" style="border-color: rgba(0,255,136,0.2);">
+            <div class="feature-icon" aria-hidden="true">&#x1F4CB;</div>
+            <h3 style="color:#00ff88;">Shape the Roadmap</h3>
+            <p>Co-develop features that solve your specific workflows. Your clinical priorities drive ours. As a founding partner, your pain points become our sprint priorities &mdash; not a future roadmap item.</p>
+          </div>
+
+          <div class="feature-card" style="border-color: rgba(0,255,136,0.2);">
+            <div class="feature-icon" aria-hidden="true">&#x2705;</div>
+            <h3 style="color:#00ff88;">CMS-0057-F Ready</h3>
+            <p>Validate your care coordination and attribution workflows now, before the compliance window closes. Go live with documentation, audit trails, and tested logic &mdash; not a rushed implementation.</p>
+          </div>
+        </div>
+
+        <p style="
+          text-align: center;
+          margin-top: 40px;
+          font-size: 0.95rem;
+          color: rgba(200,200,200,0.6);
+          font-style: italic;
+        ">
+          We are selecting one founding partner. Application closes soon.
+        </p>
+
+        <div style="text-align: center; margin-top: 32px;">
+          <a href="#founding-partner-form" class="button" style="font-size:1rem; padding:14px 36px;">
+            Apply to Be a Founding Partner &rarr;
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== HOW IT WORKS (BYOS 3-STEP) ===== -->
+    <section aria-labelledby="how-it-works-heading" style="
+      padding: 80px 24px;
+      background: #000;
+      border-top: 1px solid rgba(0,255,255,0.08);
+    ">
+      <div class="section-wrapper">
+        <div class="section-header">
+          <span class="section-eyebrow">The Process</span>
+          <h2 id="how-it-works-heading" class="section-title">How It Works</h2>
+          <p class="section-subtitle">From application to production in under 8 weeks &mdash; in your own cloud subscription.</p>
+        </div>
+
+        <div style="
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 32px;
+          margin-top: 48px;
+          counter-reset: step-counter;
+        ">
+          <div style="
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(0,255,255,0.12);
+            border-radius: 12px;
+            padding: 36px 28px;
+            position: relative;
+          ">
+            <div aria-hidden="true" style="
+              width: 40px; height: 40px;
+              border-radius: 50%;
+              background: rgba(0,255,255,0.1);
+              border: 1px solid rgba(0,255,255,0.3);
+              display: flex; align-items: center; justify-content: center;
+              font-size: 1.1rem; font-weight: 700; color: #00ffff;
+              margin-bottom: 20px;
+            ">1</div>
+            <h3 style="font-size: 1.15rem; margin-bottom: 10px;">Apply and align on scope</h3>
+            <p style="font-size: 0.9rem; color: rgba(176,176,176,0.75); line-height: 1.65;">
+              We learn your current stack, your CMS-0057-F priorities, and the workflows that matter most.
+              Together we define a focused first milestone.
+            </p>
+            <p style="font-size: 0.82rem; color: rgba(0,255,255,0.5); margin-top: 14px; font-weight: 600;">1&ndash;2 weeks</p>
+          </div>
+
+          <div style="
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(0,255,255,0.12);
+            border-radius: 12px;
+            padding: 36px 28px;
+          ">
+            <div aria-hidden="true" style="
+              width: 40px; height: 40px;
+              border-radius: 50%;
+              background: rgba(0,255,255,0.1);
+              border: 1px solid rgba(0,255,255,0.3);
+              display: flex; align-items: center; justify-content: center;
+              font-size: 1.1rem; font-weight: 700; color: #00ffff;
+              margin-bottom: 20px;
+            ">2</div>
+            <h3 style="font-size: 1.15rem; margin-bottom: 10px;">Deploy to your subscription</h3>
+            <p style="font-size: 0.9rem; color: rgba(176,176,176,0.75); line-height: 1.65;">
+              We handle the full infrastructure setup in your Azure, AWS, or GCP environment. Your team watches
+              and approves &mdash; no black-box vendor access, no data ever leaves your walls.
+            </p>
+            <p style="font-size: 0.82rem; color: rgba(0,255,255,0.5); margin-top: 14px; font-weight: 600;">2&ndash;4 weeks</p>
+          </div>
+
+          <div style="
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(0,255,255,0.12);
+            border-radius: 12px;
+            padding: 36px 28px;
+          ">
+            <div aria-hidden="true" style="
+              width: 40px; height: 40px;
+              border-radius: 50%;
+              background: rgba(0,255,255,0.1);
+              border: 1px solid rgba(0,255,255,0.3);
+              display: flex; align-items: center; justify-content: center;
+              font-size: 1.1rem; font-weight: 700; color: #00ffff;
+              margin-bottom: 20px;
+            ">3</div>
+            <h3 style="font-size: 1.15rem; margin-bottom: 10px;">Go live &amp; co-develop</h3>
+            <p style="font-size: 0.9rem; color: rgba(176,176,176,0.75); line-height: 1.65;">
+              Your team is live in production. We run joint sprints to build out workflows, tune attribution
+              logic, and prioritize your roadmap based on real-world findings.
+            </p>
+            <p style="font-size: 0.82rem; color: rgba(0,255,136,0.5); margin-top: 14px; font-weight: 600;">Ongoing collaboration</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SOCIAL PROOF PLACEHOLDER ===== -->
+    <section aria-label="Partner results" style="
+      padding: 60px 24px;
+      background: linear-gradient(180deg, #050510 0%, #000 100%);
+      border-top: 1px solid rgba(0,255,255,0.08);
+      text-align: center;
+    ">
+      <div style="max-width: 760px; margin: 0 auto;">
+        <span class="section-eyebrow">Early Results</span>
+        <h2 class="section-title" style="margin-top: 12px;">Results Coming Soon</h2>
+        <p style="font-size: 1rem; color: rgba(200,200,200,0.7); line-height: 1.75; margin-bottom: 40px;">
+          Founding partner onboarding is in progress &mdash; results will be published Q3 2026.
+        </p>
+
+        <div style="
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px dashed rgba(0,255,255,0.2);
+          border-radius: 12px;
+          padding: 32px 60px;
+          min-width: 240px;
+          color: rgba(0,255,255,0.35);
+          font-size: 0.85rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        " aria-label="Placeholder for founding partner logo">
+          Your logo here
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== FOUNDING PARTNER APPLICATION FORM ===== -->
+    <section id="founding-partner-form" aria-labelledby="fp-form-heading" style="
+      padding: 80px 24px;
+      background: #000;
+      border-top: 1px solid rgba(0,255,136,0.2);
+    ">
+      <div style="max-width: 680px; margin: 0 auto;">
+        <div class="section-header" style="text-align: center; margin-bottom: 48px;">
+          <span class="section-eyebrow" style="color:#00ff88;">One partner. No cost. Your cloud.</span>
+          <h2 id="fp-form-heading" class="section-title" style="color:#00ff88; text-shadow:0 0 30px rgba(0,255,136,0.3); margin-top:12px;">
+            Apply for Founding Partner Access
+          </h2>
+          <p class="section-subtitle">
+            Tell us about your organization and your CMS-0057-F priorities.
+            We respond to every application personally within 2 business days.
+          </p>
+        </div>
+
+        <form id="fpApplicationForm" novalidate style="display: block;" aria-label="Founding partner application form">
+
+          <div style="margin-bottom: 22px;">
+            <label for="fp-org-name" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
+              Organization Name <span aria-hidden="true" style="color:#00ff88;">*</span>
+            </label>
+            <input type="text" id="fp-org-name" name="org_name" required
+              placeholder="e.g., Lakeside ACO"
+              style="
+                width: 100%; padding: 12px 16px;
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(0,255,255,0.2);
+                border-radius: 8px;
+                color: #fff; font-size: 0.95rem;
+                outline: none;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+              "
+              onfocus="this.style.borderColor='rgba(0,255,255,0.6)'"
+              onblur="this.style.borderColor='rgba(0,255,255,0.2)'"
+            />
+          </div>
+
+          <div style="margin-bottom: 22px;">
+            <label for="fp-title" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
+              Your Title / Role <span aria-hidden="true" style="color:#00ff88;">*</span>
+            </label>
+            <input type="text" id="fp-title" name="title" required
+              placeholder="e.g., VP of Clinical Operations"
+              style="
+                width: 100%; padding: 12px 16px;
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(0,255,255,0.2);
+                border-radius: 8px;
+                color: #fff; font-size: 0.95rem;
+                outline: none;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+              "
+              onfocus="this.style.borderColor='rgba(0,255,255,0.6)'"
+              onblur="this.style.borderColor='rgba(0,255,255,0.2)'"
+            />
+          </div>
+
+          <div style="margin-bottom: 22px;">
+            <label for="fp-email" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
+              Work Email <span aria-hidden="true" style="color:#00ff88;">*</span>
+            </label>
+            <input type="email" id="fp-email" name="email" required
+              placeholder="you@organization.org"
+              style="
+                width: 100%; padding: 12px 16px;
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(0,255,255,0.2);
+                border-radius: 8px;
+                color: #fff; font-size: 0.95rem;
+                outline: none;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+              "
+              onfocus="this.style.borderColor='rgba(0,255,255,0.6)'"
+              onblur="this.style.borderColor='rgba(0,255,255,0.2)'"
+            />
+          </div>
+
+          <div style="margin-bottom: 22px;">
+            <label for="fp-org-type" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
+              Organization Type <span aria-hidden="true" style="color:#00ff88;">*</span>
+            </label>
+            <select id="fp-org-type" name="org_type" required
+              style="
+                width: 100%; padding: 12px 16px;
+                background: rgba(10,10,10,0.9);
+                border: 1px solid rgba(0,255,255,0.2);
+                border-radius: 8px;
+                color: #fff; font-size: 0.95rem;
+                outline: none;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+                appearance: none;
+                cursor: pointer;
+              "
+              onfocus="this.style.borderColor='rgba(0,255,255,0.6)'"
+              onblur="this.style.borderColor='rgba(0,255,255,0.2)'"
+            >
+              <option value="" style="background:#0a0a0a;">Select organization type&hellip;</option>
+              <option value="aco" style="background:#0a0a0a;">ACO (Accountable Care Organization)</option>
+              <option value="health_system" style="background:#0a0a0a;">Health System</option>
+              <option value="physician_group" style="background:#0a0a0a;">Physician Group / Medical Group</option>
+              <option value="other" style="background:#0a0a0a;">Other</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 22px;">
+            <label for="fp-ehr" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
+              Current EHR
+            </label>
+            <input type="text" id="fp-ehr" name="ehr"
+              placeholder="e.g., Epic, Cerner, athenahealth"
+              style="
+                width: 100%; padding: 12px 16px;
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(0,255,255,0.2);
+                border-radius: 8px;
+                color: #fff; font-size: 0.95rem;
+                outline: none;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+              "
+              onfocus="this.style.borderColor='rgba(0,255,255,0.6)'"
+              onblur="this.style.borderColor='rgba(0,255,255,0.2)'"
+            />
+          </div>
+
+          <div style="margin-bottom: 32px;">
+            <label for="fp-concern" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
+              What&rsquo;s your biggest CMS-0057-F concern? <span aria-hidden="true" style="color:#00ff88;">*</span>
+            </label>
+            <textarea id="fp-concern" name="concern" required rows="4"
+              placeholder="e.g., We don't have real-time prior auth workflows in place, and our attribution data is inconsistent..."
+              style="
+                width: 100%; padding: 12px 16px;
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(0,255,255,0.2);
+                border-radius: 8px;
+                color: #fff; font-size: 0.95rem;
+                outline: none;
+                resize: vertical;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+                font-family: inherit;
+                line-height: 1.6;
+              "
+              onfocus="this.style.borderColor='rgba(0,255,255,0.6)'"
+              onblur="this.style.borderColor='rgba(0,255,255,0.2)'"
+            ></textarea>
+          </div>
+
+          <div id="fp-form-error" role="alert" aria-live="polite" style="
+            display: none;
+            background: rgba(255,60,60,0.1);
+            border: 1px solid rgba(255,60,60,0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 0.88rem;
+            color: rgba(255,120,120,0.9);
+            margin-bottom: 20px;
+          "></div>
+
+          <button type="submit" id="fp-submit-btn" style="
+            width: 100%;
+            padding: 16px 32px;
+            background: linear-gradient(90deg, #00c060, #00ff88);
+            color: #000;
+            font-size: 1rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            transition: opacity 0.2s, transform 0.1s;
+          "
+            onmouseover="this.style.opacity='0.9'"
+            onmouseout="this.style.opacity='1'"
+          >
+            Apply for Founding Partner Access
+          </button>
+
+          <p style="text-align:center; margin-top:16px; font-size:0.82rem; color:rgba(128,128,128,0.5);">
+            We respond personally to every application within 2 business days. No automated queues.
+          </p>
+        </form>
+
+        <!-- Success state -->
+        <div id="fp-form-success" role="status" aria-live="polite" style="
+          display: none;
+          background: rgba(0,255,136,0.06);
+          border: 1px solid rgba(0,255,136,0.3);
+          border-radius: 12px;
+          padding: 40px 32px;
+          text-align: center;
+        ">
+          <div style="font-size: 2.5rem; margin-bottom: 16px;" aria-hidden="true">&#x2705;</div>
+          <h3 style="color: #00ff88; margin-bottom: 12px;">Application Received</h3>
+          <p style="color: rgba(200,200,200,0.85); font-size: 0.95rem; line-height: 1.7;">
+            Thank you for applying to the Cloud Health Office Founding Partner Program.
+            We&rsquo;ll review your application and respond personally within 2 business days.
+          </p>
+          <p style="margin-top: 20px; font-size: 0.85rem; color: rgba(128,128,128,0.6);">
+            Questions in the meantime? Email <a href="mailto:partners@cloudhealthoffice.com" style="color:#00ff88;">partners@cloudhealthoffice.com</a>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <script>
+    (function() {
+      var form = document.getElementById('fpApplicationForm');
+      if (!form) return;
+
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        var errorEl = document.getElementById('fp-form-error');
+        var submitBtn = document.getElementById('fp-submit-btn');
+        errorEl.style.display = 'none';
+
+        // Basic validation
+        var orgName = document.getElementById('fp-org-name').value.trim();
+        var title = document.getElementById('fp-title').value.trim();
+        var email = document.getElementById('fp-email').value.trim();
+        var orgType = document.getElementById('fp-org-type').value;
+        var concern = document.getElementById('fp-concern').value.trim();
+
+        if (!orgName || !title || !email || !orgType || !concern) {
+          errorEl.textContent = 'Please fill in all required fields before submitting.';
+          errorEl.style.display = 'block';
+          errorEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          return;
+        }
+
+        var emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(email)) {
+          errorEl.textContent = 'Please enter a valid work email address.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        // Show success state
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Sending\u2026';
+
+        // Build mailto body
+        var ehr = document.getElementById('fp-ehr').value.trim() || 'Not specified';
+        var body = [
+          'Organization: ' + orgName,
+          'Title/Role: ' + title,
+          'Email: ' + email,
+          'Organization Type: ' + orgType,
+          'EHR: ' + ehr,
+          '',
+          'CMS-0057-F Concern:',
+          concern
+        ].join('\n');
+
+        var mailtoHref = 'mailto:partners@cloudhealthoffice.com'
+          + '?subject=' + encodeURIComponent('Founding Partner Application — ' + orgName)
+          + '&body=' + encodeURIComponent(body);
+
+        // Show success UI
+        form.style.display = 'none';
+        document.getElementById('fp-form-success').style.display = 'block';
+        document.getElementById('fp-form-success').scrollIntoView({ behavior: 'smooth' });
+
+        // Open email client after brief delay
+        setTimeout(function() {
+          window.location.href = mailtoHref;
+        }, 400);
+      });
+    })();
+    </script>
 
     <!-- ===== PORTFOLIO ===== -->
     <section aria-label="Four product lines portfolio">
@@ -620,29 +1159,29 @@
     <!-- ===== FINAL CTA ===== -->
     <section class="cta-full-section" id="schedule-demo">
       <div style="position:relative; z-index:10; max-width:820px; margin:0 auto;">
-        <div class="hero-badge" style="margin-bottom:36px; opacity:1; animation:none;">Currently Accepting Pilot Deployments &mdash; 2026</div>
+        <div class="hero-badge" style="margin-bottom:36px; opacity:1; animation:none;">Currently Selecting One Founding Partner &mdash; Zero Licensing Cost</div>
 
         <h2 class="cta-headline">
-          Meet CMS-0057-F on your<br>
-          <span>existing core admin system.</span>
+          Be Ready for CMS-0057-F.<br>
+          <span>On your terms.</span>
         </h2>
 
         <p style="font-size:1.15rem; color:rgba(176,176,176,0.8); margin:24px 0 48px 0; line-height:1.75; position:relative;">
-          For Medicaid MCOs, Medicare Advantage, and commercial payers running QNXT, Facets, HealthEdge, or legacy platforms.<br>
-          <strong style="color:white;">Compliance in weeks. Modernization on your timeline. Full replacement only if you choose it.</strong>
+          For ACOs, health systems, and physician groups preparing for the Making Care Primary model.<br>
+          <strong style="color:white;">Deploy in your own cloud. Zero licensing to start. Co-develop your roadmap.</strong>
         </p>
 
         <div class="hero-cta" style="position:relative; opacity:1; animation:none;">
-          <a href="/contact"
+          <a href="#founding-partner-form"
              class="button"
-             style="font-size:1.1rem; padding:17px 48px;">Contact Sales &rarr;</a>
+             style="font-size:1.1rem; padding:17px 48px;">Apply to Be a Founding Partner &rarr;</a>
           <a href="/contact"
              class="button button-secondary"
-             style="font-size:1.1rem; padding:17px 48px;">Contact Sales &rarr;</a>
+             style="font-size:1.1rem; padding:17px 48px;">Contact Sales</a>
         </div>
 
         <p style="margin-top:28px; font-size:0.93rem; color:rgba(128,128,128,0.65); position:relative;">
-          Questions? Email <a href="mailto:sales@cloudhealthoffice.com" style="color:#00ff88;">sales@cloudhealthoffice.com</a>
+          Questions? Email <a href="mailto:partners@cloudhealthoffice.com" style="color:#00ff88;">partners@cloudhealthoffice.com</a>
         </p>
       </div>
     </section>
@@ -682,6 +1221,7 @@
         <div class="footer-col">
           <h5>Contact</h5>
           <ul>
+            <li><a href="#founding-partner">Founding Partner Program</a></li>
             <li><a href="/contact">Contact Sales</a></li>
             <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
             <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
