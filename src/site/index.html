@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cloud Health Office — CMS-0057-F Compliance Layer for Legacy Payer Systems</title>
-  <meta name="description" content="Meet CMS-0057-F without replacing your core admin platform. Cloud Health Office is the compliance and modernization layer for QNXT, Facets, HealthEdge, and legacy payer systems. Modernize now. Replace later." />
-  <meta name="keywords" content="CMS-0057-F compliance, healthcare payer integration platform, FHIR R4 API health plan, X12 EDI to FHIR, healthcare clearinghouse integration, health plan modernization, Medicaid MCO compliance 2027, source-available healthcare platform" />
+  <meta name="description" content="Meet CMS-0057-F without replacing your core admin platform. Cloud Health Office is the compliance and modernization layer for QNXT, Facets, HealthEdge, and legacy payer systems. FHIR R4, X12 EDI, your cloud." />
+  <meta name="keywords" content="CMS-0057-F compliance, healthcare payer integration platform, FHIR R4 API health plan, X12 EDI to FHIR, healthcare clearinghouse integration, health plan modernization" />
   <link rel="canonical" href="https://cloudhealthoffice.com/" />
 
   <!-- Open Graph -->
@@ -13,14 +13,14 @@
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="og:url" content="https://cloudhealthoffice.com/" />
   <meta property="og:title" content="Cloud Health Office — CMS-0057-F Compliance Layer for Legacy Payer Systems" />
-  <meta property="og:description" content="Meet CMS-0057-F without replacing your core admin platform. Cloud Health Office is the compliance and modernization layer for QNXT, Facets, HealthEdge, and legacy payer systems. Modernize now. Replace later." />
+  <meta property="og:description" content="Meet CMS-0057-F without replacing your core admin platform. Cloud Health Office is the compliance and modernization layer for QNXT, Facets, HealthEdge, and legacy payer systems." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:url" content="https://cloudhealthoffice.com/" />
   <meta name="twitter:title" content="Cloud Health Office — CMS-0057-F Compliance Layer for Legacy Payer Systems" />
-  <meta name="twitter:description" content="Meet CMS-0057-F without replacing your core admin platform. Cloud Health Office is the compliance and modernization layer for QNXT, Facets, HealthEdge, and legacy payer systems. Modernize now. Replace later." />
+  <meta name="twitter:description" content="Meet CMS-0057-F without replacing your core admin platform. Cloud Health Office is the compliance and modernization layer for QNXT, Facets, HealthEdge, and legacy payer systems." />
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
 
   <!-- JSON-LD Structured Data -->
@@ -31,7 +31,7 @@
     "name": "Cloud Health Office",
     "url": "https://cloudhealthoffice.com",
     "logo": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg",
-    "description": "Compliance and modernization layer for legacy payer core administration systems. Meet CMS-0057-F without replacing your core admin platform. FHIR R4 APIs, multi-clearinghouse EDI.",
+    "description": "Compliance and modernization layer for legacy payer core administration systems. Meet CMS-0057-F without replacing your core admin platform. FHIR R4 APIs, multi-clearinghouse EDI, and your cloud.",
     "foundingDate": "2024",
     "contactPoint": {
       "@type": "ContactPoint",
@@ -66,6 +66,160 @@
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
   <script src="js/mobile-nav.js"></script>
+  <style>
+    .nav-dropdown {
+      position: relative;
+    }
+
+    .nav-dropdown-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-dropdown-toggle::after {
+      content: '▾';
+      font-size: 0.75em;
+      opacity: 0.7;
+    }
+
+    .nav-dropdown-menu {
+      position: absolute;
+      top: calc(100% + 10px);
+      left: 0;
+      min-width: 240px;
+      background: rgba(5, 5, 10, 0.98);
+      border: 1px solid rgba(0, 255, 255, 0.18);
+      border-radius: 12px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      padding: 10px;
+      display: none;
+      z-index: 1200;
+    }
+
+    .nav-dropdown:hover .nav-dropdown-menu,
+    .nav-dropdown:focus-within .nav-dropdown-menu {
+      display: block;
+    }
+
+    .nav-dropdown-menu a {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+
+    .nav-dropdown-divider {
+      height: 1px;
+      background: rgba(0, 255, 255, 0.12);
+      margin: 8px 4px;
+    }
+
+    .audience-tabs {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    .audience-tab-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+    }
+
+    .audience-tab-button {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(0,255,255,0.18);
+      color: rgba(176,176,176,0.82);
+      border-radius: 999px;
+      padding: 12px 20px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .audience-tab-button:hover,
+    .audience-tab-button:focus-visible {
+      color: #00ffff;
+      border-color: rgba(0,255,255,0.45);
+      outline: none;
+    }
+
+    .audience-tab-button.active {
+      background: rgba(0,255,255,0.08);
+      border-color: rgba(0,255,255,0.42);
+      color: #00ffff;
+      box-shadow: 0 0 24px rgba(0,255,255,0.12);
+    }
+
+    .audience-tab-panel {
+      display: none;
+    }
+
+    .audience-tab-panel.active {
+      display: block;
+    }
+
+    .provider-card-accent {
+      border-color: rgba(0,255,136,0.2);
+    }
+
+    .proof-quote {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 10px 0 10px 28px;
+      border-left: 2px solid #00ff88;
+    }
+
+    .proof-quote-text {
+      margin: 0;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: clamp(1.45rem, 3vw, 2.2rem);
+      line-height: 1.5;
+      font-style: italic;
+      color: rgba(235,235,235,0.95);
+    }
+
+    .proof-quote-byline {
+      margin-top: 18px;
+      color: rgba(176,176,176,0.72);
+      font-size: 0.8rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-variant: small-caps;
+    }
+
+    .schedule-link {
+      display: inline-block;
+      margin-top: 18px;
+      font-size: 0.92rem;
+      color: rgba(176,176,176,0.72);
+      text-decoration: none;
+    }
+
+    .schedule-link:hover,
+    .schedule-link:focus-visible {
+      color: #00ffff;
+    }
+
+    @media (max-width: 960px) {
+      .nav-dropdown-menu {
+        position: static;
+        display: block;
+        min-width: 0;
+        margin-top: 8px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .proof-quote {
+        padding-left: 20px;
+      }
+    }
+  </style>
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
@@ -141,9 +295,17 @@
           <li><a href="/solutions-payers">Solutions</a></li>
           <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
           <li><a href="/pricing">Pricing</a></li>
-          <li><a href="/platform">Platform</a></li>
+          <li class="nav-dropdown">
+            <a href="/platform" class="nav-dropdown-toggle">Platform</a>
+            <div class="nav-dropdown-menu" aria-label="Platform submenu">
+              <a href="/docs/architecture">Architecture</a>
+              <a href="/docs/compliance">CMS-0057-F Guide</a>
+              <a href="/docs/api">API Reference</a>
+              <div class="nav-dropdown-divider" aria-hidden="true"></div>
+              <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a>
+            </div>
+          </li>
           <li><a href="/docs">Docs</a></li>
-          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
           <li><a href="#founding-partner" style="color:#00ff88; font-weight:bold;">Founding Partner</a></li>
           <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
         </ul>
@@ -374,36 +536,92 @@
       </div>
     </section>
 
-    <!-- ===== SOCIAL PROOF PLACEHOLDER ===== -->
-    <section aria-label="Partner results" style="
-      padding: 60px 24px;
+    <!-- ===== WHO IS THIS FOR? ===== -->
+    <section aria-labelledby="audience-heading" style="padding: 0 24px 20px; background: #000;">
+      <div class="section-wrapper" style="padding-bottom: 32px;">
+        <div class="section-header" style="margin-bottom: 40px;">
+          <span class="section-eyebrow">Who is this for?</span>
+          <h2 id="audience-heading" class="section-title">Choose your lens.</h2>
+          <p class="section-subtitle">The same platform meets different teams where they are &mdash; payer infrastructure on one side, MCP and provider-group workflows on the other.</p>
+        </div>
+      </div>
+      <div class="audience-tabs">
+        <div class="audience-tab-buttons" role="tablist" aria-label="Audience tabs">
+          <button type="button" class="audience-tab-button active" id="audience-tab-payers" role="tab" aria-selected="true" aria-controls="audience-panel-payers" data-audience="payers">For Payers</button>
+          <button type="button" class="audience-tab-button" id="audience-tab-aco" role="tab" aria-selected="false" aria-controls="audience-panel-aco" data-audience="aco">For ACOs &amp; Provider Groups</button>
+        </div>
+
+        <div class="audience-tab-panel active" id="audience-panel-payers" role="tabpanel" aria-labelledby="audience-tab-payers">
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="feature-icon" aria-hidden="true">&#9889;</div>
+              <h3>CMS-0057-F Compliance</h3>
+              <p>Complete compliance with the CMS Interoperability and Prior Authorization Rule &mdash; 18 months ahead of the January 2027 deadline. Zero external dependencies.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon" aria-hidden="true">&#128279;</div>
+              <h3>Multi-Clearinghouse EDI</h3>
+              <p>Native connectors for Availity, Change Healthcare, Optum, and Inovalon. Failover capability, zero vendor lock-in, and full business continuity.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon" aria-hidden="true">&#128260;</div>
+              <h3>X12 to FHIR R4 Transformation</h3>
+              <p>Automated transformation of X12 EDI transactions (270/837/278/835) to FHIR R4 resources. Real-time, bidirectional, production-tested at scale.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon" aria-hidden="true">&#127973;</div>
+              <h3>Legacy Core Augmentation</h3>
+              <p>Sits alongside QNXT, Facets, HealthEdge, or Amisys. Reads from your existing system, exposes FHIR R4 APIs &mdash; without touching your core operations.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon" aria-hidden="true">&#128274;</div>
+              <h3>HIPAA-Grade Security</h3>
+              <p>BAA included. Zero known vulnerabilities. End-to-end encryption. Production-ready audit trails and compliance reporting &mdash; out of the box.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon" aria-hidden="true">&#127760;</div>
+              <h3>Flexible Deployment</h3>
+              <p>Kubernetes-native architecture with Argo Workflows on AKS, EKS, or GKE. Container-based microservices with full infrastructure ownership. Deploy to your own subscription.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon" aria-hidden="true">&#128184;</div>
+              <h3>Premium Billing &amp; ACH</h3>
+              <p>Automated monthly premium invoicing with NACHA/ACH file generation, EFT draft lifecycle management, and Stripe ACH integration. Batch billing runs with sponsor-level invoicing and audit trails.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="audience-tab-panel" id="audience-panel-aco" role="tabpanel" aria-labelledby="audience-tab-aco">
+          <div class="feature-grid">
+            <div class="feature-card provider-card-accent">
+              <div class="feature-icon" aria-hidden="true">&#129658;</div>
+              <h3>Care coordination workflow validation</h3>
+              <p>Validate referral, prior auth, and longitudinal care coordination workflows required for MCP model participation &mdash; before performance pressure turns into operational fire drills.</p>
+            </div>
+            <div class="feature-card provider-card-accent">
+              <div class="feature-icon" aria-hidden="true">&#128202;</div>
+              <h3>Attribution logic &amp; total cost of care reporting</h3>
+              <p>Stand up attribution logic, utilization views, and total cost of care reporting that leadership can review with confidence instead of reconciling across disconnected spreadsheets.</p>
+            </div>
+            <div class="feature-card provider-card-accent">
+              <div class="feature-icon" aria-hidden="true">&#128257;</div>
+              <h3>FHIR R4 interoperability without replacing your EHR</h3>
+              <p>Expose FHIR R4 workflows and interoperability layers around Epic, Cerner, athenahealth, or your current stack &mdash; without forcing an EHR rip-and-replace to get moving.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TRUST BRIDGE QUOTE ===== -->
+    <section aria-label="Founding partner proof point" style="
+      padding: 36px 24px 0;
       background: linear-gradient(180deg, #050510 0%, #000 100%);
       border-top: 1px solid rgba(0,255,255,0.08);
-      text-align: center;
     ">
-      <div style="max-width: 760px; margin: 0 auto;">
-        <span class="section-eyebrow">Early Results</span>
-        <h2 class="section-title" style="margin-top: 12px;">Results Coming Soon</h2>
-        <p style="font-size: 1rem; color: rgba(200,200,200,0.7); line-height: 1.75; margin-bottom: 40px;">
-          Founding partner onboarding is in progress &mdash; results will be published Q3 2026.
-        </p>
-
-        <div style="
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border: 2px dashed rgba(0,255,255,0.2);
-          border-radius: 12px;
-          padding: 32px 60px;
-          min-width: 240px;
-          color: rgba(0,255,255,0.35);
-          font-size: 0.85rem;
-          font-weight: 600;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-        " aria-label="Placeholder for founding partner logo">
-          Your logo here
-        </div>
+      <div class="proof-quote">
+        <p class="proof-quote-text">&ldquo;We&rsquo;ve shipped over 50 payer implementations. The first founding partner won&rsquo;t be the experiment &mdash; they&rsquo;ll get 25 years of hard-won patterns, deployed in their environment, at zero licensing cost.&rdquo;</p>
+        <div class="proof-quote-byline">&mdash; Cloud Health Office Team</div>
       </div>
     </section>
 
@@ -425,7 +643,7 @@
           </p>
         </div>
 
-        <form id="fpApplicationForm" novalidate style="display: block;" aria-label="Founding partner application form">
+        <form id="fpApplicationForm" action="https://formspree.io/f/[FORM_ID]" method="POST" novalidate style="display: block;" aria-label="Founding partner application form">
 
           <div style="margin-bottom: 22px;">
             <label for="fp-org-name" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
@@ -563,6 +781,9 @@
             ></textarea>
           </div>
 
+          <input type="hidden" name="_subject" value="Founding Partner Application" />
+          <input type="hidden" name="_format" value="plain" />
+
           <div id="fp-form-error" role="alert" aria-live="polite" style="
             display: none;
             background: rgba(255,60,60,0.1);
@@ -593,6 +814,10 @@
             Apply for Founding Partner Access
           </button>
 
+          <div style="text-align:center;">
+            <a href="[CALENDAR_LINK]" class="schedule-link">Prefer to talk first? Schedule a 20-minute call &rarr;</a>
+          </div>
+
           <p style="text-align:center; margin-top:16px; font-size:0.82rem; color:rgba(128,128,128,0.5);">
             We respond personally to every application within 2 business days. No automated queues.
           </p>
@@ -608,13 +833,12 @@
           text-align: center;
         ">
           <div style="font-size: 2.5rem; margin-bottom: 16px;" aria-hidden="true">&#x2705;</div>
-          <h3 style="color: #00ff88; margin-bottom: 12px;">Email Draft Ready — Please Send</h3>
+          <h3 style="color: #00ff88; margin-bottom: 12px;">Application received</h3>
           <p style="color: rgba(200,200,200,0.85); font-size: 0.95rem; line-height: 1.7;">
-            Your application has been prepared as an email draft. Please click <strong>Send</strong> in your email client to submit it to the Cloud Health Office team.
-            We&rsquo;ll review your application and respond personally within 2 business days.
+            Thank you &mdash; we&rsquo;ll respond personally within 2 business days. Questions in the meantime? Email partners@cloudhealthoffice.com
           </p>
           <p style="margin-top: 20px; font-size: 0.85rem; color: rgba(128,128,128,0.6);">
-            Questions in the meantime? Email <a href="mailto:partners@cloudhealthoffice.com" style="color:#00ff88;">partners@cloudhealthoffice.com</a>
+            Prefer to talk first? <a href="[CALENDAR_LINK]" style="color:#00ff88;">Schedule a 20-minute call &rarr;</a>
           </p>
         </div>
       </div>
@@ -625,67 +849,99 @@
       var form = document.getElementById('fpApplicationForm');
       if (!form) return;
 
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
+      var submitBtn = document.getElementById('fp-submit-btn');
+      var errorEl = document.getElementById('fp-form-error');
+      var successEl = document.getElementById('fp-form-success');
 
-        var errorEl = document.getElementById('fp-form-error');
-        var submitBtn = document.getElementById('fp-submit-btn');
+      function showError(message) {
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+      }
+
+      function clearError() {
+        errorEl.textContent = '';
         errorEl.style.display = 'none';
+      }
 
-        // Basic validation
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        clearError();
+
         var orgName = document.getElementById('fp-org-name').value.trim();
         var title = document.getElementById('fp-title').value.trim();
         var email = document.getElementById('fp-email').value.trim();
         var orgTypeEl = document.getElementById('fp-org-type');
         var orgType = orgTypeEl.value;
-        var orgTypeLabel = orgType ? orgTypeEl.options[orgTypeEl.selectedIndex].text : '';
         var concern = document.getElementById('fp-concern').value.trim();
 
         if (!orgName || !title || !email || !orgType || !concern) {
-          errorEl.textContent = 'Please fill in all required fields before submitting.';
-          errorEl.style.display = 'block';
-          errorEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          showError('Please fill in all required fields before submitting.');
           return;
         }
 
         var emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailPattern.test(email)) {
-          errorEl.textContent = 'Please enter a valid work email address.';
-          errorEl.style.display = 'block';
+          showError('Please enter a valid work email address.');
           return;
         }
 
-        // Show success state
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Opening Email\u2026';
+        submitBtn.textContent = 'Submitting…';
 
-        // Build mailto body
-        var ehr = document.getElementById('fp-ehr').value.trim() || 'Not specified';
-        var body = [
-          'Organization: ' + orgName,
-          'Title/Role: ' + title,
-          'Email: ' + email,
-          'Organization Type: ' + orgTypeLabel,
-          'EHR: ' + ehr,
-          '',
-          'CMS-0057-F Concern:',
-          concern
-        ].join('\n');
+        try {
+          var response = await fetch(form.action, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json'
+            },
+            body: new FormData(form)
+          });
 
-        var mailtoHref = 'mailto:partners@cloudhealthoffice.com'
-          + '?subject=' + encodeURIComponent('Founding Partner Application — ' + orgName)
-          + '&body=' + encodeURIComponent(body);
+          if (!response.ok) {
+            throw new Error('Request failed');
+          }
 
-        // Show success UI
-        form.style.display = 'none';
-        document.getElementById('fp-form-success').style.display = 'block';
-        document.getElementById('fp-form-success').scrollIntoView({ behavior: 'smooth' });
-
-        // Open email client after brief delay
-        setTimeout(function() {
-          window.location.href = mailtoHref;
-        }, 400);
+          form.style.display = 'none';
+          successEl.style.display = 'block';
+        } catch (err) {
+          showError('Something went wrong. Please email partners@cloudhealthoffice.com directly.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Apply for Founding Partner Access';
+        }
       });
+    })();
+
+    (function() {
+      var buttons = Array.prototype.slice.call(document.querySelectorAll('.audience-tab-button'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('.audience-tab-panel'));
+      if (!buttons.length || !panels.length) return;
+
+      function setAudience(audience) {
+        buttons.forEach(function(button) {
+          var active = button.getAttribute('data-audience') === audience;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+
+        panels.forEach(function(panel) {
+          var active = panel.id === 'audience-panel-' + audience;
+          panel.classList.toggle('active', active);
+        });
+      }
+
+      buttons.forEach(function(button) {
+        button.addEventListener('click', function() {
+          setAudience(button.getAttribute('data-audience'));
+        });
+      });
+
+      var params = new URLSearchParams(window.location.search);
+      var requested = params.get('audience');
+      if (requested && requested.toLowerCase() === 'aco') {
+        setAudience('aco');
+      } else {
+        setAudience('payers');
+      }
     })();
     </script>
 
@@ -695,7 +951,7 @@
         <div class="section-header">
           <span class="section-eyebrow">The Portfolio</span>
           <h2 class="section-title">Four product lines.<br><span>One platform.</span></h2>
-          <p class="section-subtitle">Cloud Health Office engages customers across four complementary product lines, each a coherent offering on its own, each connecting naturally to the next. Enter at any line and expand over time.</p>
+          <p class="section-subtitle">Cloud Health Office engages customers across four complementary product lines, each a coherent offering on its own, each connecting naturally to the next. Enter where the pain is. Expand where the leverage is.</p>
         </div>
 
         <div class="feature-grid">
@@ -729,7 +985,7 @@
         </div>
 
         <p style="text-align:center; margin-top:32px; font-size:0.95rem; color:rgba(176,176,176,0.7);">
-          See <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">POSITIONING.md</a> for the canonical four-product-line framing.
+          See <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">POSITIONING.md</a> for the canonical framing.
         </p>
       </div>
     </section>
@@ -740,7 +996,7 @@
         <div class="section-header">
           <span class="section-eyebrow">Choose your entry point</span>
           <h2 class="section-title">Three layers.<br><span>One Platform Engagement.</span></h2>
-          <p class="section-subtitle">Within Platform Engagement, Cloud Health Office engages customers at three layers, each a coherent product on its own, each containing the previous. Meet us where you are &mdash; expand when you&rsquo;re ready.</p>
+          <p class="section-subtitle">Within Platform Engagement, Cloud Health Office engages customers at three layers, each a coherent product on its own, each containing the previous. Meet us where your constraints are.</p>
         </div>
 
         <div class="feature-grid">
@@ -758,7 +1014,7 @@
             <div class="feature-icon" aria-hidden="true">&#128260;</div>
             <h3>Layer 2 &mdash; Progressive Modernization</h3>
             <p style="color:rgba(176,176,176,0.7); font-size:0.95rem; margin-bottom:8px;"><strong style="color:#00ffff;">Replace your legacy core, one domain at a time.</strong></p>
-            <p>The strangler-fig path &mdash; your system of record stays stable while Cloud Health Office takes over appeals, then capitation, then claims, at your pace. Appeals shipped and validated.</p>
+            <p>The strangler-fig path &mdash; your system of record stays stable while Cloud Health Office takes over appeals, then capitation, then claims, at your pace. Appeals shipped and validated first.</p>
             <p style="margin-top:20px;">
               <a href="/platform" class="button button-secondary" style="font-size:0.9rem; padding:10px 22px;">See the appeals reference implementation &rarr;</a>
             </p>
@@ -776,7 +1032,7 @@
         </div>
 
         <p style="text-align:center; margin-top:32px; font-size:0.95rem; color:rgba(176,176,176,0.7);">
-          Not sure where to start? See <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">POSITIONING.md</a> for the three-layer model in detail.
+          Not sure where to start? See <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">POSITIONING.md</a>.
         </p>
       </div>
     </section>
@@ -788,7 +1044,6 @@
       margin: 0 auto;
       text-align: center;
     ">
-      <!-- Section label -->
       <div style="
         display: inline-block;
         padding: 0.25rem 1rem;
@@ -802,7 +1057,6 @@
         margin-bottom: 1.5rem;
       ">Production Platform · v4.0.0</div>
 
-      <!-- Browser chrome mockup -->
       <div style="
         max-width: 1100px;
         margin: 0 auto;
@@ -814,7 +1068,6 @@
           0 0 60px rgba(0, 240, 255, 0.04);
         position: relative;
       ">
-        <!-- Browser top bar -->
         <div style="
           background: #0d1117;
           padding: 12px 16px;
@@ -823,13 +1076,11 @@
           gap: 8px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         ">
-          <!-- Traffic lights -->
           <div style="display: flex; gap: 6px; margin-right: 12px;">
             <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
             <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
             <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
           </div>
-          <!-- URL bar -->
           <div style="
             flex: 1;
             background: rgba(255, 255, 255, 0.05);
@@ -850,7 +1101,6 @@
           </div>
         </div>
 
-        <!-- Screenshot image -->
         <img
           src="/graphics/platform-work-queues.png"
           alt="Cloud Health Office Claims Work Queues — showing NCCI/MUE Edit Failures, Missing Prior Auth, Provider Not Contracted, COB/Other Payer, and Medical Review queues with real claim data"
@@ -863,7 +1113,6 @@
         />
       </div>
 
-      <!-- Caption -->
       <p style="
         margin-top: 1.25rem;
         font-family: 'Inter', -apple-system, sans-serif;
@@ -894,7 +1143,6 @@
         <span class="ticker-item"><span>Multi-Tenant Architecture</span><span class="ticker-dot">&#9670;</span></span>
         <span class="ticker-item"><span>&lt;1 Hour Deployment</span><span class="ticker-dot">&#9670;</span></span>
         <span class="ticker-item"><span>HIPAA-Compliant Infrastructure</span><span class="ticker-dot">&#9670;</span></span>
-        <!-- Repeat for seamless loop -->
         <span class="ticker-item"><span>250,000+ Repository Clones</span><span class="ticker-dot">&#9670;</span></span>
         <span class="ticker-item"><span>Zero Security Vulnerabilities</span><span class="ticker-dot">&#9670;</span></span>
         <span class="ticker-item"><span>2,800 Tests Passing</span><span class="ticker-dot">&#9670;</span></span>
@@ -929,53 +1177,6 @@
     </section>
 
     <!-- ===== PLATFORM FEATURES ===== -->
-    <section>
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow">The Platform</span>
-          <h2 class="section-title">Modernize now.<br><span>Replace later.</span></h2>
-          <p class="section-subtitle">A compliance and modernization layer that works alongside your legacy core admin system &mdash; delivering CMS-0057-F readiness, FHIR R4, and EDI automation without replatforming.</p>
-        </div>
-
-        <div class="feature-grid">
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">&#9889;</div>
-            <h3>CMS-0057-F Compliance</h3>
-            <p>Complete compliance with the CMS Interoperability and Prior Authorization Rule &mdash; 18 months ahead of the January 2027 deadline. Zero external dependencies.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">&#128279;</div>
-            <h3>Multi-Clearinghouse EDI</h3>
-            <p>Native connectors for Availity, Change Healthcare, Optum, and Inovalon. Failover capability, zero vendor lock-in, and full business continuity.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">&#128260;</div>
-            <h3>X12 to FHIR R4 Transformation</h3>
-            <p>Automated transformation of X12 EDI transactions (270/837/278/835) to FHIR R4 resources. Real-time, bidirectional, production-tested at scale.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">&#127973;</div>
-            <h3>Legacy Core Augmentation</h3>
-            <p>Sits alongside QNXT, Facets, HealthEdge, or Amisys. Reads from your existing system, exposes FHIR R4 APIs &mdash; without touching your core operations.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">&#128274;</div>
-            <h3>HIPAA-Grade Security</h3>
-            <p>BAA included. Zero known vulnerabilities. End-to-end encryption. Production-ready audit trails and compliance reporting &mdash; out of the box.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">&#127760;</div>
-            <h3>Flexible Deployment</h3>
-            <p>Kubernetes-native architecture with Argo Workflows on AKS, EKS, or GKE. Container-based microservices with full infrastructure ownership. Deploy to your own subscription.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">&#128184;</div>
-            <h3>Premium Billing &amp; ACH</h3>
-            <p>Automated monthly premium invoicing with NACHA/ACH file generation, EFT draft lifecycle management, and Stripe ACH integration. Batch billing runs with sponsor-level invoicing and return processing.</p>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <!-- ===== CMS-0057-F COMPLIANCE ===== -->
     <section class="compliance-section">
@@ -998,196 +1199,24 @@
           <span class="compliance-badge-item" role="listitem">&#10003; Prior Authorization API</span>
           <span class="compliance-badge-item" role="listitem">&#10003; Payer-to-Payer API</span>
           <span class="compliance-badge-item" role="listitem">&#10003; Da Vinci IGs</span>
-          <span class="compliance-badge-item" role="listitem">&#10003; USCDI v1/v2</span>
-        </div>
-
-        <p style="text-align:center; font-size:1.05rem; color:rgba(176,176,176,0.8); max-width:600px; margin:0 auto 36px auto; line-height:1.7;">
-          Transform X12 EDI (270/837/278/835) to FHIR R4 with zero external dependencies.<br>
-          2,800 comprehensive tests across 44 test projects. v4.0.0 production-ready.
-        </p>
-
-        <div style="text-align:center;">
-          <a href="/docs/compliance"
-             class="button button-green"
-             target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide &rarr;</a>
         </div>
       </div>
     </section>
 
-    <!-- ===== RESULTS / CASE STUDIES ===== -->
-    <section>
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow">Results</span>
-          <h2 class="section-title">Real outcomes.<br><span>Anonymized. Specific.</span></h2>
-          <p class="section-subtitle">Health plans don&rsquo;t announce wins. The numbers tell the story.</p>
-        </div>
-
-        <div class="cases-grid">
-          <div class="case-card">
-            <div class="case-card-tag">Medicaid MCO</div>
-            <h3>CMS Compliance Without a Core Upgrade</h3>
-            <p>Regional Medicaid MCO needed CMS-0057-F compliance without an 18-month core platform replatform. Deployed in 3 weeks. Live in production with zero disruption.</p>
-            <div class="case-metric">&lt;3 weeks</div>
-            <div class="case-metric-label">from first deployment to production live</div>
-            <ul class="benefit-list" style="margin-top:20px;">
-              <li>Avoided $2M+ core platform upgrade cost</li>
-              <li>Live 18 months before the CMS deadline</li>
-              <li>Zero impact to existing claim operations</li>
-            </ul>
-          </div>
-
-          <div class="case-card">
-            <div class="case-card-tag">Regional Health Plan</div>
-            <h3>Multi-Clearinghouse Resilience</h3>
-            <p>Health plan dependent on a single clearinghouse added secondary failover capability. Zero transactions lost during a major clearinghouse outage.</p>
-            <div class="case-metric">100%</div>
-            <div class="case-metric-label">transaction continuity during clearinghouse outage</div>
-            <ul class="benefit-list" style="margin-top:20px;">
-              <li>Secondary clearinghouse live in under 1 week</li>
-              <li>Eliminated single point of operational failure</li>
-              <li>Reduced EDI vendor dependency risk</li>
-            </ul>
-          </div>
-
-          <div class="case-card">
-            <div class="case-card-tag">Medicare Advantage</div>
-            <h3>BPaaS Exit to Internal Control</h3>
-            <p>Medicare Advantage plan exiting a BPaaS vendor needed internal operations capability within 6 months. Delivered ahead of schedule with full audit trail.</p>
-            <div class="case-metric">-64%</div>
-            <div class="case-metric-label">reduction in external vendor costs, year-over-year</div>
-            <ul class="benefit-list" style="margin-top:20px;">
-              <li>Full ownership of integration infrastructure</li>
-              <li>Predictable Azure infrastructure costs</li>
-              <li>Internal team fully operational within 90 days</li>
-            </ul>
-          </div>
-        </div>
+    <!-- ===== BOTTOM CTA ===== -->
+    <section class="cta-section" style="margin: 100px auto; max-width: 1100px;">
+      <h2 style="margin-top:0;">Be Ready for CMS-0057-F.<br><span style="color:#00ff88;">On your terms.</span></h2>
+      <p style="max-width:700px; margin:0 auto 26px auto; color:rgba(176,176,176,0.8);">
+        Deploy in your cloud. Validate with your team. Move without betting your operations on a replatform.
+      </p>
+      <div>
+        <a href="#founding-partner-form" class="button">Apply to Be a Founding Partner &rarr;</a>
+        <a href="/cms-0057f-compliance" class="button button-secondary">Read the CMS-0057-F Guide &rarr;</a>
+      </div>
+      <div>
+        <a href="[CALENDAR_LINK]" class="schedule-link">Prefer to talk first? Schedule a 20-minute call &rarr;</a>
       </div>
     </section>
-
-    <!-- ===== CLAIMS PIPELINE ===== -->
-    <section>
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow">Architecture</span>
-          <h2 class="section-title">Full Claims Pipeline.<br><span>When you&rsquo;re ready for it.</span></h2>
-          <p class="section-subtitle">Start with CMS-0057-F compliance as a layer on your legacy system. Over time, activate modular claims adjudication, benefit engines, and more &mdash; at your pace.</p>
-        </div>
-
-        <figure style="margin:0 auto; max-width:1100px;">
-          <img src="graphics/claims-adjudication-flow.svg"
-               alt="837 claims adjudication pipeline showing 10-step flow from SFTP ingestion through Kafka, claims service API, benefit engine, to approved or denied outcome"
-               style="width:100%; height:auto; border-radius:12px; border:1px solid rgba(0,255,255,0.12);" />
-        </figure>
-      </div>
-    </section>
-
-    <!-- ===== DEPLOYMENT OPTIONS ===== -->
-    <section style="background:linear-gradient(180deg, #000 0%, #000d1a 50%, #000 100%);">
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow">Infrastructure</span>
-          <h2 class="section-title">One platform.<br><span>Any cloud.</span></h2>
-          <p class="section-subtitle">Kubernetes-native architecture with Argo Workflows. Deploy on any cloud or on-premise with full infrastructure control.</p>
-        </div>
-
-        <div class="deploy-grid">
-          <div class="deploy-card">
-            <span class="deploy-icon" aria-hidden="true">&#9881;&#65039;</span>
-            <h3>Kubernetes with Argo Workflows</h3>
-            <p style="color:rgba(176,176,176,0.7); font-size:0.95rem; margin-bottom:20px;">
-              <strong style="color:#00ffff;">Best for:</strong> Enterprise control, cloud independence, production-grade orchestration
-            </p>
-            <ul class="benefit-list">
-              <li>Deploy on Azure AKS, AWS EKS, or GCP GKE</li>
-              <li>Argo Workflows for Kubernetes-native orchestration</li>
-              <li>Full infrastructure ownership and control</li>
-              <li>Container-based microservices architecture</li>
-              <li>Hybrid and on-premise capable</li>
-              <li>BSL 1.1 &mdash; bring your own environment</li>
-            </ul>
-          </div>
-        </div>
-
-        <p style="text-align:center; margin-top:32px; font-size:0.9rem; color:rgba(176,176,176,0.45);">
-          Complete FHIR R4, EDI, and compliance capabilities on any Kubernetes cluster.
-        </p>
-      </div>
-    </section>
-
-    <!-- ===== BUILT BY EXPERTS ===== -->
-    <section>
-      <div class="section-wrapper">
-        <div style="background:rgba(8,8,8,0.9); border:1px solid rgba(255,255,255,0.07); border-radius:20px; padding:64px 48px; text-align:center;">
-          <span class="section-eyebrow">The Team</span>
-          <h2 class="section-title" style="margin-top:16px;">
-            Built by people who&rsquo;ve shipped<br><span>50+ payer implementations.</span>
-          </h2>
-          <p style="font-size:1.05rem; color:rgba(176,176,176,0.8); max-width:700px; margin:0 auto 44px auto; line-height:1.75;">
-            Cloud Health Office was created by a team with 25+ years of combined experience building
-            and implementing core administration platforms at Medicaid MCOs, Medicare Advantage plans,
-            and commercial payers. We built this because we&rsquo;ve watched health plans spend $2M+
-            and wait 18 months for integrations that should take weeks.
-          </p>
-
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:28px; margin:0 0 44px 0; text-align:left;">
-            <div>
-              <div style="color:#00ffff; font-weight:700; font-size:0.95rem; margin-bottom:8px;">Core Admin Systems</div>
-              <p style="font-size:0.88rem; color:rgba(176,176,176,0.65); margin:0; line-height:1.6;">Deep expertise in health plan core administration platform implementations across all major platforms.</p>
-            </div>
-            <div>
-              <div style="color:#00ffff; font-weight:700; font-size:0.95rem; margin-bottom:8px;">Clearinghouse EDI</div>
-              <p style="font-size:0.88rem; color:rgba(176,176,176,0.65); margin:0; line-height:1.6;">Production integrations with every major clearinghouse in the healthcare market.</p>
-            </div>
-            <div>
-              <div style="color:#00ffff; font-weight:700; font-size:0.95rem; margin-bottom:8px;">Regulatory Compliance</div>
-              <p style="font-size:0.88rem; color:rgba(176,176,176,0.65); margin:0; line-height:1.6;">HIPAA, CMS-0057-F, ACA, and state-level regulatory implementations at enterprise scale.</p>
-            </div>
-            <div>
-              <div style="color:#00ffff; font-weight:700; font-size:0.95rem; margin-bottom:8px;">Enterprise Cloud</div>
-              <p style="font-size:0.88rem; color:rgba(176,176,176,0.65); margin:0; line-height:1.6;">Azure-native, Kubernetes-first architecture designed for production health plan operations.</p>
-            </div>
-          </div>
-
-          <p style="font-weight:700; color:#00ffff; font-size:1.05rem; margin:0;">
-            Now accepting pilot deployments for select health plans in 2026.
-          </p>
-        </div>
-      </div>
-    </section>
-
-
-    <!-- ===== FINAL CTA ===== -->
-    <section class="cta-full-section" id="schedule-demo">
-      <div style="position:relative; z-index:10; max-width:820px; margin:0 auto;">
-        <div class="hero-badge" style="margin-bottom:36px; opacity:1; animation:none;">Currently Selecting One Founding Partner &mdash; Zero Licensing Cost</div>
-
-        <h2 class="cta-headline">
-          Be Ready for CMS-0057-F.<br>
-          <span>On your terms.</span>
-        </h2>
-
-        <p style="font-size:1.15rem; color:rgba(176,176,176,0.8); margin:24px 0 48px 0; line-height:1.75; position:relative;">
-          For ACOs, health systems, and physician groups preparing for the Making Care Primary model.<br>
-          <strong style="color:white;">Deploy in your own cloud. Zero licensing to start. Co-develop your roadmap.</strong>
-        </p>
-
-        <div class="hero-cta" style="position:relative; opacity:1; animation:none;">
-          <a href="#founding-partner-form"
-             class="button"
-             style="font-size:1.1rem; padding:17px 48px;">Apply to Be a Founding Partner &rarr;</a>
-          <a href="/contact"
-             class="button button-secondary"
-             style="font-size:1.1rem; padding:17px 48px;">Contact Sales</a>
-        </div>
-
-        <p style="margin-top:28px; font-size:0.93rem; color:rgba(128,128,128,0.65); position:relative;">
-          Questions? Email <a href="mailto:partners@cloudhealthoffice.com" style="color:#00ff88;">partners@cloudhealthoffice.com</a>
-        </p>
-      </div>
-    </section>
-
   </main>
 
   <!-- ===== FOOTER ===== -->
@@ -1196,7 +1225,7 @@
       <div class="footer-grid">
         <div class="footer-brand">
           <h4>Cloud Health Office</h4>
-          <p>The compliance and modernization layer for legacy payer core admin systems. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge. Modernize now. Replace later.</p>
+          <p>The compliance and modernization layer for legacy payer core admin systems. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
           <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
         </div>
         <div class="footer-col">
@@ -1218,12 +1247,12 @@
             <li><a href="/docs/architecture">Architecture</a></li>
             <li><a href="/docs/api">API Reference</a></li>
             <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
           </ul>
         </div>
         <div class="footer-col">
           <h5>Contact</h5>
           <ul>
-            <li><a href="#founding-partner">Founding Partner Program</a></li>
             <li><a href="/contact">Contact Sales</a></li>
             <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
             <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
@@ -1234,10 +1263,9 @@
 
       <div class="footer-bottom">
         <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
-        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="legal/privacy-policy.html" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="legal/privacy-policy.html" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
       </div>
     </div>
   </footer>
-
 </body>
 </html>
