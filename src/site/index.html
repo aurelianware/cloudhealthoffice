@@ -177,7 +177,7 @@
         </h1>
 
         <p class="hero-subheadline">
-          CloudHealthOffice deploys in your own cloud subscription &mdash; no vendor lock-in, no data leaving your walls.<br>
+          Cloud Health Office deploys in your own cloud subscription &mdash; no vendor lock-in, no data leaving your walls.<br>
           We&rsquo;re selecting a founding partner to validate together. <strong style="color:#00ff88;">Zero licensing cost to start.</strong>
         </p>
 
@@ -237,7 +237,7 @@
             Founding Partner Program
           </h2>
           <p class="section-subtitle">
-            We are partnering with one healthcare organization to deploy CloudHealthOffice in their own cloud
+            We are partnering with one healthcare organization to deploy Cloud Health Office in their own cloud
             subscription, co-develop priority workflows, and validate CMS-0057-F readiness together &mdash;
             at zero licensing cost.
           </p>
@@ -608,9 +608,9 @@
           text-align: center;
         ">
           <div style="font-size: 2.5rem; margin-bottom: 16px;" aria-hidden="true">&#x2705;</div>
-          <h3 style="color: #00ff88; margin-bottom: 12px;">Application Received</h3>
+          <h3 style="color: #00ff88; margin-bottom: 12px;">Email Draft Ready — Please Send</h3>
           <p style="color: rgba(200,200,200,0.85); font-size: 0.95rem; line-height: 1.7;">
-            Thank you for applying to the Cloud Health Office Founding Partner Program.
+            Your application has been prepared as an email draft. Please click <strong>Send</strong> in your email client to submit it to the Cloud Health Office team.
             We&rsquo;ll review your application and respond personally within 2 business days.
           </p>
           <p style="margin-top: 20px; font-size: 0.85rem; color: rgba(128,128,128,0.6);">
@@ -636,7 +636,9 @@
         var orgName = document.getElementById('fp-org-name').value.trim();
         var title = document.getElementById('fp-title').value.trim();
         var email = document.getElementById('fp-email').value.trim();
-        var orgType = document.getElementById('fp-org-type').value;
+        var orgTypeEl = document.getElementById('fp-org-type');
+        var orgType = orgTypeEl.value;
+        var orgTypeLabel = orgType ? orgTypeEl.options[orgTypeEl.selectedIndex].text : '';
         var concern = document.getElementById('fp-concern').value.trim();
 
         if (!orgName || !title || !email || !orgType || !concern) {
@@ -655,7 +657,7 @@
 
         // Show success state
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Sending\u2026';
+        submitBtn.textContent = 'Opening Email\u2026';
 
         // Build mailto body
         var ehr = document.getElementById('fp-ehr').value.trim() || 'Not specified';
@@ -663,7 +665,7 @@
           'Organization: ' + orgName,
           'Title/Role: ' + title,
           'Email: ' + email,
-          'Organization Type: ' + orgType,
+          'Organization Type: ' + orgTypeLabel,
           'EHR: ' + ehr,
           '',
           'CMS-0057-F Concern:',
