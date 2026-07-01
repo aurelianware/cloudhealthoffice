@@ -41,13 +41,13 @@ Organizations relying on legacy core administrative processing systems (CAPS) su
 | **Implementation Cost** | $2-5M+ | $150K-500K |
 | **Annual Operating Cost** | $500K-1.5M | $60K-180K |
 | **Staff Required** | 8-15 FTEs | 1-2 FTEs |
-| **CMS-0057-F Readiness** | Partial | 100% Complete |
+| **CMS-0057-F Readiness** | Partial | Accelerated technical readiness with payer-specific implementation |
 
 ### Strategic Value Proposition
 
 CloudHealthOffice is the #1 source-available Azure-native multi-payer EDI platform[^AHIP2024]. Unlike legacy vendor lock-in approaches, CloudHealthOffice provides:
 
-- **100% CMS-0057-F compliance** with production-ready FHIR R4 APIs
+- **CMS-0057-F implementation accelerator** with FHIR R4 APIs, SMART-on-FHIR, and prior-authorization building blocks
 - **Backend-agnostic architecture** that integrates with existing claims adjudication systems investments
 - **Zero-code onboarding** completing configuration in under one hour
 - **Source-available transparency** eliminating vendor dependency concerns
@@ -192,25 +192,28 @@ The platform does not replace claims backend or claims adjudication system for c
 
 ### Platform Capabilities
 
-CloudHealthOffice delivers production-ready CMS-0057-F compliance through:
+CloudHealthOffice accelerates CMS-0057-F implementation through:
 
-#### Complete FHIR R4 Implementation
+#### FHIR R4 Implementation Foundation
 
 | CMS-0057-F Requirement | CloudHealthOffice Status | Tests |
 |-----------------------|---------------------------|-------|
-| Patient Access API | ✅ Production Ready | 19 tests |
-| Provider Access API | ✅ Production Ready | 8 tests |
-| Payer-to-Payer API | ✅ Production Ready | 6 tests |
-| Prior Authorization API | ✅ Production Ready | 12 tests |
-| 72-Hour Urgent Response | ✅ Automated Tracking | Compliance Checker |
-| 7-Day Standard Response | ✅ Automated Tracking | Compliance Checker |
-| USCDI v1/v2 Coverage | ✅ Complete | Data Class Mapping |
-| Da Vinci IG Conformance | ✅ Validated | PDex, PAS, CRD, DTR |
+| Patient Access API | Integration required | 19 tests |
+| Provider Access API | Integration required | 8 tests |
+| Payer-to-Payer API | Phase 2 required | 6 tests |
+| Prior Authorization API | Implemented / integration required | 12 tests |
+| 72-Hour Urgent Response | Implemented / operational integration required | Compliance Checker |
+| 7-Day Standard Response | Implemented / operational integration required | Compliance Checker |
+| USCDI v1/v2 Coverage | Integration required | Data Class Mapping |
+| Da Vinci IG Conformance | Integration required | PDex, PAS, CRD, DTR |
 
 **Total Platform Tests:** 355+ tests with 100% pass rate
 **Security Vulnerabilities:** 0 in core mappers
 
-For detailed technical specifications, see [CMS-0057-F-COMPLIANCE.md](CMS-0057-F-COMPLIANCE.md).
+For the canonical cross-service readiness posture, see
+[`CMS-0057-F-READINESS-MATRIX.md`](../compliance/CMS-0057-F-READINESS-MATRIX.md).
+For detailed technical specifications, see
+[`CMS-0057-F-COMPLIANCE.md`](../features/CMS-0057-F-COMPLIANCE.md).
 
 #### X12 to FHIR Transformation Engine
 
@@ -737,7 +740,7 @@ CloudHealthOffice transforms the CMS-0057-F compliance challenge from an insurmo
 | Benefit | Legacy Approach | CloudHealthOffice Advantage |
 |---------|-----------------|----------------------------|
 | **Vendor Independence** | Lock-in with $800K-3.5M annual licensing | Source-available agility; no vendor lock-in |
-| **CMS Compliance** | 18-36 month uncertain timeline | 100% compliant by January 2027, 90-day deployment |
+| **CMS Compliance** | 18-36 month uncertain timeline | 90-day technical accelerator toward payer-specific January 2027 readiness |
 | **claims adjudication systems Integration** | Custom $2-5M development | Modular replacement via pre-built connectors |
 | **5-Year TCO** | $16.7M+ | $2.6M ($10M+ savings) |
 | **Technical Debt** | Compounds annually | Zero; source-available community-maintained |
