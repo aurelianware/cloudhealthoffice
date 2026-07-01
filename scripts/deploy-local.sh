@@ -61,16 +61,15 @@ warn() { echo "  ⚠ $*"; }
 
 # ── Preflight checks ─────────────────────────────────────────────────────────
 log "Preflight checks"
-kubectl config current-context | grep -q "docker-desktop" \
-  || warn "Context is '$(kubectl config current-context)' — expected 'docker-desktop'"
-kubectl cluster-info > /dev/null 2>&1 || err "Kubernetes cluster not reachable"
-ok "Cluster reachable"
-
 CURRENT_CONTEXT="$(kubectl config current-context)"
 if [[ "$CURRENT_CONTEXT" == kind-* ]]; then
   KIND_CLUSTER_NAME="${CURRENT_CONTEXT#kind-}"
   ok "kind cluster detected: $KIND_CLUSTER_NAME"
+elif [[ "$CURRENT_CONTEXT" != "docker-desktop" ]]; then
+  warn "Context is '$CURRENT_CONTEXT' — expected 'docker-desktop' or 'kind-*'"
 fi
+kubectl cluster-info > /dev/null 2>&1 || err "Kubernetes cluster not reachable"
+ok "Cluster reachable"
 
 load_kind_image() {
   local image="$1"
@@ -142,7 +141,7 @@ if [[ "$SKIP_BUILD" == false ]]; then
     docker build -t "$acr_tag" -t "$ghcr_tag" \
       --build-arg REGISTRY="$LOCAL_DOTNET_REGISTRY" \
       -f "$dockerfile" . \
-      && { ok "$svc"; load_kind_image "$acr_tag"; } || warn "$svc build failed"
+      && { ok "$svc"; load_kind_image "$acr_tag"; load_kind_image "$ghcr_tag"; } || warn "$svc build failed"
   done
 fi
 
