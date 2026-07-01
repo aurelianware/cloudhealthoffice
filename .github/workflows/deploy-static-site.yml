@@ -43,10 +43,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -125,7 +125,7 @@ jobs:
 
       - name: Azure Login (OIDC)
         id: azure-login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -454,7 +454,7 @@ jobs:
 
       - name: Upload DNS Instructions
         if: steps.get-swa.outputs.swa_exists == 'true' && steps.custom-domain.outputs.dns_instructions_file != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dns-configuration-instructions
           path: ${{ steps.custom-domain.outputs.dns_instructions_file }}
@@ -510,9 +510,9 @@ jobs:
               exit 0
             fi
 
-            if [ $i -lt $MAX_RETRIES ]; then
+            if [ "$i" -lt "$MAX_RETRIES" ]; then
               echo "   HTTP $HTTP_STATUS - waiting ${RETRY_DELAY}s before retry..."
-              sleep $RETRY_DELAY
+              sleep "$RETRY_DELAY"
             fi
           done
 

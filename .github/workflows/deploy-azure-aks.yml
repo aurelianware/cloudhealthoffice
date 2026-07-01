@@ -69,7 +69,7 @@ jobs:
       contents: read
     steps:
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -112,10 +112,10 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -125,10 +125,10 @@ jobs:
         run: az acr login --name ${{ vars.ACR_NAME }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push portal
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./src/portal/CloudHealthOffice.Portal/Dockerfile
@@ -141,7 +141,7 @@ jobs:
           platforms: linux/amd64
 
       - name: Build and push site
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./src/site
           file: ./src/site/Dockerfile
@@ -242,10 +242,10 @@ jobs:
           - x12-834-parser
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -255,7 +255,7 @@ jobs:
         run: az acr login --name ${{ vars.ACR_NAME }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Check Dockerfile exists
         id: check
@@ -268,7 +268,7 @@ jobs:
 
       - name: Build and push ${{ matrix.container }}
         if: steps.check.outputs.exists == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./containers/${{ matrix.container }}
           file: ./containers/${{ matrix.container }}/Dockerfile
@@ -292,10 +292,10 @@ jobs:
     environment: PROD
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -361,10 +361,10 @@ jobs:
     environment: PROD
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}

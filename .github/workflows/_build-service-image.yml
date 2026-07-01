@@ -206,7 +206,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # ───────────────────────────────────────────────────────────────────
       # Resolve effective parameters from the input/var/literal fallback
@@ -299,7 +299,7 @@ jobs:
       # ───────────────────────────────────────────────────────────────────
       - name: Azure Login (OIDC) — push mode
         if: env.PUSH_ENABLED == 'true'
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           # secrets.X || secrets.Y pattern: in workflow_call mode the lowercase
           # form is the caller-passed secret; in workflow_dispatch mode it's
@@ -346,8 +346,8 @@ jobs:
 
       - name: Log in to ACR for base-image pulls — non-push mode
         id: acr-pr-login
-        if: env.PUSH_ENABLED != 'true' && steps.check-acr-token.outputs.available == 'true'
-        uses: docker/login-action@v3
+        if: env.PUSH_ENABLED != 'true' && inputs.require_acr_read_token && steps.check-acr-token.outputs.available == 'true'
+        uses: docker/login-action@v4
         with:
           registry: ${{ steps.params.outputs.registry }}
           username: ${{ secrets.acr_username || secrets.ACR_USERNAME }}
@@ -378,8 +378,8 @@ jobs:
       - name: Warn when using public MCR base images — non-push mode
         if: env.PUSH_ENABLED != 'true' && !inputs.require_acr_read_token && steps.acr-pr-login.outcome != 'success'
         run: |
-          echo "::warning::ACR read credentials are unavailable for this non-push build."
-          echo "::warning::Falling back to public mcr.microsoft.com base images. This is intended for Dependabot PRs only; normal PRs should keep require_acr_read_token=true."
+          echo "::warning::ACR read credentials are not required for this non-push build."
+          echo "::warning::Falling back to public mcr.microsoft.com base images. This is intended for Dependabot PRs or periods when Azure deployments are paused."
 
       # ───────────────────────────────────────────────────────────────────
       # Buildx + the actual build. Both modes (push:true, push:false) share
@@ -387,10 +387,10 @@ jobs:
       # the cache-to gating.
       # ───────────────────────────────────────────────────────────────────
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and ${{ env.PUSH_ENABLED == 'true' && 'push' || 'check' }} ${{ inputs.service }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ steps.params.outputs.build_context }}
           # The Dockerfile ALWAYS lives at src/services/<service>/Dockerfile,
