@@ -24,7 +24,7 @@ jobs:
       packages: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
