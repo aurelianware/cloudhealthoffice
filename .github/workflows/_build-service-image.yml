@@ -107,6 +107,11 @@ on:
         type: boolean
         required: false
         default: true
+      require_acr_read_token:
+        description: "When push:false, require ACR_USERNAME/ACR_PASSWORD for mirrored .NET base-image pulls. Set false only for actors such as Dependabot that cannot receive repo Actions secrets; those builds fall back to public MCR base images."
+        type: boolean
+        required: false
+        default: true
     secrets:
       # All secrets are declared optional — runtime checks below enforce
       # presence when actually needed (push:true requires Azure OIDC; push:false
@@ -180,6 +185,11 @@ on:
         type: boolean
         required: false
         default: true
+      require_acr_read_token:
+        description: "When push:false, require ACR_USERNAME/ACR_PASSWORD for mirrored .NET base-image pulls. Defaults to true."
+        type: boolean
+        required: false
+        default: true
 
 jobs:
   build:
@@ -240,10 +250,12 @@ jobs:
           # hypothetical self-contained services.
           BUILD_CONTEXT="${{ inputs.build_context || format('./src/services/{0}', inputs.service) }}"
 
-          echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
-          echo "registry_name=$REGISTRY_NAME" >> "$GITHUB_OUTPUT"
-          echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
-          echo "build_context=$BUILD_CONTEXT" >> "$GITHUB_OUTPUT"
+          {
+            echo "registry=$REGISTRY"
+            echo "registry_name=$REGISTRY_NAME"
+            echo "image_name=$IMAGE_NAME"
+            echo "build_context=$BUILD_CONTEXT"
+          } >> "$GITHUB_OUTPUT"
 
           # Build the multi-line tag list that docker/build-push-action expects.
           # Each line becomes one tag the image is published under.
@@ -274,7 +286,9 @@ jobs:
           echo "Resolved image_name:    $IMAGE_NAME"
           echo "Resolved build_context: $BUILD_CONTEXT"
           echo "Resolved tags:"
-          echo "$TAGS" | sed 's/^/  /'
+          while IFS= read -r tag; do
+            printf '  %s\n' "$tag"
+          done <<< "$TAGS"
 
       # ───────────────────────────────────────────────────────────────────
       # PUSH MODE: authenticate to Azure via OIDC and `az acr login`. This
@@ -344,7 +358,7 @@ jobs:
         # login step was skipped, OR (b) the login step ran and failed.
         # Either way, proceeding silently would let the build pull base
         # images from MCR — exactly what 71c9d37 did, undetected for 5 days.
-        if: env.PUSH_ENABLED != 'true' && steps.acr-pr-login.outcome != 'success'
+        if: env.PUSH_ENABLED != 'true' && inputs.require_acr_read_token && steps.acr-pr-login.outcome != 'success'
         env:
           ACR_SHORT_NAME: ${{ steps.params.outputs.registry_name }}
         run: |
@@ -360,6 +374,12 @@ jobs:
           echo "::error::  5. Save password1 value as repo secret ACR_PASSWORD"
           echo "::error::See docs/security/SECRETS-INVENTORY.md for the rationale."
           exit 1
+
+      - name: Warn when using public MCR base images — non-push mode
+        if: env.PUSH_ENABLED != 'true' && !inputs.require_acr_read_token && steps.acr-pr-login.outcome != 'success'
+        run: |
+          echo "::warning::ACR read credentials are unavailable for this non-push build."
+          echo "::warning::Falling back to public mcr.microsoft.com base images. This is intended for Dependabot PRs only; normal PRs should keep require_acr_read_token=true."
 
       # ───────────────────────────────────────────────────────────────────
       # Buildx + the actual build. Both modes (push:true, push:false) share
@@ -388,7 +408,7 @@ jobs:
           # defaults). Setting it here means a future Dockerfile that forgot
           # to default ARG REGISTRY can't silently fall through to MCR.
           build-args: |
-            REGISTRY=${{ steps.params.outputs.registry }}
+            REGISTRY=${{ env.PUSH_ENABLED != 'true' && !inputs.require_acr_read_token && steps.acr-pr-login.outcome != 'success' && 'mcr.microsoft.com' || steps.params.outputs.registry }}
           # cache-from is always read-only — both push and non-push builds
           # benefit from warm cache.
           cache-from: type=gha

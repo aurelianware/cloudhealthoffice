@@ -16,6 +16,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Automatic Azure deploys are intentionally opt-in. This keeps main green
+  # while the Azure subscription is inactive, without removing the deployment
+  # workflow or the manual recovery path.
+  AZURE_DEPLOYMENTS_ENABLED: ${{ vars.AZURE_DEPLOYMENTS_ENABLED == 'true' || github.event_name == 'workflow_dispatch' }}
   REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
   NAMESPACE: cloudhealthoffice
   AKS_NAME: ${{ vars.AKS_NAME || 'cho-aks' }}
@@ -29,6 +33,17 @@ env:
   # Repository secret:   AZURE_SUBSCRIPTION_ID Subscription containing the Key Vault
 
 jobs:
+  deployment-paused:
+    name: Azure deployment paused
+    if: ${{ vars.AZURE_DEPLOYMENTS_ENABLED != 'true' && github.event_name != 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain skipped deployment
+        run: |
+          echo "::notice::Azure deployment is paused because vars.AZURE_DEPLOYMENTS_ENABLED is not 'true'."
+          echo "::notice::This is expected while the Azure subscription is inactive."
+          echo "::notice::Set repository variable AZURE_DEPLOYMENTS_ENABLED=true to restore automatic main-branch deploys."
+
   # ─────────────────────────────────────────────────────────────
   # Preflight: mirror .NET base images from MCR into ACR so the
   # Dockerfile `FROM ${REGISTRY}/dotnet/...` lines resolve. Every
@@ -47,6 +62,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   ensure-base-images:
     name: Ensure .NET Base Images Mirrored to ACR
+    if: ${{ vars.AZURE_DEPLOYMENTS_ENABLED == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -245,9 +261,9 @@ jobs:
         id: check
         run: |
           if [ -f "./containers/${{ matrix.container }}/Dockerfile" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push ${{ matrix.container }}

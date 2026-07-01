@@ -420,12 +420,14 @@ public class NetworkRosterServiceTests
         // mismatch even when other fields are preserved — fix #5.
         var repo = new InMemoryProviderRepository { TenantId = TenantA };
         var svc = NewService(repo);
+        var asOf = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc);
         for (var i = 0; i < 6; i++)
-            await SeedProviderAsync(repo, $"p-{i}", $"Last-{i}", networkId: Network1);
+            await SeedProviderAsync(repo, $"p-{i}", $"Last-{i}", networkId: Network1,
+                effectiveDate: asOf.AddYears(-1));
 
         var query = NewQuery(Network1);
         query.PageSize = 2;
-        query.AsOfDate = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        query.AsOfDate = asOf;
         var page1 = await svc.GetRosterAsync(query);
         page1.NextCursor.Should().NotBeNull();
 

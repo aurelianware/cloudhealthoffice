@@ -314,6 +314,12 @@ jobs:
       # PR builds neither pollute :latest nor leak per-PR sha tags.
       tag_latest: false
       tag_sha: true
+      # Dependabot PRs do not receive normal repo Actions secrets, so they
+      # cannot log into the mirrored ACR base-image repositories unless
+      # equivalent Dependabot secrets are configured. Keep strict ACR parity
+      # for human/automation PRs that can access secrets, but let Dependabot
+      # still compile the affected service image against public MCR bases.
+      require_acr_read_token: ${{ github.actor != 'dependabot[bot]' }}
     secrets:
       # PR builds need ACR read access for mirrored .NET base image pulls.
       # AZURE_CLIENT_ID / TENANT / SUBSCRIPTION are deliberately NOT
