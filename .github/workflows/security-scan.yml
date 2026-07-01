@@ -22,10 +22,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -35,7 +35,7 @@ jobs:
 
       - name: Run npm audit
         run: |
-          echo "## NPM Security Audit" >> $GITHUB_STEP_SUMMARY
+          echo "## NPM Security Audit" >> "$GITHUB_STEP_SUMMARY"
           # Keep the raw report as an artifact for triage.
           npm audit --omit=dev --audit-level=moderate --json > npm-audit.json || true
           # Gate on production moderate+ advisories via audit-ci so we can
@@ -44,7 +44,7 @@ jobs:
           npx --yes audit-ci@^7 --config .audit-ci.json
 
       - name: Upload audit results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: npm-audit-results
@@ -76,7 +76,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -115,7 +115,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run Trivy vulnerability scanner in fs mode
         uses: aquasecurity/trivy-action@v0.36.0
@@ -150,7 +150,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -182,17 +182,19 @@ jobs:
     steps:
       - name: Generate Security Summary
         run: |
-          echo "# 🛡️ Security Scan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Scan Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Scan Type | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Dependency Scan | ${{ needs.dependency-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| .NET Scan | ${{ needs.dotnet-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docker Scan | ${{ needs.docker-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Secret Scan | ${{ needs.secret-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Action Required:** Review failed scans and remediate vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "# 🛡️ Security Scan Summary"
+            echo ""
+            echo "**Scan Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo ""
+            echo "## Scan Results"
+            echo ""
+            echo "| Scan Type | Status |"
+            echo "|-----------|--------|"
+            echo "| Dependency Scan | ${{ needs.dependency-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+            echo "| .NET Scan | ${{ needs.dotnet-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+            echo "| Docker Scan | ${{ needs.docker-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+            echo "| Secret Scan | ${{ needs.secret-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+            echo ""
+            echo "**Action Required:** Review failed scans and remediate vulnerabilities"
+          } >> "$GITHUB_STEP_SUMMARY"

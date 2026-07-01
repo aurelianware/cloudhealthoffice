@@ -123,7 +123,7 @@ jobs:
       services: ${{ steps.compute.outputs.services }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run path filter
         id: filter
@@ -131,8 +131,8 @@ jobs:
         # v4.0.0/v4.0.1 followed in the same window with a Node 24 runtime
         # upgrade). Pinned to v4.0.1 — the latest minor in the v4 line.
         # All other actions in this repo follow the same "current major"
-        # convention (actions/checkout@v4, docker/setup-buildx-action@v3,
-        # docker/build-push-action@v6, docker/metadata-action@v5).
+        # convention (actions/checkout@v7, docker/setup-buildx-action@v4,
+        # docker/build-push-action@v7, docker/metadata-action@v5).
         uses: dorny/paths-filter@v4.0.1
         with:
           filters: .github/paths-filter.yml
@@ -314,12 +314,10 @@ jobs:
       # PR builds neither pollute :latest nor leak per-PR sha tags.
       tag_latest: false
       tag_sha: true
-      # Dependabot PRs do not receive normal repo Actions secrets, so they
-      # cannot log into the mirrored ACR base-image repositories unless
-      # equivalent Dependabot secrets are configured. Keep strict ACR parity
-      # for human/automation PRs that can access secrets, but let Dependabot
-      # still compile the affected service image against public MCR bases.
-      require_acr_read_token: ${{ github.actor != 'dependabot[bot]' }}
+      # Dependabot PRs do not receive normal repo Actions secrets, and all PR
+      # validation should avoid ACR while Azure deployments are paused. Keep
+      # strict ACR parity only when Azure deploys are explicitly enabled.
+      require_acr_read_token: ${{ github.actor != 'dependabot[bot]' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true' }}
     secrets:
       # PR builds need ACR read access for mirrored .NET base image pulls.
       # AZURE_CLIENT_ID / TENANT / SUBSCRIPTION are deliberately NOT

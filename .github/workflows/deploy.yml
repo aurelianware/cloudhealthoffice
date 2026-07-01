@@ -32,7 +32,7 @@ jobs:
       sp-id: ${{ steps.ensure-sp.outputs.sp-id }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set default secrets if not configured
         id: set-defaults
@@ -67,7 +67,7 @@ jobs:
       - name: Azure Login (OIDC) - Optional if secrets exist
         if: env.HAS_AZURE_CREDS == 'true'
         id: azure-login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ env.CLIENT_ID }}
           tenant-id: ${{ env.TENANT_ID }}
