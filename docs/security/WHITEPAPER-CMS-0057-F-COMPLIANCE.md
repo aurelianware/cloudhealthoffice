@@ -1,6 +1,6 @@
 # The Open Path to CMS-0057-F Compliance
 
-## Replacing claims backend & claims adjudication system Modules with Cloud Health Office
+## Replacing claims backend & claims adjudication system modules with Cloud Health Office
 
 ---
 
