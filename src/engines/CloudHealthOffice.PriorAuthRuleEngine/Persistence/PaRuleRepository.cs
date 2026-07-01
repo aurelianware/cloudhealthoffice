@@ -241,6 +241,7 @@ public sealed class PaRuleRepositoryMongo : IPaRuleRepository
 
     public async Task UpsertAsync(PaRuleDocument rule, CancellationToken ct = default)
     {
+        rule.Id        = MakeId(rule);
         rule.UpdatedAt = DateTime.UtcNow;
         var filter = Builders<PaRuleDocument>.Filter.And(
             Builders<PaRuleDocument>.Filter.Eq(r => r.RuleId,    rule.RuleId),
@@ -255,6 +256,7 @@ public sealed class PaRuleRepositoryMongo : IPaRuleRepository
     {
         var ops = rules.Select(r =>
         {
+            r.Id        = MakeId(r);
             r.UpdatedAt = DateTime.UtcNow;
             var filter = Builders<PaRuleDocument>.Filter.And(
                 Builders<PaRuleDocument>.Filter.Eq(x => x.RuleId,    r.RuleId),
@@ -265,6 +267,9 @@ public sealed class PaRuleRepositoryMongo : IPaRuleRepository
         if (ops.Count > 0)
             await _collection.BulkWriteAsync(ops, new BulkWriteOptions { IsOrdered = false }, ct);
     }
+
+    private static string MakeId(PaRuleDocument r) =>
+        $"{r.StateCode}:{(int)r.Lob}:{r.Program ?? "any"}:{r.TenantId ?? "platform"}:{r.RuleId}";
 
     public async Task DeleteAsync(string ruleId, string stateCode, CancellationToken ct = default)
     {

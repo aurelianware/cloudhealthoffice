@@ -18,6 +18,8 @@ SKIP_BUILD=false
 ONLY_BUILD=false
 NAMESPACE="cloudhealthoffice"
 IMAGE_PREFIX="cloudhealthoffice"
+KIND_CLUSTER_NAME=""
+LOCAL_DOTNET_REGISTRY="${LOCAL_DOTNET_REGISTRY:-mcr.microsoft.com}"
 
 # Defaults — overridden by .env.local if present
 MONGO_USER="admin"
@@ -59,10 +61,23 @@ warn() { echo "  ⚠ $*"; }
 
 # ── Preflight checks ─────────────────────────────────────────────────────────
 log "Preflight checks"
-kubectl config current-context | grep -q "docker-desktop" \
-  || warn "Context is '$(kubectl config current-context)' — expected 'docker-desktop'"
+CURRENT_CONTEXT="$(kubectl config current-context)"
+if [[ "$CURRENT_CONTEXT" == kind-* ]]; then
+  KIND_CLUSTER_NAME="${CURRENT_CONTEXT#kind-}"
+  ok "kind cluster detected: $KIND_CLUSTER_NAME"
+elif [[ "$CURRENT_CONTEXT" != "docker-desktop" ]]; then
+  warn "Context is '$CURRENT_CONTEXT' — expected 'docker-desktop' or 'kind-*'"
+fi
 kubectl cluster-info > /dev/null 2>&1 || err "Kubernetes cluster not reachable"
 ok "Cluster reachable"
+
+load_kind_image() {
+  local image="$1"
+  if [[ -n "$KIND_CLUSTER_NAME" ]]; then
+    kind load docker-image "$image" --name "$KIND_CLUSTER_NAME" \
+      && ok "loaded $image into kind" || warn "failed to load $image into kind"
+  fi
+}
 
 # ── Services to build ─────────────────────────────────────────────────────────
 # Maps: service-name -> Dockerfile path (relative to repo root)
@@ -100,14 +115,15 @@ if [[ "$SKIP_BUILD" == false ]]; then
   # Portal — uses repo root as build context
   log "Building portal"
   docker build -t ghcr.io/aurelianware/${IMAGE_PREFIX}-portal:latest \
+    --build-arg REGISTRY="$LOCAL_DOTNET_REGISTRY" \
     -f src/portal/CloudHealthOffice.Portal/Dockerfile . \
-    && ok "portal" || warn "portal build failed"
+    && { ok "portal"; load_kind_image "ghcr.io/aurelianware/${IMAGE_PREFIX}-portal:latest"; } || warn "portal build failed"
 
   # Site
   log "Building site"
   docker build -t ${IMAGE_PREFIX}-site:latest \
     -f src/site/Dockerfile src/site/ \
-    && ok "site" || warn "site build failed"
+    && { ok "site"; load_kind_image "${IMAGE_PREFIX}-site:latest"; } || warn "site build failed"
 
   # Microservices — all use repo root as build context (Dockerfiles COPY from src/services/...)
   log "Building microservices"
@@ -123,8 +139,9 @@ if [[ "$SKIP_BUILD" == false ]]; then
     ghcr_tag="ghcr.io/aurelianware/${IMAGE_PREFIX}-${svc}:latest"
 
     docker build -t "$acr_tag" -t "$ghcr_tag" \
+      --build-arg REGISTRY="$LOCAL_DOTNET_REGISTRY" \
       -f "$dockerfile" . \
-      && ok "$svc" || warn "$svc build failed"
+      && { ok "$svc"; load_kind_image "$acr_tag"; load_kind_image "$ghcr_tag"; } || warn "$svc build failed"
   done
 fi
 
@@ -216,6 +233,19 @@ kubectl create secret generic pricing-api-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "pricing-api-secret"
 
+# Portal email stubs for local development
+kubectl create secret generic email-config \
+  --namespace "$NAMESPACE" \
+  --from-literal=SmtpHost=localhost \
+  --from-literal=SmtpPort=1025 \
+  --from-literal=EnableSsl=false \
+  --from-literal=FromAddress=local-dev@cloudhealthoffice.local \
+  --from-literal=SalesTeamAddress=sales@cloudhealthoffice.local \
+  --from-literal=Username=local-dev \
+  --from-literal=Password=local-dev \
+  --dry-run=client -o yaml | kubectl apply -f -
+ok "email-config"
+
 # ── Deploy infrastructure ────────────────────────────────────────────────────
 log "Deploying MongoDB"
 kubectl apply -f infrastructure/k8s/mongodb-deployment.yaml
@@ -269,6 +299,12 @@ kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
     print("✓ Demo data seeded");
   ' 2>/dev/null && ok "seeded" || warn "seed failed (MongoDB may still be starting)"
 
+# Local MongoDB can retain malformed seed rows from previous interrupted runs.
+kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
+  --username "$MONGO_USER" --password "$MONGO_PASS" --authenticationDatabase admin --quiet \
+  --eval 'db = db.getSiblingDB("cloudhealthoffice"); db.prior_auth_rules.deleteMany({ _id: "" });' \
+  >/dev/null 2>&1 || true
+
 # ── Deploy all services ───────────────────────────────────────────────────────
 log "Deploying microservices"
 
@@ -296,12 +332,25 @@ done
 # Pricing API (different path)
 deploy_service "src/services/CloudHealthOffice.PricingApi/k8s/pricing-api-deployment.yaml" "pricing-api"
 
+# Local-only environment relaxations. Claims stays Production because it has
+# Development DI scope validation issues in its hosted index initializers.
+kubectl patch configmap member-service-config -n "$NAMESPACE" --type merge \
+  -p '{"data":{"ASPNETCORE_ENVIRONMENT":"Development"}}' >/dev/null 2>&1 || true
+kubectl patch configmap benefit-plan-service-config -n "$NAMESPACE" --type merge \
+  -p '{"data":{"ASPNETCORE_ENVIRONMENT":"Development"}}' >/dev/null 2>&1 || true
+
 # ── Deploy portal ─────────────────────────────────────────────────────────────
 log "Deploying portal"
 sed 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' \
   src/portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml \
   | kubectl apply -f - \
   && ok "portal" || warn "portal deploy failed"
+
+kubectl patch configmap portal-config -n "$NAMESPACE" --type merge \
+  -p '{"data":{"ASPNETCORE_ENVIRONMENT":"Development"}}' >/dev/null 2>&1 || true
+kubectl delete hpa portal-hpa -n "$NAMESPACE" 2>/dev/null || true
+kubectl set env deployment/portal -n "$NAMESPACE" XDG_DATA_HOME=/tmp >/dev/null 2>&1 || true
+kubectl scale deployment/portal -n "$NAMESPACE" --replicas=1 >/dev/null 2>&1 || true
 
 # ── Wait for rollouts ────────────────────────────────────────────────────────
 log "Waiting for core services to start"
