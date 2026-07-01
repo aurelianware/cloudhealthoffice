@@ -14,11 +14,12 @@ For the broader Claims Phase 1 architectural posture, see
 For the Phase 2 backlog covering items required for full compliance,
 see [`docs/roadmap/claims-phase-2-backlog.md`](../roadmap/claims-phase-2-backlog.md).
 
-This document is **scoped to the Claims domain.** A cross-service
-master CMS-0057-F readiness document does not yet exist; the
-provider-directory and benefit-plan readiness contributions are
+This document is **scoped to the Claims domain.** The cross-service
+master CMS-0057-F readiness document is
+[`CMS-0057-F-READINESS-MATRIX.md`](CMS-0057-F-READINESS-MATRIX.md).
+Provider-directory and benefit-plan readiness contributions are
 referenced here only to the extent they intersect with the claims
-posture. A future cross-service CMS-0057-F doc will consolidate.
+posture.
 
 > **Important caveat.** Compliance readiness statements in this
 > document describe Cloud Health Office's **technical capability
