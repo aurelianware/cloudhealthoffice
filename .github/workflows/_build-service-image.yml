@@ -200,7 +200,7 @@ jobs:
     permissions:
       # Read-only checkout of the repository.
       contents: read
-      # OIDC token issuance for azure/login@v3 (only used when push: true,
+      # OIDC token issuance for azure/login@v2 (only used when push: true,
       # but the permission must be granted at the job level regardless).
       id-token: write
 
