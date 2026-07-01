@@ -1,6 +1,6 @@
 # The Open Path to CMS-0057-F Compliance
 
-## Replacing claims backend & claims adjudication system Modules with CloudHealthOffice
+## Replacing claims backend & claims adjudication system modules with Cloud Health Office
 
 ---
 
@@ -15,7 +15,7 @@
 1. [Executive Summary](#executive-summary)
 2. [The CMS-0057-F Imperative](#the-cms-0057-f-imperative)
 3. [The Legacy System Burden](#the-legacy-system-burden)
-4. [CloudHealthOffice: The Inevitable Evolution](#cloudhealthoffice-the-inevitable-evolution)
+4. [Cloud Health Office: The Inevitable Evolution](#cloud-health-office-the-inevitable-evolution)
 5. [Migration Timeline and ROI Analysis](#migration-timeline-and-roi-analysis)
 6. [Implementation Roadmap](#implementation-roadmap-page-6)
 7. [Conclusion and Next Steps](#conclusion-and-next-steps-page-7)
@@ -31,11 +31,11 @@
 
 Organizations relying on legacy core administrative processing systems (CAPS) such as core administrative system and Core System Vendor claims adjudication system face a stark reality: these platforms were not architected for modern interoperability requirements. Custom development projects to retrofit compliance onto legacy systems routinely exceed $2-5 million[^Gartner2024] and require 18-36 months of implementation time[^Forrester2024].
 
-**CloudHealthOffice eliminates this burden.**
+**Cloud Health Office eliminates this burden.**
 
 ### Key Findings
 
-| Metric | Legacy Approach | CloudHealthOffice |
+| Metric | Legacy Approach | Cloud Health Office |
 |--------|----------------|---------------------|
 | **Time to Compliance** | 18-36 months | < 90 days |
 | **Implementation Cost** | $2-5M+ | $150K-500K |
@@ -154,16 +154,16 @@ Organizations operating claims adjudication systems face substantial obstacles w
 - Custom code maintenance: $200,000-500,000/year
 - Regulatory update implementation: $100,000-300,000/year
 
-### TCO Comparison: Legacy vs. CloudHealthOffice
+### TCO Comparison: Legacy vs. Cloud Health Office
 
-The following chart illustrates the dramatic 5-year total cost of ownership difference between legacy custom development and CloudHealthOffice deployment:
+The following chart illustrates the dramatic 5-year total cost of ownership difference between legacy custom development and Cloud Health Office deployment:
 
-<!-- Alt text: Bar chart comparing 5-year TCO showing Legacy claims adjudication systems at $16.7M vs CloudHealthOffice at $2.6M -->
+<!-- Alt text: Bar chart comparing 5-year TCO showing Legacy claims adjudication systems at $16.7M vs Cloud Health Office at $2.6M -->
 ```mermaid
 %%{init: {'theme': 'neutral', 'themeVariables': { 'primaryColor': '#3498db', 'secondaryColor': '#27ae60' }}}%%
 xychart-beta
     title "5-Year Total Cost of Ownership ($M)"
-    x-axis ["Legacy claims adjudication systems ($16.7M)", "CloudHealthOffice ($2.6M)"]
+    x-axis ["Legacy claims adjudication systems ($16.7M)", "Cloud Health Office ($2.6M)"]
     y-axis "Cost in Millions USD" 0 --> 20
     bar [16.7, 2.6]
 ```
@@ -182,7 +182,7 @@ Legacy CAPS vendors profit from complexity. Each customization creates dependenc
 
 ### The Source-Available Alternative
 
-CloudHealthOffice inverts this model. Source-available transparency eliminates vendor lock-in concerns. Configuration-driven deployment replaces custom development. Azure-native architecture provides enterprise-grade reliability without proprietary infrastructure.
+Cloud Health Office inverts this model. Source-available transparency eliminates vendor lock-in concerns. Configuration-driven deployment replaces custom development. Azure-native architecture provides enterprise-grade reliability without proprietary infrastructure.
 
 The platform does not replace claims backend or claims adjudication system for core claims processing. Instead, it provides the interoperability layer these systems cannot deliver natively. Existing investments remain protected. Compliance becomes achievable.
 
@@ -229,7 +229,7 @@ The platform performs bi-directional transformation between X12 EDI and FHIR R4[
 
 #### Backend-Agnostic Integration
 
-CloudHealthOffice connects to existing CAPS platforms via:
+Cloud Health Office connects to existing CAPS platforms via:
 
 - **claims backend:** TriZetto Open Access SOAP APIs for member, provider, and claim data
 - **claims adjudication system:** Core System Vendor APIs and database views for claims and authorization data
@@ -237,8 +237,8 @@ CloudHealthOffice connects to existing CAPS platforms via:
 
 The Migration Wizard automates data extraction with 95%+ auto-match capability for members, providers, and benefit plans.
 
-![CloudHealthOffice Architecture](images/architecture-cloudhealthoffice-cms0057f.png)
-*Figure: CloudHealthOffice integration architecture showing X12-to-FHIR transformation layer connecting legacy CAPS to modern APIs.*
+![Cloud Health Office Architecture](images/architecture-cloudhealthoffice-cms0057f.png)
+*Figure: Cloud Health Office integration architecture showing X12-to-FHIR transformation layer connecting legacy CAPS to modern APIs.*
 
 <!-- Architecture diagram in PlantUML format - generate PNG using: plantuml generated/architecture-diagram.puml -->
 <details>
@@ -250,7 +250,7 @@ The Migration Wizard automates data extraction with 95%+ auto-match capability f
 skinparam backgroundColor #FEFEFE
 skinparam componentStyle rectangle
 
-title CloudHealthOffice CMS-0057-F Integration Architecture
+title Cloud Health Office CMS-0057-F Integration Architecture
 
 package "Legacy CAPS Systems" {
   [claims backend\n(TriZetto)] as claims backend
@@ -258,7 +258,7 @@ package "Legacy CAPS Systems" {
   [Custom Systems] as Custom
 }
 
-package "CloudHealthOffice Platform" {
+package "Cloud Health Office Platform" {
   package "X12 EDI Layer" {
     [270/271 Eligibility] as E270
     [837 Claims] as C837
@@ -345,7 +345,7 @@ PriorAuthAPI --> CMS
 
 ### Migration Timeline
 
-CloudHealthOffice enables compliance achievement in 90 days or less:
+Cloud Health Office enables compliance achievement in 90 days or less:
 
 #### Phase 1: Discovery and Planning (Weeks 1-2)
 
@@ -391,7 +391,7 @@ CloudHealthOffice enables compliance achievement in 90 days or less:
 
 #### Cost Assumptions
 
-| Category | Legacy Custom Build | CloudHealthOffice |
+| Category | Legacy Custom Build | Cloud Health Office |
 |----------|-------------------|---------------------|
 | Implementation Duration | 24 months | 3 months |
 | Implementation Cost | $3,500,000 | $350,000 |
@@ -402,7 +402,7 @@ CloudHealthOffice enables compliance achievement in 90 days or less:
 
 #### 5-Year Total Cost of Ownership
 
-| Year | Legacy Custom Build | CloudHealthOffice | Annual Savings |
+| Year | Legacy Custom Build | Cloud Health Office | Annual Savings |
 |------|-------------------|---------------------|----------------|
 | **Year 0 (Implementation)** | $3,500,000 | $350,000 | $3,150,000 |
 | **Year 1** | $2,250,000 | $420,000 | $1,830,000 |
@@ -416,7 +416,7 @@ CloudHealthOffice enables compliance achievement in 90 days or less:
 
 #### ROI Calculation
 
-The return on investment for CloudHealthOffice can be calculated using the standard ROI formula:
+The return on investment for Cloud Health Office can be calculated using the standard ROI formula:
 
 **ROI Formula:**
 ```
@@ -425,15 +425,15 @@ ROI = (Net Benefits - Implementation Costs) / Implementation Costs × 100
 
 **Step-by-Step Example Calculation:**
 
-Using the TCO table values above, here is a detailed ROI calculation for CloudHealthOffice:
+Using the TCO table values above, here is a detailed ROI calculation for Cloud Health Office:
 
 1. **Calculate Total Net Benefits (5 Years):**
    - Legacy 5-Year TCO: $16,699,852
-   - CloudHealthOffice 5-Year TCO: $2,579,837
+   - Cloud Health Office 5-Year TCO: $2,579,837
    - **Net Benefits:** $16,699,852 - $2,579,837 = **$14,120,015**
 
 2. **Identify Implementation Costs:**
-   - CloudHealthOffice Initial Investment: **$350,000**
+   - Cloud Health Office Initial Investment: **$350,000**
    - Year 1 Operating Investment: $420,000
    - **Total Initial Investment (Year 0-1):** $770,000
 
@@ -467,11 +467,11 @@ Using the TCO table values above, here is a detailed ROI calculation for CloudHe
 | **5-Year ROI (conservative)** | 547% |
 | **5-Year ROI (aggressive)** | 1,734%+ |
 
-<!-- Alt text: Pie chart showing CloudHealthOffice implementation cost breakdown: 40% Implementation, 30% Operations, 15% Infrastructure, 10% Training, 5% Contingency -->
+<!-- Alt text: Pie chart showing Cloud Health Office implementation cost breakdown: 40% Implementation, 30% Operations, 15% Infrastructure, 10% Training, 5% Contingency -->
 ```mermaid
 %%{init: {'theme': 'neutral', 'themeVariables': { 'pie1': '#3498db', 'pie2': '#27ae60', 'pie3': '#f39c12', 'pie4': '#9b59b6', 'pie5': '#e74c3c' }}}%%
 pie showData
-    title "CloudHealthOffice Implementation Cost Breakdown"
+    title "Cloud Health Office Implementation Cost Breakdown"
     "Implementation (40%)" : 40
     "Operations Year 1 (30%)" : 30
     "Infrastructure (15%)" : 15
@@ -502,11 +502,11 @@ The following table shows how ROI varies based on implementation timeline and co
 | **Conservative** | 16 weeks | $500,000 | $13,850,000 | 2,770% |
 | **Worst Case** | 24 weeks | $750,000 | $13,500,000 | 1,800% |
 
-**Key CIO Insight:** Even in worst-case scenarios, CloudHealthOffice delivers 18x+ returns while eliminating compliance risk. The risk-adjusted return is significantly higher when factoring in potential CMS fines ($1M+ annually), audit costs, and reputational damage from non-compliance. For organizations with existing claims backend or claims adjudication system investments, CloudHealthOffice represents the lowest-risk path to CMS-0057-F compliance.
+**Key CIO Insight:** Even in worst-case scenarios, Cloud Health Office delivers 18x+ returns while eliminating compliance risk. The risk-adjusted return is significantly higher when factoring in potential CMS fines ($1M+ annually), audit costs, and reputational damage from non-compliance. For organizations with existing claims backend or claims adjudication system investments, Cloud Health Office represents the lowest-risk path to CMS-0057-F compliance.
 
 ### Additional Value Drivers
 
-Beyond direct cost savings, CloudHealthOffice delivers[^AHIP2024]:
+Beyond direct cost savings, Cloud Health Office delivers[^AHIP2024]:
 
 | Value Driver | Quantified Impact |
 |-------------|-------------------|
@@ -523,16 +523,16 @@ Beyond direct cost savings, CloudHealthOffice delivers[^AHIP2024]:
 
 ### Phased Implementation Timeline
 
-CloudHealthOffice implementation follows a structured 12-16 week timeline designed for minimal disruption and maximum compliance assurance. This roadmap draws from the strategic initiatives outlined in the [2026 Product Roadmap](../ROADMAP-2026.md) and adapts them for payer-specific deployment scenarios.
+Cloud Health Office implementation follows a structured 12-16 week timeline designed for minimal disruption and maximum compliance assurance. This roadmap draws from the strategic initiatives outlined in the [2026 Product Roadmap](../ROADMAP-2026.md) and adapts them for payer-specific deployment scenarios.
 
 #### Implementation Phases Overview
 
 | Phase | Timeline | Key Deliverables | Responsibilities |
 |-------|----------|------------------|------------------|
-| **Discovery** | Weeks 1-2 | Gap analysis, architecture design, integration specification | Payer IT (40%) / CloudHealthOffice (60%) |
-| **Pilot** | Weeks 3-6 | Eligibility microservice deploy, FHIR API certification, sandbox environment | Payer IT (30%) / CloudHealthOffice (70%) |
-| **Scale** | Weeks 7-10 | Prior auth workflows, production deployment, 20% traffic routing | Payer IT (50%) / CloudHealthOffice (50%) |
-| **Optimize** | Weeks 11-16 | Full traffic cutover, performance tuning, compliance audit | Payer IT (60%) / CloudHealthOffice (40%) |
+| **Discovery** | Weeks 1-2 | Gap analysis, architecture design, integration specification | Payer IT (40%) / Cloud Health Office (60%) |
+| **Pilot** | Weeks 3-6 | Eligibility microservice deploy, FHIR API certification, sandbox environment | Payer IT (30%) / Cloud Health Office (70%) |
+| **Scale** | Weeks 7-10 | Prior auth workflows, production deployment, 20% traffic routing | Payer IT (50%) / Cloud Health Office (50%) |
+| **Optimize** | Weeks 11-16 | Full traffic cutover, performance tuning, compliance audit | Payer IT (60%) / Cloud Health Office (40%) |
 
 ### Detailed Phase Breakdown
 
@@ -557,7 +557,7 @@ CloudHealthOffice implementation follows a structured 12-16 week timeline design
 #### Phase 2: Pilot (Weeks 3-6)
 
 **Objectives:**
-- Deploy CloudHealthOffice sandbox environment
+- Deploy Cloud Health Office sandbox environment
 - Implement eligibility microservice (270/271 processing)
 - Achieve FHIR API certification for Patient Access API
 - Validate Da Vinci PDex conformance
@@ -620,7 +620,7 @@ CloudHealthOffice implementation follows a structured 12-16 week timeline design
 ```mermaid
 %%{init: {'theme': 'neutral', 'themeVariables': { 'primaryColor': '#3498db' }}}%%
 gantt
-    title CloudHealthOffice CMS-0057-F Implementation Timeline
+    title Cloud Health Office CMS-0057-F Implementation Timeline
     dateFormat  YYYY-MM-DD
     
     section Discovery
@@ -662,7 +662,7 @@ gantt
 |------|--------|---------------------|
 | **claims adjudication systems API Instability** | High | Hybrid EDI/FHIR mode for rollback; maintain legacy pathways for 90 days post-go-live |
 | **FHIR Certification Delays** | Medium | Pre-certified components; early engagement with ONC-ACB testing labs |
-| **Staff Skill Gaps** | Medium | Comprehensive training program; CloudHealthOffice managed services option |
+| **Staff Skill Gaps** | Medium | Comprehensive training program; Cloud Health Office managed services option |
 | **Data Migration Issues** | High | Incremental migration with validation gates; parallel processing during transition |
 | **Performance Degradation** | Medium | Auto-scaling Azure infrastructure; pre-production load testing at 2x expected volume |
 | **Compliance Audit Findings** | High | Continuous compliance monitoring; automated Da Vinci IG validation |
@@ -671,7 +671,7 @@ gantt
 
 #### claims backend Integration (TriZetto Open Access APIs)
 
-CloudHealthOffice integrates with claims backend via the Open Access API framework[^Gartner2024]:
+Cloud Health Office integrates with claims backend via the Open Access API framework[^Gartner2024]:
 
 - **Member Services:** Real-time eligibility lookup via `MemberService` SOAP endpoint
 - **Provider Services:** Provider directory and credentialing via `ProviderService`
@@ -693,7 +693,7 @@ backend:
 
 #### claims adjudication system Integration (Core System Vendor APIs)
 
-CloudHealthOffice supports claims adjudication system integration via database views and REST APIs:
+Cloud Health Office supports claims adjudication system integration via database views and REST APIs:
 
 - **Database Views:** Direct access to `BACKEND_MEMBER_VW`, `BACKEND_CLAIM_VW`, `BACKEND_AUTH_VW`
 - **REST APIs:** Core System Vendor Enterprise Integration Layer (EIL) for real-time operations
@@ -701,7 +701,7 @@ CloudHealthOffice supports claims adjudication system integration via database v
 
 **Hybrid EDI/FHIR Mode:**
 
-For risk mitigation, CloudHealthOffice supports a hybrid mode where:
+For risk mitigation, Cloud Health Office supports a hybrid mode where:
 1. Legacy X12 EDI continues processing through existing claims adjudication systems pathways
 2. FHIR APIs operate in parallel for CMS-0057-F compliance
 3. Traffic can be routed between systems based on transaction type or provider
@@ -720,7 +720,7 @@ The implementation timeline can be adjusted based on payer size and complexity:
 
 **Small Payer Accelerator:**
 
-For regional Medicaid MCOs and small commercial plans, CloudHealthOffice offers a 4-week accelerated deployment:
+For regional Medicaid MCOs and small commercial plans, Cloud Health Office offers a 4-week accelerated deployment:
 
 - **Week 1:** Discovery and Azure deployment (pre-configured templates)
 - **Week 2:** FHIR API activation and basic integration
@@ -735,9 +735,9 @@ This accelerated path leverages pre-built configurations and managed services to
 
 ### Key Benefits Summary
 
-CloudHealthOffice transforms the CMS-0057-F compliance challenge from an insurmountable burden into a strategic opportunity:
+Cloud Health Office transforms the CMS-0057-F compliance challenge from an insurmountable burden into a strategic opportunity:
 
-| Benefit | Legacy Approach | CloudHealthOffice Advantage |
+| Benefit | Legacy Approach | Cloud Health Office Advantage |
 |---------|-----------------|----------------------------|
 | **Vendor Independence** | Lock-in with $800K-3.5M annual licensing | Source-available agility; no vendor lock-in |
 | **CMS Compliance** | 18-36 month uncertain timeline | 90-day technical accelerator toward payer-specific January 2027 readiness |
@@ -756,7 +756,7 @@ Open-source health IT adoption is accelerating across the industry. Per Gartner,
 - **Community:** Benefit from shared innovations across 150+ contributing organizations
 - **Future-Proofing:** Adapt to regulatory changes (CMS updates, state Medicaid requirements) on your timeline
 
-CloudHealthOffice positions your organization at the forefront of this transformation—not as a follower retrofitting legacy systems, but as a leader defining the future of payer interoperability.
+Cloud Health Office positions your organization at the forefront of this transformation—not as a follower retrofitting legacy systems, but as a leader defining the future of payer interoperability.
 
 ### Call to Action
 
@@ -764,14 +764,14 @@ Take the next step toward CMS-0057-F compliance today:
 
 - **🔗 Fork the Repository:** Start exploring at [github.com/aurelianware/cloudhealthoffice](https://github.com/aurelianware/cloudhealthoffice)
 - **🚀 Join Our Early Adopter Program:** Priority support, dedicated implementation assistance, and influence on roadmap priorities. Contact: [contact@aurelianware.com](mailto:contact@aurelianware.com)
-- **📅 Schedule a Demo:** See CloudHealthOffice in action with your specific claims adjudication systems environment. [Book via Calendly](https://calendly.com/aurelianware/cloudhealthoffice-demo)
+- **📅 Schedule a Demo:** See Cloud Health Office in action with your specific claims adjudication systems environment. [Book via Calendly](https://calendly.com/aurelianware/cloudhealthoffice-demo)
 - **🤝 Contribute to Governance:** Shape custom features, propose enhancements, and participate in community roadmap decisions. See [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ### Final Thought
 
 > *"The organizations that thrive in healthcare's interoperability future won't be those with the deepest pockets for vendor fees—they'll be those with the agility to adopt open standards, the transparency to build trust, and the vision to see compliance as competitive advantage."*
 
-The January 2027 deadline is not a threat. With CloudHealthOffice, it's an opportunity to leapfrog competitors still mired in legacy complexity.
+The January 2027 deadline is not a threat. With Cloud Health Office, it's an opportunity to leapfrog competitors still mired in legacy complexity.
 
 **The transformation starts now.**
 
@@ -779,7 +779,7 @@ The January 2027 deadline is not a threat. With CloudHealthOffice, it's an oppor
 
 ### Contact
 
-**CloudHealthOffice**
+**Cloud Health Office**
 *The Inevitable Evolution of Healthcare EDI*
 
 - **Documentation:** [https://github.com/aurelianware/cloudhealthoffice](https://github.com/aurelianware/cloudhealthoffice)
@@ -825,10 +825,10 @@ The January 2027 deadline is not a threat. With CloudHealthOffice, it's an oppor
 
 ---
 
-*CloudHealthOffice is an independent EDI integration platform. References to claims backend (core system vendors) and claims adjudication system (Core System Vendor) are for illustrative purposes only. CloudHealthOffice is not affiliated with, endorsed by, or sponsored by TriZetto, Core System Vendor, or any other vendor mentioned in this document.*
+*Cloud Health Office is an independent EDI integration platform. References to claims backend (core system vendors) and claims adjudication system (Core System Vendor) are for illustrative purposes only. Cloud Health Office is not affiliated with, endorsed by, or sponsored by TriZetto, Core System Vendor, or any other vendor mentioned in this document.*
 
 ---
 
-**CloudHealthOffice** – Systems That Do Not Fail
+**Cloud Health Office** – Systems That Do Not Fail
 
 *Source-Available (BSL 1.1) | Azure-Native | Production-Grade | HIPAA-Compliant*
