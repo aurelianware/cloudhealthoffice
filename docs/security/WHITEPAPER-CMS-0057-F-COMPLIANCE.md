@@ -45,7 +45,7 @@ Organizations relying on legacy core administrative processing systems (CAPS) su
 
 ### Strategic Value Proposition
 
-CloudHealthOffice is the #1 source-available Azure-native multi-payer EDI platform[^AHIP2024]. Unlike legacy vendor lock-in approaches, CloudHealthOffice provides:
+Cloud Health Office is the #1 source-available Azure-native multi-payer EDI platform[^AHIP2024]. Unlike legacy vendor lock-in approaches, Cloud Health Office provides:
 
 - **CMS-0057-F implementation accelerator** with FHIR R4 APIs, SMART-on-FHIR, and prior-authorization building blocks
 - **Backend-agnostic architecture** that integrates with existing claims adjudication systems investments
@@ -53,9 +53,9 @@ CloudHealthOffice is the #1 source-available Azure-native multi-payer EDI platfo
 - **Source-available transparency** eliminating vendor dependency concerns
 - **Proven ROI** with 5-year TCO savings exceeding $14 million
 
-The transformation does not require wholesale replacement of existing systems. CloudHealthOffice augments and extends claims adjudication systems with the interoperability layer CMS-0057-F demands. Legacy investments remain protected while compliance becomes absolute.
+The transformation does not require wholesale replacement of existing systems. Cloud Health Office augments and extends claims adjudication systems with the interoperability layer CMS-0057-F demands. Legacy investments remain protected while compliance becomes absolute.
 
-> **Note for Diverse Payer Types:** Whether you operate a large Medicare Advantage plan, a regional Medicaid managed care organization, or a commercial QHP on the federal marketplace, CloudHealthOffice scales to your transaction volume and regulatory requirements. Medicaid-specific considerations (e.g., state-level reporting, dual-eligible coordination) are fully supported.
+> **Note for Diverse Payer Types:** Whether you operate a large Medicare Advantage plan, a regional Medicaid managed care organization, or a commercial QHP on the federal marketplace, Cloud Health Office scales to your transaction volume and regulatory requirements. Medicaid-specific considerations (e.g., state-level reporting, dual-eligible coordination) are fully supported.
 
 ---
 
@@ -192,11 +192,11 @@ The platform does not replace claims backend or claims adjudication system for c
 
 ### Platform Capabilities
 
-CloudHealthOffice accelerates CMS-0057-F implementation through:
+Cloud Health Office accelerates CMS-0057-F implementation through:
 
 #### FHIR R4 Implementation Foundation
 
-| CMS-0057-F Requirement | CloudHealthOffice Status | Tests |
+| CMS-0057-F Requirement | Cloud Health Office Status | Tests |
 |-----------------------|---------------------------|-------|
 | Patient Access API | Integration required | 19 tests |
 | Provider Access API | Integration required | 8 tests |

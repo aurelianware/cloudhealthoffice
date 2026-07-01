@@ -461,7 +461,7 @@ Cloud Health Office aligns with the following HL7 Da Vinci Implementation Guides
 
 ### Timeline Summary
 
-| Requirement | Applicable Payers | Deadline | CHO Status |
+| Requirement | Applicable Payers | Deadline | Cloud Health Office Status |
 |-------------|-------------------|----------|------------|
 | **Patient Access API** | MA, Medicaid MC, CHIP MC, QHP | January 1, 2027 | Integration required |
 | **Provider Access API** | All impacted payers | January 1, 2027 | Integration required |
