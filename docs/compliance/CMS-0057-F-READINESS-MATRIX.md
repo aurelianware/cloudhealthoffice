@@ -36,6 +36,20 @@ implementation still requires payer source-system integration and gap closure
 around patient access breadth, payer-to-payer consent/exchange workflow, public
 prior-authorization metrics, and adapter mode clarity.
 
+## Pilot Diligence Package
+
+Use these companion artifacts to turn the readiness matrix into a buyer or pilot
+workstream:
+
+- [CMS-0057-F-COMPLIANCE-ACCELERATOR-BRIEF.md](CMS-0057-F-COMPLIANCE-ACCELERATOR-BRIEF.md)
+  for the one-page buyer-facing offer.
+- [CMS-0057-F-PILOT-DILIGENCE-CHECKLIST.md](CMS-0057-F-PILOT-DILIGENCE-CHECKLIST.md)
+  for intake, evidence, security, integration, and go/no-go tracking.
+- [CMS-0057-F-DEMO-MODE-LIVE-ADAPTERS.md](CMS-0057-F-DEMO-MODE-LIVE-ADAPTERS.md)
+  for labeling demo, hybrid, and live payer-backed evidence.
+- [CMS-0057-F-PRIOR-AUTH-METRICS-TEMPLATE.md](CMS-0057-F-PRIOR-AUTH-METRICS-TEMPLATE.md)
+  for public prior-authorization metrics planning.
+
 ## Primary Requirement Matrix
 
 | CMS-0057-F area | Cloud Health Office status | Repo evidence | Gap / implementation note | Buyer-facing position |
