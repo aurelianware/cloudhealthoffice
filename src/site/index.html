@@ -649,8 +649,8 @@
             <label for="fp-org-name" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
               Organization Name <span aria-hidden="true" style="color:#00ff88;">*</span>
             </label>
-            <input type="text" id="fp-org-name" name="org_name" required
-              placeholder="e.g., Lakeside ACO"
+            <input type="text" id="fp-org-name" name="organization" required
+              placeholder="e.g., Regional Health Plan"
               style="
                 width: 100%; padding: 12px 16px;
                 background: rgba(255,255,255,0.04);
@@ -670,8 +670,8 @@
             <label for="fp-title" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
               Your Title / Role <span aria-hidden="true" style="color:#00ff88;">*</span>
             </label>
-            <input type="text" id="fp-title" name="title" required
-              placeholder="e.g., VP of Clinical Operations"
+            <input type="text" id="fp-title" name="role" required
+              placeholder="e.g., CIO, VP Claims, Interoperability Director"
               style="
                 width: 100%; padding: 12px 16px;
                 background: rgba(255,255,255,0.04);
@@ -712,7 +712,7 @@
             <label for="fp-org-type" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
               Organization Type <span aria-hidden="true" style="color:#00ff88;">*</span>
             </label>
-            <select id="fp-org-type" name="org_type" required
+            <select id="fp-org-type" name="organizationType" required
               style="
                 width: 100%; padding: 12px 16px;
                 background: rgba(10,10,10,0.9);
@@ -729,19 +729,22 @@
               onblur="this.style.borderColor='rgba(0,255,255,0.2)'"
             >
               <option value="" style="background:#0a0a0a;">Select organization type&hellip;</option>
-              <option value="aco" style="background:#0a0a0a;">ACO (Accountable Care Organization)</option>
-              <option value="health_system" style="background:#0a0a0a;">Health System</option>
-              <option value="physician_group" style="background:#0a0a0a;">Physician Group / Medical Group</option>
+              <option value="health_plan" style="background:#0a0a0a;">Health Plan / Commercial Payer</option>
+              <option value="medicaid_plan" style="background:#0a0a0a;">Medicaid Managed Care Plan</option>
+              <option value="medicare_advantage" style="background:#0a0a0a;">Medicare Advantage Plan</option>
+              <option value="tpa" style="background:#0a0a0a;">Third-Party Administrator (TPA)</option>
+              <option value="aco" style="background:#0a0a0a;">ACO / Value-Based Care Organization</option>
+              <option value="health_system" style="background:#0a0a0a;">Health System / IDN</option>
               <option value="other" style="background:#0a0a0a;">Other</option>
             </select>
           </div>
 
           <div style="margin-bottom: 22px;">
-            <label for="fp-ehr" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
-              Current EHR
+            <label for="fp-core-admin" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
+              Current Core Admin / CAPS
             </label>
-            <input type="text" id="fp-ehr" name="ehr"
-              placeholder="e.g., Epic, Cerner, athenahealth"
+            <input type="text" id="fp-core-admin" name="coreAdminPlatform"
+              placeholder="e.g., Facets, QNXT, HealthRules, Amisys, EZ-CAP, custom platform"
               style="
                 width: 100%; padding: 12px 16px;
                 background: rgba(255,255,255,0.04);
@@ -761,8 +764,8 @@
             <label for="fp-concern" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
               What&rsquo;s your biggest CMS-0057-F concern? <span aria-hidden="true" style="color:#00ff88;">*</span>
             </label>
-            <textarea id="fp-concern" name="concern" required rows="4"
-              placeholder="e.g., We don't have real-time prior auth workflows in place, and our attribution data is inconsistent..."
+            <textarea id="fp-concern" name="cms0057Concern" required rows="4"
+              placeholder="e.g., Prior authorization APIs, payer-to-payer exchange, provider access APIs, attribution data, or legacy core admin integration..."
               style="
                 width: 100%; padding: 12px 16px;
                 background: rgba(255,255,255,0.04);
