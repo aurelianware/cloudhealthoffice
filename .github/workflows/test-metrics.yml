@@ -44,7 +44,7 @@ jobs:
       coverage_pct: ${{ steps.parse.outputs.coverage_pct }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -92,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          TOTAL=0; PASSED=0; FAILED=0; SKIPPED=0; DURATION=0
+          TOTAL=0; PASSED=0; FAILED=0; SKIPPED=0
 
           for trx in TestResults/*.trx; do
             [ -f "$trx" ] || continue
@@ -117,15 +117,17 @@ jobs:
             fi
           fi
 
-          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
-          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
-          echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
-          echo "skip_count=$SKIPPED" >> "$GITHUB_OUTPUT"
-          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
-          echo "coverage_pct=$COVERAGE" >> "$GITHUB_OUTPUT"
+          {
+            echo "test_count=$TOTAL"
+            echo "pass_count=$PASSED"
+            echo "fail_count=$FAILED"
+            echo "skip_count=$SKIPPED"
+            echo "duration_ms=${{ steps.run.outputs.duration_ms }}"
+            echo "coverage_pct=$COVERAGE"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload .NET test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dotnet-test-results
@@ -149,10 +151,10 @@ jobs:
       coverage_pct: ${{ steps.parse.outputs.coverage_pct }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -193,15 +195,17 @@ jobs:
             COVERAGE=$(python3 -c "import json; d=json.load(open('coverage/coverage-summary.json')); print(d['total']['lines']['pct'])")
           fi
 
-          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
-          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
-          echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
-          echo "skip_count=$SKIPPED" >> "$GITHUB_OUTPUT"
-          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
-          echo "coverage_pct=$COVERAGE" >> "$GITHUB_OUTPUT"
+          {
+            echo "test_count=$TOTAL"
+            echo "pass_count=$PASSED"
+            echo "fail_count=$FAILED"
+            echo "skip_count=$SKIPPED"
+            echo "duration_ms=${{ steps.run.outputs.duration_ms }}"
+            echo "coverage_pct=$COVERAGE"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload Jest results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: jest-test-results
@@ -225,7 +229,7 @@ jobs:
       coverage_pct: ${{ steps.parse.outputs.coverage_pct }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -286,15 +290,17 @@ jobs:
           " 2>/dev/null || echo "0")
           fi
 
-          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
-          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
-          echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
-          echo "skip_count=$SKIPPED" >> "$GITHUB_OUTPUT"
-          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
-          echo "coverage_pct=$COVERAGE" >> "$GITHUB_OUTPUT"
+          {
+            echo "test_count=$TOTAL"
+            echo "pass_count=$PASSED"
+            echo "fail_count=$FAILED"
+            echo "skip_count=$SKIPPED"
+            echo "duration_ms=${{ steps.run.outputs.duration_ms }}"
+            echo "coverage_pct=$COVERAGE"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload pytest results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: python-test-results
@@ -313,7 +319,7 @@ jobs:
     if: always()
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Generate test-metrics.json
         run: |
@@ -345,9 +351,14 @@ jobs:
           GRAND_FAIL=$((DOTNET_FAIL + JEST_FAIL + PYTHON_FAIL))
           GRAND_SKIP=$((DOTNET_SKIP + JEST_SKIP + PYTHON_SKIP))
           GRAND_DURATION=$((DOTNET_DURATION + JEST_DURATION + PYTHON_DURATION))
+          if [ "$GRAND_FAIL" -eq 0 ]; then
+            ALL_PASSING=true
+          else
+            ALL_PASSING=false
+          fi
 
           # Weighted average coverage across all suites that report coverage
-          WEIGHTED_COVERAGE=$(python3 -c "
+          WEIGHTED_COVERAGE=$(python3 - <<PY
           suites = [
               ($DOTNET_COVERAGE, $DOTNET_TOTAL),
               ($JEST_COVERAGE, $JEST_TOTAL),
@@ -362,7 +373,8 @@ jobs:
               print(round(weighted / total_tests, 2))
           else:
               print(0)
-          ")
+          PY
+          )
 
           TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
           SHA="${GITHUB_SHA:-unknown}"
@@ -380,7 +392,7 @@ jobs:
               "skipped": $GRAND_SKIP,
               "duration_ms": $GRAND_DURATION,
               "coverage_pct": $WEIGHTED_COVERAGE,
-              "all_passing": $([ "$GRAND_FAIL" -eq 0 ] && echo "true" || echo "false")
+              "all_passing": $ALL_PASSING
             },
             "suites": {
               "dotnet": {
@@ -415,21 +427,23 @@ jobs:
           METRICS_EOF
 
           # Pretty-print for the job summary
-          echo "## Test Metrics Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Suite | Total | Passed | Failed | Skipped | Duration | Coverage |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-------|-------|--------|--------|---------|----------|----------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| .NET (xUnit) | $DOTNET_TOTAL | $DOTNET_PASS | $DOTNET_FAIL | $DOTNET_SKIP | ${DOTNET_DURATION}ms | ${DOTNET_COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| TypeScript (Jest) | $JEST_TOTAL | $JEST_PASS | $JEST_FAIL | $JEST_SKIP | ${JEST_DURATION}ms | ${JEST_COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Python (pytest) | $PYTHON_TOTAL | $PYTHON_PASS | $PYTHON_FAIL | $PYTHON_SKIP | ${PYTHON_DURATION}ms | ${PYTHON_COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Grand Total** | **$GRAND_TOTAL** | **$GRAND_PASS** | **$GRAND_FAIL** | **$GRAND_SKIP** | **${GRAND_DURATION}ms** | **${WEIGHTED_COVERAGE}%** |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Generated: $TIMESTAMP | Commit: \`${SHA::7}\` | Ref: \`$REF\`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Test Metrics Summary"
+            echo ""
+            echo "| Suite | Total | Passed | Failed | Skipped | Duration | Coverage |"
+            echo "|-------|-------|--------|--------|---------|----------|----------|"
+            echo "| .NET (xUnit) | $DOTNET_TOTAL | $DOTNET_PASS | $DOTNET_FAIL | $DOTNET_SKIP | ${DOTNET_DURATION}ms | ${DOTNET_COVERAGE}% |"
+            echo "| TypeScript (Jest) | $JEST_TOTAL | $JEST_PASS | $JEST_FAIL | $JEST_SKIP | ${JEST_DURATION}ms | ${JEST_COVERAGE}% |"
+            echo "| Python (pytest) | $PYTHON_TOTAL | $PYTHON_PASS | $PYTHON_FAIL | $PYTHON_SKIP | ${PYTHON_DURATION}ms | ${PYTHON_COVERAGE}% |"
+            echo "| **Grand Total** | **$GRAND_TOTAL** | **$GRAND_PASS** | **$GRAND_FAIL** | **$GRAND_SKIP** | **${GRAND_DURATION}ms** | **${WEIGHTED_COVERAGE}%** |"
+            echo ""
+            echo "Generated: $TIMESTAMP | Commit: \`${SHA::7}\` | Ref: \`$REF\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
           cat test-metrics.json
 
       - name: Upload test-metrics.json
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-metrics
           path: test-metrics.json
