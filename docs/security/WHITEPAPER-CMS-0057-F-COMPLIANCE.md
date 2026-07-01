@@ -188,7 +188,7 @@ The platform does not replace claims backend or claims adjudication system for c
 
 ---
 
-## CloudHealthOffice: The Inevitable Evolution
+## Cloud Health Office: The Inevitable Evolution
 
 ### Platform Capabilities
 
