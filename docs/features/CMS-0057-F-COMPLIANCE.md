@@ -25,7 +25,12 @@
 
 **CMS-0057-F** (Advancing Interoperability and Improving Prior Authorization Processes) is a final rule that requires payers to implement specific FHIR APIs to improve prior authorization workflows, reduce provider burden, and enhance patient care coordination.
 
-**Cloud Health Office** provides comprehensive, production-ready support for all CMS-0057-F requirements, enabling payers to achieve compliance efficiently with minimal custom development.
+**Cloud Health Office** provides a CMS-0057-F implementation accelerator:
+FHIR R4, SMART-on-FHIR, Da Vinci prior-authorization, Bulk FHIR, consent,
+and payer integration building blocks that can be deployed beside an existing
+core administration platform. Production compliance still depends on payer
+configuration, source-system integration, operating procedures, and legal /
+compliance attestation.
 
 ### Key Capabilities
 
@@ -37,7 +42,7 @@
 ✅ **USCDI Support** - Complete USCDI v1 & v2 data class coverage  
 ✅ **OAuth 2.0** - Secure authorization with Azure AD integration  
 ✅ **Bulk FHIR** - Efficient data export for regulatory reporting  
-✅ **Production Ready** - HIPAA-compliant, enterprise-grade security
+✅ **Security Foundation** - HIPAA-oriented controls, tenant isolation patterns, audit logging, and observability building blocks
 
 ### Deployment Time
 
@@ -47,20 +52,23 @@
 
 ## V2 Implementation Status
 
-> **✅ COMPLETE**: As of November 2024, Cloud Health Office V2 delivers **100% CMS-0057-F compliance** with production-ready FHIR R4 APIs. All required APIs are implemented, tested, and ready for deployment.
+> **Readiness note:** This guide predates the canonical cross-service readiness
+> matrix and should be read as a technical implementation guide, not a legal
+> compliance attestation. For current status, gaps, and buyer-safe wording, see
+> [`../compliance/CMS-0057-F-READINESS-MATRIX.md`](../compliance/CMS-0057-F-READINESS-MATRIX.md).
 
 ### Compliance Dashboard
 
 | Requirement | Status | Tests | Implementation Date |
 |-------------|--------|-------|---------------------|
-| **Patient Access API** | ✅ Complete | 19 tests | November 2024 |
-| **Provider Access API** | ✅ Complete | 8 tests | November 2024 |
-| **Payer-to-Payer API** | ✅ Complete | 6 tests | November 2024 |
-| **Prior Authorization API** | ✅ Complete | 12 tests | November 2024 |
-| **72-Hour Urgent Response** | ✅ Automated | Compliance Checker | November 2024 |
-| **7-Day Standard Response** | ✅ Automated | Compliance Checker | November 2024 |
-| **USCDI v1/v2 Coverage** | ✅ Complete | Data Class Mapping | November 2024 |
-| **Da Vinci IG Conformance** | ✅ Validated | PDex, PAS, CRD, DTR | November 2024 |
+| **Patient Access API** | Integration required | FHIR controller and SMART tests | See readiness matrix |
+| **Provider Access API** | Integration required | Provider directory and SMART tests | See readiness matrix |
+| **Payer-to-Payer API** | Phase 2 required | Bulk FHIR and consent building blocks | See readiness matrix |
+| **Prior Authorization API** | Implemented / integration required | PAS/CRD/DTR tests | See readiness matrix |
+| **72-Hour Urgent Response** | Implemented / integration required | PAS and compliance checker tests | See readiness matrix |
+| **7-Day Standard Response** | Implemented / integration required | PAS and compliance checker tests | See readiness matrix |
+| **USCDI v1/v2 Coverage** | Integration required | Resource mapping coverage varies by service | See readiness matrix |
+| **Da Vinci IG Conformance** | Integration required | PAS/CRD/DTR technical support | See readiness matrix |
 
 **Total Tests**: 45 FHIR-specific tests (100% pass rate)  
 **Total Platform Tests**: 355+ tests (100% pass rate)  
@@ -453,15 +461,15 @@ Cloud Health Office aligns with the following HL7 Da Vinci Implementation Guides
 
 ### Timeline Summary
 
-| Requirement | Applicable Payers | Deadline | CHO Status |
+| Requirement | Applicable Payers | Deadline | Cloud Health Office Status |
 |-------------|-------------------|----------|------------|
-| **Patient Access API** | MA, Medicaid MC, CHIP MC, QHP | January 1, 2027 | ✅ Ready |
-| **Provider Access API** | All impacted payers | January 1, 2027 | ✅ Ready |
-| **Payer-to-Payer API** | MA, Medicaid MC, CHIP MC, QHP | January 1, 2027 | ✅ Ready |
-| **Prior Auth API** | All impacted payers | January 1, 2027 | ✅ Ready |
-| **Prior Auth Decisions API** | All impacted payers | January 1, 2027 | ✅ Ready |
-| **72-Hour Urgent Response** | All impacted payers | January 1, 2027 | ✅ Automated |
-| **7-Day Standard Response** | All impacted payers | January 1, 2027 | ✅ Automated |
+| **Patient Access API** | MA, Medicaid MC, CHIP MC, QHP | January 1, 2027 | Integration required |
+| **Provider Access API** | All impacted payers | January 1, 2027 | Integration required |
+| **Payer-to-Payer API** | MA, Medicaid MC, CHIP MC, QHP | January 1, 2027 | Phase 2 required |
+| **Prior Auth API** | All impacted payers | January 1, 2027 | Implemented / integration required |
+| **Prior Auth Decisions API** | All impacted payers | January 1, 2027 | Implemented / integration required |
+| **72-Hour Urgent Response** | All impacted payers | January 1, 2027 | Implemented / operational integration required |
+| **7-Day Standard Response** | All impacted payers | January 1, 2027 | Implemented / operational integration required |
 
 ### Implementation Recommendations
 
@@ -484,7 +492,7 @@ Cloud Health Office aligns with the following HL7 Da Vinci Implementation Guides
 - ✅ Provider onboarding campaigns
 
 **January 1, 2027**:
-- ✅ CMS-0057-F compliant and operational
+- Payer-specific CMS-0057-F production posture validated, attested, and operational
 
 ---
 
