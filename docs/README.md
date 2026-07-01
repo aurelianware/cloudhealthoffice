@@ -29,7 +29,10 @@ CloudHealthOffice v3.0.0 — The Open Frontier Release delivers multi-cloud inde
 |----------|-------------|
 | [WHITEPAPER-CMS-0057-F-COMPLIANCE.md](security/WHITEPAPER-CMS-0057-F-COMPLIANCE.md) | Executive whitepaper for CMS-0057-F compliance strategy |
 | [CMS-0057-F-COMPLIANCE.md](features/CMS-0057-F-COMPLIANCE.md) | Technical compliance guide with API specifications |
+| [Compliance README](compliance/README.md) | Compliance document index and CMS-0057-F pilot package workflow |
 | [CMS-0057-F-READINESS-MATRIX.md](compliance/CMS-0057-F-READINESS-MATRIX.md) | Canonical cross-service CMS-0057-F readiness matrix and gap record |
+| [CMS-0057-F-COMPLIANCE-ACCELERATOR-BRIEF.md](compliance/CMS-0057-F-COMPLIANCE-ACCELERATOR-BRIEF.md) | Buyer-facing CMS-0057-F accelerator brief |
+| [CMS-0057-F-PILOT-DILIGENCE-CHECKLIST.md](compliance/CMS-0057-F-PILOT-DILIGENCE-CHECKLIST.md) | Pilot diligence checklist for CMS-0057-F implementation planning |
 | [HIPAA-COMPLIANCE-MATRIX.md](features/HIPAA-COMPLIANCE-MATRIX.md) | HIPAA security control mapping |
 | [HIPAA-AUDIT-REPORT.md](features/HIPAA-AUDIT-REPORT.md) | Audit report template |
 | [FL-AHCA-COMPLIANCE.md](compliance/FL-AHCA-COMPLIANCE.md) | Florida AHCA / SMMC 3.0 compliance guide — FMMIS, MPIP, encounter submission |
