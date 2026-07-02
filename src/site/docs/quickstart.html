@@ -194,10 +194,10 @@ kubectl cluster-info</code></pre>
           <span class="step-number">2</span>
           <div class="step-body">
             <h3>Build images and deploy the platform</h3>
-<pre><code>./scripts/deploy-local.sh</code></pre>
+<pre><code>bash ./scripts/deploy-local.sh</code></pre>
             <p>The script builds local images, creates the <code>cloudhealthoffice</code> namespace, deploys MongoDB and Redis, creates local secrets, applies service manifests, and waits for the core rollout. First run can take 15-30 minutes depending on Docker cache and CPU.</p>
             <p>For repeat deploys after images are already built:</p>
-<pre><code>./scripts/deploy-local.sh --skip-build</code></pre>
+<pre><code>bash ./scripts/deploy-local.sh --skip-build</code></pre>
             <p>Verify the deployments:</p>
 <pre><code>kubectl get deployments -n cloudhealthoffice
 kubectl get pods -n cloudhealthoffice</code></pre>

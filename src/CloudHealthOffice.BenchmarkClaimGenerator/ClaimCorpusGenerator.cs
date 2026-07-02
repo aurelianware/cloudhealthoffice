@@ -303,15 +303,33 @@ public class ClaimCorpusGenerator
         int total,
         IReadOnlyList<(T Item, double Fraction)> weightedItems)
     {
-        if (total <= 0 || weightedItems.Count == 0)
+        if (weightedItems.Count == 0)
         {
             return Array.Empty<(T, int)>();
         }
 
+        if (total <= 0)
+        {
+            return weightedItems
+                .Select(item => (item.Item, 0))
+                .ToList();
+        }
+
+        var weights = weightedItems
+            .Select(item => Math.Max(0, item.Fraction))
+            .ToArray();
+        var totalWeight = weights.Sum();
+
+        if (totalWeight <= 0)
+        {
+            Array.Fill(weights, 1.0);
+            totalWeight = weights.Length;
+        }
+
         var allocations = weightedItems
-            .Select(item =>
+            .Select((item, index) =>
             {
-                var exact = total * Math.Max(0, item.Fraction);
+                var exact = total * (weights[index] / totalWeight);
                 var floor = (int)Math.Floor(exact);
                 return new
                 {
