@@ -21,8 +21,12 @@ const rawGoogleAnalyticsId = process.env.GOOGLE_ANALYTICS_ID;
 const googleAnalyticsId = rawGoogleAnalyticsId === undefined
   ? defaultGoogleAnalyticsId
   : rawGoogleAnalyticsId.trim();
-const formspreeFoundingPartnerEndpoint =
-  (process.env.FORMSPREE_FOUNDING_PARTNER_ENDPOINT || defaultFormspreeFoundingPartnerEndpoint).trim();
+const rawFormspreeFoundingPartnerEndpoint = process.env.FORMSPREE_FOUNDING_PARTNER_ENDPOINT;
+const formspreeFoundingPartnerEndpoint = (
+  rawFormspreeFoundingPartnerEndpoint === undefined
+    ? defaultFormspreeFoundingPartnerEndpoint
+    : rawFormspreeFoundingPartnerEndpoint.trim()
+) || defaultFormspreeFoundingPartnerEndpoint;
 
 if (googleAnalyticsId && !/^G-[A-Z0-9]+$/i.test(googleAnalyticsId)) {
   console.error(
