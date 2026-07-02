@@ -305,9 +305,9 @@ kubectl run -n cloudhealthoffice dns-test --rm -it --image=busybox -- \
 
 ### Out of memory / Docker Desktop slow
 
-The full platform runs 25+ pods. Allocate at least:
-- **CPU:** 4 cores
-- **Memory:** 8 GB (Settings > Resources)
+The full platform runs 30+ pods. Allocate at least:
+- **CPU:** 6 cores
+- **Memory:** 16 GB minimum, 24 GB recommended (Settings > Resources)
 
 ---
 
