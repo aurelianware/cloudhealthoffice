@@ -55,12 +55,13 @@ foreach (var claim in claims)
     var sw = Stopwatch.StartNew();
     try
     {
+        var networkTier = NetworkTier(claim);
         var submitted = await SubmitClaimAsync(http, options, claim, validationPlanId, json);
-        var adjudicated = await AdjudicateClaimAsync(http, options, claim, submitted.Id, validationPlanId, json);
+        var adjudicated = await AdjudicateClaimAsync(http, options, claim, submitted.Id, validationPlanId, networkTier, json);
 
         if (!options.SkipClaimUpdate)
         {
-            await UpdateClaimAdjudicationAsync(http, options, submitted.Id, adjudicated, json);
+            await UpdateClaimAdjudicationAsync(http, options, submitted.Id, networkTier, adjudicated, json);
         }
 
         sw.Stop();
@@ -301,6 +302,7 @@ static async Task<AdjudicationResponseDto> AdjudicateClaimAsync(
     SyntheticClaim claim,
     string submittedClaimId,
     Guid validationPlanId,
+    string networkTier,
     JsonSerializerOptions json)
 {
     var payload = new
@@ -311,7 +313,7 @@ static async Task<AdjudicationResponseDto> AdjudicateClaimAsync(
         benefitPlanId = validationPlanId,
         serviceDate = DateOnly.FromDateTime(claim.DateOfService),
         providerNpi = claim.RenderingProvider.Npi,
-        networkTier = claim.RenderingProvider.IsParticipating ? "InNetwork" : "OutOfNetwork",
+        networkTier,
         lineOfBusiness = 1,
         claimType = NormalizeClaimType(claim),
         stateCode = claim.RenderingProvider.State,
@@ -346,12 +348,13 @@ static async Task UpdateClaimAdjudicationAsync(
     HttpClient http,
     ValidatorOptions options,
     string submittedClaimId,
+    string networkTier,
     AdjudicationResponseDto adjudication,
     JsonSerializerOptions json)
 {
     var payload = new
     {
-        networkTier = "InNetwork",
+        networkTier,
         allowedAmount = adjudication.Totals.AllowedAmount,
         deductibleAmount = adjudication.Totals.DeductibleAmount,
         coinsuranceAmount = adjudication.Totals.CoinsuranceAmount,
@@ -437,6 +440,9 @@ static int ClaimTypeValue(SyntheticClaim claim)
         claimType.Equals("Dental", StringComparison.OrdinalIgnoreCase) ? 3 :
         1;
 }
+
+static string NetworkTier(SyntheticClaim claim)
+    => claim.RenderingProvider.IsParticipating ? "InNetwork" : "OutOfNetwork";
 
 static CorpusProfile BuildCorpusProfile(int claimCount, int seed)
 {
@@ -558,7 +564,7 @@ static void WriteSummary(List<ClaimValidationResult> results, TimeSpan elapsed)
 
     Console.WriteLine("Validation summary");
     Console.WriteLine($"  Total claims:       {results.Count:N0}");
-    Console.WriteLine($"  Submitted+updated:  {succeeded:N0}");
+    Console.WriteLine($"  Processed:          {succeeded:N0}");
     Console.WriteLine($"  Adjudicated:        {adjudicated:N0}");
     Console.WriteLine($"  Failed:             {failed:N0}");
     Console.WriteLine($"  Elapsed:            {elapsed:mm\\:ss\\.fff}");
@@ -609,6 +615,7 @@ static void PrintUsage()
       --benefit-url <url>        Benefit plan service URL (default: http://localhost:5002)
       --skip-claim-update        Do not write adjudication projection back to claims-service
       --timeout <seconds>        Per-request timeout (default: 60)
+      --progress-every <count>   Report progress every N claims (default: 25)
       -h, --help                 Show help
 
     Example:
@@ -644,6 +651,8 @@ internal sealed record ValidatorOptions(
     int ProgressEvery,
     bool ShowHelp)
 {
+    public const int MaxClaims = 10_000;
+
     public static ValidatorOptions Parse(string[] args)
     {
         var options = new MutableOptions();
@@ -679,6 +688,12 @@ internal sealed record ValidatorOptions(
                     options.ShowHelp = true;
                     break;
             }
+        }
+
+        if (options.Claims > MaxClaims)
+        {
+            Console.Error.WriteLine($"warning: capping --claims to {MaxClaims:N0} to avoid excessive in-memory allocation");
+            options.Claims = MaxClaims;
         }
 
         return new ValidatorOptions(
