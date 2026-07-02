@@ -10,7 +10,8 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Cache;
 /// MongoDB implementation of ITenantEnrollmentConfigRepository.
 ///
 /// Collection: enrollment_tenant_config
-/// Index: { tenantId: 1 } unique  — primary lookup + list ordering
+/// Index: _id  — TenantId is stored as the Mongo document id, so the
+/// built-in unique _id index provides primary lookup + list ordering.
 ///
 /// No TTL index — config documents are permanent until explicitly deleted or replaced.
 /// </summary>
@@ -84,10 +85,9 @@ public sealed class TenantEnrollmentConfigRepositoryMongo : ITenantEnrollmentCon
 
     private void EnsureIndexes()
     {
-        _collection.Indexes.CreateOne(
-            new CreateIndexModel<MongoTenantConfigDocument>(
-                Builders<MongoTenantConfigDocument>.IndexKeys.Ascending(d => d.TenantId),
-                new CreateIndexOptions { Unique = true, Name = "idx_tenantId_unique" }));
+        // TenantId is [BsonId], which MongoDB stores as _id. The built-in
+        // _id index is already unique; creating another unique _id index is
+        // rejected by MongoDB.
     }
 
     // ── Mongo document type ───────────────────────────────────────
