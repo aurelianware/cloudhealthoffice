@@ -924,7 +924,7 @@
           form.style.display = 'none';
           successEl.style.display = 'block';
         } catch (err) {
-          showError('Something went wrong. Please email partners@cloudhealthoffice.com directly.');
+          showError(err.message || 'Something went wrong. Please email partners@cloudhealthoffice.com directly.');
           submitBtn.disabled = false;
           submitBtn.textContent = 'Apply for Founding Partner Access';
         }
