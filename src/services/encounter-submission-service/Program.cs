@@ -45,6 +45,7 @@ builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(new TenantMiddlewareOptions());
 
 // Inter-service HTTP clients (named client pattern)
 builder.Services.AddHttpClient("ClaimsService", client =>
