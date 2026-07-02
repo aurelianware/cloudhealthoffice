@@ -10,6 +10,17 @@ The site build injects the Google Analytics tag for measurement ID `G-H1HCD5EYPN
 To override the default ID, set the `GOOGLE_ANALYTICS_ID` environment variable when running the build (e.g. `GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX npm run build`).
 Setting `GOOGLE_ANALYTICS_ID` to an empty string disables analytics injection entirely.
 
+## Founding Partner Form
+
+The homepage founding partner application posts to Formspree. Set
+`FORMSPREE_FOUNDING_PARTNER_ENDPOINT` to the full Formspree endpoint, for example
+`https://formspree.io/f/abcdefgh`, before running `npm run build`.
+
+Configure the Formspree form recipient/workflow in the Formspree dashboard to send
+submissions to `partners@cloudhealthoffice.com`. The static site includes that
+mailbox in the form payload and fallback messages, but Formspree controls final
+email routing from the form settings.
+
 ## Structure
 
 ```
