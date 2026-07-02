@@ -255,7 +255,7 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
     // ── Log-forging regression tests (CodeQL cs/log-forging / alert #1805) ───
 
     /// <summary>
-    /// Submitting a launch token that contains an embedded newline (a classic
+    /// Submitting a launch token that contains embedded control characters (a classic
     /// log-injection payload) must not cause an unhandled server error.
     /// The server should reject the unknown/invalid token — returning either
     /// a 302 redirect to the redirect_uri with error=access_denied (OpenIddict

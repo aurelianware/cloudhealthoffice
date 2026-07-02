@@ -148,7 +148,7 @@ public class AuthorizationController : ControllerBase
 
         _logger.LogInformation(
             "Issuing authorization code — subject: {Subject}, scopes: {Scopes}",
-            SanitizeForLog(userId), string.Join(" ", request.GetScopes()));
+            SanitizeForLog(userId), SanitizeForLog(string.Join(" ", request.GetScopes())));
 
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
@@ -251,21 +251,23 @@ public class AuthorizationController : ControllerBase
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Strips control characters (including CR/LF/tab/NUL) from user-supplied
-    /// strings before they appear in log messages, preventing log-forging/log-injection
-    /// (CodeQL rule cs/log-forging). Uses char.IsControl() so that CodeQL's
-    /// sanitizer recognition picks it up correctly — a simple Replace("\r","").Replace("\n","")
-    /// is not sufficient for CodeQL to recognise the value as sanitized.
+    /// Replaces control characters (including CR/LF/tab/NUL) with '_' in user-supplied
+    /// strings and truncates the sanitized result to 256 characters before they appear
+    /// in log messages, preventing log-forging/log-injection (CodeQL rule
+    /// cs/log-forging). Uses char.IsControl() so that CodeQL's sanitizer recognition
+    /// picks it up correctly — a simple Replace("\r","").Replace("\n","") is not
+    /// sufficient for CodeQL to recognise the value as sanitized.
     /// </summary>
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
-        var buffer = new System.Text.StringBuilder(value.Length);
+        const int maxLength = 256;
+        var buffer = new System.Text.StringBuilder(Math.Min(value.Length, maxLength));
         foreach (var ch in value)
         {
+            if (buffer.Length == maxLength) break;
             buffer.Append(char.IsControl(ch) ? '_' : ch);
         }
-        if (buffer.Length > 256) buffer.Length = 256;
         return buffer.ToString();
     }
 }
