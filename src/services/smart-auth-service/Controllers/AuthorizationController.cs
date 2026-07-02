@@ -81,7 +81,7 @@ public class AuthorizationController : ControllerBase
             var launchCtx = await _launchContextStore.ConsumeAsync(launchToken, ct);
             if (launchCtx == null)
             {
-                _logger.LogWarning("EHR launch token not found or expired: {Token}", launchToken);
+                _logger.LogWarning("EHR launch token not found or expired: {Token}", SanitizeForLog(launchToken));
                 return Forbid(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
             }
 
@@ -91,7 +91,7 @@ public class AuthorizationController : ControllerBase
 
             _logger.LogInformation(
                 "EHR launch resolved — patient: {PatientId}, encounter: {EncounterId}",
-                boundPatientId, boundEncounterId);
+                SanitizeForLog(boundPatientId), SanitizeForLog(boundEncounterId));
         }
 
         // ── Build the authenticated principal ─────────────────────────────────
@@ -124,7 +124,7 @@ public class AuthorizationController : ControllerBase
             // For now we store the user's subject ID as the patient binding.
             identity.AddClaim(new Claim(SmartClaims.Patient, userId)
                 .SetDestinations(Destinations.AccessToken));
-            _logger.LogInformation("Standalone launch: bound patient={UserId}", userId);
+            _logger.LogInformation("Standalone launch: bound patient={UserId}", SanitizeForLog(userId));
         }
 
         if (boundEncounterId != null)
@@ -148,7 +148,7 @@ public class AuthorizationController : ControllerBase
 
         _logger.LogInformation(
             "Issuing authorization code — subject: {Subject}, scopes: {Scopes}",
-            userId, string.Join(" ", request.GetScopes()));
+            SanitizeForLog(userId), string.Join(" ", request.GetScopes()));
 
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
@@ -246,5 +246,26 @@ public class AuthorizationController : ControllerBase
         if (fhirUser != null) claims[SmartClaims.FhirUser] = fhirUser;
 
         return Ok(claims);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Strips control characters (including CR/LF/tab/NUL) from user-supplied
+    /// strings before they appear in log messages, preventing log-forging/log-injection
+    /// (CodeQL rule cs/log-forging). Uses char.IsControl() so that CodeQL's
+    /// sanitizer recognition picks it up correctly — a simple Replace("\r","").Replace("\n","")
+    /// is not sufficient for CodeQL to recognise the value as sanitized.
+    /// </summary>
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var buffer = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            buffer.Append(char.IsControl(ch) ? '_' : ch);
+        }
+        if (buffer.Length > 256) buffer.Length = 256;
+        return buffer.ToString();
     }
 }

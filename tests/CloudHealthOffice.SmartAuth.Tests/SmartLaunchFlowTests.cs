@@ -251,4 +251,54 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
         // 400 (invalid_client) confirms the endpoint exists and is enforced
         resp.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.Unauthorized);
     }
+
+    // ── Log-forging regression tests (CodeQL cs/log-forging / alert #1805) ───
+
+    /// <summary>
+    /// Submitting a launch token that contains an embedded newline (a classic
+    /// log-injection payload) must not cause an unhandled server error.
+    /// The server should reject the unknown/invalid token — returning either
+    /// a 302 redirect to the redirect_uri with error=access_denied (OpenIddict
+    /// standard OAuth2 error handling) or 403 Forbidden. Either confirms the
+    /// sanitized log path is exercised without throwing.
+    /// </summary>
+    [Theory]
+    [InlineData("fake-token\nINJECTED: synthetic log line")]
+    [InlineData("fake-token\r\nINJECTED: synthetic log line")]
+    [InlineData("fake-token\x00null-byte")]
+    [InlineData("fake-token\ttab-char")]
+    public async Task Authorize_LaunchTokenWithControlChars_RejectsTokenAndDoesNotThrow(string maliciousToken)
+    {
+        // Arrange: log in first so we have a session cookie
+        var client = CreateClient();
+        var loginForm = new FormUrlEncodedContent(new[]
+        {
+            new KeyValuePair<string, string>("username", "testpatient"),
+            new KeyValuePair<string, string>("password", "Password123!")
+        });
+        var loginResp = await client.PostAsync("/account/login?returnUrl=%2F", loginForm);
+        loginResp.StatusCode.Should().Be(HttpStatusCode.Redirect);
+
+        // Act: submit an authorization request with a malicious launch token
+        var encodedToken = Uri.EscapeDataString(maliciousToken);
+        var resp = await client.GetAsync(
+            "/connect/authorize?response_type=code&client_id=smart-patient-app" +
+            "&scope=openid+launch%2Fpatient+patient%2F*.read" +
+            "&redirect_uri=http%3A%2F%2Flocalhost%3A4200%2Fcallback" +
+            "&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" +
+            "&code_challenge_method=S256" +
+            "&state=sec-test" +
+            $"&launch={encodedToken}");
+
+        // Assert: the server handled the request without throwing (no 500).
+        // OpenIddict translates Forbid() into a redirect to redirect_uri with
+        // error=access_denied (302) or, in some configurations, a direct 403.
+        // Both outcomes confirm the token was rejected and the sanitized log
+        // path was exercised correctly.
+        ((int)resp.StatusCode).Should().NotBe(500,
+            "a server error would indicate the malicious token was not handled safely");
+        resp.StatusCode.Should().BeOneOf(
+            new[] { HttpStatusCode.Redirect, HttpStatusCode.Forbidden },
+            "the invalid launch token must be rejected by the authorization endpoint");
+    }
 }
