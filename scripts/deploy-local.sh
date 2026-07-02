@@ -82,16 +82,21 @@ load_kind_image() {
 # ── Services to build ─────────────────────────────────────────────────────────
 # Maps: service-name -> Dockerfile path (relative to repo root)
 declare -A SERVICES=(
+  [accumulator-service]="src/services/accumulator-service/Dockerfile"
+  [ar-service]="src/services/ar-service/Dockerfile"
   [member-service]="src/services/member-service/Dockerfile"
   [coverage-service]="src/services/coverage-service/Dockerfile"
   [claims-service]="src/services/claims-service/Dockerfile"
+  [claims-examiner-service]="src/services/claims-examiner-service/Dockerfile"
   [eligibility-service]="src/services/eligibility-service/Dockerfile"
   [authorization-service]="src/services/authorization-service/Dockerfile"
   [attachment-service]="src/services/attachment-service/Dockerfile"
+  [consent-service]="src/services/consent-service/Dockerfile"
   [provider-service]="src/services/provider-service/Dockerfile"
+  [provider-contracts-service]="src/services/provider-contracts-service/Dockerfile"
+  [provider-verification-service]="src/services/provider-verification-service/Dockerfile"
   [reference-data-service]="src/services/reference-data-service/Dockerfile"
   [sponsor-service]="src/services/sponsor-service/Dockerfile"
-  [claims-scrubbing-service]="src/services/claims-scrubbing-service/Dockerfile"
   [enrollment-import-service]="src/services/enrollment-import-service/Dockerfile"
   [trading-partner-service]="src/services/trading-partner-service/Dockerfile"
   [tenant-service]="src/services/tenant-service/Dockerfile"
@@ -100,37 +105,46 @@ declare -A SERVICES=(
   [fhir-service]="src/services/fhir-service/Dockerfile"
   [smart-auth-service]="src/services/smart-auth-service/Dockerfile"
   [encounter-service]="src/services/encounter-service/Dockerfile"
+  [encounter-submission-service]="src/services/encounter-submission-service/Dockerfile"
   [appeals-service]="src/services/appeals-service/Dockerfile"
   [capitation-service]="src/services/capitation-service/Dockerfile"
   [premium-billing-service]="src/services/premium-billing-service/Dockerfile"
   [risk-adjustment-service]="src/services/risk-adjustment-service/Dockerfile"
   [rfai-service]="src/services/rfai-service/Dockerfile"
+  [idcard-service]="src/services/idcard-service/Dockerfile"
+  [member-document-service]="src/services/member-document-service/Dockerfile"
+  [personal-representative-service]="src/services/personal-representative-service/Dockerfile"
+  [terminology-service]="src/services/CHO.TerminologyService/Dockerfile"
   [pricing-api]="src/services/CloudHealthOffice.PricingApi/Dockerfile"
 )
 
 # ── Build images ──────────────────────────────────────────────────────────────
 if [[ "$SKIP_BUILD" == false ]]; then
   log "Building Docker images (this will take a while the first time)"
+  failed_builds=()
 
   # Portal — uses repo root as build context
   log "Building portal"
   docker build -t ghcr.io/aurelianware/${IMAGE_PREFIX}-portal:latest \
     --build-arg REGISTRY="$LOCAL_DOTNET_REGISTRY" \
     -f src/portal/CloudHealthOffice.Portal/Dockerfile . \
-    && { ok "portal"; load_kind_image "ghcr.io/aurelianware/${IMAGE_PREFIX}-portal:latest"; } || warn "portal build failed"
+    && { ok "portal"; load_kind_image "ghcr.io/aurelianware/${IMAGE_PREFIX}-portal:latest"; } \
+    || { warn "portal build failed"; failed_builds+=("portal"); }
 
   # Site
   log "Building site"
   docker build -t ${IMAGE_PREFIX}-site:latest \
     -f src/site/Dockerfile src/site/ \
-    && { ok "site"; load_kind_image "${IMAGE_PREFIX}-site:latest"; } || warn "site build failed"
+    && { ok "site"; load_kind_image "${IMAGE_PREFIX}-site:latest"; } \
+    || { warn "site build failed"; failed_builds+=("site"); }
 
   # Microservices — all use repo root as build context (Dockerfiles COPY from src/services/...)
   log "Building microservices"
   for svc in "${!SERVICES[@]}"; do
     dockerfile="${SERVICES[$svc]}"
     if [[ ! -f "$dockerfile" ]]; then
-      warn "$svc — Dockerfile not found at $dockerfile, skipping"
+      warn "$svc — Dockerfile not found at $dockerfile"
+      failed_builds+=("$svc")
       continue
     fi
 
@@ -141,8 +155,13 @@ if [[ "$SKIP_BUILD" == false ]]; then
     docker build -t "$acr_tag" -t "$ghcr_tag" \
       --build-arg REGISTRY="$LOCAL_DOTNET_REGISTRY" \
       -f "$dockerfile" . \
-      && { ok "$svc"; load_kind_image "$acr_tag"; load_kind_image "$ghcr_tag"; } || warn "$svc build failed"
+      && { ok "$svc"; load_kind_image "$acr_tag"; load_kind_image "$ghcr_tag"; } \
+      || { warn "$svc build failed"; failed_builds+=("$svc"); }
   done
+
+  if (( ${#failed_builds[@]} > 0 )); then
+    err "Image build failed for: ${failed_builds[*]}"
+  fi
 fi
 
 [[ "$ONLY_BUILD" == true ]] && { echo -e "\n✅ Images built. Run with --skip-build to deploy."; exit 0; }
@@ -173,8 +192,8 @@ ok "mongodb-auth"
 kubectl create secret generic database-secret \
   --namespace "$NAMESPACE" \
   --from-literal=connectionString="$MONGO_CONN" \
-  --from-literal=endpoint="$MONGO_CONN" \
-  --from-literal=key="$MONGO_PASS" \
+  --from-literal=endpoint= \
+  --from-literal=key= \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "database-secret"
 
@@ -232,6 +251,19 @@ kubectl create secret generic pricing-api-secret \
   --from-literal=AdminSecret="$PRICING_API_ADMIN_SECRET" \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "pricing-api-secret"
+
+# Local service stubs for optional integrations used by background workflows.
+kubectl create secret generic anthropic-secret \
+  --namespace "$NAMESPACE" \
+  --from-literal=apiKey="${ANTHROPIC_API_KEY:-local-dev}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+ok "anthropic-secret"
+
+kubectl create secret generic kafka-secret \
+  --namespace "$NAMESPACE" \
+  --from-literal=bootstrapServers="${KAFKA_BOOTSTRAP_SERVERS:-}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+ok "kafka-secret"
 
 # Portal email stubs for local development
 kubectl create secret generic email-config \
@@ -308,13 +340,27 @@ kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
 # ── Deploy all services ───────────────────────────────────────────────────────
 log "Deploying microservices"
 
+if [[ "$(kubectl get pvc terminology-maps-pvc -n "$NAMESPACE" -o jsonpath='{.status.phase}:{.spec.storageClassName}' 2>/dev/null || true)" == "Pending:azurefile-csi" ]]; then
+  kubectl delete pvc terminology-maps-pvc -n "$NAMESPACE" >/dev/null
+  ok "removed Azure Files terminology PVC for local storage"
+fi
+
 # Patch manifests to use Never pull policy (images are local)
 deploy_service() {
   local manifest="$1"
   local name="$2"
   if [[ -f "$manifest" ]]; then
+    if ! grep -q '^[[:space:]]*apiVersion:' "$manifest"; then
+      warn "$name — manifest has no Kubernetes objects: $manifest"
+      return 0
+    fi
+
     # Replace imagePullPolicy: Always with Never for local images
-    sed 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' "$manifest" \
+    sed \
+      -e 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' \
+      -e 's/storageClassName: azurefile-csi/storageClassName: standard/g' \
+      -e 's/ReadWriteMany/ReadWriteOnce/g' \
+      "$manifest" \
       | kubectl apply -f - 2>/dev/null \
       && ok "$name" || warn "$name failed"
   else
@@ -332,12 +378,70 @@ done
 # Pricing API (different path)
 deploy_service "src/services/CloudHealthOffice.PricingApi/k8s/pricing-api-deployment.yaml" "pricing-api"
 
+# Services whose manifests live outside src/services/<name>/k8s.
+deploy_service "infrastructure/k8s/services/attachment-service.yaml" "attachment-service"
+deploy_service "infrastructure/k8s/sponsor-service-deployment.yaml" "sponsor-service"
+deploy_service "infrastructure/k8s/provider-verification-service-deployment.yaml" "provider-verification-service"
+deploy_service "k8s/idcard-service.yaml" "idcard-service"
+
 # Local-only environment relaxations. Claims stays Production because it has
 # Development DI scope validation issues in its hosted index initializers.
 kubectl patch configmap member-service-config -n "$NAMESPACE" --type merge \
   -p '{"data":{"ASPNETCORE_ENVIRONMENT":"Development"}}' >/dev/null 2>&1 || true
 kubectl patch configmap benefit-plan-service-config -n "$NAMESPACE" --type merge \
   -p '{"data":{"ASPNETCORE_ENVIRONMENT":"Development"}}' >/dev/null 2>&1 || true
+for cm in $(kubectl get configmaps -n "$NAMESPACE" -o name | grep -- '-config$' | grep -Ev '(claims|provider|fhir)-service-config$'); do
+  kubectl patch "$cm" -n "$NAMESPACE" --type merge \
+    -p '{"data":{"ASPNETCORE_ENVIRONMENT":"Development"}}' >/dev/null 2>&1 || true
+done
+kubectl patch configmap pricing-api-config -n "$NAMESPACE" --type merge \
+  -p "{\"data\":{\"PricingApi__MongoConnectionString\":\"$MONGO_CONN\"}}" >/dev/null 2>&1 || true
+kubectl patch configmap smart-auth-service-config -n "$NAMESPACE" --type merge \
+  -p '{"data":{"SmartAuth__DevMode":"true"}}' >/dev/null 2>&1 || true
+
+kubectl create secret generic attachment-service-secret \
+  --namespace "$NAMESPACE" \
+  --from-literal=MongoDb__ConnectionString="$MONGO_CONN" \
+  --from-literal=BlobStorage__ConnectionString="$AZURE_STORAGE_CONNECTION_STRING" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl create secret generic sponsor-service-secrets \
+  --namespace "$NAMESPACE" \
+  --from-literal=MongoDb__ConnectionString="$MONGO_CONN" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl create secret generic smart-auth-service-secrets \
+  --namespace "$NAMESPACE" \
+  --from-literal=MongoDb__ConnectionString="$MONGO_CONN" \
+  --from-literal=MongoDb__DatabaseName=cloudhealthoffice \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+for dep in $(kubectl get deployments -n "$NAMESPACE" -o name); do
+  kubectl patch "$dep" -n "$NAMESPACE" --type json \
+    -p='[{"op":"add","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]' \
+    >/dev/null 2>&1 || true
+done
+kubectl set env deployment --all -n "$NAMESPACE" SecretProvider__Provider=None >/dev/null 2>&1 || true
+kubectl set env deployment/pricing-api -n "$NAMESPACE" \
+  PricingApi__MongoConnectionString="$MONGO_CONN" >/dev/null 2>&1 || true
+for dep in appeals-service consent-service personal-representative-service; do
+  kubectl patch "deployment/$dep" -n "$NAMESPACE" --type json \
+    -p='[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/path","value":"/health/live"}]' \
+    >/dev/null 2>&1 || true
+done
+for dep in encounter-service sponsor-service; do
+  kubectl patch "deployment/$dep" -n "$NAMESPACE" --type json \
+    -p='[{"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/httpGet/path","value":"/health/live"},{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/path","value":"/health/live"}]' \
+    >/dev/null 2>&1 || true
+done
+for dep in attachment-service fhir-service reference-data-service; do
+  kubectl set env "deployment/$dep" -n "$NAMESPACE" \
+    AzureAd__ClientId="$AZURE_AD_CLIENT_ID" \
+    AzureAd__TenantId="$AZURE_AD_TENANT_ID" \
+    AzureAd__Instance="$AZURE_AD_INSTANCE" \
+    AzureAd__Audience="$AZURE_AD_AUDIENCE" \
+    >/dev/null 2>&1 || true
+done
+kubectl scale deployment --all -n "$NAMESPACE" --replicas=1 >/dev/null 2>&1 || true
+kubectl delete hpa --all -n "$NAMESPACE" >/dev/null 2>&1 || true
 
 # ── Deploy portal ─────────────────────────────────────────────────────────────
 log "Deploying portal"
