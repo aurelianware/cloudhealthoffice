@@ -12,9 +12,10 @@ Setting `GOOGLE_ANALYTICS_ID` to an empty string disables analytics injection en
 
 ## Founding Partner Form
 
-The homepage founding partner application posts to Formspree. Set
-`FORMSPREE_FOUNDING_PARTNER_ENDPOINT` to the full Formspree endpoint, for example
-`https://formspree.io/f/abcdefgh`, before running `npm run build`.
+The homepage founding partner application posts to Formspree at
+`https://formspree.io/f/xgojygon`. To override the endpoint for a preview or
+environment-specific form, set `FORMSPREE_FOUNDING_PARTNER_ENDPOINT` to the full
+Formspree endpoint before running `npm run build`.
 
 Configure the Formspree form recipient/workflow in the Formspree dashboard to send
 submissions to `partners@cloudhealthoffice.com`. The static site includes that

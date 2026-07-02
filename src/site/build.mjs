@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const siteRoot = process.cwd();
 const scriptDir = fileURLToPath(new URL('.', import.meta.url)).replace(/[\\/]$/, '');
 const defaultGoogleAnalyticsId = 'G-H1HCD5EYPN';
+const defaultFormspreeFoundingPartnerEndpoint = 'https://formspree.io/f/xgojygon';
 
 if (siteRoot !== scriptDir) {
   console.error(
@@ -20,8 +21,12 @@ const rawGoogleAnalyticsId = process.env.GOOGLE_ANALYTICS_ID;
 const googleAnalyticsId = rawGoogleAnalyticsId === undefined
   ? defaultGoogleAnalyticsId
   : rawGoogleAnalyticsId.trim();
-const formspreeFoundingPartnerEndpoint =
-  (process.env.FORMSPREE_FOUNDING_PARTNER_ENDPOINT || '').trim();
+const rawFormspreeFoundingPartnerEndpoint = process.env.FORMSPREE_FOUNDING_PARTNER_ENDPOINT;
+const formspreeFoundingPartnerEndpoint = (
+  rawFormspreeFoundingPartnerEndpoint === undefined
+    ? defaultFormspreeFoundingPartnerEndpoint
+    : rawFormspreeFoundingPartnerEndpoint.trim()
+) || defaultFormspreeFoundingPartnerEndpoint;
 
 if (googleAnalyticsId && !/^G-[A-Z0-9]+$/i.test(googleAnalyticsId)) {
   console.error(
@@ -131,12 +136,6 @@ if (googleAnalyticsId) {
   console.warn('Google Analytics is disabled; generated site artifact will not include analytics');
 }
 
-if (formspreeFoundingPartnerEndpoint) {
-  console.log('Injected Formspree endpoint for the founding partner form');
-} else {
-  console.warn(
-    'FORMSPREE_FOUNDING_PARTNER_ENDPOINT is not set; founding partner form will show the partners@cloudhealthoffice.com fallback'
-  );
-}
+console.log('Injected Formspree endpoint for the founding partner form');
 
 console.log(`Prepared GitHub Pages artifact in ${outputDir}`);
