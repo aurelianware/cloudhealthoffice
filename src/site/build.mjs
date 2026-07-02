@@ -102,6 +102,10 @@ function processHtmlFiles(directory) {
       .replaceAll(
         '__FORMSPREE_FOUNDING_PARTNER_ENDPOINT__',
         formspreeFoundingPartnerEndpoint
+      )
+      .replaceAll(
+        defaultFormspreeFoundingPartnerEndpoint,
+        formspreeFoundingPartnerEndpoint
       );
 
     if (analyticsInjection) {
