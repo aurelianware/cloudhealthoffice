@@ -31,15 +31,34 @@ for (int i = 0; i < args.Length; i++)
     }
 }
 
-// Build a scaled profile
-var scale = claimCount / 1_000_000.0;
+// Build a scaled profile. Counts are allocated with remainder handling so
+// smaller smoke-test runs generate exactly the requested claim count.
+var majorCounts = AllocateCounts(claimCount, new[]
+{
+    ("professional", 0.60),
+    ("institutional", 0.25),
+    ("dental", 0.10),
+    ("edge", 0.05)
+}).ToDictionary(x => x.Item, x => x.Count);
+
+var edgeCounts = AllocateCounts(majorCounts["edge"], new[]
+{
+    ("cob", 12.0 / 50.0),
+    ("retroEligibility", 8.0 / 50.0),
+    ("newborn", 6.0 / 50.0),
+    ("priorAuth", 8.0 / 50.0),
+    ("subrogation", 4.0 / 50.0),
+    ("behavioralHealth", 6.0 / 50.0),
+    ("medicaid", 6.0 / 50.0)
+}).ToDictionary(x => x.Item, x => x.Count);
+
 var profile = new CorpusProfile
 {
     TotalClaims = claimCount,
     Seed = seed,
     Professional = new ProfessionalDistribution
     {
-        Count = (int)(600_000 * scale),
+        Count = majorCounts["professional"],
         OfficeVisitFraction = 0.40,
         MultiLineProcedureFraction = 0.20,
         GlobalSurgeryFraction = 0.10,
@@ -50,7 +69,7 @@ var profile = new CorpusProfile
     },
     Institutional = new InstitutionalDistribution
     {
-        Count = (int)(250_000 * scale),
+        Count = majorCounts["institutional"],
         InpatientDrgFraction = 0.40,
         OutpatientPerDiemFraction = 0.25,
         EmergencyFraction = 0.15,
@@ -60,7 +79,7 @@ var profile = new CorpusProfile
     },
     Dental = new DentalDistribution
     {
-        Count = (int)(100_000 * scale),
+        Count = majorCounts["dental"],
         PreventiveFraction = 0.40,
         RestorativeFraction = 0.25,
         EndodonticsFraction = 0.10,
@@ -70,14 +89,14 @@ var profile = new CorpusProfile
     },
     EdgeCases = new EdgeCaseDistribution
     {
-        Count = (int)(50_000 * scale),
-        CobCount = (int)(12_000 * scale),
-        RetroEligibilityCount = (int)(8_000 * scale),
-        NewbornCount = (int)(6_000 * scale),
-        PriorAuthCount = (int)(8_000 * scale),
-        SubrogationCount = (int)(4_000 * scale),
-        BehavioralHealthCount = (int)(6_000 * scale),
-        MedicaidCount = (int)(6_000 * scale)
+        Count = majorCounts["edge"],
+        CobCount = edgeCounts["cob"],
+        RetroEligibilityCount = edgeCounts["retroEligibility"],
+        NewbornCount = edgeCounts["newborn"],
+        PriorAuthCount = edgeCounts["priorAuth"],
+        SubrogationCount = edgeCounts["subrogation"],
+        BehavioralHealthCount = edgeCounts["behavioralHealth"],
+        MedicaidCount = edgeCounts["medicaid"]
     }
 };
 
@@ -138,4 +157,44 @@ static void PrintUsage()
       mcc-runner -n 5000 -f fhir -o ./fhir   # 5K claims as FHIR bundles
       mcc-runner -n 1000 -s 123              # Custom seed
     """);
+}
+
+static IReadOnlyList<(T Item, int Count)> AllocateCounts<T>(int total, IReadOnlyList<(T Item, double Fraction)> weightedItems)
+{
+    if (total <= 0 || weightedItems.Count == 0)
+    {
+        return Array.Empty<(T, int)>();
+    }
+
+    var allocations = weightedItems
+        .Select(item =>
+        {
+            var exact = total * Math.Max(0, item.Fraction);
+            var floor = (int)Math.Floor(exact);
+            return new
+            {
+                item.Item,
+                Count = floor,
+                Remainder = exact - floor
+            };
+        })
+        .ToList();
+
+    var assigned = allocations.Sum(x => x.Count);
+    var remaining = total - assigned;
+    var counts = allocations.Select(x => x.Count).ToArray();
+
+    foreach (var index in allocations
+        .Select((value, index) => new { value.Remainder, index })
+        .OrderByDescending(x => x.Remainder)
+        .ThenBy(x => x.index)
+        .Take(Math.Max(0, remaining))
+        .Select(x => x.index))
+    {
+        counts[index]++;
+    }
+
+    return weightedItems
+        .Select((item, index) => (item.Item, counts[index]))
+        .ToList();
 }

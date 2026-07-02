@@ -11,7 +11,7 @@
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/quickstart-kubernetes" />
   <meta property="og:title" content="Kubernetes Quick Start — Cloud Health Office" />
-  <meta property="og:description" content="Deploy Cloud Health Office to local Kubernetes with the same architecture as production. 36 microservices, MongoDB, Redis — identical to Azure AKS." />
+  <meta property="og:description" content="Deploy Cloud Health Office to local Kubernetes with the same architecture as production. production-shaped microservices, MongoDB, Redis — identical to Azure AKS." />
 
   <script type="application/ld+json">
   {
@@ -77,8 +77,8 @@
             <div class="docs-sidebar-section-title">Getting Started</div>
             <ul>
               <li><a href="/docs">Docs Home</a></li>
-              <li><a href="/docs/quickstart">Quick Start (Docker)</a></li>
-              <li><a href="/docs/quickstart-kubernetes" class="active">Quick Start (Kubernetes)</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+              <li><a href="/docs/quickstart-kubernetes" class="active">Kubernetes Reference</a></li>
             </ul>
           </div>
           <div class="docs-sidebar-section">
@@ -143,8 +143,8 @@
         </p>
 
         <div class="callout callout-info">
-          <div class="callout-title">Docker Compose vs Kubernetes</div>
-          <p>The <a href="/docs/quickstart">Docker Compose Quick Start</a> is faster for API testing and claims adjudication. This guide gives you the <strong>full production-equivalent Kubernetes deployment</strong> &mdash; same namespace layout, DNS, secrets, ConfigMaps, and health probes as Azure AKS.</p>
+          <div class="callout-title">Quick Start vs Reference</div>
+          <p>The <a href="/docs/quickstart">primary Quick Start</a> is the shortest local Kubernetes path. This reference guide adds deeper troubleshooting, teardown, resource guidance, and common kubectl workflows for the same production-equivalent deployment.</p>
         </div>
 
         <!-- What You Get -->
@@ -155,7 +155,7 @@
             <tr><th>Component</th><th>Count</th><th>Notes</th></tr>
           </thead>
           <tbody>
-            <tr><td>Microservices</td><td>25</td><td>Claims, Members, Eligibility, Payments, FHIR, Appeals, Capitation, etc.</td></tr>
+            <tr><td>Microservices</td><td>30+</td><td>Claims, Members, Eligibility, Payments, FHIR, Appeals, Capitation, encounters, provider workflows, and supporting services.</td></tr>
             <tr><td>Portal</td><td>1</td><td>Blazor Server UI &mdash; same as <code>portal.cloudhealthoffice.com</code></td></tr>
             <tr><td>MongoDB</td><td>1</td><td>StatefulSet with persistent storage</td></tr>
             <tr><td>Redis</td><td>1</td><td>Data-protection key store and caching</td></tr>
@@ -184,7 +184,7 @@
 
         <div class="callout callout-warning">
           <div class="callout-title">Resource requirements</div>
-          <p>The full platform runs 25+ pods. Allocate at least <strong>4 CPU cores</strong> and <strong>8 GB memory</strong> in Docker Desktop (Settings &gt; Resources). First build pulls .NET 8 SDK + runtime images &mdash; budget ~8 GB disk for images.</p>
+          <p>The full platform runs 30+ pods. Allocate at least <strong>6 CPU cores</strong> and <strong>16 GB memory</strong>; <strong>24 GB</strong> is recommended in Docker Desktop (Settings &gt; Resources). First build pulls .NET 8 SDK + runtime images &mdash; budget ~8 GB disk for images.</p>
         </div>
 
         <!-- Step 1 -->
@@ -328,7 +328,7 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error</co
 
         <div class="callout callout-success">
           <div class="callout-title">You're running production-equivalent Kubernetes!</div>
-          <p>You now have the same 25-service microservices architecture running locally that powers <code>portal.cloudhealthoffice.com</code> in production. Same namespace, same DNS, same manifests, same health probes.</p>
+          <p>You now have the same production-shaped microservices architecture running locally that powers <code>portal.cloudhealthoffice.com</code> in production. Same namespace, same DNS, same manifests, same health probes.</p>
         </div>
 
         <!-- Production Comparison -->
@@ -424,8 +424,8 @@ docker volume prune -f</code></pre>
 
         <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
           <a href="/docs/quickstart" class="docs-hub-card">
-            <h3>Docker Compose Quick Start</h3>
-            <p>Faster alternative for API testing. Step-by-step claim adjudication with curl commands.</p>
+            <h3>Primary Quick Start</h3>
+            <p>Short path for deploying local Kubernetes and validating claims plus CRD discovery.</p>
             <span class="card-arrow">View guide &rarr;</span>
           </a>
           <a href="/docs/deployment" class="docs-hub-card">
@@ -449,7 +449,7 @@ docker volume prune -f</code></pre>
         <div class="docs-pager">
           <a href="/docs/quickstart">
             <div class="pager-label">&larr; Previous</div>
-            <div class="pager-title">Quick Start (Docker)</div>
+            <div class="pager-title">Quick Start</div>
           </a>
           <a href="/docs/deployment" class="next">
             <div class="pager-label">Next &rarr;</div>
@@ -473,8 +473,8 @@ docker volume prune -f</code></pre>
         <div class="footer-col">
           <h5>Documentation</h5>
           <ul>
-            <li><a href="/docs/quickstart">Quick Start (Docker)</a></li>
-            <li><a href="/docs/quickstart-kubernetes">Quick Start (Kubernetes)</a></li>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/quickstart-kubernetes">Kubernetes Reference</a></li>
             <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
             <li><a href="/docs/architecture">Architecture</a></li>
             <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>

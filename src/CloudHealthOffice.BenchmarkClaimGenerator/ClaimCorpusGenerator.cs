@@ -152,9 +152,8 @@ public class ClaimCorpusGenerator
             ("labpathology", dist.LabPathologyFraction)
         };
 
-        foreach (var (subType, fraction) in subTypes)
+        foreach (var (subType, count) in AllocateCounts(dist.Count, subTypes))
         {
-            var count = (int)(dist.Count * fraction);
             for (int i = 0; i < count && !ct.IsCancellationRequested; i++)
             {
                 seq++;
@@ -185,9 +184,8 @@ public class ClaimCorpusGenerator
             ("skillednursing", dist.SkilledNursingFraction)
         };
 
-        foreach (var (subType, fraction) in subTypes)
+        foreach (var (subType, count) in AllocateCounts(dist.Count, subTypes))
         {
-            var count = (int)(dist.Count * fraction);
             for (int i = 0; i < count && !ct.IsCancellationRequested; i++)
             {
                 seq++;
@@ -218,9 +216,8 @@ public class ClaimCorpusGenerator
             ("oralsurgery", dist.OralSurgeryFraction)
         };
 
-        foreach (var (subType, fraction) in subTypes)
+        foreach (var (subType, count) in AllocateCounts(dist.Count, subTypes))
         {
-            var count = (int)(dist.Count * fraction);
             for (int i = 0; i < count && !ct.IsCancellationRequested; i++)
             {
                 seq++;
@@ -290,10 +287,9 @@ public class ClaimCorpusGenerator
 
         foreach (var (scenarios, totalCount) in scenarioGroups)
         {
-            var perScenario = totalCount / scenarios.Length;
-            foreach (var scenario in scenarios)
+            foreach (var (scenario, count) in AllocateEvenly(totalCount, scenarios))
             {
-                for (int i = 0; i < perScenario && !ct.IsCancellationRequested; i++)
+                for (int i = 0; i < count && !ct.IsCancellationRequested; i++)
                 {
                     seq++;
                     var claim = generator.Generate(seq, scenario.ToString(), random);
@@ -301,6 +297,63 @@ public class ClaimCorpusGenerator
                 }
             }
         }
+    }
+
+    private static IReadOnlyList<(T Item, int Count)> AllocateCounts<T>(
+        int total,
+        IReadOnlyList<(T Item, double Fraction)> weightedItems)
+    {
+        if (total <= 0 || weightedItems.Count == 0)
+        {
+            return Array.Empty<(T, int)>();
+        }
+
+        var allocations = weightedItems
+            .Select(item =>
+            {
+                var exact = total * Math.Max(0, item.Fraction);
+                var floor = (int)Math.Floor(exact);
+                return new
+                {
+                    item.Item,
+                    Count = floor,
+                    Remainder = exact - floor
+                };
+            })
+            .ToList();
+
+        var assigned = allocations.Sum(x => x.Count);
+        var remaining = total - assigned;
+        var counts = allocations.Select(x => x.Count).ToArray();
+
+        foreach (var index in allocations
+            .Select((value, index) => new { value.Remainder, index })
+            .OrderByDescending(x => x.Remainder)
+            .ThenBy(x => x.index)
+            .Take(Math.Max(0, remaining))
+            .Select(x => x.index))
+        {
+            counts[index]++;
+        }
+
+        return weightedItems
+            .Select((item, index) => (item.Item, counts[index]))
+            .ToList();
+    }
+
+    private static IReadOnlyList<(T Item, int Count)> AllocateEvenly<T>(int total, IReadOnlyList<T> items)
+    {
+        if (total <= 0 || items.Count == 0)
+        {
+            return Array.Empty<(T, int)>();
+        }
+
+        var baseCount = total / items.Count;
+        var remainder = total % items.Count;
+
+        return items
+            .Select((item, index) => (item, baseCount + (index < remainder ? 1 : 0)))
+            .ToList();
     }
 }
 

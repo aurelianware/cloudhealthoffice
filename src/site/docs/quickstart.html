@@ -4,21 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quick Start — Cloud Health Office Documentation</title>
-  <meta name="description" content="Get Cloud Health Office running locally in under 15 minutes. Clone, start the Docker stack, submit a claim through full adjudication, and generate an 835 ERA — no Azure account needed." />
-  <meta name="keywords" content="Cloud Health Office quick start, healthcare payer platform setup, FHIR R4 quick start, X12 EDI local development, claims adjudication tutorial, CMS-0057-F getting started" />
+  <meta name="description" content="Get Cloud Health Office running locally on Kubernetes. Deploy the full platform, validate claims adjudication, and test CRD discovery with no Azure account needed." />
+  <meta name="keywords" content="Cloud Health Office quick start, Kubernetes local development, healthcare payer platform setup, FHIR R4 quick start, X12 EDI local development, claims adjudication tutorial, CMS-0057-F getting started" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/quickstart" />
 
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/quickstart" />
   <meta property="og:title" content="Quick Start — Cloud Health Office" />
-  <meta property="og:description" content="Get Cloud Health Office running locally in under 15 minutes. Full claims adjudication pipeline with no Azure account needed." />
+  <meta property="og:description" content="Get Cloud Health Office running locally on Kubernetes. Full platform deployment with claims adjudication and CRD discovery validation." />
 
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "Cloud Health Office Quick Start Guide",
-    "description": "Step-by-step guide to running Cloud Health Office locally with Docker. Submit a claim, run adjudication, generate an 835 ERA.",
+    "description": "Step-by-step guide to running Cloud Health Office locally on Kubernetes. Deploy the full platform, run adjudication, and verify CRD discovery.",
     "url": "https://cloudhealthoffice.com/docs/quickstart",
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
     "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
@@ -77,8 +77,8 @@
             <div class="docs-sidebar-section-title">Getting Started</div>
             <ul>
               <li><a href="/docs">Docs Home</a></li>
-              <li><a href="/docs/quickstart" class="active">Quick Start (Docker)</a></li>
-              <li><a href="/docs/quickstart-kubernetes">Quick Start (Kubernetes)</a></li>
+              <li><a href="/docs/quickstart" class="active">Quick Start</a></li>
+              <li><a href="/docs/quickstart-kubernetes">Kubernetes Reference</a></li>
             </ul>
           </div>
           <div class="docs-sidebar-section">
@@ -92,13 +92,12 @@
             <div class="docs-sidebar-section-title">On This Page</div>
             <ul class="toc-sub">
               <li><a href="#prerequisites">Prerequisites</a></li>
-              <li><a href="#step-1">1. Clone &amp; Install</a></li>
-              <li><a href="#step-2">2. Start the Stack</a></li>
-              <li><a href="#step-3">3. Seed Data</a></li>
-              <li><a href="#step-4">4. Submit a Claim</a></li>
-              <li><a href="#step-5">5. Adjudicate</a></li>
-              <li><a href="#step-6">6. Payment &amp; 835 ERA</a></li>
-              <li><a href="#step-7">7. Verify FHIR APIs</a></li>
+              <li><a href="#step-1">1. Clone</a></li>
+              <li><a href="#step-2">2. Deploy Kubernetes</a></li>
+              <li><a href="#step-3">3. Port Forward</a></li>
+              <li><a href="#step-4">4. Validate Claims</a></li>
+              <li><a href="#step-5">5. Verify CRD</a></li>
+              <li><a href="#step-6">6. Check Health</a></li>
               <li><a href="#next-steps">Next Steps</a></li>
             </ul>
           </div>
@@ -141,7 +140,7 @@
 
         <h1>Quick Start</h1>
         <p class="docs-subtitle">
-          Run Cloud Health Office locally and take a claim all the way through adjudication, payment, and 835 ERA download — no Azure account needed. Total time: under 15 minutes.
+          Run the full Cloud Health Office platform locally on Kubernetes, then validate claims adjudication and Da Vinci CRD discovery — no Azure account needed.
         </p>
 
         <!-- Diagram -->
@@ -152,7 +151,7 @@
         <!-- What This Covers -->
         <div class="callout callout-success">
           <div class="callout-title">What you'll build</div>
-          <p>By the end of this guide you'll have a running local stack with MongoDB, Redis, and three core services — and you'll have submitted a claim through NCCI edit checking, fee schedule lookup, benefit calculation, cost-sharing, payment batching, and 835 ERA generation.</p>
+          <p>By the end of this guide you'll have the full service suite running in the <code>cloudhealthoffice</code> namespace with MongoDB, Redis, the portal, FHIR, claims, payment, enrollment, provider, and supporting services. You'll also run a claim through adjudication and verify CRD discovery.</p>
         </div>
 
         <!-- Prerequisites -->
@@ -163,226 +162,139 @@
             <tr><th>Tool</th><th>Version</th><th>Notes</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>Docker Desktop</code></td><td>4.x+</td><td>Must have Docker Compose v2</td></tr>
-            <tr><td><code>Node.js</code></td><td>18+</td><td>For CLI tooling</td></tr>
+            <tr><td><code>Docker Desktop</code></td><td>4.x+</td><td>Kubernetes enabled; 16 GB memory minimum, 24 GB recommended</td></tr>
+            <tr><td><code>kubectl</code></td><td>current</td><td>Bundled with Docker Desktop</td></tr>
+            <tr><td><code>bash</code></td><td>4+</td><td>macOS: <code>brew install bash</code></td></tr>
             <tr><td><code>curl</code></td><td>any</td><td>For API calls</td></tr>
             <tr><td><code>jq</code></td><td>any</td><td>Optional — for pretty JSON output</td></tr>
           </tbody>
         </table>
 
         <!-- Step 1 -->
-        <h2 id="step-1">1. Clone &amp; Install</h2>
+        <h2 id="step-1">1. Clone the Repository</h2>
 
         <div class="step">
           <span class="step-number">1</span>
           <div class="step-body">
-            <h3>Clone the repository and install dependencies</h3>
+            <h3>Clone the repository</h3>
 <pre><code><span class="code-comment"># Clone</span>
 git clone https://github.com/aurelianware/cloudhealthoffice.git
 cd cloudhealthoffice
 
-<span class="code-comment"># Install Node.js dependencies (for CLI tooling)</span>
-npm install</code></pre>
+<span class="code-comment"># Confirm Docker Desktop Kubernetes is selected</span>
+kubectl config current-context
+kubectl cluster-info</code></pre>
           </div>
         </div>
 
         <!-- Step 2 -->
-        <h2 id="step-2">2. Start the Stack</h2>
+        <h2 id="step-2">2. Deploy to Local Kubernetes</h2>
 
         <div class="step">
           <span class="step-number">2</span>
           <div class="step-body">
-            <h3>Launch all services with Docker Compose</h3>
-<pre><code>docker compose up -d</code></pre>
-            <p>This starts MongoDB (<code>localhost:27017</code>), Redis (<code>localhost:6379</code>), and three core services:</p>
+            <h3>Build images and deploy the platform</h3>
+<pre><code>./scripts/deploy-local.sh</code></pre>
+            <p>The script builds local images, creates the <code>cloudhealthoffice</code> namespace, deploys MongoDB and Redis, creates local secrets, applies service manifests, and waits for the core rollout. First run can take 15-30 minutes depending on Docker cache and CPU.</p>
+            <p>For repeat deploys after images are already built:</p>
+<pre><code>./scripts/deploy-local.sh --skip-build</code></pre>
+            <p>Verify the deployments:</p>
+<pre><code>kubectl get deployments -n cloudhealthoffice
+kubectl get pods -n cloudhealthoffice</code></pre>
+            <p>Every deployment should eventually show <code>1/1</code> ready. The main services used below are:</p>
             <table>
               <thead><tr><th>Service</th><th>URL</th></tr></thead>
               <tbody>
+                <tr><td>portal</td><td><code>http://localhost:8080</code></td></tr>
                 <tr><td>claims-service</td><td><code>http://localhost:5001</code></td></tr>
                 <tr><td>benefit-plan-service</td><td><code>http://localhost:5002</code></td></tr>
-                <tr><td>payment-service</td><td><code>http://localhost:5003</code></td></tr>
+                <tr><td>payment-service</td><td><code>http://localhost:5006</code></td></tr>
+                <tr><td>fhir-service</td><td><code>http://localhost:5080</code></td></tr>
               </tbody>
             </table>
-            <p>Wait about 45 seconds, then verify all services are healthy:</p>
-<pre><code>curl -s http://localhost:5001/health
-curl -s http://localhost:5002/health
-curl -s http://localhost:5003/health</code></pre>
-            <p>All should return <code>Healthy</code>.</p>
           </div>
         </div>
 
         <!-- Step 3 -->
-        <h2 id="step-3">3. Seed Reference Data</h2>
+        <h2 id="step-3">3. Open Local Access</h2>
 
         <div class="step">
           <span class="step-number green">3</span>
           <div class="step-body">
-            <h3>Set tenant ID and seed NCCI/MUE edits</h3>
-            <p>All requests require an <code>X-Tenant-ID</code> header. For local development, use any string:</p>
-<pre><code>TENANT="demo"
-
-<span class="code-comment"># Seed NCCI Q1 2025 baseline edits</span>
-curl -s -X POST http://localhost:5002/api/v1/ncci/seed \
-  -H "X-Tenant-ID: $TENANT" | jq .</code></pre>
-            <p>The response includes an <code>editCount</code> showing the number of NCCI pairs loaded.</p>
+            <h3>Port-forward the services used in the walkthrough</h3>
+            <p>Run these in separate terminals, or append <code>&amp;</code> to background them:</p>
+<pre><code>kubectl port-forward -n cloudhealthoffice svc/portal 8080:80
+kubectl port-forward -n cloudhealthoffice svc/claims-service 5001:80
+kubectl port-forward -n cloudhealthoffice svc/benefit-plan-service 5002:80
+kubectl port-forward -n cloudhealthoffice svc/payment-service 5006:80
+kubectl port-forward -n cloudhealthoffice svc/fhir-service 5080:80</code></pre>
+            <p>Open the portal at <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer">http://localhost:8080</a>. API calls use the local seeded tenant header <code>X-Tenant-ID: demo</code>.</p>
           </div>
         </div>
 
         <!-- Step 4 -->
-        <h2 id="step-4">4. Create a Benefit Plan &amp; Submit a Claim</h2>
+        <h2 id="step-4">4. Validate the Claims Workflow</h2>
 
         <div class="step">
           <span class="step-number green">4</span>
           <div class="step-body">
-            <h3>Create a PPO plan with cost-sharing rules</h3>
-<pre><code>PLAN=$(curl -s -X POST http://localhost:5002/api/benefitplans \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "planId": "LOCAL-PPO-2025",
-    "planName": "Local Dev PPO 2025",
-    "payer": "Demo Health",
-    "effectiveDate": "2025-01-01T00:00:00Z",
-    "planType": "PPO",
-    "lineOfBusiness": "Commercial",
-    "costSharing": {
-      "individualDeductible": 1500.00,
-      "familyDeductible": 3000.00,
-      "individualOutOfPocketMax": 5000.00,
-      "familyOutOfPocketMax": 10000.00
-    },
-    "benefits": [
-      {
-        "serviceCategory": "98",
-        "description": "Professional Office Visit",
-        "inNetworkCopay": 30.00,
-        "deductibleApplies": false
-      },
-      {
-        "serviceCategory": "73",
-        "description": "Diagnostic Lab",
-        "inNetworkCoinsurance": 0.20,
-        "deductibleApplies": true
-      }
-    ]
-  }')
-
-PLAN_ID=$(echo $PLAN | jq -r '.id')
-echo "Plan ID: $PLAN_ID"</code></pre>
-
-            <h3>Submit an 837P-equivalent claim</h3>
-            <p>An office visit (CPT 99213) at POS 11 with a billed amount of $175:</p>
-<pre><code>CLAIM=$(curl -s -X POST http://localhost:5001/api/claims \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "claimNumber": "LOCAL-TEST-001",
-    "memberId": "MBR001",
-    "subscriberId": "SUB001",
-    "providerNpi": "1234567890",
-    "serviceDate": "2025-06-15T00:00:00Z",
-    "diagnosisCodes": ["Z00.00"],
-    "serviceLines": [{
-      "procedureCode": "99213",
-      "placeOfServiceCode": "11",
-      "billedAmount": 175.00,
-      "units": 1,
-      "diagnosisCodes": ["Z00.00"]
-    }],
-    "totalBilledAmount": 175.00,
-    "status": "Submitted"
-  }')
-
-CLAIM_ID=$(echo $CLAIM | jq -r '.id')
-echo "Claim ID: $CLAIM_ID"</code></pre>
+            <h3>Seed data, submit a claim, and run adjudication</h3>
+<pre><code>CLAIMS_URL=http://localhost:5001 \
+BENEFIT_URL=http://localhost:5002 \
+./scripts/seed-local.sh --tenant demo</code></pre>
+            <p>The script seeds NCCI edits, creates a local PPO benefit plan, submits a professional claim, runs adjudication, and updates the claim with the adjudication result. The summary prints the claim ID, allowed amount, plan payment, and member responsibility.</p>
           </div>
         </div>
 
         <!-- Step 5 -->
-        <h2 id="step-5">5. Adjudicate the Claim</h2>
+        <h2 id="step-5">5. Verify CRD Discovery</h2>
 
         <div class="step">
           <span class="step-number">5</span>
           <div class="step-body">
-            <h3>Run the full adjudication pipeline</h3>
-            <p>This calls the combined endpoint which runs NCCI/MUE edit check, fee schedule lookup, and benefit calculation in a single pass:</p>
-<pre><code>ADJ=$(curl -s -X POST http://localhost:5002/api/v1/adjudication/adjudicate \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"claimId\": \"$CLAIM_ID\",
-    \"memberId\": \"MBR001\",
-    \"planId\": \"LOCAL-PPO-2025\"
-  }")
-
-echo $ADJ | jq .</code></pre>
-
+            <h3>Call the Da Vinci CRD CDS Hooks discovery endpoint</h3>
+<pre><code>curl -s -H "X-Tenant-ID: demo" http://localhost:5080/cds-services | jq .</code></pre>
             <div class="callout callout-info">
-              <div class="callout-title">What happens during adjudication</div>
-              <p><strong>NCCI check:</strong> CPT 99213 has no NCCI conflicts — passes. <strong>Fee schedule:</strong> No local schedule seeded, falls back to billed charges ($175). <strong>Benefit calculation:</strong> POS 11 resolves to service type "98" (Professional Visit); $30 copay applies, deductible not consumed. <strong>Result:</strong> Allowed $175, plan pays $145, member owes $30 copay.</p>
+              <div class="callout-title">Expected result</div>
+              <p>The response should list the local CRD services, including <code>cho-order-select</code> and <code>cho-order-sign</code>. Browser testing needs a header extension or proxy that sends <code>X-Tenant-ID: demo</code>.</p>
             </div>
           </div>
         </div>
 
         <!-- Step 6 -->
-        <h2 id="step-6">6. Generate Payment &amp; 835 ERA</h2>
+        <h2 id="step-6">6. Check System Health</h2>
 
         <div class="step">
           <span class="step-number green">6</span>
           <div class="step-body">
-            <h3>Create a payment batch and download the X12 835</h3>
-<pre><code><span class="code-comment"># Create payment batch</span>
-BATCH=$(curl -s -X POST http://localhost:5003/api/v1/payment/batch \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d '{ "batchDate": "2025-06-20T00:00:00Z" }')
+            <h3>Inspect rollouts and logs</h3>
+<pre><code>kubectl get deployments -n cloudhealthoffice
+kubectl get pods -n cloudhealthoffice
 
-BATCH_ID=$(echo $BATCH | jq -r '.batchId')
+<span class="code-comment"># Recent portal and claims logs</span>
+kubectl logs -n cloudhealthoffice -l app=portal --tail=50
+kubectl logs -n cloudhealthoffice -l app=claims-service --tail=50
 
-<span class="code-comment"># Download the 835 ERA file</span>
-curl -s "http://localhost:5003/api/v1/payment/era/$BATCH_ID" \
-  -H "X-Tenant-ID: $TENANT" -o era-835.edi
-
-cat era-835.edi</code></pre>
-            <p>The output is a valid X12 835 Electronic Remittance Advice file showing the claim payment details.</p>
-          </div>
-        </div>
-
-        <!-- Step 7 -->
-        <h2 id="step-7">7. Verify FHIR R4 APIs</h2>
-
-        <div class="step">
-          <span class="step-number green">7</span>
-          <div class="step-body">
-            <h3>Test the CMS-0057-F FHIR endpoints</h3>
-<pre><code><span class="code-comment"># FHIR CapabilityStatement</span>
-curl -s http://localhost:3000/fhir/r4/metadata | jq .resourceType
-
-<span class="code-comment"># Patient Access API — retrieve claims as FHIR resources</span>
-curl -s -H "Authorization: Bearer test-token" \
-  "http://localhost:3000/fhir/r4/Claim?patient=MBR001" | jq .
-
-<span class="code-comment"># Explanation of Benefits</span>
-curl -s -H "Authorization: Bearer test-token" \
-  "http://localhost:3000/fhir/r4/ExplanationOfBenefit?patient=MBR001" | jq .</code></pre>
+<span class="code-comment"># Find recent errors across services</span>
+kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || true</code></pre>
           </div>
         </div>
 
         <div class="callout callout-success">
           <div class="callout-title">You're done!</div>
-          <p>You've just run a claim through the complete Cloud Health Office pipeline — NCCI edit checking, benefit calculation, cost-sharing, payment, 835 ERA generation, and FHIR R4 API verification. All locally, with synthetic data, in under 15 minutes.</p>
+          <p>You now have the production-shaped Cloud Health Office platform running locally in Kubernetes, with claims adjudication and CRD discovery validated against the seeded <code>demo</code> tenant.</p>
         </div>
 
         <!-- Next Steps -->
         <h2 id="next-steps">Next Steps</h2>
 
-        <p>Now that you have a running local stack, explore these areas:</p>
+        <p>Now that you have a running local Kubernetes platform, explore these areas:</p>
 
         <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
           <a href="/docs/quickstart-kubernetes" class="docs-hub-card">
-            <h3>Kubernetes Quick Start</h3>
-            <p>Deploy the full 25-service platform on Docker Desktop Kubernetes &mdash; identical to the production Azure AKS architecture.</p>
-            <span class="card-arrow">Kubernetes guide &rarr;</span>
+            <h3>Kubernetes Reference</h3>
+            <p>Review deeper troubleshooting, resource guidance, common kubectl tasks, and teardown commands.</p>
+            <span class="card-arrow">Reference guide &rarr;</span>
           </a>
           <a href="/docs/compliance" class="docs-hub-card">
             <h3>CMS-0057-F Compliance</h3>
