@@ -643,7 +643,7 @@
           </p>
         </div>
 
-        <form id="fpApplicationForm" action="https://formspree.io/f/[FORM_ID]" method="POST" novalidate style="display: block;" aria-label="Founding partner application form">
+        <form id="fpApplicationForm" action="__FORMSPREE_FOUNDING_PARTNER_ENDPOINT__" method="POST" novalidate style="display: block;" aria-label="Founding partner application form">
 
           <div style="margin-bottom: 22px;">
             <label for="fp-org-name" style="display:block; font-size:0.9rem; color:rgba(0,255,255,0.8); margin-bottom:6px; font-weight:600;">
@@ -786,6 +786,7 @@
 
           <input type="hidden" name="_subject" value="Founding Partner Application" />
           <input type="hidden" name="_format" value="plain" />
+          <input type="hidden" name="formRecipient" value="partners@cloudhealthoffice.com" />
 
           <div id="fp-form-error" role="alert" aria-live="polite" style="
             display: none;
@@ -838,7 +839,7 @@
           <div style="font-size: 2.5rem; margin-bottom: 16px;" aria-hidden="true">&#x2705;</div>
           <h3 style="color: #00ff88; margin-bottom: 12px;">Application received</h3>
           <p style="color: rgba(200,200,200,0.85); font-size: 0.95rem; line-height: 1.7;">
-            Thank you &mdash; we&rsquo;ll respond personally within 2 business days. Questions in the meantime? Email mark@cloudhealthoffice.com
+            Thank you &mdash; we&rsquo;ll respond personally within 2 business days. Questions in the meantime? Email partners@cloudhealthoffice.com
           </p>
           <p style="margin-top: 20px; font-size: 0.85rem; color: rgba(128,128,128,0.6);">
             Prefer to talk first? <a href="[CALENDAR_LINK]" style="color:#00ff88;">Schedule a 20-minute call &rarr;</a>
@@ -866,6 +867,10 @@
         errorEl.style.display = 'none';
       }
 
+      function isFormspreeEndpointConfigured() {
+        return /^https:\/\/formspree\.io\/f\/[a-z0-9]+$/i.test(form.action);
+      }
+
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
         clearError();
@@ -888,26 +893,38 @@
           return;
         }
 
+        if (!isFormspreeEndpointConfigured()) {
+          showError('This form is not configured yet. Please email partners@cloudhealthoffice.com directly.');
+          return;
+        }
+
         submitBtn.disabled = true;
         submitBtn.textContent = 'Submitting…';
 
         try {
+          var formData = new FormData(form);
+          formData.set('_replyto', email);
+
           var response = await fetch(form.action, {
             method: 'POST',
             headers: {
               'Accept': 'application/json'
             },
-            body: new FormData(form)
+            body: formData
           });
 
           if (!response.ok) {
-            throw new Error('Request failed');
+            var result = await response.json().catch(function() { return null; });
+            var message = result && result.errors && result.errors.length
+              ? result.errors.map(function(error) { return error.message; }).join(' ')
+              : 'Request failed';
+            throw new Error(message);
           }
 
           form.style.display = 'none';
           successEl.style.display = 'block';
         } catch (err) {
-          showError('Something went wrong. Please email mark@cloudhealthoffice.com directly.');
+          showError(err.message || 'Something went wrong. Please email partners@cloudhealthoffice.com directly.');
           submitBtn.disabled = false;
           submitBtn.textContent = 'Apply for Founding Partner Access';
         }

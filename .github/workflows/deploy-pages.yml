@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GOOGLE_ANALYTICS_ID: ${{ vars.GOOGLE_ANALYTICS_ID || 'G-H1HCD5EYPN' }}
+      FORMSPREE_FOUNDING_PARTNER_ENDPOINT: ${{ secrets.FORMSPREE_FOUNDING_PARTNER_ENDPOINT || vars.FORMSPREE_FOUNDING_PARTNER_ENDPOINT || '' }}
     defaults:
       run:
         working-directory: src/site
