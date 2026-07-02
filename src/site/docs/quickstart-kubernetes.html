@@ -231,7 +231,7 @@ kubectl cluster-info
           <div class="step-body">
             <h3>One command deploys the entire platform</h3>
 <pre><code>./scripts/deploy-local.sh</code></pre>
-            <p>This builds Docker images for all 25 services + portal, creates the <code>cloudhealthoffice</code> namespace, deploys MongoDB and Redis, creates all Kubernetes secrets, seeds demo data, and deploys all microservices using the same k8s manifests as production.</p>
+            <p>This builds Docker images for all 30+ services plus the portal, creates the <code>cloudhealthoffice</code> namespace, deploys MongoDB and Redis, creates all Kubernetes secrets, seeds demo data, and deploys all microservices using the same k8s manifests as production.</p>
             <p><strong>First run:</strong> ~10&ndash;15 minutes (image builds). <strong>Subsequent runs:</strong> ~2 minutes.</p>
 
             <table>
@@ -297,8 +297,8 @@ kubectl port-forward -n cloudhealthoffice svc/mongodb 27017:27017</code></pre>
 <pre><code>CLAIMS_URL=http://localhost:5001 \
 BENEFIT_URL=http://localhost:5002 \
 ./scripts/seed-local.sh --tenant demo</code></pre>
-            <p>This seeds NCCI edits, creates a benefit plan, submits a claim, runs adjudication, executes a payment batch, and downloads an 835 ERA file &mdash; the complete claims lifecycle.</p>
-            <p>For a step-by-step walkthrough with individual curl commands, see the <a href="/docs/quickstart">Docker Quick Start guide</a> (steps 3&ndash;7 work identically after port-forwarding).</p>
+            <p>This seeds NCCI edits, creates a benefit plan, submits a claim, runs adjudication, and writes the adjudication result back to the claim.</p>
+            <p>For the shortest walkthrough, see the <a href="/docs/quickstart">primary Quick Start guide</a>.</p>
           </div>
         </div>
 

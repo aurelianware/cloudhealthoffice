@@ -89,13 +89,13 @@ docker --version
 node --version</code></pre>
 
         <h2 id="local-dev">Local Development</h2>
-        <p>Start with Docker Compose for local development and testing. This runs MongoDB, Redis, and all core services locally. See the <a href="/docs/quickstart">Quick Start</a> for a complete walkthrough.</p>
+        <p>Start with local Kubernetes for development and testing. This runs MongoDB, Redis, the portal, FHIR, claims, payment, enrollment, provider, and supporting services in the same namespace and service-DNS shape used by production. See the <a href="/docs/quickstart">Quick Start</a> for a complete walkthrough.</p>
 
-<pre><code><span class="code-comment"># Start local stack</span>
-docker compose up -d
+<pre><code><span class="code-comment"># Start local Kubernetes platform</span>
+bash ./scripts/deploy-local.sh
 
 <span class="code-comment"># Verify health</span>
-curl -s http://localhost:5001/health</code></pre>
+kubectl get deployments -n cloudhealthoffice</code></pre>
 
         <h2 id="cicd">CI/CD Pipeline</h2>
         <p>The deployment pipeline uses GitHub Actions with OIDC authentication (no stored secrets) and environment protection rules for approval gates between stages.</p>
