@@ -29,7 +29,7 @@ Run Cloud Health Office locally and take a claim all the way through adjudicatio
 From the repo root:
 
 ```bash
-docker compose up -d
+docker compose --profile core --profile finance up -d
 ```
 
 This starts:
@@ -40,14 +40,14 @@ This starts:
 | Redis | `localhost:6379` |
 | claims-service | `http://localhost:5001` |
 | benefit-plan-service | `http://localhost:5002` |
-| payment-service | `http://localhost:5003` |
+| payment-service | `http://localhost:5006` |
 
 Wait for all services to be healthy (≈ 45 seconds):
 
 ```bash
 curl -s http://localhost:5001/health
 curl -s http://localhost:5002/health
-curl -s http://localhost:5003/health
+curl -s http://localhost:5006/health
 ```
 
 All should return `Healthy`.
@@ -280,7 +280,7 @@ curl -s -X PUT "http://localhost:5001/api/claims/$CLAIM_ID/status" \
 Execute a payment run that picks up all adjudicated claims and generates 835 EDI for each:
 
 ```bash
-PAYRUN=$(curl -s -X POST http://localhost:5003/api/paymentruns/execute \
+PAYRUN=$(curl -s -X POST http://localhost:5006/api/paymentruns/execute \
   -H "X-Tenant-ID: $TENANT" \
   -H "Content-Type: application/json" \
   -d "{
@@ -306,7 +306,7 @@ echo "Payment ID:  $PAYMENT_ID"
 ## 9. Download the 835 ERA
 
 ```bash
-curl -s "http://localhost:5003/api/payments/$PAYMENT_ID/835" \
+curl -s "http://localhost:5006/api/payments/$PAYMENT_ID/835" \
   -H "X-Tenant-ID: $TENANT" \
   -o era-$(date +%Y%m%d).835
 
@@ -325,7 +325,7 @@ Use these checks to verify payment run persistence, payment lifecycle endpoints,
 ### 10.1 Confirm payment run details
 
 ```bash
-curl -s "http://localhost:5003/api/paymentruns/$PAYRUN_ID" \
+curl -s "http://localhost:5006/api/paymentruns/$PAYRUN_ID" \
   -H "X-Tenant-ID: $TENANT" | jq '{id, status, totalClaims, totalPaymentAmount, paymentIds, claimIds}'
 ```
 
@@ -337,7 +337,7 @@ Expected:
 ### 10.2 Confirm payment record
 
 ```bash
-curl -s "http://localhost:5003/api/payments/$PAYMENT_ID" \
+curl -s "http://localhost:5006/api/payments/$PAYMENT_ID" \
   -H "X-Tenant-ID: $TENANT" | jq '{id, checkNumber, status, totalPaymentAmount, claimPayments}'
 ```
 
@@ -349,11 +349,11 @@ Expected:
 
 ```bash
 # Search payments in a date range
-curl -s "http://localhost:5003/api/payments?paymentDateFrom=2025-06-01&paymentDateTo=2025-12-31&page=1&pageSize=50" \
+curl -s "http://localhost:5006/api/payments?paymentDateFrom=2025-06-01&paymentDateTo=2025-12-31&page=1&pageSize=50" \
   -H "X-Tenant-ID: $TENANT" | jq '.[0:3]'
 
 # Payment summary
-curl -s "http://localhost:5003/api/payments/summary?from=2025-06-01&to=2025-12-31" \
+curl -s "http://localhost:5006/api/payments/summary?from=2025-06-01&to=2025-12-31" \
   -H "X-Tenant-ID: $TENANT" | jq .
 ```
 
@@ -365,13 +365,13 @@ Expected:
 
 ```bash
 # Mark as posted
-curl -s -X POST "http://localhost:5003/api/payments/$PAYMENT_ID/post" \
+curl -s -X POST "http://localhost:5006/api/payments/$PAYMENT_ID/post" \
   -H "X-Tenant-ID: $TENANT" \
   -H "Content-Type: application/json" \
   -d '{"postedBy":"local-tester","notes":"Posted during quickstart"}' | jq '{id, status, postedAt, postedBy}'
 
 # Mark as reconciled
-curl -s -X POST "http://localhost:5003/api/payments/$PAYMENT_ID/reconcile" \
+curl -s -X POST "http://localhost:5006/api/payments/$PAYMENT_ID/reconcile" \
   -H "X-Tenant-ID: $TENANT" \
   -H "Content-Type: application/json" \
   -d '{"notes":"Bank reconciliation test"}' | jq '{id, status, reconciledAt}'
@@ -386,7 +386,7 @@ Expected:
 If you want to test manual ERA ingestion without payment-run execution:
 
 ```bash
-curl -s -X POST http://localhost:5003/api/payments \
+curl -s -X POST http://localhost:5006/api/payments \
   -H "X-Tenant-ID: $TENANT" \
   -H "Content-Type: application/json" \
   -d '{
@@ -416,13 +416,13 @@ curl -s -X POST http://localhost:5003/api/payments \
 - `400 TenantId field is required`: ensure you're on latest code where tenant comes from `X-Tenant-ID`; if not, include `"tenantId":"$TENANT"` in payload as temporary fallback.
 - `404` on `/api/payments/{id}/835`: verify `PAYMENT_ID` is non-empty and was created under the same tenant header.
 - `500` during payment run execution: confirm claims-service has adjudicated claims and `PUT /api/claims/{id}/adjudication` completed first.
-- Intermittent failures right after `docker compose up -d`: wait for health checks to pass (`curl http://localhost:5003/health`) before running API calls.
+- Intermittent failures right after `docker compose --profile core --profile finance up -d`: wait for health checks to pass (`curl http://localhost:5006/health`) before running API calls.
 
 ---
 
 ## Automated script
 
-Run the entire flow (submit → adjudicate → payment → 835) in one command:
+Run the submit → adjudicate flow in one command:
 
 ```bash
 ./scripts/seed-local.sh --tenant demo
@@ -436,7 +436,7 @@ Explore all endpoints interactively:
 
 - **Claims service:** [http://localhost:5001/swagger](http://localhost:5001/swagger)
 - **Benefit-plan / adjudication:** [http://localhost:5002/swagger](http://localhost:5002/swagger)
-- **Payment / 835 ERA:** [http://localhost:5003/swagger](http://localhost:5003/swagger)
+- **Payment / 835 ERA:** [http://localhost:5006/swagger](http://localhost:5006/swagger)
 
 ---
 
