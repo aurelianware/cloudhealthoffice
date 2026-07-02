@@ -20,6 +20,8 @@ const rawGoogleAnalyticsId = process.env.GOOGLE_ANALYTICS_ID;
 const googleAnalyticsId = rawGoogleAnalyticsId === undefined
   ? defaultGoogleAnalyticsId
   : rawGoogleAnalyticsId.trim();
+const formspreeFoundingPartnerEndpoint =
+  (process.env.FORMSPREE_FOUNDING_PARTNER_ENDPOINT || '').trim();
 
 if (googleAnalyticsId && !/^G-[A-Z0-9]+$/i.test(googleAnalyticsId)) {
   console.error(
@@ -27,6 +29,17 @@ if (googleAnalyticsId && !/^G-[A-Z0-9]+$/i.test(googleAnalyticsId)) {
   );
   process.exit(1);
 }
+
+if (
+  formspreeFoundingPartnerEndpoint &&
+  !/^https:\/\/formspree\.io\/f\/[a-z0-9]+$/i.test(formspreeFoundingPartnerEndpoint)
+) {
+  console.error(
+    `Error: FORMSPREE_FOUNDING_PARTNER_ENDPOINT must use the format https://formspree.io/f/{form_id}`
+  );
+  process.exit(1);
+}
+
 const ignoredEntries = new Set([
   '.dockerignore',
   '.gitignore',
@@ -80,7 +93,11 @@ function processHtmlFiles(directory) {
     let html = readFileSync(fullPath, 'utf8')
       .replace(plausibleCommentPattern, '\n')
       .replace(plausibleLoaderPattern, '\n')
-      .replace(plausibleInlinePattern, '\n');
+      .replace(plausibleInlinePattern, '\n')
+      .replaceAll(
+        '__FORMSPREE_FOUNDING_PARTNER_ENDPOINT__',
+        formspreeFoundingPartnerEndpoint
+      );
 
     if (analyticsInjection) {
       html = html.replace('</head>', `  ${analyticsInjection}\n</head>`);
@@ -112,6 +129,14 @@ if (googleAnalyticsId) {
   console.log(`Injected Google Analytics ID ${googleAnalyticsId} into site HTML`);
 } else {
   console.warn('Google Analytics is disabled; generated site artifact will not include analytics');
+}
+
+if (formspreeFoundingPartnerEndpoint) {
+  console.log('Injected Formspree endpoint for the founding partner form');
+} else {
+  console.warn(
+    'FORMSPREE_FOUNDING_PARTNER_ENDPOINT is not set; founding partner form will show the partners@cloudhealthoffice.com fallback'
+  );
 }
 
 console.log(`Prepared GitHub Pages artifact in ${outputDir}`);
