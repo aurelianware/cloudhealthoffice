@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -34,6 +35,7 @@ Console.WriteLine($"  Claims URL:  {options.ClaimsUrl}");
 Console.WriteLine($"  Benefit URL: {options.BenefitUrl}");
 Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
+Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
 Console.WriteLine();
 
 await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
@@ -47,10 +49,58 @@ await CreateValidationPlanAsync(http, options, validationPlanId, json);
 var claims = await GenerateClaimsAsync(options.Claims, options.Seed);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 
-var results = new List<ClaimValidationResult>(claims.Count);
+var results = new ConcurrentBag<ClaimValidationResult>();
 var total = Stopwatch.StartNew();
+var completed = 0;
+var succeeded = 0;
+var progressLock = new object();
 
-foreach (var claim in claims)
+await Parallel.ForEachAsync(
+    claims,
+    new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
+    async (claim, _) =>
+    {
+        var result = await ProcessClaimAsync(http, options, claim, validationPlanId, json);
+        results.Add(result);
+
+        var done = Interlocked.Increment(ref completed);
+        if (result.Success)
+        {
+            Interlocked.Increment(ref succeeded);
+        }
+
+        if (done % options.ProgressEvery == 0 || done == claims.Count)
+        {
+            lock (progressLock)
+            {
+                done = Volatile.Read(ref completed);
+                var ok = Volatile.Read(ref succeeded);
+                Console.Write($"\r  Processed: {done:N0}/{claims.Count:N0}  success={ok:N0}  failed={done - ok:N0}");
+            }
+        }
+    });
+
+total.Stop();
+Console.WriteLine();
+Console.WriteLine();
+
+var orderedResults = results
+    .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
+    .ToList();
+
+WriteSummary(orderedResults, total.Elapsed);
+
+if (orderedResults.Any(r => !r.Success))
+{
+    Environment.ExitCode = 1;
+}
+
+static async Task<ClaimValidationResult> ProcessClaimAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    SyntheticClaim claim,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
 {
     var sw = Stopwatch.StartNew();
     try
@@ -65,7 +115,7 @@ foreach (var claim in claims)
         }
 
         sw.Stop();
-        results.Add(new ClaimValidationResult(
+        return new ClaimValidationResult(
             claim.ClaimId,
             submitted.Id,
             claim.ClaimType,
@@ -74,12 +124,12 @@ foreach (var claim in claims)
             adjudicated.Totals.PlanPayment,
             claim.ExpectedOutcome?.ExpectedPaidAmount,
             sw.Elapsed,
-            null));
+            null);
     }
     catch (Exception ex)
     {
         sw.Stop();
-        results.Add(new ClaimValidationResult(
+        return new ClaimValidationResult(
             claim.ClaimId,
             null,
             claim.ClaimType,
@@ -88,26 +138,8 @@ foreach (var claim in claims)
             null,
             claim.ExpectedOutcome?.ExpectedPaidAmount,
             sw.Elapsed,
-            ex.Message));
+            ex.Message);
     }
-
-    var completed = results.Count;
-    if (completed % Math.Max(1, options.ProgressEvery) == 0 || completed == claims.Count)
-    {
-        var ok = results.Count(r => r.Success);
-        Console.Write($"\r  Processed: {completed:N0}/{claims.Count:N0}  success={ok:N0}  failed={completed - ok:N0}");
-    }
-}
-
-total.Stop();
-Console.WriteLine();
-Console.WriteLine();
-
-WriteSummary(results, total.Elapsed);
-
-if (results.Any(r => !r.Success))
-{
-    Environment.ExitCode = 1;
 }
 
 static async Task RequireHealthyAsync(HttpClient http, string url, string serviceName)
@@ -221,9 +253,41 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(int claimCount, int 
         await generator.GenerateCorpusAsync(profile, writer);
     }
 
-    return writer.Claims
+    var claims = writer.Claims
         .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
         .ToList();
+    NormalizeClaimDates(claims, seed);
+    return claims;
+}
+
+static void NormalizeClaimDates(List<SyntheticClaim> claims, int seed)
+{
+    var random = new Random(seed);
+    var anchorDate = DateTime.UtcNow.Date.AddDays(-45);
+
+    foreach (var claim in claims)
+    {
+        var originalServiceDate = claim.DateOfService.Date;
+        var normalizedServiceDate = anchorDate.AddDays(random.Next(0, 30));
+        var dateShift = normalizedServiceDate - originalServiceDate;
+
+        claim.DateOfService = claim.DateOfService.Date.Add(dateShift);
+
+        foreach (var line in claim.Lines)
+        {
+            line.ServiceDate = line.ServiceDate.Date.Add(dateShift);
+            if (line.ServiceEndDate.HasValue)
+            {
+                line.ServiceEndDate = line.ServiceEndDate.Value.Date.Add(dateShift);
+            }
+        }
+
+        var latestServiceDate = claim.Lines
+            .Select(line => line.ServiceEndDate ?? line.ServiceDate)
+            .DefaultIfEmpty(claim.DateOfService)
+            .Max();
+        claim.DateReceived = latestServiceDate.Date.AddDays(random.Next(1, 15));
+    }
 }
 
 static async Task<SubmittedClaim> SubmitClaimAsync(
@@ -616,10 +680,11 @@ static void PrintUsage()
       --skip-claim-update        Do not write adjudication projection back to claims-service
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 25)
+      --parallelism <count>      Number of claims to process concurrently (default: 4)
       -h, --help                 Show help
 
     Example:
-      dotnet run --project src/tools/mcc-platform-validator -- --claims 100 --tenant demo
+      dotnet run --project src/tools/mcc-platform-validator -- --claims 100 --parallelism 4 --tenant demo
     """);
 }
 
@@ -649,9 +714,11 @@ internal sealed record ValidatorOptions(
     bool SkipClaimUpdate,
     int TimeoutSeconds,
     int ProgressEvery,
+    int Parallelism,
     bool ShowHelp)
 {
     public const int MaxClaims = 10_000;
+    public const int MaxParallelism = 64;
 
     public static ValidatorOptions Parse(string[] args)
     {
@@ -684,6 +751,9 @@ internal sealed record ValidatorOptions(
                 case "--progress-every" when i + 1 < args.Length:
                     options.ProgressEvery = int.Parse(args[++i]);
                     break;
+                case "--parallelism" or "-p" when i + 1 < args.Length:
+                    options.Parallelism = int.Parse(args[++i]);
+                    break;
                 case "--help" or "-h":
                     options.ShowHelp = true;
                     break;
@@ -696,6 +766,12 @@ internal sealed record ValidatorOptions(
             options.Claims = MaxClaims;
         }
 
+        if (options.Parallelism > MaxParallelism)
+        {
+            Console.Error.WriteLine($"warning: capping --parallelism to {MaxParallelism:N0} for local validation");
+            options.Parallelism = MaxParallelism;
+        }
+
         return new ValidatorOptions(
             Math.Max(1, options.Claims),
             options.Seed,
@@ -705,6 +781,7 @@ internal sealed record ValidatorOptions(
             options.SkipClaimUpdate,
             Math.Max(5, options.TimeoutSeconds),
             Math.Max(1, options.ProgressEvery),
+            Math.Max(1, options.Parallelism),
             options.ShowHelp);
     }
 
@@ -718,6 +795,7 @@ internal sealed record ValidatorOptions(
         public bool SkipClaimUpdate { get; set; }
         public int TimeoutSeconds { get; set; } = 60;
         public int ProgressEvery { get; set; } = 10;
+        public int Parallelism { get; set; } = 4;
         public bool ShowHelp { get; set; }
     }
 }
