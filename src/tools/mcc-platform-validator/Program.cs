@@ -84,8 +84,9 @@ await Parallel.ForEachAsync(
         {
             lock (progressLock)
             {
-                var failures = Math.Min(Volatile.Read(ref platformFailures), done);
-                Console.Write($"\r  Processed: {done:N0}/{claims.Count:N0}  processed={done - failures:N0}  platformFailures={failures:N0}");
+                var currentDone = Volatile.Read(ref completed);
+                var failures = Math.Min(Volatile.Read(ref platformFailures), currentDone);
+                Console.Write($"\r  Processed: {currentDone:N0}/{claims.Count:N0}  processed={currentDone - failures:N0}  platformFailures={failures:N0}");
             }
         }
     });
