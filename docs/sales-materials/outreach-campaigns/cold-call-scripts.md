@@ -40,7 +40,7 @@
 
 **YOU:** "Perfect. So at 2 hours per attachment, that's [X × 2] hours of staff time monthly. At $50/hour, that's [X × 100] per month in operational costs, or about [X × 1,200] annually."
 
-**YOU:** "We automate the entire workflow—SFTP polling, X12 decoding, claim matching, and integration with your claims system. Most payers see an 80% reduction in processing time and save around $180K annually."
+**YOU:** "We automate the entire workflow—SFTP polling, X12 decoding, claim matching, and integration with your claims system. Based on our internal benchmarking, payers processing similar volumes could see up to an 80% reduction in processing time and save around $180K annually—that's a modeled projection, not a live customer result yet."
 
 **YOU:** "Would it make sense to schedule a quick 15-minute demo so you can see how this would work for your organization?"
 
@@ -315,7 +315,7 @@
 ### Proof Points:
 - "One of our customers processes 500 attachments/month and saves 1,000 staff hours monthly"
 - "We've helped payers reduce attachment-related provider calls by 60%"
-- "Our platform is 100% HIPAA compliant with SOC 2 Type II certification"
+- "Our platform is 100% HIPAA compliant, and we're currently completing our SOC 2 Type II audit (observation period through September 2026)"
 - "Average implementation is 90 days from contract to go-live"
 - "We guarantee the ROI—if you don't save money, we refund your investment"
 

@@ -153,8 +153,8 @@ NOW, THEREFORE, in consideration of the mutual covenants and agreements set fort
 - (d) Regular security assessments and penetration testing;
 - (e) Incident response and breach notification procedures.
 
-**7.3 Compliance Certifications.** Provider represents that it maintains:
-- (a) SOC 2 Type II certification;
+**7.3 Compliance Certifications.** Provider represents that it maintains or is actively pursuing the following compliance certifications and standards:
+- (a) SOC 2 Type II audit in progress (observation period April 1 - September 30, 2026; audit completion targeted December 31, 2026);
 - (b) HIPAA compliance documentation;
 - (c) Regular third-party security audits.
 

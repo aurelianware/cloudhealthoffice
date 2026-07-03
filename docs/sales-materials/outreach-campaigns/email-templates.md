@@ -258,6 +258,8 @@ Best,
 
 ## Template 8: Customer Success - Monthly Check-In
 
+> ⚠️ **DO NOT SEND until real customer data exists.** Every metric below is an [ILLUSTRATIVE - PLACEHOLDER] showing the template's structure only. Replace each one with that customer's actual figures before sending.
+
 **Subject:** [Company Name] - Monthly Performance Review
 
 **Body:**
@@ -266,18 +268,18 @@ Hi [First Name],
 
 I wanted to share your monthly performance metrics and see how things are going.
 
-**This Month's Metrics (March 2025):**
-- **Attachments Processed:** 523 (up 12% from February)
-- **Average Processing Time:** 4.2 minutes (down from 2.1 hours manual)
-- **Time Saved:** 1,089 staff hours
-- **Cost Savings:** $54,450 this month
-- **Uptime:** 99.98%
-- **Error Rate:** 0.02%
+**This Month's Metrics ([ILLUSTRATIVE - PLACEHOLDER: Month Year]):**
+- **Attachments Processed:** [ILLUSTRATIVE - PLACEHOLDER] (up [ILLUSTRATIVE - PLACEHOLDER]% from prior month)
+- **Average Processing Time:** [ILLUSTRATIVE - PLACEHOLDER] (down from manual baseline)
+- **Time Saved:** [ILLUSTRATIVE - PLACEHOLDER] staff hours
+- **Cost Savings:** [ILLUSTRATIVE - PLACEHOLDER] this month
+- **Uptime:** [ILLUSTRATIVE - PLACEHOLDER]
+- **Error Rate:** [ILLUSTRATIVE - PLACEHOLDER]
 
-**Cumulative Results (3 Months Live):**
-- **Total Time Saved:** 3,156 hours
-- **Total Cost Savings:** $157,800
-- **ROI to Date:** 6.3x (vs. 7.2x projected)
+**Cumulative Results ([ILLUSTRATIVE - PLACEHOLDER: N Months Live]):**
+- **Total Time Saved:** [ILLUSTRATIVE - PLACEHOLDER] hours
+- **Total Cost Savings:** [ILLUSTRATIVE - PLACEHOLDER]
+- **ROI to Date:** [ILLUSTRATIVE - PLACEHOLDER] (vs. [ILLUSTRATIVE - PLACEHOLDER] projected)
 
 **Areas for Improvement:**
 - Consider enabling 278 authorization processing (additional $2K/year savings)
@@ -347,7 +349,7 @@ Your annual contract is up for renewal on [Date], which is about 60 days away. I
 3. **Enhanced Package:** Add 278 processing + Appeals integration ($15K/year, $3K savings)
 
 **What's New This Year:**
-✅ Enhanced security features (SOC 2 Type II certified)
+✅ Enhanced security features (SOC 2 Type II audit in progress - observation period through Sep 2026)
 ✅ Improved reporting dashboard
 ✅ 278 authorization processing module
 ✅ Appeals integration capability
