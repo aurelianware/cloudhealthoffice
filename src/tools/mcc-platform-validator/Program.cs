@@ -16,6 +16,7 @@ if (options.ShowHelp)
     return;
 }
 
+var runStartedAtUtc = DateTimeOffset.UtcNow;
 var json = new JsonSerializerOptions(JsonSerializerDefaults.Web)
 {
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -62,7 +63,7 @@ if (options.SeedProviders)
 var results = new ConcurrentBag<ClaimValidationResult>();
 var total = Stopwatch.StartNew();
 var completed = 0;
-var succeeded = 0;
+var platformFailures = 0;
 var progressLock = new object();
 
 await Parallel.ForEachAsync(
@@ -74,18 +75,17 @@ await Parallel.ForEachAsync(
         results.Add(result);
 
         var done = Interlocked.Increment(ref completed);
-        if (result.Success)
+        if (result.Outcome is ClaimValidationOutcome.PlatformFailure)
         {
-            Interlocked.Increment(ref succeeded);
+            Interlocked.Increment(ref platformFailures);
         }
 
         if (done % options.ProgressEvery == 0 || done == claims.Count)
         {
             lock (progressLock)
             {
-                done = Volatile.Read(ref completed);
-                var ok = Volatile.Read(ref succeeded);
-                Console.Write($"\r  Processed: {done:N0}/{claims.Count:N0}  success={ok:N0}  failed={done - ok:N0}");
+                var failures = Math.Min(Volatile.Read(ref platformFailures), done);
+                Console.Write($"\r  Processed: {done:N0}/{claims.Count:N0}  processed={done - failures:N0}  platformFailures={failures:N0}");
             }
         }
     });
@@ -98,9 +98,15 @@ var orderedResults = results
     .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
     .ToList();
 
-WriteSummary(orderedResults, total.Elapsed);
+var summary = BuildSummary(orderedResults, total.Elapsed, options, runStartedAtUtc, DateTimeOffset.UtcNow);
+WriteSummary(summary);
 
-if (orderedResults.Any(r => !r.Success))
+if (!string.IsNullOrWhiteSpace(options.SummaryJsonPath))
+{
+    await WriteSummaryJsonAsync(options.SummaryJsonPath, summary, json);
+}
+
+if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure))
 {
     Environment.ExitCode = 1;
 }
@@ -143,11 +149,18 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         }
 
         sw.Stop();
+        var outcome = adjudicated.Success
+            ? ClaimValidationOutcome.Paid
+            : ClaimValidationOutcome.BusinessDenial;
+        var businessDenialCode = NormalizeBusinessDenialCode(adjudicated.BusinessDenialCode
+            ?? adjudicated.DenialReasonCode
+            ?? (outcome is ClaimValidationOutcome.BusinessDenial ? "ADJUDICATION_DENIAL" : null));
+
         return new ClaimValidationResult(
             claim.ClaimId,
             submitted.Id,
             claim.ClaimType,
-            true,
+            outcome,
             adjudicated.Success,
             adjudicated.Totals.PlanPayment,
             claim.ExpectedOutcome?.ExpectedPaidAmount,
@@ -155,6 +168,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             submitElapsed,
             adjudicationElapsed,
             updateElapsed,
+            businessDenialCode,
             null,
             null);
     }
@@ -165,7 +179,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             claim.ClaimId,
             null,
             claim.ClaimType,
-            false,
+            ClaimValidationOutcome.PlatformFailure,
             false,
             null,
             claim.ExpectedOutcome?.ExpectedPaidAmount,
@@ -173,6 +187,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             submitElapsed,
             adjudicationElapsed,
             updateElapsed,
+            null,
             failureStage,
             ex.Message);
     }
@@ -565,11 +580,65 @@ static async Task<AdjudicationResponseDto> AdjudicateClaimAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
+        if (response.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity
+            && TryParseBusinessDenial(body, json, out var denial))
+        {
+            return denial with { ClaimId = submittedClaimId };
+        }
+
         throw new InvalidOperationException($"adjudication failed ({claim.ClaimId}): {(int)response.StatusCode} {body}");
     }
 
     var result = JsonSerializer.Deserialize<AdjudicationResponseDto>(body, json);
     return result ?? throw new InvalidOperationException($"adjudication returned empty response ({claim.ClaimId})");
+}
+
+static bool TryParseBusinessDenial(
+    string body,
+    JsonSerializerOptions json,
+    out AdjudicationResponseDto denial)
+{
+    denial = default!;
+
+    try
+    {
+        var error = JsonSerializer.Deserialize<AdjudicationErrorDto>(body, json);
+        if (error?.Error is null || !IsKnownBusinessDenialCode(error.Error))
+        {
+            return false;
+        }
+
+        denial = new AdjudicationResponseDto(
+            error.ClaimId ?? string.Empty,
+            false,
+            error.Carc,
+            error.Message,
+            new AdjudicationTotalsDto(0, 0, 0, 0, 0, 0, 0, 0),
+            error.Error);
+        return true;
+    }
+    catch (JsonException)
+    {
+        return false;
+    }
+}
+
+static bool IsKnownBusinessDenialCode(string errorCode)
+    => errorCode is
+        "SCRUB_VALIDATION_FAILURE" or
+        "NCCI_MUE_EDIT_FAILURE" or
+        "PROVIDER_EXCLUDED" or
+        "PRIOR_AUTH_REQUIRED";
+
+static string? NormalizeBusinessDenialCode(string? code)
+{
+    if (string.IsNullOrWhiteSpace(code))
+    {
+        return null;
+    }
+
+    var trimmed = code.Trim();
+    return trimmed.All(char.IsDigit) ? $"CARC_{trimmed}" : trimmed;
 }
 
 static async Task UpdateClaimAdjudicationAsync(
@@ -780,46 +849,104 @@ static IReadOnlyList<(T Item, int Count)> AllocateCounts<T>(int total, IReadOnly
         .ToList();
 }
 
-static void WriteSummary(List<ClaimValidationResult> results, TimeSpan elapsed)
+static MccValidationSummary BuildSummary(
+    List<ClaimValidationResult> results,
+    TimeSpan elapsed,
+    ValidatorOptions options,
+    DateTimeOffset runStartedAtUtc,
+    DateTimeOffset runCompletedAtUtc)
 {
-    var succeeded = results.Count(r => r.Success);
-    var adjudicated = results.Count(r => r.AdjudicationSuccess);
-    var failed = results.Count - succeeded;
+    var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+    var adjudicated = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
+    var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
+    var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
     var orderedDurations = results.Select(r => r.Elapsed.TotalMilliseconds).Order().ToArray();
     var p95 = Percentile(orderedDurations, 0.95);
     var p99 = Percentile(orderedDurations, 0.99);
     var throughput = results.Count / Math.Max(0.001, elapsed.TotalSeconds);
-
-    Console.WriteLine("Validation summary");
-    Console.WriteLine($"  Total claims:       {results.Count:N0}");
-    Console.WriteLine($"  Processed:          {succeeded:N0}");
-    Console.WriteLine($"  Adjudicated:        {adjudicated:N0}");
-    Console.WriteLine($"  Failed:             {failed:N0}");
-    Console.WriteLine($"  Elapsed:            {elapsed:mm\\:ss\\.fff}");
-    Console.WriteLine($"  Throughput:         {throughput:N2} claims/sec");
-    Console.WriteLine($"  P95 latency:        {p95:N0} ms");
-    Console.WriteLine($"  P99 latency:        {p99:N0} ms");
-    WriteStageTiming("Submit", results.Select(r => r.SubmitElapsed));
-    WriteStageTiming("Adjudicate", results.Select(r => r.AdjudicationElapsed));
-    WriteStageTiming("Writeback", results.Select(r => r.UpdateElapsed));
-
     var comparable = results
+        .Where(r => r.Outcome is ClaimValidationOutcome.Paid)
         .Where(r => r.ActualPlanPayment.HasValue && r.ExpectedPlanPayment.HasValue)
         .ToList();
-    if (comparable.Count > 0)
+    var avgDelta = comparable.Count == 0
+        ? (decimal?)null
+        : comparable.Average(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value));
+    var denialBreakdown = results
+        .Where(r => r.Outcome is ClaimValidationOutcome.BusinessDenial)
+        .GroupBy(r => r.BusinessDenialCode ?? "UNKNOWN")
+        .OrderByDescending(g => g.Count())
+        .ThenBy(g => g.Key, StringComparer.Ordinal)
+        .Select(g => new MccBusinessDenialSummary(g.Key, g.Count()))
+        .ToList();
+    var failures = results
+        .Where(r => r.Outcome is ClaimValidationOutcome.PlatformFailure)
+        .Take(5)
+        .Select(r => new MccFailureSummary(r.GeneratedClaimId, r.FailureStage, r.Error))
+        .ToList();
+
+    return new MccValidationSummary(
+        new MccValidationRun(
+            options.TenantId,
+            options.Claims,
+            options.Seed,
+            options.Parallelism,
+            options.ClaimsUrl,
+            options.BenefitUrl,
+            options.ProviderUrl,
+            options.SeedProviders,
+            options.SkipClaimUpdate,
+            runStartedAtUtc,
+            runCompletedAtUtc),
+        results.Count,
+        processed,
+        adjudicated,
+        businessDenials,
+        platformFailures,
+        elapsed,
+        throughput,
+        p95,
+        p99,
+        BuildStageTiming("Submit", results.Select(r => r.SubmitElapsed)),
+        BuildStageTiming("Adjudicate", results.Select(r => r.AdjudicationElapsed)),
+        BuildStageTiming("Writeback", results.Select(r => r.UpdateElapsed)),
+        avgDelta,
+        denialBreakdown,
+        failures);
+}
+
+static void WriteSummary(MccValidationSummary summary)
+{
+    Console.WriteLine("Validation summary");
+    Console.WriteLine($"  Total claims:       {summary.TotalClaims:N0}");
+    Console.WriteLine($"  Processed:          {summary.Processed:N0}");
+    Console.WriteLine($"  Paid/adjudicated:   {summary.Paid:N0}");
+    Console.WriteLine($"  Business denials:   {summary.BusinessDenials:N0}");
+    Console.WriteLine($"  Platform failures:  {summary.PlatformFailures:N0}");
+    Console.WriteLine($"  Elapsed:            {summary.Elapsed:mm\\:ss\\.fff}");
+    Console.WriteLine($"  Throughput:         {summary.ThroughputClaimsPerSecond:N2} claims/sec");
+    Console.WriteLine($"  P95 latency:        {summary.P95LatencyMilliseconds:N0} ms");
+    Console.WriteLine($"  P99 latency:        {summary.P99LatencyMilliseconds:N0} ms");
+    WriteStageTiming(summary.SubmitTiming);
+    WriteStageTiming(summary.AdjudicateTiming);
+    WriteStageTiming(summary.WritebackTiming);
+
+    if (summary.AveragePaymentDelta.HasValue)
     {
-        var avgDelta = comparable
-            .Average(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value));
-        Console.WriteLine($"  Avg payment delta:  ${avgDelta:N2}");
+        Console.WriteLine($"  Avg payment delta:  ${summary.AveragePaymentDelta:N2}");
     }
 
-    foreach (var failure in results.Where(r => !r.Success).Take(5))
+    foreach (var denialGroup in summary.BusinessDenialBreakdown.Take(5))
     {
-        Console.WriteLine($"  Failure: {failure.GeneratedClaimId} [{failure.FailureStage}] {failure.Error}");
+        Console.WriteLine($"  Business denial: {denialGroup.Code} ({denialGroup.Count:N0})");
+    }
+
+    foreach (var failure in summary.SampleFailures)
+    {
+        Console.WriteLine($"  Failure: {failure.GeneratedClaimId} [{failure.Stage}] {failure.Error}");
     }
 }
 
-static void WriteStageTiming(string label, IEnumerable<TimeSpan> durations)
+static MccStageTiming? BuildStageTiming(string label, IEnumerable<TimeSpan> durations)
 {
     var values = durations
         .Select(d => d.TotalMilliseconds)
@@ -829,10 +956,32 @@ static void WriteStageTiming(string label, IEnumerable<TimeSpan> durations)
 
     if (values.Length == 0)
     {
+        return null;
+    }
+
+    return new MccStageTiming(label, values.Average(), Percentile(values, 0.95));
+}
+
+static void WriteStageTiming(MccStageTiming? timing)
+{
+    if (timing is null)
+    {
         return;
     }
 
-    Console.WriteLine($"  {label,-12} avg/p95: {values.Average():N0} ms / {Percentile(values, 0.95):N0} ms");
+    Console.WriteLine($"  {timing.Label,-12} avg/p95: {timing.AverageMilliseconds:N0} ms / {timing.P95Milliseconds:N0} ms");
+}
+
+static async Task WriteSummaryJsonAsync(string path, MccValidationSummary summary, JsonSerializerOptions json)
+{
+    var directory = Path.GetDirectoryName(Path.GetFullPath(path));
+    if (!string.IsNullOrWhiteSpace(directory))
+    {
+        Directory.CreateDirectory(directory);
+    }
+
+    await File.WriteAllTextAsync(path, JsonSerializer.Serialize(summary, json));
+    Console.WriteLine($"  Summary JSON:       {path}");
 }
 
 static double Percentile(double[] values, double percentile)
@@ -866,6 +1015,7 @@ static void PrintUsage()
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 25)
       --parallelism <count>      Number of claims to process concurrently (default: 4)
+      --summary-json <path>      Write machine-readable validation summary JSON
       -h, --help                 Show help
 
     Example:
@@ -902,6 +1052,7 @@ internal sealed record ValidatorOptions(
     int TimeoutSeconds,
     int ProgressEvery,
     int Parallelism,
+    string? SummaryJsonPath,
     bool ShowHelp)
 {
     public const int MaxClaims = 10_000;
@@ -947,6 +1098,9 @@ internal sealed record ValidatorOptions(
                 case "--parallelism" or "-p" when i + 1 < args.Length:
                     options.Parallelism = int.Parse(args[++i]);
                     break;
+                case "--summary-json" when i + 1 < args.Length:
+                    options.SummaryJsonPath = args[++i];
+                    break;
                 case "--help" or "-h":
                     options.ShowHelp = true;
                     break;
@@ -977,6 +1131,7 @@ internal sealed record ValidatorOptions(
             Math.Max(5, options.TimeoutSeconds),
             Math.Max(1, options.ProgressEvery),
             Math.Max(1, options.Parallelism),
+            options.SummaryJsonPath,
             options.ShowHelp);
     }
 
@@ -993,17 +1148,25 @@ internal sealed record ValidatorOptions(
         public int TimeoutSeconds { get; set; } = 60;
         public int ProgressEvery { get; set; } = 10;
         public int Parallelism { get; set; } = 4;
+        public string? SummaryJsonPath { get; set; }
         public bool ShowHelp { get; set; }
     }
 }
 
 internal sealed record SubmittedClaim(string Id);
 
+internal enum ClaimValidationOutcome
+{
+    Paid,
+    BusinessDenial,
+    PlatformFailure
+}
+
 internal sealed record ClaimValidationResult(
     string GeneratedClaimId,
     string? SubmittedClaimId,
     string ClaimType,
-    bool Success,
+    ClaimValidationOutcome Outcome,
     bool AdjudicationSuccess,
     decimal? ActualPlanPayment,
     decimal? ExpectedPlanPayment,
@@ -1011,7 +1174,53 @@ internal sealed record ClaimValidationResult(
     TimeSpan SubmitElapsed,
     TimeSpan AdjudicationElapsed,
     TimeSpan UpdateElapsed,
+    string? BusinessDenialCode,
     string? FailureStage,
+    string? Error);
+
+internal sealed record MccValidationSummary(
+    MccValidationRun Run,
+    int TotalClaims,
+    int Processed,
+    int Paid,
+    int BusinessDenials,
+    int PlatformFailures,
+    TimeSpan Elapsed,
+    double ThroughputClaimsPerSecond,
+    double P95LatencyMilliseconds,
+    double P99LatencyMilliseconds,
+    MccStageTiming? SubmitTiming,
+    MccStageTiming? AdjudicateTiming,
+    MccStageTiming? WritebackTiming,
+    decimal? AveragePaymentDelta,
+    IReadOnlyList<MccBusinessDenialSummary> BusinessDenialBreakdown,
+    IReadOnlyList<MccFailureSummary> SampleFailures);
+
+internal sealed record MccValidationRun(
+    string TenantId,
+    int RequestedClaims,
+    int Seed,
+    int Parallelism,
+    string ClaimsUrl,
+    string BenefitUrl,
+    string ProviderUrl,
+    bool SeedProviders,
+    bool SkipClaimUpdate,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset CompletedAtUtc);
+
+internal sealed record MccStageTiming(
+    string Label,
+    double AverageMilliseconds,
+    double P95Milliseconds);
+
+internal sealed record MccBusinessDenialSummary(
+    string Code,
+    int Count);
+
+internal sealed record MccFailureSummary(
+    string GeneratedClaimId,
+    string? Stage,
     string? Error);
 
 internal sealed record AdjudicationResponseDto(
@@ -1019,7 +1228,8 @@ internal sealed record AdjudicationResponseDto(
     bool Success,
     string? DenialReasonCode,
     string? DenialReasonDescription,
-    AdjudicationTotalsDto Totals);
+    AdjudicationTotalsDto Totals,
+    string? BusinessDenialCode = null);
 
 internal sealed record AdjudicationTotalsDto(
     decimal BilledAmount,
@@ -1030,3 +1240,9 @@ internal sealed record AdjudicationTotalsDto(
     decimal CoinsuranceAmount,
     decimal MemberResponsibility,
     decimal PlanPayment);
+
+internal sealed record AdjudicationErrorDto(
+    string? ClaimId,
+    string? Error,
+    string? Message,
+    string? Carc);
