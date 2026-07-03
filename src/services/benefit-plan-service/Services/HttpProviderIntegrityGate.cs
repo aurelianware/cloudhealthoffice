@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using BenefitPlanService.Models;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Caching.Memory;
@@ -222,12 +223,14 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
             var record = await response.Content.ReadFromJsonAsync<IntegrityScoreResponse>(ct);
             if (record is null) return null;
 
-            var isExcluded = record.Status is "Excluded";
+            var rating = NormalizeRating(record.Rating) ?? "Unknown";
+            var status = NormalizeStatus(record.Status);
+            var isExcluded = status is "Excluded";
             return new ProviderIntegrityResult
             {
-                Passed = record.Status is not ("Excluded" or "Failed"),
+                Passed = status is not ("Excluded" or "Failed"),
                 IntegrityScore = record.CompositeScore,
-                Rating = record.Rating,
+                Rating = rating,
                 IsExcluded = isExcluded,
                 DenialCode = isExcluded ? "B7" : null,
                 DenialReason = isExcluded
@@ -295,6 +298,29 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
+    private static string? NormalizeRating(JsonElement value)
+        => NormalizeEnumValue(value, ["Unknown", "Clear", "Advisory", "Caution", "Alert", "Blocked"]);
+
+    private static string? NormalizeStatus(JsonElement value)
+        => NormalizeEnumValue(value, ["Pending", "Verified", "VerifiedWithWarnings", "Failed", "Excluded", "Expired", "ManualReviewRequired"]);
+
+    private static string? NormalizeEnumValue(JsonElement value, IReadOnlyList<string> names)
+    {
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var s = value.GetString();
+            if (s is not null && names.Contains(s)) return s;
+            if (s is not null && int.TryParse(s, out var idx) && idx >= 0 && idx < names.Count) return names[idx];
+            return null;
+        }
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var index) && index >= 0 && index < names.Count => names[index],
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => null
+        };
+    }
+
     /// <summary>
     /// Subset of the <c>Provider</c> entity returned by
     /// <c>GET /api/v1/providers/npi/{npi}</c>. Only the integrity-projection
@@ -319,8 +345,8 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
     private sealed record IntegrityScoreResponse
     {
         public int CompositeScore { get; init; }
-        public string? Rating { get; init; }
-        public string? Status { get; init; }
+        public JsonElement Rating { get; init; }
+        public JsonElement Status { get; init; }
         public DateTimeOffset? VerifiedAt { get; init; }
     }
 
