@@ -51,6 +51,30 @@ public sealed class HttpProviderIntegrityGateTests
     }
 
     [Fact]
+    public async Task CheckAsync_WithTenantId_ForwardsTenantHeaderToProviderService()
+    {
+        var providerHandler = new FakeHttpMessageHandler(request =>
+        {
+            request.Headers.TryGetValues("X-Tenant-ID", out var values).Should().BeTrue();
+            values.Should().ContainSingle().Which.Should().Be("demo");
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    ProviderJson(score: 92, rating: "Clear", lastVerifiedAt: DateTimeOffset.UtcNow),
+                    System.Text.Encoding.UTF8,
+                    "application/json"),
+            };
+        });
+        var verificationHandler = FakeHttpMessageHandler.Json("{}");
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        await gate.CheckAsync(Npi, tenantId: "demo");
+
+        providerHandler.RequestCount.Should().Be(1);
+        verificationHandler.RequestCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task CheckAsync_CacheHit_DoesNotIssueAnyHttpCalls()
     {
         var providerHandler = FakeHttpMessageHandler.Json(

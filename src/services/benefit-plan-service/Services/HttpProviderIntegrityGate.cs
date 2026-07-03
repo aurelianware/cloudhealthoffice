@@ -67,6 +67,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 {
     public const string ProviderServiceClientName = "ProviderService";
     public const string VerificationServiceClientName = "ProviderVerificationService";
+    private const string TenantHeaderName = "X-Tenant-ID";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _cache;
@@ -89,15 +90,17 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 
     public async Task<ProviderIntegrityResult> CheckAsync(
         string npi,
+        string? tenantId = null,
         bool forceRefresh = false,
         CancellationToken ct = default)
     {
         // Cache key separates default vs force-refresh so a force-refresh
         // call's live-only result doesn't pollute the cached-or-live entry,
         // and vice-versa.
+        var cacheTenant = string.IsNullOrWhiteSpace(tenantId) ? "default" : tenantId.Trim();
         var cacheKey = forceRefresh
-            ? $"provider-integrity:force:{npi}"
-            : $"provider-integrity:cached-or-live:{npi}";
+            ? $"provider-integrity:force:{cacheTenant}:{npi}"
+            : $"provider-integrity:cached-or-live:{cacheTenant}:{npi}";
 
         if (_cache.TryGetValue<ProviderIntegrityResult>(cacheKey, out var cached) && cached is not null)
         {
@@ -118,7 +121,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 
         if (forceRefresh)
         {
-            var live = await CallVerificationServiceAsync(npi, ct);
+            var live = await CallVerificationServiceAsync(npi, tenantId, ct);
             isPassthrough = live is null;
             result = live ?? Passthrough();
             RecordDecision(IntegrityGatePath.LiveOnly, result.Rating);
@@ -126,14 +129,14 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         else
         {
             // Default path: try the cached projection first.
-            var projection = await TryReadProjectionAsync(npi, ct);
+            var projection = await TryReadProjectionAsync(npi, tenantId, ct);
 
             if (projection is null)
             {
                 // Provider not found in provider-service or transport
                 // failure — fall back to live verification rather than
                 // failing closed.
-                var live = await CallVerificationServiceAsync(npi, ct);
+                var live = await CallVerificationServiceAsync(npi, tenantId, ct);
                 isPassthrough = live is null;
                 result = live ?? Passthrough();
                 RecordDecision(IntegrityGatePath.NullFallback, result.Rating);
@@ -142,13 +145,13 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
             {
                 // Projection row exists but never refreshed — fall back to
                 // live and let the local cache absorb subsequent calls.
-                result = await CallVerificationServiceAsync(npi, ct)
+                result = await CallVerificationServiceAsync(npi, tenantId, ct)
                     ?? BuildResultFromProjection(projection);
                 RecordDecision(IntegrityGatePath.NullFallback, result.Rating);
             }
             else if (IsStale(projection.LastVerifiedAt.Value))
             {
-                result = await CallVerificationServiceAsync(npi, ct)
+                result = await CallVerificationServiceAsync(npi, tenantId, ct)
                     ?? BuildResultFromProjection(projection);
                 RecordDecision(IntegrityGatePath.StaleFallback, result.Rating);
             }
@@ -170,14 +173,17 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         return DateTimeOffset.UtcNow - lastVerifiedAt > threshold;
     }
 
-    private async Task<ProviderProjection?> TryReadProjectionAsync(string npi, CancellationToken ct)
+    private async Task<ProviderProjection?> TryReadProjectionAsync(string npi, string? tenantId, CancellationToken ct)
     {
         try
         {
             var client = _httpClientFactory.CreateClient(ProviderServiceClientName);
             var encodedNpi = Uri.EscapeDataString(npi);
-            var response = await client.GetAsync(
-                $"api/v1/providers/npi/{encodedNpi}", ct);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"api/v1/providers/npi/{encodedNpi}");
+            AddTenantHeader(request, tenantId);
+            var response = await client.SendAsync(request, ct);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 return null;
@@ -203,14 +209,18 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 
     private async Task<ProviderIntegrityResult?> CallVerificationServiceAsync(
         string npi,
+        string? tenantId,
         CancellationToken ct)
     {
         try
         {
             var client = _httpClientFactory.CreateClient(VerificationServiceClientName);
             var encodedNpi = Uri.EscapeDataString(npi);
-            var response = await client.GetAsync(
-                $"api/v1/providers/{encodedNpi}/integrity-score", ct);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"api/v1/providers/{encodedNpi}/integrity-score");
+            AddTenantHeader(request, tenantId);
+            var response = await client.SendAsync(request, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -303,6 +313,14 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 
     private static string? NormalizeStatus(JsonElement value)
         => NormalizeEnumValue(value, ["Pending", "Verified", "VerifiedWithWarnings", "Failed", "Excluded", "Expired", "ManualReviewRequired"]);
+
+    private static void AddTenantHeader(HttpRequestMessage request, string? tenantId)
+    {
+        if (!string.IsNullOrWhiteSpace(tenantId))
+        {
+            request.Headers.TryAddWithoutValidation(TenantHeaderName, tenantId.Trim());
+        }
+    }
 
     private static string? NormalizeEnumValue(JsonElement value, IReadOnlyList<string> names)
     {

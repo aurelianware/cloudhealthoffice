@@ -24,6 +24,10 @@ public interface IProviderIntegrityGate
     /// Resolve the integrity result for <paramref name="npi"/>.
     /// </summary>
     /// <param name="npi">Provider NPI.</param>
+    /// <param name="tenantId">
+    /// Tenant id to forward to provider-service when reading cached
+    /// provider integrity projections. Null preserves legacy behavior.
+    /// </param>
     /// <param name="forceRefresh">
     /// When <c>true</c> the cached-projection short-circuit is bypassed
     /// and the gate calls <c>provider-verification-service</c> directly.
@@ -33,6 +37,7 @@ public interface IProviderIntegrityGate
     /// <param name="ct">Cancellation token.</param>
     Task<ProviderIntegrityResult> CheckAsync(
         string npi,
+        string? tenantId = null,
         bool forceRefresh = false,
         CancellationToken ct = default);
 }
