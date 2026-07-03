@@ -92,7 +92,7 @@ CHO operates four product lines, each with distinct unit economics: **Public Too
 
 *All rows are forward-looking targets, not present-state. Pre-pilot status disclosed above.*
 
-**Unit Economics**: LTV:CAC 25:1 | CAC Payback: 6 months | NRR: 115-125%
+**Unit Economics** (modeled targets, pre-revenue - not yet realized with a production customer): LTV:CAC 25:1 | CAC Payback: 6 months | NRR: 115-125%
 
 ---
 

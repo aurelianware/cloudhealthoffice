@@ -226,7 +226,7 @@
 - "7-year retention for HIPAA compliance"
 - "Secure deletion after retention period"
 
-**YOU:** "We're also SOC 2 Type II certified and working on HITRUST certification."
+**YOU:** "We're currently in our SOC 2 Type II observation period, which runs through September 2026, with certification targeted by year-end, and we're also working on HITRUST certification."
 
 ---
 

@@ -39,7 +39,7 @@ Cloud Health Office Platform
 - 100% HIPAA compliant infrastructure with Premium Key Vault
 - Automated audit trails and 7-year retention
 - Reduced error rates and compliance risks
-- SOC 2 Type II certified platform
+- SOC 2 Type II audit in progress (observation period through September 2026)
 
 **Strategic Value:**
 - Faster claim adjudication and settlement
@@ -136,7 +136,7 @@ The Cloud Health Office Platform is an Azure-native, configuration-driven soluti
 - **PHI Masking:** Automated redaction in Application Insights logs
 
 #### Compliance Certifications
-- SOC 2 Type II certified
+- SOC 2 Type II audit in progress (targeted completion Q4 2026)
 - HITRUST certification in progress
 - Azure Government cloud support available
 
@@ -386,7 +386,7 @@ For organizations processing higher volumes:
 |------|-----------|
 | **Platform downtime** | 99.9% uptime SLA, multi-region redundancy, automated failover |
 | **Data loss** | 7-year retention, geo-redundant storage, automated backups |
-| **Security breach** | SOC 2 certified, penetration tested, continuous monitoring |
+| **Security breach** | SOC 2 Type II audit in progress, penetration tested, continuous monitoring |
 | **Azure service outage** | Azure SLA 99.95%+, multi-region deployment option |
 
 ### ROI Guarantee

@@ -49,7 +49,7 @@ The source-available, Azure-native EDI platform that delivers complete Patient A
 | **193** | Tests Passing | Production-Grade Quality |
 | **< 5 min** | Deployment Time | vs. 18 Months Industry Average |
 | **100%** | CMS Compliance | APIs Ready Today |
-| **85%** | Cost Reduction | vs. Enterprise Vendors |
+| **82%** | Cost Reduction | vs. Enterprise Vendors (results may vary) |
 
 ---
 
@@ -70,7 +70,7 @@ Every API required by the January 2027 deadline is production-ready today. Patie
 ### Value Prop 2: Radical Cost Reduction
 [PLACEHOLDER: Dollar/savings icon]
 
-**85% Lower Cost Than Enterprise Vendors**
+**Up to 82% Lower Cost Than Enterprise Vendors** *(results may vary)*
 
 No per-transaction fees. No per-payer licensing. Contact us for commercial licensing.
 
@@ -373,7 +373,7 @@ CMS-0057-F compliance statements reflect platform capabilities; customers are re
 
 **Title**: Cloud Health Office - CMS-0057-F Compliant EDI Platform | Source-Available, Azure-Native
 
-**Description**: Deploy HIPAA-compliant Patient Access, Provider Access, and Prior Authorization APIs in 5 minutes. Source-available, Azure-native EDI platform with 85% lower cost than enterprise vendors. Start free pilot.
+**Description**: Deploy HIPAA-compliant Patient Access, Provider Access, and Prior Authorization APIs in 5 minutes. Source-available, Azure-native EDI platform with up to 82% lower cost than enterprise vendors. Start free pilot.
 
 **Keywords**: CMS-0057-F compliance, healthcare EDI, FHIR R4, Patient Access API, Prior Authorization API, Azure healthcare, source-available healthcare, HIPAA compliant EDI
 
