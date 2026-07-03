@@ -183,7 +183,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                 HttpMethod.Get,
                 $"api/v1/providers/npi/{encodedNpi}");
             AddTenantHeader(request, tenantId);
-            var response = await client.SendAsync(request, ct);
+            using var response = await client.SendAsync(request, ct);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 return null;
@@ -220,7 +220,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                 HttpMethod.Get,
                 $"api/v1/providers/{encodedNpi}/integrity-score");
             AddTenantHeader(request, tenantId);
-            var response = await client.SendAsync(request, ct);
+            using var response = await client.SendAsync(request, ct);
 
             if (!response.IsSuccessStatusCode)
             {

@@ -25,8 +25,9 @@ public interface IProviderIntegrityGate
     /// </summary>
     /// <param name="npi">Provider NPI.</param>
     /// <param name="tenantId">
-    /// Tenant id to forward to provider-service when reading cached
-    /// provider integrity projections. Null preserves legacy behavior.
+    /// Tenant id to forward to provider-service and
+    /// provider-verification-service. When null, no tenant header is
+    /// forwarded.
     /// </param>
     /// <param name="forceRefresh">
     /// When <c>true</c> the cached-projection short-circuit is bypassed
