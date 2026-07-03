@@ -99,6 +99,23 @@ public sealed class HttpProviderIntegrityGateTests
     }
 
     [Fact]
+    public async Task CheckAsync_VerificationServiceNumericEnums_NormalizesRatingAndStatus()
+    {
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: null, rating: null, lastVerifiedAt: null));
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonRaw(compositeScore: 88, ratingToken: "1", statusToken: "1"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi);
+
+        result.Passed.Should().BeTrue();
+        result.IntegrityScore.Should().Be(88);
+        result.Rating.Should().Be("Clear");
+        result.IsExcluded.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task CheckAsync_ProviderNotFound_FallsBackToVerificationService()
     {
         var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
@@ -232,10 +249,13 @@ public sealed class HttpProviderIntegrityGateTests
     }
 
     private static string VerificationJson(int compositeScore, string rating, string status) =>
+        VerificationJsonRaw(compositeScore, $"\"{rating}\"", $"\"{status}\"");
+
+    private static string VerificationJsonRaw(int compositeScore, string ratingToken, string statusToken) =>
         "{" +
         $"\"CompositeScore\":{compositeScore}," +
-        $"\"Rating\":\"{rating}\"," +
-        $"\"Status\":\"{status}\"," +
+        $"\"Rating\":{ratingToken}," +
+        $"\"Status\":{statusToken}," +
         $"\"VerifiedAt\":\"{DateTimeOffset.UtcNow:O}\"" +
         "}";
 
