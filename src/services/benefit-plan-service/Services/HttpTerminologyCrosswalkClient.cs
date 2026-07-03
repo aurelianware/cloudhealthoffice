@@ -21,6 +21,14 @@ public class HttpTerminologyCrosswalkClient : ITerminologyCrosswalkClient
         Size = 1
     };
 
+    // Short TTL for failure passthroughs so transient terminology-service
+    // outages do not lock in untranslated codes for the full 30-minute window.
+    private static readonly MemoryCacheEntryOptions FailureCacheOptions = new()
+    {
+        AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(30),
+        Size = 1
+    };
+
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
     private readonly ILogger<HttpTerminologyCrosswalkClient> _logger;
@@ -132,7 +140,7 @@ public class HttpTerminologyCrosswalkClient : ITerminologyCrosswalkClient
         foreach (var (index, request) in misses)
         {
             var cached = new CachedCrosswalkResult(request.ProcedureCode, false, null);
-            _cache.Set(CacheKey(tenantId, request), cached, CacheOptions);
+            _cache.Set(CacheKey(tenantId, request), cached, FailureCacheOptions);
             results[index] = ToResult(request, cached);
         }
     }
