@@ -373,7 +373,7 @@ CMS-0057-F compliance statements reflect platform capabilities; customers are re
 
 **Title**: Cloud Health Office - CMS-0057-F Compliant EDI Platform | Source-Available, Azure-Native
 
-**Description**: Deploy HIPAA-compliant Patient Access, Provider Access, and Prior Authorization APIs in 5 minutes. Source-available, Azure-native EDI platform with up to 82% lower cost than enterprise vendors. Start free pilot.
+**Description**: Deploy HIPAA-compliant Patient Access, Provider Access, and Prior Authorization APIs in 5 minutes. Source-available, Azure-native EDI platform with up to 82% lower cost than enterprise vendors (results may vary). Start free pilot.
 
 **Keywords**: CMS-0057-F compliance, healthcare EDI, FHIR R4, Patient Access API, Prior Authorization API, Azure healthcare, source-available healthcare, HIPAA compliant EDI
 

@@ -571,7 +571,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 | **HITECH Act** | ✅ Compliant | Breach notification &lt; 24 hours |
 | **CMS-0057-F** | ✅ 100% Ready | All 4 APIs production-ready |
 | **State Breach Laws** | ✅ Compliant | 50-state compliance |
-| **SOC 2 Type II** | ✅ Inherited (Azure datacenter only) | CHO's own Type II audit is in progress, not yet complete |
+| **SOC 2 Type II** | ✅ Inherited (Azure datacenter only) | Cloud Health Office's own Type II audit is in progress, not yet complete |
 | **ISO 27001** | ✅ Inherited (Azure datacenter only) | Via Azure infrastructure |
 
 ### Security Architecture
