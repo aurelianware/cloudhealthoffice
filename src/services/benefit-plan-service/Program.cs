@@ -365,7 +365,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"]
-    ?? "http://claims-service:8080";
+    ?? "http://claims-service";
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString  = builder.Configuration["MongoDb:ConnectionString"];

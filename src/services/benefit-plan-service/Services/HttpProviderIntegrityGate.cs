@@ -306,13 +306,18 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 
     private static string? NormalizeEnumValue(JsonElement value, IReadOnlyList<string> names)
     {
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var s = value.GetString();
+            if (s is not null && names.Contains(s)) return s;
+            if (s is not null && int.TryParse(s, out var idx) && idx >= 0 && idx < names.Count) return names[idx];
+            return null;
+        }
         return value.ValueKind switch
         {
-            JsonValueKind.String => value.GetString(),
             JsonValueKind.Number when value.TryGetInt32(out var index) && index >= 0 && index < names.Count => names[index],
-            JsonValueKind.Number => value.GetRawText(),
             JsonValueKind.Null or JsonValueKind.Undefined => null,
-            _ => value.ToString()
+            _ => null
         };
     }
 
