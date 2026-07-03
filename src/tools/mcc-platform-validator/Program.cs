@@ -33,6 +33,7 @@ Console.WriteLine("Million Claim Challenge - Platform Validator");
 Console.WriteLine($"  Tenant:      {options.TenantId}");
 Console.WriteLine($"  Claims URL:  {options.ClaimsUrl}");
 Console.WriteLine($"  Benefit URL: {options.BenefitUrl}");
+Console.WriteLine($"  Provider URL:{options.ProviderUrl}");
 Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
 Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
@@ -40,6 +41,10 @@ Console.WriteLine();
 
 await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
 await RequireHealthyAsync(http, $"{options.BenefitUrl}/health", "benefit-plan-service");
+if (options.SeedProviders)
+{
+    await RequireHealthyAsync(http, $"{options.ProviderUrl}/health", "provider-service");
+}
 
 await SeedNcciAsync(http, options, json);
 
@@ -48,6 +53,11 @@ await CreateValidationPlanAsync(http, options, validationPlanId, json);
 
 var claims = await GenerateClaimsAsync(options.Claims, options.Seed);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
+
+if (options.SeedProviders)
+{
+    await SeedProvidersAsync(http, options, claims, validationPlanId, json);
+}
 
 var results = new ConcurrentBag<ClaimValidationResult>();
 var total = Stopwatch.StartNew();
@@ -285,6 +295,134 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(int claimCount, int 
     NormalizeClaimDates(claims, seed);
     return claims;
 }
+
+static async Task SeedProvidersAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    IReadOnlyCollection<SyntheticClaim> claims,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    var providers = claims
+        .SelectMany(claim => new[] { claim.RenderingProvider, claim.BillingProvider })
+        .Where(provider => !string.IsNullOrWhiteSpace(provider.Npi))
+        .GroupBy(provider => provider.Npi, StringComparer.Ordinal)
+        .Select(group => group.First())
+        .OrderBy(provider => provider.Npi, StringComparer.Ordinal)
+        .ToList();
+
+    var created = 0;
+    var existing = 0;
+
+    foreach (var provider in providers)
+    {
+        if (await ProviderExistsAsync(http, options, provider.Npi))
+        {
+            existing++;
+            continue;
+        }
+
+        await CreateProviderAsync(http, options, provider, validationPlanId, json);
+        created++;
+    }
+
+    Console.WriteLine($"seeded: {created:N0} synthetic providers ({existing:N0} already present)");
+}
+
+static async Task<bool> ProviderExistsAsync(HttpClient http, ValidatorOptions options, string npi)
+{
+    using var response = await http.GetAsync($"{options.ProviderUrl}/api/v1/providers/npi/{Uri.EscapeDataString(npi)}");
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        return false;
+    }
+
+    if (response.IsSuccessStatusCode)
+    {
+        return true;
+    }
+
+    var body = await response.Content.ReadAsStringAsync();
+    throw new InvalidOperationException($"provider lookup failed ({npi}): {(int)response.StatusCode} {body}");
+}
+
+static async Task CreateProviderAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    SyntheticProvider provider,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    var isOrganization = provider.ProviderType.Equals("Organization", StringComparison.OrdinalIgnoreCase);
+    var effectiveDate = DateTime.SpecifyKind(provider.EffectiveDate == default
+        ? DateTime.UtcNow.Date.AddYears(-2)
+        : provider.EffectiveDate.Date, DateTimeKind.Utc);
+    var now = DateTimeOffset.UtcNow;
+
+    var payload = new
+    {
+        tenantId = options.TenantId,
+        npi = provider.Npi,
+        providerType = isOrganization ? "organization" : "individual",
+        taxId = provider.TaxId,
+        firstName = isOrganization ? null : NullIfWhiteSpace(provider.FirstName) ?? "MCC",
+        lastName = isOrganization ? null : NullIfWhiteSpace(provider.LastName) ?? "Provider",
+        organizationName = isOrganization ? NullIfWhiteSpace(provider.OrganizationName) ?? provider.FullName : null,
+        credentials = isOrganization ? null : NullIfWhiteSpace(provider.Credentials) ?? "MD",
+        primarySpecialty = NullIfWhiteSpace(provider.SpecialtyDescription) ?? provider.TaxonomyCode,
+        taxonomyCode = provider.TaxonomyCode,
+        address = provider.Address,
+        city = provider.City,
+        state = provider.State,
+        zipCode = provider.ZipCode,
+        phone = NullIfWhiteSpace(provider.Phone) ?? "555-0100",
+        email = NullIfWhiteSpace(provider.Email),
+        credentialingStatus = "approved",
+        credentialingDate = effectiveDate,
+        recredentialingDueDate = now.UtcDateTime.AddYears(2),
+        acceptingNewPatients = provider.AcceptingNewPatients,
+        status = "active",
+        integrityScore = 96,
+        integrityRating = "Clear",
+        lastVerifiedAt = now,
+        nextVerificationDue = now.AddDays(30),
+        networkParticipations = new[]
+        {
+            new
+            {
+                planId = validationPlanId.ToString(),
+                networkId = provider.IsParticipating ? "mcc-local-network" : "mcc-local-out-network",
+                lineOfBusiness = "commercial",
+                networkTier = provider.IsParticipating ? "InNetwork" : "OutOfNetwork",
+                effectiveDate,
+                terminationDate = provider.TermDate,
+                acceptingNewPatients = provider.AcceptingNewPatients,
+                panelLimit = 2500,
+                panelAccepted = provider.AcceptingNewPatients,
+                acceptedLobs = new[] { "commercial" },
+                minAcceptedAgeYears = (int?)null,
+                maxAcceptedAgeYears = (int?)null,
+                rates = new
+                {
+                    feeScheduleName = provider.FeeScheduleId ?? "MCC Local Fee Schedule",
+                    percentOfMedicare = provider.IsParticipating ? 1.10m : 0.80m,
+                    pmpm = (decimal?)null,
+                    caseRate = (decimal?)null
+                }
+            }
+        }
+    };
+
+    using var response = await http.PostAsJsonAsync($"{options.ProviderUrl}/api/v1/providers", payload, json);
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException($"provider seed failed ({provider.Npi}): {(int)response.StatusCode} {body}");
+    }
+}
+
+static string? NullIfWhiteSpace(string? value)
+    => string.IsNullOrWhiteSpace(value) ? null : value;
 
 static void NormalizeClaimDates(List<SyntheticClaim> claims, int seed)
 {
@@ -722,6 +860,8 @@ static void PrintUsage()
       --tenant <tenant-id>       Tenant header to use (default: demo)
       --claims-url <url>         Claims service URL (default: http://localhost:5001)
       --benefit-url <url>        Benefit plan service URL (default: http://localhost:5002)
+      --provider-url <url>       Provider service URL (default: http://localhost:5004)
+      --no-seed-providers        Skip synthetic provider seeding
       --skip-claim-update        Do not write adjudication projection back to claims-service
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 25)
@@ -756,6 +896,8 @@ internal sealed record ValidatorOptions(
     string TenantId,
     string ClaimsUrl,
     string BenefitUrl,
+    string ProviderUrl,
+    bool SeedProviders,
     bool SkipClaimUpdate,
     int TimeoutSeconds,
     int ProgressEvery,
@@ -786,6 +928,12 @@ internal sealed record ValidatorOptions(
                     break;
                 case "--benefit-url" when i + 1 < args.Length:
                     options.BenefitUrl = args[++i].TrimEnd('/');
+                    break;
+                case "--provider-url" when i + 1 < args.Length:
+                    options.ProviderUrl = args[++i].TrimEnd('/');
+                    break;
+                case "--no-seed-providers":
+                    options.SeedProviders = false;
                     break;
                 case "--skip-claim-update":
                     options.SkipClaimUpdate = true;
@@ -823,6 +971,8 @@ internal sealed record ValidatorOptions(
             options.TenantId,
             options.ClaimsUrl.TrimEnd('/'),
             options.BenefitUrl.TrimEnd('/'),
+            options.ProviderUrl.TrimEnd('/'),
+            options.SeedProviders,
             options.SkipClaimUpdate,
             Math.Max(5, options.TimeoutSeconds),
             Math.Max(1, options.ProgressEvery),
@@ -837,6 +987,8 @@ internal sealed record ValidatorOptions(
         public string TenantId { get; set; } = "demo";
         public string ClaimsUrl { get; set; } = "http://localhost:5001";
         public string BenefitUrl { get; set; } = "http://localhost:5002";
+        public string ProviderUrl { get; set; } = "http://localhost:5004";
+        public bool SeedProviders { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
         public int TimeoutSeconds { get; set; } = 60;
         public int ProgressEvery { get; set; } = 10;
