@@ -280,7 +280,7 @@ builder.Services.AddHttpClient<IOperatingModeProvider, HttpOperatingModeProvider
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:TenantServiceUrl"]
-        ?? "http://tenant-service:8080/");
+        ?? "http://tenant-service/");
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 
@@ -303,14 +303,14 @@ builder.Services.AddHttpClient(HttpProviderIntegrityGate.ProviderServiceClientNa
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:ProviderServiceUrl"]
-        ?? "http://provider-service:8080/");
+        ?? "http://provider-service/");
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 builder.Services.AddHttpClient(HttpProviderIntegrityGate.VerificationServiceClientName, client =>
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:ProviderVerificationServiceUrl"]
-        ?? "http://provider-verification-service:8080/");
+        ?? "http://provider-verification-service/");
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 builder.Services.AddSingleton<IProviderIntegrityGate, HttpProviderIntegrityGate>();
@@ -350,7 +350,7 @@ builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCross
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:TerminologyServiceUrl"]
-        ?? "http://terminology-service:8080/");
+        ?? "http://terminology-service/");
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 
@@ -365,7 +365,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"]
-    ?? "http://claims-service:8080";
+    ?? "http://claims-service";
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString  = builder.Configuration["MongoDb:ConnectionString"];

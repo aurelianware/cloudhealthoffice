@@ -103,15 +103,33 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     JsonSerializerOptions json)
 {
     var sw = Stopwatch.StartNew();
+    var submitElapsed = TimeSpan.Zero;
+    var adjudicationElapsed = TimeSpan.Zero;
+    var updateElapsed = TimeSpan.Zero;
+    var failureStage = "unknown";
+
     try
     {
         var networkTier = NetworkTier(claim);
+        failureStage = "submit";
+        var stage = Stopwatch.StartNew();
         var submitted = await SubmitClaimAsync(http, options, claim, validationPlanId, json);
+        stage.Stop();
+        submitElapsed = stage.Elapsed;
+
+        failureStage = "adjudicate";
+        stage.Restart();
         var adjudicated = await AdjudicateClaimAsync(http, options, claim, submitted.Id, validationPlanId, networkTier, json);
+        stage.Stop();
+        adjudicationElapsed = stage.Elapsed;
 
         if (!options.SkipClaimUpdate)
         {
+            failureStage = "writeback";
+            stage.Restart();
             await UpdateClaimAdjudicationAsync(http, options, submitted.Id, networkTier, adjudicated, json);
+            stage.Stop();
+            updateElapsed = stage.Elapsed;
         }
 
         sw.Stop();
@@ -124,6 +142,10 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             adjudicated.Totals.PlanPayment,
             claim.ExpectedOutcome?.ExpectedPaidAmount,
             sw.Elapsed,
+            submitElapsed,
+            adjudicationElapsed,
+            updateElapsed,
+            null,
             null);
     }
     catch (Exception ex)
@@ -138,6 +160,10 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             null,
             claim.ExpectedOutcome?.ExpectedPaidAmount,
             sw.Elapsed,
+            submitElapsed,
+            adjudicationElapsed,
+            updateElapsed,
+            failureStage,
             ex.Message);
     }
 }
@@ -635,6 +661,9 @@ static void WriteSummary(List<ClaimValidationResult> results, TimeSpan elapsed)
     Console.WriteLine($"  Throughput:         {throughput:N2} claims/sec");
     Console.WriteLine($"  P95 latency:        {p95:N0} ms");
     Console.WriteLine($"  P99 latency:        {p99:N0} ms");
+    WriteStageTiming("Submit", results.Select(r => r.SubmitElapsed));
+    WriteStageTiming("Adjudicate", results.Select(r => r.AdjudicationElapsed));
+    WriteStageTiming("Writeback", results.Select(r => r.UpdateElapsed));
 
     var comparable = results
         .Where(r => r.ActualPlanPayment.HasValue && r.ExpectedPlanPayment.HasValue)
@@ -648,8 +677,24 @@ static void WriteSummary(List<ClaimValidationResult> results, TimeSpan elapsed)
 
     foreach (var failure in results.Where(r => !r.Success).Take(5))
     {
-        Console.WriteLine($"  Failure: {failure.GeneratedClaimId} {failure.Error}");
+        Console.WriteLine($"  Failure: {failure.GeneratedClaimId} [{failure.FailureStage}] {failure.Error}");
     }
+}
+
+static void WriteStageTiming(string label, IEnumerable<TimeSpan> durations)
+{
+    var values = durations
+        .Select(d => d.TotalMilliseconds)
+        .Where(ms => ms > 0)
+        .Order()
+        .ToArray();
+
+    if (values.Length == 0)
+    {
+        return;
+    }
+
+    Console.WriteLine($"  {label,-12} avg/p95: {values.Average():N0} ms / {Percentile(values, 0.95):N0} ms");
 }
 
 static double Percentile(double[] values, double percentile)
@@ -811,6 +856,10 @@ internal sealed record ClaimValidationResult(
     decimal? ActualPlanPayment,
     decimal? ExpectedPlanPayment,
     TimeSpan Elapsed,
+    TimeSpan SubmitElapsed,
+    TimeSpan AdjudicationElapsed,
+    TimeSpan UpdateElapsed,
+    string? FailureStage,
     string? Error);
 
 internal sealed record AdjudicationResponseDto(
