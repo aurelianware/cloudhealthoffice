@@ -511,7 +511,7 @@ This is the precedent that every subsequent Layer 2 domain follows (capitation, 
 
 | Initiative | Status | Impact |
 |------------|--------|--------|
-| **Beta Launch** | ✅ Live | First 10 customers |
+| **Beta Launch** | ✅ Live | Discount offer capped at first 10 customers (signup window closed), not a count of signed customers |
 | **Eligibility Microservice v2.0** | ✅ Complete | 50K req/sec, <100ms latency |
 | **Security Hardening** | ✅ Complete | Zero vulnerabilities (CodeQL) |
 | **Documentation Overhaul** | ✅ Complete | ~94,000 lines of markdown documentation |
@@ -571,8 +571,8 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 | **HITECH Act** | ✅ Compliant | Breach notification &lt; 24 hours |
 | **CMS-0057-F** | ✅ 100% Ready | All 4 APIs production-ready |
 | **State Breach Laws** | ✅ Compliant | 50-state compliance |
-| **SOC 2 Type II** | ✅ Inherited | Via Azure infrastructure |
-| **ISO 27001** | ✅ Inherited | Via Azure infrastructure |
+| **SOC 2 Type II** | ✅ Inherited (Azure datacenter only) | Cloud Health Office's own Type II audit is in progress, not yet complete |
+| **ISO 27001** | ✅ Inherited (Azure datacenter only) | Via Azure infrastructure |
 
 ### Security Architecture
 
