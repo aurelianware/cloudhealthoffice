@@ -125,6 +125,20 @@ public interface IClaimRepository
         PendDetails? pendDetails = null);
 
     /// <summary>
+    /// Fast claim-level adjudication projection for direct local workflow
+    /// validation. Patches only summary adjudication/status fields on a known
+    /// claim row and intentionally skips full-claim hydration, line projection,
+    /// and event emission. Use the full adjudication pipeline when downstream
+    /// finalized events or line adjudications are required.
+    /// </summary>
+    Task<bool> UpdateAdjudicationSummaryAsync(
+        string tenantId,
+        string claimId,
+        AdjudicationResult adjudicationResult,
+        ClaimStatus status,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Supersession projection bypass for capability 5.12. Patches
     /// <c>SupersededAt</c>, <c>SupersededByVersionId</c>, and
     /// <c>VersionState=Adjusted</c> on a single claim row identified by
@@ -897,6 +911,68 @@ public class ClaimRepository : IClaimRepository
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             // Row deleted between lookup and patch.
+            return false;
+        }
+    }
+
+    public async Task<bool> UpdateAdjudicationSummaryAsync(
+        string tenantId,
+        string claimVersionId,
+        AdjudicationResult adjudicationResult,
+        ClaimStatus status,
+        CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(@"
+            SELECT TOP 1 c.id
+            FROM c
+            WHERE c.tenantId = @tenantId
+              AND (c.claimVersionId = @claimVersionId
+                   OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
+                   OR (c.claimVersionId = '' AND c.id = @claimVersionId))
+              AND (NOT IS_DEFINED(c.versionState)
+                   OR c.versionState = @submitted
+                   OR c.versionState = @adjudicated
+                   OR c.versionState = @unknown)
+            ORDER BY c.versionNumber DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@claimVersionId", claimVersionId)
+            .WithParameter("@submitted", ClaimVersionState.Submitted.ToString())
+            .WithParameter("@adjudicated", ClaimVersionState.Adjudicated.ToString())
+            .WithParameter("@unknown", ClaimVersionState.Unknown.ToString());
+
+        string? rowId = null;
+        var iterator = _container.GetItemQueryIterator<HeadIdResult>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        if (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            rowId = page.FirstOrDefault()?.Id;
+        }
+
+        if (string.IsNullOrEmpty(rowId)) return false;
+
+        var now = DateTime.UtcNow;
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set("/adjudicationResult", adjudicationResult),
+            PatchOperation.Set("/adjudicatedDate", now),
+            PatchOperation.Set("/lastUpdatedDate", now),
+            PatchOperation.Set("/status", status),
+            PatchOperation.Set("/versionState", ClaimVersionState.Adjudicated)
+        };
+
+        try
+        {
+            await _container.PatchItemAsync<Claim>(
+                rowId,
+                new PartitionKey(tenantId),
+                ops,
+                cancellationToken: ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
             return false;
         }
     }
