@@ -38,6 +38,25 @@ public sealed class MassAdjudicationRunsController : ControllerBase
         return run is null ? NotFound() : Ok(run);
     }
 
+    [HttpGet("{id}/claims")]
+    [ProducesResponseType(typeof(IReadOnlyList<MassAdjudicationClaimResult>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<MassAdjudicationClaimResult>>> ListClaimResults(
+        string id,
+        [FromQuery] string? outcome = null,
+        [FromQuery] int limit = 250,
+        CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var run = await _repository.GetAsync(tenantId, id, ct);
+        if (run is null)
+        {
+            return NotFound();
+        }
+
+        var results = await _repository.ListClaimResultsAsync(tenantId, id, outcome, limit, ct);
+        return Ok(results);
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(MassAdjudicationRunSummary), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
