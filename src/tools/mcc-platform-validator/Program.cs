@@ -164,11 +164,16 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         var businessDenialCode = NormalizeBusinessDenialCode(adjudicated.BusinessDenialCode
             ?? adjudicated.DenialReasonCode
             ?? (outcome is ClaimValidationOutcome.BusinessDenial ? "ADJUDICATION_DENIAL" : null));
+        var expectedValidation = ExpectedValidationFor(claim);
 
         return new ClaimValidationResult(
             claim.ClaimId,
             submitted.Id,
             claim.ClaimType,
+            expectedValidation.Scenario,
+            expectedValidation.ExpectedOutcome,
+            expectedValidation.ExpectedBusinessDenialCode,
+            ValidationStatus(expectedValidation, outcome, businessDenialCode),
             outcome,
             adjudicated.Success,
             adjudicated.Totals.PlanPayment,
@@ -184,10 +189,15 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     catch (Exception ex)
     {
         sw.Stop();
+        var expectedValidation = ExpectedValidationFor(claim);
         return new ClaimValidationResult(
             claim.ClaimId,
             null,
             claim.ClaimType,
+            expectedValidation.Scenario,
+            expectedValidation.ExpectedOutcome,
+            expectedValidation.ExpectedBusinessDenialCode,
+            ValidationStatus(expectedValidation, ClaimValidationOutcome.PlatformFailure, null),
             ClaimValidationOutcome.PlatformFailure,
             false,
             null,
@@ -388,6 +398,47 @@ static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
     {
         line.PlaceOfService = "21";
     }
+}
+
+static ExpectedValidation ExpectedValidationFor(SyntheticClaim claim)
+{
+    var isTxStarInpatientNoAuth =
+        claim.ClaimType.Equals("Institutional", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(claim.PlaceOfService, "21", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(claim.PriorAuthStatus, "Required", StringComparison.OrdinalIgnoreCase)
+        && string.IsNullOrWhiteSpace(claim.PriorAuthNumber)
+        && string.Equals(claim.RenderingProvider.State, "TX", StringComparison.OrdinalIgnoreCase);
+
+    return isTxStarInpatientNoAuth
+        ? new ExpectedValidation(
+            "TxStarInpatientNoAuth",
+            ClaimValidationOutcome.BusinessDenial.ToString(),
+            "PRIOR_AUTH_REQUIRED")
+        : ExpectedValidation.Unspecified;
+}
+
+static string ValidationStatus(
+    ExpectedValidation expected,
+    ClaimValidationOutcome actualOutcome,
+    string? actualBusinessDenialCode)
+{
+    if (expected.ExpectedOutcome is null)
+    {
+        return "Unspecified";
+    }
+
+    if (!string.Equals(expected.ExpectedOutcome, actualOutcome.ToString(), StringComparison.Ordinal))
+    {
+        return "Mismatched";
+    }
+
+    if (!string.IsNullOrWhiteSpace(expected.ExpectedBusinessDenialCode)
+        && !string.Equals(expected.ExpectedBusinessDenialCode, actualBusinessDenialCode, StringComparison.OrdinalIgnoreCase))
+    {
+        return "Mismatched";
+    }
+
+    return "Matched";
 }
 
 static async Task SeedProvidersAsync(
@@ -949,6 +1000,9 @@ static MassAdjudicationRunSummary BuildSummary(
     var adjudicated = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
     var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
     var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
+    var validationScenarios = results.Count(r => r.ExpectedOutcome is not null);
+    var validationMatches = results.Count(r => r.ValidationStatus == "Matched");
+    var validationMismatches = results.Count(r => r.ValidationStatus == "Mismatched");
     var orderedDurations = results.Select(r => r.Elapsed.TotalMilliseconds).Order().ToArray();
     var p95 = Percentile(orderedDurations, 0.95);
     var p99 = Percentile(orderedDurations, 0.99);
@@ -979,6 +1033,10 @@ static MassAdjudicationRunSummary BuildSummary(
             r.GeneratedClaimId,
             r.SubmittedClaimId,
             r.ClaimType,
+            r.ValidationScenario,
+            r.ExpectedOutcome,
+            r.ExpectedBusinessDenialCode,
+            r.ValidationStatus,
             r.Outcome.ToString(),
             r.AdjudicationSuccess,
             r.BusinessDenialCode,
@@ -1014,6 +1072,9 @@ static MassAdjudicationRunSummary BuildSummary(
         adjudicated,
         businessDenials,
         platformFailures,
+        validationScenarios,
+        validationMatches,
+        validationMismatches,
         elapsed,
         throughput,
         p95,
@@ -1035,6 +1096,7 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     Console.WriteLine($"  Paid/adjudicated:   {summary.Paid:N0}");
     Console.WriteLine($"  Business denials:   {summary.BusinessDenials:N0}");
     Console.WriteLine($"  Platform failures:  {summary.PlatformFailures:N0}");
+    Console.WriteLine($"  Workflow checks:    {summary.WorkflowMatches:N0}/{summary.WorkflowScenarios:N0} matched ({summary.WorkflowMismatches:N0} mismatched)");
     Console.WriteLine($"  Elapsed:            {summary.Elapsed:mm\\:ss\\.fff}");
     Console.WriteLine($"  Throughput:         {summary.ThroughputClaimsPerSecond:N2} claims/sec");
     Console.WriteLine($"  P95 latency:        {summary.P95LatencyMilliseconds:N0} ms");
@@ -1340,6 +1402,10 @@ internal sealed record ClaimValidationResult(
     string GeneratedClaimId,
     string? SubmittedClaimId,
     string ClaimType,
+    string? ValidationScenario,
+    string? ExpectedOutcome,
+    string? ExpectedBusinessDenialCode,
+    string ValidationStatus,
     ClaimValidationOutcome Outcome,
     bool AdjudicationSuccess,
     decimal? ActualPlanPayment,
@@ -1359,6 +1425,9 @@ internal sealed record MassAdjudicationRunSummary(
     int Paid,
     int BusinessDenials,
     int PlatformFailures,
+    int WorkflowScenarios,
+    int WorkflowMatches,
+    int WorkflowMismatches,
     TimeSpan Elapsed,
     double ThroughputClaimsPerSecond,
     double P95LatencyMilliseconds,
@@ -1403,6 +1472,10 @@ internal sealed record MassAdjudicationClaimResult(
     string GeneratedClaimId,
     string? SubmittedClaimId,
     string ClaimType,
+    string? ValidationScenario,
+    string? ExpectedOutcome,
+    string? ExpectedBusinessDenialCode,
+    string ValidationStatus,
     string Outcome,
     bool AdjudicationSuccess,
     string? BusinessDenialCode,
@@ -1415,6 +1488,14 @@ internal sealed record MassAdjudicationClaimResult(
     double SubmitMilliseconds,
     double AdjudicationMilliseconds,
     double WritebackMilliseconds);
+
+internal sealed record ExpectedValidation(
+    string? Scenario,
+    string? ExpectedOutcome,
+    string? ExpectedBusinessDenialCode)
+{
+    public static ExpectedValidation Unspecified { get; } = new(null, null, null);
+}
 
 internal sealed record AdjudicationResponseDto(
     string ClaimId,
