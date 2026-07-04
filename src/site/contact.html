@@ -168,6 +168,116 @@
       font-size: 0.9rem;
       color: rgba(128, 128, 128, 0.55);
     }
+
+    .contact-form-section {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .contact-form-field {
+      margin-bottom: 22px;
+    }
+
+    .contact-form-label {
+      display: block;
+      font-size: 0.9rem;
+      color: rgba(0, 255, 255, 0.8);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .contact-form-label .required {
+      color: #00ff88;
+    }
+
+    .contact-form-input,
+    .contact-form-select,
+    .contact-form-textarea {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(0, 255, 255, 0.2);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+
+    .contact-form-select {
+      background-color: rgba(10, 10, 10, 0.9);
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .contact-form-textarea {
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    .contact-form-input:focus,
+    .contact-form-select:focus,
+    .contact-form-textarea:focus {
+      border-color: rgba(0, 255, 255, 0.6);
+    }
+
+    .contact-form-error {
+      display: none;
+      background: rgba(255, 60, 60, 0.1);
+      border: 1px solid rgba(255, 60, 60, 0.3);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 0.88rem;
+      color: rgba(255, 120, 120, 0.9);
+      margin-bottom: 20px;
+    }
+
+    .contact-form-submit {
+      width: 100%;
+      padding: 16px 32px;
+      background: linear-gradient(90deg, #00c0c0, #00ffff);
+      color: #000;
+      font-size: 1rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: opacity 0.2s;
+    }
+
+    .contact-form-submit:hover {
+      opacity: 0.9;
+    }
+
+    .contact-form-submit:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .contact-form-success {
+      display: none;
+      background: rgba(0, 255, 255, 0.06);
+      border: 1px solid rgba(0, 255, 255, 0.3);
+      border-radius: 12px;
+      padding: 40px 32px;
+      text-align: center;
+    }
+
+    .contact-form-success h3 {
+      color: #00ffff;
+      margin-bottom: 12px;
+    }
+
+    .contact-form-note {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 0.82rem;
+      color: rgba(128, 128, 128, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -201,11 +311,73 @@
       <h1>Talk to <span>Sales</span></h1>
       <p>
         Ready to evaluate Cloud Health Office for your organization? We're accepting pilot deployments now.
-        Reach out directly — no forms, no automated queues.
+        Tell us what you're working on and we'll respond personally — no automated queues.
       </p>
     </section>
 
+    <section class="contact-form-section">
+      <form id="salesContactForm" action="https://formspree.io/f/xgojygon" method="POST" novalidate aria-label="Contact sales form">
+
+        <div class="contact-form-field">
+          <label for="cs-name" class="contact-form-label">Full Name <span class="required" aria-hidden="true">*</span></label>
+          <input type="text" id="cs-name" name="name" class="contact-form-input" required placeholder="e.g., Jamie Rivera" />
+        </div>
+
+        <div class="contact-form-field">
+          <label for="cs-org" class="contact-form-label">Organization <span class="required" aria-hidden="true">*</span></label>
+          <input type="text" id="cs-org" name="organization" class="contact-form-input" required placeholder="e.g., Regional Health Plan" />
+        </div>
+
+        <div class="contact-form-field">
+          <label for="cs-email" class="contact-form-label">Work Email <span class="required" aria-hidden="true">*</span></label>
+          <input type="email" id="cs-email" name="email" class="contact-form-input" required placeholder="you@organization.org" />
+        </div>
+
+        <div class="contact-form-field">
+          <label for="cs-topic" class="contact-form-label">What would you like to discuss? <span class="required" aria-hidden="true">*</span></label>
+          <select id="cs-topic" name="topic" class="contact-form-select" required>
+            <option value="">Select a topic&hellip;</option>
+            <option value="CMS-0057-F compliance readiness">CMS-0057-F compliance readiness</option>
+            <option value="Augment vs. replace strategy for QNXT / Facets / HealthEdge">Augment vs. replace strategy for QNXT / Facets / HealthEdge</option>
+            <option value="Pilot deployment scope & timeline">Pilot deployment scope &amp; timeline</option>
+            <option value="Multi-clearinghouse EDI configuration">Multi-clearinghouse EDI configuration</option>
+            <option value="FHIR R4 API integration">FHIR R4 API integration</option>
+            <option value="Licensing & pricing">Licensing &amp; pricing</option>
+            <option value="Azure, AWS, or GCP deployment">Azure, AWS, or GCP deployment</option>
+            <option value="HIPAA BAA & security review">HIPAA BAA &amp; security review</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div class="contact-form-field">
+          <label for="cs-message" class="contact-form-label">Anything else we should know? <span class="required" aria-hidden="true">*</span></label>
+          <textarea id="cs-message" name="message" class="contact-form-textarea" rows="4" required placeholder="A few details about your organization and what you're evaluating..."></textarea>
+        </div>
+
+        <input type="hidden" name="_subject" value="Contact Sales Inquiry" />
+        <input type="hidden" name="_format" value="plain" />
+        <input type="hidden" name="formRecipient" value="sales@cloudhealthoffice.com" />
+
+        <div id="cs-form-error" class="contact-form-error" role="alert" aria-live="polite"></div>
+
+        <button type="submit" id="cs-submit-btn" class="contact-form-submit">Send to Sales</button>
+
+        <p class="contact-form-note">We typically respond within one business day.</p>
+      </form>
+
+      <div id="cs-form-success" class="contact-form-success" role="status" aria-live="polite">
+        <div style="font-size: 2.5rem; margin-bottom: 16px;" aria-hidden="true">&#x2705;</div>
+        <h3>Message received</h3>
+        <p style="color: rgba(200,200,200,0.85); font-size: 0.95rem; line-height: 1.7;">
+          Thanks — we'll respond within one business day. Questions in the meantime? Email <a href="mailto:sales@cloudhealthoffice.com" style="color:#00ffff;">sales@cloudhealthoffice.com</a>
+        </p>
+      </div>
+    </section>
+
     <div class="contact-section">
+      <div class="contact-divider" style="margin-top:0;">
+        <h3>Prefer email, phone, or mail?</h3>
+      </div>
       <div class="contact-grid">
 
         <div class="contact-card">
@@ -235,28 +407,96 @@
 
       </div>
 
-      <div class="contact-divider">
-        <h3>Common topics we discuss on first contact</h3>
-        <ul class="topic-list">
-          <li>CMS-0057-F compliance readiness</li>
-          <li>Augment vs. replace strategy for QNXT / Facets / HealthEdge</li>
-          <li>Pilot deployment scope &amp; timeline</li>
-          <li>Multi-clearinghouse EDI configuration</li>
-          <li>FHIR R4 API integration</li>
-          <li>Licensing &amp; pricing</li>
-          <li>Azure, AWS, or GCP deployment</li>
-          <li>HIPAA BAA &amp; security review</li>
-        </ul>
-      </div>
-
       <p class="response-note">
-        We typically respond within one business day.<br>
         For technical questions, see the <a href="/docs" style="color:rgba(0,255,255,0.7);">documentation</a>
         or open an issue on <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:rgba(0,255,255,0.7);">GitHub</a>.
       </p>
     </div>
 
   </main>
+
+  <script>
+  (function() {
+    var form = document.getElementById('salesContactForm');
+    if (!form) return;
+
+    var submitBtn = document.getElementById('cs-submit-btn');
+    var errorEl = document.getElementById('cs-form-error');
+    var successEl = document.getElementById('cs-form-success');
+
+    function showError(message) {
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+    }
+
+    function clearError() {
+      errorEl.textContent = '';
+      errorEl.style.display = 'none';
+    }
+
+    function isFormspreeEndpointConfigured() {
+      return /^https:\/\/formspree\.io\/f\/[a-z0-9]+$/i.test(form.action);
+    }
+
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      clearError();
+
+      var name = document.getElementById('cs-name').value.trim();
+      var org = document.getElementById('cs-org').value.trim();
+      var email = document.getElementById('cs-email').value.trim();
+      var topic = document.getElementById('cs-topic').value;
+      var message = document.getElementById('cs-message').value.trim();
+
+      if (!name || !org || !email || !topic || !message) {
+        showError('Please fill in all required fields before submitting.');
+        return;
+      }
+
+      var emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(email)) {
+        showError('Please enter a valid work email address.');
+        return;
+      }
+
+      if (!isFormspreeEndpointConfigured()) {
+        showError('This form is not configured yet. Please email sales@cloudhealthoffice.com directly.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending…';
+
+      try {
+        var formData = new FormData(form);
+        formData.set('_replyto', email);
+
+        var response = await fetch(form.action, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json'
+          },
+          body: formData
+        });
+
+        if (!response.ok) {
+          var result = await response.json().catch(function() { return null; });
+          var errMessage = result && result.errors && result.errors.length
+            ? result.errors.map(function(error) { return error.message; }).join(' ')
+            : 'Request failed';
+          throw new Error(errMessage);
+        }
+
+        form.style.display = 'none';
+        successEl.style.display = 'block';
+      } catch (err) {
+        showError(err.message || 'Something went wrong. Please email sales@cloudhealthoffice.com directly.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Send to Sales';
+      }
+    });
+  })();
+  </script>
 
   <!-- ===== FOOTER ===== -->
   <footer class="site-footer">

@@ -159,6 +159,16 @@
           <p>Want the story behind this walkthrough? Read <a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-then-validating-real-workflows-db3b6d691ac2" target="_blank" rel="noopener noreferrer">Part 1: Running a Healthcare Claims Platform Locally in Kubernetes, Then Validating Real Workflows</a> for the initial local deployment path, then <a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-2-from-it-runs-to-it-measures-b36c915f08b9" target="_blank" rel="noopener noreferrer">Part 2: From It Runs to It Measures</a> for the provider verification, tenant context, and Million Claim Challenge (MCC) timing work that followed.</p>
         </div>
 
+        <div class="callout callout-info">
+          <div class="callout-title">Prefer Docker Compose?</div>
+          <p>This guide walks through the full Kubernetes-shaped deployment. If you just want the core adjudication services running quickly without Kubernetes:</p>
+          <pre><code>git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
+docker compose --profile core up -d
+curl http://localhost:5001/health/live</code></pre>
+          <p>See <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/README.md#quick-start" target="_blank" rel="noopener noreferrer">the README Quick Start</a> for the full profile list and the complete-stack (<code>docker-compose.development.yml</code>) option.</p>
+        </div>
+
         <!-- Prerequisites -->
         <h2 id="prerequisites">Prerequisites</h2>
 

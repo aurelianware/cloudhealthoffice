@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Million Claim Challenge — Open Claims Adjudication Benchmark | Cloud Health Office</title>
-  <meta name="description" content="The Million Claim Challenge is an open-source benchmarking tool that generates 1,000,000 synthetic healthcare claims — professional, institutional, dental, and 29 edge case scenarios — with pre-computed expected adjudication outcomes. Benchmark any claims engine against a shared yardstick." />
+  <meta name="description" content="The Million Claim Challenge is a source-available benchmarking tool that generates 1,000,000 synthetic healthcare claims — professional, institutional, dental, and 29 edge case scenarios — with pre-computed expected adjudication outcomes. Benchmark any claims engine against a shared yardstick." />
   <meta name="keywords" content="million claim challenge, claims adjudication benchmark, synthetic claim generator, healthcare benchmarking, CMS-0057-F testing, cloud health office benchmark, FHIR R4 compliance testing, healthcare claims testing, payer platform benchmark, claims accuracy testing, COB coordination of benefits testing, prior authorization testing, QNXT benchmark, Facets benchmark, HealthEdge benchmark, adjudication engine accuracy, healthcare QA, claims edge cases, DRG grouper testing, dental claims benchmark, synthetic member generation, synthetic provider generation, benefit plan seeding, fee schedule seeding, X12 834 enrollment, benchmark data seeding, Cosmos DB seeding, claims pipeline benchmarking" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/million-claim-challenge" />
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
@@ -82,7 +82,7 @@
         "name": "What is the Million Claim Challenge?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "The Million Claim Challenge (MCC) is an open-source benchmarking tool that generates 1,000,000 deterministic synthetic healthcare claims with pre-computed expected adjudication outcomes. It produces a stratified corpus of professional CMS-1500 claims (60%), institutional UB-04 claims (25%), dental ADA claims (10%), and edge case claims (5%) covering 29 named scenarios including COB, retro-eligibility, newborn auto-adjudication, prior authorization, subrogation, behavioral health parity, and Medicaid subprograms."
+          "text": "The Million Claim Challenge (MCC) is a source-available benchmarking tool that generates 1,000,000 deterministic synthetic healthcare claims with pre-computed expected adjudication outcomes. It produces a stratified corpus of professional CMS-1500 claims (60%), institutional UB-04 claims (25%), dental ADA claims (10%), and edge case claims (5%) covering 29 named scenarios including COB, retro-eligibility, newborn auto-adjudication, prior authorization, subrogation, behavioral health parity, and Medicaid subprograms."
         }
       },
       {
@@ -90,7 +90,7 @@
         "name": "Can I use the Million Claim Challenge to benchmark competitors like QNXT, Facets, or HealthEdge?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. The Million Claim Challenge is open source and not coupled to Cloud Health Office. Generate a corpus, convert it to whatever intake format the other platform expects, run it, and compare results against the pre-computed answer key. The corpus, scoring methodology, and generator are all publicly available."
+          "text": "Yes. The Million Claim Challenge is source-available and not coupled to Cloud Health Office. Generate a corpus, convert it to whatever intake format the other platform expects, run it, and compare results against the pre-computed answer key. The corpus, scoring methodology, and generator are all publicly available on GitHub under CHO's BSL 1.1 license."
         }
       },
       {
@@ -161,13 +161,13 @@
   }
   </script>
 
-  <!-- JSON-LD: SoftwareSourceCode for open-source discovery -->
+  <!-- JSON-LD: SoftwareSourceCode for source-available discovery -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     "name": "BenchmarkClaimGenerator",
-    "description": "Open-source synthetic healthcare claim generator for the Million Claim Challenge benchmark. Produces 1,000,000 stratified claims with pre-computed expected adjudication outcomes.",
+    "description": "Source-available synthetic healthcare claim generator for the Million Claim Challenge benchmark. Produces 1,000,000 stratified claims with pre-computed expected adjudication outcomes.",
     "codeRepository": "https://github.com/aurelianware/cloudhealthoffice",
     "programmingLanguage": "C#",
     "runtimePlatform": ".NET 8.0",
@@ -302,7 +302,7 @@
         <div class="callout callout-info">
           <div class="callout-title">Open by design</div>
           <p>
-            The generator, the corpus profile, and the scoring methodology are all open source.
+            The generator, the corpus profile, and the scoring methodology are all source-available on GitHub.
             We built MCC to benchmark Cloud Health Office against itself &mdash; and then decided
             the industry could use a shared yardstick. Use it on our platform, use it on
             someone else's, use it on that mainframe in the basement that nobody wants to touch.
@@ -1148,7 +1148,7 @@ dotnet run --project src/tools/mcc-runner -- --claims 10000 --seed 42</code></pr
 
         <h3>Can I use MCC to benchmark a competitor's platform?</h3>
         <p>
-          Yes. That's the point. MCC is open source and not coupled to Cloud Health Office. Generate a corpus,
+          Yes. That's the point. MCC is source-available and not coupled to Cloud Health Office. Generate a corpus,
           convert it to whatever intake format the other platform expects, run it, and compare.
           We'd genuinely love to see the results.
         </p>
