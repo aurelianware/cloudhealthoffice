@@ -396,6 +396,10 @@ public class ClaimsServiceTests
                 generatedClaimId = "GEN-001",
                 submittedClaimId = "CLM-001",
                 claimType = 1,
+                validationScenario = "TxStarInpatientNoAuth",
+                expectedOutcome = "BusinessDenial",
+                expectedBusinessDenialCode = "PRIOR_AUTH_REQUIRED",
+                validationStatus = "Matched",
                 outcome = "Paid",
                 adjudicationSuccess = true,
                 actualPlanPayment = 95.25m,
@@ -416,6 +420,8 @@ public class ClaimsServiceTests
         result.Should().ContainSingle();
         result[0].GeneratedClaimId.Should().Be("GEN-001");
         result[0].ClaimType.Should().Be("Professional");
+        result[0].ValidationScenario.Should().Be("TxStarInpatientNoAuth");
+        result[0].ValidationStatus.Should().Be("Matched");
         result[0].Outcome.Should().Be("Paid");
     }
 
