@@ -650,11 +650,12 @@ static string? NormalizeBusinessDenialCode(string? code)
 
 static string LineOfBusinessName(int lineOfBusiness) => lineOfBusiness switch
 {
+    1 => "Commercial",
     2 => "Medicare",
     3 => "Medicaid",
     4 => "CHIP",
     5 => "Exchange",
-    _ => "Commercial"
+    _ => throw new ArgumentOutOfRangeException(nameof(lineOfBusiness), lineOfBusiness, "Unsupported line-of-business code.")
 };
 
 static async Task UpdateClaimAdjudicationAsync(
@@ -1079,7 +1080,7 @@ static void PrintUsage()
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 25)
       --parallelism <count>      Number of claims to process concurrently (default: 4)
-      --line-of-business <code>  Adjudication line of business: 1 Commercial, 2 Medicare, 3 Medicaid (default: 3)
+      --line-of-business <code>  Adjudication line of business: 1 Commercial, 2 Medicare, 3 Medicaid, 4 CHIP, 5 Exchange (default: 3)
       --summary-json <path>      Write machine-readable validation summary JSON
       --no-publish-summary       Do not publish the completed run to claims-service
       --claim-results-limit <n>  Number of per-claim results to publish with the run (default: 1000)
@@ -1212,7 +1213,7 @@ internal sealed record ValidatorOptions(
             Math.Max(5, options.TimeoutSeconds),
             Math.Max(1, options.ProgressEvery),
             Math.Max(1, options.Parallelism),
-            Math.Clamp(options.LineOfBusiness, 1, 6),
+            Math.Clamp(options.LineOfBusiness, 1, 5),
             options.SummaryJsonPath,
             options.NoPublishSummary,
             Math.Clamp(options.PublishClaimResultsLimit, 0, effectiveClaims),

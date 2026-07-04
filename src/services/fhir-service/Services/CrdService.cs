@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
@@ -14,18 +13,20 @@ public class CrdService : ICrdService
     private readonly HttpClient _terminologyClient;
     private readonly IPriorAuthRuleEngine _priorAuthRuleEngine;
     private readonly CrdCodeClassification _defaultClassification;
-    private static readonly ConcurrentDictionary<string, CrdCodeClassification> ClassificationCache = new();
+    private readonly ICrdClassificationStore _classificationStore;
     private readonly ILogger<CrdService> _logger;
 
     public CrdService(
         IHttpClientFactory httpClientFactory,
         IPriorAuthRuleEngine priorAuthRuleEngine,
         IOptions<CrdConfig> config,
+        ICrdClassificationStore classificationStore,
         ILogger<CrdService> logger)
     {
         _terminologyClient = httpClientFactory.CreateClient("TerminologyService");
         _priorAuthRuleEngine = priorAuthRuleEngine;
         _defaultClassification = LoadFromConfig(config.Value);
+        _classificationStore = classificationStore;
         _logger = logger;
     }
 
@@ -50,7 +51,7 @@ public class CrdService : ICrdService
             var ruleDecision = await EvaluatePriorAuthRuleAsync(
                 request, tenantId, effectiveCode, ct);
 
-            if (IsPriorAuthRequired(ruleDecision))
+            if (ruleDecision.IsPriorAuthRequired())
             {
                 cards.Add(BuildAuthRequiredCard(display, ruleDecision));
             }
@@ -117,7 +118,7 @@ public class CrdService : ICrdService
         {
             _logger.LogWarning(ex,
                 "Prior Auth Rule Engine unavailable for CRD code {Code}; falling back to CRD classification",
-                procedureCode);
+                SanitizeForLog(procedureCode));
             return null;
         }
     }
@@ -134,27 +135,11 @@ public class CrdService : ICrdService
             : userId;
     }
 
-    private static bool IsPriorAuthRequired(PaRuleDecision? decision)
-    {
-        if (decision is null)
-            return false;
-
-        if (decision.Outcome is PaDecisionOutcome.Deny)
-            return true;
-
-        if (decision.Outcome is not PaDecisionOutcome.Pend)
-            return false;
-
-        return decision.FiringRuleId is not
-            ("NoRulesConfigured" or "NoRuleMatch" or "NoOp")
-            && !decision.FiringRuleId.StartsWith("RuleError:", StringComparison.Ordinal);
-    }
-
     // ── Classification cache ─────────────────────────────────────────────────
 
     public CrdCodeClassification GetClassification(string tenantId)
     {
-        if (ClassificationCache.TryGetValue(tenantId, out var tenantClassification))
+        if (_classificationStore.TryGet(tenantId, out var tenantClassification) && tenantClassification is not null)
             return tenantClassification;
         return _defaultClassification;
     }
@@ -162,14 +147,11 @@ public class CrdService : ICrdService
     public void SetClassification(string tenantId, CrdCodeClassification classification)
     {
         classification.LoadedAt = DateTimeOffset.UtcNow;
-        ClassificationCache[tenantId] = classification;
+        _classificationStore.Set(tenantId, classification);
     }
 
     public CrdCodeClassification? GetClassificationOrNull(string tenantId)
-    {
-        ClassificationCache.TryGetValue(tenantId, out var c);
-        return c;
-    }
+        => _classificationStore.GetOrNull(tenantId);
 
     private static CrdCodeClassification LoadFromConfig(CrdConfig config) => new()
     {
@@ -177,6 +159,18 @@ public class CrdService : ICrdService
         AutoApprovedCodes = new HashSet<string>(config.AutoApprovedCodes, StringComparer.Ordinal),
         DocumentationRequiredCodes = new HashSet<string>(config.DocumentationRequiredCodes, StringComparer.Ordinal),
     };
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var buffer = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            buffer.Append(char.IsControl(ch) ? '_' : ch);
+        }
+        if (buffer.Length > 256) buffer.Length = 256;
+        return buffer.ToString();
+    }
 
     // ── Code extraction ──────────────────────────────────────────────────────
 

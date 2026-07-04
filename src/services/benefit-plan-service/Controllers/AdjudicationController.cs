@@ -356,7 +356,7 @@ public class AdjudicationController : ControllerBase
 
         // If PA rule engine says auth/review is required and no auth exists,
         // deny the claim unless the provider already has an authorization on file.
-        if (IsPriorAuthRequired(priorAuthDecision)
+        if (priorAuthDecision.IsPriorAuthRequired()
             && string.IsNullOrEmpty(request.PriorAuthorizationNumber))
         {
             adjudicationSpan?.SetTag("cho.outcome", "pa_denied");
@@ -861,19 +861,6 @@ public class AdjudicationController : ControllerBase
         5 => PaLineOfBusiness.Exchange,
         _ => PaLineOfBusiness.Medicaid   // Default to Medicaid for TX MCO tenants
     };
-
-    private static bool IsPriorAuthRequired(PaRuleDecision decision)
-    {
-        if (decision.Outcome is PaDecisionOutcome.Deny)
-            return true;
-
-        if (decision.Outcome is not PaDecisionOutcome.Pend)
-            return false;
-
-        return decision.FiringRuleId is not
-            ("NoRulesConfigured" or "NoRuleMatch" or "NoOp")
-            && !decision.FiringRuleId.StartsWith("RuleError:", StringComparison.Ordinal);
-    }
 
     private static string? MapToPaProgram(int? lob) => lob switch
     {

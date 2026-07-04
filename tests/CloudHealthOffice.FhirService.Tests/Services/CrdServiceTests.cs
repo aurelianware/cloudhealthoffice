@@ -63,6 +63,7 @@ public class CrdServiceTests
             _httpClientFactoryMock.Object,
             _priorAuthRuleEngineMock.Object,
             Options.Create(_config),
+            new CrdClassificationStore(),
             _loggerMock.Object);
     }
 

@@ -44,6 +44,7 @@ public class CrdCodeClassificationTests
             httpClientFactory.Object,
             priorAuthRuleEngine.Object,
             Options.Create(config),
+            new CrdClassificationStore(),
             new Mock<ILogger<CrdService>>().Object);
     }
 
