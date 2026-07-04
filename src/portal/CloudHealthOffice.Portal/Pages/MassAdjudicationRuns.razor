@@ -161,6 +161,88 @@
                 </MudGrid>
             </MudPaper>
 
+            <MudPaper Class="pa-4 mb-3" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;">
+                <div class="d-flex align-center gap-2 mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Color="Color.Primary" />
+                    <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Claim Results</MudText>
+                    <MudSpacer />
+                    <MudSelect T="string" Value="_claimOutcomeFilter" ValueChanged="OnClaimOutcomeFilterChanged"
+                               Dense="true" Variant="Variant.Outlined" Style="width: 190px;">
+                        <MudSelectItem Value="@("")">All outcomes</MudSelectItem>
+                        <MudSelectItem Value="@("Paid")">Paid</MudSelectItem>
+                        <MudSelectItem Value="@("BusinessDenial")">Business denials</MudSelectItem>
+                        <MudSelectItem Value="@("PlatformFailure")">Platform failures</MudSelectItem>
+                    </MudSelect>
+                </div>
+
+                @if (_claimResultsLoading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-3" />
+                }
+
+                <MudTable Items="_claimResults" Dense="true" Hover="true" T="MassAdjudicationClaimResult" RowsPerPage="10">
+                    <HeaderContent>
+                        <MudTh>Claim</MudTh>
+                        <MudTh>Outcome</MudTh>
+                        <MudTh>Denial / Failure</MudTh>
+                        <MudTh>Latency</MudTh>
+                        <MudTh>Payment</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Claim">
+                            @if (!string.IsNullOrWhiteSpace(context.SubmittedClaimId))
+                            {
+                                <MudLink Href="@ClaimHref(context.SubmittedClaimId!)" Color="Color.Primary" Style="font-family: monospace; font-weight: 700;">
+                                    @ShortId(context.SubmittedClaimId!)
+                                </MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Style="font-family: monospace;">@ShortId(context.GeneratedClaimId)</MudText>
+                            }
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
+                                @context.ClaimType · @ShortId(context.GeneratedClaimId)
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Outcome">
+                            <MudChip T="string" Size="Size.Small" Color="@OutcomeColor(context.Outcome)">
+                                @OutcomeLabel(context.Outcome)
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Denial / Failure">
+                            <MudText Typo="Typo.body2">@(!string.IsNullOrWhiteSpace(context.BusinessDenialCode) ? context.BusinessDenialCode : context.FailureStage ?? "-")</MudText>
+                            @if (!string.IsNullOrWhiteSpace(context.Error))
+                            {
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55);">@context.Error</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Latency">
+                            <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.ElapsedMilliseconds.ToString("N0") ms</MudText>
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
+                                s @context.SubmitMilliseconds.ToString("N0") / a @context.AdjudicationMilliseconds.ToString("N0") / w @context.WritebackMilliseconds.ToString("N0")
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Payment">
+                            <MudText Typo="Typo.body2" Style="font-family: monospace;">@(context.ActualPlanPayment?.ToString("C") ?? "-")</MudText>
+                            @if (context.PaymentDelta.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
+                                    delta @context.PaymentDelta.Value.ToString("C")
+                                </MudText>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <div class="pa-5 text-center">
+                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.55);">No claim-level results were published for this run.</MudText>
+                        </div>
+                    </NoRecordsContent>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="new[] { 10, 25, 50 }" />
+                    </PagerContent>
+                </MudTable>
+            </MudPaper>
+
             <MudGrid Spacing="3">
                 <MudItem xs="12" md="6">
                     <MudPaper Class="pa-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,202,40,0.18); border-radius: 8px;">
@@ -204,8 +286,11 @@
 
 @code {
     private readonly List<MassAdjudicationRunSummary> _runs = new();
+    private readonly List<MassAdjudicationClaimResult> _claimResults = new();
     private MassAdjudicationRunSummary? _selectedRun;
     private bool _loading;
+    private bool _claimResultsLoading;
+    private string _claimOutcomeFilter = string.Empty;
     private string? _error;
 
     protected override async Task OnInitializedAsync()
@@ -223,6 +308,7 @@
             _runs.Clear();
             _runs.AddRange(runs);
             _selectedRun = _runs.FirstOrDefault();
+            await LoadClaimResults();
         }
         catch (Exception ex)
         {
@@ -235,10 +321,49 @@
         }
     }
 
-    private void SelectRun(MassAdjudicationRunSummary run)
+    private async Task SelectRun(MassAdjudicationRunSummary run)
     {
         _selectedRun = run;
+        _claimOutcomeFilter = string.Empty;
+        await LoadClaimResults();
     }
+
+    private async Task OnClaimOutcomeFilterChanged(string value)
+    {
+        _claimOutcomeFilter = value;
+        await LoadClaimResults();
+    }
+
+    private async Task LoadClaimResults()
+    {
+        _claimResults.Clear();
+        if (_selectedRun is null)
+        {
+            return;
+        }
+
+        _claimResultsLoading = true;
+        try
+        {
+            var results = await ClaimsService.GetMassAdjudicationClaimResultsAsync(
+                _selectedRun.Id,
+                string.IsNullOrWhiteSpace(_claimOutcomeFilter) ? null : _claimOutcomeFilter,
+                250);
+            _claimResults.AddRange(results);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Snackbar.Add("Unable to load claim-level results", Severity.Warning);
+        }
+        finally
+        {
+            _claimResultsLoading = false;
+        }
+    }
+
+    private static string ClaimHref(string claimId)
+        => $"/claims/{Uri.EscapeDataString(claimId)}";
 
     private static string ShortId(string id)
         => string.IsNullOrWhiteSpace(id) ? "run" : id[..Math.Min(8, id.Length)];
@@ -250,6 +375,21 @@
         => _selectedRun is null || _selectedRun.BusinessDenials <= 0
             ? 0
             : (double)count / _selectedRun.BusinessDenials * 100;
+
+    private static Color OutcomeColor(string outcome) => outcome switch
+    {
+        "Paid" => Color.Success,
+        "BusinessDenial" => Color.Warning,
+        "PlatformFailure" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string OutcomeLabel(string outcome) => outcome switch
+    {
+        "BusinessDenial" => "Business Denial",
+        "PlatformFailure" => "Platform Failure",
+        _ => outcome
+    };
 
     private RenderFragment Metric(string label, string value, string color) => builder =>
     {

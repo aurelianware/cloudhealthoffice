@@ -383,6 +383,62 @@ public class ClaimsServiceTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetMassAdjudicationClaimResultsAsync_WhenApiReturns200_DeserializesClaimResults()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                id = "result-001",
+                runId = "run-001",
+                tenantId = "tenant-a",
+                generatedClaimId = "GEN-001",
+                submittedClaimId = "CLM-001",
+                claimType = 1,
+                outcome = "Paid",
+                adjudicationSuccess = true,
+                actualPlanPayment = 95.25m,
+                expectedPlanPayment = 95.25m,
+                paymentDelta = 0m,
+                elapsedMilliseconds = 250.5,
+                submitMilliseconds = 50.0,
+                adjudicationMilliseconds = 125.0,
+                writebackMilliseconds = 75.5,
+                createdAtUtc = "2026-07-03T00:00:00Z"
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetMassAdjudicationClaimResultsAsync("run-001");
+
+        result.Should().ContainSingle();
+        result[0].GeneratedClaimId.Should().Be("GEN-001");
+        result[0].ClaimType.Should().Be("Professional");
+        result[0].Outcome.Should().Be("Paid");
+    }
+
+    [Fact]
+    public async Task GetMassAdjudicationClaimResultsAsync_VerifyUrlContainsEscapedQueryParameters()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.GetMassAdjudicationClaimResultsAsync("run/001", "Business Denial", 5000);
+
+        handler.CapturedUrls.Should().ContainSingle()
+            .Which.Should().Be("http://localhost:5000/mass-adjudication/runs/run%2F001/claims?limit=1000&outcome=Business%20Denial");
+    }
+
+    [Fact]
+    public void FlexibleClaimStatusJsonConverter_WhenApiReturnsNumericValue_DeserializesStatusName()
+    {
+        JsonSerializer.Deserialize<IdCardOrderView>(
+            """{"status":7}""",
+            JsonOpts)!.Status.Should().Be("Paid");
+    }
+
     // ── SubmitClaimAsync ──
 
     [Fact]

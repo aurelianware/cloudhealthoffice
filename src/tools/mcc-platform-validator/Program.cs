@@ -889,6 +889,28 @@ static MassAdjudicationRunSummary BuildSummary(
         .Take(5)
         .Select(r => new MassAdjudicationFailureSummary(r.GeneratedClaimId, r.FailureStage, r.Error))
         .ToList();
+    var claimResults = results
+        .OrderByDescending(r => r.Elapsed)
+        .Take(options.PublishClaimResultsLimit)
+        .Select(r => new MassAdjudicationClaimResult(
+            r.GeneratedClaimId,
+            r.SubmittedClaimId,
+            r.ClaimType,
+            r.Outcome.ToString(),
+            r.AdjudicationSuccess,
+            r.BusinessDenialCode,
+            r.FailureStage,
+            r.Error,
+            r.ActualPlanPayment,
+            r.ExpectedPlanPayment,
+            r.ActualPlanPayment.HasValue && r.ExpectedPlanPayment.HasValue
+                ? Math.Abs(r.ActualPlanPayment.Value - r.ExpectedPlanPayment.Value)
+                : null,
+            r.Elapsed.TotalMilliseconds,
+            r.SubmitElapsed.TotalMilliseconds,
+            r.AdjudicationElapsed.TotalMilliseconds,
+            r.UpdateElapsed.TotalMilliseconds))
+        .ToList();
 
     return new MassAdjudicationRunSummary(
         new MassAdjudicationRun(
@@ -917,7 +939,8 @@ static MassAdjudicationRunSummary BuildSummary(
         BuildStageTiming("Writeback", results.Select(r => r.UpdateElapsed)),
         avgDelta,
         denialBreakdown,
-        failures);
+        failures,
+        claimResults);
 }
 
 static void WriteSummary(MassAdjudicationRunSummary summary)
@@ -1047,6 +1070,7 @@ static void PrintUsage()
       --parallelism <count>      Number of claims to process concurrently (default: 4)
       --summary-json <path>      Write machine-readable validation summary JSON
       --no-publish-summary       Do not publish the completed run to claims-service
+      --claim-results-limit <n>  Number of per-claim results to publish with the run (default: 1000)
       -h, --help                 Show help
 
     Example:
@@ -1085,6 +1109,7 @@ internal sealed record ValidatorOptions(
     int Parallelism,
     string? SummaryJsonPath,
     bool NoPublishSummary,
+    int PublishClaimResultsLimit,
     bool ShowHelp)
 {
     public const int MaxClaims = 10_000;
@@ -1136,6 +1161,9 @@ internal sealed record ValidatorOptions(
                 case "--no-publish-summary":
                     options.NoPublishSummary = true;
                     break;
+                case "--claim-results-limit" when i + 1 < args.Length:
+                    options.PublishClaimResultsLimit = int.Parse(args[++i]);
+                    break;
                 case "--help" or "-h":
                     options.ShowHelp = true;
                     break;
@@ -1154,8 +1182,10 @@ internal sealed record ValidatorOptions(
             options.Parallelism = MaxParallelism;
         }
 
+        var effectiveClaims = Math.Max(1, options.Claims);
+
         return new ValidatorOptions(
-            Math.Max(1, options.Claims),
+            effectiveClaims,
             options.Seed,
             options.TenantId,
             options.ClaimsUrl.TrimEnd('/'),
@@ -1168,6 +1198,7 @@ internal sealed record ValidatorOptions(
             Math.Max(1, options.Parallelism),
             options.SummaryJsonPath,
             options.NoPublishSummary,
+            Math.Clamp(options.PublishClaimResultsLimit, 0, effectiveClaims),
             options.ShowHelp);
     }
 
@@ -1186,6 +1217,7 @@ internal sealed record ValidatorOptions(
         public int Parallelism { get; set; } = 4;
         public string? SummaryJsonPath { get; set; }
         public bool NoPublishSummary { get; set; }
+        public int PublishClaimResultsLimit { get; set; } = 1000;
         public bool ShowHelp { get; set; }
     }
 }
@@ -1231,7 +1263,8 @@ internal sealed record MassAdjudicationRunSummary(
     MassAdjudicationStageTiming? WritebackTiming,
     decimal? AveragePaymentDelta,
     IReadOnlyList<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown,
-    IReadOnlyList<MassAdjudicationFailureSummary> SampleFailures);
+    IReadOnlyList<MassAdjudicationFailureSummary> SampleFailures,
+    IReadOnlyList<MassAdjudicationClaimResult> ClaimResults);
 
 internal sealed record MassAdjudicationRun(
     string TenantId,
@@ -1259,6 +1292,23 @@ internal sealed record MassAdjudicationFailureSummary(
     string GeneratedClaimId,
     string? Stage,
     string? Error);
+
+internal sealed record MassAdjudicationClaimResult(
+    string GeneratedClaimId,
+    string? SubmittedClaimId,
+    string ClaimType,
+    string Outcome,
+    bool AdjudicationSuccess,
+    string? BusinessDenialCode,
+    string? FailureStage,
+    string? Error,
+    decimal? ActualPlanPayment,
+    decimal? ExpectedPlanPayment,
+    decimal? PaymentDelta,
+    double ElapsedMilliseconds,
+    double SubmitMilliseconds,
+    double AdjudicationMilliseconds,
+    double WritebackMilliseconds);
 
 internal sealed record AdjudicationResponseDto(
     string ClaimId,
