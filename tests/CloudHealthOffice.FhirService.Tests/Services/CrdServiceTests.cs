@@ -7,6 +7,7 @@ using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using FhirService.Models;
 using FhirService.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -63,9 +64,14 @@ public class CrdServiceTests
             _httpClientFactoryMock.Object,
             _priorAuthRuleEngineMock.Object,
             Options.Create(_config),
-            new CrdClassificationStore(),
+            new CrdClassificationStore(CreateMemoryCache()),
             _loggerMock.Object);
     }
+
+    private static MemoryCache CreateMemoryCache() => new(new MemoryCacheOptions
+    {
+        SizeLimit = 1024,
+    });
 
     // ── SNOMED translation ───────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using FhirService.Models;
 using FhirService.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -44,9 +45,14 @@ public class CrdCodeClassificationTests
             httpClientFactory.Object,
             priorAuthRuleEngine.Object,
             Options.Create(config),
-            new CrdClassificationStore(),
+            new CrdClassificationStore(CreateMemoryCache()),
             new Mock<ILogger<CrdService>>().Object);
     }
+
+    private static MemoryCache CreateMemoryCache() => new(new MemoryCacheOptions
+    {
+        SizeLimit = 1024,
+    });
 
     [Fact]
     public async Task EvaluateAsync_UsesHashSetLookup_AuthRequired()
