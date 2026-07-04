@@ -7,6 +7,7 @@ using EnginePlanType = CloudHealthOffice.BenefitEngine.Domain.PlanType;
 using ModelPlanType = BenefitPlanService.Models.PlanType;
 using EngineFamilyAccumulatorModel = CloudHealthOffice.BenefitEngine.Domain.FamilyAccumulatorModel;
 using ModelFamilyAccumulatorModel = BenefitPlanService.Models.FamilyAccumulatorModel;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace BenefitPlanService.Services;
 
@@ -16,6 +17,12 @@ namespace BenefitPlanService.Services;
 /// </summary>
 public class ChoBenefitPlanProvider : IBenefitPlanProvider
 {
+    private static readonly MemoryCacheEntryOptions CacheOptions = new()
+    {
+        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5),
+        SlidingExpiration = TimeSpan.FromMinutes(2)
+    };
+
     /// <summary>
     /// Cutoff that distinguishes legacy plans (hydrate with
     /// <c>IsAcaCapEnforced=false</c>) from post-5.7 publishes (which set
@@ -32,6 +39,7 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
     private readonly IBenefitEngineTenantContext _tenantContext;
     private readonly IAcaLimitsProvider _acaLimits;
     private readonly IPlanYearResolver _planYear;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<ChoBenefitPlanProvider> _logger;
 
     public ChoBenefitPlanProvider(
@@ -39,22 +47,32 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
         IBenefitEngineTenantContext tenantContext,
         IAcaLimitsProvider acaLimits,
         IPlanYearResolver planYear,
+        IMemoryCache cache,
         ILogger<ChoBenefitPlanProvider> logger)
     {
         _repo = repo;
         _tenantContext = tenantContext;
         _acaLimits = acaLimits;
         _planYear = planYear;
+        _cache = cache;
         _logger = logger;
     }
 
     public async Task<BenefitPlanConfig?> GetPlanAsync(Guid benefitPlanId, CancellationToken ct = default)
     {
+        var cacheKey = $"benefit-plan-config:{_tenantContext.TenantId}:{benefitPlanId:N}";
+        if (_cache.TryGetValue<BenefitPlanConfig>(cacheKey, out var cached) && cached is not null)
+        {
+            return cached;
+        }
+
         var plan = await _repo.GetByIdAsync(benefitPlanId.ToString(), _tenantContext.TenantId);
         if (plan is null)
             return null;
 
-        return MapToConfig(plan);
+        var config = MapToConfig(plan);
+        _cache.Set(cacheKey, config, CacheOptions);
+        return config;
     }
 
     internal BenefitPlanConfig MapToConfig(BenefitPlan plan)
