@@ -5,6 +5,22 @@ All notable changes to Cloud Health Office will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### v5.0 - Planned
+
+**Enhanced Provider Management & Multi-Market Expansion**
+
+- Enhanced practice management features for small-to-medium practices
+- Advanced provider network analytics and reporting
+- Expanded core system integrations (Epic Tapestry, additional CAPS)
+- Mobile provider app (React Native) for iOS and Android
+- Provider-facing scheduling and patient communication tools
+- Enhanced claims scrubbing with AI-powered validation
+- Multi-location practice support with centralized billing
+
+---
+
 ## [4.4.0] - May 2026
 
 ### Claims Phase 1 — Closure
@@ -151,22 +167,6 @@ New microservice enabling per-member-per-month (PMPM) capitation payments from h
 | Total code lines      | ~160,000 | ~192,000 |
 | Total lines (w/ docs) | ~240,000 | ~303,000 |
 | Automated tests       | 1,018    | 1,295    |
-
----
-
-## [Unreleased]
-
-### v5.0 - Planned Q2 2026
-
-**Enhanced Provider Management & Multi-Market Expansion**
-
-- Enhanced practice management features for small-to-medium practices
-- Advanced provider network analytics and reporting
-- Expanded core system integrations (Epic Tapestry, additional CAPS)
-- Mobile provider app (React Native) for iOS and Android
-- Provider-facing scheduling and patient communication tools
-- Enhanced claims scrubbing with AI-powered validation
-- Multi-location practice support with centralized billing
 
 ---
 

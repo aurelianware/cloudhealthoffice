@@ -198,6 +198,177 @@
       "rewrite": "/login.html"
     },
     {
+      "route": "/cho-ar-marketing.html",
+      "redirect": "/cho-ar-marketing",
+      "statusCode": 301
+    },
+    {
+      "route": "/cho-ar-marketing",
+      "rewrite": "/cho-ar-marketing.html"
+    },
+    {
+      "route": "/cho-capitation-marketing.html",
+      "redirect": "/cho-capitation-marketing",
+      "statusCode": 301
+    },
+    {
+      "route": "/cho-capitation-marketing",
+      "rewrite": "/cho-capitation-marketing.html"
+    },
+    {
+      "route": "/cho-ffs-payments-marketing.html",
+      "redirect": "/cho-ffs-payments-marketing",
+      "statusCode": 301
+    },
+    {
+      "route": "/cho-ffs-payments-marketing",
+      "rewrite": "/cho-ffs-payments-marketing.html"
+    },
+    {
+      "route": "/cho-premium-billing-marketing.html",
+      "redirect": "/cho-premium-billing-marketing",
+      "statusCode": 301
+    },
+    {
+      "route": "/cho-premium-billing-marketing",
+      "rewrite": "/cho-premium-billing-marketing.html"
+    },
+    {
+      "route": "/claims-repricing.html",
+      "redirect": "/claims-repricing",
+      "statusCode": 301
+    },
+    {
+      "route": "/claims-repricing",
+      "rewrite": "/claims-repricing.html"
+    },
+    {
+      "route": "/cms-0057f-compliance.html",
+      "redirect": "/cms-0057f-compliance",
+      "statusCode": 301
+    },
+    {
+      "route": "/cms-0057f-compliance",
+      "rewrite": "/cms-0057f-compliance.html"
+    },
+    {
+      "route": "/pricing-api.html",
+      "redirect": "/pricing-api",
+      "statusCode": 301
+    },
+    {
+      "route": "/pricing-api",
+      "rewrite": "/pricing-api.html"
+    },
+    {
+      "route": "/docs/benefit-plan-guide.html",
+      "redirect": "/docs/benefit-plan-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/benefit-plan-guide",
+      "rewrite": "/docs/benefit-plan-guide.html"
+    },
+    {
+      "route": "/docs/claims-guide.html",
+      "redirect": "/docs/claims-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/claims-guide",
+      "rewrite": "/docs/claims-guide.html"
+    },
+    {
+      "route": "/docs/eligibility-guide.html",
+      "redirect": "/docs/eligibility-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/eligibility-guide",
+      "rewrite": "/docs/eligibility-guide.html"
+    },
+    {
+      "route": "/docs/fee-schedule-engine.html",
+      "redirect": "/docs/fee-schedule-engine",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/fee-schedule-engine",
+      "rewrite": "/docs/fee-schedule-engine.html"
+    },
+    {
+      "route": "/docs/fee-schedule-guide.html",
+      "redirect": "/docs/fee-schedule-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/fee-schedule-guide",
+      "rewrite": "/docs/fee-schedule-guide.html"
+    },
+    {
+      "route": "/docs/florida-compliance.html",
+      "redirect": "/docs/florida-compliance",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/florida-compliance",
+      "rewrite": "/docs/florida-compliance.html"
+    },
+    {
+      "route": "/docs/million-claim-challenge.html",
+      "redirect": "/docs/million-claim-challenge",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/million-claim-challenge",
+      "rewrite": "/docs/million-claim-challenge.html"
+    },
+    {
+      "route": "/docs/prior-auth-guide.html",
+      "redirect": "/docs/prior-auth-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/prior-auth-guide",
+      "rewrite": "/docs/prior-auth-guide.html"
+    },
+    {
+      "route": "/docs/provider-enrollment-guide.html",
+      "redirect": "/docs/provider-enrollment-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/provider-enrollment-guide",
+      "rewrite": "/docs/provider-enrollment-guide.html"
+    },
+    {
+      "route": "/docs/quickstart-kubernetes.html",
+      "redirect": "/docs/quickstart-kubernetes",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/quickstart-kubernetes",
+      "rewrite": "/docs/quickstart-kubernetes.html"
+    },
+    {
+      "route": "/docs/texas-compliance.html",
+      "redirect": "/docs/texas-compliance",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/texas-compliance",
+      "rewrite": "/docs/texas-compliance.html"
+    },
+    {
+      "route": "/docs/texas-tmppm-pa-rules.html",
+      "redirect": "/docs/texas-tmppm-pa-rules",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/texas-tmppm-pa-rules",
+      "rewrite": "/docs/texas-tmppm-pa-rules.html"
+    },
+    {
       "route": "/portal/*",
       "allowedRoles": [
         "authenticated"

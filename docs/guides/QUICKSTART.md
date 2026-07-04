@@ -1,89 +1,36 @@
 # Cloud Health Office - Quick Start Guide
 
-Get started with the #1 source-available Azure-native multi-payer EDI platform in **5 minutes**.
+Get the source-available Azure-native, Kubernetes-native multi-payer EDI platform running locally.
 
-## 🌐 Self-Service Signup (Fastest - 5 minutes)
+## 🐳 Local Docker Compose (Fastest)
 
-The easiest way to get started is through our production portal:
+```bash
+# Clone
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
 
-### Step 1: Visit the Portal
+# Build and run the core adjudication services (mongo + redis + claims + benefit-plan + ...)
+docker compose --profile core up -d
 
-Navigate to **[portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com)**
+# Verify
+curl http://localhost:5001/health/live
+```
 
-### Step 2: Sign In with Azure AD
+`docker compose up -d` with no `--profile` only starts infra (Mongo + Redis). See the port map and profile list at the top of [docker-compose.yml](../../docker-compose.yml). For the complete backend (all 36 services + seed data), use `docker compose -f docker-compose.development.yml up -d` instead — see the [README Quick Start](../../README.md#quick-start) for details.
 
-Click **Sign In** and authenticate with any Microsoft account:
-- Personal Microsoft account (Outlook.com, Hotmail.com)
-- Work or school account (Office 365, Azure AD)
-- GitHub account linked to Microsoft
+## ☸️ Local Kubernetes
 
-**What happens**: Azure AD multi-tenant authentication validates your identity and extracts tenant information from your account claims.
+For a Kubernetes-shaped local environment with claims adjudication and CRD discovery validation, see [cloudhealthoffice.com/docs/quickstart](https://cloudhealthoffice.com/docs/quickstart).
 
-### Step 3: Select Your Tier
+## 🌐 Self-Service Signup (Not Yet Available)
 
-Choose the plan that fits your needs:
+A self-serve signup flow at `portal.cloudhealthoffice.com` with Stripe billing is planned but **not yet wired end-to-end** — consumer-grade authentication and checkout are still outstanding work (see [POSITIONING.md](../POSITIONING.md#customer-surface-activation-gap-honest-disclosure)). Until that ships, evaluate locally via Docker Compose or Kubernetes above.
 
-| Tier | Price | Claims/Month | Modules | Support | Trial |
-|------|-------|--------------|---------|---------|-------|
-| **Starter** | [Contact sales](mailto:sales@cloudhealthoffice.com) | 10,000 | EDI + Claims Adjudication | Community + Email | 14 days |
-| **Professional** | [Contact sales](mailto:sales@cloudhealthoffice.com) | 50,000 | All + FHIR + Analytics | Priority + Slack | 14 days |
-| **Enterprise** | Custom | Unlimited | White-label + SLA | 24/7 + Dedicated CSM | Custom |
+### Enterprise Customers / Pilot Program
 
-**Note**: All tiers include a **14-day free trial**. Cancel anytime before Feb 23, 2026 (trial end).
+Need custom pricing, a pilot deployment, or white-labeling?
 
-### Step 4: Enter Payment Details
-
-Provide credit card information via **Stripe** (PCI DSS compliant):
-- Credit card (Visa, Mastercard, Amex, Discover)
-- ACH Direct Debit (US customers)
-- SEPA Direct Debit (EU customers)
-
-**Security**: Stripe handles all payment processing. Cloud Health Office never stores your payment information.
-
-### Step 5: Choose Modules
-
-Select the EDI modules you need:
-- ✅ **EDI Transactions** - 270/271 (Eligibility), 275 (Attachments), 276/277 (Claim Status), 278 (Authorization), 837 (Claims)
-- ✅ **Claims Adjudication** - <500ms workflow processing
-- ✅ **Provider Network** - 13 specialties, contracted rates
-- ✅ **FHIR Integration** - X12 → FHIR R4 mapping (Professional+)
-
-### Step 6: Start Free Trial
-
-Click **Start Free Trial** to complete signup.
-
-**What gets auto-provisioned:**
-- ✅ Cosmos DB tenant partition (`tenantId`)
-- ✅ SFTP credentials for clearinghouse integration
-- ✅ Azure AD application for API access
-- ✅ Stripe subscription with 14-day trial
-- ✅ Welcome email with credentials and access URLs
-
-### Step 7: Access Your Tenant
-
-After signup, you can immediately access:
-
-- **Portal**: [https://portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com) - Manage subscription, view claims, configure settings
-- **API**: [https://api.cloudhealthoffice.com](https://api.cloudhealthoffice.com) - RESTful endpoints with OpenAPI docs
-- **Docs**: [https://docs.cloudhealthoffice.com](https://docs.cloudhealthoffice.com) - Integration guides and API reference
-
-**Trial Details:**
-- Starts: Today
-- Ends: Feb 23, 2026 (14 days)
-- No credit card charge until trial ends
-- Cancel anytime via Portal → Subscription → Cancel
-
-### Enterprise Customers
-
-Need custom pricing, SLAs, or white-labeling?
-
-👉 **[Contact Sales](https://portal.cloudhealthoffice.com/contact-sales)** for:
-- Unlimited claims processing
-- Dedicated customer success manager
-- Custom SLA (99.95%+ uptime)
-- White-label portal and branding
-- On-premise or hybrid deployment
-- BAA and compliance support
+👉 **[Contact Sales](https://cloudhealthoffice.com/contact)** or apply to the [Founding Client Program](https://cloudhealthoffice.com/#founding-partner-form).
 
 ---
 

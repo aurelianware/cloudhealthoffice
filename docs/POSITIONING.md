@@ -280,7 +280,7 @@ Specific indicative PMPM ranges and ARR projections are documented in `docs/sale
 
 ## Million Claim Challenge
 
-The Million Claim Challenge is an open-source benchmarking asset that sits across all four product lines as credibility infrastructure.
+The Million Claim Challenge is a source-available benchmarking asset (BSL 1.1, same as the rest of the CHO codebase) that sits across all four product lines as credibility infrastructure.
 
 We generate a stratified synthetic corpus of 1,000,000 healthcare claims — professional CMS-1500, institutional UB-04, dental ADA, and named edge-case scenarios — with pre-computed expected adjudication outcomes. Any claims adjudication engine can be benchmarked against the corpus and scored against the expected outcomes.
 

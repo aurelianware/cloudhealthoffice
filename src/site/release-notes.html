@@ -621,15 +621,15 @@
 # Clone and run<br>
 git clone https://github.com/aurelianware/cloudhealthoffice.git<br>
 cd cloudhealthoffice<br>
-docker-compose up -d<br>
+docker compose --profile core up -d<br>
 <br>
 # Verify<br>
-curl http://localhost:5000/health<br>
+curl http://localhost:5001/health/live<br>
 <br>
 # Or deploy with Helm (Azure/AWS/GCP)<br>
 helm install cloudhealthoffice ./infrastructure/helm/cloudhealthoffice<br>
 <br>
-# Run full test suite (1,740 tests)<br>
+# Run the test suite<br>
 npm install &amp;&amp; npm test
           </code>
         </div>
@@ -638,7 +638,7 @@ npm install &amp;&amp; npm test
 
         <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json" class="button button-green" target="_blank" rel="noopener noreferrer">Deploy to Azure &rarr;</a>
 
-        <p style="margin-top: 30px; color: #888;">Docker Compose for evaluation in 5 minutes. Kubernetes for production in 1&ndash;2 hours.</p>
+        <p style="margin-top: 30px; color: #888;">Docker Compose for local evaluation (first run builds images, typically 10&ndash;20 minutes; instant on repeat runs). Kubernetes for production in 1&ndash;2 hours.</p>
       </section>
 
       <!-- Documentation Links -->
@@ -647,7 +647,7 @@ npm install &amp;&amp; npm test
         <div class="feature-grid">
           <div class="feature-card">
             <h3>Quickstart</h3>
-            <p>Get running in 5 minutes with Docker Compose or deploy to Azure/Kubernetes.</p>
+            <p>Run the platform locally with Docker Compose, or deploy to Kubernetes/Azure.</p>
             <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/QUICKSTART.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
           </div>
 
