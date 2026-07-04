@@ -20,6 +20,8 @@ NAMESPACE="cloudhealthoffice"
 IMAGE_PREFIX="cloudhealthoffice"
 KIND_CLUSTER_NAME=""
 LOCAL_DOTNET_REGISTRY="${LOCAL_DOTNET_REGISTRY:-mcr.microsoft.com}"
+LOCAL_CLAIMS_REPLICAS="${LOCAL_CLAIMS_REPLICAS:-2}"
+LOCAL_BENEFIT_PLAN_REPLICAS="${LOCAL_BENEFIT_PLAN_REPLICAS:-3}"
 
 # Defaults — overridden by .env.local if present
 MONGO_USER="admin"
@@ -441,6 +443,8 @@ for dep in attachment-service fhir-service reference-data-service; do
     >/dev/null 2>&1 || true
 done
 kubectl scale deployment --all -n "$NAMESPACE" --replicas=1 >/dev/null 2>&1 || true
+kubectl scale deployment/claims-service -n "$NAMESPACE" --replicas="$LOCAL_CLAIMS_REPLICAS" >/dev/null 2>&1 || true
+kubectl scale deployment/benefit-plan-service -n "$NAMESPACE" --replicas="$LOCAL_BENEFIT_PLAN_REPLICAS" >/dev/null 2>&1 || true
 kubectl delete hpa --all -n "$NAMESPACE" >/dev/null 2>&1 || true
 
 # ── Deploy portal ─────────────────────────────────────────────────────────────

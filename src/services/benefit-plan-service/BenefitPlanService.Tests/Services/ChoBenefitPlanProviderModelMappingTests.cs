@@ -4,7 +4,9 @@ using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using BenefitPlanService.Tests.Fakes;
 using CloudHealthOffice.BenefitEngine.Services;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using BenefitRulePredicate = CloudHealthOffice.BenefitEngine.Domain.BenefitRulePredicate;
 using EngineFamilyAccumulatorModel = CloudHealthOffice.BenefitEngine.Domain.FamilyAccumulatorModel;
 using ModelFamilyAccumulatorModel = BenefitPlanService.Models.FamilyAccumulatorModel;
@@ -29,6 +31,7 @@ public sealed class ChoBenefitPlanProviderModelMappingTests
             new StubTenantContext("tenant-a"),
             limits,
             new PlanYearResolver(),
+            new MemoryCache(Options.Create(new MemoryCacheOptions())),
             NullLogger<ChoBenefitPlanProvider>.Instance);
     }
 
