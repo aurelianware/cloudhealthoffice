@@ -444,6 +444,46 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
+    /// Fast claim-level adjudication projection for local benchmark and workflow
+    /// validation paths that do not need line adjudication projection or finalized
+    /// event emission.
+    /// </summary>
+    [HttpPut("{id}/adjudication-summary")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateAdjudicationSummary(
+        string id,
+        [FromBody] AdjudicationResult adjudication,
+        CancellationToken ct = default)
+    {
+        _logger.LogDebug(
+            "Fast adjudication summary update for claim {Id}: allowed={Allowed}, payer={Payer}, patient={Patient}",
+            SanitizeForLog(id), adjudication.AllowedAmount, adjudication.PayerPayment, adjudication.PatientResponsibility);
+
+        var status = ResolveAdjudicationStatus(adjudication);
+        var updated = await _claimRepository.UpdateAdjudicationSummaryAsync(
+            GetTenantId(),
+            id,
+            adjudication,
+            status,
+            ct);
+
+        return updated ? NoContent() : NotFound($"Claim {id} not found");
+    }
+
+    private static ClaimStatus ResolveAdjudicationStatus(AdjudicationResult adjudication)
+    {
+        if (adjudication.PayerPayment == 0 && !string.IsNullOrEmpty(adjudication.DenialReasonCode))
+        {
+            return ClaimStatus.Denied;
+        }
+
+        return adjudication.PayerPayment > 0
+            ? ClaimStatus.Approved
+            : ClaimStatus.InAdjudication;
+    }
+
+    /// <summary>
     /// Write the AI Claims Examiner's advisory recommendation onto a pended claim.
     ///
     /// Called by claims-examiner-service after it processes a ClaimPendedEvent.

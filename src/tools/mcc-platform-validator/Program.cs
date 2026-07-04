@@ -663,7 +663,7 @@ static async Task UpdateClaimAdjudicationAsync(
         denialReason = adjudication.DenialReasonDescription
     };
 
-    using var response = await http.PutAsJsonAsync($"{options.ClaimsUrl}/api/claims/{submittedClaimId}/adjudication", payload, json);
+    using var response = await http.PutAsJsonAsync($"{options.ClaimsUrl}/api/claims/{submittedClaimId}/adjudication-summary", payload, json);
     if (!response.IsSuccessStatusCode)
     {
         var body = await response.Content.ReadAsStringAsync();

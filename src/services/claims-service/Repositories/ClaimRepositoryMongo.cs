@@ -500,6 +500,45 @@ public class ClaimRepositoryMongo : IClaimRepository
         return result.MatchedCount > 0;
     }
 
+    public async Task<bool> UpdateAdjudicationSummaryAsync(
+        string tenantId,
+        string claimVersionId,
+        AdjudicationResult adjudicationResult,
+        ClaimStatus status,
+        CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+
+        var chainFilter = b.Or(
+            b.Eq(c => c.ClaimVersionId, claimVersionId),
+            b.And(
+                b.Or(b.Eq(c => c.ClaimVersionId, string.Empty), b.Eq(c => c.ClaimVersionId, (string?)null)),
+                b.Eq(c => c.Id, claimVersionId)));
+
+        var stateFilter = b.Or(
+            b.Eq(c => c.VersionState, ClaimVersionState.Submitted),
+            b.Eq(c => c.VersionState, ClaimVersionState.Adjudicated),
+            b.Eq(c => c.VersionState, ClaimVersionState.Unknown));
+
+        var filter = b.And(b.Eq(c => c.TenantId, tenantId), chainFilter, stateFilter);
+        var now = DateTime.UtcNow;
+        var update = Builders<Claim>.Update
+            .Set(c => c.AdjudicationResult, adjudicationResult)
+            .Set(c => c.AdjudicatedDate, now)
+            .Set(c => c.LastUpdatedDate, now)
+            .Set(c => c.Status, status)
+            .Set(c => c.VersionState, ClaimVersionState.Adjudicated);
+
+        var options = new FindOneAndUpdateOptions<Claim>
+        {
+            Sort = Builders<Claim>.Sort.Descending(c => c.VersionNumber),
+            Projection = Builders<Claim>.Projection.Include(c => c.Id)
+        };
+
+        var updated = await _collection.FindOneAndUpdateAsync(filter, update, options, ct);
+        return updated is not null;
+    }
+
     public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
         string ownerId,
         string scope,
