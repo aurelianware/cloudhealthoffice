@@ -336,6 +336,7 @@ public class AdjudicationController : ControllerBase
                 TenantId = TenantId,
                 StateCode = request.StateCode ?? "TX",
                 Lob = MapToPaLineOfBusiness(request.LineOfBusiness),
+                Program = MapToPaProgram(request.LineOfBusiness),
                 RequestingProviderNpi = request.ProviderNpi,
                 ServicingProviderNpi = request.ProviderNpi,
                 ServicingProviderTaxonomy = request.ProviderTaxonomy,
@@ -353,9 +354,9 @@ public class AdjudicationController : ControllerBase
             paSpan?.SetTag("cho.pa.rule_id", priorAuthDecision.FiringRuleId);
         }
 
-        // If PA rule engine says Deny (procedure requires auth and none exists),
+        // If PA rule engine says auth/review is required and no auth exists,
         // deny the claim unless the provider already has an authorization on file.
-        if (priorAuthDecision.Outcome == PaDecisionOutcome.Deny
+        if (priorAuthDecision.IsPriorAuthRequired()
             && string.IsNullOrEmpty(request.PriorAuthorizationNumber))
         {
             adjudicationSpan?.SetTag("cho.outcome", "pa_denied");
@@ -859,6 +860,12 @@ public class AdjudicationController : ControllerBase
         4 => PaLineOfBusiness.Medicaid,  // CHIP → Medicaid rules
         5 => PaLineOfBusiness.Exchange,
         _ => PaLineOfBusiness.Medicaid   // Default to Medicaid for TX MCO tenants
+    };
+
+    private static string? MapToPaProgram(int? lob) => lob switch
+    {
+        3 or 4 => "STAR",
+        _ => null
     };
 
     // ═══════════════════════════════════════════════════════════════════

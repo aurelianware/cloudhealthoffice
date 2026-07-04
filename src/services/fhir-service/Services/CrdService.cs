@@ -1,6 +1,8 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Json;
+using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Domain;
+using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using FhirService.Models;
 using Microsoft.Extensions.Options;
 
@@ -9,18 +11,22 @@ namespace FhirService.Services;
 public class CrdService : ICrdService
 {
     private readonly HttpClient _terminologyClient;
+    private readonly IPriorAuthRuleEngine _priorAuthRuleEngine;
     private readonly CrdCodeClassification _defaultClassification;
-    private readonly ConcurrentDictionary<string, CrdCodeClassification> _classificationCache = new();
+    private readonly ICrdClassificationStore _classificationStore;
     private readonly ILogger<CrdService> _logger;
 
     public CrdService(
         IHttpClientFactory httpClientFactory,
+        IPriorAuthRuleEngine priorAuthRuleEngine,
         IOptions<CrdConfig> config,
+        ICrdClassificationStore classificationStore,
         ILogger<CrdService> logger)
     {
         _terminologyClient = httpClientFactory.CreateClient("TerminologyService");
+        _priorAuthRuleEngine = priorAuthRuleEngine;
         _defaultClassification = LoadFromConfig(config.Value);
-        _classificationCache["default"] = _defaultClassification;
+        _classificationStore = classificationStore;
         _logger = logger;
     }
 
@@ -42,8 +48,18 @@ public class CrdService : ICrdService
         {
             var effectiveCode = tc.EffectiveCode;
             var display = tc.TranslatedCoding?.Display ?? tc.OriginalCode.Display ?? effectiveCode;
+            var ruleDecision = await EvaluatePriorAuthRuleAsync(
+                request, tenantId, effectiveCode, ct);
 
-            if (classification.AuthRequiredCodes.Contains(effectiveCode))
+            if (ruleDecision.IsPriorAuthRequired())
+            {
+                cards.Add(BuildAuthRequiredCard(display, ruleDecision));
+            }
+            else if (ruleDecision?.Outcome is PaDecisionOutcome.Approve)
+            {
+                cards.Add(BuildAutoApprovedCard(display, ruleDecision));
+            }
+            else if (classification.AuthRequiredCodes.Contains(effectiveCode))
             {
                 cards.Add(BuildAuthRequiredCard(display));
             }
@@ -71,11 +87,59 @@ public class CrdService : ICrdService
         };
     }
 
+    private async Task<PaRuleDecision?> EvaluatePriorAuthRuleAsync(
+        CrdHookRequest request,
+        string tenantId,
+        string procedureCode,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await _priorAuthRuleEngine.EvaluateAsync(new PaRuleContext
+            {
+                TenantId = tenantId,
+                StateCode = "TX",
+                Lob = PaLineOfBusiness.Medicaid,
+                Program = "STAR",
+                RequestingProviderNpi = ExtractPractitionerId(request),
+                ServicingProviderNpi = ExtractPractitionerId(request),
+                MemberId = request.Context?.PatientId ?? string.Empty,
+                ServiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                ProcedureCodes = [procedureCode],
+                DiagnosisCodes = [],
+                EstimatedCost = 0m,
+            }, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Prior Auth Rule Engine unavailable for CRD code {Code}; falling back to CRD classification",
+                SanitizeForLog(procedureCode));
+            return null;
+        }
+    }
+
+    private static string ExtractPractitionerId(CrdHookRequest request)
+    {
+        var userId = request.Context?.UserId;
+        if (string.IsNullOrWhiteSpace(userId))
+            return string.Empty;
+
+        var slash = userId.LastIndexOf('/');
+        return slash >= 0 && slash < userId.Length - 1
+            ? userId[(slash + 1)..]
+            : userId;
+    }
+
     // ── Classification cache ─────────────────────────────────────────────────
 
     public CrdCodeClassification GetClassification(string tenantId)
     {
-        if (_classificationCache.TryGetValue(tenantId, out var tenantClassification))
+        if (_classificationStore.TryGet(tenantId, out var tenantClassification) && tenantClassification is not null)
             return tenantClassification;
         return _defaultClassification;
     }
@@ -83,14 +147,11 @@ public class CrdService : ICrdService
     public void SetClassification(string tenantId, CrdCodeClassification classification)
     {
         classification.LoadedAt = DateTimeOffset.UtcNow;
-        _classificationCache[tenantId] = classification;
+        _classificationStore.Set(tenantId, classification);
     }
 
     public CrdCodeClassification? GetClassificationOrNull(string tenantId)
-    {
-        _classificationCache.TryGetValue(tenantId, out var c);
-        return c;
-    }
+        => _classificationStore.GetOrNull(tenantId);
 
     private static CrdCodeClassification LoadFromConfig(CrdConfig config) => new()
     {
@@ -98,6 +159,18 @@ public class CrdService : ICrdService
         AutoApprovedCodes = new HashSet<string>(config.AutoApprovedCodes, StringComparer.Ordinal),
         DocumentationRequiredCodes = new HashSet<string>(config.DocumentationRequiredCodes, StringComparer.Ordinal),
     };
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var buffer = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            buffer.Append(char.IsControl(ch) ? '_' : ch);
+        }
+        if (buffer.Length > 256) buffer.Length = 256;
+        return buffer.ToString();
+    }
 
     // ── Code extraction ──────────────────────────────────────────────────────
 
@@ -212,11 +285,15 @@ public class CrdService : ICrdService
 
     // ── Card builders ────────────────────────────────────────────────────────
 
-    private static CrdCard BuildAuthRequiredCard(string serviceDisplay) => new()
+    private static CrdCard BuildAuthRequiredCard(
+        string serviceDisplay,
+        PaRuleDecision? decision = null) => new()
     {
         Uuid = Guid.NewGuid().ToString(),
         Summary = $"Prior authorization required for {serviceDisplay}",
-        Detail = "Coverage requires prior authorization. Documentation may be needed.",
+        Detail = decision is null
+            ? "Coverage requires prior authorization. Documentation may be needed."
+            : $"Coverage requires prior authorization. Rule: {decision.FiringRuleName}.",
         Indicator = "warning",
         Source = new CrdCardSource
         {
@@ -264,11 +341,15 @@ public class CrdService : ICrdService
         },
     };
 
-    private static CrdCard BuildAutoApprovedCard(string serviceDisplay) => new()
+    private static CrdCard BuildAutoApprovedCard(
+        string serviceDisplay,
+        PaRuleDecision? decision = null) => new()
     {
         Uuid = Guid.NewGuid().ToString(),
         Summary = $"No prior authorization needed for {serviceDisplay}",
-        Detail = "This service is auto-approved and does not require prior authorization.",
+        Detail = decision is null
+            ? "This service is auto-approved and does not require prior authorization."
+            : $"This service does not require prior authorization. Rule: {decision.FiringRuleName}.",
         Indicator = "info",
         Source = new CrdCardSource
         {

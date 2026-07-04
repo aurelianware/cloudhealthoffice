@@ -1,9 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Domain;
+using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using FhirService.Models;
 using FhirService.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -13,6 +17,7 @@ namespace CloudHealthOffice.FhirService.Tests.Services;
 public class CrdServiceTests
 {
     private readonly Mock<IHttpClientFactory> _httpClientFactoryMock;
+    private readonly Mock<IPriorAuthRuleEngine> _priorAuthRuleEngineMock;
     private readonly Mock<ILogger<CrdService>> _loggerMock;
     private readonly CrdConfig _config;
     private MockHttpHandler _terminologyHandler = null!;
@@ -21,6 +26,7 @@ public class CrdServiceTests
     public CrdServiceTests()
     {
         _httpClientFactoryMock = new Mock<IHttpClientFactory>();
+        _priorAuthRuleEngineMock = new Mock<IPriorAuthRuleEngine>();
         _loggerMock = new Mock<ILogger<CrdService>>();
 
         _config = new CrdConfig
@@ -32,6 +38,15 @@ public class CrdServiceTests
         };
 
         _terminologyHandler = new MockHttpHandler();
+        _priorAuthRuleEngineMock
+            .Setup(e => e.EvaluateAsync(It.IsAny<PaRuleContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PaRuleDecision
+            {
+                Outcome = PaDecisionOutcome.Pend,
+                FiringRuleId = "NoRuleMatch",
+                FiringRuleName = "NoRuleMatch",
+                ResolvedRuleSetKey = "platform/TX/Medicaid/any",
+            });
         SetupService();
     }
 
@@ -47,9 +62,16 @@ public class CrdServiceTests
 
         _service = new CrdService(
             _httpClientFactoryMock.Object,
+            _priorAuthRuleEngineMock.Object,
             Options.Create(_config),
+            new CrdClassificationStore(CreateMemoryCache()),
             _loggerMock.Object);
     }
+
+    private static MemoryCache CreateMemoryCache() => new(new MemoryCacheOptions
+    {
+        SizeLimit = 1024,
+    });
 
     // ── SNOMED translation ───────────────────────────────────────────────────
 
@@ -84,6 +106,30 @@ public class CrdServiceTests
         result.Cards.Should().HaveCount(1);
         result.Cards[0].Indicator.Should().Be("warning");
         result.Cards[0].Summary.Should().Contain("Prior authorization required");
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_PriorAuthRuleRequiresReview_ReturnsAuthRequiredCard()
+    {
+        _priorAuthRuleEngineMock
+            .Setup(e => e.EvaluateAsync(
+                It.Is<PaRuleContext>(c => c.ProcedureCodes.Contains("K0800")),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PaRuleDecision
+            {
+                Outcome = PaDecisionOutcome.Pend,
+                FiringRuleId = "TX-STARPLUS-PA-001",
+                FiringRuleName = "DME PA Required Above Threshold - STARPlus",
+                ResolvedRuleSetKey = "platform/TX/Medicaid/STARPlus",
+            });
+
+        var request = CreateHookRequest("http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", "K0800", "Power wheelchair");
+        var result = await _service.EvaluateCoverageRequirementsAsync(request, "test-tenant");
+
+        result.Cards.Should().HaveCount(1);
+        result.Cards[0].Indicator.Should().Be("warning");
+        result.Cards[0].Summary.Should().Contain("Prior authorization required");
+        result.Cards[0].Detail.Should().Contain("DME PA Required");
     }
 
     // ── Auto approved ────────────────────────────────────────────────────────
