@@ -37,7 +37,7 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
         var claimResults = summary.ClaimResults;
         foreach (var result in claimResults)
         {
-            result.Id = string.IsNullOrWhiteSpace(result.Id) ? Guid.NewGuid().ToString("N") : result.Id;
+            result.Id = Guid.NewGuid().ToString("N");
             result.RunId = summary.Id;
             result.TenantId = summary.Run.TenantId;
             result.CreatedAtUtc = summary.CreatedAtUtc;
@@ -46,7 +46,23 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
         await _collection.InsertOneAsync(summary, cancellationToken: ct);
         if (claimResults.Count > 0)
         {
-            await _claimResults.InsertManyAsync(claimResults, cancellationToken: ct);
+            try
+            {
+                await _claimResults.InsertManyAsync(claimResults, cancellationToken: ct);
+            }
+            catch
+            {
+                try
+                {
+                    var filter = Builders<MassAdjudicationRunSummary>.Filter.Eq(x => x.Id, summary.Id);
+                    await _collection.DeleteOneAsync(filter, cancellationToken: ct);
+                }
+                catch
+                {
+                }
+
+                throw;
+            }
         }
 
         return summary;
@@ -114,7 +130,7 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
         {
             foreach (var result in summary.ClaimResults)
             {
-                result.Id = string.IsNullOrWhiteSpace(result.Id) ? Guid.NewGuid().ToString("N") : result.Id;
+                result.Id = Guid.NewGuid().ToString("N");
                 result.RunId = summary.Id;
                 result.TenantId = summary.Run.TenantId;
                 result.CreatedAtUtc = summary.CreatedAtUtc;

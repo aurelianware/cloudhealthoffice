@@ -1182,8 +1182,10 @@ internal sealed record ValidatorOptions(
             options.Parallelism = MaxParallelism;
         }
 
+        var effectiveClaims = Math.Max(1, options.Claims);
+
         return new ValidatorOptions(
-            Math.Max(1, options.Claims),
+            effectiveClaims,
             options.Seed,
             options.TenantId,
             options.ClaimsUrl.TrimEnd('/'),
@@ -1196,7 +1198,7 @@ internal sealed record ValidatorOptions(
             Math.Max(1, options.Parallelism),
             options.SummaryJsonPath,
             options.NoPublishSummary,
-            Math.Clamp(options.PublishClaimResultsLimit, 0, options.Claims),
+            Math.Clamp(options.PublishClaimResultsLimit, 0, effectiveClaims),
             options.ShowHelp);
     }
 

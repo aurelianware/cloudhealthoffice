@@ -264,9 +264,9 @@ public sealed class FlexibleClaimTypeJsonConverter : JsonConverter<string>
             JsonTokenType.String => reader.GetString() ?? string.Empty,
             JsonTokenType.Number when reader.TryGetInt32(out var value) => value switch
             {
-                0 => "Professional",
-                1 => "Institutional",
-                2 => "Dental",
+                1 => "Professional",
+                2 => "Institutional",
+                3 => "Dental",
                 _ => value.ToString()
             },
             JsonTokenType.Number => reader.GetDouble().ToString(System.Globalization.CultureInfo.InvariantCulture),
