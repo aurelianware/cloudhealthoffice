@@ -56,6 +56,28 @@ public class ClaimsServiceTests
         ex.ServiceName.Should().Be("Claims Service");
     }
 
+    // ── GetMassAdjudicationRunsAsync ──
+
+    [Fact]
+    public async Task GetMassAdjudicationRunsAsync_WhenApiFails_ThrowsServiceUnavailableException()
+    {
+        var sut = CreateService();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetMassAdjudicationRunsAsync());
+        ex.ServiceName.Should().Be("Claims Service");
+    }
+
+    // ── GetMassAdjudicationRunAsync ──
+
+    [Fact]
+    public async Task GetMassAdjudicationRunAsync_WhenApiFails_ThrowsServiceUnavailableException()
+    {
+        var sut = CreateService();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetMassAdjudicationRunAsync("run-001"));
+        ex.ServiceName.Should().Be("Claims Service");
+    }
+
     // ── SubmitClaimAsync ──
 
     [Fact]
@@ -221,6 +243,142 @@ public class ClaimsServiceTests
             new FakeHandler(HttpStatusCode.OK, "null")));
 
         var result = await sut.GetClaimByIdAsync("CLM-NONE");
+
+        result.Should().BeNull();
+    }
+
+    // ── GetMassAdjudicationRunsAsync ──
+
+    [Fact]
+    public async Task GetMassAdjudicationRunsAsync_WhenApiReturns200_DeserializesRunsList()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                id = "run-001",
+                run = new
+                {
+                    tenantId = "tenant-a",
+                    requestedClaims = 100,
+                    seed = 42,
+                    parallelism = 8,
+                    claimsUrl = "https://claims",
+                    benefitUrl = "https://benefit",
+                    providerUrl = "https://provider",
+                    seedProviders = true,
+                    skipClaimUpdate = false,
+                    startedAtUtc = "2026-07-01T00:00:00Z",
+                    completedAtUtc = "2026-07-01T00:01:00Z"
+                },
+                totalClaims = 100,
+                processed = 100,
+                paid = 97,
+                businessDenials = 2,
+                platformFailures = 1,
+                throughputClaimsPerSecond = 15.5,
+                createdAtUtc = "2026-07-01T00:01:05Z"
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetMassAdjudicationRunsAsync();
+
+        result.Should().ContainSingle();
+        result[0].Id.Should().Be("run-001");
+        result[0].Run.TenantId.Should().Be("tenant-a");
+        result[0].Processed.Should().Be(100);
+        result[0].PlatformFailures.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetMassAdjudicationRunsAsync_WhenApiReturnsNull_ReturnsEmptyList()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetMassAdjudicationRunsAsync();
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetMassAdjudicationRunsAsync_WhenApiReturnsEmptyBody_ReturnsEmptyList()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, string.Empty)));
+
+        var result = await sut.GetMassAdjudicationRunsAsync();
+
+        result.Should().BeEmpty();
+    }
+
+    // ── GetMassAdjudicationRunAsync ──
+
+    [Fact]
+    public async Task GetMassAdjudicationRunAsync_WhenApiReturns200_DeserializesRun()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            id = "run-002",
+            run = new
+            {
+                tenantId = "tenant-b",
+                requestedClaims = 25,
+                seed = 7,
+                parallelism = 4,
+                claimsUrl = "https://claims",
+                benefitUrl = "https://benefit",
+                providerUrl = "https://provider",
+                seedProviders = false,
+                skipClaimUpdate = true,
+                startedAtUtc = "2026-07-02T12:00:00Z",
+                completedAtUtc = "2026-07-02T12:00:10Z"
+            },
+            totalClaims = 25,
+            processed = 24,
+            paid = 24,
+            businessDenials = 0,
+            platformFailures = 0,
+            createdAtUtc = "2026-07-02T12:00:11Z"
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetMassAdjudicationRunAsync("run-002");
+
+        result.Should().NotBeNull();
+        result!.Id.Should().Be("run-002");
+        result.Run.TenantId.Should().Be("tenant-b");
+        result.Run.SkipClaimUpdate.Should().BeTrue();
+        result.TotalClaims.Should().Be(25);
+    }
+
+    [Fact]
+    public async Task GetMassAdjudicationRunAsync_WhenApiReturnsNull_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetMassAdjudicationRunAsync("run-none");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetMassAdjudicationRunAsync_WhenApiReturnsEmptyBody_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, string.Empty)));
+
+        var result = await sut.GetMassAdjudicationRunAsync("run-empty");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetMassAdjudicationRunAsync_WhenApiReturns404_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.NotFound, "{}")));
+
+        var result = await sut.GetMassAdjudicationRunAsync("run-missing");
 
         result.Should().BeNull();
     }
