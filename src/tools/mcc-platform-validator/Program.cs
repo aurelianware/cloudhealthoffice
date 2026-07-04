@@ -39,6 +39,7 @@ Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
 Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
+Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
 Console.WriteLine();
 
 await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
@@ -49,11 +50,12 @@ if (options.SeedProviders)
 }
 
 await SeedNcciAsync(http, options, json);
+await SeedPriorAuthRulesAsync(http, options, json);
 
 var validationPlanId = Guid.NewGuid();
 await CreateValidationPlanAsync(http, options, validationPlanId, json);
 
-var claims = await GenerateClaimsAsync(options.Claims, options.Seed);
+var claims = await GenerateClaimsAsync(options);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 
 if (options.SeedProviders)
@@ -223,6 +225,23 @@ static async Task SeedNcciAsync(HttpClient http, ValidatorOptions options, JsonS
     Console.WriteLine("seeded: NCCI baseline");
 }
 
+static async Task SeedPriorAuthRulesAsync(HttpClient http, ValidatorOptions options, JsonSerializerOptions json)
+{
+    using var response = await http.PostAsync($"{options.BenefitUrl}/api/v1/prior-auth-rules/seed-platform", JsonContent.Create(new { }, options: json));
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        throw new InvalidOperationException($"prior-auth rule seed failed: {(int)response.StatusCode} {body}");
+    }
+
+    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    var seeded = document.RootElement.TryGetProperty("seededRules", out var seededElement)
+        ? seededElement.GetInt32()
+        : 0;
+
+    Console.WriteLine($"seeded: prior-auth platform rules ({seeded:N0} new)");
+}
+
 static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions options, Guid planGuid, JsonSerializerOptions json)
 {
     var plan = new
@@ -300,9 +319,9 @@ static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions op
     Console.WriteLine($"created: validation benefit plan {planGuid}");
 }
 
-static async Task<List<SyntheticClaim>> GenerateClaimsAsync(int claimCount, int seed)
+static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions options)
 {
-    var profile = BuildCorpusProfile(claimCount, seed);
+    var profile = BuildCorpusProfile(options.Claims, options.Seed);
     var writer = new InMemoryCorpusWriter();
     var generator = new ClaimCorpusGenerator(new InMemoryReferenceDataProvider());
 
@@ -314,8 +333,61 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(int claimCount, int 
     var claims = writer.Claims
         .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
         .ToList();
-    NormalizeClaimDates(claims, seed);
+    NormalizeClaimDates(claims, options.Seed);
+    InjectPriorAuthScenarios(claims, options);
     return claims;
+}
+
+static void InjectPriorAuthScenarios(List<SyntheticClaim> claims, ValidatorOptions options)
+{
+    if (!options.PriorAuthScenariosEnabled)
+    {
+        return;
+    }
+
+    if (options.LineOfBusiness is not (3 or 4))
+    {
+        Console.WriteLine("PA scenarios: skipped (TX Medicaid/CHIP rule scenarios require --line-of-business 3 or 4)");
+        return;
+    }
+
+    var candidates = claims
+        .Where(c => c.ClaimType.Equals("Institutional", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
+        .ToList();
+
+    if (candidates.Count == 0)
+    {
+        Console.WriteLine("PA scenarios: skipped (no institutional claims generated)");
+        return;
+    }
+
+    var requested = Math.Max(1, (int)Math.Round(claims.Count * options.PriorAuthScenarioRate, MidpointRounding.AwayFromZero));
+    var injected = 0;
+
+    foreach (var claim in candidates.Take(Math.Min(requested, candidates.Count)))
+    {
+        ForceTexasMedicaidInpatientPriorAuthScenario(claim);
+        injected++;
+    }
+
+    Console.WriteLine($"PA scenarios: injected {injected:N0} TX STAR inpatient claims without auth");
+}
+
+static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
+{
+    claim.PlaceOfService = "21";
+    claim.BillType = "0111";
+    claim.PriorAuthStatus = "Required";
+    claim.PriorAuthNumber = null;
+
+    claim.RenderingProvider.State = "TX";
+    claim.BillingProvider.State = "TX";
+
+    foreach (var line in claim.Lines)
+    {
+        line.PlaceOfService = "21";
+    }
 }
 
 static async Task SeedProvidersAsync(
@@ -1081,6 +1153,8 @@ static void PrintUsage()
       --progress-every <count>   Report progress every N claims (default: 25)
       --parallelism <count>      Number of claims to process concurrently (default: 4)
       --line-of-business <code>  Adjudication line of business: 1 Commercial, 2 Medicare, 3 Medicaid, 4 CHIP, 5 Exchange (default: 3)
+      --no-prior-auth-scenarios  Disable deterministic PA-required claim scenarios
+      --prior-auth-rate <rate>   Fraction of generated claims forced into PA-required scenarios (default: 0.02)
       --summary-json <path>      Write machine-readable validation summary JSON
       --no-publish-summary       Do not publish the completed run to claims-service
       --claim-results-limit <n>  Number of per-claim results to publish with the run (default: 1000)
@@ -1124,6 +1198,8 @@ internal sealed record ValidatorOptions(
     string? SummaryJsonPath,
     bool NoPublishSummary,
     int PublishClaimResultsLimit,
+    bool PriorAuthScenariosEnabled,
+    double PriorAuthScenarioRate,
     bool ShowHelp)
 {
     public const int MaxClaims = 10_000;
@@ -1172,6 +1248,12 @@ internal sealed record ValidatorOptions(
                 case "--line-of-business" when i + 1 < args.Length:
                     options.LineOfBusiness = int.Parse(args[++i]);
                     break;
+                case "--no-prior-auth-scenarios":
+                    options.PriorAuthScenariosEnabled = false;
+                    break;
+                case "--prior-auth-rate" when i + 1 < args.Length:
+                    options.PriorAuthScenarioRate = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
+                    break;
                 case "--summary-json" when i + 1 < args.Length:
                     options.SummaryJsonPath = args[++i];
                     break;
@@ -1217,6 +1299,8 @@ internal sealed record ValidatorOptions(
             options.SummaryJsonPath,
             options.NoPublishSummary,
             Math.Clamp(options.PublishClaimResultsLimit, 0, effectiveClaims),
+            options.PriorAuthScenariosEnabled,
+            Math.Clamp(options.PriorAuthScenarioRate, 0.0, 0.25),
             options.ShowHelp);
     }
 
@@ -1237,6 +1321,8 @@ internal sealed record ValidatorOptions(
         public string? SummaryJsonPath { get; set; }
         public bool NoPublishSummary { get; set; }
         public int PublishClaimResultsLimit { get; set; } = 1000;
+        public bool PriorAuthScenariosEnabled { get; set; } = true;
+        public double PriorAuthScenarioRate { get; set; } = 0.02;
         public bool ShowHelp { get; set; }
     }
 }
