@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Mail;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Identity.Web;
 using MongoDB.Driver;
 using MongoDB.Bson;
@@ -46,13 +47,13 @@ public class ClaimsService : IClaimsService
             // Try by ID first, then fall back to claim number lookup
             var response = await _httpClient.GetAsync($"{baseUrl}/claims/{claimId}");
             if (response.IsSuccessStatusCode)
-                return await response.Content.ReadFromJsonAsync<ClaimDetails>();
+                return await response.Content.ReadFromJsonAsync<ClaimDetails>(JsonOptions);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 var fallback = await _httpClient.GetAsync($"{baseUrl}/claims/number/{claimId}");
                 if (fallback.IsSuccessStatusCode)
-                    return await fallback.Content.ReadFromJsonAsync<ClaimDetails>();
+                    return await fallback.Content.ReadFromJsonAsync<ClaimDetails>(JsonOptions);
                 if (fallback.StatusCode == System.Net.HttpStatusCode.NotFound)
                     return null;
                 fallback.EnsureSuccessStatusCode();
@@ -99,6 +100,33 @@ public class ClaimsService : IClaimsService
 
             response.EnsureSuccessStatusCode();
             return await ReadOptionalJsonAsync<MassAdjudicationRunSummary>(response);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
+    public async Task<List<MassAdjudicationClaimResult>> GetMassAdjudicationClaimResultsAsync(
+        string runId,
+        string? outcome = null,
+        int limit = 250)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var query = $"limit={Math.Clamp(limit, 1, 1000)}";
+            if (!string.IsNullOrWhiteSpace(outcome))
+            {
+                query += $"&outcome={Uri.EscapeDataString(outcome)}";
+            }
+
+            var response = await _httpClient.GetAsync(
+                $"{baseUrl}/mass-adjudication/runs/{Uri.EscapeDataString(runId)}/claims?{query}");
+            response.EnsureSuccessStatusCode();
+            return await ReadOptionalJsonAsync<List<MassAdjudicationClaimResult>>(response)
+                ?? new List<MassAdjudicationClaimResult>();
         }
         catch (HttpRequestException ex)
         {
@@ -224,6 +252,68 @@ public class ClaimsService : IClaimsService
         }
 
         return JsonSerializer.Deserialize<T>(body, JsonOptions);
+    }
+}
+
+public sealed class FlexibleClaimTypeJsonConverter : JsonConverter<string>
+{
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.String => reader.GetString() ?? string.Empty,
+            JsonTokenType.Number when reader.TryGetInt32(out var value) => value switch
+            {
+                0 => "Professional",
+                1 => "Institutional",
+                2 => "Dental",
+                _ => value.ToString()
+            },
+            JsonTokenType.Number => reader.GetDouble().ToString(System.Globalization.CultureInfo.InvariantCulture),
+            JsonTokenType.True => bool.TrueString,
+            JsonTokenType.False => bool.FalseString,
+            JsonTokenType.Null => string.Empty,
+            _ => JsonDocument.ParseValue(ref reader).RootElement.ToString()
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value);
+    }
+}
+
+public sealed class FlexibleClaimStatusJsonConverter : JsonConverter<string>
+{
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.String => reader.GetString() ?? string.Empty,
+            JsonTokenType.Number when reader.TryGetInt32(out var value) => value switch
+            {
+                1 => "Submitted",
+                2 => "Received",
+                3 => "InAdjudication",
+                4 => "Pended",
+                5 => "Approved",
+                6 => "Denied",
+                7 => "Paid",
+                8 => "Voided",
+                9 => "PartiallyPaid",
+                _ => value.ToString()
+            },
+            JsonTokenType.Number => reader.GetDouble().ToString(System.Globalization.CultureInfo.InvariantCulture),
+            JsonTokenType.True => bool.TrueString,
+            JsonTokenType.False => bool.FalseString,
+            JsonTokenType.Null => string.Empty,
+            _ => JsonDocument.ParseValue(ref reader).RootElement.ToString()
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value);
     }
 }
 

@@ -35,9 +35,33 @@ public sealed class MassAdjudicationRunIndexInitializer : IHostedService
             },
             cancellationToken);
 
+        var claimResults = _database.GetCollection<MassAdjudicationClaimResult>(
+            MassAdjudicationRunRepositoryMongo.ClaimResultsCollectionName);
+        var claimResultKeys = Builders<MassAdjudicationClaimResult>.IndexKeys;
+
+        claimResults.Indexes.CreateMany(
+            new[]
+            {
+                new CreateIndexModel<MassAdjudicationClaimResult>(
+                    claimResultKeys.Ascending(x => x.TenantId).Ascending(x => x.RunId).Ascending(x => x.Outcome),
+                    new CreateIndexOptions { Name = "tenant_run_outcome" }),
+                new CreateIndexModel<MassAdjudicationClaimResult>(
+                    claimResultKeys.Ascending(x => x.TenantId).Ascending(x => x.RunId).Descending(x => x.ElapsedMilliseconds),
+                    new CreateIndexOptions { Name = "tenant_run_elapsed_desc" }),
+                new CreateIndexModel<MassAdjudicationClaimResult>(
+                    claimResultKeys.Ascending(x => x.TenantId).Ascending(x => x.SubmittedClaimId),
+                    new CreateIndexOptions
+                    {
+                        Name = "tenant_submitted_claim",
+                        Sparse = true
+                    })
+            },
+            cancellationToken);
+
         _logger.LogInformation(
-            "Mass adjudication run indexes ensured on collection '{Collection}'.",
-            MassAdjudicationRunRepositoryMongo.CollectionName);
+            "Mass adjudication run indexes ensured on collections '{RunCollection}' and '{ClaimResultCollection}'.",
+            MassAdjudicationRunRepositoryMongo.CollectionName,
+            MassAdjudicationRunRepositoryMongo.ClaimResultsCollectionName);
         return Task.CompletedTask;
     }
 

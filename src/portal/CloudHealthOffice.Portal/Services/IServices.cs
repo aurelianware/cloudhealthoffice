@@ -12,6 +12,10 @@ public interface IClaimsService
     Task<ClaimDetails?> GetClaimByIdAsync(string claimId);
     Task<List<MassAdjudicationRunSummary>> GetMassAdjudicationRunsAsync(int limit = 25);
     Task<MassAdjudicationRunSummary?> GetMassAdjudicationRunAsync(string runId);
+    Task<List<MassAdjudicationClaimResult>> GetMassAdjudicationClaimResultsAsync(
+        string runId,
+        string? outcome = null,
+        int limit = 250);
     Task<string> SubmitClaimAsync(SubmitClaimRequest request);
     Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null);
     Task<AdjudicationTransparencyData?> GetAdjudicationDataAsync(string claimId);
@@ -90,6 +94,7 @@ public class MassAdjudicationRunSummary
     public decimal? AveragePaymentDelta { get; set; }
     public List<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown { get; set; } = new();
     public List<MassAdjudicationFailureSummary> SampleFailures { get; set; } = new();
+    public List<MassAdjudicationClaimResult> ClaimResults { get; set; } = new();
     public DateTime CreatedAtUtc { get; set; }
 }
 
@@ -126,6 +131,29 @@ public class MassAdjudicationFailureSummary
     public string GeneratedClaimId { get; set; } = string.Empty;
     public string? Stage { get; set; }
     public string? Error { get; set; }
+}
+
+public class MassAdjudicationClaimResult
+{
+    public string Id { get; set; } = string.Empty;
+    public string RunId { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
+    public string GeneratedClaimId { get; set; } = string.Empty;
+    public string? SubmittedClaimId { get; set; }
+    public string ClaimType { get; set; } = string.Empty;
+    public string Outcome { get; set; } = string.Empty;
+    public bool AdjudicationSuccess { get; set; }
+    public string? BusinessDenialCode { get; set; }
+    public string? FailureStage { get; set; }
+    public string? Error { get; set; }
+    public decimal? ActualPlanPayment { get; set; }
+    public decimal? ExpectedPlanPayment { get; set; }
+    public decimal? PaymentDelta { get; set; }
+    public double ElapsedMilliseconds { get; set; }
+    public double SubmitMilliseconds { get; set; }
+    public double AdjudicationMilliseconds { get; set; }
+    public double WritebackMilliseconds { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
 }
 
 public class ServiceAccumulator
@@ -535,6 +563,7 @@ public interface IIdCardService
 public class IdCardOrderView
 {
     public string OrderId { get; set; } = string.Empty;
+    [JsonConverter(typeof(FlexibleClaimStatusJsonConverter))]
     public string Status { get; set; } = string.Empty;
     public string? CardId { get; set; }
     public string? DocumentId { get; set; }
@@ -570,7 +599,8 @@ public class ClaimSummary
     public string MemberId { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;
     public string ProviderId { get; set; } = string.Empty;
-    public string ClaimType { get; set; } = string.Empty; // Professional, Institutional
+    [JsonConverter(typeof(FlexibleClaimTypeJsonConverter))]
+    public string ClaimType { get; set; } = string.Empty; // Professional, Institutional, Dental
     public decimal TotalChargeAmount { get; set; }
     public decimal AllowedAmount { get; set; }
     public decimal PaidAmount { get; set; }
