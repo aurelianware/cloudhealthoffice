@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Portal.Services;
 
@@ -10,6 +11,7 @@ public class TenantContextServiceTests
     private readonly Mock<AuthenticationStateProvider> _authStateProvider;
     private readonly Mock<ITenantService> _tenantService;
     private readonly Mock<ILogger<TenantContextService>> _logger;
+    private readonly IConfiguration _configuration;
     private readonly TenantContextService _sut;
 
     public TenantContextServiceTests()
@@ -17,7 +19,8 @@ public class TenantContextServiceTests
         _authStateProvider = new Mock<AuthenticationStateProvider>();
         _tenantService = new Mock<ITenantService>();
         _logger = new Mock<ILogger<TenantContextService>>();
-        _sut = new TenantContextService(_authStateProvider.Object, _tenantService.Object, _logger.Object);
+        _configuration = new ConfigurationBuilder().Build();
+        _sut = new TenantContextService(_authStateProvider.Object, _tenantService.Object, _logger.Object, _configuration);
     }
 
     [Fact]
