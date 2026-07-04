@@ -152,6 +152,8 @@
                     <MudItem xs="6" md="4">@Metric("Platform Failures", $"{_selectedRun.PlatformFailures:N0}", "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Throughput", $"{_selectedRun.ThroughputClaimsPerSecond:N2}/s", "#7dd3fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("P95 / P99", $"{_selectedRun.P95LatencyMilliseconds:N0} / {_selectedRun.P99LatencyMilliseconds:N0} ms", "#c084fc")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Workflow Checks", $"{_selectedRun.WorkflowMatches:N0} / {_selectedRun.WorkflowScenarios:N0}", "#00ff88")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Workflow Mismatches", $"{_selectedRun.WorkflowMismatches:N0}", _selectedRun.WorkflowMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
                 </MudGrid>
 
                 <MudGrid Spacing="2">
@@ -183,6 +185,7 @@
                 <MudTable Items="_claimResults" Dense="true" Hover="true" T="MassAdjudicationClaimResult" RowsPerPage="10">
                     <HeaderContent>
                         <MudTh>Claim</MudTh>
+                        <MudTh>Validation</MudTh>
                         <MudTh>Outcome</MudTh>
                         <MudTh>Denial / Failure</MudTh>
                         <MudTh>Latency</MudTh>
@@ -203,6 +206,21 @@
                             <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
                                 @context.ClaimType · @ShortId(context.GeneratedClaimId)
                             </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Validation">
+                            @if (!string.IsNullOrWhiteSpace(context.ValidationScenario))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="@ValidationColor(context.ValidationStatus)">
+                                    @ValidationLabel(context.ValidationStatus)
+                                </MudChip>
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
+                                    @context.ValidationScenario
+                                </MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.35);">Unscored</MudText>
+                            }
                         </MudTd>
                         <MudTd DataLabel="Outcome">
                             <MudChip T="string" Size="Size.Small" Color="@OutcomeColor(context.Outcome)">
@@ -389,6 +407,20 @@
         "BusinessDenial" => "Business Denial",
         "PlatformFailure" => "Platform Failure",
         _ => outcome
+    };
+
+    private static Color ValidationColor(string status) => status switch
+    {
+        "Matched" => Color.Success,
+        "Mismatched" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string ValidationLabel(string status) => status switch
+    {
+        "Matched" => "Expected",
+        "Mismatched" => "Mismatch",
+        _ => "Unscored"
     };
 
     private RenderFragment Metric(string label, string value, string color) => builder =>

@@ -18,6 +18,10 @@ public class MassAdjudicationRunRepositoryTests
             Id = "client-supplied-id",
             GeneratedClaimId = "GEN-001",
             ClaimType = "Professional",
+            ValidationScenario = "TxStarInpatientNoAuth",
+            ExpectedOutcome = "BusinessDenial",
+            ExpectedBusinessDenialCode = "PRIOR_AUTH_REQUIRED",
+            ValidationStatus = "Matched",
             Outcome = "Paid",
             AdjudicationSuccess = true
         });
@@ -30,6 +34,8 @@ public class MassAdjudicationRunRepositoryTests
         saved.ClaimResults[0].RunId.Should().Be(saved.Id);
         saved.ClaimResults[0].TenantId.Should().Be(saved.Run.TenantId);
         saved.ClaimResults[0].CreatedAtUtc.Should().Be(saved.CreatedAtUtc);
+        saved.ClaimResults[0].ValidationScenario.Should().Be("TxStarInpatientNoAuth");
+        saved.ClaimResults[0].ValidationStatus.Should().Be("Matched");
     }
 
     [Fact]

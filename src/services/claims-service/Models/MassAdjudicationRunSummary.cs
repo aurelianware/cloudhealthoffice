@@ -11,6 +11,9 @@ public class MassAdjudicationRunSummary
     public int Paid { get; set; }
     public int BusinessDenials { get; set; }
     public int PlatformFailures { get; set; }
+    public int WorkflowScenarios { get; set; }
+    public int WorkflowMatches { get; set; }
+    public int WorkflowMismatches { get; set; }
     public TimeSpan Elapsed { get; set; }
     public double ThroughputClaimsPerSecond { get; set; }
     public double P95LatencyMilliseconds { get; set; }
@@ -69,6 +72,10 @@ public class MassAdjudicationClaimResult
     public string GeneratedClaimId { get; set; } = string.Empty;
     public string? SubmittedClaimId { get; set; }
     public string ClaimType { get; set; } = string.Empty;
+    public string? ValidationScenario { get; set; }
+    public string? ExpectedOutcome { get; set; }
+    public string? ExpectedBusinessDenialCode { get; set; }
+    public string ValidationStatus { get; set; } = "Unspecified";
     public string Outcome { get; set; } = string.Empty;
     public bool AdjudicationSuccess { get; set; }
     public string? BusinessDenialCode { get; set; }
