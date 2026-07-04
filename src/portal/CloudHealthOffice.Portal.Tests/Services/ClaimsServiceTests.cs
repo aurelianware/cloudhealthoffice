@@ -400,7 +400,7 @@ public class ClaimsServiceTests
                 expectedOutcome = "BusinessDenial",
                 expectedBusinessDenialCode = "PRIOR_AUTH_REQUIRED",
                 validationStatus = "Matched",
-                outcome = "Paid",
+                outcome = "BusinessDenial",
                 adjudicationSuccess = true,
                 actualPlanPayment = 95.25m,
                 expectedPlanPayment = 95.25m,
@@ -422,7 +422,7 @@ public class ClaimsServiceTests
         result[0].ClaimType.Should().Be("Professional");
         result[0].ValidationScenario.Should().Be("TxStarInpatientNoAuth");
         result[0].ValidationStatus.Should().Be("Matched");
-        result[0].Outcome.Should().Be("Paid");
+        result[0].Outcome.Should().Be("BusinessDenial");
     }
 
     [Fact]
