@@ -67,6 +67,43 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<List<MassAdjudicationRunSummary>> GetMassAdjudicationRunsAsync(int limit = 25)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<MassAdjudicationRunSummary>>(
+                $"{baseUrl}/mass-adjudication/runs?limit={Math.Clamp(limit, 1, 100)}")
+                ?? new List<MassAdjudicationRunSummary>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
+    public async Task<MassAdjudicationRunSummary?> GetMassAdjudicationRunAsync(string runId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var response = await _httpClient.GetAsync($"{baseUrl}/mass-adjudication/runs/{Uri.EscapeDataString(runId)}");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MassAdjudicationRunSummary>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
     public async Task<string> SubmitClaimAsync(SubmitClaimRequest request)
     {
         var baseUrl = _configuration["Services:ClaimsService"];

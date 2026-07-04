@@ -107,6 +107,11 @@ if (!string.IsNullOrWhiteSpace(options.SummaryJsonPath))
     await WriteSummaryJsonAsync(options.SummaryJsonPath, summary, json);
 }
 
+if (!options.NoPublishSummary)
+{
+    await PublishSummaryAsync(http, options, summary, json);
+}
+
 if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure))
 {
     Environment.ExitCode = 1;
@@ -850,7 +855,7 @@ static IReadOnlyList<(T Item, int Count)> AllocateCounts<T>(int total, IReadOnly
         .ToList();
 }
 
-static MccValidationSummary BuildSummary(
+static MassAdjudicationRunSummary BuildSummary(
     List<ClaimValidationResult> results,
     TimeSpan elapsed,
     ValidatorOptions options,
@@ -877,16 +882,16 @@ static MccValidationSummary BuildSummary(
         .GroupBy(r => r.BusinessDenialCode ?? "UNKNOWN")
         .OrderByDescending(g => g.Count())
         .ThenBy(g => g.Key, StringComparer.Ordinal)
-        .Select(g => new MccBusinessDenialSummary(g.Key, g.Count()))
+        .Select(g => new MassAdjudicationBusinessDenialSummary(g.Key, g.Count()))
         .ToList();
     var failures = results
         .Where(r => r.Outcome is ClaimValidationOutcome.PlatformFailure)
         .Take(5)
-        .Select(r => new MccFailureSummary(r.GeneratedClaimId, r.FailureStage, r.Error))
+        .Select(r => new MassAdjudicationFailureSummary(r.GeneratedClaimId, r.FailureStage, r.Error))
         .ToList();
 
-    return new MccValidationSummary(
-        new MccValidationRun(
+    return new MassAdjudicationRunSummary(
+        new MassAdjudicationRun(
             options.TenantId,
             options.Claims,
             options.Seed,
@@ -915,7 +920,7 @@ static MccValidationSummary BuildSummary(
         failures);
 }
 
-static void WriteSummary(MccValidationSummary summary)
+static void WriteSummary(MassAdjudicationRunSummary summary)
 {
     Console.WriteLine("Validation summary");
     Console.WriteLine($"  Total claims:       {summary.TotalClaims:N0}");
@@ -947,7 +952,7 @@ static void WriteSummary(MccValidationSummary summary)
     }
 }
 
-static MccStageTiming? BuildStageTiming(string label, IEnumerable<TimeSpan> durations)
+static MassAdjudicationStageTiming? BuildStageTiming(string label, IEnumerable<TimeSpan> durations)
 {
     var values = durations
         .Select(d => d.TotalMilliseconds)
@@ -960,10 +965,10 @@ static MccStageTiming? BuildStageTiming(string label, IEnumerable<TimeSpan> dura
         return null;
     }
 
-    return new MccStageTiming(label, values.Average(), Percentile(values, 0.95));
+    return new MassAdjudicationStageTiming(label, values.Average(), Percentile(values, 0.95));
 }
 
-static void WriteStageTiming(MccStageTiming? timing)
+static void WriteStageTiming(MassAdjudicationStageTiming? timing)
 {
     if (timing is null)
     {
@@ -973,7 +978,7 @@ static void WriteStageTiming(MccStageTiming? timing)
     Console.WriteLine($"  {timing.Label,-12} avg/p95: {timing.AverageMilliseconds:N0} ms / {timing.P95Milliseconds:N0} ms");
 }
 
-static async Task WriteSummaryJsonAsync(string path, MccValidationSummary summary, JsonSerializerOptions json)
+static async Task WriteSummaryJsonAsync(string path, MassAdjudicationRunSummary summary, JsonSerializerOptions json)
 {
     var directory = Path.GetDirectoryName(Path.GetFullPath(path));
     if (!string.IsNullOrWhiteSpace(directory))
@@ -983,6 +988,30 @@ static async Task WriteSummaryJsonAsync(string path, MccValidationSummary summar
 
     await File.WriteAllTextAsync(path, JsonSerializer.Serialize(summary, json));
     Console.WriteLine($"  Summary JSON:       {path}");
+}
+
+static async Task PublishSummaryAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    MassAdjudicationRunSummary summary,
+    JsonSerializerOptions json)
+{
+    try
+    {
+        using var response = await http.PostAsJsonAsync($"{options.ClaimsUrl}/api/mass-adjudication/runs", summary, json);
+        if (response.IsSuccessStatusCode)
+        {
+            Console.WriteLine("  Dashboard summary: published");
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync();
+        Console.WriteLine($"  Dashboard summary: publish skipped ({(int)response.StatusCode} {body})");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  Dashboard summary: publish skipped ({ex.Message})");
+    }
 }
 
 static double Percentile(double[] values, double percentile)
@@ -1017,6 +1046,7 @@ static void PrintUsage()
       --progress-every <count>   Report progress every N claims (default: 25)
       --parallelism <count>      Number of claims to process concurrently (default: 4)
       --summary-json <path>      Write machine-readable validation summary JSON
+      --no-publish-summary       Do not publish the completed run to claims-service
       -h, --help                 Show help
 
     Example:
@@ -1054,6 +1084,7 @@ internal sealed record ValidatorOptions(
     int ProgressEvery,
     int Parallelism,
     string? SummaryJsonPath,
+    bool NoPublishSummary,
     bool ShowHelp)
 {
     public const int MaxClaims = 10_000;
@@ -1102,6 +1133,9 @@ internal sealed record ValidatorOptions(
                 case "--summary-json" when i + 1 < args.Length:
                     options.SummaryJsonPath = args[++i];
                     break;
+                case "--no-publish-summary":
+                    options.NoPublishSummary = true;
+                    break;
                 case "--help" or "-h":
                     options.ShowHelp = true;
                     break;
@@ -1133,6 +1167,7 @@ internal sealed record ValidatorOptions(
             Math.Max(1, options.ProgressEvery),
             Math.Max(1, options.Parallelism),
             options.SummaryJsonPath,
+            options.NoPublishSummary,
             options.ShowHelp);
     }
 
@@ -1150,6 +1185,7 @@ internal sealed record ValidatorOptions(
         public int ProgressEvery { get; set; } = 10;
         public int Parallelism { get; set; } = 4;
         public string? SummaryJsonPath { get; set; }
+        public bool NoPublishSummary { get; set; }
         public bool ShowHelp { get; set; }
     }
 }
@@ -1179,8 +1215,8 @@ internal sealed record ClaimValidationResult(
     string? FailureStage,
     string? Error);
 
-internal sealed record MccValidationSummary(
-    MccValidationRun Run,
+internal sealed record MassAdjudicationRunSummary(
+    MassAdjudicationRun Run,
     int TotalClaims,
     int Processed,
     int Paid,
@@ -1190,14 +1226,14 @@ internal sealed record MccValidationSummary(
     double ThroughputClaimsPerSecond,
     double P95LatencyMilliseconds,
     double P99LatencyMilliseconds,
-    MccStageTiming? SubmitTiming,
-    MccStageTiming? AdjudicateTiming,
-    MccStageTiming? WritebackTiming,
+    MassAdjudicationStageTiming? SubmitTiming,
+    MassAdjudicationStageTiming? AdjudicateTiming,
+    MassAdjudicationStageTiming? WritebackTiming,
     decimal? AveragePaymentDelta,
-    IReadOnlyList<MccBusinessDenialSummary> BusinessDenialBreakdown,
-    IReadOnlyList<MccFailureSummary> SampleFailures);
+    IReadOnlyList<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown,
+    IReadOnlyList<MassAdjudicationFailureSummary> SampleFailures);
 
-internal sealed record MccValidationRun(
+internal sealed record MassAdjudicationRun(
     string TenantId,
     int RequestedClaims,
     int Seed,
@@ -1210,16 +1246,16 @@ internal sealed record MccValidationRun(
     DateTimeOffset StartedAtUtc,
     DateTimeOffset CompletedAtUtc);
 
-internal sealed record MccStageTiming(
+internal sealed record MassAdjudicationStageTiming(
     string Label,
     double AverageMilliseconds,
     double P95Milliseconds);
 
-internal sealed record MccBusinessDenialSummary(
+internal sealed record MassAdjudicationBusinessDenialSummary(
     string Code,
     int Count);
 
-internal sealed record MccFailureSummary(
+internal sealed record MassAdjudicationFailureSummary(
     string GeneratedClaimId,
     string? Stage,
     string? Error);
