@@ -46,6 +46,7 @@ public class TenantContextService : ITenantContextService
     private readonly AuthenticationStateProvider _authenticationStateProvider;
     private readonly ITenantService _tenantService;
     private readonly ILogger<TenantContextService> _logger;
+    private readonly IConfiguration _configuration;
     private TenantContext? _cachedContext;
     private List<TenantSubscription>? _cachedAvailableTenants;
     private string? _homeTenantId; // Original Azure AD tenant ID from claims — never changes after first resolution
@@ -59,11 +60,13 @@ public class TenantContextService : ITenantContextService
     public TenantContextService(
         AuthenticationStateProvider authenticationStateProvider,
         ITenantService tenantService,
-        ILogger<TenantContextService> logger)
+        ILogger<TenantContextService> logger,
+        IConfiguration configuration)
     {
         _authenticationStateProvider = authenticationStateProvider;
         _tenantService = tenantService;
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task<TenantContext?> GetCurrentTenantContextAsync()
@@ -81,6 +84,14 @@ public class TenantContextService : ITenantContextService
         {
             _logger.LogDebug("User not authenticated, no tenant context available");
             return null;
+        }
+
+        if (IsLocalDemoUser(user))
+        {
+            _cachedContext = BuildLocalDemoTenantContext(user);
+            _logger.LogInformation("Tenant context resolved via local demo auth: {TenantName} ({TenantId})",
+                _cachedContext.TenantName, _cachedContext.TenantId);
+            return _cachedContext;
         }
 
         // Extract Azure AD Tenant ID from claims
@@ -197,6 +208,29 @@ public class TenantContextService : ITenantContextService
         if (currentContext == null)
             return new List<TenantSubscription>();
 
+        if (currentContext.IsDemo && string.Equals(
+                _configuration["Authentication:Mode"],
+                "LocalDemo",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _cachedAvailableTenants = new List<TenantSubscription>
+            {
+                new()
+                {
+                    TenantId = currentContext.TenantId,
+                    AzureTenantId = currentContext.AzureTenantId,
+                    OrganizationName = currentContext.TenantName,
+                    SubscriptionStatus = currentContext.SubscriptionStatus,
+                    Tier = currentContext.SubscriptionTier,
+                    IsDemo = true,
+                    AdminEmails = string.IsNullOrWhiteSpace(currentContext.UserEmail)
+                        ? new List<string>()
+                        : new List<string> { currentContext.UserEmail }
+                }
+            };
+            return _cachedAvailableTenants;
+        }
+
         var userEmail = currentContext.UserEmail;
         if (string.IsNullOrEmpty(userEmail))
             return new List<TenantSubscription>();
@@ -296,6 +330,38 @@ public class TenantContextService : ITenantContextService
             SubscriptionStatus = subscription.SubscriptionStatus ?? "Unknown",
             IsDemo = subscription.IsDemo,
             UserEmail = userEmail
+        };
+    }
+
+    private bool IsLocalDemoUser(ClaimsPrincipal user)
+        => string.Equals(
+                _configuration["Authentication:Mode"],
+                "LocalDemo",
+                StringComparison.OrdinalIgnoreCase)
+            && user.HasClaim("cho_local_demo", "true");
+
+    private TenantContext BuildLocalDemoTenantContext(ClaimsPrincipal user)
+    {
+        var tenantId = _configuration["Authentication:LocalDemo:TenantId"]
+            ?? user.FindFirst("extension_TenantId")?.Value
+            ?? "demo";
+        var azureTenantId = _configuration["Authentication:LocalDemo:AzureTenantId"]
+            ?? user.FindFirst("tid")?.Value
+            ?? "local-demo";
+        var tenantName = _configuration["Authentication:LocalDemo:TenantName"]
+            ?? "Local Demo Tenant";
+        var email = user.FindFirst(ClaimTypes.Email)?.Value
+            ?? user.FindFirst("preferred_username")?.Value;
+
+        return new TenantContext
+        {
+            TenantId = tenantId,
+            TenantName = tenantName,
+            AzureTenantId = azureTenantId,
+            SubscriptionTier = "local-demo",
+            SubscriptionStatus = "Active",
+            IsDemo = true,
+            UserEmail = email
         };
     }
 

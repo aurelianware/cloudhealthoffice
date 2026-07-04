@@ -8,6 +8,7 @@
 @inject HttpClient HttpClient
 @inject ISnackbar Snackbar
 @inject ILogger<MainLayout> Logger
+@inject IConfiguration Configuration
 
 <MudThemeProvider Theme="_theme" />
 <MudDialogProvider />
@@ -127,6 +128,10 @@
                         <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Claims
+                        </MudNavLink>
+                        <MudNavLink Href="/mass-adjudication-runs" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Mass Adjudication
                         </MudNavLink>
                         <MudNavLink Href="/work-queues" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Queue"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
@@ -408,7 +413,19 @@
     private bool _tenantLoadComplete;
     private List<TenantSubscription> _availableTenants = new();
 
-    private void SignIn() => Navigation.NavigateTo("/MicrosoftIdentity/Account/SignIn", forceLoad: true);
+    private bool IsLocalDemoAuth()
+        => string.Equals(
+            Configuration["Authentication:Mode"],
+            "LocalDemo",
+            StringComparison.OrdinalIgnoreCase);
+
+    private void SignIn()
+    {
+        var signInPath = IsLocalDemoAuth()
+            ? "/local-demo/sign-in"
+            : "/MicrosoftIdentity/Account/SignIn";
+        Navigation.NavigateTo(signInPath, forceLoad: true);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -535,8 +552,10 @@
 
     private void Logout()
     {
-        // Navigate to Microsoft Identity logout endpoint
-        Navigation.NavigateTo("/MicrosoftIdentity/Account/SignOut", forceLoad: true);
+        var signOutPath = IsLocalDemoAuth()
+            ? "/local-demo/sign-out"
+            : "/MicrosoftIdentity/Account/SignOut";
+        Navigation.NavigateTo(signOutPath, forceLoad: true);
     }
 
     private MudTheme _theme = new()

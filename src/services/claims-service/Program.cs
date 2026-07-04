@@ -37,6 +37,8 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
 {
     builder.Services.AddScoped<IClaimRepository, ClaimRepositoryMongo>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryMongo>();
+    builder.Services.AddScoped<IMassAdjudicationRunRepository, MassAdjudicationRunRepositoryMongo>();
+    builder.Services.AddHostedService<MassAdjudicationRunIndexInitializer>();
 
     // Claim version event publisher (5.1) — Mongo append-only stream is the
     // system-of-record for the version chain. Mirrors
@@ -68,6 +70,7 @@ else
 
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryCosmos>();
+    builder.Services.AddSingleton<IMassAdjudicationRunRepository, InMemoryMassAdjudicationRunRepository>();
 
     // 5.1b — Cosmos partition-key migration tooling. Resolves the source
     // (legacy /memberId Bicep / /Id runtime) and target (canonical

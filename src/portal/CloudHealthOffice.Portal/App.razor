@@ -1,4 +1,5 @@
 @inject NavigationManager Navigation
+@inject IConfiguration Configuration
 
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly">
@@ -8,7 +9,10 @@
                     <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
                         <NotAuthorized>
                             @{
-                                Navigation.NavigateTo($"/MicrosoftIdentity/Account/SignIn?redirectUri={Uri.EscapeDataString(Navigation.Uri)}", forceLoad: true);
+                                var signInPath = IsLocalDemoAuth()
+                                    ? "/local-demo/sign-in"
+                                    : "/MicrosoftIdentity/Account/SignIn";
+                                Navigation.NavigateTo($"{signInPath}?redirectUri={Uri.EscapeDataString(Navigation.Uri)}", forceLoad: true);
                             }
                         </NotAuthorized>
                         <Authorizing>
@@ -35,3 +39,11 @@
         </NotFound>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+    private bool IsLocalDemoAuth()
+        => string.Equals(
+            Configuration["Authentication:Mode"],
+            "LocalDemo",
+            StringComparison.OrdinalIgnoreCase);
+}
