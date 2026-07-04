@@ -37,7 +37,9 @@ public sealed class PriorAuthRulesController : ControllerBase
             {
                 var existing = await _repository.ListAsync(tenantId: null, stateCode: rule.StateCode, ct);
                 existingRuleIds = new HashSet<string>(
-                    existing.Select(r => r.RuleId),
+                    existing
+                        .Where(r => r.TenantId is null)
+                        .Select(r => r.RuleId),
                     StringComparer.OrdinalIgnoreCase);
                 existingRuleIdsByState[rule.StateCode] = existingRuleIds;
             }

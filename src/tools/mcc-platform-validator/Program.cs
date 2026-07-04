@@ -362,7 +362,7 @@ static void InjectPriorAuthScenarios(List<SyntheticClaim> claims, ValidatorOptio
         return;
     }
 
-    var requested = Math.Max(1, (int)Math.Round(claims.Count * options.PriorAuthScenarioRate, MidpointRounding.AwayFromZero));
+    var requested = Math.Max(0, (int)Math.Round(claims.Count * options.PriorAuthScenarioRate, MidpointRounding.AwayFromZero));
     var injected = 0;
 
     foreach (var claim in candidates.Take(Math.Min(requested, candidates.Count)))
