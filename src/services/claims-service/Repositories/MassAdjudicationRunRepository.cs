@@ -12,31 +12,17 @@ public interface IMassAdjudicationRunRepository
 
 public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRepository
 {
+    internal const string CollectionName = "MassAdjudicationRuns";
     private readonly IMongoCollection<MassAdjudicationRunSummary> _collection;
 
     public MassAdjudicationRunRepositoryMongo(IMongoDatabase database)
     {
-        _collection = database.GetCollection<MassAdjudicationRunSummary>("MassAdjudicationRuns");
-
-        var keys = Builders<MassAdjudicationRunSummary>.IndexKeys;
-        _collection.Indexes.CreateMany(new[]
-        {
-            new CreateIndexModel<MassAdjudicationRunSummary>(
-                keys.Ascending(x => x.Run.TenantId).Descending(x => x.Run.StartedAtUtc),
-                new CreateIndexOptions { Name = "tenant_started_desc" }),
-            new CreateIndexModel<MassAdjudicationRunSummary>(
-                keys.Ascending(x => x.Run.TenantId).Ascending(x => x.Id),
-                new CreateIndexOptions { Name = "tenant_run_id" })
-        });
+        _collection = database.GetCollection<MassAdjudicationRunSummary>(CollectionName);
     }
 
     public async Task<MassAdjudicationRunSummary> SaveAsync(MassAdjudicationRunSummary summary, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(summary.Id))
-        {
-            summary.Id = Guid.NewGuid().ToString("N");
-        }
-
+        summary.Id = Guid.NewGuid().ToString("N");
         summary.CreatedAtUtc = DateTime.UtcNow;
         await _collection.InsertOneAsync(summary, cancellationToken: ct);
         return summary;
@@ -71,11 +57,7 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
 
     public Task<MassAdjudicationRunSummary> SaveAsync(MassAdjudicationRunSummary summary, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(summary.Id))
-        {
-            summary.Id = Guid.NewGuid().ToString("N");
-        }
-
+        summary.Id = Guid.NewGuid().ToString("N");
         summary.CreatedAtUtc = DateTime.UtcNow;
 
         lock (_sync)

@@ -40,10 +40,16 @@ public sealed class MassAdjudicationRunsController : ControllerBase
 
     [HttpPost]
     [ProducesResponseType(typeof(MassAdjudicationRunSummary), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MassAdjudicationRunSummary>> Create(
-        [FromBody] MassAdjudicationRunSummary summary,
+        [FromBody] MassAdjudicationRunSummary? summary,
         CancellationToken ct = default)
     {
+        if (summary?.Run is null)
+        {
+            return BadRequest(new { error = "Run payload is required" });
+        }
+
         var tenantId = GetTenantId();
         summary.Run.TenantId = tenantId;
 
