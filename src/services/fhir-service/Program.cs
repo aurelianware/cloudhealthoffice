@@ -257,7 +257,9 @@ builder.Services.AddHttpClient(UpstreamClientNames.ClaimsService, client =>
 
 // ── Da Vinci CRD / DTR / Bulk ─────────────────────────────────────────────────
 builder.Services.Configure<CrdConfig>(builder.Configuration.GetSection("Cms0057:Crd"));
-builder.Services.AddSingleton<ICrdService, CrdService>();
+builder.Services.AddMemoryCache(options => options.SizeLimit = 1024);
+builder.Services.AddSingleton<ICrdClassificationStore, CrdClassificationStore>();
+builder.Services.AddScoped<ICrdService, CrdService>();
 builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:Dtr"));
 builder.Services.AddSingleton<IDtrService, DtrService>();
 builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
