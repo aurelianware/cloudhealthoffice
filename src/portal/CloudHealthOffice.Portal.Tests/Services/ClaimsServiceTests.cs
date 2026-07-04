@@ -302,6 +302,16 @@ public class ClaimsServiceTests
         result.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task GetMassAdjudicationRunsAsync_WhenApiReturnsEmptyBody_ReturnsEmptyList()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, string.Empty)));
+
+        var result = await sut.GetMassAdjudicationRunsAsync();
+
+        result.Should().BeEmpty();
+    }
+
     // ── GetMassAdjudicationRunAsync ──
 
     [Fact]
@@ -349,6 +359,16 @@ public class ClaimsServiceTests
         var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, "null")));
 
         var result = await sut.GetMassAdjudicationRunAsync("run-none");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetMassAdjudicationRunAsync_WhenApiReturnsEmptyBody_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, string.Empty)));
+
+        var result = await sut.GetMassAdjudicationRunAsync("run-empty");
 
         result.Should().BeNull();
     }

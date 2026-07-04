@@ -11,6 +11,7 @@ namespace CloudHealthOffice.Portal.Services;
 
 public class ClaimsService : IClaimsService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ClaimsService> _logger;
@@ -72,8 +73,10 @@ public class ClaimsService : IClaimsService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<List<MassAdjudicationRunSummary>>(
-                $"{baseUrl}/mass-adjudication/runs?limit={Math.Clamp(limit, 1, 100)}")
+            var response = await _httpClient.GetAsync(
+                $"{baseUrl}/mass-adjudication/runs?limit={Math.Clamp(limit, 1, 100)}");
+            response.EnsureSuccessStatusCode();
+            return await ReadOptionalJsonAsync<List<MassAdjudicationRunSummary>>(response)
                 ?? new List<MassAdjudicationRunSummary>();
         }
         catch (HttpRequestException ex)
@@ -95,7 +98,7 @@ public class ClaimsService : IClaimsService
             }
 
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<MassAdjudicationRunSummary>();
+            return await ReadOptionalJsonAsync<MassAdjudicationRunSummary>(response);
         }
         catch (HttpRequestException ex)
         {
@@ -205,6 +208,22 @@ public class ClaimsService : IClaimsService
     private class SubmitClaimResponse
     {
         public string ClaimId { get; set; } = string.Empty;
+    }
+
+    private static async Task<T?> ReadOptionalJsonAsync<T>(HttpResponseMessage response)
+    {
+        if (response.Content is null)
+        {
+            return default;
+        }
+
+        var body = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(body) || string.Equals(body.Trim(), "null", StringComparison.OrdinalIgnoreCase))
+        {
+            return default;
+        }
+
+        return JsonSerializer.Deserialize<T>(body, JsonOptions);
     }
 }
 
