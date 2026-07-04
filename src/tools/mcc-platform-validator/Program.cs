@@ -38,6 +38,7 @@ Console.WriteLine($"  Provider URL:{options.ProviderUrl}");
 Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
 Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
+Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine();
 
 await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
@@ -233,7 +234,7 @@ static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions op
         payer = "Cloud Health Office MCC",
         effectiveDate = "2025-01-01T00:00:00Z",
         planType = "PPO",
-        lineOfBusiness = "Commercial",
+        lineOfBusiness = LineOfBusinessName(options.LineOfBusiness),
         isActive = true,
         networkTiers = new[]
         {
@@ -494,7 +495,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
         patientFirstName = claim.Member.FirstName,
         patientLastName = claim.Member.LastName,
         patientRelationship = claim.Member.Relationship,
-        lineOfBusiness = 1,
+        lineOfBusiness = options.LineOfBusiness,
         billingProviderNPI = claim.BillingProvider.Npi,
         billingProviderName = claim.BillingProvider.FullName,
         renderingProviderNPI = claim.RenderingProvider.Npi,
@@ -563,7 +564,7 @@ static async Task<AdjudicationResponseDto> AdjudicateClaimAsync(
         serviceDate = DateOnly.FromDateTime(claim.DateOfService),
         providerNpi = claim.RenderingProvider.Npi,
         networkTier,
-        lineOfBusiness = 1,
+        lineOfBusiness = options.LineOfBusiness,
         claimType = NormalizeClaimType(claim),
         stateCode = claim.RenderingProvider.State,
         providerTaxonomy = claim.RenderingProvider.TaxonomyCode,
@@ -646,6 +647,15 @@ static string? NormalizeBusinessDenialCode(string? code)
     var trimmed = code.Trim();
     return trimmed.All(char.IsDigit) ? $"CARC_{trimmed}" : trimmed;
 }
+
+static string LineOfBusinessName(int lineOfBusiness) => lineOfBusiness switch
+{
+    2 => "Medicare",
+    3 => "Medicaid",
+    4 => "CHIP",
+    5 => "Exchange",
+    _ => "Commercial"
+};
 
 static async Task UpdateClaimAdjudicationAsync(
     HttpClient http,
@@ -923,6 +933,7 @@ static MassAdjudicationRunSummary BuildSummary(
             options.ProviderUrl,
             options.SeedProviders,
             options.SkipClaimUpdate,
+            options.LineOfBusiness,
             runStartedAtUtc,
             runCompletedAtUtc),
         results.Count,
@@ -1068,6 +1079,7 @@ static void PrintUsage()
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 25)
       --parallelism <count>      Number of claims to process concurrently (default: 4)
+      --line-of-business <code>  Adjudication line of business: 1 Commercial, 2 Medicare, 3 Medicaid (default: 3)
       --summary-json <path>      Write machine-readable validation summary JSON
       --no-publish-summary       Do not publish the completed run to claims-service
       --claim-results-limit <n>  Number of per-claim results to publish with the run (default: 1000)
@@ -1107,6 +1119,7 @@ internal sealed record ValidatorOptions(
     int TimeoutSeconds,
     int ProgressEvery,
     int Parallelism,
+    int LineOfBusiness,
     string? SummaryJsonPath,
     bool NoPublishSummary,
     int PublishClaimResultsLimit,
@@ -1155,6 +1168,9 @@ internal sealed record ValidatorOptions(
                 case "--parallelism" or "-p" when i + 1 < args.Length:
                     options.Parallelism = int.Parse(args[++i]);
                     break;
+                case "--line-of-business" when i + 1 < args.Length:
+                    options.LineOfBusiness = int.Parse(args[++i]);
+                    break;
                 case "--summary-json" when i + 1 < args.Length:
                     options.SummaryJsonPath = args[++i];
                     break;
@@ -1196,6 +1212,7 @@ internal sealed record ValidatorOptions(
             Math.Max(5, options.TimeoutSeconds),
             Math.Max(1, options.ProgressEvery),
             Math.Max(1, options.Parallelism),
+            Math.Clamp(options.LineOfBusiness, 1, 6),
             options.SummaryJsonPath,
             options.NoPublishSummary,
             Math.Clamp(options.PublishClaimResultsLimit, 0, effectiveClaims),
@@ -1215,6 +1232,7 @@ internal sealed record ValidatorOptions(
         public int TimeoutSeconds { get; set; } = 60;
         public int ProgressEvery { get; set; } = 10;
         public int Parallelism { get; set; } = 4;
+        public int LineOfBusiness { get; set; } = 3;
         public string? SummaryJsonPath { get; set; }
         public bool NoPublishSummary { get; set; }
         public int PublishClaimResultsLimit { get; set; } = 1000;
@@ -1276,6 +1294,7 @@ internal sealed record MassAdjudicationRun(
     string ProviderUrl,
     bool SeedProviders,
     bool SkipClaimUpdate,
+    int LineOfBusiness,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset CompletedAtUtc);
 
