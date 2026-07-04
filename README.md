@@ -7,7 +7,7 @@
 CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engines.
 Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrate workloads on your timeline.
 
-[![Version](https://img.shields.io/badge/version-v4.2.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.2.0)
+[![Version](https://img.shields.io/badge/version-v4.4.0-blue)](./CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/tests-2800%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
 [![Test Projects](https://img.shields.io/badge/test%20projects-44-brightgreen)](./tests/)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
@@ -214,12 +214,14 @@ Most health plans follow a phased approach:
 git clone https://github.com/aurelianware/cloudhealthoffice.git
 cd cloudhealthoffice
 
-# Build and run
-docker-compose up -d
+# Build and run the core adjudication services (mongo + redis + claims + benefit-plan + ...)
+docker compose --profile core up -d
 
 # Verify
-curl http://localhost:5000/health
+curl http://localhost:5001/health/live
 ```
+
+`docker compose up -d` with no `--profile` only starts infra (Mongo + Redis) — see the port map and profile list at the top of [docker-compose.yml](docker-compose.yml). Use `--profile finance` or `--profile fhir` (or combine flags) to bring up additional service groups.
 
 ### Full Development Stack
 
