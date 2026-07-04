@@ -387,7 +387,7 @@ if (useLocalDemoAuth)
         }
 
         var email = builder.Configuration["Authentication:LocalDemo:Email"]
-            ?? "local-demo@cloudhealthoffice.local";
+            ?? "local-demo-user";
         var name = builder.Configuration["Authentication:LocalDemo:DisplayName"]
             ?? "Local Demo Admin";
         var tenantId = builder.Configuration["Authentication:LocalDemo:TenantId"]
