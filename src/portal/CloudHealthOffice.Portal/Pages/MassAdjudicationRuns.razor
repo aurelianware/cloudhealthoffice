@@ -99,7 +99,7 @@
                         @context.Run.StartedAtUtc.LocalDateTime.ToString("MM/dd HH:mm")
                     </MudButton>
                     <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
-                        @ShortId(context.Id) · p@context.Run.Parallelism
+                        @($"{ShortId(context.Id)} · p{context.Run.Parallelism}")
                     </MudText>
                 </MudTd>
                 <MudTd DataLabel="Processed">

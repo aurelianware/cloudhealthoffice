@@ -600,9 +600,13 @@ public class AuthorizationService : IAuthorizationService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthorizationService> _logger;
-    private readonly ITokenAcquisition _tokenAcquisition;
+    private readonly ITokenAcquisition? _tokenAcquisition;
 
-    public AuthorizationService(HttpClient httpClient, IConfiguration configuration, ILogger<AuthorizationService> logger, ITokenAcquisition tokenAcquisition)
+    public AuthorizationService(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        ILogger<AuthorizationService> logger,
+        ITokenAcquisition? tokenAcquisition = null)
     {
         _httpClient = httpClient;
         _configuration = configuration;
@@ -664,10 +668,22 @@ public class AuthorizationService : IAuthorizationService
 
     private async Task SetBearerTokenAsync()
     {
+        if (_tokenAcquisition is null || IsLocalDemoAuth())
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = null;
+            return;
+        }
+
         var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Authorization.ReadWrite" };
         var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
+
+    private bool IsLocalDemoAuth()
+        => string.Equals(
+            _configuration["Authentication:Mode"],
+            "LocalDemo",
+            StringComparison.OrdinalIgnoreCase);
 
     private class SubmitAuthorizationResponse
     {
@@ -1192,9 +1208,13 @@ public class AttachmentService : IAttachmentService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AttachmentService> _logger;
-    private readonly ITokenAcquisition _tokenAcquisition;
+    private readonly ITokenAcquisition? _tokenAcquisition;
 
-    public AttachmentService(HttpClient httpClient, IConfiguration configuration, ILogger<AttachmentService> logger, ITokenAcquisition tokenAcquisition)
+    public AttachmentService(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        ILogger<AttachmentService> logger,
+        ITokenAcquisition? tokenAcquisition = null)
     {
         _httpClient = httpClient;
         _configuration = configuration;
@@ -1277,10 +1297,22 @@ public class AttachmentService : IAttachmentService
 
     private async Task SetBearerTokenAsync()
     {
+        if (_tokenAcquisition is null || IsLocalDemoAuth())
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = null;
+            return;
+        }
+
         var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Attachments.ReadWrite" };
         var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
+
+    private bool IsLocalDemoAuth()
+        => string.Equals(
+            _configuration["Authentication:Mode"],
+            "LocalDemo",
+            StringComparison.OrdinalIgnoreCase);
 
     private class UploadAttachmentResponse
     {
