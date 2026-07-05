@@ -19,11 +19,11 @@ public class MccWorkflowValidationTests
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
         var status = MccWorkflowValidation.ValidationStatus(
             expected,
-            MccValidationOutcome.Paid.ToString(),
+            ClaimValidationOutcome.Paid,
             actualBusinessDenialCode: null);
 
         Assert.Equal(MccWorkflowValidation.CleanProfessionalPaidScenario, expected.Scenario);
-        Assert.Equal(MccValidationOutcome.Paid.ToString(), expected.ExpectedOutcome);
+        Assert.Equal(ClaimValidationOutcome.Paid, expected.ExpectedOutcome);
         Assert.Null(expected.ExpectedBusinessDenialCode);
         Assert.Equal("Matched", status);
     }
@@ -42,11 +42,11 @@ public class MccWorkflowValidationTests
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
         var status = MccWorkflowValidation.ValidationStatus(
             expected,
-            MccValidationOutcome.BusinessDenial.ToString(),
+            ClaimValidationOutcome.BusinessDenial,
             MccWorkflowValidation.PriorAuthRequiredCode);
 
         Assert.Equal(MccWorkflowValidation.TexasStarInpatientNoAuthScenario, expected.Scenario);
-        Assert.Equal(MccValidationOutcome.BusinessDenial.ToString(), expected.ExpectedOutcome);
+        Assert.Equal(ClaimValidationOutcome.BusinessDenial, expected.ExpectedOutcome);
         Assert.Equal(MccWorkflowValidation.PriorAuthRequiredCode, expected.ExpectedBusinessDenialCode);
         Assert.Equal("Matched", status);
     }
@@ -65,7 +65,7 @@ public class MccWorkflowValidationTests
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
         var status = MccWorkflowValidation.ValidationStatus(
             expected,
-            MccValidationOutcome.BusinessDenial.ToString(),
+            ClaimValidationOutcome.BusinessDenial,
             "CARC_96");
 
         Assert.Equal("Mismatched", status);
@@ -85,7 +85,7 @@ public class MccWorkflowValidationTests
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
         var status = MccWorkflowValidation.ValidationStatus(
             expected,
-            MccValidationOutcome.Paid.ToString(),
+            ClaimValidationOutcome.Paid,
             actualBusinessDenialCode: null);
 
         Assert.Null(expected.Scenario);

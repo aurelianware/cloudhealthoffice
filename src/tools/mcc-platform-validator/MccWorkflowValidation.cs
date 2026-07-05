@@ -2,16 +2,9 @@ using CloudHealthOffice.BenchmarkClaimGenerator.Models;
 
 namespace CloudHealthOffice.Tools.MccPlatformValidator;
 
-public enum MccValidationOutcome
-{
-    Paid,
-    BusinessDenial,
-    PlatformFailure
-}
-
 public sealed record ExpectedValidation(
     string? Scenario,
-    string? ExpectedOutcome,
+    ClaimValidationOutcome? ExpectedOutcome,
     string? ExpectedBusinessDenialCode)
 {
     public static ExpectedValidation Unspecified { get; } = new(null, null, null);
@@ -34,7 +27,7 @@ public static class MccWorkflowValidation
         {
             return new ExpectedValidation(
                 CleanProfessionalPaidScenario,
-                MccValidationOutcome.Paid.ToString(),
+                ClaimValidationOutcome.Paid,
                 null);
         }
 
@@ -48,14 +41,14 @@ public static class MccWorkflowValidation
         return isTxStarInpatientNoAuth
             ? new ExpectedValidation(
                 TexasStarInpatientNoAuthScenario,
-                MccValidationOutcome.BusinessDenial.ToString(),
+                ClaimValidationOutcome.BusinessDenial,
                 PriorAuthRequiredCode)
             : ExpectedValidation.Unspecified;
     }
 
     public static string ValidationStatus(
         ExpectedValidation expected,
-        string actualOutcome,
+        ClaimValidationOutcome actualOutcome,
         string? actualBusinessDenialCode)
     {
         if (expected.ExpectedOutcome is null)
@@ -63,7 +56,7 @@ public static class MccWorkflowValidation
             return "Unspecified";
         }
 
-        if (!string.Equals(expected.ExpectedOutcome, actualOutcome, StringComparison.Ordinal))
+        if (expected.ExpectedOutcome != actualOutcome)
         {
             return "Mismatched";
         }

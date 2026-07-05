@@ -172,9 +172,9 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             submitted.Id,
             claim.ClaimType,
             expectedValidation.Scenario,
-            expectedValidation.ExpectedOutcome,
+            expectedValidation.ExpectedOutcome?.ToString(),
             expectedValidation.ExpectedBusinessDenialCode,
-            MccWorkflowValidation.ValidationStatus(expectedValidation, outcome.ToString(), businessDenialCode),
+            MccWorkflowValidation.ValidationStatus(expectedValidation, outcome, businessDenialCode),
             outcome,
             adjudicated.Success,
             adjudicated.Totals.PlanPayment,
@@ -196,9 +196,9 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             null,
             claim.ClaimType,
             expectedValidation.Scenario,
-            expectedValidation.ExpectedOutcome,
+            expectedValidation.ExpectedOutcome?.ToString(),
             expectedValidation.ExpectedBusinessDenialCode,
-            MccWorkflowValidation.ValidationStatus(expectedValidation, ClaimValidationOutcome.PlatformFailure.ToString(), null),
+            MccWorkflowValidation.ValidationStatus(expectedValidation, ClaimValidationOutcome.PlatformFailure, null),
             ClaimValidationOutcome.PlatformFailure,
             false,
             null,
@@ -423,8 +423,8 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
     claim.PrimaryDiagnosisCode = "Z00.00";
     claim.SecondaryDiagnosisCodes.Clear();
 
-    ForceParticipatingProvider(claim.RenderingProvider);
-    ForceParticipatingProvider(claim.BillingProvider);
+    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider);
+    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider);
 
     var serviceDate = claim.DateOfService.Date;
     claim.Lines = new List<ClaimLine>
@@ -448,11 +448,11 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
     claim.ExpectedOutcome = new ExpectedOutcome
     {
         Disposition = "Paid",
-        ExpectedAllowedAmount = 180.00m,
-        ExpectedPaidAmount = 150.00m,
-        ExpectedMemberLiability = 30.00m,
-        ExpectedCopay = 30.00m,
-        ExpectedCoinsurance = 0.00m,
+        ExpectedAllowedAmount = 117.00m,
+        ExpectedPaidAmount = 68.60m,
+        ExpectedMemberLiability = 48.40m,
+        ExpectedCopay = 25.00m,
+        ExpectedCoinsurance = 23.40m,
         ExpectedDeductible = 0.00m,
         ExpectedFhirCompliant = true,
         ExpectedPriorAuthDecision = "N/A",
@@ -462,14 +462,14 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
             {
                 LineNumber = 1,
                 Disposition = "Paid",
-                AllowedAmount = 180.00m,
-                PaidAmount = 150.00m
+                AllowedAmount = 117.00m,
+                PaidAmount = 93.60m
             }
         }
     };
 }
 
-static void ForceParticipatingProvider(SyntheticProvider provider)
+static void ForceCleanProfessionalPaidProviderProfile(SyntheticProvider provider)
 {
     provider.IsParticipating = true;
     provider.NetworkStatus = "InNetwork";
@@ -1449,7 +1449,7 @@ internal sealed record ValidatorOptions(
 
 internal sealed record SubmittedClaim(string Id);
 
-internal enum ClaimValidationOutcome
+public enum ClaimValidationOutcome
 {
     Paid,
     BusinessDenial,
