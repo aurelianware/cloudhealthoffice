@@ -585,9 +585,13 @@ static void ForceExcludedProviderProfile(SyntheticProvider provider, int seed, i
 
 static string BuildSyntheticExcludedProviderNpi(int seed, int index)
 {
-    var value = Math.Abs(HashCode.Combine(seed, index, DateTime.UtcNow.Ticks)) % 1_000_000;
-    var baseNineDigits = $"900{value:D6}";
-    return $"{baseNineDigits}{CalculateNpiCheckDigit(baseNineDigits)}";
+    unchecked
+    {
+        var combined = (uint)(seed * 1_000_003 + index);
+        var value = combined % 1_000_000;
+        var baseNineDigits = $"900{value:D6}";
+        return $"{baseNineDigits}{CalculateNpiCheckDigit(baseNineDigits)}";
+    }
 }
 
 static int CalculateNpiCheckDigit(string baseNineDigits)
