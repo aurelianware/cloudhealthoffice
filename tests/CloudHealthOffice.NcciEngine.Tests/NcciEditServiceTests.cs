@@ -24,8 +24,8 @@ public class NcciEditServiceTests
     private static readonly DateOnly Dos = new(2025, 3, 1);
     private static readonly DateTime EffDt = new(2025, 1, 1);
 
-    private static NcciEditService BuildService(FakeNcciRepository repo)
-        => new(repo, NullLogger<NcciEditService>.Instance);
+    private static NcciEditService BuildService(FakeNcciRepository repo, NcciLookupCache? cache = null)
+        => new(repo, NullLogger<NcciEditService>.Instance, cache);
 
     private static NcciScrubRequest OneLineClaim(
         string code, decimal units = 1, List<string>? modifiers = null)
@@ -585,5 +585,42 @@ public class NcciEditServiceTests
 
         Assert.Equal(1, result.NcciPairsChecked); // one unordered pair
         Assert.Equal(2, result.MueChecked);        // one per distinct code+DOS
+    }
+
+    [Fact]
+    public async Task ScrubAsync_RepeatedCodeLookups_ReusesSharedCache()
+    {
+        var repo = new FakeNcciRepository();
+        repo.AddEditPair(MakePair("99213", "99212", NcciModifierIndicator.NotAllowed));
+        repo.AddMueEntry(MakeMue("99213", maxUnits: 10));
+        repo.AddMueEntry(MakeMue("99212", maxUnits: 10));
+        var cache = new NcciLookupCache();
+        var svc = BuildService(repo, cache);
+        var request = TwoLineClaim("99213", "99212");
+
+        await svc.ScrubAsync(request);
+        var pairCountAfterFirst = repo.EditPairLookupCount;
+        var mueCountAfterFirst = repo.MueLookupCount;
+
+        await svc.ScrubAsync(request);
+
+        Assert.Equal(pairCountAfterFirst, repo.EditPairLookupCount);
+        Assert.Equal(mueCountAfterFirst, repo.MueLookupCount);
+    }
+
+    [Fact]
+    public async Task ImportQuarterlyUpdate_InvalidatesTenantCache()
+    {
+        var repo = new FakeNcciRepository();
+        repo.AddMueEntry(MakeMue("99213", maxUnits: 10));
+        var cache = new NcciLookupCache();
+        var svc = BuildService(repo, cache);
+        var request = OneLineClaim("99213", units: 1);
+
+        await svc.ScrubAsync(request);
+        await svc.ImportQuarterlyUpdateAsync(Tenant, "2025Q2", [], []);
+        await svc.ScrubAsync(request);
+
+        Assert.Equal(2, repo.MueLookupCount);
     }
 }

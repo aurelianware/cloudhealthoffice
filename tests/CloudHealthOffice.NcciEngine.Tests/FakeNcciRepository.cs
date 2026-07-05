@@ -13,6 +13,9 @@ internal sealed class FakeNcciRepository : INcciRepository
     private readonly List<NcciEditPair> _pairs = new();
     private readonly List<MueEntry> _mues = new();
 
+    public int EditPairLookupCount { get; private set; }
+    public int MueLookupCount { get; private set; }
+
     public void AddEditPair(NcciEditPair pair) => _pairs.Add(pair);
 
     public void AddMueEntry(MueEntry mue) => _mues.Add(mue);
@@ -21,6 +24,8 @@ internal sealed class FakeNcciRepository : INcciRepository
         string tenantId, string column1Code, string column2Code,
         DateOnly serviceDate, CancellationToken ct = default)
     {
+        EditPairLookupCount++;
+
         var match = _pairs.FirstOrDefault(p =>
             p.TenantId == tenantId &&
             p.Column1Code == column1Code &&
@@ -35,6 +40,8 @@ internal sealed class FakeNcciRepository : INcciRepository
         string tenantId, string procedureCode,
         DateOnly serviceDate, CancellationToken ct = default)
     {
+        MueLookupCount++;
+
         var match = _mues.FirstOrDefault(m =>
             m.TenantId == tenantId &&
             m.ProcedureCode == procedureCode &&
