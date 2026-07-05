@@ -52,6 +52,51 @@ public class MccWorkflowValidationTests
     }
 
     [Fact]
+    public void ExpectedValidationFor_ExcludedProviderClaim_ReturnsProviderExcludedScenario()
+    {
+        var claim = CreateClaim(
+            claimType: "Professional",
+            benefitPlanId: MccWorkflowValidation.ExcludedProviderPlanId,
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        claim.RenderingProvider.CredentialingStatus = "Excluded";
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.BusinessDenial,
+            MccWorkflowValidation.ProviderExcludedCode);
+
+        Assert.Equal(MccWorkflowValidation.ExcludedProviderScenario, expected.Scenario);
+        Assert.Equal(ClaimValidationOutcome.BusinessDenial, expected.ExpectedOutcome);
+        Assert.Equal(MccWorkflowValidation.ProviderExcludedCode, expected.ExpectedBusinessDenialCode);
+        Assert.Equal("Matched", status);
+    }
+
+    [Fact]
+    public void ValidationStatus_WhenExpectedProviderExclusionPays_ReturnsMismatched()
+    {
+        var claim = CreateClaim(
+            claimType: "Professional",
+            benefitPlanId: MccWorkflowValidation.ExcludedProviderPlanId,
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        claim.RenderingProvider.CredentialingStatus = "Excluded";
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.Paid,
+            actualBusinessDenialCode: null);
+
+        Assert.Equal("Mismatched", status);
+    }
+
+    [Fact]
     public void ValidationStatus_WhenExpectedPaidClaimIsDenied_ReturnsMismatched()
     {
         var claim = CreateClaim(
