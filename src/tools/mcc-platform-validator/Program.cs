@@ -346,6 +346,7 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
         .ToList();
     NormalizeClaimDates(claims, options.Seed);
     InjectCleanPaidScenarios(claims);
+    InjectExcludedProviderScenarios(claims, options.Seed);
     InjectPriorAuthScenarios(claims, options);
     return claims;
 }
@@ -373,6 +374,33 @@ static void InjectCleanPaidScenarios(List<SyntheticClaim> claims)
     }
 
     Console.WriteLine($"Clean paid scenarios: injected {injected:N0} professional claims expected to pay");
+}
+
+static void InjectExcludedProviderScenarios(List<SyntheticClaim> claims, int seed)
+{
+    var candidates = claims
+        .Where(c =>
+            c.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.CleanProfessionalPaidPlanId, StringComparison.Ordinal))
+        .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
+        .ToList();
+
+    if (candidates.Count == 0)
+    {
+        Console.WriteLine("Excluded provider scenarios: skipped (no remaining professional claims generated)");
+        return;
+    }
+
+    var requested = Math.Max(1, (int)Math.Round(claims.Count * 0.02, MidpointRounding.AwayFromZero));
+    var injected = 0;
+
+    foreach (var claim in candidates.Take(Math.Min(requested, candidates.Count)))
+    {
+        ForceExcludedProviderScenario(claim, seed, injected);
+        injected++;
+    }
+
+    Console.WriteLine($"Excluded provider scenarios: injected {injected:N0} professional claims expected to deny");
 }
 
 static void InjectPriorAuthScenarios(List<SyntheticClaim> claims, ValidatorOptions options)
@@ -469,6 +497,67 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
     };
 }
 
+static void ForceExcludedProviderScenario(SyntheticClaim claim, int seed, int index)
+{
+    claim.BenefitPlanId = MccWorkflowValidation.ExcludedProviderPlanId;
+    claim.PlaceOfService = "11";
+    claim.FrequencyCode = "1";
+    claim.BillType = null;
+    claim.DrgCode = null;
+    claim.PriorAuthStatus = "NotRequired";
+    claim.PriorAuthNumber = null;
+    claim.PrimaryDiagnosisCode = "Z00.00";
+    claim.SecondaryDiagnosisCodes.Clear();
+
+    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider);
+    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider);
+    ForceExcludedProviderProfile(claim.RenderingProvider, seed, index);
+
+    var serviceDate = claim.DateOfService.Date;
+    claim.Lines = new List<ClaimLine>
+    {
+        new()
+        {
+            LineNumber = 1,
+            ProcedureCode = "99213",
+            Description = "Office/outpatient established patient visit",
+            Modifiers = new List<string>(),
+            RevenueCode = null,
+            DiagnosisPointers = new List<int> { 1 },
+            Units = 1,
+            ChargeAmount = 180.00m,
+            ServiceDate = serviceDate,
+            ServiceEndDate = serviceDate,
+            PlaceOfService = "11"
+        }
+    };
+    claim.TotalCharges = 180.00m;
+    claim.ExpectedOutcome = new ExpectedOutcome
+    {
+        Disposition = "Denied",
+        DenialReasonCode = MccWorkflowValidation.ProviderExcludedCode,
+        ExpectedAllowedAmount = 0.00m,
+        ExpectedPaidAmount = 0.00m,
+        ExpectedMemberLiability = 0.00m,
+        ExpectedCopay = 0.00m,
+        ExpectedCoinsurance = 0.00m,
+        ExpectedDeductible = 0.00m,
+        ExpectedFhirCompliant = true,
+        ExpectedPriorAuthDecision = "N/A",
+        LineOutcomes = new List<LineOutcome>
+        {
+            new()
+            {
+                LineNumber = 1,
+                Disposition = "Denied",
+                AllowedAmount = 0.00m,
+                PaidAmount = 0.00m,
+                ReasonCode = MccWorkflowValidation.ProviderExcludedCode
+            }
+        }
+    };
+}
+
 static void ForceCleanProfessionalPaidProviderProfile(SyntheticProvider provider)
 {
     provider.IsParticipating = true;
@@ -481,6 +570,50 @@ static void ForceCleanProfessionalPaidProviderProfile(SyntheticProvider provider
     provider.SpecialtyDescription = "Family Medicine";
     provider.TaxonomyCode = "207Q00000X";
     provider.ContractType = "FeeForService";
+}
+
+static void ForceExcludedProviderProfile(SyntheticProvider provider, int seed, int index)
+{
+    provider.Npi = BuildSyntheticExcludedProviderNpi(seed, index);
+    provider.FirstName = "Excluded";
+    provider.LastName = $"Provider{index + 1:D2}";
+    provider.CredentialingStatus = "Excluded";
+    provider.NetworkStatus = "Excluded";
+    provider.IsParticipating = true;
+    provider.AcceptingNewPatients = false;
+}
+
+static string BuildSyntheticExcludedProviderNpi(int seed, int index)
+{
+    var value = Math.Abs(HashCode.Combine(seed, index, DateTime.UtcNow.Ticks)) % 1_000_000;
+    var baseNineDigits = $"900{value:D6}";
+    return $"{baseNineDigits}{CalculateNpiCheckDigit(baseNineDigits)}";
+}
+
+static int CalculateNpiCheckDigit(string baseNineDigits)
+{
+    const string npiPrefix = "80840";
+    var candidate = $"{npiPrefix}{baseNineDigits}0";
+    var sum = 0;
+    var doubleDigit = false;
+
+    for (var i = candidate.Length - 1; i >= 0; i--)
+    {
+        var digit = candidate[i] - '0';
+        if (doubleDigit)
+        {
+            digit *= 2;
+            if (digit > 9)
+            {
+                digit -= 9;
+            }
+        }
+
+        sum += digit;
+        doubleDigit = !doubleDigit;
+    }
+
+    return (10 - (sum % 10)) % 10;
 }
 
 static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
@@ -561,6 +694,8 @@ static async Task CreateProviderAsync(
         ? DateTime.UtcNow.Date.AddYears(-2)
         : provider.EffectiveDate.Date, DateTimeKind.Utc);
     var now = DateTimeOffset.UtcNow;
+    var isProviderExcluded = string.Equals(provider.CredentialingStatus, "Excluded", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(provider.NetworkStatus, "Excluded", StringComparison.OrdinalIgnoreCase);
 
     var payload = new
     {
@@ -580,13 +715,13 @@ static async Task CreateProviderAsync(
         zipCode = provider.ZipCode,
         phone = NullIfWhiteSpace(provider.Phone) ?? "555-0100",
         email = NullIfWhiteSpace(provider.Email),
-        credentialingStatus = "approved",
+        credentialingStatus = isProviderExcluded ? "denied" : "approved",
         credentialingDate = effectiveDate,
         recredentialingDueDate = now.UtcDateTime.AddYears(2),
         acceptingNewPatients = provider.AcceptingNewPatients,
         status = "active",
-        integrityScore = 96,
-        integrityRating = "Clear",
+        integrityScore = isProviderExcluded ? 0 : 96,
+        integrityRating = isProviderExcluded ? "Blocked" : "Clear",
         lastVerifiedAt = now,
         nextVerificationDue = now.AddDays(30),
         networkParticipations = new[]

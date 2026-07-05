@@ -14,6 +14,9 @@ public static class MccWorkflowValidation
 {
     public const string CleanProfessionalPaidScenario = "CleanProfessionalPaid";
     public const string CleanProfessionalPaidPlanId = "MCC_VALIDATION_CLEAN_PAID";
+    public const string ExcludedProviderScenario = "ExcludedProviderDenied";
+    public const string ExcludedProviderPlanId = "MCC_VALIDATION_EXCLUDED_PROVIDER";
+    public const string ProviderExcludedCode = "PROVIDER_EXCLUDED";
     public const string TexasStarInpatientNoAuthScenario = "TxStarInpatientNoAuth";
     public const string PriorAuthRequiredCode = "PRIOR_AUTH_REQUIRED";
 
@@ -29,6 +32,17 @@ public static class MccWorkflowValidation
                 CleanProfessionalPaidScenario,
                 ClaimValidationOutcome.Paid,
                 null);
+        }
+
+        if (claim.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(claim.BenefitPlanId, ExcludedProviderPlanId, StringComparison.Ordinal)
+            && string.Equals(claim.PlaceOfService, "11", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(claim.RenderingProvider.CredentialingStatus, "Excluded", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ExpectedValidation(
+                ExcludedProviderScenario,
+                ClaimValidationOutcome.BusinessDenial,
+                ProviderExcludedCode);
         }
 
         var isTxStarInpatientNoAuth =
