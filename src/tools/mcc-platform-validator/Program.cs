@@ -8,6 +8,7 @@ using CloudHealthOffice.BenchmarkClaimGenerator.Configuration;
 using CloudHealthOffice.BenchmarkClaimGenerator.Models;
 using CloudHealthOffice.BenchmarkClaimGenerator.Output;
 using CloudHealthOffice.BenchmarkClaimGenerator.ReferenceData;
+using CloudHealthOffice.Tools.MccPlatformValidator;
 
 var options = ValidatorOptions.Parse(args);
 if (options.ShowHelp)
@@ -164,7 +165,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         var businessDenialCode = NormalizeBusinessDenialCode(adjudicated.BusinessDenialCode
             ?? adjudicated.DenialReasonCode
             ?? (outcome is ClaimValidationOutcome.BusinessDenial ? "ADJUDICATION_DENIAL" : null));
-        var expectedValidation = ExpectedValidationFor(claim);
+        var expectedValidation = MccWorkflowValidation.ExpectedValidationFor(claim);
 
         return new ClaimValidationResult(
             claim.ClaimId,
@@ -173,7 +174,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             expectedValidation.Scenario,
             expectedValidation.ExpectedOutcome,
             expectedValidation.ExpectedBusinessDenialCode,
-            ValidationStatus(expectedValidation, outcome, businessDenialCode),
+            MccWorkflowValidation.ValidationStatus(expectedValidation, outcome.ToString(), businessDenialCode),
             outcome,
             adjudicated.Success,
             adjudicated.Totals.PlanPayment,
@@ -189,7 +190,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     catch (Exception ex)
     {
         sw.Stop();
-        var expectedValidation = ExpectedValidationFor(claim);
+        var expectedValidation = MccWorkflowValidation.ExpectedValidationFor(claim);
         return new ClaimValidationResult(
             claim.ClaimId,
             null,
@@ -197,7 +198,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             expectedValidation.Scenario,
             expectedValidation.ExpectedOutcome,
             expectedValidation.ExpectedBusinessDenialCode,
-            ValidationStatus(expectedValidation, ClaimValidationOutcome.PlatformFailure, null),
+            MccWorkflowValidation.ValidationStatus(expectedValidation, ClaimValidationOutcome.PlatformFailure.ToString(), null),
             ClaimValidationOutcome.PlatformFailure,
             false,
             null,
@@ -344,8 +345,34 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
         .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
         .ToList();
     NormalizeClaimDates(claims, options.Seed);
+    InjectCleanPaidScenarios(claims);
     InjectPriorAuthScenarios(claims, options);
     return claims;
+}
+
+static void InjectCleanPaidScenarios(List<SyntheticClaim> claims)
+{
+    var candidates = claims
+        .Where(c => c.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
+        .ToList();
+
+    if (candidates.Count == 0)
+    {
+        Console.WriteLine("Clean paid scenarios: skipped (no professional claims generated)");
+        return;
+    }
+
+    var requested = Math.Max(1, (int)Math.Round(claims.Count * 0.02, MidpointRounding.AwayFromZero));
+    var injected = 0;
+
+    foreach (var claim in candidates.Take(Math.Min(requested, candidates.Count)))
+    {
+        ForceCleanProfessionalPaidScenario(claim);
+        injected++;
+    }
+
+    Console.WriteLine($"Clean paid scenarios: injected {injected:N0} professional claims expected to pay");
 }
 
 static void InjectPriorAuthScenarios(List<SyntheticClaim> claims, ValidatorOptions options)
@@ -384,6 +411,78 @@ static void InjectPriorAuthScenarios(List<SyntheticClaim> claims, ValidatorOptio
     Console.WriteLine($"PA scenarios: injected {injected:N0} TX STAR inpatient claims without auth");
 }
 
+static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
+{
+    claim.BenefitPlanId = MccWorkflowValidation.CleanProfessionalPaidPlanId;
+    claim.PlaceOfService = "11";
+    claim.FrequencyCode = "1";
+    claim.BillType = null;
+    claim.DrgCode = null;
+    claim.PriorAuthStatus = "NotRequired";
+    claim.PriorAuthNumber = null;
+    claim.PrimaryDiagnosisCode = "Z00.00";
+    claim.SecondaryDiagnosisCodes.Clear();
+
+    ForceParticipatingProvider(claim.RenderingProvider);
+    ForceParticipatingProvider(claim.BillingProvider);
+
+    var serviceDate = claim.DateOfService.Date;
+    claim.Lines = new List<ClaimLine>
+    {
+        new()
+        {
+            LineNumber = 1,
+            ProcedureCode = "99213",
+            Description = "Office/outpatient established patient visit",
+            Modifiers = new List<string>(),
+            RevenueCode = null,
+            DiagnosisPointers = new List<int> { 1 },
+            Units = 1,
+            ChargeAmount = 180.00m,
+            ServiceDate = serviceDate,
+            ServiceEndDate = serviceDate,
+            PlaceOfService = "11"
+        }
+    };
+    claim.TotalCharges = 180.00m;
+    claim.ExpectedOutcome = new ExpectedOutcome
+    {
+        Disposition = "Paid",
+        ExpectedAllowedAmount = 180.00m,
+        ExpectedPaidAmount = 150.00m,
+        ExpectedMemberLiability = 30.00m,
+        ExpectedCopay = 30.00m,
+        ExpectedCoinsurance = 0.00m,
+        ExpectedDeductible = 0.00m,
+        ExpectedFhirCompliant = true,
+        ExpectedPriorAuthDecision = "N/A",
+        LineOutcomes = new List<LineOutcome>
+        {
+            new()
+            {
+                LineNumber = 1,
+                Disposition = "Paid",
+                AllowedAmount = 180.00m,
+                PaidAmount = 150.00m
+            }
+        }
+    };
+}
+
+static void ForceParticipatingProvider(SyntheticProvider provider)
+{
+    provider.IsParticipating = true;
+    provider.NetworkStatus = "InNetwork";
+    provider.CredentialingStatus = "Active";
+    provider.TermDate = null;
+    provider.AcceptingNewPatients = true;
+    provider.State = "AZ";
+    provider.SpecialtyCode = "207Q00000X";
+    provider.SpecialtyDescription = "Family Medicine";
+    provider.TaxonomyCode = "207Q00000X";
+    provider.ContractType = "FeeForService";
+}
+
 static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
 {
     claim.PlaceOfService = "21";
@@ -398,47 +497,6 @@ static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
     {
         line.PlaceOfService = "21";
     }
-}
-
-static ExpectedValidation ExpectedValidationFor(SyntheticClaim claim)
-{
-    var isTxStarInpatientNoAuth =
-        claim.ClaimType.Equals("Institutional", StringComparison.OrdinalIgnoreCase)
-        && string.Equals(claim.PlaceOfService, "21", StringComparison.OrdinalIgnoreCase)
-        && string.Equals(claim.PriorAuthStatus, "Required", StringComparison.OrdinalIgnoreCase)
-        && string.IsNullOrWhiteSpace(claim.PriorAuthNumber)
-        && string.Equals(claim.RenderingProvider.State, "TX", StringComparison.OrdinalIgnoreCase);
-
-    return isTxStarInpatientNoAuth
-        ? new ExpectedValidation(
-            "TxStarInpatientNoAuth",
-            ClaimValidationOutcome.BusinessDenial.ToString(),
-            "PRIOR_AUTH_REQUIRED")
-        : ExpectedValidation.Unspecified;
-}
-
-static string ValidationStatus(
-    ExpectedValidation expected,
-    ClaimValidationOutcome actualOutcome,
-    string? actualBusinessDenialCode)
-{
-    if (expected.ExpectedOutcome is null)
-    {
-        return "Unspecified";
-    }
-
-    if (!string.Equals(expected.ExpectedOutcome, actualOutcome.ToString(), StringComparison.Ordinal))
-    {
-        return "Mismatched";
-    }
-
-    if (!string.IsNullOrWhiteSpace(expected.ExpectedBusinessDenialCode)
-        && !string.Equals(expected.ExpectedBusinessDenialCode, actualBusinessDenialCode, StringComparison.OrdinalIgnoreCase))
-    {
-        return "Mismatched";
-    }
-
-    return "Matched";
 }
 
 static async Task SeedProvidersAsync(
@@ -1488,14 +1546,6 @@ internal sealed record MassAdjudicationClaimResult(
     double SubmitMilliseconds,
     double AdjudicationMilliseconds,
     double WritebackMilliseconds);
-
-internal sealed record ExpectedValidation(
-    string? Scenario,
-    string? ExpectedOutcome,
-    string? ExpectedBusinessDenialCode)
-{
-    public static ExpectedValidation Unspecified { get; } = new(null, null, null);
-}
 
 internal sealed record AdjudicationResponseDto(
     string ClaimId,
