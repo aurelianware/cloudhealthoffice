@@ -212,6 +212,10 @@ public class BenefitCalculationEngineTests
         Assert.Equal(0m, line.PlanPaidAmount);
         Assert.Contains(line.Adjustments, a => a.GroupCode == "CO" && a.ReasonCode == "45" && a.Amount == 50m);
         Assert.Contains(line.Adjustments, a => a.GroupCode == "PR" && a.ReasonCode == "1" && a.Amount == 150m);
+        Assert.Contains("planLookup", result.Timings.Keys);
+        Assert.Contains("accumulatorRead", result.Timings.Keys);
+        Assert.Contains("lineProcessing", result.Timings.Keys);
+        Assert.Contains("accumulatorWrite", result.Timings.Keys);
     }
 
     [Fact]

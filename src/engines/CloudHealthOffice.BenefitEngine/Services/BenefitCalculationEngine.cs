@@ -84,6 +84,50 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         BenefitResolutionRequest request,
         CancellationToken ct = default)
     {
+        var timings = new Dictionary<string, double>(StringComparer.Ordinal);
+
+        async Task<T> MeasureStageAsync<T>(string stage, Func<Task<T>> action)
+        {
+            var stageWatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                return await action();
+            }
+            finally
+            {
+                stageWatch.Stop();
+                timings[stage] = stageWatch.Elapsed.TotalMilliseconds;
+            }
+        }
+
+        async Task MeasureTaskStageAsync(string stage, Func<Task> action)
+        {
+            var stageWatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                await action();
+            }
+            finally
+            {
+                stageWatch.Stop();
+                timings[stage] = stageWatch.Elapsed.TotalMilliseconds;
+            }
+        }
+
+        T MeasureStage<T>(string stage, Func<T> action)
+        {
+            var stageWatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                return action();
+            }
+            finally
+            {
+                stageWatch.Stop();
+                timings[stage] = stageWatch.Elapsed.TotalMilliseconds;
+            }
+        }
+
         _logger.LogInformation(
             "Calculating benefits for member {MemberId}, plan {PlanId}, " +
             "{LineCount} lines, service date {ServiceDate}",
@@ -91,24 +135,31 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             request.Lines.Count, request.ServiceDate);
 
         // ── Step 1: Load plan configuration ──
-        var plan = await _planProvider.GetPlanAsync(request.BenefitPlanId, ct);
+        var plan = await MeasureStageAsync(
+            "planLookup",
+            () => _planProvider.GetPlanAsync(request.BenefitPlanId, ct));
         if (plan is null)
         {
             return new BenefitResolutionResult
             {
                 Success = false,
                 DenialReasonCode = "16",
-                DenialReasonDescription = "Benefit plan not found"
+                DenialReasonDescription = "Benefit plan not found",
+                Timings = timings
             };
         }
 
         // ── Step 2: Load current accumulator state ──
         var planYear = DeterminePlanYear(request.ServiceDate, plan);
-        var accumulators = await _accumulatorService.GetAccumulatorsAsync(
-            request.MemberId, request.SubscriberId,
-            request.BenefitPlanId, planYear, ct);
+        var accumulators = await MeasureStageAsync(
+            "accumulatorRead",
+            () => _accumulatorService.GetAccumulatorsAsync(
+                request.MemberId, request.SubscriberId,
+                request.BenefitPlanId, planYear, ct));
 
-        var workingAccumulators = new AccumulatorWorkingSet(accumulators, plan);
+        var workingAccumulators = MeasureStage(
+            "workingSet",
+            () => new AccumulatorWorkingSet(accumulators, plan));
 
         // ── Step 3: Check for DRG/per-diem inpatient pricing ──
         var inpatientMethod = DetermineInpatientPricingMethod(request, plan);
@@ -116,33 +167,46 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         if (inpatientMethod is InpatientPricingMethod.DrgCaseRate or InpatientPricingMethod.PerDiem
             && request.DrgAllowedAmount.HasValue)
         {
-            return await ProcessDrgClaimAsync(
-                request, plan, workingAccumulators, inpatientMethod, planYear, ct);
+            var drgResult = await MeasureStageAsync(
+                "drgProcessing",
+                () => ProcessDrgClaimAsync(
+                    request, plan, workingAccumulators, inpatientMethod, planYear, ct));
+
+            return drgResult with { Timings = timings };
         }
 
         // ── Step 4: Process each line (standard per-line adjudication) ──
-        var lineResults = new List<LineBenefitResult>();
-
-        foreach (var line in request.Lines.OrderBy(l => l.LineNumber))
+        var lineResults = await MeasureStageAsync("lineProcessing", async () =>
         {
-            var lineResult = await ProcessLineAsync(
-                request, line, plan, workingAccumulators, ct);
-            lineResults.Add(lineResult);
-        }
+            var results = new List<LineBenefitResult>();
+
+            foreach (var line in request.Lines.OrderBy(l => l.LineNumber))
+            {
+                var lineResult = await ProcessLineAsync(
+                    request, line, plan, workingAccumulators, ct);
+                results.Add(lineResult);
+            }
+
+            return results;
+        });
 
         // ── Step 5: Compute totals ──
-        var totals = ComputeTotals(lineResults);
+        var totals = MeasureStage("totals", () => ComputeTotals(lineResults));
 
         // ── Step 6: Persist accumulator updates ──
-        var accumulatorSnapshot = workingAccumulators.GetSnapshot();
-        await _accumulatorService.ApplyUpdatesAsync(
-            request.MemberId, request.SubscriberId,
-            request.BenefitPlanId, planYear,
-            request.ClaimId,
-            workingAccumulators.GetPendingUpdates(), ct);
+        var accumulatorSnapshot = MeasureStage("snapshot", workingAccumulators.GetSnapshot);
+        await MeasureTaskStageAsync(
+            "accumulatorWrite",
+            () => _accumulatorService.ApplyUpdatesAsync(
+                request.MemberId, request.SubscriberId,
+                request.BenefitPlanId, planYear,
+                request.ClaimId,
+                workingAccumulators.GetPendingUpdates(), ct));
 
         // ── Step 7: Determine overall claim outcome ──
-        var allDenied = lineResults.All(l => !l.IsCovered || l.DenialReasonCode is not null);
+        var allDenied = MeasureStage(
+            "outcome",
+            () => lineResults.All(l => !l.IsCovered || l.DenialReasonCode is not null));
 
         return new BenefitResolutionResult
         {
@@ -151,7 +215,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             DenialReasonDescription = allDenied ? lineResults.First().DenialReasonDescription : null,
             Lines = lineResults,
             Totals = totals,
-            AccumulatorSnapshot = accumulatorSnapshot
+            AccumulatorSnapshot = accumulatorSnapshot,
+            Timings = timings
         };
     }
 

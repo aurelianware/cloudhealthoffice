@@ -520,6 +520,10 @@ public class AdjudicationController : ControllerBase
 
             benefitResult = augmentResult.ChoResult;
             augmentDiscrepancies = augmentResult.Discrepancies;
+            foreach (var timing in benefitResult.Timings)
+            {
+                stageTimings[$"benefitCalculation.{timing.Key}"] = timing.Value;
+            }
 
             benefitSpan?.SetTag("cho.benefit.success", benefitResult.Success);
             benefitSpan?.SetTag("cho.benefit.authoritative", augmentResult.Authoritative);
