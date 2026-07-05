@@ -38,6 +38,7 @@ public static class NcciEngineServiceCollectionExtensions
     /// </summary>
     public static NcciEngineBuilder AddNcciEngine(this IServiceCollection services)
     {
+        services.AddSingleton<NcciLookupCache>();
         services.AddScoped<INcciEditService, NcciEditService>();
         return new NcciEngineBuilder(services);
     }
