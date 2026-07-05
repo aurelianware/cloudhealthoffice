@@ -190,6 +190,18 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             return results;
         });
 
+        // ── Guard: no lines processed → fail fast with a clear denial ──
+        if (lineResults.Count == 0)
+        {
+            return new BenefitResolutionResult
+            {
+                Success = false,
+                DenialReasonCode = "16",
+                DenialReasonDescription = "Claim submitted with no service lines",
+                Timings = timings
+            };
+        }
+
         // ── Step 5: Compute totals ──
         var totals = MeasureStage("totals", () => ComputeTotals(lineResults));
 
