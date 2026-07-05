@@ -166,6 +166,9 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             ?? adjudicated.DenialReasonCode
             ?? (outcome is ClaimValidationOutcome.BusinessDenial ? "ADJUDICATION_DENIAL" : null));
         var expectedValidation = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var expectedPlanPayment = expectedValidation.ExpectedOutcome is not ClaimValidationOutcome.Paid
+            ? null
+            : claim.ExpectedOutcome?.ExpectedPaidAmount;
 
         return new ClaimValidationResult(
             claim.ClaimId,
@@ -178,7 +181,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             outcome,
             adjudicated.Success,
             adjudicated.Totals.PlanPayment,
-            claim.ExpectedOutcome?.ExpectedPaidAmount,
+            expectedPlanPayment,
             sw.Elapsed,
             submitElapsed,
             adjudicationElapsed,
@@ -191,6 +194,9 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     {
         sw.Stop();
         var expectedValidation = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var expectedPlanPayment = expectedValidation.ExpectedOutcome is not ClaimValidationOutcome.Paid
+            ? null
+            : claim.ExpectedOutcome?.ExpectedPaidAmount;
         return new ClaimValidationResult(
             claim.ClaimId,
             null,
@@ -202,7 +208,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             ClaimValidationOutcome.PlatformFailure,
             false,
             null,
-            claim.ExpectedOutcome?.ExpectedPaidAmount,
+            expectedPlanPayment,
             sw.Elapsed,
             submitElapsed,
             adjudicationElapsed,
@@ -505,11 +511,11 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
     claim.ExpectedOutcome = new ExpectedOutcome
     {
         Disposition = "Paid",
-        ExpectedAllowedAmount = 117.00m,
-        ExpectedPaidAmount = 68.60m,
-        ExpectedMemberLiability = 48.40m,
-        ExpectedCopay = 25.00m,
-        ExpectedCoinsurance = 23.40m,
+        ExpectedAllowedAmount = 180.00m,
+        ExpectedPaidAmount = 150.00m,
+        ExpectedMemberLiability = 30.00m,
+        ExpectedCopay = 30.00m,
+        ExpectedCoinsurance = 0.00m,
         ExpectedDeductible = 0.00m,
         ExpectedFhirCompliant = true,
         ExpectedPriorAuthDecision = "N/A",
@@ -519,8 +525,8 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
             {
                 LineNumber = 1,
                 Disposition = "Paid",
-                AllowedAmount = 117.00m,
-                PaidAmount = 93.60m
+                AllowedAmount = 180.00m,
+                PaidAmount = 150.00m
             }
         }
     };
