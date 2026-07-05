@@ -133,6 +133,10 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     var adjudicationElapsed = TimeSpan.Zero;
     var updateElapsed = TimeSpan.Zero;
     var failureStage = "unknown";
+    var expectedValidation = MccWorkflowValidation.ExpectedValidationFor(claim);
+    var expectedPlanPayment = expectedValidation.ExpectedOutcome is not ClaimValidationOutcome.Paid
+        ? null
+        : claim.ExpectedOutcome?.ExpectedPaidAmount;
 
     try
     {
@@ -165,10 +169,6 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         var businessDenialCode = NormalizeBusinessDenialCode(adjudicated.BusinessDenialCode
             ?? adjudicated.DenialReasonCode
             ?? (outcome is ClaimValidationOutcome.BusinessDenial ? "ADJUDICATION_DENIAL" : null));
-        var expectedValidation = MccWorkflowValidation.ExpectedValidationFor(claim);
-        var expectedPlanPayment = expectedValidation.ExpectedOutcome is not ClaimValidationOutcome.Paid
-            ? null
-            : claim.ExpectedOutcome?.ExpectedPaidAmount;
 
         return new ClaimValidationResult(
             claim.ClaimId,
@@ -193,10 +193,6 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     catch (Exception ex)
     {
         sw.Stop();
-        var expectedValidation = MccWorkflowValidation.ExpectedValidationFor(claim);
-        var expectedPlanPayment = expectedValidation.ExpectedOutcome is not ClaimValidationOutcome.Paid
-            ? null
-            : claim.ExpectedOutcome?.ExpectedPaidAmount;
         return new ClaimValidationResult(
             claim.ClaimId,
             null,
