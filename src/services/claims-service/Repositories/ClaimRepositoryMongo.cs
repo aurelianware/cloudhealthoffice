@@ -36,7 +36,18 @@ public class ClaimRepositoryMongo : IClaimRepository
             // Compound index for search
             new CreateIndexModel<Claim>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.ServiceDateFrom)),
             // Versioning chain key index — supports GetLatestVersion / ListVersions.
-            new CreateIndexModel<Claim>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.ClaimVersionId).Descending(c => c.VersionNumber))
+            new CreateIndexModel<Claim>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.ClaimVersionId).Descending(c => c.VersionNumber)),
+            // Accumulator rebuild indexes — support Redis cache miss aggregation by owner/plan/year.
+            new CreateIndexModel<Claim>(indexKeys
+                .Ascending(c => c.TenantId)
+                .Ascending(c => c.BenefitPlanId)
+                .Ascending(c => c.MemberId)
+                .Ascending(c => c.ServiceDateFrom)),
+            new CreateIndexModel<Claim>(indexKeys
+                .Ascending(c => c.TenantId)
+                .Ascending(c => c.BenefitPlanId)
+                .Ascending(c => c.SubscriberId)
+                .Ascending(c => c.ServiceDateFrom))
         };
 
         _collection.Indexes.CreateMany(indexModels);
@@ -577,16 +588,19 @@ public class ClaimRepositoryMongo : IClaimRepository
         else
             filter = builder.And(filter, builder.Eq(c => c.MemberId, ownerId));
 
-        var claims = await _collection
-            .Find(filter)
-            .Project(c => new
-            {
-                c.AdjudicationResult!.DeductibleAmount,
-                c.AdjudicationResult.CoinsuranceAmount,
-                c.AdjudicationResult.CopayAmount,
-                c.AdjudicationResult.PatientResponsibility,
-                c.AdjudicationResult.NetworkTier
-            })
+        var rows = await _collection
+            .Aggregate()
+            .Match(filter)
+            .Group(
+                c => c.AdjudicationResult!.NetworkTier,
+                g => new AccumulatorTotalsAggregationRow
+                {
+                    NetworkTier = g.Key,
+                    DeductibleAmount = g.Sum(c => c.AdjudicationResult!.DeductibleAmount),
+                    CoinsuranceAmount = g.Sum(c => c.AdjudicationResult!.CoinsuranceAmount),
+                    CopayAmount = g.Sum(c => c.AdjudicationResult!.CopayAmount),
+                    PatientResponsibility = g.Sum(c => c.AdjudicationResult!.PatientResponsibility)
+                })
             .ToListAsync(ct);
 
         var deductibleType = scope == "Family" ? "FamilyDeductible"     : "IndividualDeductible";
@@ -597,7 +611,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         var coinsurance = new Dictionary<string, decimal>();
         var copay       = new Dictionary<string, decimal>();
 
-        foreach (var row in claims)
+        foreach (var row in rows)
         {
             var tier = row.NetworkTier ?? "InNetwork";
             deductible[tier]  = deductible.GetValueOrDefault(tier)  + row.DeductibleAmount;
@@ -617,6 +631,15 @@ public class ClaimRepositoryMongo : IClaimRepository
             if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Copay", NetworkTier = tier, AccumulatedAmount = amount });
 
         return new AccumulatorTotalsResponse { Totals = totals };
+    }
+
+    private sealed class AccumulatorTotalsAggregationRow
+    {
+        public string? NetworkTier { get; set; }
+        public decimal DeductibleAmount { get; set; }
+        public decimal CoinsuranceAmount { get; set; }
+        public decimal CopayAmount { get; set; }
+        public decimal PatientResponsibility { get; set; }
     }
 
     public async Task<bool> MarkSupersededProjectionAsync(

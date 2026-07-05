@@ -96,6 +96,7 @@ public class RedisAccumulatorService : IAccumulatorService
     /// plan with 2 months of run-out.
     /// </summary>
     private static readonly TimeSpan DefaultKeyTtl = TimeSpan.FromDays(425);
+    private static readonly RedisValue EmptySnapshotField = "__empty";
 
     public RedisAccumulatorService(
         IConnectionMultiplexer redis,
@@ -306,7 +307,11 @@ public class RedisAccumulatorService : IAccumulatorService
         var computed = await _claimsSource.CalculateAccumulatorsAsync(
             _tenantContext.TenantId, ownerId, scope, benefitPlanId, planYear, ct);
 
-        if (computed.Count == 0) return [];
+        if (computed.Count == 0)
+        {
+            await MarkEmptySnapshotAsync(db, key);
+            return [];
+        }
 
         // Populate Redis
         var hashEntries = computed.Select(s =>
@@ -337,6 +342,8 @@ public class RedisAccumulatorService : IAccumulatorService
         var batch = db.CreateBatch();
         var tasks = new List<Task>();
 
+        tasks.Add(batch.HashDeleteAsync(key, EmptySnapshotField));
+
         foreach (var update in updates)
         {
             var field = MakeField(update);
@@ -348,6 +355,15 @@ public class RedisAccumulatorService : IAccumulatorService
 
         batch.Execute();
         await Task.WhenAll(tasks);
+    }
+
+    private static async Task MarkEmptySnapshotAsync(IDatabase db, RedisKey key)
+    {
+        var batch = db.CreateBatch();
+        var setTask = batch.HashSetAsync(key, EmptySnapshotField, RedisValue.EmptyString);
+        var expireTask = batch.KeyExpireAsync(key, DefaultKeyTtl);
+        batch.Execute();
+        await Task.WhenAll(setTask, expireTask);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -386,6 +402,8 @@ public class RedisAccumulatorService : IAccumulatorService
         foreach (var entry in entries)
         {
             var field = entry.Name.ToString();
+            if (entry.Name == EmptySnapshotField) continue;
+
             var amount = (decimal)(double)entry.Value;
 
             // Parse "AccumulatorType:NetworkTier" field format
