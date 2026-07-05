@@ -76,6 +76,29 @@ public class MccWorkflowValidationTests
     }
 
     [Fact]
+    public void ExpectedValidationFor_UncoveredServiceClaim_ReturnsCoverageDenialScenario()
+    {
+        var claim = CreateClaim(
+            claimType: "Professional",
+            benefitPlanId: MccWorkflowValidation.UncoveredServicePlanId,
+            placeOfService: "31",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.BusinessDenial,
+            MccWorkflowValidation.UncoveredServiceCode);
+
+        Assert.Equal(MccWorkflowValidation.UncoveredServiceScenario, expected.Scenario);
+        Assert.Equal(ClaimValidationOutcome.BusinessDenial, expected.ExpectedOutcome);
+        Assert.Equal(MccWorkflowValidation.UncoveredServiceCode, expected.ExpectedBusinessDenialCode);
+        Assert.Equal("Matched", status);
+    }
+
+    [Fact]
     public void ValidationStatus_WhenExpectedProviderExclusionPays_ReturnsMismatched()
     {
         var claim = CreateClaim(
@@ -86,6 +109,26 @@ public class MccWorkflowValidationTests
             priorAuthNumber: null,
             renderingState: "AZ");
         claim.RenderingProvider.CredentialingStatus = "Excluded";
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.Paid,
+            actualBusinessDenialCode: null);
+
+        Assert.Equal("Mismatched", status);
+    }
+
+    [Fact]
+    public void ValidationStatus_WhenExpectedUncoveredServicePays_ReturnsMismatched()
+    {
+        var claim = CreateClaim(
+            claimType: "Professional",
+            benefitPlanId: MccWorkflowValidation.UncoveredServicePlanId,
+            placeOfService: "31",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
 
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
         var status = MccWorkflowValidation.ValidationStatus(

@@ -17,6 +17,9 @@ public static class MccWorkflowValidation
     public const string ExcludedProviderScenario = "ExcludedProviderDenied";
     public const string ExcludedProviderPlanId = "MCC_VALIDATION_EXCLUDED_PROVIDER";
     public const string ProviderExcludedCode = "PROVIDER_EXCLUDED";
+    public const string UncoveredServiceScenario = "UncoveredServiceDenied";
+    public const string UncoveredServicePlanId = "MCC_VALIDATION_UNCOVERED_SERVICE";
+    public const string UncoveredServiceCode = "CARC_96";
     public const string TexasStarInpatientNoAuthScenario = "TxStarInpatientNoAuth";
     public const string PriorAuthRequiredCode = "PRIOR_AUTH_REQUIRED";
 
@@ -43,6 +46,16 @@ public static class MccWorkflowValidation
                 ExcludedProviderScenario,
                 ClaimValidationOutcome.BusinessDenial,
                 ProviderExcludedCode);
+        }
+
+        if (claim.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(claim.BenefitPlanId, UncoveredServicePlanId, StringComparison.Ordinal)
+            && string.Equals(claim.PlaceOfService, "31", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ExpectedValidation(
+                UncoveredServiceScenario,
+                ClaimValidationOutcome.BusinessDenial,
+                UncoveredServiceCode);
         }
 
         var isTxStarInpatientNoAuth =

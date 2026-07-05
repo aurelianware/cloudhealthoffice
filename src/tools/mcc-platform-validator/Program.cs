@@ -347,6 +347,7 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
     NormalizeClaimDates(claims, options.Seed);
     InjectCleanPaidScenarios(claims);
     InjectExcludedProviderScenarios(claims, options.Seed);
+    InjectUncoveredServiceScenarios(claims);
     InjectPriorAuthScenarios(claims, options);
     return claims;
 }
@@ -401,6 +402,34 @@ static void InjectExcludedProviderScenarios(List<SyntheticClaim> claims, int see
     }
 
     Console.WriteLine($"Excluded provider scenarios: injected {injected:N0} professional claims expected to deny");
+}
+
+static void InjectUncoveredServiceScenarios(List<SyntheticClaim> claims)
+{
+    var candidates = claims
+        .Where(c =>
+            c.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.CleanProfessionalPaidPlanId, StringComparison.Ordinal)
+            && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.ExcludedProviderPlanId, StringComparison.Ordinal))
+        .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
+        .ToList();
+
+    if (candidates.Count == 0)
+    {
+        Console.WriteLine("Uncovered service scenarios: skipped (no remaining professional claims generated)");
+        return;
+    }
+
+    var requested = Math.Max(1, (int)Math.Round(claims.Count * 0.02, MidpointRounding.AwayFromZero));
+    var injected = 0;
+
+    foreach (var claim in candidates.Take(Math.Min(requested, candidates.Count)))
+    {
+        ForceUncoveredServiceScenario(claim);
+        injected++;
+    }
+
+    Console.WriteLine($"Uncovered service scenarios: injected {injected:N0} professional claims expected to deny");
 }
 
 static void InjectPriorAuthScenarios(List<SyntheticClaim> claims, ValidatorOptions options)
@@ -553,6 +582,66 @@ static void ForceExcludedProviderScenario(SyntheticClaim claim, int seed, int in
                 AllowedAmount = 0.00m,
                 PaidAmount = 0.00m,
                 ReasonCode = MccWorkflowValidation.ProviderExcludedCode
+            }
+        }
+    };
+}
+
+static void ForceUncoveredServiceScenario(SyntheticClaim claim)
+{
+    claim.BenefitPlanId = MccWorkflowValidation.UncoveredServicePlanId;
+    claim.PlaceOfService = "31";
+    claim.FrequencyCode = "1";
+    claim.BillType = null;
+    claim.DrgCode = null;
+    claim.PriorAuthStatus = "NotRequired";
+    claim.PriorAuthNumber = null;
+    claim.PrimaryDiagnosisCode = "Z00.00";
+    claim.SecondaryDiagnosisCodes.Clear();
+
+    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider);
+    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider);
+
+    var serviceDate = claim.DateOfService.Date;
+    claim.Lines = new List<ClaimLine>
+    {
+        new()
+        {
+            LineNumber = 1,
+            ProcedureCode = "99283",
+            Description = "Emergency department visit, moderate severity",
+            Modifiers = new List<string>(),
+            RevenueCode = null,
+            DiagnosisPointers = new List<int> { 1 },
+            Units = 1,
+            ChargeAmount = 850.00m,
+            ServiceDate = serviceDate,
+            ServiceEndDate = serviceDate,
+            PlaceOfService = "31"
+        }
+    };
+    claim.TotalCharges = 850.00m;
+    claim.ExpectedOutcome = new ExpectedOutcome
+    {
+        Disposition = "Denied",
+        DenialReasonCode = MccWorkflowValidation.UncoveredServiceCode,
+        ExpectedAllowedAmount = 0.00m,
+        ExpectedPaidAmount = 0.00m,
+        ExpectedMemberLiability = 0.00m,
+        ExpectedCopay = 0.00m,
+        ExpectedCoinsurance = 0.00m,
+        ExpectedDeductible = 0.00m,
+        ExpectedFhirCompliant = true,
+        ExpectedPriorAuthDecision = "N/A",
+        LineOutcomes = new List<LineOutcome>
+        {
+            new()
+            {
+                LineNumber = 1,
+                Disposition = "Denied",
+                AllowedAmount = 0.00m,
+                PaidAmount = 0.00m,
+                ReasonCode = MccWorkflowValidation.UncoveredServiceCode
             }
         }
     };
@@ -951,9 +1040,10 @@ static bool TryParseBusinessDenial(
 }
 
 static bool IsKnownBusinessDenialCode(string errorCode)
-    => errorCode is
+    => NormalizeBusinessDenialCode(errorCode) is
         "SCRUB_VALIDATION_FAILURE" or
         "NCCI_MUE_EDIT_FAILURE" or
+        "CARC_96" or
         "PROVIDER_EXCLUDED" or
         "PRIOR_AUTH_REQUIRED";
 
