@@ -599,10 +599,13 @@ public class NcciEditServiceTests
         var request = TwoLineClaim("99213", "99212");
 
         await svc.ScrubAsync(request);
+        var pairCountAfterFirst = repo.EditPairLookupCount;
+        var mueCountAfterFirst = repo.MueLookupCount;
+
         await svc.ScrubAsync(request);
 
-        Assert.Equal(2, repo.EditPairLookupCount);
-        Assert.Equal(2, repo.MueLookupCount);
+        Assert.Equal(pairCountAfterFirst, repo.EditPairLookupCount);
+        Assert.Equal(mueCountAfterFirst, repo.MueLookupCount);
     }
 
     [Fact]

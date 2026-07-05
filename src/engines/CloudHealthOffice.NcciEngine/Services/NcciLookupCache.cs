@@ -9,6 +9,7 @@ internal sealed class NcciLookupCache
 
     private readonly ConcurrentDictionary<PairCacheKey, CacheEntry<NcciEditPair>> _pairs = new();
     private readonly ConcurrentDictionary<MueCacheKey, CacheEntry<MueEntry>> _mues = new();
+    private long _nextSweepTicks = DateTimeOffset.UtcNow.Add(DefaultTtl).UtcTicks;
 
     public Task<NcciEditPair?> GetEditPairAsync(
         string tenantId,
@@ -51,26 +52,33 @@ internal sealed class NcciLookupCache
         }
     }
 
-    private static async Task<T?> GetOrCreateAsync<TKey, T>(
+    private async Task<T?> GetOrCreateAsync<TKey, T>(
         ConcurrentDictionary<TKey, CacheEntry<T>> cache,
         TKey key,
         Func<CancellationToken, Task<T?>> factory,
         CancellationToken ct)
         where TKey : notnull
     {
+        MaybeSweep();
+
         var now = DateTimeOffset.UtcNow;
-        var entry = cache.GetOrAdd(key, _ => NewEntry(factory, ct, now));
+        var entry = cache.GetOrAdd(key, _ => NewEntry(factory, now));
 
         if (entry.ExpiresAt <= now)
         {
-            var replacement = NewEntry(factory, ct, now);
+            var replacement = NewEntry(factory, now);
             entry = cache.AddOrUpdate(key, replacement, (_, current) =>
                 current.ExpiresAt <= now ? replacement : current);
         }
 
         try
         {
-            return await entry.Value.Value;
+            return await entry.Value.Value.WaitAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Per-caller cancellation; the shared task continues — do not evict.
+            throw;
         }
         catch
         {
@@ -79,13 +87,36 @@ internal sealed class NcciLookupCache
         }
     }
 
+    private void MaybeSweep()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var next = Volatile.Read(ref _nextSweepTicks);
+        if (now.UtcTicks < next) return;
+        if (Interlocked.CompareExchange(ref _nextSweepTicks, now.Add(DefaultTtl).UtcTicks, next) != next)
+            return;
+
+        SweepExpired(_pairs, now);
+        SweepExpired(_mues, now);
+    }
+
+    private static void SweepExpired<TKey, T>(
+        ConcurrentDictionary<TKey, CacheEntry<T>> cache,
+        DateTimeOffset now)
+        where TKey : notnull
+    {
+        foreach (var key in cache.Keys.ToList())
+        {
+            if (cache.TryGetValue(key, out var entry) && entry.ExpiresAt <= now)
+                cache.TryRemove(key, out _);
+        }
+    }
+
     private static CacheEntry<T> NewEntry<T>(
         Func<CancellationToken, Task<T?>> factory,
-        CancellationToken ct,
         DateTimeOffset now)
     {
         return new CacheEntry<T>(
-            new Lazy<Task<T?>>(() => factory(ct), LazyThreadSafetyMode.ExecutionAndPublication),
+            new Lazy<Task<T?>>(() => factory(CancellationToken.None), LazyThreadSafetyMode.ExecutionAndPublication),
             now.Add(DefaultTtl));
     }
 

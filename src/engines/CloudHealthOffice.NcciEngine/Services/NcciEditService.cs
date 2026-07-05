@@ -116,6 +116,8 @@ internal class NcciEditService : INcciEditService
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
+    private static string NormalizeCode(string code) => code.Trim().ToUpperInvariant();
+
     // ═══════════════════════════════════════════════════════════════
     // PRIVATE — NCCI PAIR EDITS (NE001)
     // ═══════════════════════════════════════════════════════════════
@@ -143,29 +145,32 @@ internal class NcciEditService : INcciEditService
                     var lineA = lines[i];
                     var lineB = lines[j];
 
+                    var codeA = NormalizeCode(lineA.ProcedureCode);
+                    var codeB = NormalizeCode(lineB.ProcedureCode);
+
                     // Look up both orderings: A/B and B/A
                     var editAB = await _lookupCache.GetEditPairAsync(
                         request.TenantId,
-                        lineA.ProcedureCode,
-                        lineB.ProcedureCode,
+                        codeA,
+                        codeB,
                         effectiveDate,
                         lookupCt => _repository.GetEditPairAsync(
                             request.TenantId,
-                            lineA.ProcedureCode,
-                            lineB.ProcedureCode,
+                            codeA,
+                            codeB,
                             effectiveDate,
                             lookupCt),
                         ct);
 
                     var editBA = await _lookupCache.GetEditPairAsync(
                         request.TenantId,
-                        lineB.ProcedureCode,
-                        lineA.ProcedureCode,
+                        codeB,
+                        codeA,
                         effectiveDate,
                         lookupCt => _repository.GetEditPairAsync(
                             request.TenantId,
-                            lineB.ProcedureCode,
-                            lineA.ProcedureCode,
+                            codeB,
+                            codeA,
                             effectiveDate,
                             lookupCt),
                         ct);
@@ -248,11 +253,12 @@ internal class NcciEditService : INcciEditService
             var (code, dos) = group.Key;
             var lines = group.ToList();
 
+            var normalizedCode = NormalizeCode(code);
             var mue = await _lookupCache.GetMueEntryAsync(
                 request.TenantId,
-                code,
+                normalizedCode,
                 effectiveDate,
-                lookupCt => _repository.GetMueEntryAsync(request.TenantId, code, effectiveDate, lookupCt),
+                lookupCt => _repository.GetMueEntryAsync(request.TenantId, normalizedCode, effectiveDate, lookupCt),
                 ct);
 
             result.MueChecked++;
