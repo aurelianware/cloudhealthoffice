@@ -46,11 +46,16 @@ internal class NcciEditService : INcciEditService
         };
 
     private readonly INcciRepository _repository;
+    private readonly NcciLookupCache _lookupCache;
     private readonly ILogger<NcciEditService> _logger;
 
-    public NcciEditService(INcciRepository repository, ILogger<NcciEditService> logger)
+    public NcciEditService(
+        INcciRepository repository,
+        ILogger<NcciEditService> logger,
+        NcciLookupCache? lookupCache = null)
     {
         _repository = repository;
+        _lookupCache = lookupCache ?? new NcciLookupCache();
         _logger = logger;
     }
 
@@ -95,6 +100,8 @@ internal class NcciEditService : INcciEditService
         var (pairsWritten, mueWritten) = await _repository.UpsertQuarterAsync(
             tenantId, quarter, pairs, entries, ct);
 
+        _lookupCache.InvalidateTenant(tenantId);
+
         _logger.LogInformation(
             "NCCI import complete for {Quarter}: {PairsWritten} pairs, {MueWritten} MUE entries written",
             SanitizeForLog(quarter), pairsWritten, mueWritten);
@@ -137,13 +144,31 @@ internal class NcciEditService : INcciEditService
                     var lineB = lines[j];
 
                     // Look up both orderings: A/B and B/A
-                    var editAB = await _repository.GetEditPairAsync(
-                        request.TenantId, lineA.ProcedureCode, lineB.ProcedureCode,
-                        effectiveDate, ct);
+                    var editAB = await _lookupCache.GetEditPairAsync(
+                        request.TenantId,
+                        lineA.ProcedureCode,
+                        lineB.ProcedureCode,
+                        effectiveDate,
+                        lookupCt => _repository.GetEditPairAsync(
+                            request.TenantId,
+                            lineA.ProcedureCode,
+                            lineB.ProcedureCode,
+                            effectiveDate,
+                            lookupCt),
+                        ct);
 
-                    var editBA = await _repository.GetEditPairAsync(
-                        request.TenantId, lineB.ProcedureCode, lineA.ProcedureCode,
-                        effectiveDate, ct);
+                    var editBA = await _lookupCache.GetEditPairAsync(
+                        request.TenantId,
+                        lineB.ProcedureCode,
+                        lineA.ProcedureCode,
+                        effectiveDate,
+                        lookupCt => _repository.GetEditPairAsync(
+                            request.TenantId,
+                            lineB.ProcedureCode,
+                            lineA.ProcedureCode,
+                            effectiveDate,
+                            lookupCt),
+                        ct);
 
                     result.NcciPairsChecked++;
 
@@ -223,8 +248,12 @@ internal class NcciEditService : INcciEditService
             var (code, dos) = group.Key;
             var lines = group.ToList();
 
-            var mue = await _repository.GetMueEntryAsync(
-                request.TenantId, code, effectiveDate, ct);
+            var mue = await _lookupCache.GetMueEntryAsync(
+                request.TenantId,
+                code,
+                effectiveDate,
+                lookupCt => _repository.GetMueEntryAsync(request.TenantId, code, effectiveDate, lookupCt),
+                ct);
 
             result.MueChecked++;
 
