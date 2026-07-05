@@ -21,6 +21,7 @@ public class MassAdjudicationRunSummary
     public MassAdjudicationStageTiming? SubmitTiming { get; set; }
     public MassAdjudicationStageTiming? AdjudicateTiming { get; set; }
     public MassAdjudicationStageTiming? WritebackTiming { get; set; }
+    public List<MassAdjudicationStageTiming> AdjudicationStepTimings { get; set; } = new();
     public decimal? AveragePaymentDelta { get; set; }
     public List<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown { get; set; } = new();
     public List<MassAdjudicationFailureSummary> SampleFailures { get; set; } = new();
@@ -88,5 +89,6 @@ public class MassAdjudicationClaimResult
     public double SubmitMilliseconds { get; set; }
     public double AdjudicationMilliseconds { get; set; }
     public double WritebackMilliseconds { get; set; }
+    public Dictionary<string, double> AdjudicationStepMilliseconds { get; set; } = new();
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }

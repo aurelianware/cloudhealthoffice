@@ -186,6 +186,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             submitElapsed,
             adjudicationElapsed,
             updateElapsed,
+            adjudicated.Timings ?? new Dictionary<string, double>(),
             businessDenialCode,
             null,
             null);
@@ -209,6 +210,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             submitElapsed,
             adjudicationElapsed,
             updateElapsed,
+            new Dictionary<string, double>(),
             null,
             failureStage,
             ex.Message);
@@ -1032,7 +1034,8 @@ static bool TryParseBusinessDenial(
             error.Carc,
             error.Message,
             new AdjudicationTotalsDto(0, 0, 0, 0, 0, 0, 0, 0),
-            error.Error);
+            error.Error,
+            error.Timings);
         return true;
     }
     catch (JsonException)
@@ -1339,7 +1342,8 @@ static MassAdjudicationRunSummary BuildSummary(
             r.Elapsed.TotalMilliseconds,
             r.SubmitElapsed.TotalMilliseconds,
             r.AdjudicationElapsed.TotalMilliseconds,
-            r.UpdateElapsed.TotalMilliseconds))
+            r.UpdateElapsed.TotalMilliseconds,
+            r.AdjudicationStepTimings))
         .ToList();
 
     return new MassAdjudicationRunSummary(
@@ -1371,6 +1375,7 @@ static MassAdjudicationRunSummary BuildSummary(
         BuildStageTiming("Submit", results.Select(r => r.SubmitElapsed)),
         BuildStageTiming("Adjudicate", results.Select(r => r.AdjudicationElapsed)),
         BuildStageTiming("Writeback", results.Select(r => r.UpdateElapsed)),
+        BuildAdjudicationStepTimings(results),
         avgDelta,
         denialBreakdown,
         failures,
@@ -1393,6 +1398,10 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     WriteStageTiming(summary.SubmitTiming);
     WriteStageTiming(summary.AdjudicateTiming);
     WriteStageTiming(summary.WritebackTiming);
+    foreach (var timing in summary.AdjudicationStepTimings)
+    {
+        WriteStageTiming(timing);
+    }
 
     if (summary.AveragePaymentDelta.HasValue)
     {
@@ -1424,6 +1433,33 @@ static MassAdjudicationStageTiming? BuildStageTiming(string label, IEnumerable<T
     }
 
     return new MassAdjudicationStageTiming(label, values.Average(), Percentile(values, 0.95));
+}
+
+static IReadOnlyList<MassAdjudicationStageTiming> BuildAdjudicationStepTimings(
+    IReadOnlyCollection<ClaimValidationResult> results)
+{
+    return results
+        .SelectMany(r => r.AdjudicationStepTimings)
+        .GroupBy(kvp => kvp.Key, StringComparer.Ordinal)
+        .Select(group =>
+        {
+            var values = group
+                .Select(kvp => kvp.Value)
+                .Where(ms => ms > 0)
+                .Order()
+                .ToArray();
+
+            return values.Length == 0
+                ? null
+                : new MassAdjudicationStageTiming(
+                    $"Adjudicate.{group.Key}",
+                    values.Average(),
+                    Percentile(values, 0.95));
+        })
+        .Where(timing => timing is not null)
+        .Cast<MassAdjudicationStageTiming>()
+        .OrderByDescending(timing => timing.AverageMilliseconds)
+        .ToList();
 }
 
 static void WriteStageTiming(MassAdjudicationStageTiming? timing)
@@ -1703,6 +1739,7 @@ internal sealed record ClaimValidationResult(
     TimeSpan SubmitElapsed,
     TimeSpan AdjudicationElapsed,
     TimeSpan UpdateElapsed,
+    IReadOnlyDictionary<string, double> AdjudicationStepTimings,
     string? BusinessDenialCode,
     string? FailureStage,
     string? Error);
@@ -1724,6 +1761,7 @@ internal sealed record MassAdjudicationRunSummary(
     MassAdjudicationStageTiming? SubmitTiming,
     MassAdjudicationStageTiming? AdjudicateTiming,
     MassAdjudicationStageTiming? WritebackTiming,
+    IReadOnlyList<MassAdjudicationStageTiming> AdjudicationStepTimings,
     decimal? AveragePaymentDelta,
     IReadOnlyList<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown,
     IReadOnlyList<MassAdjudicationFailureSummary> SampleFailures,
@@ -1776,7 +1814,8 @@ internal sealed record MassAdjudicationClaimResult(
     double ElapsedMilliseconds,
     double SubmitMilliseconds,
     double AdjudicationMilliseconds,
-    double WritebackMilliseconds);
+    double WritebackMilliseconds,
+    IReadOnlyDictionary<string, double> AdjudicationStepMilliseconds);
 
 internal sealed record AdjudicationResponseDto(
     string ClaimId,
@@ -1784,7 +1823,8 @@ internal sealed record AdjudicationResponseDto(
     string? DenialReasonCode,
     string? DenialReasonDescription,
     AdjudicationTotalsDto Totals,
-    string? BusinessDenialCode = null);
+    string? BusinessDenialCode = null,
+    IReadOnlyDictionary<string, double>? Timings = null);
 
 internal sealed record AdjudicationTotalsDto(
     decimal BilledAmount,
@@ -1800,4 +1840,5 @@ internal sealed record AdjudicationErrorDto(
     string? ClaimId,
     string? Error,
     string? Message,
-    string? Carc);
+    string? Carc,
+    IReadOnlyDictionary<string, double>? Timings = null);

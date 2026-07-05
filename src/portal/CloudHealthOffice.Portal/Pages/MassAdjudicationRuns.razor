@@ -161,6 +161,18 @@
                     <MudItem xs="12" sm="4">@Timing(_selectedRun.AdjudicateTiming)</MudItem>
                     <MudItem xs="12" sm="4">@Timing(_selectedRun.WritebackTiming)</MudItem>
                 </MudGrid>
+
+                @if (_selectedRun.AdjudicationStepTimings.Count > 0)
+                {
+                    <MudDivider Class="my-3" Style="border-color: rgba(0,255,255,0.12);" />
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65); font-weight: 700;">Adjudication Sub-Steps</MudText>
+                    <MudGrid Spacing="2" Class="mt-1">
+                        @foreach (var timing in _selectedRun.AdjudicationStepTimings.Take(6))
+                        {
+                            <MudItem xs="12" sm="6" md="4">@Timing(timing)</MudItem>
+                        }
+                    </MudGrid>
+                }
             </MudPaper>
 
             <MudPaper Class="pa-4 mb-3" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;">

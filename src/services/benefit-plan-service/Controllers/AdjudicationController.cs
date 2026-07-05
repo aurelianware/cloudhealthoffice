@@ -145,9 +145,26 @@ public class AdjudicationController : ControllerBase
         adjudicationSpan?.SetTag("cho.claim_type", request.ClaimType);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        var stageTimings = new Dictionary<string, double>(StringComparer.Ordinal);
+
+        async Task<T> MeasureStageAsync<T>(string stage, Func<Task<T>> action)
+        {
+            var stageWatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                return await action();
+            }
+            finally
+            {
+                stageWatch.Stop();
+                stageTimings[stage] = stageWatch.Elapsed.TotalMilliseconds;
+            }
+        }
 
         // ── Routing decision: determine operating mode for this claim type/LOB ──
-        var operatingModeConfig = await _operatingModeProvider.GetConfigurationAsync(TenantId, ct);
+        var operatingModeConfig = await MeasureStageAsync(
+            "routing",
+            () => _operatingModeProvider.GetConfigurationAsync(TenantId, ct));
         var routingDecision = _claimTypeRouter.Route(
             operatingModeConfig, request.ClaimType, request.LineOfBusiness);
 
@@ -176,7 +193,8 @@ public class AdjudicationController : ControllerBase
                 DenialReasonDescription = $"Claim type {request.ClaimType} routed to legacy system per tenant configuration",
                 OperatingMode = "LegacyOnly",
                 RoutingKey = routingDecision.ResolvedKey,
-                IsAuthoritative = false
+                IsAuthoritative = false,
+                Timings = stageTimings
             });
         }
 
@@ -196,8 +214,9 @@ public class AdjudicationController : ControllerBase
             memberId: request.MemberId))
         {
             var scrubClaim = MapToScrubClaim(request);
-            scrubResponse = await _scrubEngine.ScrubAndRouteAsync(
-                new ClaimsScrubRequest { Claim = scrubClaim }, ct);
+            scrubResponse = await MeasureStageAsync(
+                "scrub",
+                () => _scrubEngine.ScrubAndRouteAsync(new ClaimsScrubRequest { Claim = scrubClaim }, ct));
 
             scrubSpan?.SetTag("cho.scrub.passed", scrubResponse.Result.Routing.Destination == "adjudication");
             scrubSpan?.SetTag("cho.scrub.error_count", scrubResponse.Result.ErrorCount);
@@ -225,6 +244,7 @@ public class AdjudicationController : ControllerBase
                 status = scrubResponse.Result.Status,
                 routing = scrubResponse.Result.Routing,
                 validationResults = scrubResponse.Result.Results.Where(r => !r.Passed).ToList(),
+                timings = stageTimings,
             });
         }
 
@@ -254,7 +274,9 @@ public class AdjudicationController : ControllerBase
                 }).ToList(),
             };
 
-            ncciResult = await _ncciEngine.ScrubAsync(ncciRequest, ct);
+            ncciResult = await MeasureStageAsync(
+                "ncci",
+                () => _ncciEngine.ScrubAsync(ncciRequest, ct));
 
             ncciSpan?.SetTag("cho.ncci.passed", ncciResult.Passed);
             ncciSpan?.SetTag("cho.ncci.failure_count", ncciResult.EditFailures.Count);
@@ -278,6 +300,7 @@ public class AdjudicationController : ControllerBase
                 message = $"Claim failed {ncciResult.EditFailures.Count} NCCI/MUE edit(s). " +
                           "Review edit failures and resubmit or override.",
                 editFailures = ncciResult.EditFailures,
+                timings = stageTimings,
             });
         }
 
@@ -290,7 +313,9 @@ public class AdjudicationController : ControllerBase
             claimType: claimTypeCode,
             memberId: request.MemberId))
         {
-            providerIntegrity = await _providerIntegrityGate.CheckAsync(request.ProviderNpi, TenantId, ct: ct);
+            providerIntegrity = await MeasureStageAsync(
+                "providerIntegrity",
+                () => _providerIntegrityGate.CheckAsync(request.ProviderNpi, TenantId, ct: ct));
 
             integritySpan?.SetTag("cho.integrity.passed", providerIntegrity.Passed);
             integritySpan?.SetTag("cho.integrity.score", providerIntegrity.IntegrityScore ?? -1);
@@ -317,6 +342,7 @@ public class AdjudicationController : ControllerBase
                 carc = providerIntegrity.DenialCode,
                 integrityScore = providerIntegrity.IntegrityScore,
                 rating = providerIntegrity.Rating,
+                timings = stageTimings,
             });
         }
 
@@ -348,7 +374,9 @@ public class AdjudicationController : ControllerBase
                 EstimatedCost = request.Lines.Sum(l => l.BilledAmount),
             };
 
-            priorAuthDecision = await _priorAuthEngine.EvaluateAsync(paContext, ct);
+            priorAuthDecision = await MeasureStageAsync(
+                "priorAuth",
+                () => _priorAuthEngine.EvaluateAsync(paContext, ct));
 
             paSpan?.SetTag("cho.pa.outcome", priorAuthDecision.Outcome.ToString());
             paSpan?.SetTag("cho.pa.rule_id", priorAuthDecision.FiringRuleId);
@@ -377,21 +405,24 @@ public class AdjudicationController : ControllerBase
                 carc = priorAuthDecision.DenialCode ?? "197",
                 firingRule = priorAuthDecision.FiringRuleName,
                 ruleSetKey = priorAuthDecision.ResolvedRuleSetKey,
+                timings = stageTimings,
             });
         }
 
         // ── Step 0e: Terminology crosswalk (plan-specific code mappings) ──
         // Resolves plan-specific procedure code overrides before pricing.
         // Essential for TX Medicaid rate accuracy where plan codes differ from standard CPT.
-        var crosswalkResults = await _terminologyClient.TranslateBatchAsync(
-            TenantId,
-            request.Lines.Select(l => new CodeCrosswalkRequest
-            {
-                LineNumber = l.LineNumber,
-                ProcedureCode = l.ProcedureCode,
-                CodeType = l.CodeType ?? "CPT"
-            }).ToList(),
-            ct);
+        var crosswalkResults = await MeasureStageAsync(
+            "terminology",
+            () => _terminologyClient.TranslateBatchAsync(
+                TenantId,
+                request.Lines.Select(l => new CodeCrosswalkRequest
+                {
+                    LineNumber = l.LineNumber,
+                    ProcedureCode = l.ProcedureCode,
+                    CodeType = l.CodeType ?? "CPT"
+                }).ToList(),
+                ct));
 
         var crosswalkMap = crosswalkResults.ToDictionary(r => r.LineNumber, r => r.ResolvedCode);
 
@@ -419,7 +450,9 @@ public class AdjudicationController : ControllerBase
                 LineNumber = line.LineNumber
             }).ToList();
 
-            pricingResults = await _rateEngine.ResolveBatchAsync(pricingRequests, ct);
+            pricingResults = await MeasureStageAsync(
+                "rateResolution",
+                () => _rateEngine.ResolveBatchAsync(pricingRequests, ct));
 
             rateSpan?.SetTag("cho.rate.line_count", pricingResults.LineResults.Count);
         }
@@ -476,12 +509,14 @@ public class AdjudicationController : ControllerBase
             };
 
             // Use mode-aware calculation when in Augment mode to capture discrepancies
-            var augmentResult = await _benefitEngine.CalculateWithModeAsync(
-                benefitRequest,
-                routingDecision.OperatingMode,
-                TenantId,
-                legacyResult: null, // Legacy result injected by workflow when available
-                ct);
+            var augmentResult = await MeasureStageAsync(
+                "benefitCalculation",
+                () => _benefitEngine.CalculateWithModeAsync(
+                    benefitRequest,
+                    routingDecision.OperatingMode,
+                    TenantId,
+                    legacyResult: null, // Legacy result injected by workflow when available
+                    ct));
 
             benefitResult = augmentResult.ChoResult;
             augmentDiscrepancies = augmentResult.Discrepancies;
@@ -559,7 +594,8 @@ public class AdjudicationController : ControllerBase
                     AdjustmentReasons = bl.Adjustments
                 };
             }).ToList(),
-            Accumulators = benefitResult.AccumulatorSnapshot
+            Accumulators = benefitResult.AccumulatorSnapshot,
+            Timings = stageTimings
         };
 
         var outcome = benefitResult.Success ? "approved" : "denied";
@@ -1078,6 +1114,12 @@ public record AdjudicationResponse
     /// Null when the verification service was not consulted.
     /// </summary>
     public int? ProviderIntegrityScore { get; init; }
+
+    /// <summary>
+    /// Elapsed milliseconds for adjudication sub-steps. Used by local MCC
+    /// benchmarking to identify the next tuning target.
+    /// </summary>
+    public IReadOnlyDictionary<string, double> Timings { get; init; } = new Dictionary<string, double>();
 }
 
 public record AdjudicationTotals
