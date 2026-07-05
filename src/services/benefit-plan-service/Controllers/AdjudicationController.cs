@@ -1119,7 +1119,7 @@ public record AdjudicationResponse
     /// Elapsed milliseconds for adjudication sub-steps. Used by local MCC
     /// benchmarking to identify the next tuning target.
     /// </summary>
-    public IReadOnlyDictionary<string, double> Timings { get; init; } = new Dictionary<string, double>();
+    public IReadOnlyDictionary<string, double>? Timings { get; init; }
 }
 
 public record AdjudicationTotals
