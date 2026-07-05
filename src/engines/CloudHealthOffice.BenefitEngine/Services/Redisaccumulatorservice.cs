@@ -123,14 +123,18 @@ public class RedisAccumulatorService : IAccumulatorService
         var db = _redis.GetDatabase();
         var snapshots = new List<AccumulatorSnapshot>();
 
-        // Load individual accumulators
-        var individualSnapshots = await GetOrRebuildAsync(
+        // Load individual and family accumulators independently. Running
+        // both reads in parallel avoids paying two Redis round trips serially.
+        var individualTask = GetOrRebuildAsync(
             db, memberId, AccumulatorScope.Individual, benefitPlanId, planYear, ct);
-        snapshots.AddRange(individualSnapshots);
-
-        // Load family accumulators
-        var familySnapshots = await GetOrRebuildAsync(
+        var familyTask = GetOrRebuildAsync(
             db, subscriberId, AccumulatorScope.Family, benefitPlanId, planYear, ct);
+
+        await Task.WhenAll(individualTask, familyTask);
+
+        var individualSnapshots = await individualTask;
+        var familySnapshots = await familyTask;
+        snapshots.AddRange(individualSnapshots);
         snapshots.AddRange(familySnapshots);
 
         _logger.LogDebug(

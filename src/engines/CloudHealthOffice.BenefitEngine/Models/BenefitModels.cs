@@ -119,6 +119,7 @@ public record BenefitResolutionResult
     public List<LineBenefitResult> Lines { get; init; } = [];
     public ClaimTotals Totals { get; init; } = new();
     public List<AccumulatorState> AccumulatorSnapshot { get; init; } = [];
+    public IReadOnlyDictionary<string, double> Timings { get; init; } = new Dictionary<string, double>();
 
     /// <summary>
     /// When DRG/per-diem pricing is used, this contains the claim-level
