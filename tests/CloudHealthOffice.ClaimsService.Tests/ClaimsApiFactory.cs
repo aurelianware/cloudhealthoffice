@@ -1,5 +1,6 @@
 using ClaimsService.Adapters;
 using ClaimsService.EDI.Florida;
+using ClaimsService.HostedServices;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
@@ -77,9 +78,10 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType.FullName?.Contains("Mongo") == true
                          || d.ImplementationType?.FullName?.Contains("Cosmos") == true
                          || d.ImplementationType?.FullName?.Contains("Mongo") == true
-                         || d.ImplementationType?.FullName?.Contains("MassAdjudicationRunIndexInitializer") == true
-                         || d.ImplementationType?.FullName?.Contains("ClaimVersionEventIndexInitializer") == true
-                         || d.ImplementationType?.FullName?.Contains("ClaimAdjustmentIndexInitializer") == true)
+                         || d.ImplementationType == typeof(ClaimIndexInitializer)
+                         || d.ImplementationType == typeof(MassAdjudicationRunIndexInitializer)
+                         || d.ImplementationType == typeof(ClaimVersionEventIndexInitializer)
+                         || d.ImplementationType == typeof(ClaimAdjustmentIndexInitializer))
                 .ToList();
 
             foreach (var descriptor in cosmosDescriptors)

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using ClaimsService.Adapters;
+using ClaimsService.HostedServices;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
@@ -188,8 +189,10 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                              || d.ServiceType.FullName?.Contains("Mongo") == true
                              || d.ImplementationType?.FullName?.Contains("Cosmos") == true
                              || d.ImplementationType?.FullName?.Contains("Mongo") == true
-                             || d.ImplementationType?.FullName?.Contains("ClaimVersionEventIndexInitializer") == true
-                             || d.ImplementationType?.FullName?.Contains("ClaimAdjustmentIndexInitializer") == true
+                             || d.ImplementationType == typeof(ClaimIndexInitializer)
+                             || d.ImplementationType == typeof(MassAdjudicationRunIndexInitializer)
+                             || d.ImplementationType == typeof(ClaimVersionEventIndexInitializer)
+                             || d.ImplementationType == typeof(ClaimAdjustmentIndexInitializer)
                              || d.ServiceType == typeof(IClaimVersionEventPublisher)
                              || d.ServiceType == typeof(IBenefitCalculationEngine)
                              || d.ServiceType == typeof(IBenefitPlanResolver)
