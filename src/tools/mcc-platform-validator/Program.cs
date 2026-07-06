@@ -1538,7 +1538,7 @@ static void PrintUsage()
       --skip-claim-update        Do not write adjudication projection back to claims-service
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 10)
-      -p, --parallelism <count>  Number of claims to process concurrently (default: 12)
+      -p, --parallelism <count>  Number of claims to process concurrently (default: 10)
       --line-of-business <code>  Adjudication line of business: 1 Commercial, 2 Medicare, 3 Medicaid, 4 CHIP, 5 Exchange (default: 3)
       --no-prior-auth-scenarios  Disable deterministic PA-required claim scenarios
       --prior-auth-rate <rate>   Fraction of generated claims forced into PA-required scenarios (default: 0.02)
@@ -1548,7 +1548,7 @@ static void PrintUsage()
       -h, --help                 Show help
 
     Example:
-      dotnet run --project src/tools/mcc-platform-validator -- --claims 100 --parallelism 12 --tenant demo
+      dotnet run --project src/tools/mcc-platform-validator -- --claims 100 --parallelism 10 --tenant demo
     """);
 }
 
@@ -1703,7 +1703,7 @@ internal sealed record ValidatorOptions(
         public bool SkipClaimUpdate { get; set; }
         public int TimeoutSeconds { get; set; } = 60;
         public int ProgressEvery { get; set; } = 10;
-        public int Parallelism { get; set; } = 12;
+        public int Parallelism { get; set; } = 10;
         public int LineOfBusiness { get; set; } = 3;
         public string? SummaryJsonPath { get; set; }
         public bool NoPublishSummary { get; set; }
