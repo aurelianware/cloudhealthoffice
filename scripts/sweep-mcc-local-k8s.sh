@@ -6,6 +6,9 @@ set -euo pipefail
 #
 # For a quick smoke test with an image already loaded locally:
 #   SKIP_BUILD=true CLAIMS=20 PARALLELISM_VALUES="2" REPEATS=1 ./scripts/sweep-mcc-local-k8s.sh
+#
+# For repeat benchmarks after synthetic providers have already been seeded:
+#   SKIP_BUILD=true SEED_PROVIDERS=false CLAIMS=50000 PARALLELISM_VALUES="10" REPEATS=1 ./scripts/sweep-mcc-local-k8s.sh
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -14,6 +17,7 @@ IMAGE="${IMAGE:-cloudhealthoffice-mcc-platform-validator:local}"
 CLAIMS="${CLAIMS:-1000}"
 MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
+SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 PARALLELISM_VALUES="${PARALLELISM_VALUES:-8 10 11 12}"
 REPEATS="${REPEATS:-2}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-100}"
@@ -88,7 +92,12 @@ run_case() {
   local job_name="mcc-sweep-p${parallelism}-r${repeat}-$(date +%H%M%S)"
   local log_file="$OUTPUT_DIR/${job_name}.log"
   local json_file="$OUTPUT_DIR/${job_name}.json"
+  local seed_provider_arg=""
   local status="ok"
+
+  if [[ "$SEED_PROVIDERS" != "true" ]]; then
+    seed_provider_arg='                --no-seed-providers \'
+  fi
 
   log "Running MCC sweep case parallelism=${parallelism}, repeat=${repeat}"
   kubectl delete job -n "$NAMESPACE" "$job_name" --ignore-not-found >/dev/null
@@ -124,6 +133,7 @@ spec:
                 --benefit-url http://benefit-plan-service \
                 --provider-url http://provider-service \
                 --progress-every "${PROGRESS_EVERY}" \
+${seed_provider_arg}
                 --summary-json /tmp/mcc-summary.json
               status=\$?
               echo "__MCC_SUMMARY_JSON_BEGIN__"
