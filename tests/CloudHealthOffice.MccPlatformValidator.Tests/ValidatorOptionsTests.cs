@@ -22,4 +22,12 @@ public class ValidatorOptionsTests
 
         Assert.Equal(50_000, options.Claims);
     }
+
+    [Fact]
+    public void Parse_WhenNoSeedProvidersProvided_DisablesProviderSeeding()
+    {
+        var options = ValidatorOptions.Parse(["--no-seed-providers"]);
+
+        Assert.False(options.SeedProviders);
+    }
 }

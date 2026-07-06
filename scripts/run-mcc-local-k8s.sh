@@ -9,6 +9,7 @@ IMAGE="${IMAGE:-cloudhealthoffice-mcc-platform-validator:local}"
 CLAIMS="${CLAIMS:-5000}"
 MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
+SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 PARALLELISM="${PARALLELISM:-10}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-500}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-docker-desktop}"
@@ -63,6 +64,7 @@ spec:
             - http://benefit-plan-service
             - --provider-url
             - http://provider-service
+$(if [[ "$SEED_PROVIDERS" != "true" ]]; then printf '            - --no-seed-providers\n'; fi)
             - --progress-every
             - "${PROGRESS_EVERY}"
             - --summary-json
