@@ -304,11 +304,21 @@ public class RedisAccumulatorService : IAccumulatorService
         _logger.LogDebug(
             "Cache miss for {Key}. Rebuilding from claim history.", key.ToString());
 
-        var computed = await _claimsSource.CalculateAccumulatorsAsync(
+        var (fetchSuccess, computed) = await _claimsSource.CalculateAccumulatorsAsync(
             _tenantContext.TenantId, ownerId, scope, benefitPlanId, planYear, ct);
+
+        if (!fetchSuccess)
+        {
+            // Source was unavailable — do not cache; the next read will retry.
+            _logger.LogWarning(
+                "Accumulator source unavailable for {Key}. Skipping Redis cache population.",
+                key.ToString());
+            return [];
+        }
 
         if (computed.Count == 0)
         {
+            // Authoritatively empty: owner has no accumulator history.
             await MarkEmptySnapshotAsync(db, key);
             return [];
         }
@@ -460,7 +470,18 @@ public class RedisAccumulatorService : IAccumulatorService
 /// </summary>
 public interface IClaimsAccumulatorSource
 {
-    Task<IReadOnlyList<AccumulatorSnapshot>> CalculateAccumulatorsAsync(
+    /// <summary>
+    /// Calculates accumulator totals from claim history.
+    /// </summary>
+    /// <returns>
+    /// A result where <c>Success</c> is <c>true</c> when the source was
+    /// reachable and the data is authoritative (even if <c>Snapshots</c> is
+    /// empty, meaning the owner has no accumulator history), and <c>false</c>
+    /// when the source was unavailable or returned a non-success response —
+    /// in which case the caller must NOT cache the result as an authoritative
+    /// empty rebuild.
+    /// </returns>
+    Task<(bool Success, IReadOnlyList<AccumulatorSnapshot> Snapshots)> CalculateAccumulatorsAsync(
         string tenantId, string ownerId, AccumulatorScope scope,
         Guid benefitPlanId, string planYear,
         CancellationToken ct = default);

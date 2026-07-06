@@ -25,32 +25,6 @@ public class ClaimRepositoryMongo : IClaimRepository
         _collection = database.GetCollection<Claim>("Claims");
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
-
-        // Ensure indexes (best effort on startup)
-        var indexKeys = Builders<Claim>.IndexKeys;
-        var indexModels = new List<CreateIndexModel<Claim>>
-        {
-            new CreateIndexModel<Claim>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.ClaimNumber)),
-            new CreateIndexModel<Claim>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.MemberId)),
-            new CreateIndexModel<Claim>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.SubmittedDate)),
-            // Compound index for search
-            new CreateIndexModel<Claim>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.ServiceDateFrom)),
-            // Versioning chain key index — supports GetLatestVersion / ListVersions.
-            new CreateIndexModel<Claim>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.ClaimVersionId).Descending(c => c.VersionNumber)),
-            // Accumulator rebuild indexes — support Redis cache miss aggregation by owner/plan/year.
-            new CreateIndexModel<Claim>(indexKeys
-                .Ascending(c => c.TenantId)
-                .Ascending(c => c.BenefitPlanId)
-                .Ascending(c => c.MemberId)
-                .Ascending(c => c.ServiceDateFrom)),
-            new CreateIndexModel<Claim>(indexKeys
-                .Ascending(c => c.TenantId)
-                .Ascending(c => c.BenefitPlanId)
-                .Ascending(c => c.SubscriberId)
-                .Ascending(c => c.ServiceDateFrom))
-        };
-
-        _collection.Indexes.CreateMany(indexModels);
     }
 
     private string GetTenantId()
