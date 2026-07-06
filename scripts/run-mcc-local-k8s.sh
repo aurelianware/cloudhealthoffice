@@ -64,7 +64,7 @@ spec:
             - http://benefit-plan-service
             - --provider-url
             - http://provider-service
-$(if [[ "$SEED_PROVIDERS" != "true" ]]; then printf '            - --no-seed-providers\n'; fi)
+            $(if [[ "$SEED_PROVIDERS" != "true" ]]; then printf -- '- --no-seed-providers\n'; fi)
             - --progress-every
             - "${PROGRESS_EVERY}"
             - --summary-json
