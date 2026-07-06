@@ -461,6 +461,58 @@ public class RateResolutionServiceTests
         Assert.Equal(1, inner.GetContractCalls);
     }
 
+    [Fact]
+    public async Task CachingRepository_UpsertSchedule_InvalidatesDefaultPlanCache()
+    {
+        var inner = new CountingFeeScheduleRepo(defaultSchedule: null);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var sut = new CachingFeeScheduleRepository(inner, inner, cache);
+
+        var firstDefault = await sut.GetDefaultForPlanAsync(Tenant, PlanId, new DateTime(2026, 3, 8));
+        var secondDefault = await sut.GetDefaultForPlanAsync(Tenant, PlanId, new DateTime(2026, 3, 8));
+        Assert.Null(firstDefault);
+        Assert.Null(secondDefault);
+        Assert.Equal(1, inner.GetDefaultForPlanCalls);
+
+        var newDefault = CreateCommercialSchedule("99213", 120m);
+        await sut.UpsertAsync(newDefault);
+
+        var refreshedDefault = await sut.GetDefaultForPlanAsync(Tenant, PlanId, new DateTime(2026, 3, 8));
+        Assert.NotNull(refreshedDefault);
+        Assert.Equal(2, inner.GetDefaultForPlanCalls);
+    }
+
+    [Fact]
+    public async Task CachingRepository_UpsertContract_InvalidatesContractCache()
+    {
+        var inner = new CountingFeeScheduleRepo(defaultSchedule: null);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var sut = new CachingFeeScheduleRepository(inner, inner, cache);
+        var serviceDate = new DateTime(2026, 3, 8);
+
+        var firstContract = await sut.GetContractAsync(Tenant, ProviderNpi, PlanId, serviceDate);
+        var secondContract = await sut.GetContractAsync(Tenant, ProviderNpi, PlanId, serviceDate);
+        Assert.Null(firstContract);
+        Assert.Null(secondContract);
+        Assert.Equal(1, inner.GetContractCalls);
+
+        var updatedContract = new ProviderContract
+        {
+            Id = ProviderContract.MakeId(Tenant, ProviderNpi, PlanId),
+            TenantId = Tenant,
+            ProviderNpi = ProviderNpi,
+            PlanId = PlanId,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            NetworkStatus = NetworkStatus.InNetwork,
+            FeeScheduleId = "comm-test"
+        };
+        await sut.UpsertAsync(updatedContract);
+
+        var refreshedContract = await sut.GetContractAsync(Tenant, ProviderNpi, PlanId, serviceDate);
+        Assert.NotNull(refreshedContract);
+        Assert.Equal(2, inner.GetContractCalls);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // HELPERS
     // ═══════════════════════════════════════════════════════════════════
@@ -614,7 +666,8 @@ internal class InMemoryProviderContractRepo : IProviderContractRepository
 
 internal class CountingFeeScheduleRepo : IFeeScheduleRepository, IProviderContractRepository
 {
-    private readonly FeeSchedule? _defaultSchedule;
+    private FeeSchedule? _defaultSchedule;
+    private ProviderContract? _contract;
 
     public int GetByIdCalls { get; private set; }
     public int GetDefaultForPlanCalls { get; private set; }
@@ -641,7 +694,10 @@ internal class CountingFeeScheduleRepo : IFeeScheduleRepository, IProviderContra
         => Task.FromResult<FeeScheduleLine?>(null);
 
     public Task<FeeSchedule> UpsertAsync(FeeSchedule schedule, CancellationToken ct)
-        => Task.FromResult(schedule);
+    {
+        _defaultSchedule = schedule;
+        return Task.FromResult(schedule);
+    }
 
     public Task<IReadOnlyList<FeeSchedule>> ListAsync(
         string tenantId, int page, int pageSize, CancellationToken ct)
@@ -651,11 +707,14 @@ internal class CountingFeeScheduleRepo : IFeeScheduleRepository, IProviderContra
         string tenantId, string providerNpi, string planId, DateTime serviceDate, CancellationToken ct)
     {
         GetContractCalls++;
-        return Task.FromResult<ProviderContract?>(null);
+        return Task.FromResult(_contract);
     }
 
     public Task<ProviderContract> UpsertAsync(ProviderContract contract, CancellationToken ct)
-        => Task.FromResult(contract);
+    {
+        _contract = contract;
+        return Task.FromResult(contract);
+    }
 
     public Task<IReadOnlyList<ProviderContract>> ListByProviderAsync(
         string tenantId, string providerNpi, CancellationToken ct)
