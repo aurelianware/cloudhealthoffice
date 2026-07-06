@@ -36,6 +36,7 @@ var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 if (!string.IsNullOrEmpty(mongoConnectionString))
 {
     builder.Services.AddScoped<IClaimRepository, ClaimRepositoryMongo>();
+    builder.Services.AddHostedService<ClaimIndexInitializer>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryMongo>();
     builder.Services.AddScoped<IMassAdjudicationRunRepository, MassAdjudicationRunRepositoryMongo>();
     builder.Services.AddHostedService<MassAdjudicationRunIndexInitializer>();
