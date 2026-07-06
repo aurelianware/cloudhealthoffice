@@ -1,0 +1,84 @@
+# Episode 005 podcast prompt
+
+Create a 10-12 minute conversational podcast episode titled:
+
+**From Faster to Repeatably Faster**
+
+Use the attached Episode 005 packet and the reusable host personas.
+
+## Core story
+
+CloudHealthOffice moved from isolated fast local runs to repeatable local Kubernetes benchmarking for the Million Claim Challenge.
+
+The episode should explain how the team added a local Kubernetes sweep harness, compared parallelism settings, discovered that the best setting changed as workload size increased, found a hidden 10,000-claim cap, made the cap explicit with a max-claims override, and completed a true 50,000-claim run.
+
+## Hosts
+
+Use two hosts:
+
+- Alex: systems architect focused on Kubernetes, performance, infrastructure, and repeatable benchmarking.
+- Jordan: healthcare platform engineer focused on claims adjudication, benefit rules, prior authorization, CMS-0057-F, and workflow correctness.
+
+## Required discussion points
+
+- The local Kubernetes sweep harness.
+- Configurable parallelism values.
+- Repeated runs.
+- Why one fast run is not a benchmark.
+- The 1,000-claim sweep where p=11 looked best.
+- The 10,000-claim sweep where p=10 became the better balance.
+- The hidden 10,000-claim cap.
+- The intentional max-claims override.
+- The true 50,000-claim run.
+- Why correct denials are not platform failures.
+- Why throughput must be paired with workflow correctness.
+- Why local Kubernetes is a proving ground, not a final production benchmark.
+
+## Required benchmark numbers
+
+1,000 claims, parallelism 11:
+
+- 247.10 claims/sec
+- 100.35 ms P95
+- 128.53 ms P99
+- 0 platform failures
+- 160/160 workflow checks matched
+
+10,000 claims:
+
+- p=10: 209.54 claims/sec, 103.47 ms P95, 149.85 ms P99
+- p=12: 209.81 claims/sec, 118.19 ms P95, 170.90 ms P99
+- conclusion: p=10 is the better balance despite p=12 having a tiny throughput edge
+
+50,000 claims:
+
+- 50,000 requested
+- 50,000 generated
+- 50,000 processed
+- 157.07 claims/sec
+- 5 minutes 18 seconds elapsed
+- 130 ms P95
+- 175 ms P99
+- 0 platform failures
+- 4,000/4,000 workflow checks matched
+
+Repeat 50,000-claim benchmark after provider seeding was skipped:
+
+- 188.64 claims/sec
+- 106 ms P95
+- 151 ms P99
+- 0 platform failures
+- 4,000/4,000 workflow checks matched
+
+## Tone and constraints
+
+- Do not read the article verbatim.
+- No marketing hype.
+- Do not invent numbers, customers, or production claims.
+- Explain Kubernetes Jobs, parallelism, P95/P99, and workflow checks clearly.
+- Make the distinction between business denials and platform failures explicit.
+- Include a recurring "Next Week's Challenge" ending.
+
+## Suggested ending
+
+Next Week's Challenge should point toward the next bottleneck: separating one-time setup costs from steady-state adjudication throughput, then moving toward larger local and cloud-backed validation runs.

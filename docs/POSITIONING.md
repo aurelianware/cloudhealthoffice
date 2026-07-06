@@ -288,6 +288,7 @@ We generate a stratified synthetic corpus of 1,000,000 healthcare claims — pro
 
 - `src/CloudHealthOffice.BenchmarkClaimGenerator/` — full .NET 8 library for parallel corpus generation.
 - `/docs/million-claim-challenge` — public landing page at cloudhealthoffice.com describing the benchmark.
+- `docs/million-claim-challenge/podcast/` — repeatable podcast packet workflow for turning Medium articles, pull requests, benchmark results, screenshots, and project context into Adobe Podcast / Acrobat Generate Podcast source material.
 - Reference data coverage across procedure codes, diagnosis codes, dental codes, taxonomy codes, modifier sets, revenue codes, network tiers, and benefit plan templates.
 - Dedicated Cosmos DB seeder scaffold (`CosmosDbSeeder`) for running the corpus against production-shape infrastructure — provides document-shape and adapter wiring; actual Cosmos DB persistence requires a concrete implementation or separate package (the base `WriteDocumentsAsync` is a no-op stub by design).
 
