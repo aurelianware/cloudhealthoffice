@@ -188,6 +188,8 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                              || d.ServiceType.FullName?.Contains("Mongo") == true
                              || d.ImplementationType?.FullName?.Contains("Cosmos") == true
                              || d.ImplementationType?.FullName?.Contains("Mongo") == true
+                             || d.ImplementationType?.FullName?.Contains("ClaimIndexInitializer") == true
+                             || d.ImplementationType?.FullName?.Contains("MassAdjudicationRunIndexInitializer") == true
                              || d.ImplementationType?.FullName?.Contains("ClaimVersionEventIndexInitializer") == true
                              || d.ImplementationType?.FullName?.Contains("ClaimAdjustmentIndexInitializer") == true
                              || d.ServiceType == typeof(IClaimVersionEventPublisher)
