@@ -2,6 +2,7 @@ using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Persistence;
 using CloudHealthOffice.FeeScheduleEngine.Services;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -422,6 +423,45 @@ public class RateResolutionServiceTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // REPOSITORY CACHE
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task CachingRepository_CachesScheduleReads()
+    {
+        var schedule = CreateCommercialSchedule("99213", 85m);
+        var inner = new CountingFeeScheduleRepo(schedule);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var sut = new CachingFeeScheduleRepository(inner, inner, cache);
+
+        var first = await sut.GetByIdAsync(Tenant, schedule.Id);
+        var second = await sut.GetByIdAsync(Tenant, schedule.Id);
+
+        Assert.Same(first, second);
+        Assert.Equal(1, inner.GetByIdCalls);
+    }
+
+    [Fact]
+    public async Task CachingRepository_CachesDefaultScheduleAndContractMisses()
+    {
+        var inner = new CountingFeeScheduleRepo(defaultSchedule: null);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var sut = new CachingFeeScheduleRepository(inner, inner, cache);
+
+        var firstDefault = await sut.GetDefaultForPlanAsync(Tenant, PlanId, new DateTime(2026, 3, 8));
+        var secondDefault = await sut.GetDefaultForPlanAsync(Tenant, PlanId, new DateTime(2026, 3, 8));
+        var firstContract = await sut.GetContractAsync(Tenant, ProviderNpi, PlanId, new DateTime(2026, 3, 8));
+        var secondContract = await sut.GetContractAsync(Tenant, ProviderNpi, PlanId, new DateTime(2026, 3, 8));
+
+        Assert.Null(firstDefault);
+        Assert.Null(secondDefault);
+        Assert.Null(firstContract);
+        Assert.Null(secondContract);
+        Assert.Equal(1, inner.GetDefaultForPlanCalls);
+        Assert.Equal(1, inner.GetContractCalls);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // HELPERS
     // ═══════════════════════════════════════════════════════════════════
 
@@ -569,5 +609,55 @@ internal class InMemoryProviderContractRepo : IProviderContractRepository
         => Task.FromResult(contract);
 
     public Task<IReadOnlyList<ProviderContract>> ListByProviderAsync(string tenantId, string providerNpi, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ProviderContract>>([]);
+}
+
+internal class CountingFeeScheduleRepo : IFeeScheduleRepository, IProviderContractRepository
+{
+    private readonly FeeSchedule? _defaultSchedule;
+
+    public int GetByIdCalls { get; private set; }
+    public int GetDefaultForPlanCalls { get; private set; }
+    public int GetContractCalls { get; private set; }
+
+    public CountingFeeScheduleRepo(FeeSchedule? defaultSchedule)
+        => _defaultSchedule = defaultSchedule;
+
+    public Task<FeeSchedule?> GetByIdAsync(string tenantId, string id, CancellationToken ct)
+    {
+        GetByIdCalls++;
+        return Task.FromResult(_defaultSchedule?.Id == id ? _defaultSchedule : null);
+    }
+
+    public Task<FeeSchedule?> GetDefaultForPlanAsync(
+        string tenantId, string planId, DateTime serviceDate, CancellationToken ct)
+    {
+        GetDefaultForPlanCalls++;
+        return Task.FromResult(_defaultSchedule);
+    }
+
+    public Task<FeeScheduleLine?> GetLineAsync(
+        string feeScheduleId, string procedureCode, string? modifier, CancellationToken ct)
+        => Task.FromResult<FeeScheduleLine?>(null);
+
+    public Task<FeeSchedule> UpsertAsync(FeeSchedule schedule, CancellationToken ct)
+        => Task.FromResult(schedule);
+
+    public Task<IReadOnlyList<FeeSchedule>> ListAsync(
+        string tenantId, int page, int pageSize, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<FeeSchedule>>([]);
+
+    public Task<ProviderContract?> GetContractAsync(
+        string tenantId, string providerNpi, string planId, DateTime serviceDate, CancellationToken ct)
+    {
+        GetContractCalls++;
+        return Task.FromResult<ProviderContract?>(null);
+    }
+
+    public Task<ProviderContract> UpsertAsync(ProviderContract contract, CancellationToken ct)
+        => Task.FromResult(contract);
+
+    public Task<IReadOnlyList<ProviderContract>> ListByProviderAsync(
+        string tenantId, string providerNpi, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<ProviderContract>>([]);
 }

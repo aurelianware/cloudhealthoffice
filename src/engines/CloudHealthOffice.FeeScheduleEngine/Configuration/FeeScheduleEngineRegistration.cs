@@ -1,6 +1,7 @@
 using CloudHealthOffice.FeeScheduleEngine.Persistence;
 using CloudHealthOffice.FeeScheduleEngine.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Configuration;
@@ -30,6 +31,7 @@ public static class FeeScheduleEngineServiceCollectionExtensions
     /// </summary>
     public static FeeScheduleEngineBuilder AddFeeScheduleEngine(this IServiceCollection services)
     {
+        services.AddMemoryCache();
         services.AddScoped<IRateResolutionService, RateResolutionService>();
         return new FeeScheduleEngineBuilder(services);
     }
@@ -50,8 +52,9 @@ public class FeeScheduleEngineBuilder
     /// </summary>
     public FeeScheduleEngineBuilder UseCosmosRepositories()
     {
-        _services.AddScoped<IFeeScheduleRepository, FeeScheduleRepositoryCosmos>();
-        _services.AddScoped<IProviderContractRepository, FeeScheduleRepositoryCosmos>();
+        _services.AddScoped<FeeScheduleRepositoryCosmos>();
+        _services.AddScoped<IFeeScheduleRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryCosmos>);
+        _services.AddScoped<IProviderContractRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryCosmos>);
         return this;
     }
 
@@ -61,8 +64,9 @@ public class FeeScheduleEngineBuilder
     /// </summary>
     public FeeScheduleEngineBuilder UseMongoRepositories()
     {
-        _services.AddScoped<IFeeScheduleRepository, FeeScheduleRepositoryMongo>();
-        _services.AddScoped<IProviderContractRepository, FeeScheduleRepositoryMongo>();
+        _services.AddScoped<FeeScheduleRepositoryMongo>();
+        _services.AddScoped<IFeeScheduleRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
+        _services.AddScoped<IProviderContractRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
         return this;
     }
 
@@ -76,5 +80,15 @@ public class FeeScheduleEngineBuilder
         return !string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"])
             ? UseMongoRepositories()
             : UseCosmosRepositories();
+    }
+
+    private static CachingFeeScheduleRepository CreateFeeScheduleCache<TRepository>(IServiceProvider sp)
+        where TRepository : class, IFeeScheduleRepository, IProviderContractRepository
+    {
+        var inner = sp.GetRequiredService<TRepository>();
+        return new CachingFeeScheduleRepository(
+            inner,
+            inner,
+            sp.GetRequiredService<IMemoryCache>());
     }
 }
