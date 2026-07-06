@@ -1,0 +1,59 @@
+# Episode 005 PR summary
+
+Episode 005 is based on the work that turned local Million Claim Challenge tuning into a repeatable benchmark workflow.
+
+## Relevant changes
+
+### Local Kubernetes sweep harness
+
+The project added a local Kubernetes sweep script:
+
+```text
+scripts/sweep-mcc-local-k8s.sh
+```
+
+The script runs the MCC platform validator as Kubernetes Jobs, captures logs and machine-readable JSON, prints per-run timing rows, and calculates averages by parallelism.
+
+It supports:
+
+- configurable claim count
+- configurable tenant
+- configurable parallelism values
+- repeated runs per setting
+- local image loading into Docker Desktop Kubernetes / kind
+- summary JSON extraction
+- stage-level timing summaries
+
+### Larger local validation runs
+
+The MCC validator originally capped `--claims` at 10,000 to avoid excessive in-memory allocation during early local validation.
+
+That cap was made explicit through a `--max-claims` option. The safe 10,000 default remains, but local benchmark scripts can intentionally opt into larger runs.
+
+This matters because benchmark tooling must not silently measure a smaller workload than requested.
+
+### Repeat benchmark provider seeding control
+
+After the true 50,000-claim run, repeated benchmarks showed that synthetic provider seeding can dominate setup overhead.
+
+The local scripts now support:
+
+```bash
+SEED_PROVIDERS=false
+```
+
+This passes `--no-seed-providers` for repeat benchmark runs against an already-seeded demo tenant. First-time local validation still seeds providers by default.
+
+## Pull request references
+
+- PR 829: Add MCC local Kubernetes sweep harness.
+- PR 830: Allow larger MCC local Kubernetes validation runs.
+- PR 831: Allow repeat MCC benchmarks to skip provider seeding.
+
+## Engineering interpretation
+
+These changes turn the Million Claim Challenge from a one-off local run into a repeatable validation loop.
+
+The key engineering lesson is that benchmark infrastructure matters. The team found that a 50,000-claim request was initially capped at 10,000, fixed the measurement path, reran the benchmark, and then separated first-run setup overhead from repeat adjudication throughput.
+
+That is the difference between a fast demo and a credible benchmark.

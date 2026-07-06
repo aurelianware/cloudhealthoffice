@@ -1,0 +1,94 @@
+# Episode 005 benchmark results
+
+## Environment
+
+- Environment: local Kubernetes via Docker Desktop
+- Docker resource allocation: 18 CPUs, approximately 24 GB memory
+- Tenant: `demo`
+- Workload: synthetic Million Claim Challenge claim corpus
+- Important caveat: these are local validation benchmarks, not production cloud benchmarks
+
+## 1,000-claim sweep
+
+The first sweep compared parallelism values 8, 10, 11, and 12 with two repeats each.
+
+The strongest result at 1,000 claims was parallelism 11:
+
+| Metric | Value |
+| --- | ---: |
+| Claims processed | 1,000 |
+| Parallelism | 11 |
+| Throughput | 247.10 claims/sec |
+| P95 latency | 100.35 ms |
+| P99 latency | 128.53 ms |
+| Platform failures | 0 |
+| Workflow checks | 160/160 matched |
+
+Interpretation: At 1,000 claims, p=11 had the best combination of throughput, latency, and workflow correctness.
+
+## 10,000-claim sweep
+
+The larger sweep changed the answer.
+
+| Parallelism | Claims/sec | P95 | P99 | Interpretation |
+| ---: | ---: | ---: | ---: | --- |
+| 10 | 209.54 | 103.47 ms | 149.85 ms | Better balance |
+| 12 | 209.81 | 118.19 ms | 170.90 ms | Tiny throughput edge, worse latency |
+
+Conclusion: p=10 is the better 10,000-claim setting despite p=12 having a tiny throughput edge. The latency profile matters.
+
+## Hidden 10,000-claim cap
+
+An attempted 50,000-claim run initially processed only 10,000 claims because the validator had a local safety cap.
+
+The fix was to make the cap explicit:
+
+- keep default max claims at 10,000
+- add an intentional `--max-claims` override
+- have local Kubernetes scripts pass the override when larger `CLAIMS` values are requested
+
+This is an important podcast point: repeatable benchmarking also validates the benchmark tooling.
+
+## True 50,000-claim run
+
+After the max-claims override, the platform completed a true 50,000-claim local Kubernetes run.
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 50,000 |
+| Claims generated | 50,000 |
+| Claims processed | 50,000 |
+| Throughput | 157.07 claims/sec |
+| Elapsed time | 5 minutes 18 seconds |
+| P95 latency | 130 ms |
+| P99 latency | 175 ms |
+| Platform failures | 0 |
+| Workflow checks | 4,000/4,000 matched |
+
+The deterministic workflow checks included:
+
+- 1,000 clean paid scenarios
+- 1,000 excluded provider scenarios
+- 1,000 uncovered service scenarios
+- 1,000 prior authorization scenarios
+
+## Repeat benchmark without provider seeding
+
+Once the demo tenant had already been seeded with synthetic providers, the repeat benchmark could skip provider seeding.
+
+| Mode | Elapsed | Claims/sec | P95 | P99 | Platform failures | Workflow checks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| With provider seed | 5:18 | 157.07 | 130 ms | 175 ms | 0 | 4,000/4,000 |
+| Skip provider seed | 4:25 | 188.64 | 106 ms | 151 ms | 0 | 4,000/4,000 |
+
+Interpretation: skipping provider seeding for repeat runs gives a cleaner adjudication throughput measurement and avoids paying first-run setup cost every time.
+
+## Correctness framing
+
+Correct denials are not failures.
+
+Business denials can be valid outcomes when the platform applies rules correctly. Examples include uncovered services, excluded providers, prior authorization requirements, duplicate logic, coding edits, and benefit plan limits.
+
+Platform failures are unexpected system or workflow failures.
+
+The benchmark must always report speed and correctness together.

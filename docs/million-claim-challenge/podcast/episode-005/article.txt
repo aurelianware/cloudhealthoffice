@@ -1,0 +1,193 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 5: From Faster to Repeatably Faster
+
+In the last few iterations of the Million Claim Challenge, CloudHealthOffice made a meaningful jump.
+
+We were no longer just proving that the platform could run locally in Kubernetes. We were proving that real healthcare administration workflows could execute end to end: claim submission, scrubbing, provider checks, prior authorization logic, benefit plan adjudication, accumulator updates, claim writeback, and outcome reporting.
+
+But there is a trap in performance work: one fast run can feel like progress, even when it is not yet evidence.
+
+So this phase was about repeatable measurement.
+
+Not "it felt faster."
+
+Not "this one run looked good."
+
+Repeatable measurement.
+
+## A fast run is not a benchmark
+
+When tuning a claims platform, throughput alone is not enough.
+
+A benchmark has to answer more than one question:
+
+- How many claims per second did we process?
+- What was the P95 latency?
+- What happened at P99?
+- Did any platform failures occur?
+- Did workflow validation still pass?
+- Were business denials correctly distinguished from platform errors?
+- Did the same configuration perform consistently across repeated runs?
+
+For CloudHealthOffice, the Million Claim Challenge is not just a speed test. It is a workflow validation exercise. The goal is to prove that the platform can process claims correctly under pressure, not merely move HTTP requests through a local cluster.
+
+## Building the sweep harness
+
+To make tuning more disciplined, we added a local Kubernetes sweep harness.
+
+The script runs the MCC validator across configurable parallelism values and repeats each value multiple times.
+
+```bash
+SKIP_BUILD=true \
+CLAIMS=1000 \
+PARALLELISM_VALUES="8 10 11 12" \
+REPEATS=2 \
+./scripts/sweep-mcc-local-k8s.sh
+```
+
+The harness captures raw Kubernetes job logs, machine-readable summary JSON, throughput, P95/P99 latency, stage-level adjudication timings, platform failures, workflow validation counts, and averaged results by parallelism.
+
+That changed the tuning conversation.
+
+Instead of guessing which setting is better, we can run a sweep and compare the output.
+
+## The first sweep
+
+The first sweep compared parallelism values of 8, 10, 11, and 12.
+
+At 1,000 claims, parallelism 11 was the strongest setting:
+
+- 247.10 claims per second
+- 100.35 ms P95 latency
+- 128.53 ms P99 latency
+- zero platform failures
+- 160/160 workflow checks matched
+
+That was a good result.
+
+But it was also the reason we needed a larger run.
+
+A setting that wins at 1,000 claims may not win at 10,000. And a setting that wins at 10,000 may behave differently at 50,000.
+
+That is the whole point of repeatable benchmarking.
+
+## The 10,000-claim sweep changed the answer
+
+At 10,000 claims, the answer changed.
+
+Parallelism 11 was no longer the clean winner. Parallelism 10 became the better balance.
+
+The 10,000-claim sweep showed:
+
+- p=10: 209.54 claims/sec, 103.47 ms P95, 149.85 ms P99
+- p=12: 209.81 claims/sec, 118.19 ms P95, 170.90 ms P99
+
+Parallelism 12 had a tiny throughput edge, but parallelism 10 had cleaner latency.
+
+That matters.
+
+The goal is not to crank parallelism until the throughput number looks impressive. The goal is to find the setting where the system keeps its shape: throughput, tail latency, platform reliability, and workflow correctness together.
+
+These runs were performed locally on Docker Desktop Kubernetes with Docker allocated 18 CPUs and approximately 24 GB of memory. This is not a production benchmark. It is a local proving ground where the platform can be evaluated repeatably before moving to cloud-scale testing.
+
+## Finding a benchmark ceiling
+
+When we tried to move from 10,000 claims to 50,000, we found something important.
+
+The validator was intentionally capped at 10,000 claims to avoid excessive in-memory allocation during local validation.
+
+That was a reasonable safety guard earlier in the project.
+
+But now it was blocking the benchmark.
+
+So we made the cap explicit.
+
+The validator keeps the safe default cap, but allows larger runs when the caller intentionally opts in with a max-claims override. The local Kubernetes scripts pass that override when `CLAIMS` is set higher.
+
+That is the kind of thing a serious benchmark exposes.
+
+Not just "how fast is it?"
+
+But also:
+
+- Are we measuring what we think we are measuring?
+- Are there hidden caps?
+- Are the scripts honest?
+- Does the summary JSON match the requested workload?
+- Can the result be reproduced?
+
+The first attempted 50,000-claim run silently processed 10,000 because of the cap.
+
+After the fix, the validator reported the real workload:
+
+- 50,000 requested
+- 50,000 generated
+- 50,000 processed
+
+That is benchmark discipline.
+
+## The true 50,000-claim local Kubernetes run
+
+With the cap fixed, we ran a true 50,000-claim local Kubernetes validation at parallelism 10.
+
+The result:
+
+- 50,000 claims requested
+- 50,000 claims generated
+- 50,000 claims processed
+- 157.07 claims per second
+- 5 minutes 18 seconds elapsed
+- 130 ms P95 latency
+- 175 ms P99 latency
+- zero platform failures
+- 4,000/4,000 workflow checks matched
+
+This was not just a bigger number.
+
+It also validated a larger workflow mix:
+
+- 1,000 clean paid scenarios
+- 1,000 excluded provider scenarios
+- 1,000 uncovered service scenarios
+- 1,000 prior authorization scenarios
+
+Every deterministic workflow check matched.
+
+That is the result that matters most.
+
+Throughput is important. But throughput without correctness is just fast noise.
+
+## Correct denials are not failures
+
+One of the most important ideas in the Million Claim Challenge is that not every unpaid claim is a problem.
+
+Some claims should deny.
+
+A claim might fail business rules because of uncovered services, duplicate logic, excluded providers, prior authorization requirements, coding edits, or plan rules.
+
+Those are valid outcomes when the platform applies the rules correctly.
+
+The sweep preserves that distinction.
+
+A business denial is not counted as a platform failure. A platform failure is an unexpected error, infrastructure issue, service failure, or workflow breakdown.
+
+That distinction is essential if we are going to benchmark healthcare administration software honestly.
+
+A platform that pays everything quickly is not impressive.
+
+A platform that processes claims quickly, applies business rules correctly, explains denials, and records outcomes cleanly is much more interesting.
+
+## Where we are now
+
+CloudHealthOffice can now run the Million Claim Challenge locally in Kubernetes, validate real workflow outcomes, record mass adjudication runs, inspect claim-level results, sweep performance configurations, and scale beyond the original 10,000-claim validation ceiling.
+
+The current local result:
+
+> 50,000 claims processed in Kubernetes, 157.07 claims per second, 130 ms P95 latency, 175 ms P99 latency, zero platform failures, and 4,000/4,000 workflow checks matched.
+
+That is a very good place to be.
+
+But more importantly, we now have a way to keep pushing.
+
+Not by guessing.
+
+By measuring.
