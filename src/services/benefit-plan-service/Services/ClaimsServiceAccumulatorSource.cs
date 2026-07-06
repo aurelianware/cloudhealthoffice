@@ -37,7 +37,7 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<AccumulatorSnapshot>> CalculateAccumulatorsAsync(
+    public async Task<(bool Success, IReadOnlyList<AccumulatorSnapshot> Snapshots)> CalculateAccumulatorsAsync(
         string tenantId,
         string ownerId,
         AccumulatorScope scope,
@@ -68,7 +68,7 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
                 "claims-service unavailable during accumulator rebuild for owner {OwnerId}. " +
                 "Returning empty snapshot — Redis cache will remain cold.",
                 SanitizeForLog(ownerId));
-            return Array.Empty<AccumulatorSnapshot>();
+            return (false, Array.Empty<AccumulatorSnapshot>());
         }
 
         if (!response.IsSuccessStatusCode)
@@ -77,18 +77,18 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
                 "claims-service returned {Status} for accumulator-totals (owner={OwnerId}). " +
                 "Returning empty snapshot.",
                 (int)response.StatusCode, SanitizeForLog(ownerId));
-            return Array.Empty<AccumulatorSnapshot>();
+            return (false, Array.Empty<AccumulatorSnapshot>());
         }
 
         var result = await response.Content.ReadFromJsonAsync<AccumulatorTotalsDto>(JsonOptions, ct);
         if (result?.Totals is null || result.Totals.Count == 0)
-            return Array.Empty<AccumulatorSnapshot>();
+            return (true, Array.Empty<AccumulatorSnapshot>());
 
-        return result.Totals
+        return (true, result.Totals
             .Select(entry => MapToSnapshot(entry, scope))
             .Where(s => s is not null)
             .Cast<AccumulatorSnapshot>()
-            .ToList();
+            .ToList());
     }
 
     private static AccumulatorSnapshot? MapToSnapshot(AccumulatorTotalEntryDto entry, AccumulatorScope scope)
