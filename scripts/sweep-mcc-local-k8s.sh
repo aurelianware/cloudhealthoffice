@@ -33,10 +33,6 @@ require_tool() {
   fi
 }
 
-slugify() {
-  tr -cs '[:alnum:]-' '-' | tr '[:upper:]' '[:lower:]' | sed 's/^-//; s/-$//'
-}
-
 extract_summary_json() {
   awk '
     /__MCC_SUMMARY_JSON_BEGIN__/ { capture = 1; next }
@@ -144,6 +140,7 @@ EOF
 
   if ! jq -e . "$json_file" >/dev/null 2>&1; then
     status="no-json"
+    rm -f "$json_file"
     echo "Could not extract valid summary JSON for ${job_name}; see ${log_file}" >&2
     return 0
   fi
@@ -158,6 +155,7 @@ mkdir -p "$OUTPUT_DIR"
 : > "$OUTPUT_DIR/results.tsv"
 
 if [[ "$SKIP_BUILD" != "true" ]]; then
+  require_tool docker
   log "Building ${IMAGE}"
   docker build \
     -t "$IMAGE" \
@@ -181,20 +179,20 @@ printf '%-5s %-6s %-7s %10s %8s %8s %9s %8s %8s %8s %9s %9s\n' \
   "P" "Run" "Status" "Claims/s" "P95" "P99" "AccP95" "NCCI95" "Prov95" "Rate95" "Failures" "Workflow"
 
 for parallelism in $PARALLELISM_VALUES; do
-  safe_parallelism="$(printf '%s' "$parallelism" | slugify)"
-  if [[ -z "$safe_parallelism" ]]; then
+  if [[ ! "$parallelism" =~ ^[0-9]+$ ]]; then
     echo "Invalid parallelism value: $parallelism" >&2
     exit 1
   fi
 
   for repeat in $(seq 1 "$REPEATS"); do
-    run_case "$safe_parallelism" "$repeat"
+    run_case "$parallelism" "$repeat"
   done
 done
 
 log "Averages by parallelism"
 jq -s -r '
-  group_by(.run.parallelism)
+  sort_by(.run.parallelism)
+  | group_by(.run.parallelism)
   | map({
       parallelism: .[0].run.parallelism,
       runs: length,
