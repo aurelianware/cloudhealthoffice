@@ -7,6 +7,7 @@ NAMESPACE="${NAMESPACE:-cloudhealthoffice}"
 JOB_NAME="${JOB_NAME:-mcc-validator}"
 IMAGE="${IMAGE:-cloudhealthoffice-mcc-platform-validator:local}"
 CLAIMS="${CLAIMS:-5000}"
+MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
 PARALLELISM="${PARALLELISM:-10}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-500}"
@@ -50,6 +51,8 @@ spec:
           args:
             - --claims
             - "${CLAIMS}"
+            - --max-claims
+            - "${MAX_CLAIMS}"
             - --tenant
             - "${TENANT}"
             - --parallelism
