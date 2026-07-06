@@ -12,6 +12,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="${NAMESPACE:-cloudhealthoffice}"
 IMAGE="${IMAGE:-cloudhealthoffice-mcc-platform-validator:local}"
 CLAIMS="${CLAIMS:-1000}"
+MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
 PARALLELISM_VALUES="${PARALLELISM_VALUES:-8 10 11 12}"
 REPEATS="${REPEATS:-2}"
@@ -116,6 +117,7 @@ spec:
             - |
               dotnet mcc-platform-validator.dll \
                 --claims "${CLAIMS}" \
+                --max-claims "${MAX_CLAIMS}" \
                 --tenant "${TENANT}" \
                 --parallelism "${parallelism}" \
                 --claims-url http://claims-service \
