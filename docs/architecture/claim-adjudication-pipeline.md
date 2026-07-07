@@ -215,17 +215,43 @@ Fixed as follows:
    already had a `CobRequired` bucket keyed on it; the stage simply never
    emitted it before.
 
-**Known pre-existing race, out of scope for this fix:** the Argo
-workflow's `update-claim-step` does not check for `ClaimStatus.Pended`
-before calling `PUT /api/claims/{id}/status`. If claims-service's own
-async orchestrator pends a claim (via the write path above) and the Argo
-workflow's synchronous `update-claim-step` runs afterward for the same
-claim, the workflow can still overwrite `Pended` back to `Approved` /
-`Denied` — the precedence rule in this fix only protects the
-orchestrator's own write path against a disposition that already landed;
-it doesn't (and structurally can't, from here) make the Argo workflow
-disposition-aware. Flagged as a finding for the future edit-model ADR, not
-fixed here.
+#### D9b — Synchronous write-back preserves existing pend/final statuses
+
+After D9a, a residual race remained: the Argo workflow's synchronous
+`update-claim-step` could call `PUT /api/claims/{id}/adjudication`,
+`PUT /api/claims/{id}/adjudication-summary`, or
+`PUT /api/claims/{id}/status` after the async orchestrator had already
+projected `ClaimStatus.Pended`. That later synchronous write-back only
+knew its locally computed payable/deniable disposition, so it could stomp
+the pended status back to `Approved` / `Denied` while leaving
+`PendDetails` behind.
+
+Fixed as follows:
+
+1. Claims-service status writes now route through
+   `IClaimRepository.TryTransitionStatusAsync` /
+   `UpdateAdjudicationSummaryAsync`, which apply the shared
+   `ClaimRepository.BlocksSynchronousWriteback` guard before status is
+   patched.
+2. The guard suppresses synchronous write-back when the persisted claim is
+   already `Pended` or at a final disposition (`Approved`, `Denied`,
+   `Paid`, `PartiallyPaid`, or `Voided`). It still allows normal
+   `Received` / `Submitted` / `InReview` transitions.
+3. Adjudication totals, timings, denial codes, MPIP fields, and audit data
+   still persist even when the status patch is suppressed. Only `/status`
+   is protected.
+4. Suppressed fast-summary writes return `200 OK` with
+   `AdjudicationSummaryWriteResponse` (`StatusPreserved=true`,
+   `PersistedStatus=<current status>`) instead of `204 No Content` so the
+   MCC validator can score against the authoritative persisted status.
+   Unsuppressed writes retain the previous `204 No Content` behavior.
+5. Suppressed full adjudication/status writes fold the persisted status
+   back into the response payload and skip lifecycle side effects derived
+   from a transition that did not actually apply.
+
+This guard is intentionally not a human pend-resolution path. Explicit
+examiner override remains owned by `POST work-queue/{id}/override` so a
+generic workflow write-back cannot accidentally resolve a pend.
 
 ### D10 — Resolution clients are cached HTTP clients
 
@@ -323,7 +349,7 @@ always enabled regardless.
 | `UpdateAdjudicationProjectionAsync` throws | PersistenceStage rethrows; Service Bus abandons the message and redelivers. |
 | Re-delivery for already-adjudicated claim | Orchestrator detects via populated `AdjudicationResult` and completes the message without re-running the pipeline. |
 | Orchestrator resolves `Pend`, but claim is already `Approved`/`Denied`/`Paid`/`PartiallyPaid`/`Voided` | `ClaimRepository.IsFinalDisposition` guard (D9a) skips the `/status` patch; `AdjudicationResult`/`PendDetails` still project for audit purposes. |
-| Argo workflow's `update-claim-step` runs after an async-orchestrator pend | Not guarded (pre-existing, out of scope for D9a) — the workflow can overwrite `Pended` back to `Approved`/`Denied`. Flagged as a finding for the future edit-model ADR. |
+| Argo workflow's `update-claim-step` runs after an async-orchestrator pend | Guarded by D9b: synchronous write-back preserves the persisted `Pended` status while still saving adjudication summary/audit data. |
 
 ## Replacement contract for stub stages
 

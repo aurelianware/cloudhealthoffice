@@ -268,14 +268,41 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
-    /// Update claim status (277 claim status update)
+    /// Update claim status (277 claim status update). Called by the Argo
+    /// workflow's synchronous finalize step for every non-NCCI/MUE outcome —
+    /// currently the only live caller (the portal's Approve/Deny buttons wire
+    /// to this same client method, but are permanently disabled today: their
+    /// CanApprove/CanDeny gates are never set true anywhere in the codebase).
+    ///
+    /// Residual-race fix: <paramref name="statusUpdate"/>'s Status is applied
+    /// through the same precedence guard as <c>PUT /{id}/adjudication</c>
+    /// (<see cref="ClaimRepository.BlocksSynchronousWriteback"/>, via
+    /// <see cref="IClaimRepository.TryTransitionStatusAsync"/>) — it is
+    /// atomically decided BEFORE the full-document replace below and folded
+    /// back onto <c>claim.Status</c>, so the replace can't reintroduce a
+    /// stale value over a status the guard just protected. When suppressed,
+    /// the lifecycle-date/notes side effects below are skipped too (they're
+    /// derived from a transition that didn't actually happen), and the
+    /// response's <c>Status</c> field reports what's actually persisted
+    /// (e.g. still Pended) — no response-shape change, the field was always
+    /// there. See docs/architecture/claim-adjudication-pipeline.md D9b.
+    ///
+    /// <para>
+    /// If this endpoint's dead human-approval path is ever wired up
+    /// (CanApprove/CanDeny made reachable), it will need to route pend
+    /// resolution through an explicit action — mirroring
+    /// <c>POST work-queue/{id}/override</c> — rather than relying on this
+    /// generic status endpoint to bypass the guard; today it correctly has
+    /// no live caller that needs to resolve a pend through it.
+    /// </para>
     /// </summary>
     [HttpPut("{id}/status")]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Claim>> UpdateClaimStatus(
         string id,
-        [FromBody] ClaimStatusUpdate statusUpdate)
+        [FromBody] ClaimStatusUpdate statusUpdate,
+        CancellationToken ct = default)
     {
         _logger.LogInformation(
             "Updating claim {Id} status to {Status}",
@@ -287,30 +314,45 @@ public class ClaimsController : ControllerBase
             return NotFound($"Claim {id} not found");
         }
 
-        claim.Status = statusUpdate.Status;
-        claim.LastUpdatedDate = DateTime.UtcNow;
-
-        // Set dates based on status
-        switch (statusUpdate.Status)
+        var statusResult = await _claimRepository.TryTransitionStatusAsync(GetTenantId(), id, statusUpdate.Status, ct);
+        if (statusResult.Outcome == StatusWriteOutcome.NotFound)
         {
-            case ClaimStatus.Received:
-                claim.ReceivedDate = DateTime.UtcNow;
-                break;
-            case ClaimStatus.Approved:
-            case ClaimStatus.Denied:
-            case ClaimStatus.PartiallyPaid:
-                claim.AdjudicatedDate = DateTime.UtcNow;
-                break;
-            case ClaimStatus.Paid:
-                claim.PaidDate = DateTime.UtcNow;
-                break;
+            return NotFound($"Claim {id} not found");
         }
 
-        if (!string.IsNullOrEmpty(statusUpdate.Notes))
+        claim.Status = statusResult.PersistedStatus!.Value;
+        claim.LastUpdatedDate = DateTime.UtcNow;
+
+        if (statusResult.Outcome == StatusWriteOutcome.Suppressed)
         {
-            claim.ClaimNotes = string.IsNullOrEmpty(claim.ClaimNotes)
-                ? statusUpdate.Notes
-                : $"{claim.ClaimNotes}\n{DateTime.UtcNow:yyyy-MM-dd HH:mm}: {statusUpdate.Notes}";
+            _logger.LogInformation(
+                "Status transition suppressed for claim {Id}: requested={Requested}, persisted={Persisted}",
+                SanitizeForLog(id), statusUpdate.Status, statusResult.PersistedStatus);
+        }
+        else
+        {
+            // Set dates based on status
+            switch (statusUpdate.Status)
+            {
+                case ClaimStatus.Received:
+                    claim.ReceivedDate = DateTime.UtcNow;
+                    break;
+                case ClaimStatus.Approved:
+                case ClaimStatus.Denied:
+                case ClaimStatus.PartiallyPaid:
+                    claim.AdjudicatedDate = DateTime.UtcNow;
+                    break;
+                case ClaimStatus.Paid:
+                    claim.PaidDate = DateTime.UtcNow;
+                    break;
+            }
+
+            if (!string.IsNullOrEmpty(statusUpdate.Notes))
+            {
+                claim.ClaimNotes = string.IsNullOrEmpty(claim.ClaimNotes)
+                    ? statusUpdate.Notes
+                    : $"{claim.ClaimNotes}\n{DateTime.UtcNow:yyyy-MM-dd HH:mm}: {statusUpdate.Notes}";
+            }
         }
 
         var updated = await _claimRepository.UpdateAsync(claim);
@@ -318,7 +360,7 @@ public class ClaimsController : ControllerBase
         // If a generic status update happens to land on Pended without going through
         // /pend, still publish the event so downstream consumers see the transition.
         // Payload will lack PendDetails — consumers must tolerate that.
-        if (updated.Status == ClaimStatus.Pended)
+        if (statusResult.Outcome == StatusWriteOutcome.Applied && updated.Status == ClaimStatus.Pended)
         {
             await _eventPublisher.PublishClaimPendedAsync(updated, GetTenantId());
         }
@@ -389,14 +431,32 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
-    /// Update claim with adjudication results (from adjudication workflow)
+    /// Update claim with adjudication results (from adjudication workflow).
+    /// Called by the Argo workflow's synchronous finalize step
+    /// (<c>update-claim-step</c>) for every non-NCCI/MUE outcome, immediately
+    /// followed by that same step's call to <c>PUT /{id}/status</c>.
+    ///
+    /// Residual-race fix: AdjudicationResult/dates/MPIP-enhanced fields
+    /// always persist. The status decision is applied through the same
+    /// precedence guard as <c>PUT /{id}/status</c>
+    /// (<see cref="ClaimRepository.BlocksSynchronousWriteback"/>, via
+    /// <see cref="IClaimRepository.TryTransitionStatusAsync"/>), evaluated
+    /// and committed BEFORE the full-document replace below and folded back
+    /// onto <c>claim.Status</c> — so the replace can't reintroduce a stale
+    /// status over one the guard just protected. When PayerPayment/
+    /// DenialReasonCode don't resolve to a decision at all, behavior is
+    /// unchanged from before this fix (claim.Status is left as read). The
+    /// response's <c>Status</c> field is the existing signal for a suppressed
+    /// transition (e.g. still Pended) — no response-shape change. See
+    /// docs/architecture/claim-adjudication-pipeline.md D9b.
     /// </summary>
     [HttpPut("{id}/adjudication")]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Claim>> UpdateAdjudication(
         string id,
-        [FromBody] AdjudicationResult adjudication)
+        [FromBody] AdjudicationResult adjudication,
+        CancellationToken ct = default)
     {
         _logger.LogInformation(
             "Updating claim {Id} with adjudication: allowed={Allowed}, payer={Payer}, patient={Patient}",
@@ -423,19 +483,36 @@ public class ClaimsController : ControllerBase
             }
         }
 
-        // Update status based on adjudication
-        if (adjudication.PayerPayment == 0 && !string.IsNullOrEmpty(adjudication.DenialReasonCode))
+        // Decide + atomically apply the status transition (guarded — see doc
+        // comment above), folding the authoritative result back onto
+        // claim.Status before the replace below.
+        ClaimStatus? desiredStatus = adjudication.PayerPayment == 0 && !string.IsNullOrEmpty(adjudication.DenialReasonCode)
+            ? ClaimStatus.Denied
+            : adjudication.PayerPayment > 0
+                ? ClaimStatus.Approved
+                : null;
+
+        StatusWriteResult? statusResult = null;
+        if (desiredStatus is not null)
         {
-            claim.Status = ClaimStatus.Denied;
-        }
-        else if (adjudication.PayerPayment > 0)
-        {
-            claim.Status = ClaimStatus.Approved;
+            statusResult = await _claimRepository.TryTransitionStatusAsync(GetTenantId(), id, desiredStatus.Value, ct);
+            if (statusResult.Value.Outcome == StatusWriteOutcome.NotFound)
+            {
+                return NotFound($"Claim {id} not found");
+            }
+
+            claim.Status = statusResult.Value.PersistedStatus!.Value;
         }
 
         var updated = await _claimRepository.UpdateAsync(claim);
 
-        if (IsTerminalStatus(updated.Status))
+        if (statusResult is { Outcome: StatusWriteOutcome.Suppressed })
+        {
+            _logger.LogInformation(
+                "Adjudication status transition suppressed for claim {Id}: requested={Requested}, persisted={Persisted}",
+                SanitizeForLog(id), desiredStatus, statusResult.Value.PersistedStatus);
+        }
+        else if (IsTerminalStatus(updated.Status))
         {
             await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
         }
@@ -446,10 +523,20 @@ public class ClaimsController : ControllerBase
     /// <summary>
     /// Fast claim-level adjudication projection for local benchmark and workflow
     /// validation paths that do not need line adjudication projection or finalized
-    /// event emission.
+    /// event emission. Residual-race fix: <paramref name="adjudication"/>'s
+    /// totals/dates always persist. The status transition is guarded (see
+    /// <see cref="ClaimRepository.BlocksSynchronousWriteback"/>) — if this
+    /// claim was already pended (typically by the async orchestrator racing
+    /// this call's own request chain — see docs/architecture/
+    /// claim-adjudication-pipeline.md D9b) or already at a final disposition,
+    /// the status write is suppressed and the response says so via
+    /// <see cref="AdjudicationSummaryWriteResponse"/> instead of the normal
+    /// 204. The unsuppressed case is byte-identical to before this fix: 204,
+    /// no body.
     /// </summary>
     [HttpPut("{id}/adjudication-summary")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(AdjudicationSummaryWriteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateAdjudicationSummary(
         string id,
@@ -461,14 +548,29 @@ public class ClaimsController : ControllerBase
             SanitizeForLog(id), adjudication.AllowedAmount, adjudication.PayerPayment, adjudication.PatientResponsibility);
 
         var status = ResolveAdjudicationStatus(adjudication);
-        var updated = await _claimRepository.UpdateAdjudicationSummaryAsync(
+        var result = await _claimRepository.UpdateAdjudicationSummaryAsync(
             GetTenantId(),
             id,
             adjudication,
             status,
             ct);
 
-        return updated ? NoContent() : NotFound($"Claim {id} not found");
+        switch (result.Outcome)
+        {
+            case StatusWriteOutcome.NotFound:
+                return NotFound($"Claim {id} not found");
+            case StatusWriteOutcome.Suppressed:
+                _logger.LogInformation(
+                    "Adjudication summary status transition suppressed for claim {Id}: requested={Requested}, persisted={Persisted}",
+                    SanitizeForLog(id), status, result.PersistedStatus);
+                return Ok(new AdjudicationSummaryWriteResponse
+                {
+                    StatusPreserved = true,
+                    PersistedStatus = result.PersistedStatus!.Value,
+                });
+            default:
+                return NoContent();
+        }
     }
 
     private static ClaimStatus ResolveAdjudicationStatus(AdjudicationResult adjudication)
@@ -1173,6 +1275,22 @@ public class AssignClaimRequest
 public class OverrideClaimRequest
 {
     public string OverrideReason { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Returned by <c>PUT /{id}/adjudication-summary</c> only when the status
+/// transition it requested was suppressed by
+/// <see cref="ClaimRepository.BlocksSynchronousWriteback"/> (e.g. the claim
+/// was already Pended by the async orchestrator). The adjudication summary
+/// payload (totals, timings, denial codes) still persisted — only <c>/status</c>
+/// was protected. Callers (the MCC validator) should score against
+/// <see cref="PersistedStatus"/>, not the outcome they originally computed.
+/// The normal, unsuppressed case is unchanged: 204 No Content, no body.
+/// </summary>
+public class AdjudicationSummaryWriteResponse
+{
+    public bool StatusPreserved { get; set; }
+    public ClaimStatus PersistedStatus { get; set; }
 }
 
 public class AiExaminerAgreementRequest

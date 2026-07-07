@@ -4,6 +4,29 @@ using ClaimsService.Models;
 
 namespace ClaimsService.Repositories;
 
+/// <summary>
+/// Result of a repository call that writes <see cref="ClaimStatus"/> through a
+/// precedence guard (<see cref="ClaimRepository.BlocksSynchronousWriteback"/>).
+/// <see cref="Suppressed"/> means the row exists but the guard blocked the
+/// requested transition — <see cref="PersistedStatus"/> reports what the claim's
+/// status actually is now, so the caller can react (e.g. score against Pended
+/// instead of the outcome it asked for) instead of silently believing its write
+/// won.
+/// </summary>
+public enum StatusWriteOutcome
+{
+    NotFound,
+    Applied,
+    Suppressed,
+}
+
+/// <summary>See <see cref="StatusWriteOutcome"/>. <see cref="PersistedStatus"/> is
+/// null only for <see cref="StatusWriteOutcome.NotFound"/>.</summary>
+public readonly record struct StatusWriteResult(StatusWriteOutcome Outcome, ClaimStatus? PersistedStatus)
+{
+    public static readonly StatusWriteResult NotFoundResult = new(StatusWriteOutcome.NotFound, null);
+}
+
 public interface IClaimRepository
 {
     Task<Claim?> GetByIdAsync(string id);
@@ -146,16 +169,55 @@ public interface IClaimRepository
 
     /// <summary>
     /// Fast claim-level adjudication projection for direct local workflow
-    /// validation. Patches only summary adjudication/status fields on a known
-    /// claim row and intentionally skips full-claim hydration, line projection,
-    /// and event emission. Use the full adjudication pipeline when downstream
-    /// finalized events or line adjudications are required.
+    /// validation. Patches summary adjudication fields on a known claim row and
+    /// intentionally skips full-claim hydration, line projection, and event
+    /// emission. Use the full adjudication pipeline when downstream finalized
+    /// events or line adjudications are required.
+    ///
+    /// <para>
+    /// Residual-race fix — <paramref name="status"/> is applied through the
+    /// same precedence guard as <see cref="TryTransitionStatusAsync"/>
+    /// (<see cref="ClaimRepository.BlocksSynchronousWriteback"/>): it is never
+    /// written over a claim already Pended or at a final disposition, because
+    /// this method's only caller (the validator's synchronous write-back) is
+    /// racing the async orchestrator's own Pend projection, not resolving one.
+    /// <see cref="AdjudicationResult"/>/dates persist unconditionally either
+    /// way — only the status transition is guarded — so a suppressed run never
+    /// drops financial/audit data. See docs/architecture/
+    /// claim-adjudication-pipeline.md D9b.
+    /// </para>
     /// </summary>
-    Task<bool> UpdateAdjudicationSummaryAsync(
+    Task<StatusWriteResult> UpdateAdjudicationSummaryAsync(
         string tenantId,
         string claimId,
         AdjudicationResult adjudicationResult,
         ClaimStatus status,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically applies <paramref name="desiredStatus"/> to the single claim
+    /// row identified by <paramref name="claimId"/> (direct row id, not a
+    /// version-chain lookup — mirrors <see cref="GetByIdAsync"/>), subject to
+    /// <see cref="ClaimRepository.BlocksSynchronousWriteback"/>: never
+    /// overwrites a claim that is already Pended or at a final disposition.
+    /// Backing store enforces this with a conditional write evaluated at
+    /// commit time (Cosmos patch <c>FilterPredicate</c> / Mongo filter-based
+    /// compare-and-set) — not a read-then-decide check — so it holds under a
+    /// true concurrent write, not just sequential ordering.
+    ///
+    /// <para>
+    /// Used by the two Argo-invoked synchronous write-back endpoints
+    /// (<c>PUT /{id}/adjudication</c>, <c>PUT /{id}/status</c>) so their
+    /// status decision is race-safe even though the rest of the claim still
+    /// persists through <see cref="UpdateAsync"/>'s full-document replace.
+    /// Also updates <c>VersionState</c> to keep it consistent with the
+    /// applied status (<see cref="ClaimRepository.MapStatusToVersionState"/>).
+    /// </para>
+    /// </summary>
+    Task<StatusWriteResult> TryTransitionStatusAsync(
+        string tenantId,
+        string claimId,
+        ClaimStatus desiredStatus,
         CancellationToken ct = default);
 
     /// <summary>
@@ -308,6 +370,46 @@ public class ClaimRepository : IClaimRepository
         ClaimStatus.Voided => true,
         _ => false
     };
+
+    /// <summary>
+    /// Every status <see cref="IsFinalDisposition"/> returns true for. Derived,
+    /// not hand-duplicated, so the Cosmos <c>FilterPredicate</c> string built
+    /// from it (<see cref="FinalDispositionFilterPredicate"/>) and Mongo's
+    /// equivalent <c>$nin</c> filter can never drift from the canonical rule.
+    /// </summary>
+    public static readonly IReadOnlyList<ClaimStatus> FinalDispositions =
+        Enum.GetValues<ClaimStatus>().Where(IsFinalDisposition).ToArray();
+
+    /// <summary>
+    /// True when <paramref name="status"/> must not be overwritten by a
+    /// synchronous, non-authoritative adjudication write-back —
+    /// <c>UpdateAdjudicationSummaryAsync</c> (the validator's own write-back)
+    /// and <c>TryTransitionStatusAsync</c> (backing the Argo-invoked
+    /// <c>PUT /{id}/adjudication</c> and <c>PUT /{id}/status</c> endpoints).
+    ///
+    /// <para>
+    /// Composes <see cref="IsFinalDisposition"/> (a stray re-adjudication
+    /// write-back must not re-litigate an already-completed disposition) with
+    /// <see cref="ClaimStatus.Pended"/> (a human-review gate — only an
+    /// explicit, deliberate action, <c>POST work-queue/{id}/override</c>,
+    /// resolves it; never a synchronous write-back that doesn't know the pend
+    /// happened). This is deliberately a DIFFERENT set than
+    /// <see cref="IsFinalDisposition"/> alone: that predicate excludes Pended
+    /// on purpose, for the opposite write direction (the async orchestrator's
+    /// own Pend projection in <c>UpdateAdjudicationProjectionAsync</c>, which
+    /// must still be allowed to re-pend an already-Pended claim). Two
+    /// directions of one precedence lattice, both anchored here so no call
+    /// site forks its own copy. See docs/architecture/
+    /// claim-adjudication-pipeline.md D9b for the full writer x precedence
+    /// table.
+    /// </para>
+    /// </summary>
+    public static bool BlocksSynchronousWriteback(ClaimStatus status) =>
+        status == ClaimStatus.Pended || IsFinalDisposition(status);
+
+    /// <summary>Derived set backing <see cref="BlocksSynchronousWriteback"/> — see that method's doc comment.</summary>
+    public static readonly IReadOnlyList<ClaimStatus> SynchronousWritebackBlockedStatuses =
+        Enum.GetValues<ClaimStatus>().Where(BlocksSynchronousWriteback).ToArray();
 
     private static bool IsTerminal(ClaimVersionState state) => state switch
     {
@@ -940,18 +1042,6 @@ public class ClaimRepository : IClaimRepository
             ops.Add(PatchOperation.Set("/pendDetails", pendDetails));
         }
 
-        // Defect A fix — project the orchestrator's Pend outcome onto
-        // ClaimStatus. Precedence: never downgrade a claim that already
-        // reached a later-stage disposition (see IsFinalDisposition) — e.g.
-        // because the Argo workflow's synchronous finalize step, or an
-        // examiner override, raced ahead of this async projection.
-        // Re-pending an already-Pended claim is allowed. isPend=false never
-        // touches /status here, same as before this parameter existed.
-        if (isPend && !IsFinalDisposition(head.Status))
-        {
-            ops.Add(PatchOperation.Set("/status", ClaimStatus.Pended));
-        }
-
         try
         {
             await _container.PatchItemAsync<Claim>(
@@ -959,16 +1049,57 @@ public class ClaimRepository : IClaimRepository
                 new PartitionKey(tenantId),
                 ops,
                 cancellationToken: ct);
-            return true;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             // Row deleted between lookup and patch.
             return false;
         }
+
+        if (!isPend)
+        {
+            return true;
+        }
+
+        // Defect A fix, made atomic — project the orchestrator's Pend outcome
+        // onto ClaimStatus in a SEPARATE conditional patch, evaluated against
+        // the row's live state at commit time via FilterPredicate rather than
+        // the `head` snapshot read above. Precedence: never downgrade a claim
+        // that already reached a later-stage disposition (IsFinalDisposition)
+        // — e.g. because the Argo workflow's synchronous finalize step, or an
+        // examiner override, raced ahead of this async projection. A
+        // read-then-decide check (the original form of this guard) only
+        // catches that race when the other write happens to land before this
+        // method's own read; a concurrent write landing in between read and
+        // write would still get clobbered. The conditional patch closes that
+        // window: Cosmos evaluates FilterPredicate against the document as it
+        // exists at the moment this patch actually commits. Re-pending an
+        // already-Pended claim is allowed — Pended is excluded from
+        // FinalDispositions by design. A blocked patch is not an error; the
+        // /adjudicationResult + /claimLines + /pendDetails write above still
+        // succeeded, so this method still returns true either way.
+        try
+        {
+            await _container.PatchItemAsync<Claim>(
+                rowId,
+                new PartitionKey(tenantId),
+                new List<PatchOperation> { PatchOperation.Set("/status", ClaimStatus.Pended) },
+                new PatchItemRequestOptions { FilterPredicate = FinalDispositionFilterPredicate },
+                ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // Guard correctly blocked the downgrade — not an error.
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Row deleted between the first patch and this one.
+        }
+
+        return true;
     }
 
-    public async Task<bool> UpdateAdjudicationSummaryAsync(
+    public async Task<StatusWriteResult> UpdateAdjudicationSummaryAsync(
         string tenantId,
         string claimVersionId,
         AdjudicationResult adjudicationResult,
@@ -1003,16 +1134,20 @@ public class ClaimRepository : IClaimRepository
             rowId = page.FirstOrDefault()?.Id;
         }
 
-        if (string.IsNullOrEmpty(rowId)) return false;
+        if (string.IsNullOrEmpty(rowId)) return StatusWriteResult.NotFoundResult;
 
+        // Residual-race fix — financial/audit data (AdjudicationResult, dates)
+        // persists unconditionally: this method's caller (the validator's
+        // synchronous write-back) always has a legitimate adjudication result
+        // to record even when the status transition below gets suppressed.
+        // Only /status + /versionState are guarded, in a separate conditional
+        // patch — see TryPatchStatusAsync.
         var now = DateTime.UtcNow;
-        var ops = new List<PatchOperation>
+        var summaryOps = new List<PatchOperation>
         {
             PatchOperation.Set("/adjudicationResult", adjudicationResult),
             PatchOperation.Set("/adjudicatedDate", now),
             PatchOperation.Set("/lastUpdatedDate", now),
-            PatchOperation.Set("/status", status),
-            PatchOperation.Set("/versionState", ClaimVersionState.Adjudicated)
         };
 
         try
@@ -1020,15 +1155,86 @@ public class ClaimRepository : IClaimRepository
             await _container.PatchItemAsync<Claim>(
                 rowId,
                 new PartitionKey(tenantId),
-                ops,
+                summaryOps,
                 cancellationToken: ct);
-            return true;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            return false;
+            return StatusWriteResult.NotFoundResult;
+        }
+
+        return await TryPatchStatusAsync(tenantId, rowId, status, ClaimVersionState.Adjudicated, ct);
+    }
+
+    public Task<StatusWriteResult> TryTransitionStatusAsync(
+        string tenantId,
+        string claimId,
+        ClaimStatus desiredStatus,
+        CancellationToken ct = default) =>
+        TryPatchStatusAsync(tenantId, claimId, desiredStatus, MapStatusToVersionState(desiredStatus), ct);
+
+    /// <summary>
+    /// Shared atomic status write behind <see cref="UpdateAdjudicationSummaryAsync"/>
+    /// and <see cref="TryTransitionStatusAsync"/>. Guarded by
+    /// <see cref="BlocksSynchronousWriteback"/> via a Cosmos patch
+    /// <c>FilterPredicate</c>, evaluated server-side against the row's live
+    /// state at commit time — not a read-then-decide check, so it holds under
+    /// a true concurrent write. On a blocked write, issues one fallback read
+    /// to report the row's actual current status (needed to disambiguate
+    /// "guard blocked it" from "row was deleted" — a rejected conditional
+    /// patch doesn't return the document — and to tell the caller what
+    /// actually persisted); this only happens on the (expected to be rare)
+    /// suppressed path, not the hot path.
+    /// </summary>
+    private async Task<StatusWriteResult> TryPatchStatusAsync(
+        string tenantId,
+        string rowId,
+        ClaimStatus desiredStatus,
+        ClaimVersionState desiredVersionState,
+        CancellationToken ct)
+    {
+        var statusOps = new List<PatchOperation>
+        {
+            PatchOperation.Set("/status", desiredStatus),
+            PatchOperation.Set("/versionState", desiredVersionState),
+        };
+        var options = new PatchItemRequestOptions { FilterPredicate = SynchronousWritebackBlockedFilterPredicate };
+
+        try
+        {
+            await _container.PatchItemAsync<Claim>(rowId, new PartitionKey(tenantId), statusOps, options, ct);
+            return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return StatusWriteResult.NotFoundResult;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            try
+            {
+                var read = await _container.ReadItemAsync<Claim>(rowId, new PartitionKey(tenantId), cancellationToken: ct);
+                return new StatusWriteResult(StatusWriteOutcome.Suppressed, read.Resource.Status);
+            }
+            catch (CosmosException readEx) when (readEx.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // Deleted between the blocked patch and this fallback read —
+                // functionally not-found from the caller's perspective.
+                return StatusWriteResult.NotFoundResult;
+            }
         }
     }
+
+    /// <summary>Cosmos patch FilterPredicate for <see cref="BlocksSynchronousWriteback"/> — built from <see cref="SynchronousWritebackBlockedStatuses"/> so it can't drift from the canonical rule.</summary>
+    private static readonly string SynchronousWritebackBlockedFilterPredicate =
+        BuildStatusNotInFilterPredicate(SynchronousWritebackBlockedStatuses);
+
+    /// <summary>Cosmos patch FilterPredicate for <see cref="IsFinalDisposition"/> — built from <see cref="FinalDispositions"/>; Pended is deliberately absent (re-pending is allowed).</summary>
+    private static readonly string FinalDispositionFilterPredicate =
+        BuildStatusNotInFilterPredicate(FinalDispositions);
+
+    private static string BuildStatusNotInFilterPredicate(IReadOnlyList<ClaimStatus> blockedStatuses) =>
+        $"FROM c WHERE NOT (c.status IN ({string.Join(",", blockedStatuses.Select(s => $"'{s}'"))}))";
 
     public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
         string ownerId,
