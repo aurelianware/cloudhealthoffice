@@ -1,8 +1,8 @@
 # Cloud Health Office — Positioning
 
-**Audience:** internal teams, partners, and evaluators deciding how Cloud Health Office (CHO) fits into their roadmap. Payer-facing pitch materials should derive from this document and not contradict it.
+**Audience:** internal teams, partners, and evaluators deciding how Cloud Health Office fits into their roadmap. Payer-facing pitch materials should derive from this document and not contradict it.
 
-**Last updated:** April 2026
+**Last updated:** July 2026
 
 ## Summary
 
@@ -242,6 +242,7 @@ EDI coverage via Argo workflows: 270/271/275/276/277/278/834/837.
 - Portal under `src/portal/` for operational workflows across tenants, services, and operating modes.
 - `fhir-service` CapabilityStatement advertising CHO-authored profiles in addition to US Core.
 - Observability stack (OpenTelemetry with PHI-scrubbing SpanProcessor, merged in PR #666) applied across services.
+- Million Claim Challenge local Kubernetes validation: 50,000 synthetic claims processed on a repeat adjudication run at 188.64 claims/sec, 106 ms P95, 151 ms P99, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. This is a local validation benchmark, not a production cloud benchmark.
 
 #### Who enters here
 
@@ -283,6 +284,8 @@ Specific indicative PMPM ranges and ARR projections are documented in `docs/sale
 The Million Claim Challenge is a source-available benchmarking asset (BSL 1.1, same as the rest of the CHO codebase) that sits across all four product lines as credibility infrastructure.
 
 We generate a stratified synthetic corpus of 1,000,000 healthcare claims — professional CMS-1500, institutional UB-04, dental ADA, and named edge-case scenarios — with pre-computed expected adjudication outcomes. Any claims adjudication engine can be benchmarked against the corpus and scored against the expected outcomes.
+
+Latest CHO proof point: in local Docker Desktop Kubernetes, Cloud Health Office processed 50,000 synthetic claims on a repeat adjudication run at 188.64 claims/sec, with 106 ms P95 latency, 151 ms P99 latency, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. This is intentionally framed as local validation, not a production cloud benchmark. Its value is that throughput, tail latency, platform reliability, and workflow correctness are measured together.
 
 ### What we offer
 

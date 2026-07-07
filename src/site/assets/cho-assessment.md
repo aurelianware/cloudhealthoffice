@@ -44,7 +44,7 @@ Cloud Health Office represents the inevitable evolution of healthcare payer EDI 
 
 ### Core Architecture
 
-Cloud Health Office deploys production-grade, HIPAA-compliant EDI infrastructure in **under one hour**—with zero custom code.
+Cloud Health Office deploys HIPAA-oriented EDI infrastructure through a focused, configuration-first pilot path.
 
 **Azure-Native Foundation:**
 - Argo Workflows on AKS for Kubernetes-native workflow orchestration
@@ -73,7 +73,7 @@ Cloud Health Office deploys production-grade, HIPAA-compliant EDI infrastructure
 - Sub-2-minute processing
 - Automated claims adjudication systems/HealthEdge correlation
 - Complete audit trail
-- Zero manual intervention
+- Automated workflow routing
 
 **ROI:** 60-80% staff time reclamation
 
@@ -155,7 +155,7 @@ Cloud Health Office deploys production-grade, HIPAA-compliant EDI infrastructure
 
 ---
 
-## Deployment: From Zero to Production in Under 1 Hour
+## Deployment: From Compliance Pilot to Platform Engagement
 
 ### Onboarding Process
 
@@ -195,7 +195,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 ---
 
-## Comparative Analysis: Magic Quadrant Positioning
+## Comparative Analysis: Market Positioning
 
 ### Market Landscape
 
@@ -212,7 +212,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 - Unlimited multi-payer support
 - Security-first architecture
 
-**Positioning:** Cloud Health Office occupies the "Visionaries" quadrant—high completeness of vision, rapidly increasing ability to execute. Traditional vendors remain trapped in "Challengers" quadrant with declining relevance.
+**Positioning:** Cloud Health Office is a source-available, Kubernetes-native compliance and modernization layer for payer core admin systems.
 
 **Market Trajectory:** Source-available, cloud-native solutions will dominate by 2027. Resistance is futile.
 
@@ -236,7 +236,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 - Licensing: free for non-production (BSL 1.1)
 - **Total:** $750k
 
-**Savings:** $3.5M over 5 years (82% reduction)
+**Savings:** pilot-scoped commercial model with lower migration risk
 
 ### Operational Efficiency Gains
 
@@ -290,7 +290,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 ### Technical Superiority
 
-1. **Zero Custom Code Deployment**
+1. **Configuration-First Deployment**
    - Configuration-driven architecture
    - Complete automation via CLI wizard
    - No programming expertise required
@@ -318,12 +318,12 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 ### Strategic Advantages
 
 1. **Time to Market**
-   - Deploy in under 1 hour vs. 6-18 months
+   - Deploy a focused compliance pilot in weeks, not months
    - Immediate ROI realization
    - Rapid multi-payer expansion
 
 2. **Cost Structure**
-   - 82% lower 5-year TCO
+   - Pilot-scoped PMPM commercial model
    - Zero licensing fees
    - Pay-for-consumption Azure model
 
@@ -405,7 +405,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 ### Deployment Success
 
 - Infrastructure deployed in <60 minutes: ✅
-- Zero custom code required: ✅
+- Configuration-first tenant setup: ✅
 - All Argo workflow templates operational: ✅
 - Trading partner connectivity validated: ✅
 
@@ -418,7 +418,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 ### Financial Success
 
-- 82% TCO reduction achieved: ✅
+- Pilot-scoped commercial model defined
 - Professional services cost eliminated: ✅
 - Multi-payer expansion without incremental cost: ✅
 
@@ -426,9 +426,9 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 ## Conclusion
 
-The verdict is immutable: **Legacy EDI integration is obsolete.**
+The practical path is clear: **compliance first, then progressive modernization.**
 
-Cloud Health Office represents the inevitable evolution of healthcare payer operations. Organizations that resist adoption will face:
+Cloud Health Office represents a source-available path for healthcare payer operations. Organizations that delay modernization may face:
 - Escalating operational costs
 - Competitive disadvantage
 - Regulatory risk
@@ -436,13 +436,13 @@ Cloud Health Office represents the inevitable evolution of healthcare payer oper
 - Staff attrition
 
 Organizations that embrace Cloud Health Office will achieve:
-- 82% cost reduction over 5 years
-- Sub-1-hour deployment timelines
-- 60-80% staff time reclamation
-- Unbreachable security posture
-- Unlimited multi-payer scale
+- Pilot-scoped PMPM pricing
+- Weeks-to-deploy compliance pilots
+- Reduced manual work through automated workflows
+- Security-scanned, auditable architecture
+- Tenant-aware multi-payer scale
 
-**The sequence is immutable. The transformation begins now.**
+**Compliance first. Progressive modernization next.**
 
 ---
 
@@ -482,6 +482,6 @@ Organizations that embrace Cloud Health Office will achieve:
 
 <div style="text-align: center; padding: 40px 0; font-size: 0.9em; opacity: 0.7;">
   <p><strong>Cloud Health Office v1.0.0 — The Sentinel</strong></p>
-  <p>Capabilities beyond question. Systems that do not fail.</p>
+  <p>Source-available healthcare payer infrastructure.</p>
   <p>© 2026 Aurelianware, Inc • BSL 1.1 License</p>
 </div>

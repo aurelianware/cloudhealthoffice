@@ -64,7 +64,7 @@
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">CMS-0057-F Compliance</span></div>
 
         <h1>CMS-0057-F Compliance Guide</h1>
-        <p class="docs-subtitle">Cloud Health Office delivers end-to-end CMS-0057-F compliance &mdash; FHIR R4 APIs, X12 EDI transformation, SNOMED&ndash;CPT&ndash;ICD terminology translation, and multi-source provider verification. Production-ready ahead of the January 2027 deadline. 1,740 tests passing. Zero external dependencies.</p>
+        <p class="docs-subtitle">Cloud Health Office delivers a CMS-0057-F compliance surface &mdash; FHIR R4 APIs, X12 EDI transformation, SNOMED&ndash;CPT&ndash;ICD terminology translation, and multi-source provider verification &mdash; designed to deploy alongside existing payer core admin systems.</p>
 
         <figure class="docs-diagram">
           <img src="/graphics/cms-0057f-compliance.svg" alt="CMS-0057-F compliance diagram showing Patient Access API, Provider Access API, Prior Authorization, Payer-to-Payer API, and Provider Directory API — all complete" />
@@ -80,7 +80,7 @@
 
         <div class="callout callout-warning">
           <div class="callout-title">Deadline: January 1, 2027</div>
-          <p>All impacted payers must have Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs live in production by this date. Cloud Health Office was production-ready in November 2024 &mdash; more than two years ahead of the deadline.</p>
+          <p>All impacted payers must have Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs live in production by this date. Cloud Health Office is designed to help payers stand up that compliance surface without replacing the core admin system first.</p>
         </div>
 
         <p>Achieving compliance requires more than standing up four FHIR endpoints. The rule depends on Da Vinci Implementation Guides (PAS, CRD, DTR, PDex) that exchange clinical data in <strong>SNOMED CT</strong> &mdash; a code system that payer core admin platforms do not natively speak. It also requires provider directory accuracy and real-time eligibility verification against validated provider records. CHO is built to address the full compliance surface in a single deployable stack: APIs, EDI transformation, terminology translation, and provider data integrity.</p>
@@ -90,7 +90,7 @@
         <!-- COMPLIANCE DASHBOARD                                         -->
         <!-- ============================================================ -->
         <h2 id="compliance-dashboard">Compliance Dashboard</h2>
-        <p>Every CMS-0057-F requirement, tested and production-validated. The 1,740 total tests span FHIR API conformance, X12 EDI parsing, claims adjudication, benefit calculation, terminology translation, and provider verification.</p>
+        <p>CMS-0057-F coverage is validated through automated tests and implementation artifacts spanning FHIR API conformance, X12 EDI parsing, claims adjudication, benefit calculation, terminology translation, and provider verification.</p>
 
         <table>
           <thead><tr><th>Requirement</th><th>Status</th><th>Tests</th><th>Da Vinci IG</th></tr></thead>

@@ -48,14 +48,14 @@
         </figure>
 
         <h2 id="overview">Overview</h2>
-        <p>The platform runs on Kubernetes (AKS, EKS, or GKE) with Argo Workflows for orchestration. All payer-specific logic is defined in configuration files — no custom code per tenant. New payers can be onboarded in under 1 hour through the interactive CLI wizard or self-service portal.</p>
+        <p>The platform runs on Kubernetes (AKS, EKS, or GKE) with Argo Workflows for orchestration. Payer-specific logic is configuration-first, with tenant-aware deployment and integration steps sized to the customer's security review, core admin integration, and operating model.</p>
 
         <h3>Key Design Objectives</h3>
         <table>
           <thead><tr><th>Principle</th><th>Implementation</th></tr></thead>
           <tbody>
             <tr><td>Multi-Tenant SaaS</td><td>Single codebase serves unlimited payers with per-tenant isolation via <code>X-Tenant-ID</code> header routing</td></tr>
-            <tr><td>Zero-Code Onboarding</td><td>Add new payers through configuration — less than 1 hour to production</td></tr>
+            <tr><td>Configuration-First Onboarding</td><td>Add new payers through tenant-aware configuration and implementation-specific validation</td></tr>
             <tr><td>Backend Agnostic</td><td>Works with any claims admin system (QNXT, Facets, HealthEdge, Epic, custom) via <code>ICoreAdminAdapter</code> pattern</td></tr>
             <tr><td>Cloud Agnostic</td><td>Deploy to Azure, AWS, GCP, or on-premises with Kubernetes and Helm charts</td></tr>
             <tr><td>Standards-Based</td><td>X12 EDI (270/275/277/278/834/835/837), FHIR R4, Da Vinci IGs, HL7, USCDI</td></tr>
@@ -104,7 +104,7 @@
         </table>
 
         <h2 id="security">HIPAA Security</h2>
-        <p>The platform addresses HIPAA technical safeguards with private endpoints for complete network isolation of PHI, PHI masking in Application Insights using DCR-based redaction, customer-managed encryption keys (BYOK), 7-year data lifecycle management with automated tiering, and 18 automated CI/CD tests to prevent PHI exposure in logs and telemetry.</p>
+        <p>The platform addresses HIPAA technical safeguards with private endpoints for network isolation of PHI, PHI masking in Application Insights using DCR-based redaction, customer-managed encryption keys (BYOK), 7-year data lifecycle management with automated tiering, and automated CI/CD checks designed to prevent PHI exposure in logs and telemetry.</p>
 
         <div class="callout callout-info">
           <div class="callout-title">Full architecture document</div>

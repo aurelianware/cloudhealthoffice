@@ -18,8 +18,8 @@ All 10 requirements from the problem statement have been successfully implemente
 2. ✅ **Platform HTML Page** - Created `site/platform.html` with overview and CTA (12.5KB)
 3. ✅ **Homepage Assessment CTA** - Updated `site/index.html` with prominent CTA section
 4. ✅ **CSS Enhancements** - Created `site/css/sentinel.css` (11.4KB) with complete Sentinel theme
-5. ✅ **Magic Quadrant Graphics** - Created 2 SVG visualizations in `site/graphics/`
-6. ✅ **Insights Page** - Created `site/insights.html` (15KB) displaying Magic Quadrant
+5. ✅ **Market Insight Graphics** - Created initial visual assets in `site/graphics/`
+6. ✅ **Insights Page** - Created `site/insights.html` for market and engineering proof content
 7. ✅ **Build Process** - Implemented Node.js Markdown→HTML converter
 8. ✅ **Accessibility Compliance** - WCAG 2.1 Level AA (most AAA) throughout
 9. ✅ **SEO Optimization** - Meta tags, structured headings, alt-text on all pages
@@ -30,13 +30,11 @@ All 10 requirements from the problem statement have been successfully implemente
 ### Content & Pages
 - `site/assets/cho-assessment.md` - Platform assessment Markdown source
 - `site/platform.html` - Platform overview with capabilities
-- `site/insights.html` - Market insights with Magic Quadrant
+- `site/insights.html` - Market and engineering insights
 - `site/assessment.html` - Generated from Markdown (auto-build)
 
 ### Styling & Graphics
 - `site/css/sentinel.css` - Complete Sentinel theme CSS
-- `site/graphics/MQ_Objective_GartnerBlue.svg` - Full Magic Quadrant
-- `site/graphics/MQ_Objective_Minimalist.svg` - Minimalist view
 
 ### Build & Validation Scripts
 - `site/js/markdown-converter.js` - Markdown to HTML converter
@@ -122,7 +120,7 @@ All color combinations **exceed** WCAG 2.1 Level AA requirements:
 - **Style:** Kubrickian, 2047-era, authoritative - ✅
 - **Tagline:** "Just emerged from the void" - ✅
 - **Brand Name:** "Cloud Health Office" (never abbreviated) - ✅
-- **Key Phrases:** "The inevitable evolution", "Capabilities beyond question" - ✅
+- **Key Phrases:** "Compliance first", "progressive modernization" - ✅
 
 ### Assets
 
@@ -222,8 +220,8 @@ az staticwebapp deploy \
 - Capabilities Beyond Question (278, 837, 270/271, ECS, Appeals)
 - Security That Actually Passes Audits
 - Deployment: From Zero to Production in Under 1 Hour
-- Comparative Analysis: Magic Quadrant Positioning
-- Economic Impact (82% TCO reduction)
+- Comparative Analysis: Market Positioning
+- Economic Impact and pilot-scoped commercial model
 - Risk Assessment
 - Competitive Advantages
 - Adoption Roadmap
@@ -237,7 +235,7 @@ az staticwebapp deploy \
 ### Platform Overview Page
 
 **Key Features:**
-- Stats grid (<1hr, Self-Service, 82%, ∞)
+- Stats grid (deployment path, self-service, PMPM, multi-tenant)
 - 6 capability cards
 - Architecture overview
 - Multi-tenant architecture details
@@ -247,8 +245,7 @@ az staticwebapp deploy \
 ### Market Insights Page
 
 **Key Features:**
-- 2 Magic Quadrant visualizations
-- Positioning analysis (Visionaries quadrant)
+- Market positioning analysis
 - Competitive comparison (CHO vs Traditional)
 - 5 key insights
 - Market forces analysis
@@ -279,7 +276,7 @@ az staticwebapp deploy \
 
 1. **Homepage** - Shows Assessment CTA section
 2. **Platform Page** - Shows capabilities grid and stats
-3. **Insights Page** - Shows Magic Quadrant visualizations
+3. **Insights Page** - Shows market thesis and engineering proof content
 
 ## Technical Specifications
 
@@ -344,7 +341,7 @@ Before each deployment:
 ## Known Limitations
 
 1. **Markdown Converter:** Basic syntax support only (no tables, footnotes, advanced features)
-2. **Magic Quadrant SVGs:** Placeholder visualizations (can be replaced with actual graphics)
+2. **Legacy market graphics:** Removed from active site after positioning refresh
 3. **External Dependency:** Calendly widget on homepage (blocked by some content filters)
 4. **Browser Support:** Requires modern browser with CSS Grid support
 
@@ -416,6 +413,6 @@ This implementation successfully delivers a professional, accessible, SEO-optimi
 
 **Implementation Version:** 1.0.0  
 **Date:** November 22, 2025  
-**Status:** ✅ Production Ready  
+**Status:** ✅ Source-available platform
 **License:** BSL 1.1  
 **© 2026 Aurelianware, Inc**
