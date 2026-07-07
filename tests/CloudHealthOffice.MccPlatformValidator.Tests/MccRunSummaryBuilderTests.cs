@@ -13,8 +13,8 @@ public class MccRunSummaryBuilderTests
         ]);
         var results = new List<ClaimValidationResult>
         {
-            Result("MCC-1", "EdgeCase:CobSecondaryPayer", MccWorkflowValidation.UnsupportedStatus, ClaimValidationOutcome.Paid),
-            Result("MCC-2", "EdgeCase:CobSecondaryPayer", MccWorkflowValidation.UnsupportedStatus, ClaimValidationOutcome.BusinessDenial),
+            Result("MCC-1", "EdgeCase:CobSecondaryPayer", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Pended),
+            Result("MCC-2", "EdgeCase:CobSecondaryPayer", MccWorkflowValidation.ObservationTimeoutStatus, ClaimValidationOutcome.ObservationTimeout),
             Result("MCC-3", "EdgeCase:BehavioralHealthCarveIn", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid),
             Result("MCC-4", "EdgeCase:BehavioralHealthCarveIn", MccWorkflowValidation.MismatchedStatus, ClaimValidationOutcome.BusinessDenial),
             Result("MCC-5", null, MccWorkflowValidation.UnspecifiedStatus, ClaimValidationOutcome.Paid)
@@ -29,16 +29,20 @@ public class MccRunSummaryBuilderTests
 
         Assert.Equal(5, summary.TotalClaims);
         Assert.Equal(4, summary.WorkflowScenarios);
-        Assert.Equal(1, summary.WorkflowMatches);
+        Assert.Equal(2, summary.WorkflowMatches);
         Assert.Equal(1, summary.WorkflowMismatches);
-        Assert.Equal(2, summary.WorkflowUnsupported);
+        Assert.Equal(0, summary.WorkflowUnsupported);
+        Assert.Equal(1, summary.WorkflowObservationTimeouts);
+        Assert.Equal(1, summary.Pended);
+        Assert.Equal(1, summary.ObservationTimeouts);
         Assert.Equal(2, summary.WorkflowScenarioBreakdown.Count);
 
         var cob = Assert.Single(summary.WorkflowScenarioBreakdown, s => s.Scenario == "EdgeCase:CobSecondaryPayer");
         Assert.Equal(2, cob.Total);
-        Assert.Equal(0, cob.Matches);
+        Assert.Equal(1, cob.Matches);
         Assert.Equal(0, cob.Mismatches);
-        Assert.Equal(2, cob.Unsupported);
+        Assert.Equal(0, cob.Unsupported);
+        Assert.Equal(1, cob.ObservationTimeouts);
         Assert.Equal(0, cob.Unspecified);
 
         var behavioral = Assert.Single(summary.WorkflowScenarioBreakdown, s => s.Scenario == "EdgeCase:BehavioralHealthCarveIn");
@@ -46,6 +50,7 @@ public class MccRunSummaryBuilderTests
         Assert.Equal(1, behavioral.Matches);
         Assert.Equal(1, behavioral.Mismatches);
         Assert.Equal(0, behavioral.Unsupported);
+        Assert.Equal(0, behavioral.ObservationTimeouts);
         Assert.Equal(0, behavioral.Unspecified);
     }
 

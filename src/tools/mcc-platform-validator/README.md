@@ -15,6 +15,8 @@ The validator currently scores:
 - `Unspecified` when a generated claim has no validator answer-key entry.
 - `Unsupported` when the MCC answer key expects a disposition the validator
   cannot observe yet.
+- `ObservationTimeout` when an expected-pend claim does not reach a terminal or
+  pended claim status within the bounded observation window.
 
 ## Pended Edge Cases
 
@@ -22,19 +24,41 @@ The MCC edge-case corpus does include expected-pend scenarios, including COB
 review, retro-eligibility coverage change, subrogation review, dual eligible,
 and spend-down cases.
 
-The validator does not currently score those as a first-class `Pended` outcome.
-It calls the benefit-plan adjudication endpoint directly, whose response exposes
-`Success`, denial reason fields, totals, and timings, but not a claim/workflow
-pend status. Claims-service and the Argo adjudication workflow can represent
-`ClaimStatus.Pended` and 277 `P:16:85`; this validator does not yet run through
-that workflow path or read claim status back after adjudication.
+The synchronous benefit-plan adjudication response exposes `Success`, denial
+reason fields, totals, and timings, but not a claim/workflow pend status.
+Claims-service is the authoritative post-adjudication state source for this
+validator: `GET /api/claims/{id}` returns `ClaimStatus.Pended`, and
+`PendDetails.PendCode` provides the reason signal when available.
 
-Until that observable signal is wired into the validator, expected-pend scenarios
-are reported as `Unsupported` rather than silently counted as matched,
-mismatched, or unspecified.
+The validator therefore scores expected-pend scenarios in a post-adjudication
+observation pass. The timed benchmark pass completes first; then the validator
+polls claims-service for expected-pend claims only. `P95`, `P99`, stage timings,
+and claims/sec are computed from submission, adjudication, and writeback timing
+and exclude this polling window.
 
-## TODO
+This observation pass is intentionally one-directional for benchmark cost: it
+polls only claims whose answer-key disposition is `Pended`. It can prove that
+expected-pend scenarios did or did not pend, but it does not detect the inverse
+failure mode where a non-pend scenario unexpectedly lands in `ClaimStatus.Pended`
+after the synchronous adjudication response said paid or denied.
 
-- Add a validator path that observes real pend state, either by running the full
-  claim workflow and reading `ClaimStatus.Pended` / 277 status, or by extending
-  the adjudication response contract with a first-class pend result.
+Defaults:
+
+- Pend observation is enabled by default. Pass `--no-pend-observation` to turn it
+  off.
+- `--pend-observation-timeout 45`
+- `--pend-observation-interval-ms 1000`
+
+The local-k8s scripts also default `PEND_OBSERVATION_ENABLED=true`. Set
+`PEND_OBSERVATION_ENABLED=false` only when reproducing the pre-observation
+validator behavior intentionally.
+
+Expected-pend scenarios score as:
+
+- `Matched` when claims-service observes `ClaimStatus.Pended`.
+- `Mismatched` when claims-service observes a different terminal state such as
+  approved/paid or denied.
+- `ObservationTimeout` when the claim remains non-terminal until the configured
+  timeout.
+- `Unsupported` only when a future expected-pend subtype requires a signal the
+  validator still cannot distinguish from persisted claim state.

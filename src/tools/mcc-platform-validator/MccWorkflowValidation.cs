@@ -30,6 +30,7 @@ public static class MccWorkflowValidation
     public const string UnspecifiedStatus = "Unspecified";
     public const string MismatchedStatus = "Mismatched";
     public const string MatchedStatus = "Matched";
+    public const string ObservationTimeoutStatus = "ObservationTimeout";
 
     public static ExpectedValidation ExpectedValidationFor(SyntheticClaim claim)
     {
@@ -39,15 +40,9 @@ public static class MccWorkflowValidation
             var expectedCode = NormalizeExpectedCode(claim.ExpectedOutcome.DenialReasonCode);
             var expectedOutcome = OutcomeFromDisposition(claim.ExpectedOutcome.Disposition);
 
-            // TODO(mcc-pended-signal): The MCC corpus contains expected-pend scenarios,
-            // but this validator currently calls benefit-plan-service directly and only
-            // observes Success plus denial/error fields. Claims-service can represent
-            // ClaimStatus.Pended and 277 P:16:85, but this validator does not yet run
-            // the claim workflow or read that status back. Keep pend expectations
-            // explicit as Unsupported until the validator has a real pend signal.
             return expectedOutcome is null
                 && claim.ExpectedOutcome.Disposition.Equals("Pended", StringComparison.OrdinalIgnoreCase)
-                    ? ExpectedValidation.Unsupported(scenario, expectedCode)
+                    ? new ExpectedValidation(scenario, ClaimValidationOutcome.Pended, expectedCode)
                     : new ExpectedValidation(scenario, expectedOutcome, expectedCode);
         }
 
@@ -104,6 +99,11 @@ public static class MccWorkflowValidation
         ClaimValidationOutcome actualOutcome,
         string? actualBusinessDenialCode)
     {
+        if (actualOutcome is ClaimValidationOutcome.ObservationTimeout)
+        {
+            return ObservationTimeoutStatus;
+        }
+
         if (expected.ExpectedOutcome is null)
         {
             return expected.IsUnsupported ? UnsupportedStatus : UnspecifiedStatus;
@@ -114,7 +114,8 @@ public static class MccWorkflowValidation
             return MismatchedStatus;
         }
 
-        if (!string.IsNullOrWhiteSpace(expected.ExpectedBusinessDenialCode)
+        if (expected.ExpectedOutcome is not ClaimValidationOutcome.Pended
+            && !string.IsNullOrWhiteSpace(expected.ExpectedBusinessDenialCode)
             && !string.Equals(expected.ExpectedBusinessDenialCode, actualBusinessDenialCode, StringComparison.OrdinalIgnoreCase))
         {
             return MismatchedStatus;
@@ -129,6 +130,7 @@ public static class MccWorkflowValidation
         {
             { } value when value.Equals("Paid", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Paid,
             { } value when value.Equals("Denied", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.BusinessDenial,
+            { } value when value.Equals("Pended", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Pended,
             _ => null
         };
     }

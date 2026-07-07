@@ -30,4 +30,18 @@ public class ValidatorOptionsTests
 
         Assert.False(options.SeedProviders);
     }
+
+    [Fact]
+    public void Parse_WhenPendObservationOptionsProvided_AppliesOverrides()
+    {
+        var options = ValidatorOptions.Parse([
+            "--no-pend-observation",
+            "--pend-observation-timeout", "30",
+            "--pend-observation-interval-ms", "500"
+        ]);
+
+        Assert.False(options.PendObservationEnabled);
+        Assert.Equal(30, options.PendObservationTimeoutSeconds);
+        Assert.Equal(500, options.PendObservationIntervalMilliseconds);
+    }
 }
