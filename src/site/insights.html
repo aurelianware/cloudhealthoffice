@@ -295,6 +295,7 @@
           <p>
             Cloud Health Office moved from one-off fast local runs to repeatable claims adjudication benchmarks:
             configurable Kubernetes Jobs, parallelism sweeps, repeated runs, hidden-cap detection, and workflow correctness checks reported alongside throughput.
+            The latest published result is a 50K local Kubernetes validation on 18 allocated Docker CPUs, not a production cloud benchmark.
           </p>
 
           <div class="proof-metrics" aria-label="Latest Million Claim Challenge local benchmark metrics">
@@ -304,7 +305,7 @@
             </div>
             <div class="proof-metric">
               <strong>188.64 claims/sec</strong>
-              <span>repeat adjudication throughput</span>
+              <span>repeat throughput, about 10.5 claims/sec per allocated CPU</span>
             </div>
             <div class="proof-metric">
               <strong>106 ms / 151 ms</strong>
@@ -312,13 +313,14 @@
             </div>
             <div class="proof-metric">
               <strong>4,000/4,000</strong>
-              <span>workflow checks matched</span>
+              <span>checks matched across four core dispositions</span>
             </div>
           </div>
 
           <p>
             The benchmark distinguishes valid business denials from platform failures. Correct denials are not errors;
             they are evidence that benefit rules, provider checks, prior authorization logic, and adjudication outcomes are being applied consistently.
+            The next proof milestone is broader coverage across the MCC's 29 edge-case scenarios before pushing toward 250K, 500K, and full-million adjudication runs.
           </p>
           <p style="font-size:0.95rem;color:#888;">
             Local Docker Desktop Kubernetes benchmark, not a production cloud benchmark.

@@ -292,7 +292,8 @@
         <h2 id="mcc-proof-heading">Claims Adjudication Proof, Measured Locally</h2>
         <p>
           The Million Claim Challenge validates the platform under pressure by reporting throughput, tail latency,
-          platform reliability, and deterministic healthcare workflow correctness together.
+          platform reliability, and deterministic healthcare workflow correctness together. The latest published Cloud Health Office run
+          is a 50K local Kubernetes validation, not a production cloud benchmark or full-million adjudication run.
         </p>
         <div class="mcc-proof-grid" aria-label="Latest local Million Claim Challenge validation metrics">
           <div class="mcc-proof-metric">
@@ -301,7 +302,7 @@
           </div>
           <div class="mcc-proof-metric">
             <strong>188.64 claims/sec</strong>
-            <span>repeat adjudication throughput</span>
+            <span>repeat throughput, about 10.5 claims/sec per allocated CPU</span>
           </div>
           <div class="mcc-proof-metric">
             <strong>106 ms / 151 ms</strong>
@@ -309,11 +310,11 @@
           </div>
           <div class="mcc-proof-metric">
             <strong>0 platform failures</strong>
-            <span>4,000/4,000 workflow checks matched</span>
+            <span>4,000/4,000 checks across four core dispositions</span>
           </div>
         </div>
         <p style="font-size:0.95rem; color:#888;">
-          Local Docker Desktop Kubernetes validation, not a production cloud benchmark.
+          The full MCC design covers one million claims and 29 edge-case scenarios; the next proof milestone is broader scenario coverage, then 250K+ volume.
           <a href="/docs/million-claim-challenge" style="color:#00ffff;">See the benchmark methodology &rarr;</a>
         </p>
       </section>

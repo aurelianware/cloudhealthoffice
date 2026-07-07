@@ -122,7 +122,7 @@
         "name": "What accuracy scores should a claims adjudication engine achieve on the Million Claim Challenge?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "The MCC recommends three scoring tiers: Disposition Accuracy (Paid/Denied/Pended matching) should be 99.5% or higher, Amount Accuracy (paid amount within plus or minus $0.01) should be 98.0% or higher, and Edge Case Accuracy (disposition plus amount correct on the 50,000 edge cases) should be 95.0% or higher. Cloud Health Office publishes its own MCC scores with every release."
+          "text": "The MCC recommends three scoring tiers: Disposition Accuracy (Paid/Denied/Pended matching) should be 99.5% or higher, Amount Accuracy (paid amount within plus or minus $0.01) should be 98.0% or higher, and Edge Case Accuracy (disposition plus amount correct on the 50,000 edge cases) should be 95.0% or higher. Cloud Health Office publishes its own MCC validation results as the benchmark coverage expands."
         }
       },
       {
@@ -291,14 +291,20 @@
         <div class="callout callout-success">
           <div class="callout-title">Latest local Kubernetes validation</div>
           <p>
-            Cloud Health Office processed <strong>50,000 synthetic claims</strong> in local Docker Desktop Kubernetes at
+            Cloud Health Office processed <strong>50,000 synthetic claims</strong> in local Docker Desktop Kubernetes with Docker allocated 18 CPUs at
             <strong>188.64 claims/sec</strong> on a repeat adjudication run with provider seeding skipped.
             The run held <strong>106 ms P95</strong>, <strong>151 ms P99</strong>, <strong>zero platform failures</strong>,
             and <strong>4,000/4,000 deterministic workflow checks matched</strong>.
           </p>
           <p>
+            Framed per allocated CPU, that is roughly <strong>10.5 claims/sec per allocated CPU</strong> for the measured workflow.
             This is a local validation benchmark, not a production cloud benchmark. Its value is repeatability:
             throughput, tail latency, platform reliability, and workflow correctness measured together.
+          </p>
+          <p>
+            Scope matters: the MCC corpus is designed for one million claims and 29 named edge-case scenarios.
+            This published Cloud Health Office run proves a 50K local slice with deterministic checks across four core dispositions:
+            clean paid, excluded provider, uncovered service, and prior authorization.
           </p>
         </div>
 
@@ -342,7 +348,8 @@
         <p>
           MCC is not only a generator. We use it as a repeatable validation loop for Cloud Health Office itself.
           The latest published local result comes from Docker Desktop Kubernetes with Docker allocated 18 CPUs
-          and approximately 24 GB of memory.
+          and approximately 24 GB of memory. The raw throughput is less important than the shape of the measurement:
+          about 10.5 claims/sec per allocated CPU, tail latency reported with the run, and correctness checks kept in the same artifact.
         </p>
 
         <table>
@@ -403,6 +410,19 @@
           MCC reports speed and correctness together: business denials are valid outcomes when the platform applies rules correctly,
           while platform failures are unexpected system, infrastructure, or workflow breakdowns.
         </p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Current proof vs benchmark design</div>
+          <p>
+            The benchmark design is the full million-claim corpus with 29 named edge-case scenarios and target scoring tiers.
+            The latest published Cloud Health Office result is narrower: a 50,000-claim local Kubernetes validation with
+            workflow checks across four deterministic dispositions. That gap is intentional and public.
+          </p>
+          <p>
+            Our next proof milestone is not just a larger run. It is broader accuracy coverage across more of the 29 edge scenarios,
+            followed by 250K, 500K, and full-million adjudication runs so the evidence catches up to the name.
+          </p>
+        </div>
 
         <!-- Why We Built It -->
         <h2 id="why-we-built-it">Why We Built It</h2>
