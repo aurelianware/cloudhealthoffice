@@ -13,6 +13,11 @@ SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
 PEND_OBSERVATION_INTERVAL_MS="${PEND_OBSERVATION_INTERVAL_MS:-1000}"
+# Off by default. Set to a path (e.g. /tmp/mcc-pend-diagnostics.json) to capture
+# per-claim pend diagnostics; the aggregate table prints to the job logs regardless
+# of whether the JSON artifact itself is copied out of the pod.
+PEND_DIAGNOSTICS_PATH="${PEND_DIAGNOSTICS_PATH:-}"
+PEND_DIAGNOSTICS_NCCI_SAMPLE="${PEND_DIAGNOSTICS_NCCI_SAMPLE:-200}"
 PARALLELISM="${PARALLELISM:-10}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-500}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-docker-desktop}"
@@ -73,6 +78,7 @@ spec:
             - "${PEND_OBSERVATION_TIMEOUT_SECONDS}"
             - --pend-observation-interval-ms
             - "${PEND_OBSERVATION_INTERVAL_MS}"
+            $(if [[ -n "$PEND_DIAGNOSTICS_PATH" ]]; then printf -- '- --pend-diagnostics\n            - "%s"\n            - --pend-diagnostics-ncci-sample\n            - "%s"\n' "$PEND_DIAGNOSTICS_PATH" "$PEND_DIAGNOSTICS_NCCI_SAMPLE"; fi)
             - --progress-every
             - "${PROGRESS_EVERY}"
             - --summary-json

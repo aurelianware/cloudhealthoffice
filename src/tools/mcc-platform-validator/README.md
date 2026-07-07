@@ -62,3 +62,36 @@ Expected-pend scenarios score as:
   timeout.
 - `Unsupported` only when a future expected-pend subtype requires a signal the
   validator still cannot distinguish from persisted claim state.
+
+## Pend Diagnostics (`--pend-diagnostics`)
+
+Off by default. When given a path, the validator captures, for every
+expected-pend claim and a bounded sample of NCCI/MUE-denied claims (see
+`--pend-diagnostics-ncci-sample`, default 200):
+
+- The answer-key expectation (scenario, expected disposition).
+- The full synchronous adjudication response from
+  `POST /api/v1/adjudication/adjudicate` (`Success`, every denial/error field
+  present, totals) — captured verbatim, not reshaped.
+- The post-adjudication claim state read back from claims-service
+  (`ClaimStatus`, `PendDetails`, persisted denial code/reason, per-line
+  adjustment reasons when the claim model exposes them).
+- The validator's own scoring result (`Matched` / `Mismatched` /
+  `ObservationTimeout` / `Unsupported`).
+
+This produces two things:
+
+1. A JSON report at the given path — one row per diagnosed claim. Diffable,
+   and easy to aggregate or load into a notebook.
+2. An aggregate table printed to the run summary — per scenario: expected
+   pend count, observed Paid, observed Denied (grouped by denial code),
+   observed Pended, and observation timeouts. This table is meant to be
+   pasted directly into an ADR or episode packet.
+
+**This is diagnostic instrumentation only.** It changes no dispositions, no
+engine logic, no claim state handling. It performs one additional
+`GET /api/claims/{id}` read per diagnosed claim, and that read happens after
+`total.Stop()` — the same posture as `--pend-observation` — so it never
+affects P95/P99/throughput. But a diagnostics-on run reads more claims than a
+diagnostics-off run of the same size, so **do not report a diagnostics-on
+run's timing as a throughput benchmark result.**
