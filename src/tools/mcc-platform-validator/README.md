@@ -36,12 +36,22 @@ polls claims-service for expected-pend claims only. `P95`, `P99`, stage timings,
 and claims/sec are computed from submission, adjudication, and writeback timing
 and exclude this polling window.
 
+This observation pass is intentionally one-directional for benchmark cost: it
+polls only claims whose answer-key disposition is `Pended`. It can prove that
+expected-pend scenarios did or did not pend, but it does not detect the inverse
+failure mode where a non-pend scenario unexpectedly lands in `ClaimStatus.Pended`
+after the synchronous adjudication response said paid or denied.
+
 Defaults:
 
+- Pend observation is enabled by default. Pass `--no-pend-observation` to turn it
+  off.
 - `--pend-observation-timeout 45`
 - `--pend-observation-interval-ms 1000`
 
-Use `--no-pend-observation` to disable the post-adjudication observation pass.
+The local-k8s scripts also default `PEND_OBSERVATION_ENABLED=true`. Set
+`PEND_OBSERVATION_ENABLED=false` only when reproducing the pre-observation
+validator behavior intentionally.
 
 Expected-pend scenarios score as:
 
