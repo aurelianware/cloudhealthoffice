@@ -40,7 +40,7 @@
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Deployment</span></div>
 
         <h1>Deployment Guide</h1>
-        <p class="docs-subtitle">Two paths to production: managed SaaS (live in 5 minutes) or self-hosted on your own Kubernetes cluster with full infrastructure control. Both paths include HIPAA-compliant infrastructure and zero-downtime deployments.</p>
+        <p class="docs-subtitle">Two deployment paths: managed SaaS or self-hosted on your own Kubernetes cluster with full infrastructure control. Both paths are designed for HIPAA-oriented infrastructure, security review, and controlled rollout.</p>
 
         <figure class="docs-diagram">
           <img src="/graphics/docs-deployment-pipeline.svg" alt="Deployment pipeline showing SaaS signup flow and self-hosted DEV → UAT → PROD gated release strategy with multi-cloud support" />
@@ -104,7 +104,7 @@ kubectl get deployments -n cloudhealthoffice</code></pre>
         <table>
           <thead><tr><th>Stage</th><th>Trigger</th><th>What Happens</th></tr></thead>
           <tbody>
-            <tr><td><strong>CI</strong></td><td>Push to <code>main</code></td><td>Build, test (1,740 tests), security scan, Docker image build</td></tr>
+            <tr><td><strong>CI</strong></td><td>Push to <code>main</code></td><td>Build, automated test suite, security scan, Docker image build</td></tr>
             <tr><td><strong>DEV</strong></td><td>CI pass</td><td>Auto-deploy to DEV AKS, run E2E tests</td></tr>
             <tr><td><strong>UAT</strong></td><td>DEV pass + approval</td><td>Deploy to UAT, run integration tests, security validation</td></tr>
             <tr><td><strong>PROD</strong></td><td>UAT pass + approval</td><td>Blue-green deploy to PROD AKS, smoke tests, rollback-ready</td></tr>

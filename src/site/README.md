@@ -1,6 +1,6 @@
 # Cloud Health Office - Static Website
 
-**Last Updated:** February 11, 2026 - v4.0.0 Release
+**Last Updated:** July 2026
 
 This directory contains the Cloud Health Office marketing website with platform assessment, insights, and documentation.
 
@@ -29,7 +29,7 @@ site/
 ├── index.html              # Homepage with hero and Calendly integration
 ├── login.html              # Login/registration page with multi-tenant Entra ID
 ├── platform.html           # Platform overview and capabilities
-├── insights.html           # Market insights with Magic Quadrant visualization
+├── insights.html           # Market and engineering insights
 ├── assessment.html         # Generated from assets/cho-assessment.md
 ├── css/
 │   └── sentinel.css        # Sentinel theme styling (Absolute black, neon cyan/green)
@@ -37,9 +37,7 @@ site/
 │   ├── auth.js             # Authentication helper library
 │   ├── markdown-converter.js  # Build script to convert .md to .html
 │   └── validate-accessibility.js
-├── graphics/
-│   ├── MQ_Objective_GartnerBlue.svg
-│   └── MQ_Objective_Minimalist.svg
+├── graphics/               # Logos, product diagrams, and platform visuals
 ├── assets/
 │   └── cho-assessment.md   # Source Markdown for assessment page
 ├── staticwebapp.config.json  # Azure Static Web Apps configuration

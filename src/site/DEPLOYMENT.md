@@ -248,7 +248,7 @@ lighthouse http://localhost:8000 --view
 - [ ] Homepage loads correctly
 - [ ] Navigation menu works on all pages
 - [ ] Platform page displays capabilities
-- [ ] Insights page shows Magic Quadrant visualizations
+- [ ] Insights page shows market and engineering proof content
 - [ ] Assessment page renders from Markdown
 - [ ] All images have alt text
 - [ ] Links open in correct target (internal vs external)
@@ -547,6 +547,6 @@ Run this whenever you add or update public docs/quickstart pages:
 ---
 
 **Cloud Health Office v1.0.0 — The Sentinel**  
-*The deployment is inevitable. The sequence is immutable.*
+*Compliance first. Progressive modernization next.*
 
 BSL 1.1 • © 2026 Aurelianware, Inc
