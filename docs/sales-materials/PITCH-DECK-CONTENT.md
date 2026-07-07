@@ -257,7 +257,7 @@ npm run generate -- interactive --output my-config.json --generate
 ### Competitive Advantages
 
 1. **18-month head start** on CMS compliance
-2. **85%+ cost reduction** vs. enterprise vendors
+2. **Up to 82% cost reduction** vs. enterprise vendors (results may vary)
 3. **Source-available transparency** eliminates vendor lock-in
 4. **Azure Marketplace** enables instant evaluation
 5. **Community-driven** continuous improvement
@@ -334,7 +334,7 @@ npm run generate -- interactive --output my-config.json --generate
 |---------|-------|-----------------|-------------|
 | **Compliance Champion** | VP Compliance | Regulatory risk | "100% CMS-ready" |
 | **Technology Leader** | CIO/CTO | Implementation risk | "< 5 minute deployment" |
-| **Financial Decision Maker** | CFO | Cost control | "85% cost reduction" |
+| **Financial Decision Maker** | CFO | Cost control | "up to 82% cost reduction" |
 
 ---
 

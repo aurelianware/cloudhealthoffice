@@ -220,7 +220,7 @@ npm run generate -- interactive --output my-config.json --generate
 
 *Cloud Health Office figures are internal modeled ARPU values for mid-market segment Platform Engagement; specific PMPM ranges per layer are pilot-scoped. See [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md).*
 
-**Savings**: 83-97% cost reduction vs. alternatives at indicative modeled scale.
+**Savings**: 83-97% cost reduction vs. alternatives at indicative modeled scale (results may vary). *This range is derived directly from the Year 1 cost comparisons in the table above and is a separate, table-specific metric from the general "up to 82%" cost-reduction figure used elsewhere in Cloud Health Office marketing materials.*
 
 ---
 
@@ -267,7 +267,7 @@ npm run generate -- interactive --output my-config.json --generate
 ### Competitive Advantages
 
 1. **10-month head start** on CMS compliance (production-ready today)
-2. **85%+ cost reduction** vs. enterprise vendors
+2. **Up to 82% cost reduction** vs. enterprise vendors (results may vary)
 3. **Source-available transparency** eliminates vendor lock-in and security concerns
 4. **Azure Marketplace** enables instant evaluation and procurement
 5. **Community-driven** continuous improvement (GitHub, Slack, Office Hours)
