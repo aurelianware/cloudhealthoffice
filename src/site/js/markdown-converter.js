@@ -94,7 +94,7 @@ function generateHtmlPage(title, content, filename) {
 
       <section class="cta-section">
         <h2>Ready to Transform Your Payer Operations?</h2>
-        <p>The sequence is immutable. Legacy EDI integration is now optional.</p>
+        <p>Compliance first. Progressive modernization next.</p>
         <div style="margin-top: 30px;">
           <a href="platform.html" class="button">Platform Overview</a>
           <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button button-green" target="_blank" rel="noopener noreferrer">Contact Sales</a>
@@ -107,7 +107,7 @@ function generateHtmlPage(title, content, filename) {
   <footer>
     <p>
       <strong>Cloud Health Office v1.0.0 — The Sentinel</strong><br>
-      Capabilities beyond question. Systems that do not fail.
+      Source-available healthcare payer infrastructure.
     </p>
     <p>
       BSL 1.1 • Not affiliated with third-party vendors • © 2026 Aurelianware<br>
