@@ -3,27 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Healthcare EDI market analysis: how Medicaid MCOs and Medicare Advantage plans are evaluating payer integration platforms for CMS-0057-F compliance. Competitive landscape and source-available vs. legacy vendor comparison.">
-  <meta name="keywords" content="healthcare EDI market analysis, payer integration platform comparison, CMS-0057-F vendor landscape, Medicaid payer modernization, healthcare interoperability competitive analysis, source-available healthcare EDI, FHIR payer platform">
+  <meta name="description" content="Healthcare EDI market analysis and Cloud Health Office engineering insights: payer integration platform landscape, CMS-0057-F compliance, and repeatable claims adjudication benchmarks.">
+  <meta name="keywords" content="healthcare EDI market analysis, payer integration platform comparison, CMS-0057-F vendor landscape, Medicaid payer modernization, healthcare interoperability competitive analysis, source-available healthcare EDI, FHIR payer platform, claims adjudication benchmark, Million Claim Challenge">
   <meta name="author" content="Aurelianware">
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="Cloud Health Office">
   <meta property="og:url" content="https://cloudhealthoffice.com/insights">
-  <meta property="og:title" content="Healthcare EDI Market Analysis: Payer Integration Platform Landscape — Cloud Health Office">
-  <meta property="og:description" content="How Medicaid MCOs and Medicare Advantage plans are evaluating payer integration platforms for CMS-0057-F compliance. Open-source vs. legacy vendor comparison.">
+  <meta property="og:title" content="Market and Engineering Insights — Cloud Health Office">
+  <meta property="og:description" content="Healthcare EDI market analysis, CMS-0057-F platform strategy, and repeatable claims adjudication benchmark evidence from Cloud Health Office.">
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/MQ_Objective_GartnerBlue.svg">
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="https://cloudhealthoffice.com/insights">
-  <meta name="twitter:title" content="Healthcare EDI Market Analysis: Payer Integration Platform Landscape — Cloud Health Office">
-  <meta name="twitter:description" content="How Medicaid MCOs and Medicare Advantage plans are evaluating payer integration platforms for CMS-0057-F compliance.">
+  <meta name="twitter:title" content="Market and Engineering Insights — Cloud Health Office">
+  <meta name="twitter:description" content="Healthcare EDI market analysis plus repeatable claims adjudication benchmark evidence.">
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/MQ_Objective_GartnerBlue.svg">
 
   <link rel="canonical" href="https://cloudhealthoffice.com/insights" />
-  <title>Healthcare EDI Market Analysis: Payer Integration Landscape — Cloud Health Office</title>
+  <title>Market and Engineering Insights — Cloud Health Office</title>
   <!-- Privacy-friendly analytics by Plausible -->
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
@@ -166,6 +166,70 @@
       color: #00ffff;
       margin-bottom: 30px;
     }
+
+    .engineering-proof {
+      background: #0a0a0a;
+      border: 1px solid rgba(0,255,255,0.22);
+      border-left: 4px solid #00ffff;
+      border-radius: 8px;
+      padding: 30px;
+      margin: 40px 0;
+    }
+
+    .engineering-proof h3 {
+      margin-top: 0;
+      color: #00ffff;
+      text-shadow: none;
+    }
+
+    .engineering-proof .proof-meta {
+      color: #00ff88;
+      font-size: 0.82rem;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .proof-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin: 24px 0;
+    }
+
+    .proof-metric {
+      background: rgba(0,0,0,0.42);
+      border: 1px solid rgba(0,255,255,0.14);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .proof-metric strong {
+      display: block;
+      color: #fff;
+      font-size: 1.18rem;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .proof-metric span {
+      color: rgba(176,176,176,0.72);
+      font-size: 0.82rem;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 900px) {
+      .proof-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      .proof-metrics {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -220,6 +284,47 @@
         <p>The competitive analysis on this page reads Cloud Health Office (CHO) against legacy EDI and core admin vendors. The differentiation thesis is structural: incumbents sell one thing; CHO ships four complementary product lines &mdash; <strong>Public Tools</strong>, <strong>Transactional Services</strong>, <strong>Managed Data Services</strong>, and <strong>Platform Engagement</strong> &mdash; off the same platform substrate.</p>
         <p style="margin-top:12px;">Free fee-schedule lookups feed paid APIs; paid APIs validate the calculation engines that anchor per member per month (PMPM) payer relationships; subscription data services run the same ingestion pipelines that Platform Engagement deploys end-to-end. The competitive moat isn't any single capability. It's the portfolio.</p>
         <p style="margin-top:12px; font-size:0.95rem; color:#888;"><a href="/pricing" style="color:#00ffff;">See full pricing &rarr;</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Canonical positioning &rarr;</a></p>
+      </section>
+
+      <section class="featured-article-section" aria-labelledby="engineering-insights-heading">
+        <h2 id="engineering-insights-heading">Engineering Proof</h2>
+
+        <article class="engineering-proof">
+          <div class="proof-meta">Million Claim Challenge &middot; Local Kubernetes validation</div>
+          <h3>From Faster to Repeatably Faster</h3>
+          <p>
+            Cloud Health Office moved from one-off fast local runs to repeatable claims adjudication benchmarks:
+            configurable Kubernetes Jobs, parallelism sweeps, repeated runs, hidden-cap detection, and workflow correctness checks reported alongside throughput.
+          </p>
+
+          <div class="proof-metrics" aria-label="Latest Million Claim Challenge local benchmark metrics">
+            <div class="proof-metric">
+              <strong>50,000</strong>
+              <span>synthetic claims processed</span>
+            </div>
+            <div class="proof-metric">
+              <strong>188.64 claims/sec</strong>
+              <span>repeat adjudication throughput</span>
+            </div>
+            <div class="proof-metric">
+              <strong>106 ms / 151 ms</strong>
+              <span>P95 and P99 latency</span>
+            </div>
+            <div class="proof-metric">
+              <strong>4,000/4,000</strong>
+              <span>workflow checks matched</span>
+            </div>
+          </div>
+
+          <p>
+            The benchmark distinguishes valid business denials from platform failures. Correct denials are not errors;
+            they are evidence that benefit rules, provider checks, prior authorization logic, and adjudication outcomes are being applied consistently.
+          </p>
+          <p style="font-size:0.95rem;color:#888;">
+            Local Docker Desktop Kubernetes benchmark, not a production cloud benchmark.
+            <a href="/docs/million-claim-challenge" style="color:#00ffff;">Read the benchmark methodology &rarr;</a>
+          </p>
+        </article>
       </section>
 
       <section class="assessment-section">

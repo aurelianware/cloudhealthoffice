@@ -156,6 +156,37 @@ That is the result that matters most.
 
 Throughput is important. But throughput without correctness is just fast noise.
 
+## Separating setup cost from adjudication throughput
+
+After the true 50,000-claim run, we ran one more important test.
+
+The first successful 50,000-claim validation included provider seeding. That is useful for a first-time local validation because the demo tenant needs synthetic providers before claims can be checked against provider rules.
+
+But once the tenant has already been seeded, provider setup is no longer part of the steady-state adjudication path.
+
+So the local Kubernetes scripts now allow repeat benchmark runs to skip provider seeding:
+
+```bash
+SEED_PROVIDERS=false
+```
+
+That gives a cleaner view of repeat adjudication throughput against an already-prepared tenant.
+
+The difference was meaningful:
+
+- with provider seeding: 157.07 claims/sec, 130 ms P95, 175 ms P99
+- skipping provider seeding: 188.64 claims/sec, 106 ms P95, 151 ms P99
+
+Both runs still completed with zero platform failures and 4,000/4,000 workflow checks matched.
+
+That is an important distinction.
+
+The first run answers, "Can this local environment prepare itself and process the workload correctly?"
+
+The repeat run answers, "Once setup is out of the way, how fast can the adjudication path run while preserving correctness?"
+
+Both questions matter. But they should not be blended together without saying so.
+
 ## Correct denials are not failures
 
 One of the most important ideas in the Million Claim Challenge is that not every unpaid claim is a problem.
@@ -182,7 +213,7 @@ CloudHealthOffice can now run the Million Claim Challenge locally in Kubernetes,
 
 The current local result:
 
-> 50,000 claims processed in Kubernetes, 157.07 claims per second, 130 ms P95 latency, 175 ms P99 latency, zero platform failures, and 4,000/4,000 workflow checks matched.
+> 50,000 claims processed in Kubernetes, 188.64 claims per second on a repeat run with provider seeding skipped, 106 ms P95 latency, 151 ms P99 latency, zero platform failures, and 4,000/4,000 workflow checks matched.
 
 That is a very good place to be.
 
