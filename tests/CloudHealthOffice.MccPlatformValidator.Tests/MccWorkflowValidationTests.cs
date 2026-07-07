@@ -157,7 +157,7 @@ public class MccWorkflowValidationTests
     }
 
     [Fact]
-    public void ExpectedValidationFor_PendedEdgeCase_ResultsInUnspecifiedOutcome()
+    public void ExpectedValidationFor_PendedEdgeCase_ResultsInUnsupportedOutcome()
     {
         var claim = CreateClaim(
             claimType: "EdgeCase",
@@ -186,8 +186,83 @@ public class MccWorkflowValidationTests
         Assert.Equal("EdgeCase:CobSecondaryPayer", expected.Scenario);
         Assert.Null(expected.ExpectedOutcome);
         Assert.Equal("CARC_22", expected.ExpectedBusinessDenialCode);
-        Assert.Equal("Unspecified", statusWhenPaid);
-        Assert.Equal("Unspecified", statusWhenDenied);
+        Assert.True(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, statusWhenPaid);
+        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, statusWhenDenied);
+    }
+
+    [Fact]
+    public void AnswerKey_WhenClaimMissing_ReturnsUnspecified()
+    {
+        var key = MccAnswerKey.FromClaims([
+            CreateClaim(
+                claimType: "Professional",
+                benefitPlanId: MccWorkflowValidation.CleanProfessionalPaidPlanId,
+                placeOfService: "11",
+                priorAuthStatus: "NotRequired",
+                priorAuthNumber: null,
+                renderingState: "AZ")
+        ]);
+        var missing = CreateClaim(
+            claimType: "Professional",
+            benefitPlanId: "OTHER-PLAN",
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        missing.ClaimId = "MCC-MISSING-0000001";
+
+        var expected = key.ExpectedValidationFor(missing);
+
+        Assert.Null(expected.Scenario);
+        Assert.Null(expected.ExpectedOutcome);
+        Assert.False(expected.IsUnsupported);
+    }
+
+    [Fact]
+    public void AnswerKey_WhenEdgeCaseEntryMissingExpectedOutcome_ReturnsUnspecified()
+    {
+        var claim = CreateClaim(
+            claimType: "EdgeCase",
+            benefitPlanId: "MCC-PLAN",
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        claim.EdgeCase = EdgeCaseScenario.CobSecondaryPayer;
+        claim.ExpectedOutcome = null!;
+
+        var key = MccAnswerKey.FromClaims([claim]);
+        var expected = key.ExpectedValidationFor(claim);
+
+        Assert.Null(expected.Scenario);
+        Assert.Null(expected.ExpectedOutcome);
+        Assert.Equal(MccWorkflowValidation.UnspecifiedStatus,
+            MccWorkflowValidation.ValidationStatus(expected, ClaimValidationOutcome.Paid, null));
+    }
+
+    [Fact]
+    public void AnswerKey_WhenDuplicateClaimIds_Throws()
+    {
+        var first = CreateClaim(
+            claimType: "Professional",
+            benefitPlanId: MccWorkflowValidation.CleanProfessionalPaidPlanId,
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        var second = CreateClaim(
+            claimType: "Professional",
+            benefitPlanId: MccWorkflowValidation.ExcludedProviderPlanId,
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        second.ClaimId = first.ClaimId;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => MccAnswerKey.FromClaims([first, second]));
+
+        Assert.Contains(first.ClaimId, ex.Message);
     }
 
     [Fact]

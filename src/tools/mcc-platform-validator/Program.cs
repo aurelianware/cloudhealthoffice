@@ -58,6 +58,7 @@ await CreateValidationPlanAsync(http, options, validationPlanId, json);
 
 var claims = await GenerateClaimsAsync(options);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
+var answerKey = MccAnswerKey.FromClaims(claims);
 
 if (options.SeedProviders)
 {
@@ -75,7 +76,7 @@ await Parallel.ForEachAsync(
     new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
     async (claim, _) =>
     {
-        var result = await ProcessClaimAsync(http, options, claim, validationPlanId, json);
+        var result = await ProcessClaimAsync(http, options, claim, validationPlanId, answerKey, json);
         results.Add(result);
 
         var done = Interlocked.Increment(ref completed);
@@ -103,7 +104,7 @@ var orderedResults = results
     .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
     .ToList();
 
-var summary = BuildSummary(orderedResults, total.Elapsed, options, runStartedAtUtc, DateTimeOffset.UtcNow);
+var summary = MccRunSummaryBuilder.Build(orderedResults, total.Elapsed, options, runStartedAtUtc, DateTimeOffset.UtcNow);
 WriteSummary(summary);
 
 if (!string.IsNullOrWhiteSpace(options.SummaryJsonPath))
@@ -126,6 +127,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     ValidatorOptions options,
     SyntheticClaim claim,
     Guid validationPlanId,
+    MccAnswerKey answerKey,
     JsonSerializerOptions json)
 {
     var sw = Stopwatch.StartNew();
@@ -133,7 +135,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     var adjudicationElapsed = TimeSpan.Zero;
     var updateElapsed = TimeSpan.Zero;
     var failureStage = "unknown";
-    var expectedValidation = MccWorkflowValidation.ExpectedValidationFor(claim);
+    var expectedValidation = answerKey.ExpectedValidationFor(claim);
     var expectedPlanPayment = expectedValidation.ExpectedOutcome is not ClaimValidationOutcome.Paid
         ? null
         : claim.ExpectedOutcome?.ExpectedPaidAmount;
@@ -1281,119 +1283,6 @@ static IReadOnlyList<(T Item, int Count)> AllocateCounts<T>(int total, IReadOnly
         .ToList();
 }
 
-static MassAdjudicationRunSummary BuildSummary(
-    List<ClaimValidationResult> results,
-    TimeSpan elapsed,
-    ValidatorOptions options,
-    DateTimeOffset runStartedAtUtc,
-    DateTimeOffset runCompletedAtUtc)
-{
-    var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
-    var adjudicated = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
-    var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
-    var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
-    var validationScenarios = results.Count(r => r.ExpectedOutcome is not null);
-    var validationMatches = results.Count(r => r.ValidationStatus == "Matched");
-    var validationMismatches = results.Count(r => r.ValidationStatus == "Mismatched");
-    var orderedDurations = results.Select(r => r.Elapsed.TotalMilliseconds).Order().ToArray();
-    var p95 = Percentile(orderedDurations, 0.95);
-    var p99 = Percentile(orderedDurations, 0.99);
-    var throughput = results.Count / Math.Max(0.001, elapsed.TotalSeconds);
-    var comparable = results
-        .Where(r => r.Outcome is ClaimValidationOutcome.Paid)
-        .Where(r => r.ActualPlanPayment.HasValue && r.ExpectedPlanPayment.HasValue)
-        .ToList();
-    var avgDelta = comparable.Count == 0
-        ? (decimal?)null
-        : comparable.Average(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value));
-    var denialBreakdown = results
-        .Where(r => r.Outcome is ClaimValidationOutcome.BusinessDenial)
-        .GroupBy(r => r.BusinessDenialCode ?? "UNKNOWN")
-        .OrderByDescending(g => g.Count())
-        .ThenBy(g => g.Key, StringComparer.Ordinal)
-        .Select(g => new MassAdjudicationBusinessDenialSummary(g.Key, g.Count()))
-        .ToList();
-    var workflowBreakdown = results
-        .Where(r => !string.IsNullOrWhiteSpace(r.ValidationScenario))
-        .GroupBy(r => r.ValidationScenario!, StringComparer.Ordinal)
-        .OrderBy(g => g.Key, StringComparer.Ordinal)
-        .Select(g => new MassAdjudicationWorkflowScenarioSummary(
-            g.Key,
-            g.Count(),
-            g.Count(r => r.ValidationStatus == "Matched"),
-            g.Count(r => r.ValidationStatus == "Mismatched"),
-            g.Count(r => r.ValidationStatus == "Unspecified")))
-        .ToList();
-    var failures = results
-        .Where(r => r.Outcome is ClaimValidationOutcome.PlatformFailure)
-        .Take(5)
-        .Select(r => new MassAdjudicationFailureSummary(r.GeneratedClaimId, r.FailureStage, r.Error))
-        .ToList();
-    var claimResults = results
-        .OrderByDescending(r => r.Elapsed)
-        .Take(options.PublishClaimResultsLimit)
-        .Select(r => new MassAdjudicationClaimResult(
-            r.GeneratedClaimId,
-            r.SubmittedClaimId,
-            r.ClaimType,
-            r.ValidationScenario,
-            r.ExpectedOutcome,
-            r.ExpectedBusinessDenialCode,
-            r.ValidationStatus,
-            r.Outcome.ToString(),
-            r.AdjudicationSuccess,
-            r.BusinessDenialCode,
-            r.FailureStage,
-            r.Error,
-            r.ActualPlanPayment,
-            r.ExpectedPlanPayment,
-            r.ActualPlanPayment.HasValue && r.ExpectedPlanPayment.HasValue
-                ? Math.Abs(r.ActualPlanPayment.Value - r.ExpectedPlanPayment.Value)
-                : null,
-            r.Elapsed.TotalMilliseconds,
-            r.SubmitElapsed.TotalMilliseconds,
-            r.AdjudicationElapsed.TotalMilliseconds,
-            r.UpdateElapsed.TotalMilliseconds,
-            r.AdjudicationStepTimings))
-        .ToList();
-
-    return new MassAdjudicationRunSummary(
-        new MassAdjudicationRun(
-            options.TenantId,
-            options.Claims,
-            options.Seed,
-            options.Parallelism,
-            options.ClaimsUrl,
-            options.BenefitUrl,
-            options.ProviderUrl,
-            options.SeedProviders,
-            options.SkipClaimUpdate,
-            options.LineOfBusiness,
-            runStartedAtUtc,
-            runCompletedAtUtc),
-        results.Count,
-        processed,
-        adjudicated,
-        businessDenials,
-        platformFailures,
-        validationScenarios,
-        validationMatches,
-        validationMismatches,
-        elapsed,
-        throughput,
-        p95,
-        p99,
-        BuildStageTiming("Submit", results.Select(r => r.SubmitElapsed)),
-        BuildStageTiming("Adjudicate", results.Select(r => r.AdjudicationElapsed)),
-        BuildStageTiming("Writeback", results.Select(r => r.UpdateElapsed)),
-        BuildAdjudicationStepTimings(results),
-        avgDelta,
-        denialBreakdown,
-        workflowBreakdown,
-        failures,
-        claimResults);
-}
-
 static void WriteSummary(MassAdjudicationRunSummary summary)
 {
     Console.WriteLine("Validation summary");
@@ -1402,7 +1291,7 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     Console.WriteLine($"  Paid/adjudicated:   {summary.Paid:N0}");
     Console.WriteLine($"  Business denials:   {summary.BusinessDenials:N0}");
     Console.WriteLine($"  Platform failures:  {summary.PlatformFailures:N0}");
-    Console.WriteLine($"  Workflow checks:    {summary.WorkflowMatches:N0}/{summary.WorkflowScenarios:N0} matched ({summary.WorkflowMismatches:N0} mismatched)");
+    Console.WriteLine($"  Workflow checks:    {summary.WorkflowMatches:N0}/{summary.WorkflowScenarios:N0} matched ({summary.WorkflowMismatches:N0} mismatched, {summary.WorkflowUnsupported:N0} unsupported)");
     Console.WriteLine($"  Elapsed:            {summary.Elapsed:mm\\:ss\\.fff}");
     Console.WriteLine($"  Throughput:         {summary.ThroughputClaimsPerSecond:N2} claims/sec");
     Console.WriteLine($"  P95 latency:        {summary.P95LatencyMilliseconds:N0} ms");
@@ -1427,56 +1316,13 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
 
     foreach (var scenario in summary.WorkflowScenarioBreakdown)
     {
-        Console.WriteLine($"  Scenario: {scenario.Scenario} {scenario.Matches:N0}/{scenario.Total:N0} matched ({scenario.Mismatches:N0} mismatched, {scenario.Unspecified:N0} unspecified)");
+        Console.WriteLine($"  Scenario: {scenario.Scenario} {scenario.Matches:N0}/{scenario.Total:N0} matched ({scenario.Mismatches:N0} mismatched, {scenario.Unsupported:N0} unsupported, {scenario.Unspecified:N0} unspecified)");
     }
 
     foreach (var failure in summary.SampleFailures)
     {
         Console.WriteLine($"  Failure: {failure.GeneratedClaimId} [{failure.Stage}] {failure.Error}");
     }
-}
-
-static MassAdjudicationStageTiming? BuildStageTiming(string label, IEnumerable<TimeSpan> durations)
-{
-    var values = durations
-        .Select(d => d.TotalMilliseconds)
-        .Where(ms => ms > 0)
-        .Order()
-        .ToArray();
-
-    if (values.Length == 0)
-    {
-        return null;
-    }
-
-    return new MassAdjudicationStageTiming(label, values.Average(), Percentile(values, 0.95));
-}
-
-static IReadOnlyList<MassAdjudicationStageTiming> BuildAdjudicationStepTimings(
-    IReadOnlyCollection<ClaimValidationResult> results)
-{
-    return results
-        .SelectMany(r => r.AdjudicationStepTimings)
-        .GroupBy(kvp => kvp.Key, StringComparer.Ordinal)
-        .Select(group =>
-        {
-            var values = group
-                .Select(kvp => kvp.Value)
-                .Where(ms => ms > 0)
-                .Order()
-                .ToArray();
-
-            return values.Length == 0
-                ? null
-                : new MassAdjudicationStageTiming(
-                    $"Adjudicate.{group.Key}",
-                    values.Average(),
-                    Percentile(values, 0.95));
-        })
-        .Where(timing => timing is not null)
-        .Cast<MassAdjudicationStageTiming>()
-        .OrderByDescending(timing => timing.AverageMilliseconds)
-        .ToList();
 }
 
 static void WriteStageTiming(MassAdjudicationStageTiming? timing)
@@ -1523,17 +1369,6 @@ static async Task PublishSummaryAsync(
     {
         Console.WriteLine($"  Dashboard summary: publish skipped ({ex.Message})");
     }
-}
-
-static double Percentile(double[] values, double percentile)
-{
-    if (values.Length == 0)
-    {
-        return 0;
-    }
-
-    var index = (int)Math.Ceiling(percentile * values.Length) - 1;
-    return values[Math.Clamp(index, 0, values.Length - 1)];
 }
 
 static void PrintUsage()
@@ -1628,6 +1463,7 @@ internal sealed record MassAdjudicationRunSummary(
     int WorkflowScenarios,
     int WorkflowMatches,
     int WorkflowMismatches,
+    int WorkflowUnsupported,
     TimeSpan Elapsed,
     double ThroughputClaimsPerSecond,
     double P95LatencyMilliseconds,
@@ -1670,6 +1506,7 @@ internal sealed record MassAdjudicationWorkflowScenarioSummary(
     int Total,
     int Matches,
     int Mismatches,
+    int Unsupported,
     int Unspecified);
 
 internal sealed record MassAdjudicationFailureSummary(
