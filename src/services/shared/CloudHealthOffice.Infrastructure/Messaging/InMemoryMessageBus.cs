@@ -100,6 +100,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
             queueOrTopic,
             channel,
             env => handler((T)env.Message, env.ToContext(), env.CancellationToken),
+            Math.Max(1, options?.MaxConcurrentCalls ?? 1),
             _logger);
         _subscriptions.Add(new WeakReference<InMemorySubscription>(sub));
         return sub;
@@ -191,10 +192,11 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
         private readonly string _queueOrTopic;
         private readonly Channel<Envelope> _channel;
         private readonly Func<Envelope, Task> _dispatch;
+        private readonly int _maxConcurrentCalls;
         private readonly ILogger _logger;
         private readonly CancellationTokenSource _internalCts = new();
         private CancellationTokenSource? _linkedCts;
-        private Task? _pump;
+        private Task[]? _pumps;
         private int _started;
         private int _disposed;
 
@@ -202,11 +204,13 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
             string queueOrTopic,
             Channel<Envelope> channel,
             Func<Envelope, Task> dispatch,
+            int maxConcurrentCalls,
             ILogger logger)
         {
             _queueOrTopic = queueOrTopic;
             _channel = channel;
             _dispatch = dispatch;
+            _maxConcurrentCalls = maxConcurrentCalls;
             _logger = logger;
         }
 
@@ -216,20 +220,22 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
             if (Interlocked.Exchange(ref _started, 1) == 1) return Task.CompletedTask;
             _linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_internalCts.Token, ct);
             var pumpToken = _linkedCts.Token;
-            _pump = Task.Run(() => PumpAsync(pumpToken), pumpToken);
+            _pumps = Enumerable.Range(0, _maxConcurrentCalls)
+                .Select(_ => Task.Run(() => PumpAsync(pumpToken), pumpToken))
+                .ToArray();
             return Task.CompletedTask;
         }
 
         public async Task StopAsync(CancellationToken ct)
         {
-            if (_pump is null) return;
+            if (_pumps is null) return;
             try { _internalCts.Cancel(); }
             catch (ObjectDisposedException) { return; }
             try
             {
                 // Honour the caller's cancellation — don't let a hung handler
                 // block StopAsync past the provided token's lifetime.
-                await _pump.WaitAsync(ct).ConfigureAwait(false);
+                await Task.WhenAll(_pumps).WaitAsync(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { /* expected on stop or caller cancel */ }
         }
