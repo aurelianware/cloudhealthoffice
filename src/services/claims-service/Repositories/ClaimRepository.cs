@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using ClaimsService.Exceptions;
 using ClaimsService.Models;
+using ClaimsService.Services.Adjudication;
 
 namespace ClaimsService.Repositories;
 
@@ -275,12 +276,14 @@ public class ClaimRepository : IClaimRepository
     private readonly Container _container;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<ClaimRepository> _logger;
+    private readonly IAdjudicationTenantContext? _adjudicationTenantContext;
 
     public ClaimRepository(
         CosmosClient cosmosClient,
         IConfiguration configuration,
         IHttpContextAccessor httpContextAccessor,
-        ILogger<ClaimRepository> logger)
+        ILogger<ClaimRepository> logger,
+        IAdjudicationTenantContext? adjudicationTenantContext = null)
     {
         var databaseName = configuration["CosmosDb:DatabaseName"] ?? "ClaimsDB";
         var containerName = configuration["CosmosDb:ContainerName"] ?? "Claims";
@@ -288,14 +291,16 @@ public class ClaimRepository : IClaimRepository
         _container = cosmosClient.GetContainer(databaseName, containerName);
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+        _adjudicationTenantContext = adjudicationTenantContext;
     }
 
     private string GetTenantId()
     {
-        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString();
+        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString()
+            ?? _adjudicationTenantContext?.TenantId;
         if (string.IsNullOrEmpty(tenantId))
         {
-            throw new InvalidOperationException("TenantId not found in request context");
+            throw new InvalidOperationException("TenantId not found in request or adjudication context");
         }
         return tenantId;
     }

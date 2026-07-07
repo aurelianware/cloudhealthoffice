@@ -1,6 +1,7 @@
 using ClaimsService.Exceptions;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using ClaimsService.Services.Adjudication;
 using EphemeralMongo;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -234,6 +235,24 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
         var mar1 = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
         head = await _repo.GetLatestVersionAsync("chain-multi", mar1);
         head!.Id.Should().Be("row-2");
+    }
+
+    [Fact]
+    public async Task GetLatestVersionAsync_uses_adjudication_tenant_context_without_http_context()
+    {
+        var created = await _repo.CreateAsync(Sample("row-background"));
+        var tenantContext = new AdjudicationTenantContext { TenantId = Tenant };
+        var backgroundRepo = new ClaimRepositoryMongo(
+            _database,
+            new HttpContextAccessor(),
+            NullLogger<ClaimRepositoryMongo>.Instance,
+            tenantContext);
+
+        var latest = await backgroundRepo.GetLatestVersionAsync(created.ClaimVersionId, DateTime.UtcNow);
+
+        latest.Should().NotBeNull();
+        latest!.Id.Should().Be(created.Id);
+        latest.TenantId.Should().Be(Tenant);
     }
 
     [Fact]

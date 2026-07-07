@@ -1,5 +1,6 @@
 using ClaimsService.Exceptions;
 using ClaimsService.Models;
+using ClaimsService.Services.Adjudication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
@@ -16,26 +17,27 @@ public class ClaimRepositoryMongo : IClaimRepository
     private readonly IMongoCollection<Claim> _collection;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<ClaimRepositoryMongo> _logger;
+    private readonly IAdjudicationTenantContext? _adjudicationTenantContext;
 
     public ClaimRepositoryMongo(
         IMongoDatabase database,
         IHttpContextAccessor httpContextAccessor,
-        ILogger<ClaimRepositoryMongo> logger)
+        ILogger<ClaimRepositoryMongo> logger,
+        IAdjudicationTenantContext? adjudicationTenantContext = null)
     {
         _collection = database.GetCollection<Claim>("Claims");
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+        _adjudicationTenantContext = adjudicationTenantContext;
     }
 
     private string GetTenantId()
     {
-        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString();
+        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString()
+            ?? _adjudicationTenantContext?.TenantId;
         if (string.IsNullOrEmpty(tenantId))
         {
-            // Fallback for background services or testing if no context.
-            // In a real scenario, we might default to a specific behavior or throw
-            // throw new InvalidOperationException("TenantId not found in request context -- Mongo repo");
-            return "unknown";
+            throw new InvalidOperationException("TenantId not found in request or adjudication context");
         }
         return tenantId;
     }

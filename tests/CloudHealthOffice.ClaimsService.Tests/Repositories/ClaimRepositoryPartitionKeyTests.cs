@@ -1,6 +1,7 @@
 using System.Net;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using ClaimsService.Services.Adjudication;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Cosmos;
@@ -55,6 +56,37 @@ public sealed class ClaimRepositoryPartitionKeyTests
         StubReadItemReturnsClaim(MakeClaim());
 
         await _sut.GetByIdAsync(ClaimId);
+
+        await _container.Received(1).ReadItemAsync<Claim>(
+            ClaimId,
+            new PartitionKey(TenantId),
+            Arg.Any<ItemRequestOptions>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_WithoutHttpContext_UsesAdjudicationTenantPartitionKey()
+    {
+        var cosmos = Substitute.For<CosmosClient>();
+        cosmos.GetContainer(Arg.Any<string>(), Arg.Any<string>()).Returns(_container);
+
+        var config = Substitute.For<IConfiguration>();
+        config["CosmosDb:DatabaseName"].Returns("ClaimsDB");
+        config["CosmosDb:ContainerName"].Returns("Claims");
+
+        var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
+        httpContextAccessor.HttpContext.Returns((HttpContext?)null);
+
+        var tenantContext = new AdjudicationTenantContext { TenantId = TenantId };
+        var sut = new ClaimRepository(
+            cosmos,
+            config,
+            httpContextAccessor,
+            NullLogger<ClaimRepository>.Instance,
+            tenantContext);
+        StubReadItemReturnsClaim(MakeClaim());
+
+        await sut.GetByIdAsync(ClaimId);
 
         await _container.Received(1).ReadItemAsync<Claim>(
             ClaimId,
