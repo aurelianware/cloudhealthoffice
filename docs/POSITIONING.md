@@ -281,13 +281,13 @@ Specific indicative PMPM ranges and ARR projections are documented in `docs/sale
 
 ## Million Claim Challenge
 
-The Million Claim Challenge is a source-available benchmarking asset (BSL 1.1, same as the rest of the CHO codebase) that sits across all four product lines as credibility infrastructure.
+The Million Claim Challenge is a source-available benchmarking asset (BSL 1.1, same as the rest of the Cloud Health Office codebase) that sits across all four product lines as credibility infrastructure.
 
 We generate a stratified synthetic corpus of 1,000,000 healthcare claims — professional CMS-1500, institutional UB-04, dental ADA, and named edge-case scenarios — with pre-computed expected adjudication outcomes. Any claims adjudication engine can be benchmarked against the corpus and scored against the expected outcomes.
 
-Latest CHO proof point: in local Docker Desktop Kubernetes with Docker allocated 18 CPUs, Cloud Health Office processed 50,000 synthetic claims on a repeat adjudication run at 188.64 claims/sec, with 106 ms P95 latency, 151 ms P99 latency, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. That is roughly 10.5 claims/sec per allocated CPU for the measured workflow. This is intentionally framed as local validation, not a production cloud benchmark. Its value is that throughput, tail latency, platform reliability, and workflow correctness are measured together.
+Latest Cloud Health Office proof point: in local Docker Desktop Kubernetes with Docker allocated 18 CPUs, Cloud Health Office processed 50,000 synthetic claims on a repeat adjudication run at 188.64 claims/sec, with 106 ms P95 latency, 151 ms P99 latency, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. That is roughly 10.5 claims/sec per allocated CPU for the measured workflow. This is intentionally framed as local validation, not a production cloud benchmark. Its value is that throughput, tail latency, platform reliability, and workflow correctness are measured together.
 
-The published result should not be overstated. The MCC corpus is designed for 1,000,000 claims and 29 named edge-case scenarios; the latest published CHO validation is a 50,000-claim local run with deterministic workflow checks across four core dispositions: clean paid, excluded provider, uncovered service, and prior authorization. The next proof priority is breadth before volume: publish a run that exercises more of the 29 edge scenarios, then extend volume to 250K, 500K, and the full million.
+The published result should not be overstated. The MCC corpus is designed for 1,000,000 claims and 29 named edge-case scenarios; the latest published Cloud Health Office validation is a 50,000-claim local run with deterministic workflow checks across four core dispositions: clean paid, excluded provider, uncovered service, and prior authorization. The next proof priority is breadth before volume: publish a run that exercises more of the 29 edge scenarios, then extend volume to 250K, 500K, and the full million.
 
 ### What we offer
 
