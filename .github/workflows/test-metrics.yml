@@ -457,3 +457,41 @@ jobs:
           flags: combined
           name: combined-coverage
         continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 5. Refresh Test Count Docs (README.md, docs/guides/FEATURES.md)
+  # ═══════════════════════════════════════════════════════════════════════
+  update-docs:
+    name: Update Test Count Docs
+    runs-on: ubuntu-latest
+    needs: publish-metrics
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Download test-metrics.json
+        uses: actions/download-artifact@v8
+        with:
+          name: test-metrics
+          path: .
+
+      - name: Inject metrics into README and FEATURES.md
+        run: node scripts/inject-test-metrics.js test-metrics.json
+
+      - name: Commit updated docs
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- README.md docs/guides/FEATURES.md; then
+            echo "No doc changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md docs/guides/FEATURES.md
+          git commit -m "chore: refresh test count and coverage metrics [skip ci]"
+          git push origin HEAD:main
