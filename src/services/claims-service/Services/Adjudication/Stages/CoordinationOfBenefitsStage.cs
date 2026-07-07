@@ -327,7 +327,7 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
         {
             PendCode = CobPendCode,
             PendReason = TruncatePendReason(
-                $"CHO-secondary COB detected ({classification.Scenario}); primary payer " +
+                $"Cloud Health Office is the secondary payer ({classification.Scenario}); primary payer " +
                 $"{classification.PrimaryPayerName ?? "unknown"}; secondary claim calculation " +
                 $"deferred to Phase 2. Reason code: {SecondaryNotSupportedPendReason}."),
             PendedAt = DateTime.UtcNow,

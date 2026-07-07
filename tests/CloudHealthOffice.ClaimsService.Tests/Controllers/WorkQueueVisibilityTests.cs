@@ -75,7 +75,7 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
         PendDetails = new PendDetails
         {
             PendCode = "COB",
-            PendReason = "CHO-secondary COB detected; primary payer Aetna",
+            PendReason = "Cloud Health Office is the secondary payer; primary payer Aetna",
             PendedAt = DateTime.UtcNow.AddDays(-1),
         },
         ClaimLines = new List<ClaimLine>

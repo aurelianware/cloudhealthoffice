@@ -136,7 +136,7 @@ pipeline has real `Pend` support:
   `context.PendDetails` with `PendCode="NCCI"` or `"MUE"`
   (`NcciEditsStage.cs:154-179`).
 - `CoordinationOfBenefitsStage` (`Stages/CoordinationOfBenefitsStage.cs:382-403`)
-  — CHO-secondary/tertiary detection produces `Pend` by default
+  — Cloud Health Office secondary/tertiary detection produces `Pend` by default
   (`CobEnforcementMode.PendForSecondary`), reason
   `cob-secondary-not-supported-phase-1`. Coverage-service unavailability also
   pends (`CoordinationOfBenefitsStage.cs:405-429`), reason
