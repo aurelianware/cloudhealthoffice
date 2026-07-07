@@ -11,12 +11,15 @@ internal static class MccRunSummaryBuilder
     {
         var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
         var adjudicated = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
+        var pended = results.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
         var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
+        var observationTimeouts = results.Count(r => r.Outcome is ClaimValidationOutcome.ObservationTimeout);
         var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
         var validationScenarios = results.Count(r => r.ValidationStatus is not "Unspecified");
         var validationMatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus);
         var validationMismatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MismatchedStatus);
         var validationUnsupported = results.Count(r => r.ValidationStatus == MccWorkflowValidation.UnsupportedStatus);
+        var validationObservationTimeouts = results.Count(r => r.ValidationStatus == MccWorkflowValidation.ObservationTimeoutStatus);
         var orderedDurations = results.Select(r => r.Elapsed.TotalMilliseconds).Order().ToArray();
         var p95 = Percentile(orderedDurations, 0.95);
         var p99 = Percentile(orderedDurations, 0.99);
@@ -45,10 +48,11 @@ internal static class MccRunSummaryBuilder
                 g.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus),
                 g.Count(r => r.ValidationStatus == MccWorkflowValidation.MismatchedStatus),
                 g.Count(r => r.ValidationStatus == MccWorkflowValidation.UnsupportedStatus),
+                g.Count(r => r.ValidationStatus == MccWorkflowValidation.ObservationTimeoutStatus),
                 g.Count(r => r.ValidationStatus == MccWorkflowValidation.UnspecifiedStatus)))
             .ToList();
         var failures = results
-            .Where(r => r.Outcome is ClaimValidationOutcome.PlatformFailure)
+            .Where(r => r.Outcome is ClaimValidationOutcome.PlatformFailure or ClaimValidationOutcome.ObservationTimeout)
             .Take(5)
             .Select(r => new MassAdjudicationFailureSummary(r.GeneratedClaimId, r.FailureStage, r.Error))
             .ToList();
@@ -97,12 +101,15 @@ internal static class MccRunSummaryBuilder
             results.Count,
             processed,
             adjudicated,
+            pended,
             businessDenials,
+            observationTimeouts,
             platformFailures,
             validationScenarios,
             validationMatches,
             validationMismatches,
             validationUnsupported,
+            validationObservationTimeouts,
             elapsed,
             throughput,
             p95,
