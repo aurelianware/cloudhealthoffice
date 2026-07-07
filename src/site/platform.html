@@ -146,6 +146,61 @@
       color: #00ff88;
       font-weight: bold;
     }
+
+    .mcc-proof-strip {
+      background: #0a0a0a;
+      border: 1px solid rgba(0,255,255,0.22);
+      border-left: 4px solid #00ff88;
+      border-radius: 8px;
+      padding: 28px;
+      margin: 36px 0 60px;
+    }
+
+    .mcc-proof-strip h2 {
+      margin-top: 0;
+      font-size: 1.7rem;
+      text-shadow: none;
+    }
+
+    .mcc-proof-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin: 22px 0;
+    }
+
+    .mcc-proof-metric {
+      border: 1px solid rgba(0,255,255,0.14);
+      border-radius: 8px;
+      padding: 14px;
+      background: rgba(0,0,0,0.38);
+    }
+
+    .mcc-proof-metric strong {
+      display: block;
+      color: #fff;
+      font-size: 1.15rem;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .mcc-proof-metric span {
+      color: rgba(176,176,176,0.72);
+      font-size: 0.82rem;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 900px) {
+      .mcc-proof-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      .mcc-proof-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -230,6 +285,36 @@
           <a href="/pricing" style="color:#00ffff;">See full pricing across all four product lines &rarr;</a>
           &nbsp;&middot;&nbsp;
           <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Canonical positioning (POSITIONING.md) &rarr;</a>
+        </p>
+      </section>
+
+      <section class="mcc-proof-strip" aria-labelledby="mcc-proof-heading">
+        <h2 id="mcc-proof-heading">Claims Adjudication Proof, Measured Locally</h2>
+        <p>
+          The Million Claim Challenge validates the platform under pressure by reporting throughput, tail latency,
+          platform reliability, and deterministic healthcare workflow correctness together.
+        </p>
+        <div class="mcc-proof-grid" aria-label="Latest local Million Claim Challenge validation metrics">
+          <div class="mcc-proof-metric">
+            <strong>50,000</strong>
+            <span>claims processed in local Kubernetes</span>
+          </div>
+          <div class="mcc-proof-metric">
+            <strong>188.64 claims/sec</strong>
+            <span>repeat adjudication throughput</span>
+          </div>
+          <div class="mcc-proof-metric">
+            <strong>106 ms / 151 ms</strong>
+            <span>P95 and P99 latency</span>
+          </div>
+          <div class="mcc-proof-metric">
+            <strong>0 platform failures</strong>
+            <span>4,000/4,000 workflow checks matched</span>
+          </div>
+        </div>
+        <p style="font-size:0.95rem; color:#888;">
+          Local Docker Desktop Kubernetes validation, not a production cloud benchmark.
+          <a href="/docs/million-claim-challenge" style="color:#00ffff;">See the benchmark methodology &rarr;</a>
         </p>
       </section>
 
