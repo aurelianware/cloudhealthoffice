@@ -94,7 +94,7 @@ This template is designed to capture pilot customer success stories in a consist
 
 **Example narrative**:
 
-> After evaluating [X] vendors, [Customer Name] selected Cloud Health Office based on three key differentiators: (1) immediate deployment capability that reduced time-to-compliance from 12+ months to under 90 days, (2) source-available transparency that eliminated vendor lock-in concerns, and (3) total cost of ownership 85% lower than enterprise alternatives.
+> After evaluating [X] vendors, [Customer Name] selected Cloud Health Office based on three key differentiators: (1) immediate deployment capability that reduced time-to-compliance from 12+ months to under 90 days, (2) source-available transparency that eliminated vendor lock-in concerns, and (3) total cost of ownership [X]% lower than enterprise alternatives.
 
 ### Implementation Timeline
 

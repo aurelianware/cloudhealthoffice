@@ -52,7 +52,7 @@ Cloud Health Office is the industry's first source-available, Azure-native EDI p
 ✓ Complete FHIR R4 Patient Access API (production-ready)
 ✓ Prior Authorization API with automated 72-hour/7-day response tracking
 ✓ Da Vinci IG conformance (PDex, PAS, CRD, DTR)
-✓ 85% lower cost than enterprise alternatives
+✓ Up to 82% lower cost than enterprise alternatives (results may vary)
 
 I'd welcome 20 minutes to show you how [Similar Regional Plan] went from compliance gap to production-ready in 30 days.
 
@@ -103,7 +103,7 @@ Best,
 ---
 
 **Subject Lines (A/B Test)**:
-- A: Reduce EDI Platform Costs by 85%
+- A: Reduce EDI Platform Costs by Up to 82%
 - B: [Company Name]: $[X]M in EDI Savings (Analysis Attached)
 - C: Your EDI vendor is overcharging you. Here's proof.
 
@@ -116,7 +116,7 @@ Hi [First Name],
 
 TPAs managing multi-payer relationships face a unique challenge: enterprise EDI platforms charge per-payer, per-transaction fees that scale with your success. The more you grow, the more they cost.
 
-I'm reaching out because Cloud Health Office can reduce your EDI platform costs by up to 85% while delivering better compliance and faster deployment.
+I'm reaching out because Cloud Health Office can reduce your EDI platform costs by up to 82% (results may vary) while delivering better compliance and faster deployment.
 
 **Here's the math for an organization like [Company Name]:**
 
@@ -156,7 +156,7 @@ P.S. We also offer a free 60-day pilot program where you can validate these savi
 **Follow-Up (Day 4, if no response)**:
 
 ```
-Subject: Re: Reduce EDI Platform Costs by 85%
+Subject: Re: Reduce EDI Platform Costs by Up to 82%
 
 Hi [First Name],
 
