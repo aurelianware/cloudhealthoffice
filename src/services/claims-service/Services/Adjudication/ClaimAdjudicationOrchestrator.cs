@@ -294,16 +294,12 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         // PersistenceStage, whose Reject (e.g.
         // UpdateAdjudicationProjectionAsync returned false) MUST surface
         // on the emitted event so subscribers don't see a Pass for a
-        // claim whose adjudication never persisted.
-        var results = context.StageResults;
-
-        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Reject))
-            return ClaimAdjudicationOutcome.Reject;
-        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Deny))
-            return ClaimAdjudicationOutcome.Deny;
-        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Pend))
-            return ClaimAdjudicationOutcome.Pend;
-        return ClaimAdjudicationOutcome.Pass;
+        // claim whose adjudication never persisted. Called here AFTER
+        // every stage including Persistence has run (see
+        // ClaimAdjudicationStageResult.ResolveOutcome, the shared
+        // precedence rule; PersistenceStage itself calls it one stage
+        // earlier to decide the ClaimStatus.Pended projection).
+        return ClaimAdjudicationStageResult.ResolveOutcome(context.StageResults);
     }
 
     private bool IsEnabled(IClaimAdjudicationStage stage)

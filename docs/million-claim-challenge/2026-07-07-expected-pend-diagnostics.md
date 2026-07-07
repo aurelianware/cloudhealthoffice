@@ -8,6 +8,57 @@ validation run in PR #841 showed expected-pend scenarios terminating as
 codebase as of this writing. It has not yet been confirmed by an empirical
 diagnostics run — see "How to produce the empirical companion report" below.
 
+> **Defects A/B remediated (this PR — pend-persistence defect fix).** The
+> two structural defects this trace identified inside claims-service's own
+> async orchestrator are now fixed:
+>
+> - **Defect A** — `UpdateAdjudicationProjectionAsync` never patched
+>   `/status`, so an orchestrator-computed `Pend` (NCCI/MUE, COB) never
+>   reached `ClaimStatus`. Fixed: the repository now patches
+>   `ClaimStatus.Pended` when the orchestrator resolved `Pend`, subject to
+>   a precedence rule that never downgrades a claim already at a
+>   later-stage disposition. See
+>   `docs/architecture/claim-adjudication-pipeline.md` D9a.
+> - **Defect B** — `CoordinationOfBenefitsStage` never wrote `PendDetails`
+>   for COB pends. Fixed: it now writes `PendCode="COB"` + a reason string,
+>   mirroring NCCI's existing precedent. See
+>   `docs/architecture/claim-cob-pipeline.md` D4.
+>
+> Orchestrator-computed NCCI/MUE and COB pends are now visible in the
+> examiner work queue (`ClaimsController.GetWorkQueueSummary` /
+> `GetWorkQueueItems`), which they never were before.
+>
+> **This does not change the headline finding below.** The Argo Workflow's
+> `update-claim-step` is still the only caller of
+> `PUT /api/claims/{id}/pend`, and it still only redirects NCCI/MUE to
+> pend — COB, subrogation, retro-eligibility, and dual-eligible/spend-down
+> have no equivalent branch there. The validator's own write-back path
+> (`UpdateAdjudicationSummaryAsync`) still cannot produce `Pended` — that
+> is unchanged. And the coverage gap (no code anywhere detects
+> subrogation, retro-eligibility-coverage-change, or Medicaid
+> dual-eligible/spend-down) is exactly as described below and remains the
+> future edit-model ADR's problem.
+>
+> **New finding surfaced while fixing Defect A, not fixed here (out of
+> scope):** the validator's `POST /api/v1/claims` call triggers the async
+> orchestrator in the background (via `ClaimVersionSubmittedMessage`),
+> which can now legitimately pend a claim. But the validator's own
+> synchronous write-back (`UpdateAdjudicationSummaryAsync`, called
+> moments later in the validator's own request chain) has no precedence
+> guard at all — it unconditionally sets `/status` to
+> `Approved`/`Denied`/`InAdjudication` based on the synchronous
+> adjudication response, with no `IsFinalDisposition`-style check against
+> whatever the async orchestrator already wrote. If the async pend lands
+> first and the synchronous write-back lands second, the write-back will
+> silently overwrite `Pended` back to a terminal status. This fix's
+> precedence rule only protects the orchestrator's own projection write
+> (Defect A's scope); it does not add a guard to
+> `UpdateAdjudicationSummaryAsync`, which is a different method serving a
+> different caller (the validator's direct HTTP path) and was out of
+> scope for this surgical fix.
+>
+> The findings below are preserved unedited as the original record.
+
 ## Headline finding
 
 **`ClaimStatus.Pended` is reachable from exactly one code path in the entire

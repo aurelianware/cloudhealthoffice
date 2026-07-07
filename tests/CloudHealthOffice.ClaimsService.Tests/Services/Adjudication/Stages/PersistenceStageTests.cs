@@ -88,6 +88,97 @@ public class PersistenceStageTests
             () => _sut.ExecuteAsync(ctx, CancellationToken.None));
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // Defect A fix — isPend resolution (Reject > Deny > Pend > Pass over
+    // every stage that ran before Persistence, since Persistence is
+    // always Order=999/last).
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Execute_WhenPriorStageResultIsPend_PassesIsPendTrue()
+    {
+        var ctx = BuildContext();
+        ctx.PendDetails = new PendDetails { PendCode = "NCCI", PendReason = "bundled pair" };
+        ctx.StageResults.Add(ClaimAdjudicationStageResult.Pend("NcciEdits", "pended for NCCI/MUE review"));
+        StubRepositoryReturns(true);
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        await _repository.Received(1).UpdateAdjudicationProjectionAsync(
+            "tenant-1", "ver-1",
+            Arg.Any<AdjudicationResult>(), Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Is<PendDetails?>(p => p!.PendCode == "NCCI"),
+            Arg.Is<bool>(isPend => isPend));
+    }
+
+    [Fact]
+    public async Task Execute_WhenNoPriorStageResults_PassesIsPendFalse()
+    {
+        var ctx = BuildContext();
+        StubRepositoryReturns(true);
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        await _repository.Received(1).UpdateAdjudicationProjectionAsync(
+            "tenant-1", "ver-1",
+            Arg.Any<AdjudicationResult>(), Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<PendDetails?>(),
+            Arg.Is<bool>(isPend => !isPend));
+    }
+
+    [Fact]
+    public async Task Execute_WhenPriorStageResultIsDeny_PassesIsPendFalse_EvenWithPendDetailsPresent()
+    {
+        // NcciEditsStage records the deterministic edit-failure snapshot on
+        // PendDetails unconditionally, regardless of NcciMode — so a Deny-mode
+        // claim can carry non-null PendDetails while the resolved outcome is
+        // Deny, not Pend. isPend must reflect the resolved outcome (Deny wins
+        // over Pend), not merely "PendDetails is non-null".
+        var ctx = BuildContext();
+        ctx.PendDetails = new PendDetails { PendCode = "NCCI", PendReason = "bundled pair (Deny mode)" };
+        ctx.StageResults.Add(ClaimAdjudicationStageResult.Deny("NcciEdits", "denied for NCCI/MUE failure"));
+        StubRepositoryReturns(true);
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        await _repository.Received(1).UpdateAdjudicationProjectionAsync(
+            "tenant-1", "ver-1",
+            Arg.Any<AdjudicationResult>(), Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<PendDetails?>(),
+            Arg.Is<bool>(isPend => !isPend));
+    }
+
+    [Fact]
+    public async Task Execute_WhenPriorStageResultIsReject_PassesIsPendFalse()
+    {
+        var ctx = BuildContext();
+        ctx.StageResults.Add(ClaimAdjudicationStageResult.Reject("Scrubbing", "missing NPI"));
+        StubRepositoryReturns(true);
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        await _repository.Received(1).UpdateAdjudicationProjectionAsync(
+            "tenant-1", "ver-1",
+            Arg.Any<AdjudicationResult>(), Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<PendDetails?>(),
+            Arg.Is<bool>(isPend => !isPend));
+    }
+
+    private void StubRepositoryReturns(bool value) =>
+        _repository.UpdateAdjudicationProjectionAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<AdjudicationResult>(),
+            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<PendDetails?>(),
+            Arg.Any<bool>())
+            .Returns(value);
+
     private static ClaimAdjudicationContext BuildContext() => new()
     {
         TenantId = "tenant-1",

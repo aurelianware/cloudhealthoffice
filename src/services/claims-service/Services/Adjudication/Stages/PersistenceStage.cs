@@ -50,6 +50,19 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
         ClaimAdjudicationContext context,
         CancellationToken ct)
     {
+        // Defect A fix — the orchestrator's Pend decision (NCCI/MUE, COB) was
+        // being computed correctly by upstream stages but never reached
+        // ClaimStatus: this repository call previously had no way to know a
+        // Pend had been decided. Resolve it here from every stage that ran
+        // BEFORE Persistence (Order=999, always last) using the same
+        // Reject>Deny>Pend>Pass precedence the orchestrator uses for the
+        // emitted event's Outcome (ClaimAdjudicationStageResult.ResolveOutcome).
+        // Reject/Deny/Pass outcomes leave isPend=false, so the repository's
+        // status-write behavior for those outcomes is unchanged from before
+        // this fix — this call site only ever adds a status write for Pend.
+        var isPend = ClaimAdjudicationStageResult.ResolveOutcome(context.StageResults)
+            == ClaimAdjudicationOutcome.Pend;
+
         try
         {
             var written = await _repository
@@ -59,7 +72,8 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                     context.AdjudicationResult,
                     context.LineAdjudicationResults,
                     ct,
-                    pendDetails: context.PendDetails)
+                    pendDetails: context.PendDetails,
+                    isPend: isPend)
                 .ConfigureAwait(false);
 
             if (!written)

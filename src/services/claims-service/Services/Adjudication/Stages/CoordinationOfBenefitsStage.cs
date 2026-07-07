@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ClaimsService.Models;
 using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.CobEngine.Domain;
@@ -77,9 +78,29 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// stable machine reason code (<c>cob-secondary-not-supported-phase-1</c>,
 /// <c>cob-coverage-service-unavailable</c>); the
 /// <see cref="ClaimAdjudicationStageResult.Reason"/> is the human-readable
-/// reason that surfaces on the work-queue UI. PendDetails is NOT touched
-/// — that channel is reserved for NCCI's deterministic edit-failure
-/// snapshots (5.7).
+/// reason that surfaces on the work-queue UI.
+/// </para>
+///
+/// <para>
+/// <b>Pend-persistence defect fix.</b> This stage used to leave
+/// <see cref="ClaimAdjudicationContext.PendDetails"/> untouched — the
+/// channel was reserved for NCCI's deterministic edit-failure snapshots
+/// (5.7) on the stated theory that "the work-queue UI uses the stage
+/// result's human-readable reason" for COB. That theory doesn't hold:
+/// <see cref="ClaimAdjudicationStageResult.Reason"/> lives only on the
+/// in-flight <see cref="ClaimAdjudicationContext.StageResults"/> for the
+/// duration of one Service Bus message handler — nothing persists it, so
+/// no work-queue UI or examiner ever actually saw it. <see cref="CobPendCode"/>
+/// (<c>"COB"</c>) was already a documented, expected
+/// <see cref="PendDetails.PendCode"/> value and the work queue already has
+/// a <c>CobRequired</c> bucket keyed on it
+/// (<c>ClaimsController.GetWorkQueueSummary</c>) — this stage simply never
+/// emitted it. Fixed: both Pend-producing paths (<see cref="BuildSecondaryOutcome"/>,
+/// <see cref="BuildDegradedOutcome"/>) now populate <c>PendDetails</c>
+/// unconditionally, mirroring <see cref="NcciEditsStage"/>'s existing
+/// precedent of recording the deterministic snapshot regardless of
+/// enforcement mode (an audit trail even when Deny mode ultimately denies
+/// the claim instead of pending it).
 /// </para>
 /// </summary>
 public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
@@ -94,6 +115,15 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
     /// <summary>Stable pend-reason code for coverage-service degradation.
     /// Distinguishes ops-triage signal from the structural Phase 2 hook.</summary>
     public const string CoverageServiceUnavailablePendReason = "cob-coverage-service-unavailable";
+
+    /// <summary>
+    /// <see cref="PendDetails.PendCode"/> value for COB pends. Already a
+    /// documented, recognized value (see <see cref="PendDetails.PendCode"/>'s
+    /// own doc comment and the work queue's <c>CobRequired</c> bucket in
+    /// <c>ClaimsController.GetWorkQueueSummary</c>) — no new pend vocabulary
+    /// introduced here.
+    /// </summary>
+    public const string CobPendCode = "COB";
 
     /// <summary>Sentinel <see cref="InsuredInfo.PayerId"/> for CHO when
     /// constructing the engine input. <see cref="ResolvedBenefitPlan"/>
@@ -288,6 +318,22 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             AppliedRule = appliedRule,
         };
 
+        // Defect B fix — record the deterministic COB-secondary/tertiary
+        // snapshot on PendDetails regardless of enforcement mode, mirroring
+        // NcciEditsStage.ApplyFailureSnapshots. In Deny mode the claim still
+        // ends up Denied (Deny outweighs Pend in the orchestrator's
+        // precedence), but the audit trail explains why COB fired.
+        context.PendDetails = new PendDetails
+        {
+            PendCode = CobPendCode,
+            PendReason = TruncatePendReason(
+                $"CHO-secondary COB detected ({classification.Scenario}); primary payer " +
+                $"{classification.PrimaryPayerName ?? "unknown"}; secondary claim calculation " +
+                $"deferred to Phase 2. Reason code: {SecondaryNotSupportedPendReason}."),
+            PendedAt = DateTime.UtcNow,
+            EditFailures = new List<NcciEditFailureSnapshot>(),
+        };
+
         return BuildModeDrivenSecondaryResult(activity);
     }
 
@@ -416,6 +462,18 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             PendReason = CoverageServiceUnavailablePendReason,
         };
 
+        // Defect B fix — same audit-trail posture as BuildSecondaryOutcome:
+        // record the snapshot regardless of mode.
+        context.PendDetails = new PendDetails
+        {
+            PendCode = CobPendCode,
+            PendReason = TruncatePendReason(
+                $"Coverage-service unavailable; unable to determine payer order for COB. " +
+                $"Reason code: {CoverageServiceUnavailablePendReason}."),
+            PendedAt = DateTime.UtcNow,
+            EditFailures = new List<NcciEditFailureSnapshot>(),
+        };
+
         if (_options.CobMode == CobEnforcementMode.SoftValidation)
         {
             activity?.SetTag("cob.outcome_mode", "softvalidation");
@@ -467,6 +525,14 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
+    private static string? TruncatePendReason(string? reason)
+    {
+        if (reason is null) return null;
+        // PendDetails.PendReason has [StringLength(500)] — mirrors
+        // NcciEditsStage.TruncatePendReason.
+        return reason.Length <= 500 ? reason : reason.Substring(0, 500);
+    }
 
     /// <summary>Internal classification result threaded through the
     /// stage's outcome builders. Public for the test project via

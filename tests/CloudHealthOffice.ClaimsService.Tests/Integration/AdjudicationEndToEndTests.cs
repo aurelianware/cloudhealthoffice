@@ -154,12 +154,22 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                     Arg.Any<string>(), Arg.Any<DateTime>())
                 .Returns(_ => _lastCreated);
 
+            // Explicitly matches all 7 parameters (not just the leading 5) —
+            // this test's pipeline runs the real CoordinationOfBenefitsStage
+            // against the real HttpCoverageClient, which is unreachable in
+            // this test host and degrades to a Pend (Decision 7, default
+            // CobMode=PendForSecondary). PersistenceStage now resolves that
+            // to isPend=true and passes non-null PendDetails, so a stub that
+            // only specified the first 5 args (implicitly matching
+            // pendDetails=null/isPend=false) would silently stop matching.
             Repository.UpdateAdjudicationProjectionAsync(
                     Arg.Any<string>(),
                     Arg.Any<string>(),
                     Arg.Any<AdjudicationResult>(),
                     Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
-                    Arg.Any<CancellationToken>())
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<PendDetails?>(),
+                    Arg.Any<bool>())
                 .Returns(ci =>
                 {
                     ProjectionWrites.Add(new ProjectionWrite(

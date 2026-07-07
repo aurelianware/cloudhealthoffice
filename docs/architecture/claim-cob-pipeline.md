@@ -120,16 +120,40 @@ CHO-secondary persistence (CobReduction, SecondaryPlanPayment,
 PrimaryPayerPayment) is deferred to Phase 2 priorEob work. Phase 1 ships
 CHO-primary adjudication only and CHO-primary scenarios complete their
 full benefit calculation upstream at Order=300 — the existing
-`AdjudicationResult` shape captures CHO-primary fully.
+`AdjudicationResult` shape captures CHO-primary fully. This part is
+unchanged and still correct: no COB *calculation* fields exist yet.
 
-`CobOutcome` lives on the context only; PersistenceStage projection is
-deferred (α posture, consistent with 5.4 ScrubbingResult).
+> **Pend-persistence defect fix (dated diagnostics doc,
+> `docs/million-claim-challenge/2026-07-07-expected-pend-diagnostics.md`).**
+> The paragraph below originally also deferred *PendDetails* projection —
+> that part was wrong and has been fixed. `CobOutcome` living on the
+> context only (with no PersistenceStage write) meant an examiner never
+> saw *why* a claim pended: `ClaimAdjudicationStageResult.Reason` lives
+> only on `ClaimAdjudicationContext.StageResults` for the duration of one
+> Service Bus message handler — nothing persists it, so the "human-readable
+> pend reason already carried by `ClaimAdjudicationStageResult`" argument
+> below never actually reached any UI. `CoordinationOfBenefitsStage` now
+> populates `PendDetails` (`PendCode="COB"` — already a documented,
+> recognized value, not new vocabulary) whenever it detects a
+> secondary/tertiary scenario or a coverage-service outage, mirroring
+> `NcciEditsStage`'s existing precedent of recording the deterministic
+> snapshot regardless of enforcement mode. `PersistenceStage` in turn now
+> projects the orchestrator's Pend outcome onto `ClaimStatus.Pended`. See
+> `claim-adjudication-pipeline.md` D9 for the full precedence rule.
 
-This is a deliberate non-symmetry with 5.6's `EnforcementOutcome` (which
+~~`CobOutcome` lives on the context only; PersistenceStage projection is
+deferred (α posture, consistent with 5.4 ScrubbingResult).~~ *(superseded —
+see the note above.)*
+
+~~This is a deliberate non-symmetry with 5.6's `EnforcementOutcome` (which
 extends the projection) and 5.7's `PendDetails.EditFailures` (which
 extends the projection-bypass shape): COB Phase 1 has nothing
 calculation-shaped to persist beyond the human-readable pend reason
-already carried by `ClaimAdjudicationStageResult`.
+already carried by `ClaimAdjudicationStageResult`.~~ *(superseded — the
+premise was that the stage-result reason was already visible somewhere
+downstream; it wasn't. `PendDetails.EditFailures` stays NCCI/MUE-specific
+— COB pends persist `PendDetails` with an empty `EditFailures` list, since
+COB has no per-line edit-failure shape to report.)*
 
 ### D5 — `CobOutcome` on `ClaimAdjudicationContext`
 
