@@ -481,23 +481,43 @@ public class ClaimRepositoryMongo : IClaimRepository
             update = update.Set(c => c.PendDetails, pendDetails);
         }
 
-        // Defect A fix — project the orchestrator's Pend outcome onto
-        // ClaimStatus. Same precedence rule as the Cosmos sibling: never
-        // downgrade a claim already at a later-stage disposition (see
-        // ClaimRepository.IsFinalDisposition); re-pending an already-Pended
-        // claim is allowed. isPend=false never touches /status here, same
-        // as before this parameter existed.
-        if (isPend && !ClaimRepository.IsFinalDisposition(head.Status))
-        {
-            update = update.Set(c => c.Status, ClaimStatus.Pended);
-        }
-
         var rowFilter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, head.Id));
         var result = await _collection.UpdateOneAsync(rowFilter, update, cancellationToken: ct);
-        return result.MatchedCount > 0;
+        if (result.MatchedCount == 0)
+        {
+            return false;
+        }
+
+        if (!isPend)
+        {
+            return true;
+        }
+
+        // Defect A fix, made atomic — project the orchestrator's Pend outcome
+        // onto ClaimStatus in a SEPARATE conditional update, whose FILTER
+        // (not a C# if-check against the `head` snapshot above) carries the
+        // precedence rule: never downgrade a claim already at a later-stage
+        // disposition (see ClaimRepository.IsFinalDisposition). A
+        // read-then-decide check only catches a concurrent write that lands
+        // before this method's own read; MongoDB evaluates this filter
+        // against the row's live state at the moment the update actually
+        // executes, so a competing write landing in between is still caught.
+        // No match on this second update just means the guard correctly
+        // blocked the downgrade — not an error; the AdjudicationResult /
+        // ClaimLines / PendDetails write above already succeeded, so this
+        // method still returns true either way. Re-pending an already-Pended
+        // claim is allowed — Pended is excluded from FinalDispositions.
+        var pendFilter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.Id, head.Id),
+            b.Not(b.In(c => c.Status, ClaimRepository.FinalDispositions)));
+        var pendUpdate = Builders<Claim>.Update.Set(c => c.Status, ClaimStatus.Pended);
+        await _collection.UpdateOneAsync(pendFilter, pendUpdate, cancellationToken: ct);
+
+        return true;
     }
 
-    public async Task<bool> UpdateAdjudicationSummaryAsync(
+    public async Task<StatusWriteResult> UpdateAdjudicationSummaryAsync(
         string tenantId,
         string claimVersionId,
         AdjudicationResult adjudicationResult,
@@ -519,21 +539,83 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         var filter = b.And(b.Eq(c => c.TenantId, tenantId), chainFilter, stateFilter);
         var now = DateTime.UtcNow;
-        var update = Builders<Claim>.Update
+
+        // Residual-race fix — financial/audit data (AdjudicationResult, dates)
+        // persists unconditionally: this method's caller (the validator's
+        // synchronous write-back) always has a legitimate adjudication result
+        // to record even when the status transition below gets suppressed.
+        // Only Status + VersionState are guarded, in a separate conditional
+        // update — see TryPatchStatusAsync.
+        var summaryUpdate = Builders<Claim>.Update
             .Set(c => c.AdjudicationResult, adjudicationResult)
             .Set(c => c.AdjudicatedDate, now)
-            .Set(c => c.LastUpdatedDate, now)
-            .Set(c => c.Status, status)
-            .Set(c => c.VersionState, ClaimVersionState.Adjudicated);
+            .Set(c => c.LastUpdatedDate, now);
 
         var options = new FindOneAndUpdateOptions<Claim>
         {
             Sort = Builders<Claim>.Sort.Descending(c => c.VersionNumber),
-            Projection = Builders<Claim>.Projection.Include(c => c.Id)
+            Projection = Builders<Claim>.Projection.Include(c => c.Id),
+            ReturnDocument = ReturnDocument.After,
         };
 
-        var updated = await _collection.FindOneAndUpdateAsync(filter, update, options, ct);
-        return updated is not null;
+        var summaryUpdated = await _collection.FindOneAndUpdateAsync(filter, summaryUpdate, options, ct);
+        if (summaryUpdated is null)
+        {
+            return StatusWriteResult.NotFoundResult;
+        }
+
+        return await TryPatchStatusAsync(tenantId, summaryUpdated.Id, status, ClaimVersionState.Adjudicated, ct);
+    }
+
+    public Task<StatusWriteResult> TryTransitionStatusAsync(
+        string tenantId,
+        string claimId,
+        ClaimStatus desiredStatus,
+        CancellationToken ct = default) =>
+        TryPatchStatusAsync(tenantId, claimId, desiredStatus, ClaimRepository.MapStatusToVersionState(desiredStatus), ct);
+
+    /// <summary>
+    /// Shared atomic status write behind <see cref="UpdateAdjudicationSummaryAsync"/>
+    /// and <see cref="TryTransitionStatusAsync"/>. The precedence guard
+    /// (<see cref="ClaimRepository.BlocksSynchronousWriteback"/>) is encoded
+    /// directly in the update filter's <c>$nin</c> clause, so MongoDB
+    /// evaluates it against the document's live state at the moment the
+    /// update actually executes — not a read-then-decide snapshot — meaning
+    /// it holds under a true concurrent write. A <c>MatchedCount == 0</c>
+    /// result is ambiguous (guard blocked it vs. row doesn't exist), so on
+    /// that path we issue one fallback existence+status read to disambiguate
+    /// and to report what's actually persisted; this only runs on the
+    /// (expected to be rare) suppressed/not-found path, not the hot path.
+    /// </summary>
+    private async Task<StatusWriteResult> TryPatchStatusAsync(
+        string tenantId,
+        string rowId,
+        ClaimStatus desiredStatus,
+        ClaimVersionState desiredVersionState,
+        CancellationToken ct)
+    {
+        var b = Builders<Claim>.Filter;
+        var statusFilter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.Id, rowId),
+            b.Not(b.In(c => c.Status, ClaimRepository.SynchronousWritebackBlockedStatuses)));
+        var statusUpdate = Builders<Claim>.Update
+            .Set(c => c.Status, desiredStatus)
+            .Set(c => c.VersionState, desiredVersionState);
+
+        var result = await _collection.UpdateOneAsync(statusFilter, statusUpdate, cancellationToken: ct);
+        if (result.MatchedCount > 0)
+        {
+            return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
+        }
+
+        var existing = await _collection
+            .Find(b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, rowId)))
+            .FirstOrDefaultAsync(ct);
+
+        return existing is null
+            ? StatusWriteResult.NotFoundResult
+            : new StatusWriteResult(StatusWriteOutcome.Suppressed, existing.Status);
     }
 
     public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
