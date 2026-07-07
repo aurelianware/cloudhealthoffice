@@ -18,6 +18,9 @@ CLAIMS="${CLAIMS:-1000}"
 MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
+PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
+PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
+PEND_OBSERVATION_INTERVAL_MS="${PEND_OBSERVATION_INTERVAL_MS:-1000}"
 PARALLELISM_VALUES="${PARALLELISM_VALUES:-8 10 11 12}"
 REPEATS="${REPEATS:-2}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-100}"
@@ -93,10 +96,14 @@ run_case() {
   local log_file="$OUTPUT_DIR/${job_name}.log"
   local json_file="$OUTPUT_DIR/${job_name}.json"
   local seed_provider_arg=""
+  local pend_observation_arg=""
   local status="ok"
 
   if [[ "$SEED_PROVIDERS" != "true" ]]; then
     seed_provider_arg='                --no-seed-providers \'
+  fi
+  if [[ "$PEND_OBSERVATION_ENABLED" != "true" ]]; then
+    pend_observation_arg='                --no-pend-observation \'
   fi
 
   log "Running MCC sweep case parallelism=${parallelism}, repeat=${repeat}"
@@ -132,8 +139,11 @@ spec:
                 --claims-url http://claims-service \
                 --benefit-url http://benefit-plan-service \
                 --provider-url http://provider-service \
+                --pend-observation-timeout "${PEND_OBSERVATION_TIMEOUT_SECONDS}" \
+                --pend-observation-interval-ms "${PEND_OBSERVATION_INTERVAL_MS}" \
                 --progress-every "${PROGRESS_EVERY}" \
 ${seed_provider_arg}
+${pend_observation_arg}
                 --summary-json /tmp/mcc-summary.json
               status=\$?
               echo "__MCC_SUMMARY_JSON_BEGIN__"

@@ -41,6 +41,7 @@ Console.WriteLine($"  Seed:        {options.Seed}");
 Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
+Console.WriteLine($"  Pend observe:{(options.PendObservationEnabled ? $" enabled ({options.PendObservationTimeoutSeconds}s/{options.PendObservationIntervalMilliseconds}ms)" : " disabled")}");
 Console.WriteLine();
 
 await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
@@ -103,6 +104,11 @@ Console.WriteLine();
 var orderedResults = results
     .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
     .ToList();
+
+if (options.PendObservationEnabled)
+{
+    orderedResults = await ObserveExpectedPendResultsAsync(http, options, orderedResults);
+}
 
 var summary = MccRunSummaryBuilder.Build(orderedResults, total.Elapsed, options, runStartedAtUtc, DateTimeOffset.UtcNow);
 WriteSummary(summary);
@@ -1104,6 +1110,48 @@ static async Task UpdateClaimAdjudicationAsync(
     }
 }
 
+static async Task<List<ClaimValidationResult>> ObserveExpectedPendResultsAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    List<ClaimValidationResult> results)
+{
+    var expectedPendResults = results
+        .Where(r => r.ExpectedOutcome == ClaimValidationOutcome.Pended.ToString())
+        .ToList();
+
+    if (expectedPendResults.Count == 0)
+    {
+        return results;
+    }
+
+    Console.WriteLine(
+        $"Observing {expectedPendResults.Count:N0} expected-pend claims for up to {options.PendObservationTimeoutSeconds:N0}s; benchmark timing excludes this polling window.");
+
+    var observer = new MccClaimStatusObserver(new HttpClaimStatusSource(http, options.ClaimsUrl));
+    var observed = new ConcurrentDictionary<string, ClaimValidationResult>(StringComparer.Ordinal);
+    var timeout = TimeSpan.FromSeconds(options.PendObservationTimeoutSeconds);
+    var interval = TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds);
+
+    await Parallel.ForEachAsync(
+        expectedPendResults,
+        new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
+        async (result, cancellationToken) =>
+        {
+            var updated = await observer.ObserveExpectedPendAsync(result, timeout, interval, cancellationToken);
+            observed[result.GeneratedClaimId] = updated;
+        });
+
+    var pended = observed.Values.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
+    var timeouts = observed.Values.Count(r => r.Outcome is ClaimValidationOutcome.ObservationTimeout);
+    Console.WriteLine($"  Pend observation:  {pended:N0} pended, {timeouts:N0} timed out");
+    Console.WriteLine();
+
+    return results
+        .Select(result => observed.TryGetValue(result.GeneratedClaimId, out var updated) ? updated : result)
+        .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
+        .ToList();
+}
+
 static List<object> BuildDiagnosisCodes(SyntheticClaim claim)
 {
     var codes = new List<string>();
@@ -1289,9 +1337,11 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     Console.WriteLine($"  Total claims:       {summary.TotalClaims:N0}");
     Console.WriteLine($"  Processed:          {summary.Processed:N0}");
     Console.WriteLine($"  Paid/adjudicated:   {summary.Paid:N0}");
+    Console.WriteLine($"  Pended:             {summary.Pended:N0}");
     Console.WriteLine($"  Business denials:   {summary.BusinessDenials:N0}");
     Console.WriteLine($"  Platform failures:  {summary.PlatformFailures:N0}");
-    Console.WriteLine($"  Workflow checks:    {summary.WorkflowMatches:N0}/{summary.WorkflowScenarios:N0} matched ({summary.WorkflowMismatches:N0} mismatched, {summary.WorkflowUnsupported:N0} unsupported)");
+    Console.WriteLine($"  Observation timeout:{summary.ObservationTimeouts:N0}");
+    Console.WriteLine($"  Workflow checks:    {summary.WorkflowMatches:N0}/{summary.WorkflowScenarios:N0} matched ({summary.WorkflowMismatches:N0} mismatched, {summary.WorkflowUnsupported:N0} unsupported, {summary.WorkflowObservationTimeouts:N0} observation timeouts)");
     Console.WriteLine($"  Elapsed:            {summary.Elapsed:mm\\:ss\\.fff}");
     Console.WriteLine($"  Throughput:         {summary.ThroughputClaimsPerSecond:N2} claims/sec");
     Console.WriteLine($"  P95 latency:        {summary.P95LatencyMilliseconds:N0} ms");
@@ -1316,7 +1366,7 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
 
     foreach (var scenario in summary.WorkflowScenarioBreakdown)
     {
-        Console.WriteLine($"  Scenario: {scenario.Scenario} {scenario.Matches:N0}/{scenario.Total:N0} matched ({scenario.Mismatches:N0} mismatched, {scenario.Unsupported:N0} unsupported, {scenario.Unspecified:N0} unspecified)");
+        Console.WriteLine($"  Scenario: {scenario.Scenario} {scenario.Matches:N0}/{scenario.Total:N0} matched ({scenario.Mismatches:N0} mismatched, {scenario.Unsupported:N0} unsupported, {scenario.ObservationTimeouts:N0} observation timeouts, {scenario.Unspecified:N0} unspecified)");
     }
 
     foreach (var failure in summary.SampleFailures)
@@ -1388,6 +1438,11 @@ static void PrintUsage()
       --provider-url <url>       Provider service URL (default: http://localhost:5004)
       --no-seed-providers        Skip synthetic provider seeding
       --skip-claim-update        Do not write adjudication projection back to claims-service
+      --no-pend-observation      Do not poll claims-service for expected-pend claim status
+      --pend-observation-timeout <seconds>
+                                 Max wait for expected-pend claims after benchmark timing stops (default: 45)
+      --pend-observation-interval-ms <ms>
+                                 Poll interval for expected-pend claim status (default: 1000)
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 10)
       -p, --parallelism <count>  Number of claims to process concurrently (default: 10)
@@ -1429,6 +1484,8 @@ public enum ClaimValidationOutcome
 {
     Paid,
     BusinessDenial,
+    Pended,
+    ObservationTimeout,
     PlatformFailure
 }
 
@@ -1458,12 +1515,15 @@ internal sealed record MassAdjudicationRunSummary(
     int TotalClaims,
     int Processed,
     int Paid,
+    int Pended,
     int BusinessDenials,
+    int ObservationTimeouts,
     int PlatformFailures,
     int WorkflowScenarios,
     int WorkflowMatches,
     int WorkflowMismatches,
     int WorkflowUnsupported,
+    int WorkflowObservationTimeouts,
     TimeSpan Elapsed,
     double ThroughputClaimsPerSecond,
     double P95LatencyMilliseconds,
@@ -1507,6 +1567,7 @@ internal sealed record MassAdjudicationWorkflowScenarioSummary(
     int Matches,
     int Mismatches,
     int Unsupported,
+    int ObservationTimeouts,
     int Unspecified);
 
 internal sealed record MassAdjudicationFailureSummary(

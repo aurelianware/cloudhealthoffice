@@ -157,7 +157,7 @@ public class MccWorkflowValidationTests
     }
 
     [Fact]
-    public void ExpectedValidationFor_PendedEdgeCase_ResultsInUnsupportedOutcome()
+    public void ExpectedValidationFor_PendedEdgeCase_ReturnsPendedOutcome()
     {
         var claim = CreateClaim(
             claimType: "EdgeCase",
@@ -178,17 +178,22 @@ public class MccWorkflowValidationTests
             expected,
             ClaimValidationOutcome.Paid,
             actualBusinessDenialCode: null);
-        var statusWhenDenied = MccWorkflowValidation.ValidationStatus(
+        var statusWhenPended = MccWorkflowValidation.ValidationStatus(
             expected,
-            ClaimValidationOutcome.BusinessDenial,
-            actualBusinessDenialCode: "CARC_22");
+            ClaimValidationOutcome.Pended,
+            actualBusinessDenialCode: null);
+        var statusWhenTimeout = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.ObservationTimeout,
+            actualBusinessDenialCode: null);
 
         Assert.Equal("EdgeCase:CobSecondaryPayer", expected.Scenario);
-        Assert.Null(expected.ExpectedOutcome);
+        Assert.Equal(ClaimValidationOutcome.Pended, expected.ExpectedOutcome);
         Assert.Equal("CARC_22", expected.ExpectedBusinessDenialCode);
-        Assert.True(expected.IsUnsupported);
-        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, statusWhenPaid);
-        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, statusWhenDenied);
+        Assert.False(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.MismatchedStatus, statusWhenPaid);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, statusWhenPended);
+        Assert.Equal(MccWorkflowValidation.ObservationTimeoutStatus, statusWhenTimeout);
     }
 
     [Fact]

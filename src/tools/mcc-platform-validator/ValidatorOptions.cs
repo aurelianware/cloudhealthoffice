@@ -9,6 +9,9 @@ public sealed record ValidatorOptions(
     string ProviderUrl,
     bool SeedProviders,
     bool SkipClaimUpdate,
+    bool PendObservationEnabled,
+    int PendObservationTimeoutSeconds,
+    int PendObservationIntervalMilliseconds,
     int TimeoutSeconds,
     int ProgressEvery,
     int Parallelism,
@@ -53,6 +56,15 @@ public sealed record ValidatorOptions(
                     break;
                 case "--skip-claim-update":
                     options.SkipClaimUpdate = true;
+                    break;
+                case "--no-pend-observation":
+                    options.PendObservationEnabled = false;
+                    break;
+                case "--pend-observation-timeout" when i + 1 < args.Length:
+                    options.PendObservationTimeoutSeconds = int.Parse(args[++i]);
+                    break;
+                case "--pend-observation-interval-ms" when i + 1 < args.Length:
+                    options.PendObservationIntervalMilliseconds = int.Parse(args[++i]);
                     break;
                 case "--timeout" when i + 1 < args.Length:
                     options.TimeoutSeconds = int.Parse(args[++i]);
@@ -114,6 +126,9 @@ public sealed record ValidatorOptions(
             options.ProviderUrl.TrimEnd('/'),
             options.SeedProviders,
             options.SkipClaimUpdate,
+            options.PendObservationEnabled,
+            Math.Clamp(options.PendObservationTimeoutSeconds, 1, 300),
+            Math.Clamp(options.PendObservationIntervalMilliseconds, 100, 30_000),
             Math.Max(5, options.TimeoutSeconds),
             Math.Max(1, options.ProgressEvery),
             Math.Max(1, options.Parallelism),
@@ -136,6 +151,9 @@ public sealed record ValidatorOptions(
         public string ProviderUrl { get; set; } = "http://localhost:5004";
         public bool SeedProviders { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
+        public bool PendObservationEnabled { get; set; } = true;
+        public int PendObservationTimeoutSeconds { get; set; } = 45;
+        public int PendObservationIntervalMilliseconds { get; set; } = 1000;
         public int TimeoutSeconds { get; set; } = 60;
         public int ProgressEvery { get; set; } = 10;
         public int Parallelism { get; set; } = 10;
