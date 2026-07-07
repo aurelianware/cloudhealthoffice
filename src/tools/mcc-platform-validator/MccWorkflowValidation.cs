@@ -5,9 +5,13 @@ namespace CloudHealthOffice.Tools.MccPlatformValidator;
 public sealed record ExpectedValidation(
     string? Scenario,
     ClaimValidationOutcome? ExpectedOutcome,
-    string? ExpectedBusinessDenialCode)
+    string? ExpectedBusinessDenialCode,
+    bool IsUnsupported = false)
 {
     public static ExpectedValidation Unspecified { get; } = new(null, null, null);
+
+    public static ExpectedValidation Unsupported(string scenario, string? expectedBusinessDenialCode)
+        => new(scenario, null, expectedBusinessDenialCode, IsUnsupported: true);
 }
 
 public static class MccWorkflowValidation
@@ -22,15 +26,29 @@ public static class MccWorkflowValidation
     public const string UncoveredServiceCode = "CARC_96";
     public const string TexasStarInpatientNoAuthScenario = "TxStarInpatientNoAuth";
     public const string PriorAuthRequiredCode = "PRIOR_AUTH_REQUIRED";
+    public const string UnsupportedStatus = "Unsupported";
+    public const string UnspecifiedStatus = "Unspecified";
+    public const string MismatchedStatus = "Mismatched";
+    public const string MatchedStatus = "Matched";
 
     public static ExpectedValidation ExpectedValidationFor(SyntheticClaim claim)
     {
         if (claim.EdgeCase is not null && claim.ExpectedOutcome is not null)
         {
-            return new ExpectedValidation(
-                $"EdgeCase:{claim.EdgeCase}",
-                OutcomeFromDisposition(claim.ExpectedOutcome.Disposition),
-                NormalizeExpectedCode(claim.ExpectedOutcome.DenialReasonCode));
+            var scenario = $"EdgeCase:{claim.EdgeCase}";
+            var expectedCode = NormalizeExpectedCode(claim.ExpectedOutcome.DenialReasonCode);
+            var expectedOutcome = OutcomeFromDisposition(claim.ExpectedOutcome.Disposition);
+
+            // TODO(mcc-pended-signal): The MCC corpus contains expected-pend scenarios,
+            // but this validator currently calls benefit-plan-service directly and only
+            // observes Success plus denial/error fields. Claims-service can represent
+            // ClaimStatus.Pended and 277 P:16:85, but this validator does not yet run
+            // the claim workflow or read that status back. Keep pend expectations
+            // explicit as Unsupported until the validator has a real pend signal.
+            return expectedOutcome is null
+                && claim.ExpectedOutcome.Disposition.Equals("Pended", StringComparison.OrdinalIgnoreCase)
+                    ? ExpectedValidation.Unsupported(scenario, expectedCode)
+                    : new ExpectedValidation(scenario, expectedOutcome, expectedCode);
         }
 
         if (claim.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
@@ -88,21 +106,21 @@ public static class MccWorkflowValidation
     {
         if (expected.ExpectedOutcome is null)
         {
-            return "Unspecified";
+            return expected.IsUnsupported ? UnsupportedStatus : UnspecifiedStatus;
         }
 
         if (expected.ExpectedOutcome != actualOutcome)
         {
-            return "Mismatched";
+            return MismatchedStatus;
         }
 
         if (!string.IsNullOrWhiteSpace(expected.ExpectedBusinessDenialCode)
             && !string.Equals(expected.ExpectedBusinessDenialCode, actualBusinessDenialCode, StringComparison.OrdinalIgnoreCase))
         {
-            return "Mismatched";
+            return MismatchedStatus;
         }
 
-        return "Matched";
+        return MatchedStatus;
     }
 
     private static ClaimValidationOutcome? OutcomeFromDisposition(string? disposition)
@@ -125,4 +143,41 @@ public static class MccWorkflowValidation
         var trimmed = code.Trim();
         return trimmed.All(char.IsDigit) ? $"CARC_{trimmed}" : trimmed;
     }
+}
+
+public sealed class MccAnswerKey
+{
+    private readonly IReadOnlyDictionary<string, ExpectedValidation> _entries;
+
+    private MccAnswerKey(IReadOnlyDictionary<string, ExpectedValidation> entries)
+    {
+        _entries = entries;
+    }
+
+    public static MccAnswerKey FromClaims(IEnumerable<SyntheticClaim> claims)
+    {
+        var entries = new Dictionary<string, ExpectedValidation>(StringComparer.Ordinal);
+
+        foreach (var claim in claims)
+        {
+            if (string.IsNullOrWhiteSpace(claim.ClaimId))
+            {
+                continue;
+            }
+
+            if (entries.ContainsKey(claim.ClaimId))
+            {
+                throw new InvalidOperationException($"Duplicate MCC answer-key claim id: {claim.ClaimId}");
+            }
+
+            entries.Add(claim.ClaimId, MccWorkflowValidation.ExpectedValidationFor(claim));
+        }
+
+        return new MccAnswerKey(entries);
+    }
+
+    public ExpectedValidation ExpectedValidationFor(SyntheticClaim claim)
+        => !string.IsNullOrWhiteSpace(claim.ClaimId) && _entries.TryGetValue(claim.ClaimId, out var expected)
+            ? expected
+            : ExpectedValidation.Unspecified;
 }

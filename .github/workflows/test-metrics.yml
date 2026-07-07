@@ -136,6 +136,12 @@ jobs:
             TestResults/**/coverage.cobertura.xml
           retention-days: 90
 
+      - name: Fail on .NET test failures
+        if: steps.run.outputs.build_failed != '0' || steps.parse.outputs.fail_count != '0'
+        run: |
+          echo "::error::.NET test metrics detected ${{ steps.run.outputs.build_failed }} project build/test command failure(s) and ${{ steps.parse.outputs.fail_count }} failed test case(s)"
+          exit 1
+
   # ═══════════════════════════════════════════════════════════════════════
   # 2. TypeScript / Jest Tests
   # ═══════════════════════════════════════════════════════════════════════
