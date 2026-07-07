@@ -1,6 +1,6 @@
 # Cloud Health Office — Positioning
 
-**Audience:** internal teams, partners, and evaluators deciding how Cloud Health Office (CHO) fits into their roadmap. Payer-facing pitch materials should derive from this document and not contradict it.
+**Audience:** internal teams, partners, and evaluators deciding how Cloud Health Office fits into their roadmap. Payer-facing pitch materials should derive from this document and not contradict it.
 
 **Last updated:** July 2026
 
