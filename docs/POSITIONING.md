@@ -242,7 +242,7 @@ EDI coverage via Argo workflows: 270/271/275/276/277/278/834/837.
 - Portal under `src/portal/` for operational workflows across tenants, services, and operating modes.
 - `fhir-service` CapabilityStatement advertising CHO-authored profiles in addition to US Core.
 - Observability stack (OpenTelemetry with PHI-scrubbing SpanProcessor, merged in PR #666) applied across services.
-- Million Claim Challenge local Kubernetes validation: 50,000 synthetic claims processed on a repeat adjudication run at 188.64 claims/sec, 106 ms P95, 151 ms P99, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. This is a local validation benchmark, not a production cloud benchmark.
+- Million Claim Challenge local Kubernetes validation: 50,000 synthetic claims processed on a repeat adjudication run at 188.64 claims/sec, 106 ms P95, 151 ms P99, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. This ran in local Docker Desktop Kubernetes with Docker allocated 18 CPUs, which makes the useful throughput frame roughly 10.5 claims/sec per allocated CPU for the measured workflow. This is a local validation benchmark, not a production cloud benchmark.
 
 #### Who enters here
 
@@ -285,7 +285,9 @@ The Million Claim Challenge is a source-available benchmarking asset (BSL 1.1, s
 
 We generate a stratified synthetic corpus of 1,000,000 healthcare claims — professional CMS-1500, institutional UB-04, dental ADA, and named edge-case scenarios — with pre-computed expected adjudication outcomes. Any claims adjudication engine can be benchmarked against the corpus and scored against the expected outcomes.
 
-Latest CHO proof point: in local Docker Desktop Kubernetes, Cloud Health Office processed 50,000 synthetic claims on a repeat adjudication run at 188.64 claims/sec, with 106 ms P95 latency, 151 ms P99 latency, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. This is intentionally framed as local validation, not a production cloud benchmark. Its value is that throughput, tail latency, platform reliability, and workflow correctness are measured together.
+Latest CHO proof point: in local Docker Desktop Kubernetes with Docker allocated 18 CPUs, Cloud Health Office processed 50,000 synthetic claims on a repeat adjudication run at 188.64 claims/sec, with 106 ms P95 latency, 151 ms P99 latency, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. That is roughly 10.5 claims/sec per allocated CPU for the measured workflow. This is intentionally framed as local validation, not a production cloud benchmark. Its value is that throughput, tail latency, platform reliability, and workflow correctness are measured together.
+
+The published result should not be overstated. The MCC corpus is designed for 1,000,000 claims and 29 named edge-case scenarios; the latest published CHO validation is a 50,000-claim local run with deterministic workflow checks across four core dispositions: clean paid, excluded provider, uncovered service, and prior authorization. The next proof priority is breadth before volume: publish a run that exercises more of the 29 edge scenarios, then extend volume to 250K, 500K, and the full million.
 
 ### What we offer
 
