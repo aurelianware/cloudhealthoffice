@@ -292,13 +292,14 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
 
     private void SetupNewPipelineDefaults()
     {
-        // PriorAuthRuleEngine: default to Pend (no auth required, pass through)
+        // PriorAuthRuleEngine: default to a no-match Pend, which is not a
+        // prior-auth-required decision and lets adjudication pass through.
         _factory.PriorAuthEngine
             .EvaluateAsync(Arg.Any<PaRuleContext>(), Arg.Any<CancellationToken>())
             .Returns(new PaRuleDecision
             {
                 Outcome = PaDecisionOutcome.Pend,
-                FiringRuleId = "none",
+                FiringRuleId = "NoRuleMatch",
                 FiringRuleName = "No rules matched",
                 ResolvedRuleSetKey = "test"
             });
@@ -312,7 +313,11 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         // (added in capability 5.10) defaults to false; only AdminInvestigation
         // callers opt in. Stub matches any value for forward compatibility.
         _factory.ProviderIntegrityGate
-            .CheckAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .CheckAsync(
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ProviderIntegrityResult { Passed = true, Rating = "Clear", IntegrityScore = 95 });
 
         // TerminologyCrosswalkClient: passthrough (no translations)
