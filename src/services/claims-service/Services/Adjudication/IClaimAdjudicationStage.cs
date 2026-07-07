@@ -107,6 +107,30 @@ public class ClaimAdjudicationStageResult
             Outcome = ClaimAdjudicationOutcome.Deny,
             Reason = reason
         };
+
+    /// <summary>
+    /// Precedence rule for combining every stage's result into one
+    /// adjudication outcome: Reject &gt; Deny &gt; Pend &gt; Pass. Shared by
+    /// two callers that need it at two different points in the pipeline:
+    /// <see cref="Stages.PersistenceStage"/> calls this with
+    /// <c>context.StageResults</c> as they stand BEFORE Persistence's own
+    /// result is appended (Persistence is always <c>Order=999</c>, i.e.
+    /// last) to decide whether the orchestrator computed a Pend and
+    /// therefore whether to persist <c>ClaimStatus.Pended</c>; the
+    /// orchestrator's own final-outcome resolution (used to label the
+    /// emitted Service Bus event) calls this AFTER every stage including
+    /// Persistence has run, so a persistence failure (Reject) still wins.
+    /// </summary>
+    public static ClaimAdjudicationOutcome ResolveOutcome(IReadOnlyList<ClaimAdjudicationStageResult> results)
+    {
+        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Reject))
+            return ClaimAdjudicationOutcome.Reject;
+        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Deny))
+            return ClaimAdjudicationOutcome.Deny;
+        if (results.Any(r => r.Outcome == ClaimAdjudicationOutcome.Pend))
+            return ClaimAdjudicationOutcome.Pend;
+        return ClaimAdjudicationOutcome.Pass;
+    }
 }
 
 /// <summary>

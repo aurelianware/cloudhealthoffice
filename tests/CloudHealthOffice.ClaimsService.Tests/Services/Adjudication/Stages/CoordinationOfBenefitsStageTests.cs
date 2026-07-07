@@ -71,6 +71,9 @@ public class CoordinationOfBenefitsStageTests
         Assert.False(ctx.CobResult.IsMedicarePrimary);
         Assert.Null(ctx.CobResult.PendReason);
         Assert.Null(ctx.CobResult.AppliedRule);
+        // No pend condition detected — BuildPrimaryOutcome is unchanged by
+        // the Defect B fix and must not populate PendDetails.
+        Assert.Null(ctx.PendDetails);
     }
 
     [Fact]
@@ -91,6 +94,7 @@ public class CoordinationOfBenefitsStageTests
         Assert.Equal(CobScenario.ChoPrimaryWithSecondary, ctx.CobResult!.Scenario);
         Assert.False(ctx.CobResult.IsMedicarePrimary);
         Assert.Null(ctx.CobResult.PendReason);
+        Assert.Null(ctx.PendDetails);
     }
 
     [Fact]
@@ -120,6 +124,12 @@ public class CoordinationOfBenefitsStageTests
         // labels rule as ExplicitCoverageRecord (the wire signal IS
         // explicit).
         Assert.Equal(PayerOrderRule.ExplicitCoverageRecord, ctx.CobResult.AppliedRule);
+        // Defect B fix — PendDetails must be populated so the projection
+        // (PersistenceStage) has something to persist onto the claim record.
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
+        Assert.Contains("Aetna", ctx.PendDetails.PendReason);
+        Assert.Empty(ctx.PendDetails.EditFailures);
     }
 
     [Fact]
@@ -142,6 +152,8 @@ public class CoordinationOfBenefitsStageTests
         // MedicareSecondaryPayer when MedicareDesignatedPrimary=true on
         // the other coverage (Decision 16a mapping).
         Assert.Equal(PayerOrderRule.MedicareSecondaryPayer, ctx.CobResult.AppliedRule);
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
     }
 
     [Fact]
@@ -198,6 +210,14 @@ public class CoordinationOfBenefitsStageTests
         Assert.False(result.Continue, "Deny short-circuits to PersistenceStage");
         // Outcome still recorded for audit-trail richness.
         Assert.Equal(CobScenario.ChoSecondaryDetected, ctx.CobResult!.Scenario);
+        // PendDetails is populated even in Deny mode — mirrors NcciEditsStage's
+        // precedent (ApplyFailureSnapshots runs regardless of NcciMode). The
+        // claim still ends up Denied (Deny outweighs Pend in the
+        // orchestrator's Reject>Deny>Pend>Pass precedence — see
+        // ClaimAdjudicationStageResult.ResolveOutcome), but the audit trail
+        // explains why COB fired.
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
     }
 
     [Fact]
@@ -220,6 +240,10 @@ public class CoordinationOfBenefitsStageTests
         Assert.Equal(
             CoordinationOfBenefitsStage.SecondaryNotSupportedPendReason,
             ctx.CobResult.PendReason);
+        // SoftValidation still records the audit-trail snapshot — telemetry
+        // captures the detection even though the stage outcome is Pass.
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
     }
 
     [Fact]
@@ -237,6 +261,9 @@ public class CoordinationOfBenefitsStageTests
         Assert.Equal(
             CoordinationOfBenefitsStage.CoverageServiceUnavailablePendReason,
             ctx.CobResult.PendReason);
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
+        Assert.Contains("Coverage-service unavailable", ctx.PendDetails.PendReason);
     }
 
     [Fact]
@@ -256,6 +283,8 @@ public class CoordinationOfBenefitsStageTests
         Assert.Equal(
             CoordinationOfBenefitsStage.CoverageServiceUnavailablePendReason,
             ctx.CobResult!.PendReason);
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
     }
 
     [Fact]
@@ -273,6 +302,8 @@ public class CoordinationOfBenefitsStageTests
         // Outcome still recorded — telemetry captures the degradation
         // even when soft-validation suppresses the pend.
         Assert.Equal(CobScenario.None, ctx.CobResult!.Scenario);
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
     }
 
     [Fact]
@@ -322,6 +353,8 @@ public class CoordinationOfBenefitsStageTests
         // so audit trail still records why CHO is secondary.
         Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
         Assert.Equal(PayerOrderRule.ExplicitCoverageRecord, ctx.CobResult!.AppliedRule);
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
     }
 
     [Fact]

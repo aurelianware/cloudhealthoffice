@@ -100,6 +100,24 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
         ClaimRepository.MapStatusToVersionState(legacy).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData(ClaimStatus.Submitted, false)]
+    [InlineData(ClaimStatus.Received, false)]
+    [InlineData(ClaimStatus.InAdjudication, false)]
+    [InlineData(ClaimStatus.Pended, false)] // not final — re-pending must be allowed
+    [InlineData(ClaimStatus.Approved, true)]
+    [InlineData(ClaimStatus.Denied, true)]
+    [InlineData(ClaimStatus.Paid, true)]
+    [InlineData(ClaimStatus.PartiallyPaid, true)]
+    [InlineData(ClaimStatus.Voided, true)]
+    public void IsFinalDisposition_truth_table_is_pinned(ClaimStatus status, bool expectedFinal)
+    {
+        // Shared by ClaimRepository (Cosmos) and ClaimRepositoryMongo so both
+        // backends apply the identical Pend-projection precedence rule; pin
+        // it here so the table is reviewed if anyone changes it.
+        ClaimRepository.IsFinalDisposition(status).Should().Be(expectedFinal);
+    }
+
     [Fact]
     public async Task CreateAsync_seeds_chain_on_first_write()
     {
@@ -299,6 +317,111 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
             Array.Empty<LineAdjudicationResult>());
 
         ok.Should().BeFalse();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Pend-persistence defect fix: isPend projects ClaimStatus.Pended
+    // (Defect A). Non-pend behavior and the terminal-disposition
+    // precedence rule are pinned here too.
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task UpdateAdjudicationProjectionAsync_withIsPendTrue_setsStatusPendedAndPendDetails()
+    {
+        var head = await _repo.CreateAsync(BuildVersion("chain-pend-ncci", "row-1", n: 1, ClaimVersionState.Submitted));
+        head.Status.Should().Be(ClaimStatus.Submitted, "the fixture starts pre-adjudication");
+
+        var pendDetails = new PendDetails { PendCode = "NCCI", PendReason = "bundled pair NE001" };
+        var ok = await _repo.UpdateAdjudicationProjectionAsync(
+            Tenant, "chain-pend-ncci",
+            new AdjudicationResult { AllowedAmount = 0m },
+            Array.Empty<LineAdjudicationResult>(),
+            pendDetails: pendDetails,
+            isPend: true);
+
+        ok.Should().BeTrue();
+        var reread = await _repo.GetVersionAsync("chain-pend-ncci", "row-1");
+        reread!.Status.Should().Be(ClaimStatus.Pended);
+        reread.PendDetails.Should().NotBeNull();
+        reread.PendDetails!.PendCode.Should().Be("NCCI");
+        reread.PendDetails.PendReason.Should().Be("bundled pair NE001");
+    }
+
+    [Fact]
+    public async Task UpdateAdjudicationProjectionAsync_withIsPendFalse_leavesStatusUnchanged()
+    {
+        // Regression guard (task requirement 4): this bypass method has
+        // NEVER written /status for non-pend outcomes and must continue not
+        // to — even when the AdjudicationResult looks like an approval
+        // (PayerPayment > 0). Status transitions for Pass/Deny/Reject stay
+        // owned by UpdateAdjudicationSummaryAsync / UpdateAdjudication / the
+        // Argo workflow, not this method.
+        var head = await _repo.CreateAsync(BuildVersion("chain-pass", "row-1", n: 1, ClaimVersionState.Submitted));
+        head.Status.Should().Be(ClaimStatus.Submitted);
+
+        var ok = await _repo.UpdateAdjudicationProjectionAsync(
+            Tenant, "chain-pass",
+            new AdjudicationResult { AllowedAmount = 150m, PayerPayment = 120m },
+            Array.Empty<LineAdjudicationResult>(),
+            isPend: false);
+
+        ok.Should().BeTrue();
+        var reread = await _repo.GetVersionAsync("chain-pass", "row-1");
+        reread!.Status.Should().Be(ClaimStatus.Submitted, "isPend=false must never touch /status, matching pre-fix behavior");
+        reread.AdjudicationResult.Should().NotBeNull("the non-status projection fields still write as before");
+        reread.AdjudicationResult!.PayerPayment.Should().Be(120m);
+    }
+
+    [Fact]
+    public async Task UpdateAdjudicationProjectionAsync_withIsPendTrue_onAlreadyApprovedClaim_doesNotDowngradeStatus()
+    {
+        // Precedence rule (task requirement A.3): a claim that already
+        // reached a later-stage disposition — e.g. because the Argo
+        // workflow's synchronous finalize step, or an examiner override,
+        // raced ahead of this async projection — must never be downgraded
+        // back to Pended. Approved maps to VersionState.Adjudicated, which
+        // is NOT terminal for VersionState purposes (re-adjudication is
+        // allowed), so this precedence check is the only thing protecting
+        // ClaimStatus here.
+        var head = BuildVersion("chain-already-approved", "row-1", n: 1, ClaimVersionState.Adjudicated);
+        head.Status = ClaimStatus.Approved;
+        await _repo.CreateAsync(head);
+
+        var ok = await _repo.UpdateAdjudicationProjectionAsync(
+            Tenant, "chain-already-approved",
+            new AdjudicationResult { AllowedAmount = 100m },
+            Array.Empty<LineAdjudicationResult>(),
+            pendDetails: new PendDetails { PendCode = "NCCI", PendReason = "late-arriving pend" },
+            isPend: true);
+
+        ok.Should().BeTrue("the write itself still succeeds — only the /status patch is skipped");
+        var reread = await _repo.GetVersionAsync("chain-already-approved", "row-1");
+        reread!.Status.Should().Be(ClaimStatus.Approved, "a later-stage disposition must never be downgraded back to Pended");
+    }
+
+    [Fact]
+    public async Task UpdateAdjudicationProjectionAsync_withIsPendTrue_onAlreadyPendedClaim_refreshesPendDetails()
+    {
+        // Pended is NOT a final disposition — a re-adjudication run that
+        // pends again (e.g. a new NCCI edit-failure set) must be allowed to
+        // refresh PendDetails and re-affirm Status=Pended.
+        var head = BuildVersion("chain-repend", "row-1", n: 1, ClaimVersionState.Submitted);
+        head.Status = ClaimStatus.Pended;
+        head.PendDetails = new PendDetails { PendCode = "NCCI", PendReason = "first pend" };
+        await _repo.CreateAsync(head);
+
+        var ok = await _repo.UpdateAdjudicationProjectionAsync(
+            Tenant, "chain-repend",
+            new AdjudicationResult { AllowedAmount = 0m },
+            Array.Empty<LineAdjudicationResult>(),
+            pendDetails: new PendDetails { PendCode = "MUE", PendReason = "second pend, different edit" },
+            isPend: true);
+
+        ok.Should().BeTrue();
+        var reread = await _repo.GetVersionAsync("chain-repend", "row-1");
+        reread!.Status.Should().Be(ClaimStatus.Pended);
+        reread.PendDetails!.PendCode.Should().Be("MUE");
+        reread.PendDetails.PendReason.Should().Be("second pend, different edit");
     }
 
     [Fact]

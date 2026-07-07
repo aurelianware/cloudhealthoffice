@@ -124,7 +124,10 @@ across tenants. Pattern parity:
 non-persistence stages skip. PersistenceStage **always** runs (forced
 via `IsRequired=true`) so the version chain captures the failure
 outcome. `Pend` is recoverable — pipeline continues so subsequent stages
-can decorate the result before the claim ends up in a human-review queue.
+can decorate the result before the claim ends up in a human-review queue
+(see D9a for how PersistenceStage actually projects `Pend` onto
+`ClaimStatus` so the work queue can find it — that projection was missing
+until the pend-persistence defect fix).
 
 ### D8 — Stage interface
 
@@ -158,6 +161,71 @@ within one message handler so mutability is safe.
 - 5th instance of the projection-bypass pattern across the platform
   (Provider integrity, Provider credentialing, Provider panel-gating, BP
   network tiers, claims adjudication).
+
+#### D9a — Pend → ClaimStatus projection and its precedence rule (pend-persistence defect fix)
+
+Before this fix, `UpdateAdjudicationProjectionAsync`'s patch operation
+list never included `/status` — an orchestrator-computed `Pend` (NCCI/MUE,
+COB) populated `PendDetails` (NCCI) or nothing at all (COB, see
+`claim-cob-pipeline.md` D4) but never moved `ClaimStatus` off whatever it
+was before adjudication ran. Since the examiner work queue filters on
+`ClaimStatus.Pended` (`ClaimsController.GetWorkQueueSummary` /
+`GetWorkQueueItems`), orchestrator-pended claims never reached a human
+examiner. See the dated diagnostics doc
+(`docs/million-claim-challenge/2026-07-07-expected-pend-diagnostics.md`)
+for the full trace.
+
+Fixed as follows:
+
+1. `PersistenceStage` resolves `isPend` from every stage result recorded
+   **before** Persistence runs (Persistence is always `Order=999`, i.e.
+   last), using the same Reject > Deny > Pend > Pass precedence the
+   orchestrator uses for the emitted event's `Outcome`
+   (`ClaimAdjudicationStageResult.ResolveOutcome` — a single shared
+   static method; the orchestrator's own `ResolveFinalOutcome` now
+   delegates to it, called one stage later so a Persistence-stage
+   `Reject` still wins on the emitted event).
+2. `isPend` and `PendDetails` are passed to
+   `UpdateAdjudicationProjectionAsync`. `isPend=false` is a **pure no-op**
+   on `/status` — Pass/Deny/Reject outcomes never touch it, exactly as
+   before this fix. Status transitions for those outcomes remain owned by
+   other write paths (`UpdateAdjudicationSummaryAsync`, the Argo
+   workflow's `update-claim-step`, or `ClaimsController.PendClaim`), not
+   this bypass method — this fix does not add terminal-status writes here.
+3. **Precedence rule** (documented here — the source of truth, not just
+   the PR that introduced it): when `isPend` is true, the repository ALSO
+   patches `/status` to `ClaimStatus.Pended`, *unless* the claim's current
+   `Status` is already a later-stage disposition — `Approved`, `Denied`,
+   `Paid`, `PartiallyPaid`, or `Voided` (`ClaimRepository.IsFinalDisposition`,
+   shared by both the Cosmos and Mongo repositories). This guards against
+   downgrading a claim that another write path — most plausibly the Argo
+   workflow's synchronous `update-claim-step`, or an examiner's
+   work-queue override — finalized before this async projection landed.
+   `Pended` is deliberately **not** in that list: re-pending an
+   already-`Pended` claim (a re-adjudication run that refreshes
+   `PendDetails`, e.g. a different edit-failure set) is allowed.
+4. `CoordinationOfBenefitsStage` now populates `PendDetails`
+   (`PendCode="COB"`) whenever it detects a secondary/tertiary scenario or
+   a coverage-service outage, mirroring `NcciEditsStage`'s existing
+   precedent of recording the deterministic snapshot regardless of
+   enforcement mode (so a Deny-mode COB claim still carries an audit
+   trail even though it ends up `Denied`, not `Pended` — Deny outweighs
+   Pend in the same precedence rule). No new pend vocabulary: `"COB"` was
+   already a documented `PendDetails.PendCode` value and the work queue
+   already had a `CobRequired` bucket keyed on it; the stage simply never
+   emitted it before.
+
+**Known pre-existing race, out of scope for this fix:** the Argo
+workflow's `update-claim-step` does not check for `ClaimStatus.Pended`
+before calling `PUT /api/claims/{id}/status`. If claims-service's own
+async orchestrator pends a claim (via the write path above) and the Argo
+workflow's synchronous `update-claim-step` runs afterward for the same
+claim, the workflow can still overwrite `Pended` back to `Approved` /
+`Denied` — the precedence rule in this fix only protects the
+orchestrator's own write path against a disposition that already landed;
+it doesn't (and structurally can't, from here) make the Argo workflow
+disposition-aware. Flagged as a finding for the future edit-model ADR, not
+fixed here.
 
 ### D10 — Resolution clients are cached HTTP clients
 
@@ -254,6 +322,8 @@ always enabled regardless.
 | `UpdateAdjudicationProjectionAsync` returns false | PersistenceStage returns `Reject`; orchestrator continues (no further work) and emits the adjudicated event with that outcome. |
 | `UpdateAdjudicationProjectionAsync` throws | PersistenceStage rethrows; Service Bus abandons the message and redelivers. |
 | Re-delivery for already-adjudicated claim | Orchestrator detects via populated `AdjudicationResult` and completes the message without re-running the pipeline. |
+| Orchestrator resolves `Pend`, but claim is already `Approved`/`Denied`/`Paid`/`PartiallyPaid`/`Voided` | `ClaimRepository.IsFinalDisposition` guard (D9a) skips the `/status` patch; `AdjudicationResult`/`PendDetails` still project for audit purposes. |
+| Argo workflow's `update-claim-step` runs after an async-orchestrator pend | Not guarded (pre-existing, out of scope for D9a) — the workflow can overwrite `Pended` back to `Approved`/`Denied`. Flagged as a finding for the future edit-model ADR. |
 
 ## Replacement contract for stub stages
 
