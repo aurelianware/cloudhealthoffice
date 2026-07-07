@@ -1313,6 +1313,17 @@ static MassAdjudicationRunSummary BuildSummary(
         .ThenBy(g => g.Key, StringComparer.Ordinal)
         .Select(g => new MassAdjudicationBusinessDenialSummary(g.Key, g.Count()))
         .ToList();
+    var workflowBreakdown = results
+        .Where(r => !string.IsNullOrWhiteSpace(r.ValidationScenario))
+        .GroupBy(r => r.ValidationScenario!, StringComparer.Ordinal)
+        .OrderBy(g => g.Key, StringComparer.Ordinal)
+        .Select(g => new MassAdjudicationWorkflowScenarioSummary(
+            g.Key,
+            g.Count(),
+            g.Count(r => r.ValidationStatus == "Matched"),
+            g.Count(r => r.ValidationStatus == "Mismatched"),
+            g.Count(r => r.ValidationStatus == "Unspecified")))
+        .ToList();
     var failures = results
         .Where(r => r.Outcome is ClaimValidationOutcome.PlatformFailure)
         .Take(5)
@@ -1378,6 +1389,7 @@ static MassAdjudicationRunSummary BuildSummary(
         BuildAdjudicationStepTimings(results),
         avgDelta,
         denialBreakdown,
+        workflowBreakdown,
         failures,
         claimResults);
 }
@@ -1411,6 +1423,11 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     foreach (var denialGroup in summary.BusinessDenialBreakdown.Take(5))
     {
         Console.WriteLine($"  Business denial: {denialGroup.Code} ({denialGroup.Count:N0})");
+    }
+
+    foreach (var scenario in summary.WorkflowScenarioBreakdown)
+    {
+        Console.WriteLine($"  Scenario: {scenario.Scenario} {scenario.Matches:N0}/{scenario.Total:N0} matched ({scenario.Mismatches:N0} mismatched, {scenario.Unspecified:N0} unspecified)");
     }
 
     foreach (var failure in summary.SampleFailures)
@@ -1621,6 +1638,7 @@ internal sealed record MassAdjudicationRunSummary(
     IReadOnlyList<MassAdjudicationStageTiming> AdjudicationStepTimings,
     decimal? AveragePaymentDelta,
     IReadOnlyList<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown,
+    IReadOnlyList<MassAdjudicationWorkflowScenarioSummary> WorkflowScenarioBreakdown,
     IReadOnlyList<MassAdjudicationFailureSummary> SampleFailures,
     IReadOnlyList<MassAdjudicationClaimResult> ClaimResults);
 
@@ -1646,6 +1664,13 @@ internal sealed record MassAdjudicationStageTiming(
 internal sealed record MassAdjudicationBusinessDenialSummary(
     string Code,
     int Count);
+
+internal sealed record MassAdjudicationWorkflowScenarioSummary(
+    string Scenario,
+    int Total,
+    int Matches,
+    int Mismatches,
+    int Unspecified);
 
 internal sealed record MassAdjudicationFailureSummary(
     string GeneratedClaimId,

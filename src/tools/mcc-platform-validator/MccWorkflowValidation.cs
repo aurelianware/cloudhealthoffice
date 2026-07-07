@@ -25,6 +25,14 @@ public static class MccWorkflowValidation
 
     public static ExpectedValidation ExpectedValidationFor(SyntheticClaim claim)
     {
+        if (claim.EdgeCase is not null && claim.ExpectedOutcome is not null)
+        {
+            return new ExpectedValidation(
+                $"EdgeCase:{claim.EdgeCase}",
+                OutcomeFromDisposition(claim.ExpectedOutcome.Disposition),
+                NormalizeExpectedCode(claim.ExpectedOutcome.DenialReasonCode));
+        }
+
         if (claim.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
             && string.Equals(claim.BenefitPlanId, CleanProfessionalPaidPlanId, StringComparison.Ordinal)
             && string.Equals(claim.PlaceOfService, "11", StringComparison.OrdinalIgnoreCase)
@@ -95,5 +103,26 @@ public static class MccWorkflowValidation
         }
 
         return "Matched";
+    }
+
+    private static ClaimValidationOutcome? OutcomeFromDisposition(string? disposition)
+    {
+        return disposition?.Trim() switch
+        {
+            { } value when value.Equals("Paid", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Paid,
+            { } value when value.Equals("Denied", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.BusinessDenial,
+            _ => null
+        };
+    }
+
+    private static string? NormalizeExpectedCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        var trimmed = code.Trim();
+        return trimmed.All(char.IsDigit) ? $"CARC_{trimmed}" : trimmed;
     }
 }
