@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\CloudHealthOffice.BenchmarkClaimGenerator\CloudHealthOffice.BenchmarkClaimGenerator.csproj" />
     <ProjectReference Include="..\..\src\tools\mcc-platform-validator\mcc-platform-validator.csproj" />
   </ItemGroup>
 
