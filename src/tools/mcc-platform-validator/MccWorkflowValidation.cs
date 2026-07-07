@@ -111,7 +111,6 @@ public static class MccWorkflowValidation
         {
             { } value when value.Equals("Paid", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Paid,
             { } value when value.Equals("Denied", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.BusinessDenial,
-            { } value when value.Equals("Pended", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Pended,
             _ => null
         };
     }

@@ -157,7 +157,7 @@ public class MccWorkflowValidationTests
     }
 
     [Fact]
-    public void ExpectedValidationFor_PendedEdgeCase_RequiresPendedOutcome()
+    public void ExpectedValidationFor_PendedEdgeCase_ResultsInUnspecifiedOutcome()
     {
         var claim = CreateClaim(
             claimType: "EdgeCase",
@@ -174,20 +174,20 @@ public class MccWorkflowValidationTests
         };
 
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
-        var matched = MccWorkflowValidation.ValidationStatus(
+        var statusWhenPaid = MccWorkflowValidation.ValidationStatus(
             expected,
-            ClaimValidationOutcome.Pended,
-            actualBusinessDenialCode: "CARC_22");
-        var mismatched = MccWorkflowValidation.ValidationStatus(
+            ClaimValidationOutcome.Paid,
+            actualBusinessDenialCode: null);
+        var statusWhenDenied = MccWorkflowValidation.ValidationStatus(
             expected,
             ClaimValidationOutcome.BusinessDenial,
             actualBusinessDenialCode: "CARC_22");
 
         Assert.Equal("EdgeCase:CobSecondaryPayer", expected.Scenario);
-        Assert.Equal(ClaimValidationOutcome.Pended, expected.ExpectedOutcome);
+        Assert.Null(expected.ExpectedOutcome);
         Assert.Equal("CARC_22", expected.ExpectedBusinessDenialCode);
-        Assert.Equal("Matched", matched);
-        Assert.Equal("Mismatched", mismatched);
+        Assert.Equal("Unspecified", statusWhenPaid);
+        Assert.Equal("Unspecified", statusWhenDenied);
     }
 
     [Fact]

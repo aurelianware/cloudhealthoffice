@@ -1427,7 +1427,7 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
 
     foreach (var scenario in summary.WorkflowScenarioBreakdown)
     {
-        Console.WriteLine($"  Scenario: {scenario.Scenario} {scenario.Matches:N0}/{scenario.Total:N0} matched ({scenario.Mismatches:N0} mismatched)");
+        Console.WriteLine($"  Scenario: {scenario.Scenario} {scenario.Matches:N0}/{scenario.Total:N0} matched ({scenario.Mismatches:N0} mismatched, {scenario.Unspecified:N0} unspecified)");
     }
 
     foreach (var failure in summary.SampleFailures)
@@ -1593,7 +1593,6 @@ internal sealed record SubmittedClaim(string Id);
 public enum ClaimValidationOutcome
 {
     Paid,
-    Pended,
     BusinessDenial,
     PlatformFailure
 }
