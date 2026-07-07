@@ -1340,7 +1340,7 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     Console.WriteLine($"  Pended:             {summary.Pended:N0}");
     Console.WriteLine($"  Business denials:   {summary.BusinessDenials:N0}");
     Console.WriteLine($"  Platform failures:  {summary.PlatformFailures:N0}");
-    Console.WriteLine($"  Observation timeout:{summary.ObservationTimeouts:N0}");
+    Console.WriteLine($"  Observation timeout: {summary.ObservationTimeouts:N0}");
     Console.WriteLine($"  Workflow checks:    {summary.WorkflowMatches:N0}/{summary.WorkflowScenarios:N0} matched ({summary.WorkflowMismatches:N0} mismatched, {summary.WorkflowUnsupported:N0} unsupported, {summary.WorkflowObservationTimeouts:N0} observation timeouts)");
     Console.WriteLine($"  Elapsed:            {summary.Elapsed:mm\\:ss\\.fff}");
     Console.WriteLine($"  Throughput:         {summary.ThroughputClaimsPerSecond:N2} claims/sec");

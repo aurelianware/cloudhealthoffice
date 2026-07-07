@@ -72,6 +72,22 @@ public class MccClaimStatusObserverTests
     }
 
     [Fact]
+    public async Task ObserveExpectedPendAsync_WhenStatusReadFails_ReturnsObservationTimeoutResult()
+    {
+        var observer = new MccClaimStatusObserver(new ThrowingClaimStatusSource());
+
+        var result = await observer.ObserveExpectedPendAsync(
+            Result(ClaimValidationOutcome.BusinessDenial),
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromMilliseconds(100));
+
+        Assert.Equal(ClaimValidationOutcome.ObservationTimeout, result.Outcome);
+        Assert.Equal(MccWorkflowValidation.ObservationTimeoutStatus, result.ValidationStatus);
+        Assert.Equal("pend-observation", result.FailureStage);
+        Assert.Contains("claim read boom", result.Error);
+    }
+
+    [Fact]
     public void FromClaimJson_ParsesNumericPendedStatusAndPendCode()
     {
         using var document = System.Text.Json.JsonDocument.Parse("""
@@ -126,5 +142,11 @@ public class MccClaimStatusObserverTests
 
         public Task<ObservedClaimStatus?> GetAsync(string submittedClaimId, CancellationToken cancellationToken)
             => Task.FromResult(_statuses.Count == 0 ? null : _statuses.Dequeue());
+    }
+
+    private sealed class ThrowingClaimStatusSource : IClaimStatusSource
+    {
+        public Task<ObservedClaimStatus?> GetAsync(string submittedClaimId, CancellationToken cancellationToken)
+            => throw new InvalidOperationException("claim read boom");
     }
 }

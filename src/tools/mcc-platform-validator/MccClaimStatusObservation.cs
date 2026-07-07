@@ -64,7 +64,22 @@ internal sealed class MccClaimStatusObserver
         var deadline = DateTimeOffset.UtcNow.Add(timeout);
         while (true)
         {
-            var observed = await _source.GetAsync(result.SubmittedClaimId, cancellationToken);
+            ObservedClaimStatus? observed;
+            try
+            {
+                observed = await _source.GetAsync(result.SubmittedClaimId, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return result with
+                {
+                    ValidationStatus = MccWorkflowValidation.ObservationTimeoutStatus,
+                    Outcome = ClaimValidationOutcome.ObservationTimeout,
+                    FailureStage = "pend-observation",
+                    Error = $"Claim status observation failed: {ex.Message}"
+                };
+            }
+
             if (observed is { IsTerminal: true })
             {
                 return result with
