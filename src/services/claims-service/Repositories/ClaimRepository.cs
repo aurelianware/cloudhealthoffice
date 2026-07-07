@@ -113,6 +113,25 @@ public interface IClaimRepository
     /// read from this field on the head row.
     /// </para>
     ///
+    /// <para>
+    /// <paramref name="isPend"/> (pend-persistence defect fix) — when true,
+    /// this call ALSO patches <c>ClaimStatus</c> to <see cref="ClaimStatus.Pended"/>,
+    /// subject to one precedence rule: a claim already at a later-stage
+    /// disposition (<see cref="ClaimRepository.IsFinalDisposition"/> —
+    /// Approved, Denied, Paid, PartiallyPaid, Voided) is never downgraded
+    /// back to Pended, in case this async projection lands after another
+    /// write path (the Argo workflow's synchronous finalize step, or an
+    /// examiner override) already finalized the claim. Re-pending an
+    /// already-<c>Pended</c> claim (a re-adjudication run refreshing
+    /// <paramref name="pendDetails"/>) is allowed — Pended is not a final
+    /// disposition. <paramref name="isPend"/> false is a pure no-op on
+    /// <c>ClaimStatus</c> — behavior for Pass/Deny/Reject outcomes is
+    /// unchanged from before this parameter existed; those outcomes'
+    /// status transitions are owned by other write paths
+    /// (<c>UpdateAdjudicationSummaryAsync</c>, the Argo workflow, or
+    /// <c>ClaimsController.PendClaim</c>), not this bypass method.
+    /// </para>
+    ///
     /// Returns true on success, false when no head row was found for the
     /// chain.
     /// </summary>
@@ -122,7 +141,8 @@ public interface IClaimRepository
         AdjudicationResult adjudicationResult,
         IReadOnlyList<LineAdjudicationResult> lineResults,
         CancellationToken ct = default,
-        PendDetails? pendDetails = null);
+        PendDetails? pendDetails = null,
+        bool isPend = false);
 
     /// <summary>
     /// Fast claim-level adjudication projection for direct local workflow
@@ -267,6 +287,26 @@ public class ClaimRepository : IClaimRepository
         ClaimStatus.Denied => ClaimVersionState.Denied,
         ClaimStatus.Voided => ClaimVersionState.Voided,
         _ => ClaimVersionState.Submitted
+    };
+
+    /// <summary>
+    /// Claim dispositions that <see cref="UpdateAdjudicationProjectionAsync"/>'s
+    /// <c>isPend: true</c> path must never downgrade back to
+    /// <see cref="ClaimStatus.Pended"/> — see that method's doc comment for
+    /// the full precedence rule. Public so <see cref="ClaimRepositoryMongo"/>
+    /// shares one canonical rule, mirroring <see cref="MapStatusToVersionState"/>.
+    /// Pended is deliberately excluded: it is not a final disposition, so
+    /// re-pending an already-Pended claim (a re-adjudication run refreshing
+    /// PendDetails) is allowed.
+    /// </summary>
+    public static bool IsFinalDisposition(ClaimStatus status) => status switch
+    {
+        ClaimStatus.Approved or
+        ClaimStatus.Denied or
+        ClaimStatus.Paid or
+        ClaimStatus.PartiallyPaid or
+        ClaimStatus.Voided => true,
+        _ => false
     };
 
     private static bool IsTerminal(ClaimVersionState state) => state switch
@@ -808,7 +848,8 @@ public class ClaimRepository : IClaimRepository
         AdjudicationResult adjudicationResult,
         IReadOnlyList<LineAdjudicationResult> lineResults,
         CancellationToken ct = default,
-        PendDetails? pendDetails = null)
+        PendDetails? pendDetails = null,
+        bool isPend = false)
     {
         // Resolve the head (non-terminal-but-adjudicatable) row by chain key.
         // PatchItemAsync is keyed on the per-row document Id, so we look up
@@ -897,6 +938,18 @@ public class ClaimRepository : IClaimRepository
         if (pendDetails is not null)
         {
             ops.Add(PatchOperation.Set("/pendDetails", pendDetails));
+        }
+
+        // Defect A fix — project the orchestrator's Pend outcome onto
+        // ClaimStatus. Precedence: never downgrade a claim that already
+        // reached a later-stage disposition (see IsFinalDisposition) — e.g.
+        // because the Argo workflow's synchronous finalize step, or an
+        // examiner override, raced ahead of this async projection.
+        // Re-pending an already-Pended claim is allowed. isPend=false never
+        // touches /status here, same as before this parameter existed.
+        if (isPend && !IsFinalDisposition(head.Status))
+        {
+            ops.Add(PatchOperation.Set("/status", ClaimStatus.Pended));
         }
 
         try

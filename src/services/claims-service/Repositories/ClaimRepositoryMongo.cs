@@ -423,7 +423,8 @@ public class ClaimRepositoryMongo : IClaimRepository
         AdjudicationResult adjudicationResult,
         IReadOnlyList<LineAdjudicationResult> lineResults,
         CancellationToken ct = default,
-        PendDetails? pendDetails = null)
+        PendDetails? pendDetails = null,
+        bool isPend = false)
     {
         var b = Builders<Claim>.Filter;
 
@@ -478,6 +479,17 @@ public class ClaimRepositoryMongo : IClaimRepository
         if (pendDetails is not null)
         {
             update = update.Set(c => c.PendDetails, pendDetails);
+        }
+
+        // Defect A fix — project the orchestrator's Pend outcome onto
+        // ClaimStatus. Same precedence rule as the Cosmos sibling: never
+        // downgrade a claim already at a later-stage disposition (see
+        // ClaimRepository.IsFinalDisposition); re-pending an already-Pended
+        // claim is allowed. isPend=false never touches /status here, same
+        // as before this parameter existed.
+        if (isPend && !ClaimRepository.IsFinalDisposition(head.Status))
+        {
+            update = update.Set(c => c.Status, ClaimStatus.Pended);
         }
 
         var rowFilter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, head.Id));

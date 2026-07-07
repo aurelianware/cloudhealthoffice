@@ -44,4 +44,25 @@ public class ValidatorOptionsTests
         Assert.Equal(30, options.PendObservationTimeoutSeconds);
         Assert.Equal(500, options.PendObservationIntervalMilliseconds);
     }
+
+    [Fact]
+    public void Parse_WhenPendDiagnosticsNotProvided_DefaultsToDisabled()
+    {
+        var options = ValidatorOptions.Parse([]);
+
+        Assert.Null(options.PendDiagnosticsPath);
+        Assert.Equal(200, options.PendDiagnosticsNcciSampleSize);
+    }
+
+    [Fact]
+    public void Parse_WhenPendDiagnosticsProvided_AppliesOverrides()
+    {
+        var options = ValidatorOptions.Parse([
+            "--pend-diagnostics", "/tmp/mcc-pend-diagnostics.json",
+            "--pend-diagnostics-ncci-sample", "50"
+        ]);
+
+        Assert.Equal("/tmp/mcc-pend-diagnostics.json", options.PendDiagnosticsPath);
+        Assert.Equal(50, options.PendDiagnosticsNcciSampleSize);
+    }
 }

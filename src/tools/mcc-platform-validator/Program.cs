@@ -42,6 +42,7 @@ Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
 Console.WriteLine($"  Pend observe:{(options.PendObservationEnabled ? $" enabled ({options.PendObservationTimeoutSeconds}s/{options.PendObservationIntervalMilliseconds}ms)" : " disabled")}");
+Console.WriteLine($"  Pend diag:   {(options.PendDiagnosticsPath is not null ? $"enabled -> {options.PendDiagnosticsPath}" : "disabled")}");
 Console.WriteLine();
 
 await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
@@ -110,6 +111,13 @@ if (options.PendObservationEnabled)
     orderedResults = await ObserveExpectedPendResultsAsync(http, options, orderedResults);
 }
 
+if (!string.IsNullOrWhiteSpace(options.PendDiagnosticsPath))
+{
+    var diagnosticsReport = await PendDiagnostics.CollectAsync(http, options, orderedResults);
+    await PendDiagnostics.WriteReportAsync(options.PendDiagnosticsPath, diagnosticsReport, json);
+    PendDiagnostics.PrintAggregateTable(diagnosticsReport);
+}
+
 var summary = MccRunSummaryBuilder.Build(orderedResults, total.Elapsed, options, runStartedAtUtc, DateTimeOffset.UtcNow);
 WriteSummary(summary);
 
@@ -157,7 +165,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
 
         failureStage = "adjudicate";
         stage.Restart();
-        var adjudicated = await AdjudicateClaimAsync(http, options, claim, submitted.Id, validationPlanId, networkTier, json);
+        var (adjudicated, adjudicationRawBody) = await AdjudicateClaimAsync(http, options, claim, submitted.Id, validationPlanId, networkTier, json);
         stage.Stop();
         adjudicationElapsed = stage.Elapsed;
 
@@ -178,6 +186,18 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             ?? adjudicated.DenialReasonCode
             ?? (outcome is ClaimValidationOutcome.BusinessDenial ? "ADJUDICATION_DENIAL" : null));
 
+        // Diagnostics-only capture (Deliverable 1): only retained when --pend-diagnostics
+        // is on, and only for expected-pend claims or the NCCI/MUE denial sample — never
+        // parsed on the hot path otherwise, so benchmark timing is unaffected when off.
+        JsonElement? syncAdjudicationSnapshot = null;
+        if (!string.IsNullOrWhiteSpace(options.PendDiagnosticsPath)
+            && (expectedValidation.ExpectedOutcome is ClaimValidationOutcome.Pended
+                || string.Equals(businessDenialCode, PendDiagnostics.NcciMueDenialCode, StringComparison.Ordinal)))
+        {
+            using var rawDocument = JsonDocument.Parse(adjudicationRawBody);
+            syncAdjudicationSnapshot = rawDocument.RootElement.Clone();
+        }
+
         return new ClaimValidationResult(
             claim.ClaimId,
             submitted.Id,
@@ -197,7 +217,8 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             adjudicated.Timings ?? new Dictionary<string, double>(),
             businessDenialCode,
             null,
-            null);
+            null,
+            syncAdjudicationSnapshot);
     }
     catch (Exception ex)
     {
@@ -967,7 +988,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
     return new SubmittedClaim(id);
 }
 
-static async Task<AdjudicationResponseDto> AdjudicateClaimAsync(
+static async Task<(AdjudicationResponseDto Response, string RawBody)> AdjudicateClaimAsync(
     HttpClient http,
     ValidatorOptions options,
     SyntheticClaim claim,
@@ -1011,14 +1032,14 @@ static async Task<AdjudicationResponseDto> AdjudicateClaimAsync(
         if (response.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity
             && TryParseBusinessDenial(body, json, out var denial))
         {
-            return denial with { ClaimId = submittedClaimId };
+            return (denial with { ClaimId = submittedClaimId }, body);
         }
 
         throw new InvalidOperationException($"adjudication failed ({claim.ClaimId}): {(int)response.StatusCode} {body}");
     }
 
     var result = JsonSerializer.Deserialize<AdjudicationResponseDto>(body, json);
-    return result ?? throw new InvalidOperationException($"adjudication returned empty response ({claim.ClaimId})");
+    return (result ?? throw new InvalidOperationException($"adjudication returned empty response ({claim.ClaimId})"), body);
 }
 
 static bool TryParseBusinessDenial(
@@ -1443,6 +1464,14 @@ static void PrintUsage()
                                  Max wait for expected-pend claims after benchmark timing stops (default: 45)
       --pend-observation-interval-ms <ms>
                                  Poll interval for expected-pend claim status (default: 1000)
+      --pend-diagnostics <path>  Write a per-claim pend diagnostic report (JSON) for expected-pend
+                                 scenarios and a sample of NCCI/MUE denials; prints an aggregate
+                                 scenario table to the run summary. Off by default; adds one
+                                 claims-service read per diagnosed claim AFTER the timed benchmark
+                                 window closes — a diagnostics-on run is not a throughput benchmark.
+      --pend-diagnostics-ncci-sample <n>
+                                 Max NCCI/MUE-denied claims (outside expected-pend) to include in
+                                 the diagnostic report (default: 200)
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 10)
       -p, --parallelism <count>  Number of claims to process concurrently (default: 10)
@@ -1508,7 +1537,8 @@ internal sealed record ClaimValidationResult(
     IReadOnlyDictionary<string, double> AdjudicationStepTimings,
     string? BusinessDenialCode,
     string? FailureStage,
-    string? Error);
+    string? Error,
+    JsonElement? SyncAdjudicationSnapshot = null);
 
 internal sealed record MassAdjudicationRunSummary(
     MassAdjudicationRun Run,

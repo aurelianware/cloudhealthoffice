@@ -176,11 +176,18 @@ jobs:
 
       - name: Download test results
         uses: actions/download-artifact@v8
+        continue-on-error: true
         with:
           name: dotnet-test-results
           path: ./TestResults
 
+      - name: Skip missing coverage inputs
+        if: ${{ hashFiles('TestResults/**/coverage.cobertura.xml') == '' }}
+        run: |
+          echo "::warning::No .NET coverage reports were produced by the test job; skipping coverage summary."
+
       - name: Merge coverage reports
+        if: ${{ hashFiles('TestResults/**/coverage.cobertura.xml') != '' }}
         run: |
           dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.4.9
           reportgenerator \
@@ -190,6 +197,7 @@ jobs:
             "-filefilters:-*Tests*"
 
       - name: Code Coverage Summary
+        if: ${{ hashFiles('MergedCoverage/Cobertura.xml') != '' }}
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
           filename: 'MergedCoverage/Cobertura.xml'
@@ -203,8 +211,8 @@ jobs:
           thresholds: '60 80'
 
       - name: Add Coverage PR Comment
+        if: ${{ github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != '' }}
         uses: marocchino/sticky-pull-request-comment@v2
-        if: github.event_name == 'pull_request'
         with:
           recreate: true
           path: code-coverage-results.md

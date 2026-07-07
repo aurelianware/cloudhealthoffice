@@ -38,7 +38,17 @@ public class QrCodeServiceTests
 
         // flip a byte in the signature segment
         var parts = qr.Split('.');
-        var flipped = parts[1].Substring(0, parts[1].Length - 1) + (parts[1][^1] == 'A' ? 'B' : 'A');
+        var signature = parts[1].Replace('-', '+').Replace('_', '/');
+        var padding = (signature.Length % 4) switch
+        {
+            2 => "==",
+            3 => "=",
+            _ => string.Empty
+        };
+        signature += padding;
+        var signatureBytes = Convert.FromBase64String(signature);
+        signatureBytes[0] ^= 0x01;
+        var flipped = Convert.ToBase64String(signatureBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         var bad = parts[0] + "." + flipped;
 
         var (payload, err, _) = await svc.VerifyAsync(bad);
