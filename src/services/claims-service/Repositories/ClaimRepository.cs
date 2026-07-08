@@ -926,16 +926,9 @@ public class ClaimRepository : IClaimRepository
               AND (c.claimVersionId = @claimVersionId
                    OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
                    OR (c.claimVersionId = '' AND c.id = @claimVersionId))
-              AND (NOT IS_DEFINED(c.versionState)
-                   OR c.versionState = @submitted
-                   OR c.versionState = @adjudicated
-                   OR c.versionState = @unknown)
             ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@claimVersionId", claimVersionId)
-            .WithParameter("@submitted", ClaimVersionState.Submitted.ToString())
-            .WithParameter("@adjudicated", ClaimVersionState.Adjudicated.ToString())
-            .WithParameter("@unknown", ClaimVersionState.Unknown.ToString());
+            .WithParameter("@claimVersionId", claimVersionId);
 
         var iterator = _container.GetItemQueryIterator<Claim>(
             query,
@@ -978,9 +971,16 @@ public class ClaimRepository : IClaimRepository
               AND (c.claimVersionId = @claimVersionId
                    OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
                    OR (c.claimVersionId = '' AND c.id = @claimVersionId))
+              AND (NOT IS_DEFINED(c.versionState)
+                   OR c.versionState = @submitted
+                   OR c.versionState = @adjudicated
+                   OR c.versionState = @unknown)
             ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@claimVersionId", claimVersionId);
+            .WithParameter("@claimVersionId", claimVersionId)
+            .WithParameter("@submitted", ClaimVersionState.Submitted.ToString())
+            .WithParameter("@adjudicated", ClaimVersionState.Adjudicated.ToString())
+            .WithParameter("@unknown", ClaimVersionState.Unknown.ToString());
 
         string? rowId = null;
         var iterator = _container.GetItemQueryIterator<HeadIdResult>(
@@ -1130,9 +1130,11 @@ public class ClaimRepository : IClaimRepository
               AND (c.claimVersionId = @claimVersionId
                    OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
                    OR (c.claimVersionId = '' AND c.id = @claimVersionId))
+              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null OR c.versionState != @draft)
             ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@claimVersionId", claimVersionId);
+            .WithParameter("@claimVersionId", claimVersionId)
+            .WithParameter("@draft", ClaimVersionState.Draft.ToString());
 
         string? rowId = null;
         var iterator = _container.GetItemQueryIterator<HeadIdResult>(

@@ -545,7 +545,10 @@ public class ClaimRepositoryMongo : IClaimRepository
                 b.Or(b.Eq(c => c.ClaimVersionId, string.Empty), b.Eq(c => c.ClaimVersionId, (string?)null)),
                 b.Eq(c => c.Id, claimVersionId)));
 
-        var filter = b.And(b.Eq(c => c.TenantId, tenantId), chainFilter);
+        var filter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            chainFilter,
+            b.Ne(c => c.VersionState, ClaimVersionState.Draft));
         var now = DateTime.UtcNow;
 
         // Residual-race fix — financial/audit data (AdjudicationResult, dates)
