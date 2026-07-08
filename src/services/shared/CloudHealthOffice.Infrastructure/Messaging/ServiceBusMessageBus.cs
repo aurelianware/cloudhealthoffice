@@ -111,6 +111,7 @@ public sealed class ServiceBusMessageBus : IMessageBus, IAsyncDisposable
             queueOrTopic,
             processor,
             handler,
+            options?.RequiredProperties,
             _logger);
     }
 
@@ -162,6 +163,7 @@ public sealed class ServiceBusMessageBus : IMessageBus, IAsyncDisposable
         private readonly string _queueOrTopic;
         private readonly ServiceBusProcessor _processor;
         private readonly Func<T, MessageContext, CancellationToken, Task> _handler;
+        private readonly IReadOnlyDictionary<string, string>? _requiredProperties;
         private readonly ILogger _logger;
         private int _started;
 
@@ -169,11 +171,13 @@ public sealed class ServiceBusMessageBus : IMessageBus, IAsyncDisposable
             string queueOrTopic,
             ServiceBusProcessor processor,
             Func<T, MessageContext, CancellationToken, Task> handler,
+            IReadOnlyDictionary<string, string>? requiredProperties,
             ILogger logger)
         {
             _queueOrTopic = queueOrTopic;
             _processor = processor;
             _handler = handler;
+            _requiredProperties = requiredProperties;
             _logger = logger;
 
             _processor.ProcessMessageAsync += OnMessageAsync;
@@ -191,6 +195,19 @@ public sealed class ServiceBusMessageBus : IMessageBus, IAsyncDisposable
 
         private async Task OnMessageAsync(ProcessMessageEventArgs args)
         {
+            var properties = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (k, v) in args.Message.ApplicationProperties)
+                properties[k] = v?.ToString() ?? string.Empty;
+
+            if (!MatchesRequiredProperties(properties))
+            {
+                _logger.LogDebug(
+                    "Completing message {MessageId} on {Queue}: subscription property filter did not match",
+                    args.Message.MessageId, _queueOrTopic);
+                await args.CompleteMessageAsync(args.Message, args.CancellationToken).ConfigureAwait(false);
+                return;
+            }
+
             T? message;
             try
             {
@@ -214,10 +231,6 @@ public sealed class ServiceBusMessageBus : IMessageBus, IAsyncDisposable
                     cancellationToken: args.CancellationToken).ConfigureAwait(false);
                 return;
             }
-
-            var properties = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var (k, v) in args.Message.ApplicationProperties)
-                properties[k] = v?.ToString() ?? string.Empty;
 
             ActivityContext parentCtx = default;
             var hasParent = properties.TryGetValue(TraceparentPropertyName, out var tp) &&
@@ -254,6 +267,22 @@ public sealed class ServiceBusMessageBus : IMessageBus, IAsyncDisposable
                 await args.AbandonMessageAsync(args.Message,
                     cancellationToken: args.CancellationToken).ConfigureAwait(false);
             }
+        }
+
+        private bool MatchesRequiredProperties(IReadOnlyDictionary<string, string> properties)
+        {
+            if (_requiredProperties is null || _requiredProperties.Count == 0) return true;
+
+            foreach (var (key, expectedValue) in _requiredProperties)
+            {
+                if (!properties.TryGetValue(key, out var actualValue) ||
+                    !string.Equals(actualValue, expectedValue, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         // Previously a silent no-op. Surface these at Warning level so a

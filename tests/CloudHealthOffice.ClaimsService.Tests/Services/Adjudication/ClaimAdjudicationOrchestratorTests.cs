@@ -251,6 +251,26 @@ public class ClaimAdjudicationOrchestratorTests
     }
 
     [Fact]
+    public async Task Adjudicate_SubmittedClaimWithEmptyAdjudicationPlaceholder_RunsPipeline()
+    {
+        var executed = new List<string>();
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage("Scrubbing", 100, isRequired: false, executed),
+            new RecordingStage("Persistence", 999, isRequired: true, executed),
+        };
+        var submittedWithPlaceholder = BuildAdapterClaim();
+        submittedWithPlaceholder.Status = ClaimStatus.Submitted;
+        submittedWithPlaceholder.AdjudicationResult = new AdapterAdjudicationResult();
+        SetupAdapterReturning(submittedWithPlaceholder);
+
+        var orch = BuildOrchestrator(stages);
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Equal(new[] { "Scrubbing", "Persistence" }, executed);
+    }
+
+    [Fact]
     public async Task Adjudicate_ClaimNotFoundViaAdapter_SkipsPipelineCleanly()
     {
         var executed = new List<string>();

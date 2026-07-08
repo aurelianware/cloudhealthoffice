@@ -9,6 +9,7 @@ IMAGE="${IMAGE:-cloudhealthoffice-mcc-platform-validator:local}"
 CLAIMS="${CLAIMS:-5000}"
 MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
+SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
@@ -70,8 +71,11 @@ spec:
             - http://claims-service
             - --benefit-url
             - http://benefit-plan-service
+            - --member-url
+            - http://member-service
             - --provider-url
             - http://provider-service
+            $(if [[ "$SEED_MEMBERS" != "true" ]]; then printf -- '- --no-seed-members\n'; fi)
             $(if [[ "$SEED_PROVIDERS" != "true" ]]; then printf -- '- --no-seed-providers\n'; fi)
             $(if [[ "$PEND_OBSERVATION_ENABLED" != "true" ]]; then printf -- '- --no-pend-observation\n'; fi)
             - --pend-observation-timeout

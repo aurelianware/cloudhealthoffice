@@ -93,15 +93,11 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             return;
         }
 
-        // Idempotency: the version already has adjudication data → skip
-        // and complete the message. This catches Service Bus redeliveries
-        // after a previous successful adjudication that crashed before
-        // completing the message (Decision 12). Any non-null
-        // AdjudicationResult — including denials with AllowedAmount=0 —
-        // counts; the bypass write only fires after a stage produces an
-        // outcome, so its presence is a reliable "pipeline already ran"
-        // marker.
-        if (claim.AdjudicationResult is not null)
+        // Idempotency: a version with a meaningful terminal adjudication
+        // projection can be skipped on redelivery. Some submit paths hydrate
+        // an empty zero-valued AdjudicationResult placeholder on Submitted
+        // claims; that is not evidence the async pipeline already ran.
+        if (HasMeaningfulAdjudicationProjection(claim))
         {
             _logger.LogInformation(
                 "Claim {ClaimVersionId} already adjudicated; skipping pipeline run",
@@ -133,6 +129,39 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
 
         await RunPipelineAsync(context, ct).ConfigureAwait(false);
         await EmitAdjudicatedEventAsync(context, ct).ConfigureAwait(false);
+    }
+
+    private static bool HasMeaningfulAdjudicationProjection(AdapterClaim claim)
+    {
+        var result = claim.AdjudicationResult;
+        if (result is null)
+        {
+            return false;
+        }
+
+        if (claim.Status is ClaimStatus.Approved
+            or ClaimStatus.Denied
+            or ClaimStatus.Paid
+            or ClaimStatus.PartiallyPaid
+            or ClaimStatus.Pended
+            or ClaimStatus.Voided)
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(result.NetworkTier)
+            || result.AllowedAmount != 0
+            || result.DeductibleAmount != 0
+            || result.CoinsuranceAmount != 0
+            || result.CopayAmount != 0
+            || result.PatientResponsibility != 0
+            || result.PayerPayment != 0
+            || !string.IsNullOrWhiteSpace(result.DenialReasonCode)
+            || !string.IsNullOrWhiteSpace(result.DenialReason)
+            || result.AdjustmentReasons.Count > 0
+            || result.RemarkCodes.Count > 0
+            || !string.IsNullOrWhiteSpace(result.CheckNumber)
+            || result.PaymentDate.HasValue;
     }
 
     private async Task RunPipelineAsync(ClaimAdjudicationContext context, CancellationToken ct)

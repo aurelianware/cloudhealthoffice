@@ -6,7 +6,9 @@ public sealed record ValidatorOptions(
     string TenantId,
     string ClaimsUrl,
     string BenefitUrl,
+    string MemberUrl,
     string ProviderUrl,
+    bool SeedMembers,
     bool SeedProviders,
     bool SkipClaimUpdate,
     bool PendObservationEnabled,
@@ -50,8 +52,14 @@ public sealed record ValidatorOptions(
                 case "--benefit-url" when i + 1 < args.Length:
                     options.BenefitUrl = args[++i].TrimEnd('/');
                     break;
+                case "--member-url" when i + 1 < args.Length:
+                    options.MemberUrl = args[++i].TrimEnd('/');
+                    break;
                 case "--provider-url" when i + 1 < args.Length:
                     options.ProviderUrl = args[++i].TrimEnd('/');
+                    break;
+                case "--no-seed-members":
+                    options.SeedMembers = false;
                     break;
                 case "--no-seed-providers":
                     options.SeedProviders = false;
@@ -131,7 +139,9 @@ public sealed record ValidatorOptions(
             options.TenantId,
             options.ClaimsUrl.TrimEnd('/'),
             options.BenefitUrl.TrimEnd('/'),
+            options.MemberUrl.TrimEnd('/'),
             options.ProviderUrl.TrimEnd('/'),
+            options.SeedMembers,
             options.SeedProviders,
             options.SkipClaimUpdate,
             options.PendObservationEnabled,
@@ -158,7 +168,9 @@ public sealed record ValidatorOptions(
         public string TenantId { get; set; } = "demo";
         public string ClaimsUrl { get; set; } = "http://localhost:5001";
         public string BenefitUrl { get; set; } = "http://localhost:5002";
+        public string MemberUrl { get; set; } = "http://localhost:5003";
         public string ProviderUrl { get; set; } = "http://localhost:5004";
+        public bool SeedMembers { get; set; } = true;
         public bool SeedProviders { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
         public bool PendObservationEnabled { get; set; } = true;
