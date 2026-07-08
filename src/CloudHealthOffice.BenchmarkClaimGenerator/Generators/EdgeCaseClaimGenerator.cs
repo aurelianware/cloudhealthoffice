@@ -107,12 +107,15 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
         var serviceDate = claim.DateOfService.Date;
         claim.Member.CoverageEffectiveDate = serviceDate.AddYears(-1);
         claim.Member.CoverageTermDate = serviceDate.AddDays(-30);
-        claim.Member.EnrollmentStatus = "Active";
+        claim.Member.EnrollmentStatus = "Terminated";
+        claim.Member.MaintenanceTypeCode = "024";
 
         foreach (var coverage in claim.Member.Coverages)
         {
             coverage.EffectiveDate = claim.Member.CoverageEffectiveDate;
             coverage.TermDate = claim.Member.CoverageTermDate;
+            coverage.Status = "Terminated";
+            coverage.MaintenanceTypeCode = "024";
         }
     }
 
