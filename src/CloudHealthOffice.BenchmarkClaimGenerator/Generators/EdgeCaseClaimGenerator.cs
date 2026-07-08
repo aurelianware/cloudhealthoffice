@@ -242,6 +242,12 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
             candidate = _refData.GetProcedureCode(random, procSubType);
         }
 
+        if (candidate.Code == firstProcedureCode)
+        {
+            throw new InvalidOperationException(
+                $"Could not select a distinct procedure code for multi-line {procSubType} edge-case claim.");
+        }
+
         return candidate;
     }
 

@@ -105,12 +105,14 @@ public class EdgeCaseClaimGeneratorTests
         Assert.InRange(ageAtServiceDays, 0, 30);
     }
 
-    [Fact]
-    public void Generate_NewbornMotherClaimLink_UsesDistinctLineProcedureCodes()
+    [Theory]
+    [InlineData("NewbornMotherClaimLink")]
+    [InlineData("SubrogationAccidentRelated")]
+    public void Generate_MultiLineScenario_UsesDistinctLineProcedureCodes(string scenario)
     {
         for (var seed = 0; seed < 100; seed++)
         {
-            var claim = _generator.Generate(seed + 1, "NewbornMotherClaimLink", new Random(seed));
+            var claim = _generator.Generate(seed + 1, scenario, new Random(seed));
 
             Assert.Equal(2, claim.Lines.Count);
             Assert.Equal(
