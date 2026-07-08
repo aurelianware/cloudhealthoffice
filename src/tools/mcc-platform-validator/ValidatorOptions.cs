@@ -7,6 +7,7 @@ public sealed record ValidatorOptions(
     string ClaimsUrl,
     string BenefitUrl,
     string MemberUrl,
+    string CoverageUrl,
     string ProviderUrl,
     bool SeedMembers,
     bool SeedProviders,
@@ -54,6 +55,9 @@ public sealed record ValidatorOptions(
                     break;
                 case "--member-url" when i + 1 < args.Length:
                     options.MemberUrl = args[++i].TrimEnd('/');
+                    break;
+                case "--coverage-url" when i + 1 < args.Length:
+                    options.CoverageUrl = args[++i].TrimEnd('/');
                     break;
                 case "--provider-url" when i + 1 < args.Length:
                     options.ProviderUrl = args[++i].TrimEnd('/');
@@ -140,6 +144,7 @@ public sealed record ValidatorOptions(
             options.ClaimsUrl.TrimEnd('/'),
             options.BenefitUrl.TrimEnd('/'),
             options.MemberUrl.TrimEnd('/'),
+            options.CoverageUrl.TrimEnd('/'),
             options.ProviderUrl.TrimEnd('/'),
             options.SeedMembers,
             options.SeedProviders,
@@ -169,6 +174,7 @@ public sealed record ValidatorOptions(
         public string ClaimsUrl { get; set; } = "http://localhost:5001";
         public string BenefitUrl { get; set; } = "http://localhost:5002";
         public string MemberUrl { get; set; } = "http://localhost:5003";
+        public string CoverageUrl { get; set; } = "http://localhost:5005";
         public string ProviderUrl { get; set; } = "http://localhost:5004";
         public bool SeedMembers { get; set; } = true;
         public bool SeedProviders { get; set; } = true;

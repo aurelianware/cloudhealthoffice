@@ -48,6 +48,14 @@ public class ValidatorOptionsTests
     }
 
     [Fact]
+    public void Parse_WhenCoverageUrlProvided_AppliesOverride()
+    {
+        var options = ValidatorOptions.Parse(["--coverage-url", "http://coverage-service/"]);
+
+        Assert.Equal("http://coverage-service", options.CoverageUrl);
+    }
+
+    [Fact]
     public void Parse_WhenPendObservationOptionsProvided_AppliesOverrides()
     {
         var options = ValidatorOptions.Parse([

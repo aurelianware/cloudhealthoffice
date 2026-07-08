@@ -45,7 +45,7 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
                 ProcedureCode = proc.Code,
                 Description = proc.Description,
                 Units = 1,
-                ChargeAmount = proc.BaseCharge + random.Next(-50, 100),
+                ChargeAmount = ChargeWithVariance(proc.BaseCharge, random, -50, 100),
                 ServiceDate = serviceDate,
                 DiagnosisPointers = new List<int> { 1 }
             }
@@ -61,7 +61,7 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
                 ProcedureCode = proc2.Code,
                 Description = proc2.Description,
                 Units = 1,
-                ChargeAmount = proc2.BaseCharge + random.Next(-30, 60),
+                ChargeAmount = ChargeWithVariance(proc2.BaseCharge, random, -30, 60),
                 ServiceDate = serviceDate,
                 DiagnosisPointers = new List<int> { 1 }
             });
@@ -185,6 +185,9 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
             EdgeCaseScenario.NewbornMotherClaimLink or
             EdgeCaseScenario.SubrogationAccidentRelated;
     }
+
+    private static decimal ChargeWithVariance(decimal baseCharge, Random random, int minVariance, int maxVariance)
+        => Math.Max(1m, baseCharge + random.Next(minVariance, maxVariance));
 
     private static (string Status, string? Number) GetPriorAuthForScenario(EdgeCaseScenario scenario, Random random)
     {

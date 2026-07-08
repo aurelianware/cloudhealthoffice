@@ -36,6 +36,7 @@ Console.WriteLine($"  Tenant:      {options.TenantId}");
 Console.WriteLine($"  Claims URL:  {options.ClaimsUrl}");
 Console.WriteLine($"  Benefit URL: {options.BenefitUrl}");
 Console.WriteLine($"  Member URL:  {options.MemberUrl}");
+Console.WriteLine($"  Coverage URL:{options.CoverageUrl}");
 Console.WriteLine($"  Provider URL:{options.ProviderUrl}");
 Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
@@ -51,6 +52,7 @@ await RequireHealthyAsync(http, $"{options.BenefitUrl}/health", "benefit-plan-se
 if (options.SeedMembers)
 {
     await RequireHealthyAsync(http, $"{options.MemberUrl}/health", "member-service");
+    await RequireHealthyAsync(http, $"{options.CoverageUrl}/health", "coverage-service");
 }
 if (options.SeedProviders)
 {
@@ -71,6 +73,7 @@ var answerKey = MccAnswerKey.FromClaims(claims);
 if (options.SeedMembers)
 {
     await SeedMembersAsync(http, options, claims, json);
+    await SeedCoverageAsync(http, options, claims, validationPlanId, json);
 }
 
 if (options.SeedProviders)
@@ -908,6 +911,133 @@ static async Task<bool> CreateMemberAsync(
     }
 
     return true;
+}
+
+static async Task SeedCoverageAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    IReadOnlyCollection<SyntheticClaim> claims,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    var cobClaims = claims
+        .Where(IsCobPendScenario)
+        .GroupBy(claim => claim.Member.MemberId, StringComparer.Ordinal)
+        .Select(group => group.OrderBy(claim => claim.ClaimId, StringComparer.Ordinal).First())
+        .OrderBy(claim => claim.Member.MemberId, StringComparer.Ordinal)
+        .ToList();
+
+    if (cobClaims.Count == 0)
+    {
+        Console.WriteLine("seeded: 0 COB coverage rows (no supported COB-pend scenarios)");
+        return;
+    }
+
+    var created = 0;
+    var existing = 0;
+    foreach (var claim in cobClaims)
+    {
+        if (await CobCoverageExistsAsync(http, options, claim.Member.MemberId))
+        {
+            existing++;
+            continue;
+        }
+
+        await CreateCobCoverageAsync(http, options, claim, validationPlanId, json);
+        created++;
+    }
+
+    Console.WriteLine($"seeded: {created:N0} COB coverage rows ({existing:N0} already present)");
+}
+
+static bool IsCobPendScenario(SyntheticClaim claim)
+{
+    return claim.EdgeCase is
+        EdgeCaseScenario.CobSecondaryPayer or
+        EdgeCaseScenario.CobTertiaryPayer or
+        EdgeCaseScenario.CobBirthdayRule or
+        EdgeCaseScenario.CobGenderRule or
+        EdgeCaseScenario.MedicaidDualEligible;
+}
+
+static async Task<bool> CobCoverageExistsAsync(HttpClient http, ValidatorOptions options, string memberId)
+{
+    using var response = await http.GetAsync(
+        $"{options.CoverageUrl}/api/v1/coverage/member/{Uri.EscapeDataString(memberId)}/cob");
+
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        return false;
+    }
+
+    if (response.IsSuccessStatusCode)
+    {
+        return true;
+    }
+
+    var body = await response.Content.ReadAsStringAsync();
+    throw new InvalidOperationException($"COB coverage lookup failed ({memberId}): {(int)response.StatusCode} {body}");
+}
+
+static async Task CreateCobCoverageAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    SyntheticClaim claim,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    var member = claim.Member;
+    var memberEffectiveDate = member.CoverageEffectiveDate == default
+        ? claim.DateOfService.Date.AddYears(-1)
+        : member.CoverageEffectiveDate.Date;
+    var effectiveDate = DateTime.SpecifyKind(
+        memberEffectiveDate <= claim.DateOfService.Date
+            ? memberEffectiveDate
+            : claim.DateOfService.Date.AddYears(-1),
+        DateTimeKind.Utc);
+
+    var isMedicaidDual = claim.EdgeCase is EdgeCaseScenario.MedicaidDualEligible;
+    var payload = new
+    {
+        memberId = member.MemberId,
+        groupNumber = NullIfWhiteSpace(member.GroupNumber) ?? "MCC-GRP-001",
+        planId = validationPlanId.ToString(),
+        coverageLevel = "EMP",
+        insuranceLineCode = "HLT",
+        effectiveDate,
+        terminationDate = (DateTime?)null,
+        isCOBRA = false,
+        medicareCoverage = isMedicaidDual
+            ? new
+            {
+                medicareBeneficiaryId = $"MCCMED{member.MemberId.Replace("-", "", StringComparison.OrdinalIgnoreCase)}",
+                hasPartA = true,
+                partAEffectiveDate = effectiveDate,
+                hasPartB = true,
+                partBEffectiveDate = effectiveDate,
+                isPrimaryPayer = true
+            }
+            : null,
+        otherInsurance = isMedicaidDual
+            ? null
+            : new
+            {
+                payerName = "MCC Primary Carrier",
+                policyNumber = $"MCC-PRIMARY-{member.MemberId}",
+                groupNumber = "MCC-OTHER-GRP",
+                isPrimaryPayer = true,
+                effectiveDate
+            },
+        maintenanceTypeCode = "021",
+        maintenanceReasonCode = "COB"
+    };
+
+    using var response = await http.PostAsJsonAsync($"{options.CoverageUrl}/api/v1/coverage", payload, json);
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException($"COB coverage seed failed ({member.MemberId}): {(int)response.StatusCode} {body}");
+    }
 }
 
 static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
@@ -1793,6 +1923,7 @@ static void PrintUsage()
       --claims-url <url>         Claims service URL (default: http://localhost:5001)
       --benefit-url <url>        Benefit plan service URL (default: http://localhost:5002)
       --member-url <url>         Member service URL (default: http://localhost:5003)
+      --coverage-url <url>       Coverage service URL (default: http://localhost:5005)
       --provider-url <url>       Provider service URL (default: http://localhost:5004)
       --no-seed-members          Skip synthetic member seeding
       --no-seed-providers        Skip synthetic provider seeding
@@ -1914,6 +2045,7 @@ internal sealed record MassAdjudicationRun(
     string ClaimsUrl,
     string BenefitUrl,
     string MemberUrl,
+    string CoverageUrl,
     string ProviderUrl,
     bool SeedMembers,
     bool SeedProviders,

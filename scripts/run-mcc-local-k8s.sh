@@ -9,6 +9,11 @@ IMAGE="${IMAGE:-cloudhealthoffice-mcc-platform-validator:local}"
 CLAIMS="${CLAIMS:-5000}"
 MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
+CLAIMS_URL="${CLAIMS_URL:-http://claims-service}"
+BENEFIT_URL="${BENEFIT_URL:-http://benefit-plan-service}"
+MEMBER_URL="${MEMBER_URL:-http://member-service}"
+COVERAGE_URL="${COVERAGE_URL:-http://coverage-service}"
+PROVIDER_URL="${PROVIDER_URL:-http://provider-service}"
 SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
@@ -68,13 +73,15 @@ spec:
             - --parallelism
             - "${PARALLELISM}"
             - --claims-url
-            - http://claims-service
+            - "${CLAIMS_URL}"
             - --benefit-url
-            - http://benefit-plan-service
+            - "${BENEFIT_URL}"
             - --member-url
-            - http://member-service
+            - "${MEMBER_URL}"
+            - --coverage-url
+            - "${COVERAGE_URL}"
             - --provider-url
-            - http://provider-service
+            - "${PROVIDER_URL}"
             $(if [[ "$SEED_MEMBERS" != "true" ]]; then printf -- '- --no-seed-members\n'; fi)
             $(if [[ "$SEED_PROVIDERS" != "true" ]]; then printf -- '- --no-seed-providers\n'; fi)
             $(if [[ "$PEND_OBSERVATION_ENABLED" != "true" ]]; then printf -- '- --no-pend-observation\n'; fi)

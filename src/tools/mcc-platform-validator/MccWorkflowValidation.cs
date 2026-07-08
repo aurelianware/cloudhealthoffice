@@ -40,6 +40,12 @@ public static class MccWorkflowValidation
             var expectedCode = NormalizeExpectedCode(claim.ExpectedOutcome.DenialReasonCode);
             var expectedOutcome = OutcomeFromDisposition(claim.ExpectedOutcome.Disposition);
 
+            if (expectedOutcome is ClaimValidationOutcome.Pended
+                && IsUnsupportedPendedEdgeCase(claim.EdgeCase.Value))
+            {
+                return ExpectedValidation.Unsupported(scenario, expectedCode);
+            }
+
             return expectedOutcome is null
                 && claim.ExpectedOutcome.Disposition.Equals("Pended", StringComparison.OrdinalIgnoreCase)
                     ? new ExpectedValidation(scenario, ClaimValidationOutcome.Pended, expectedCode)
@@ -133,6 +139,16 @@ public static class MccWorkflowValidation
             { } value when value.Equals("Pended", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Pended,
             _ => null
         };
+    }
+
+    private static bool IsUnsupportedPendedEdgeCase(EdgeCaseScenario scenario)
+    {
+        return scenario is
+            EdgeCaseScenario.RetroEligibilityCoverageChange or
+            EdgeCaseScenario.SubrogationAccidentRelated or
+            EdgeCaseScenario.SubrogationWorkersComp or
+            EdgeCaseScenario.SubrogationThirdPartyLiability or
+            EdgeCaseScenario.MedicaidSpendDown;
     }
 
     private static string? NormalizeExpectedCode(string? code)
