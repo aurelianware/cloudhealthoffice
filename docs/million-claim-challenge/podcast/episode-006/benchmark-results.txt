@@ -1,0 +1,255 @@
+# Episode 006 benchmark results
+
+## Environment
+
+- Environment: local Kubernetes via Docker Desktop
+- Tenant: `demo`
+- Workload: synthetic Million Claim Challenge claim corpus
+- Pend observation: enabled
+- Pend observation timeout: 45 seconds
+- Parallelism: 10
+- Important caveat: these are local validation benchmarks, not production cloud benchmarks
+
+## Current baseline: 5,000-claim breadth validation
+
+This run was completed after PR 856.
+
+Command:
+
+```bash
+CLAIMS=5000 MAX_CLAIMS=5000 PARALLELISM=10 PROGRESS_EVERY=500 PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+```
+
+Summary:
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 5,000 |
+| Claims processed | 5,000 |
+| Paid/adjudicated | 3,958 |
+| Pended | 46 |
+| Business denials | 996 |
+| Platform failures | 0 |
+| Observation timeouts | 0 |
+| Expected-pend observations | 46/46 pended |
+| Workflow checks | 577/650 matched |
+| Mismatches | 0 |
+| Unsupported | 73 |
+| Elapsed | 00:59.731 |
+| Throughput | 83.71 claims/sec |
+| P95 latency | 204 ms |
+| P99 latency | 278 ms |
+
+Business denial breakdown:
+
+| Denial | Count |
+| --- | ---: |
+| CARC_96 | 448 |
+| CARC_18 | 300 |
+| PRIOR_AUTH_REQUIRED | 108 |
+| PROVIDER_EXCLUDED | 100 |
+| NCCI_MUE_EDIT_FAILURE | 24 |
+
+Key matched scenario groups:
+
+| Scenario | Result |
+| --- | ---: |
+| CleanProfessionalPaid | 100/100 matched |
+| ExcludedProviderDenied | 100/100 matched |
+| TxStarInpatientNoAuth | 100/100 matched |
+| UncoveredServiceDenied | 100/100 matched |
+| EdgeCase:NewbornAutoAdjudication | 10/10 matched |
+| EdgeCase:NewbornFirstThirtyDays | 10/10 matched |
+| EdgeCase:NewbornMotherClaimLink | 10/10 matched |
+| EdgeCase:RetroEligibilityTermination | 13/13 matched |
+| EdgeCase:CobSecondaryPayer | 10/10 matched |
+| EdgeCase:CobBirthdayRule | 10/10 matched |
+| EdgeCase:CobGenderRule | 10/10 matched |
+| EdgeCase:PriorAuthRequired_NoAuth | 8/8 matched |
+
+Unsupported scenario groups:
+
+| Scenario | Unsupported |
+| --- | ---: |
+| EdgeCase:BehavioralHealthCarveOut | 10 |
+| EdgeCase:MedicaidSpendDown | 6 |
+| EdgeCase:PriorAuthRequired_ExpiredAuth | 8 |
+| EdgeCase:PriorAuthRequired_WrongProcedure | 8 |
+| EdgeCase:PriorAuthRequired_WrongProvider | 8 |
+| EdgeCase:RetroEligibilityCoverageChange | 13 |
+| EdgeCase:SubrogationAccidentRelated | 7 |
+| EdgeCase:SubrogationThirdPartyLiability | 6 |
+| EdgeCase:SubrogationWorkersComp | 7 |
+
+Interpretation:
+
+The 5K run is the first clean breadth baseline for Episode 006. It is not a final publication headline by itself, but it proves that the broader edge-case scoring path can run with zero mismatches and zero platform failures when unsupported scenarios are separated honestly.
+
+## 10,000-claim breadth validation
+
+This run was completed after the COB fixture-isolation fix and before the clean 50K breadth validation run.
+
+Command:
+
+```bash
+CLAIMS=10000 MAX_CLAIMS=10000 PARALLELISM=10 PROGRESS_EVERY=1000 PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+```
+
+Summary:
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 10,000 |
+| Claims processed | 10,000 |
+| Paid/adjudicated | 7,910 |
+| Pended | 92 |
+| Business denials | 1,998 |
+| Platform failures | 0 |
+| Observation timeouts | 0 |
+| Expected-pend observations | 92/92 pended |
+| Workflow checks | 1,154/1,300 matched |
+| Mismatches | 0 |
+| Unsupported | 146 |
+| Elapsed | 02:08.011 |
+| Throughput | 78.12 claims/sec |
+| P95 latency | 272 ms |
+| P99 latency | 306 ms |
+
+Key matched scenario groups:
+
+| Scenario | Result |
+| --- | ---: |
+| CleanProfessionalPaid | 200/200 matched |
+| ExcludedProviderDenied | 200/200 matched |
+| TxStarInpatientNoAuth | 200/200 matched |
+| UncoveredServiceDenied | 200/200 matched |
+| EdgeCase:NewbornAutoAdjudication | 20/20 matched |
+| EdgeCase:NewbornFirstThirtyDays | 20/20 matched |
+| EdgeCase:NewbornMotherClaimLink | 20/20 matched |
+| EdgeCase:RetroEligibilityTermination | 27/27 matched |
+| EdgeCase:CobSecondaryPayer | 20/20 matched |
+| EdgeCase:CobBirthdayRule | 20/20 matched |
+| EdgeCase:CobGenderRule | 20/20 matched |
+| EdgeCase:PriorAuthRequired_NoAuth | 16/16 matched |
+
+Interpretation:
+
+The post-fix 10K gate passed. The 5K zero-mismatch breadth result held at double the volume, supported COB-pend fixture rows were isolated and seeded one-for-one, expected-pend observation remained reliable, and unsupported scenarios continued to be separated from mismatches.
+
+## Remaining Part 6 validation gate
+
+Part 6 now has 5K, 10K, and 50K breadth validation data.
+
+100K is intentionally out of scope for Part 6. After the clean 50K breadth result, 100K should become its own focused milestone article rather than a late addition to this one.
+
+### 50,000-claim breadth validation
+
+Purpose:
+
+- replace the older narrow 50K result with a broader edge-case validation result
+- confirm the Part 6 story scales from breadth smoke to a meaningful local workload
+- provide a direct bridge from Episode 005 throughput work to Episode 006 correctness work
+
+Command:
+
+```bash
+CLAIMS=50000 MAX_CLAIMS=50000 PARALLELISM=10 PROGRESS_EVERY=5000 PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+```
+
+Summary:
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 50,000 |
+| Claims processed | 50,000 |
+| Paid/adjudicated | 39,581 |
+| Pended | 460 |
+| Business denials | 9,959 |
+| Platform failures | 0 |
+| Observation timeouts | 0 |
+| Expected-pend observations | 460/460 pended |
+| Workflow checks | 5,767/6,500 matched |
+| Mismatches | 0 |
+| Unsupported | 733 |
+| Elapsed | 12:06.089 |
+| Throughput | 68.86 claims/sec |
+| P95 latency | 298 ms |
+| P99 latency | 369 ms |
+
+Timing:
+
+| Stage | Avg | P95 |
+| --- | ---: | ---: |
+| Submit | 44 ms | 130 ms |
+| Adjudicate | 66 ms | 115 ms |
+| Writeback | 36 ms | 98 ms |
+| Benefit calculation | 61 ms | 104 ms |
+| Accumulator read | 60 ms | 103 ms |
+
+Business denial breakdown:
+
+| Denial | Count |
+| --- | ---: |
+| CARC_96 | 4,542 |
+| CARC_18 | 3,000 |
+| PRIOR_AUTH_REQUIRED | 1,080 |
+| PROVIDER_EXCLUDED | 1,000 |
+| NCCI_MUE_EDIT_FAILURE | 187 |
+
+Key matched scenario groups:
+
+| Scenario | Result |
+| --- | ---: |
+| CleanProfessionalPaid | 1,000/1,000 matched |
+| ExcludedProviderDenied | 1,000/1,000 matched |
+| TxStarInpatientNoAuth | 1,000/1,000 matched |
+| UncoveredServiceDenied | 1,000/1,000 matched |
+| EdgeCase:NewbornAutoAdjudication | 100/100 matched |
+| EdgeCase:NewbornFirstThirtyDays | 100/100 matched |
+| EdgeCase:NewbornMotherClaimLink | 100/100 matched |
+| EdgeCase:RetroEligibilityTermination | 133/133 matched |
+| EdgeCase:CobBirthdayRule | 100/100 matched |
+| EdgeCase:CobGenderRule | 100/100 matched |
+| EdgeCase:CobSecondaryPayer | 100/100 matched |
+| EdgeCase:PriorAuthRequired_NoAuth | 80/80 matched |
+
+Unsupported scenario groups:
+
+| Scenario | Unsupported |
+| --- | ---: |
+| EdgeCase:BehavioralHealthCarveOut | 100 |
+| EdgeCase:MedicaidSpendDown | 60 |
+| EdgeCase:PriorAuthRequired_ExpiredAuth | 80 |
+| EdgeCase:PriorAuthRequired_WrongProcedure | 80 |
+| EdgeCase:PriorAuthRequired_WrongProvider | 80 |
+| EdgeCase:RetroEligibilityCoverageChange | 133 |
+| EdgeCase:SubrogationAccidentRelated | 67 |
+| EdgeCase:SubrogationThirdPartyLiability | 66 |
+| EdgeCase:SubrogationWorkersComp | 67 |
+
+Interpretation:
+
+The 50K gate passed cleanly: every claim processed, expected pends were observed through persisted claim status, there were no platform failures, there were no pend observation timeouts, and there were no workflow mismatches.
+
+This run replaced the earlier one-mismatch 50K result after isolating supported COB-pend members by generated claim. The earlier mismatch was a benchmark fixture-isolation issue: expected-pend COB scenarios could share a generated member, so one scenario could miss its own seeded COB row. The clean rerun confirms `EdgeCase:CobSecondaryPayer` at 100/100 matched.
+
+## Future milestone: 100,000 claims
+
+The next publication candidate after Part 6 is a focused 100K milestone.
+
+That future article should answer a different question: once broader edge-case scoring is established at 50K, how far can the local Kubernetes validation path scale before the next bottleneck appears?
+
+100K should not block Part 6.
+
+## Correctness framing
+
+Correctness is not the same as payment.
+
+In MCC reporting:
+
+- `Matched` means the actual platform outcome agreed with the answer key.
+- `Mismatched` means the platform produced a scoreable outcome that disagreed with the answer key.
+- `Unsupported` means the answer key expects behavior that is not yet observable or implemented in the validator path.
+- `Platform failure` means the platform failed to submit, adjudicate, or write back a claim.
+
+Unsupported scenarios are honest gaps. They are not successes, and they are not platform failures.
