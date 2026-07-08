@@ -55,6 +55,12 @@ public static class MccWorkflowValidation
                 return ExpectedValidation.Unsupported(scenario, expectedCode);
             }
 
+            if (expectedOutcome is ClaimValidationOutcome.BusinessDenial
+                && IsUnsupportedBusinessDenialEdgeCase(claim.EdgeCase.Value))
+            {
+                return ExpectedValidation.Unsupported(scenario, expectedCode);
+            }
+
             return expectedOutcome is null
                 && claim.ExpectedOutcome.Disposition.Equals("Pended", StringComparison.OrdinalIgnoreCase)
                     ? new ExpectedValidation(scenario, ClaimValidationOutcome.Pended, expectedCode)
@@ -166,6 +172,11 @@ public static class MccWorkflowValidation
             EdgeCaseScenario.PriorAuthRequired_ExpiredAuth or
             EdgeCaseScenario.PriorAuthRequired_WrongProvider or
             EdgeCaseScenario.PriorAuthRequired_WrongProcedure;
+    }
+
+    private static bool IsUnsupportedBusinessDenialEdgeCase(EdgeCaseScenario scenario)
+    {
+        return scenario is EdgeCaseScenario.BehavioralHealthCarveOut;
     }
 
     private static bool IsPriorAuthEdgeCase(EdgeCaseScenario scenario)

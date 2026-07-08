@@ -85,6 +85,24 @@ public class EdgeCaseClaimGeneratorTests
         var claim = _generator.Generate(1, "NewbornAutoAdjudication", random);
 
         Assert.Equal("Child", claim.Member.Relationship);
+        Assert.Equal("19", claim.Member.RelationshipCode);
+        Assert.False(claim.Member.IsSubscriber);
+        Assert.Equal("OnFile", claim.PriorAuthStatus);
+        Assert.Equal($"NB-AUTH-{claim.ClaimId}", claim.PriorAuthNumber);
+    }
+
+    [Theory]
+    [InlineData("NewbornAutoAdjudication", 2)]
+    [InlineData("NewbornMotherClaimLink", 5)]
+    [InlineData("NewbornFirstThirtyDays", 29)]
+    public void Generate_Newborn_SetsDateOfBirthRelativeToServiceDate(string scenario, int expectedAgeDays)
+    {
+        var claim = _generator.Generate(1, scenario, new Random(42));
+
+        var ageAtServiceDays = (claim.DateOfService.Date - claim.Member.DateOfBirth.Date).Days;
+
+        Assert.Equal(expectedAgeDays, ageAtServiceDays);
+        Assert.InRange(ageAtServiceDays, 0, 30);
     }
 
     [Fact]

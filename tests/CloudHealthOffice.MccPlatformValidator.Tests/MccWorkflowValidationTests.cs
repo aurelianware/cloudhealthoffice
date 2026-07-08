@@ -291,6 +291,36 @@ public class MccWorkflowValidationTests
     }
 
     [Fact]
+    public void ExpectedValidationFor_UnsupportedBusinessDenialEdgeCase_ReturnsUnsupported()
+    {
+        var claim = CreateClaim(
+            claimType: "EdgeCase",
+            benefitPlanId: "MCC-PLAN",
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        claim.EdgeCase = EdgeCaseScenario.BehavioralHealthCarveOut;
+        claim.ExpectedOutcome = new ExpectedOutcome
+        {
+            Disposition = "Denied",
+            DenialReasonCode = "296"
+        };
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.Paid,
+            actualBusinessDenialCode: null);
+
+        Assert.Equal("EdgeCase:BehavioralHealthCarveOut", expected.Scenario);
+        Assert.Null(expected.ExpectedOutcome);
+        Assert.Equal("CARC_296", expected.ExpectedBusinessDenialCode);
+        Assert.True(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, status);
+    }
+
+    [Fact]
     public void AnswerKey_WhenClaimMissing_ReturnsUnspecified()
     {
         var key = MccAnswerKey.FromClaims([

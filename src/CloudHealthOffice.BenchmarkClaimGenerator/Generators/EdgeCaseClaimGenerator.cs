@@ -92,9 +92,34 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
             PayerToPayerReady = true
         };
 
+        ApplyScenarioMemberContext(claim, scenario);
         ApplyScenarioCoverageWindow(claim, scenario);
         claim.ExpectedOutcome = ComputeExpectedOutcome(claim, scenario, random);
         return claim;
+    }
+
+    private static void ApplyScenarioMemberContext(SyntheticClaim claim, EdgeCaseScenario scenario)
+    {
+        if (scenario is not (
+            EdgeCaseScenario.NewbornAutoAdjudication or
+            EdgeCaseScenario.NewbornMotherClaimLink or
+            EdgeCaseScenario.NewbornFirstThirtyDays))
+        {
+            return;
+        }
+
+        claim.Member.DateOfBirth = scenario switch
+        {
+            EdgeCaseScenario.NewbornAutoAdjudication => claim.DateOfService.Date.AddDays(-2),
+            EdgeCaseScenario.NewbornMotherClaimLink => claim.DateOfService.Date.AddDays(-5),
+            EdgeCaseScenario.NewbornFirstThirtyDays => claim.DateOfService.Date.AddDays(-29),
+            _ => claim.Member.DateOfBirth
+        };
+        claim.Member.Relationship = "Child";
+        claim.Member.RelationshipCode = "19";
+        claim.Member.IsSubscriber = false;
+        claim.PriorAuthStatus = "OnFile";
+        claim.PriorAuthNumber = $"NB-AUTH-{claim.ClaimId}";
     }
 
     private static void ApplyScenarioCoverageWindow(SyntheticClaim claim, EdgeCaseScenario scenario)
@@ -128,8 +153,9 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
             case EdgeCaseScenario.NewbornAutoAdjudication:
             case EdgeCaseScenario.NewbornMotherClaimLink:
             case EdgeCaseScenario.NewbornFirstThirtyDays:
-                member.DateOfBirth = new DateTime(2024, 1, 1).AddDays(random.Next(365));
                 member.Relationship = "Child";
+                member.RelationshipCode = "19";
+                member.IsSubscriber = false;
                 member.Gender = random.Next(2) == 0 ? "M" : "F";
                 break;
 
