@@ -51,6 +51,49 @@ public class InMemoryMessageBusTests : MessageBusContractTests
         Assert.Equal(4, maxObserved);
     }
 
+    [Fact]
+    public async Task Subscribe_IgnoresMessagesThatDoNotMatchRequiredProperties()
+    {
+        await using var bus = new InMemoryMessageBus();
+        var queue = $"filtered-{Guid.NewGuid():N}";
+        var received = System.Threading.Channels.Channel.CreateUnbounded<string>();
+
+        await using var sub = bus.Subscribe<FilteredPayload>(
+            queue,
+            async (msg, _, ct) => await received.Writer.WriteAsync(msg.Value, ct),
+            new SubscriptionOptions(
+                RequiredProperties: new Dictionary<string, string>
+                {
+                    ["MessageType"] = "Wanted"
+                }));
+        await sub.StartAsync(CancellationToken.None);
+
+        await bus.SendAsync(
+            queue,
+            new FilteredPayload("ignored"),
+            new SendOptions(Properties: new Dictionary<string, string>
+            {
+                ["MessageType"] = "Other"
+            }));
+        await bus.SendAsync(
+            queue,
+            new FilteredPayload("wanted"),
+            new SendOptions(Properties: new Dictionary<string, string>
+            {
+                ["MessageType"] = "Wanted"
+            }));
+
+        var value = await received.Reader.ReadAsync()
+            .AsTask()
+            .WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("wanted", value);
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            received.Reader.ReadAsync()
+                .AsTask()
+                .WaitAsync(TimeSpan.FromMilliseconds(250)));
+    }
+
     private static void UpdateMax(ref int target, int value)
     {
         while (true)
@@ -62,4 +105,5 @@ public class InMemoryMessageBusTests : MessageBusContractTests
     }
 
     private sealed record ParallelPayload(int Value);
+    private sealed record FilteredPayload(string Value);
 }

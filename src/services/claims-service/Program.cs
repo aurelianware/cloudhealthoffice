@@ -334,6 +334,10 @@ builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 
 builder.Services.AddScoped<IClaimAdjudicationOrchestrator, ClaimAdjudicationOrchestrator>();
 
+var adjudicationMaxConcurrentCalls = Math.Max(
+    1,
+    builder.Configuration.GetValue<int?>("Messaging:AdjudicationMaxConcurrentCalls") ?? 16);
+
 // Subscription hosted service — the orchestrator's Service Bus
 // trigger. Factory shape defers subscription creation to ExecuteAsync
 // so the bus is fully initialised before we Subscribe.
@@ -348,7 +352,13 @@ builder.Services.AddHostedService(sp =>
                     .GetRequiredService<IClaimAdjudicationOrchestrator>();
                 await orchestrator.AdjudicateAsync(msg, ctx, ct);
             },
-            new SubscriptionOptions(SubscriptionName: ClaimVersionEventTopics.AdjudicationSubscriptionName)),
+            new SubscriptionOptions(
+                MaxConcurrentCalls: adjudicationMaxConcurrentCalls,
+                SubscriptionName: ClaimVersionEventTopics.AdjudicationSubscriptionName,
+                RequiredProperties: new Dictionary<string, string>
+                {
+                    [ClaimVersionEventTopics.MessageTypeProperty] = ClaimVersionMessageTypes.Submitted
+                })),
         sp,
         sp.GetRequiredService<ILogger<SubscriptionHostedService>>()));
 

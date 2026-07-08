@@ -30,11 +30,22 @@ Claims-service is the authoritative post-adjudication state source for this
 validator: `GET /api/claims/{id}` returns `ClaimStatus.Pended`, and
 `PendDetails.PendCode` provides the reason signal when available.
 
+Because the async claims-service adjudication path resolves member demographics
+from member-service, the validator seeds each distinct generated claim member by
+default before it submits claims. This is required for pended validation to reach
+the business edits: without a resolvable member DOB, the scrubbing stage can
+reject the claim structurally before COB/subrogation/retro-eligibility pend logic
+runs. Use `--member-url` to point at member-service and `--no-seed-members` only
+when the tenant already has the matching synthetic members.
+
 The validator therefore scores expected-pend scenarios in a post-adjudication
 observation pass. The timed benchmark pass completes first; then the validator
 polls claims-service for expected-pend claims only. `P95`, `P99`, stage timings,
 and claims/sec are computed from submission, adjudication, and writeback timing
 and exclude this polling window.
+For expected-pend claims, the synchronous adjudication projection is not written
+back to claims-service because that response cannot represent the pended state;
+the async claims workflow remains the source of truth for those claims.
 
 This observation pass is intentionally one-directional for benchmark cost: it
 polls only claims whose answer-key disposition is `Pended`. It can prove that

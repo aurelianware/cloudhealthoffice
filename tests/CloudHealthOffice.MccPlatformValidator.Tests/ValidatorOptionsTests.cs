@@ -32,6 +32,22 @@ public class ValidatorOptionsTests
     }
 
     [Fact]
+    public void Parse_WhenNoSeedMembersProvided_DisablesMemberSeeding()
+    {
+        var options = ValidatorOptions.Parse(["--no-seed-members"]);
+
+        Assert.False(options.SeedMembers);
+    }
+
+    [Fact]
+    public void Parse_WhenMemberUrlProvided_AppliesOverride()
+    {
+        var options = ValidatorOptions.Parse(["--member-url", "http://member-service/"]);
+
+        Assert.Equal("http://member-service", options.MemberUrl);
+    }
+
+    [Fact]
     public void Parse_WhenPendObservationOptionsProvided_AppliesOverrides()
     {
         var options = ValidatorOptions.Parse([
