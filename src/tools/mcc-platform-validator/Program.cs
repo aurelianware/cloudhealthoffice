@@ -66,6 +66,7 @@ var validationPlanId = Guid.NewGuid();
 await CreateValidationPlanAsync(http, options, validationPlanId, json);
 
 var claims = await GenerateClaimsAsync(options);
+NormalizePriorAuthEdgeCases(claims, options);
 NormalizeValidationProviderProfiles(claims, options.Seed);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 var answerKey = MccAnswerKey.FromClaims(claims);
@@ -544,6 +545,19 @@ static void InjectPriorAuthScenarios(List<SyntheticClaim> claims, ValidatorOptio
     }
 
     Console.WriteLine($"PA scenarios: injected {injected:N0} TX STAR inpatient claims without auth");
+}
+
+static void NormalizePriorAuthEdgeCases(List<SyntheticClaim> claims, ValidatorOptions options)
+{
+    if (!options.PriorAuthScenariosEnabled || options.LineOfBusiness is not (3 or 4))
+    {
+        return;
+    }
+
+    foreach (var claim in claims.Where(claim => claim.EdgeCase is EdgeCaseScenario.PriorAuthRequired_NoAuth))
+    {
+        ForceTexasMedicaidInpatientPriorAuthScenario(claim);
+    }
 }
 
 static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
