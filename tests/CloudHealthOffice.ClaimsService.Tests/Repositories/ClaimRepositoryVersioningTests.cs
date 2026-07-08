@@ -367,14 +367,11 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UpdateAdjudicationProjectionAsync_withIsPendFalse_leavesStatusUnchanged()
+    public async Task UpdateAdjudicationProjectionAsync_withoutResolvedStatus_leavesStatusUnchanged()
     {
-        // Regression guard (task requirement 4): this bypass method has
-        // NEVER written /status for non-pend outcomes and must continue not
-        // to — even when the AdjudicationResult looks like an approval
-        // (PayerPayment > 0). Status transitions for Pass/Deny/Reject stay
-        // owned by UpdateAdjudicationSummaryAsync / UpdateAdjudication / the
-        // Argo workflow, not this method.
+        // Backward-compatibility guard: existing callers that only project
+        // financial metadata and omit resolvedStatus must not accidentally
+        // infer a claim status from the AdjudicationResult shape.
         var head = await _repo.CreateAsync(BuildVersion("chain-pass", "row-1", n: 1, ClaimVersionState.Submitted));
         head.Status.Should().Be(ClaimStatus.Submitted);
 
@@ -386,9 +383,29 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
 
         ok.Should().BeTrue();
         var reread = await _repo.GetVersionAsync("chain-pass", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Submitted, "isPend=false must never touch /status, matching pre-fix behavior");
+        reread!.Status.Should().Be(ClaimStatus.Submitted, "resolvedStatus was not supplied");
         reread.AdjudicationResult.Should().NotBeNull("the non-status projection fields still write as before");
         reread.AdjudicationResult!.PayerPayment.Should().Be(120m);
+    }
+
+    [Fact]
+    public async Task UpdateAdjudicationProjectionAsync_withResolvedStatus_setsTerminalStatusAndVersionState()
+    {
+        var head = await _repo.CreateAsync(BuildVersion("chain-deny", "row-1", n: 1, ClaimVersionState.Submitted));
+        head.Status.Should().Be(ClaimStatus.Submitted);
+
+        var ok = await _repo.UpdateAdjudicationProjectionAsync(
+            Tenant, "chain-deny",
+            new AdjudicationResult { AllowedAmount = 0m, DenialReasonCode = "999" },
+            Array.Empty<LineAdjudicationResult>(),
+            isPend: false,
+            resolvedStatus: ClaimStatus.Denied);
+
+        ok.Should().BeTrue();
+        var reread = await _repo.GetVersionAsync("chain-deny", "row-1");
+        reread!.Status.Should().Be(ClaimStatus.Denied);
+        reread.VersionState.Should().Be(ClaimVersionState.Denied);
+        reread.AdjudicationResult.Should().NotBeNull("the financial projection still writes with the terminal status");
     }
 
     [Fact]

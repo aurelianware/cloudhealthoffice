@@ -36,13 +36,7 @@ public class PersistenceStageTests
         {
             new() { AllowedAmount = 75m, PaidAmount = 50m, PatientResponsibility = 25m },
         };
-        _repository.UpdateAdjudicationProjectionAsync(
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<AdjudicationResult>(),
-            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(true);
+        StubRepositoryReturns(true);
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -52,20 +46,17 @@ public class PersistenceStageTests
             "ver-1",
             Arg.Is<AdjudicationResult>(a => a.AllowedAmount == 75m),
             Arg.Is<IReadOnlyList<LineAdjudicationResult>>(l => l.Count == 1),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<PendDetails?>(),
+            Arg.Is<bool>(isPend => !isPend),
+            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Approved));
     }
 
     [Fact]
     public async Task Execute_BypassReturnsFalse_StageReturnsReject()
     {
         var ctx = BuildContext();
-        _repository.UpdateAdjudicationProjectionAsync(
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<AdjudicationResult>(),
-            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(false);
+        StubRepositoryReturns(false);
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -81,7 +72,10 @@ public class PersistenceStageTests
             Arg.Any<string>(),
             Arg.Any<AdjudicationResult>(),
             Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
-            Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>(),
+            Arg.Any<PendDetails?>(),
+            Arg.Any<bool>(),
+            Arg.Any<ClaimStatus?>())
             .Throws(new InvalidOperationException("cosmos down"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -109,7 +103,8 @@ public class PersistenceStageTests
             Arg.Any<AdjudicationResult>(), Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
             Arg.Any<CancellationToken>(),
             Arg.Is<PendDetails?>(p => p!.PendCode == "NCCI"),
-            Arg.Is<bool>(isPend => isPend));
+            Arg.Is<bool>(isPend => isPend),
+            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Pended));
     }
 
     [Fact]
@@ -125,7 +120,8 @@ public class PersistenceStageTests
             Arg.Any<AdjudicationResult>(), Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
             Arg.Any<CancellationToken>(),
             Arg.Any<PendDetails?>(),
-            Arg.Is<bool>(isPend => !isPend));
+            Arg.Is<bool>(isPend => !isPend),
+            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Approved));
     }
 
     [Fact]
@@ -148,7 +144,8 @@ public class PersistenceStageTests
             Arg.Any<AdjudicationResult>(), Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
             Arg.Any<CancellationToken>(),
             Arg.Any<PendDetails?>(),
-            Arg.Is<bool>(isPend => !isPend));
+            Arg.Is<bool>(isPend => !isPend),
+            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Denied));
     }
 
     [Fact]
@@ -165,7 +162,8 @@ public class PersistenceStageTests
             Arg.Any<AdjudicationResult>(), Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
             Arg.Any<CancellationToken>(),
             Arg.Any<PendDetails?>(),
-            Arg.Is<bool>(isPend => !isPend));
+            Arg.Is<bool>(isPend => !isPend),
+            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Denied));
     }
 
     private void StubRepositoryReturns(bool value) =>
@@ -176,7 +174,8 @@ public class PersistenceStageTests
             Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
             Arg.Any<CancellationToken>(),
             Arg.Any<PendDetails?>(),
-            Arg.Any<bool>())
+            Arg.Any<bool>(),
+            Arg.Any<ClaimStatus?>())
             .Returns(value);
 
     private static ClaimAdjudicationContext BuildContext() => new()

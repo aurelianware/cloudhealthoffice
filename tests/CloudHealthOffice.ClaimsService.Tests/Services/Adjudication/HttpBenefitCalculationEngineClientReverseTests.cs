@@ -1,8 +1,11 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using ClaimsService.Services.Adjudication;
+using CloudHealthOffice.BenefitEngine.Domain;
+using CloudHealthOffice.BenefitEngine.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -35,6 +38,70 @@ public class HttpBenefitCalculationEngineClientReverseTests
 
     private HttpBenefitCalculationEngineClient CreateClient() => new(
         _factory, _httpContext, _tenantContext, NullLogger<HttpBenefitCalculationEngineClient>.Instance);
+
+    [Fact]
+    public async Task CalculateAsync_RoundTripsStringEnumsInRequestAndResponse()
+    {
+        _tenantContext.TenantId.Returns("tenant-x");
+        _handler.RespondWith(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """
+                {
+                  "success": true,
+                  "lines": [],
+                  "totals": {},
+                  "accumulatorSnapshot": [
+                    {
+                      "type": "IndividualDeductible",
+                      "scope": "Individual",
+                      "networkTier": "InNetwork",
+                      "limitAmount": 1500,
+                      "accumulatedAmountBefore": 100,
+                      "amountApplied": 25,
+                      "accumulatedAmountAfter": 125,
+                      "remainingAmount": 1375,
+                      "limitReached": false
+                    }
+                  ],
+                  "timings": {}
+                }
+                """,
+                Encoding.UTF8,
+                "application/json"),
+        });
+
+        var sut = CreateClient();
+        var result = await sut.CalculateAsync(new BenefitResolutionRequest
+        {
+            ClaimId = "claim-1",
+            MemberId = "member-1",
+            SubscriberId = "subscriber-1",
+            BenefitPlanId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            ServiceDate = new DateOnly(2026, 6, 1),
+            NetworkTier = NetworkTier.InNetwork,
+            Lines =
+            [
+                new ClaimLineInput
+                {
+                    LineNumber = 1,
+                    ProcedureCode = "99213",
+                    PlaceOfService = "11",
+                    BilledAmount = 100m,
+                },
+            ],
+        });
+
+        Assert.True(result.Success);
+        var snapshot = Assert.Single(result.AccumulatorSnapshot);
+        Assert.Equal(AccumulatorType.IndividualDeductible, snapshot.Type);
+        Assert.Equal(AccumulatorScope.Individual, snapshot.Scope);
+        Assert.Equal(NetworkTier.InNetwork, snapshot.NetworkTier);
+
+        Assert.NotNull(_handler.LastBodyJson);
+        using var requestJson = JsonDocument.Parse(_handler.LastBodyJson!);
+        Assert.Equal("InNetwork", requestJson.RootElement.GetProperty("networkTier").GetString());
+    }
 
     [Fact]
     public async Task ReverseClaimAsync_HappyPath_PostsToReverseEndpointAndReturns()

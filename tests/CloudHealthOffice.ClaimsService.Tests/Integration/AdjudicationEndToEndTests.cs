@@ -154,7 +154,7 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                     Arg.Any<string>(), Arg.Any<DateTime>())
                 .Returns(_ => _lastCreated);
 
-            // Explicitly matches all 7 parameters (not just the leading 5) —
+            // Explicitly matches all projection parameters (not just the leading 5) —
             // this test's pipeline runs the real CoordinationOfBenefitsStage
             // against the real HttpCoverageClient, which is unreachable in
             // this test host and degrades to a Pend (Decision 7, default
@@ -169,7 +169,8 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                     Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
                     Arg.Any<CancellationToken>(),
                     Arg.Any<PendDetails?>(),
-                    Arg.Any<bool>())
+                    Arg.Any<bool>(),
+                    Arg.Any<ClaimStatus?>())
                 .Returns(ci =>
                 {
                     ProjectionWrites.Add(new ProjectionWrite(

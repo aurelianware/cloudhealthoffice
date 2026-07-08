@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.OperatingMode;
@@ -43,6 +44,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     private readonly IHttpClientFactory _httpClientFactory;

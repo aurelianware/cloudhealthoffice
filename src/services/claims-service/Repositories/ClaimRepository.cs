@@ -148,12 +148,11 @@ public interface IClaimRepository
     /// examiner override) already finalized the claim. Re-pending an
     /// already-<c>Pended</c> claim (a re-adjudication run refreshing
     /// <paramref name="pendDetails"/>) is allowed — Pended is not a final
-    /// disposition. <paramref name="isPend"/> false is a pure no-op on
-    /// <c>ClaimStatus</c> — behavior for Pass/Deny/Reject outcomes is
-    /// unchanged from before this parameter existed; those outcomes'
-    /// status transitions are owned by other write paths
-    /// (<c>UpdateAdjudicationSummaryAsync</c>, the Argo workflow, or
-    /// <c>ClaimsController.PendClaim</c>), not this bypass method.
+    /// disposition. When <paramref name="resolvedStatus"/> is supplied, this
+    /// call also projects async Pass/Deny/Reject outcomes through the same
+    /// guarded status transition used by <c>UpdateAdjudicationSummaryAsync</c>,
+    /// so async-only adjudication runs become observable without overwriting
+    /// an already Pended or final claim.
     /// </para>
     ///
     /// Returns true on success, false when no head row was found for the
@@ -166,7 +165,8 @@ public interface IClaimRepository
         IReadOnlyList<LineAdjudicationResult> lineResults,
         CancellationToken ct = default,
         PendDetails? pendDetails = null,
-        bool isPend = false);
+        bool isPend = false,
+        ClaimStatus? resolvedStatus = null);
 
     /// <summary>
     /// Fast claim-level adjudication projection for direct local workflow
@@ -956,7 +956,8 @@ public class ClaimRepository : IClaimRepository
         IReadOnlyList<LineAdjudicationResult> lineResults,
         CancellationToken ct = default,
         PendDetails? pendDetails = null,
-        bool isPend = false)
+        bool isPend = false,
+        ClaimStatus? resolvedStatus = null)
     {
         // Resolve the head (non-terminal-but-adjudicatable) row by chain key.
         // PatchItemAsync is keyed on the per-row document Id, so we look up
@@ -1061,44 +1062,55 @@ public class ClaimRepository : IClaimRepository
             return false;
         }
 
-        if (!isPend)
+        if (isPend)
         {
+            // Defect A fix, made atomic — project the orchestrator's Pend outcome
+            // onto ClaimStatus in a SEPARATE conditional patch, evaluated against
+            // the row's live state at commit time via FilterPredicate rather than
+            // the `head` snapshot read above. Precedence: never downgrade a claim
+            // that already reached a later-stage disposition (IsFinalDisposition)
+            // — e.g. because the Argo workflow's synchronous finalize step, or an
+            // examiner override, raced ahead of this async projection. A
+            // read-then-decide check (the original form of this guard) only
+            // catches that race when the other write happens to land before this
+            // method's own read; a concurrent write landing in between read and
+            // write would still get clobbered. The conditional patch closes that
+            // window: Cosmos evaluates FilterPredicate against the document as it
+            // exists at the moment this patch actually commits. Re-pending an
+            // already-Pended claim is allowed — Pended is excluded from
+            // FinalDispositions by design. A blocked patch is not an error; the
+            // /adjudicationResult + /claimLines + /pendDetails write above still
+            // succeeded, so this method still returns true either way.
+            try
+            {
+                await _container.PatchItemAsync<Claim>(
+                    rowId,
+                    new PartitionKey(tenantId),
+                    new List<PatchOperation> { PatchOperation.Set("/status", ClaimStatus.Pended) },
+                    new PatchItemRequestOptions { FilterPredicate = FinalDispositionFilterPredicate },
+                    ct);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Guard correctly blocked the downgrade — not an error.
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // Row deleted between the first patch and this one.
+            }
+
             return true;
         }
 
-        // Defect A fix, made atomic — project the orchestrator's Pend outcome
-        // onto ClaimStatus in a SEPARATE conditional patch, evaluated against
-        // the row's live state at commit time via FilterPredicate rather than
-        // the `head` snapshot read above. Precedence: never downgrade a claim
-        // that already reached a later-stage disposition (IsFinalDisposition)
-        // — e.g. because the Argo workflow's synchronous finalize step, or an
-        // examiner override, raced ahead of this async projection. A
-        // read-then-decide check (the original form of this guard) only
-        // catches that race when the other write happens to land before this
-        // method's own read; a concurrent write landing in between read and
-        // write would still get clobbered. The conditional patch closes that
-        // window: Cosmos evaluates FilterPredicate against the document as it
-        // exists at the moment this patch actually commits. Re-pending an
-        // already-Pended claim is allowed — Pended is excluded from
-        // FinalDispositions by design. A blocked patch is not an error; the
-        // /adjudicationResult + /claimLines + /pendDetails write above still
-        // succeeded, so this method still returns true either way.
-        try
+        if (resolvedStatus is not null)
         {
-            await _container.PatchItemAsync<Claim>(
-                rowId,
-                new PartitionKey(tenantId),
-                new List<PatchOperation> { PatchOperation.Set("/status", ClaimStatus.Pended) },
-                new PatchItemRequestOptions { FilterPredicate = FinalDispositionFilterPredicate },
-                ct);
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
-        {
-            // Guard correctly blocked the downgrade — not an error.
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            // Row deleted between the first patch and this one.
+            await TryPatchStatusAsync(
+                    tenantId,
+                    rowId,
+                    resolvedStatus.Value,
+                    MapStatusToVersionState(resolvedStatus.Value),
+                    ct)
+                .ConfigureAwait(false);
         }
 
         return true;
