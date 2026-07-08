@@ -106,6 +106,20 @@ public class EdgeCaseClaimGeneratorTests
     }
 
     [Fact]
+    public void Generate_NewbornMotherClaimLink_UsesDistinctLineProcedureCodes()
+    {
+        for (var seed = 0; seed < 100; seed++)
+        {
+            var claim = _generator.Generate(seed + 1, "NewbornMotherClaimLink", new Random(seed));
+
+            Assert.Equal(2, claim.Lines.Count);
+            Assert.Equal(
+                claim.Lines.Count,
+                claim.Lines.Select(line => line.ProcedureCode).Distinct(StringComparer.Ordinal).Count());
+        }
+    }
+
+    [Fact]
     public void Generate_CobSecondary_PendsForReview()
     {
         var random = new Random(42);
