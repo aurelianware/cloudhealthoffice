@@ -387,6 +387,34 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.NotEmpty(result.Accumulators);
     }
 
+    [Fact]
+    public async Task Adjudicate_ServiceDateAfterMemberTermination_ReturnsCarc27WithoutPricing()
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+
+        using var client = CreateClientWithTenant();
+        var request = MakeAdjudicationRequest() with
+        {
+            MemberEffectiveDate = new DateOnly(2025, 1, 1),
+            MemberTerminationDate = new DateOnly(2026, 1, 14),
+            MemberEnrollmentStatus = "Active",
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", request);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = body.RootElement;
+        Assert.Equal("CARC_27", root.GetProperty("error").GetString());
+        Assert.Equal("27", root.GetProperty("carc").GetString());
+        Assert.Equal(
+            "Service date after member coverage termination date",
+            root.GetProperty("message").GetString());
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // 2. /adjudicate with NCCI CCI conflict → 422 with edit codes
     // ═══════════════════════════════════════════════════════════════

@@ -36,6 +36,7 @@ namespace ClaimsService.Services.Adjudication.Stages;
 public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 {
     public const string StageName = "BenefitCalculation";
+    public const string MemberNotEligibleCode = "CARC_27";
 
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
@@ -76,6 +77,16 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 $"BenefitPlanId '{claim.BenefitPlanId}' is not a GUID and benefit-plan-service did not resolve a Guid id.");
         }
 
+        if (!IsMemberEligibleForServiceDate(context.ResolvedMember, claim.ServiceDateFrom, out var eligibilityReason))
+        {
+            context.AdjudicationResult.DenialReasonCode = MemberNotEligibleCode;
+            context.AdjudicationResult.DenialReason = eligibilityReason;
+
+            return ClaimAdjudicationStageResult.Deny(
+                StageName,
+                eligibilityReason);
+        }
+
         var subscriberId = await ResolveSubscriberIdAsync(context, ct).ConfigureAwait(false);
         var request = BuildRequest(context, planGuid.Value, subscriberId);
 
@@ -111,6 +122,46 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     {
         if (resolved?.PlanGuid is Guid resolvedGuid) return resolvedGuid;
         return Guid.TryParse(benefitPlanId, out var parsed) ? parsed : null;
+    }
+
+    private static bool IsMemberEligibleForServiceDate(
+        ResolvedMember? member,
+        DateTime serviceDate,
+        out string reason)
+    {
+        var serviceDay = serviceDate.Date;
+
+        if (member?.EffectiveDate is DateTime effectiveDate
+            && serviceDay < effectiveDate.Date)
+        {
+            reason = "Service date before member coverage effective date";
+            return false;
+        }
+
+        if (member?.TerminationDate is DateTime terminationDate
+            && serviceDay > terminationDate.Date)
+        {
+            reason = "Service date after member coverage termination date";
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(member?.EnrollmentStatus)
+            && !member.EnrollmentStatus.Equals("Active", StringComparison.OrdinalIgnoreCase)
+            && !member.EnrollmentStatus.Equals("Terminated", StringComparison.OrdinalIgnoreCase))
+        {
+            reason = $"Member status is {member.EnrollmentStatus}";
+            return false;
+        }
+
+        if (member?.EnrollmentStatus?.Equals("Terminated", StringComparison.OrdinalIgnoreCase) is true
+            && member.TerminationDate is null)
+        {
+            reason = "Member coverage terminated";
+            return false;
+        }
+
+        reason = "Active coverage";
+        return true;
     }
 
     private async Task<string> ResolveSubscriberIdAsync(

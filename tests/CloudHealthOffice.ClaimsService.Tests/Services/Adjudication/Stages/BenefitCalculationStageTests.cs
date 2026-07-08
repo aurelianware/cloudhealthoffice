@@ -185,6 +185,35 @@ public class BenefitCalculationStageTests
     }
 
     [Fact]
+    public async Task Execute_ServiceDateAfterMemberTermination_DeniesWithCarc27WithoutEngineCall()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember
+            {
+                MemberId = "MEM-1",
+                IsSubscriber = true,
+                EffectiveDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                TerminationDate = new DateTime(2026, 4, 14, 0, 0, 0, DateTimeKind.Utc),
+                EnrollmentStatus = "Active",
+            },
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.False(result.Continue);
+        Assert.Equal(BenefitCalculationStage.MemberNotEligibleCode, ctx.AdjudicationResult.DenialReasonCode);
+        Assert.Equal("Service date after member coverage termination date", ctx.AdjudicationResult.DenialReason);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateWithModeAsync(default!, default!, default!, default, default);
+    }
+
+    [Fact]
     public async Task Execute_NoSubscriberOnClaim_FallsBackThroughResolverAndMemberId()
     {
         var claim = BuildClaim(Guid.NewGuid().ToString());
