@@ -57,11 +57,11 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
         // BEFORE Persistence (Order=999, always last) using the same
         // Reject>Deny>Pend>Pass precedence the orchestrator uses for the
         // emitted event's Outcome (ClaimAdjudicationStageResult.ResolveOutcome).
-        // Reject/Deny/Pass outcomes leave isPend=false, so the repository's
-        // status-write behavior for those outcomes is unchanged from before
-        // this fix — this call site only ever adds a status write for Pend.
-        var isPend = ClaimAdjudicationStageResult.ResolveOutcome(context.StageResults)
-            == ClaimAdjudicationOutcome.Pend;
+        // The repository uses a special one-way guard for Pend and the normal
+        // guarded transition path for terminal Pass/Deny/Reject.
+        var resolvedOutcome = ClaimAdjudicationStageResult.ResolveOutcome(context.StageResults);
+        var isPend = resolvedOutcome == ClaimAdjudicationOutcome.Pend;
+        var resolvedStatus = MapOutcomeToStatus(resolvedOutcome);
 
         try
         {
@@ -73,7 +73,8 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                     context.LineAdjudicationResults,
                     ct,
                     pendDetails: context.PendDetails,
-                    isPend: isPend)
+                    isPend: isPend,
+                    resolvedStatus: resolvedStatus)
                 .ConfigureAwait(false);
 
             if (!written)
@@ -105,4 +106,13 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
+    private static ClaimStatus MapOutcomeToStatus(ClaimAdjudicationOutcome outcome) => outcome switch
+    {
+        ClaimAdjudicationOutcome.Pass => ClaimStatus.Approved,
+        ClaimAdjudicationOutcome.Pend => ClaimStatus.Pended,
+        ClaimAdjudicationOutcome.Deny => ClaimStatus.Denied,
+        ClaimAdjudicationOutcome.Reject => ClaimStatus.Denied,
+        _ => ClaimStatus.Approved,
+    };
 }

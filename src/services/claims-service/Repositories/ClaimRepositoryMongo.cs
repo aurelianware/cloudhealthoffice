@@ -426,7 +426,8 @@ public class ClaimRepositoryMongo : IClaimRepository
         IReadOnlyList<LineAdjudicationResult> lineResults,
         CancellationToken ct = default,
         PendDetails? pendDetails = null,
-        bool isPend = false)
+        bool isPend = false,
+        ClaimStatus? resolvedStatus = null)
     {
         var b = Builders<Claim>.Filter;
 
@@ -490,31 +491,41 @@ public class ClaimRepositoryMongo : IClaimRepository
             return false;
         }
 
-        if (!isPend)
+        if (isPend)
         {
+            // Defect A fix, made atomic — project the orchestrator's Pend outcome
+            // onto ClaimStatus in a SEPARATE conditional update, whose FILTER
+            // (not a C# if-check against the `head` snapshot above) carries the
+            // precedence rule: never downgrade a claim already at a later-stage
+            // disposition (see ClaimRepository.IsFinalDisposition). A
+            // read-then-decide check only catches a concurrent write that lands
+            // before this method's own read; MongoDB evaluates this filter
+            // against the row's live state at the moment the update actually
+            // executes, so a competing write landing in between is still caught.
+            // No match on this second update just means the guard correctly
+            // blocked the downgrade — not an error; the AdjudicationResult /
+            // ClaimLines / PendDetails write above already succeeded, so this
+            // method still returns true either way. Re-pending an already-Pended
+            // claim is allowed — Pended is excluded from FinalDispositions.
+            var pendFilter = b.And(
+                b.Eq(c => c.TenantId, tenantId),
+                b.Eq(c => c.Id, head.Id),
+                b.Not(b.In(c => c.Status, ClaimRepository.FinalDispositions)));
+            var pendUpdate = Builders<Claim>.Update.Set(c => c.Status, ClaimStatus.Pended);
+            await _collection.UpdateOneAsync(pendFilter, pendUpdate, cancellationToken: ct);
             return true;
         }
 
-        // Defect A fix, made atomic — project the orchestrator's Pend outcome
-        // onto ClaimStatus in a SEPARATE conditional update, whose FILTER
-        // (not a C# if-check against the `head` snapshot above) carries the
-        // precedence rule: never downgrade a claim already at a later-stage
-        // disposition (see ClaimRepository.IsFinalDisposition). A
-        // read-then-decide check only catches a concurrent write that lands
-        // before this method's own read; MongoDB evaluates this filter
-        // against the row's live state at the moment the update actually
-        // executes, so a competing write landing in between is still caught.
-        // No match on this second update just means the guard correctly
-        // blocked the downgrade — not an error; the AdjudicationResult /
-        // ClaimLines / PendDetails write above already succeeded, so this
-        // method still returns true either way. Re-pending an already-Pended
-        // claim is allowed — Pended is excluded from FinalDispositions.
-        var pendFilter = b.And(
-            b.Eq(c => c.TenantId, tenantId),
-            b.Eq(c => c.Id, head.Id),
-            b.Not(b.In(c => c.Status, ClaimRepository.FinalDispositions)));
-        var pendUpdate = Builders<Claim>.Update.Set(c => c.Status, ClaimStatus.Pended);
-        await _collection.UpdateOneAsync(pendFilter, pendUpdate, cancellationToken: ct);
+        if (resolvedStatus is not null)
+        {
+            await TryPatchStatusAsync(
+                    tenantId,
+                    head.Id,
+                    resolvedStatus.Value,
+                    ClaimRepository.MapStatusToVersionState(resolvedStatus.Value),
+                    ct)
+                .ConfigureAwait(false);
+        }
 
         return true;
     }

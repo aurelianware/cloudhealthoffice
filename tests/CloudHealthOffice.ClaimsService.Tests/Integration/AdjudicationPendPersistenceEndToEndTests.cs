@@ -115,11 +115,12 @@ public class AdjudicationPendPersistenceEndToEndTests
     }
 
     [Fact]
-    public async Task Ncci_deny_mode_orchestrator_run_does_not_persist_Pended_status()
+    public async Task Ncci_deny_mode_orchestrator_run_persists_Denied_status_not_Pended()
     {
         // Deny outweighs Pend in the resolved outcome even though NCCI still
         // populates PendDetails as an audit-trail snapshot — the claim must
-        // NOT be left in ClaimStatus.Pended.
+        // NOT be left in ClaimStatus.Pended. Async terminal outcomes should
+        // still become observable, so Deny projects to ClaimStatus.Denied.
         SetupAdapterReturningClaim(BuildBundledPairClaim());
 
         var state = new FakeClaimState();
@@ -132,7 +133,7 @@ public class AdjudicationPendPersistenceEndToEndTests
         await orch.AdjudicateAsync(BuildSubmittedMessage("ver-persist-ncci-deny"), BuildMessageContext("ver-persist-ncci-deny"), CancellationToken.None);
 
         Assert.NotEqual(ClaimStatus.Pended, state.Status);
-        Assert.Equal(ClaimStatus.Submitted, state.Status);
+        Assert.Equal(ClaimStatus.Denied, state.Status);
     }
 
     private void SetupAdapterReturningClaim(AdapterClaim claim) =>
@@ -175,11 +176,13 @@ public class AdjudicationPendPersistenceEndToEndTests
                 Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<PendDetails?>(),
-                Arg.Any<bool>())
+                Arg.Any<bool>(),
+                Arg.Any<ClaimStatus?>())
             .Returns(ci =>
             {
                 var pendDetails = ci.ArgAt<PendDetails?>(5);
                 var isPend = ci.ArgAt<bool>(6);
+                var resolvedStatus = ci.ArgAt<ClaimStatus?>(7);
 
                 if (pendDetails is not null)
                 {
@@ -189,6 +192,10 @@ public class AdjudicationPendPersistenceEndToEndTests
                 if (isPend && !ClaimRepository.IsFinalDisposition(state.Status))
                 {
                     state.Status = ClaimStatus.Pended;
+                }
+                else if (resolvedStatus is not null && !ClaimRepository.BlocksSynchronousWriteback(state.Status))
+                {
+                    state.Status = resolvedStatus.Value;
                 }
 
                 return true;

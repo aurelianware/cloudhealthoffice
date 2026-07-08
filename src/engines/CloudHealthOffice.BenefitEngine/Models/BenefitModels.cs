@@ -1,5 +1,6 @@
 namespace CloudHealthOffice.BenefitEngine.Models;
 
+using System.Text.Json.Serialization;
 using CloudHealthOffice.BenefitEngine.Domain;
 
 // ═══════════════════════════════════════════════════════════════════
@@ -12,6 +13,7 @@ public record BenefitResolutionRequest
     public string SubscriberId { get; init; } = default!;
     public Guid BenefitPlanId { get; init; }
     public DateOnly ServiceDate { get; init; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public NetworkTier NetworkTier { get; init; }
     public List<ClaimLineInput> Lines { get; init; } = [];
     public Dictionary<int, decimal> AllowedAmounts { get; init; } = [];
