@@ -1130,16 +1130,11 @@ public class ClaimRepository : IClaimRepository
               AND (c.claimVersionId = @claimVersionId
                    OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
                    OR (c.claimVersionId = '' AND c.id = @claimVersionId))
-              AND (NOT IS_DEFINED(c.versionState)
-                   OR c.versionState = @submitted
-                   OR c.versionState = @adjudicated
-                   OR c.versionState = @unknown)
+              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null OR c.versionState != @draft)
             ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@claimVersionId", claimVersionId)
-            .WithParameter("@submitted", ClaimVersionState.Submitted.ToString())
-            .WithParameter("@adjudicated", ClaimVersionState.Adjudicated.ToString())
-            .WithParameter("@unknown", ClaimVersionState.Unknown.ToString());
+            .WithParameter("@draft", ClaimVersionState.Draft.ToString());
 
         string? rowId = null;
         var iterator = _container.GetItemQueryIterator<HeadIdResult>(
@@ -1154,11 +1149,9 @@ public class ClaimRepository : IClaimRepository
         if (string.IsNullOrEmpty(rowId)) return StatusWriteResult.NotFoundResult;
 
         // Residual-race fix — financial/audit data (AdjudicationResult, dates)
-        // persists unconditionally: this method's caller (the validator's
-        // synchronous write-back) always has a legitimate adjudication result
-        // to record even when the status transition below gets suppressed.
-        // Only /status + /versionState are guarded, in a separate conditional
-        // patch — see TryPatchStatusAsync.
+        // persists by chain/id even if async adjudication already finalized
+        // the row. Only /status + /versionState are guarded, in a separate
+        // conditional patch — see TryPatchStatusAsync.
         var now = DateTime.UtcNow;
         var summaryOps = new List<PatchOperation>
         {
