@@ -207,7 +207,7 @@ public class BenefitCalculationStageTests
 
         Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
         Assert.False(result.Continue);
-        Assert.Equal(BenefitCalculationStage.MemberNotEligibleCode, ctx.AdjudicationResult.DenialReasonCode);
+        Assert.Equal(BenefitCalculationStage.MemberNotEligibleCarc, ctx.AdjudicationResult.DenialReasonCode);
         Assert.Equal("Service date after member coverage termination date", ctx.AdjudicationResult.DenialReason);
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
         await _engine.DidNotReceiveWithAnyArgs().CalculateWithModeAsync(default!, default!, default!, default, default);

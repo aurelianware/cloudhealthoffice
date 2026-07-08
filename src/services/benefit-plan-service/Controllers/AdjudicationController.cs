@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
@@ -353,10 +354,13 @@ public class AdjudicationController : ControllerBase
 
             RecordLatency(sw, claimTypeCode, "member_not_eligible");
 
+            var serviceDateForLog = SanitizeForLog(
+                request.ServiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
             _logger.LogWarning(
                 "Claim {ClaimId} denied: member {MemberId} not eligible on service date {ServiceDate}: {Reason}",
                 SanitizeForLog(request.ClaimId), SanitizeForLog(request.MemberId),
-                request.ServiceDate, SanitizeForLog(eligibilityReason));
+                serviceDateForLog, SanitizeForLog(eligibilityReason));
 
             return UnprocessableEntity(new
             {

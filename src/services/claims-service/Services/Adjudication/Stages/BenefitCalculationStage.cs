@@ -36,7 +36,7 @@ namespace ClaimsService.Services.Adjudication.Stages;
 public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 {
     public const string StageName = "BenefitCalculation";
-    public const string MemberNotEligibleCode = "CARC_27";
+    public const string MemberNotEligibleCarc = "27";
 
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
@@ -79,7 +79,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         if (!IsMemberEligibleForServiceDate(context.ResolvedMember, claim.ServiceDateFrom, out var eligibilityReason))
         {
-            context.AdjudicationResult.DenialReasonCode = MemberNotEligibleCode;
+            context.AdjudicationResult.DenialReasonCode = MemberNotEligibleCarc;
             context.AdjudicationResult.DenialReason = eligibilityReason;
 
             return ClaimAdjudicationStageResult.Deny(

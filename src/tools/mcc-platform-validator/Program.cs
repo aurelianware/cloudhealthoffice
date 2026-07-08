@@ -1474,6 +1474,10 @@ static async Task<(AdjudicationResponseDto Response, string RawBody)> Adjudicate
     string networkTier,
     JsonSerializerOptions json)
 {
+    var memberEffectiveDate = claim.Member.CoverageEffectiveDate == default
+        ? claim.DateOfService.Date.AddYears(-1)
+        : claim.Member.CoverageEffectiveDate.Date;
+
     var payload = new
     {
         claimId = submittedClaimId,
@@ -1481,7 +1485,7 @@ static async Task<(AdjudicationResponseDto Response, string RawBody)> Adjudicate
         subscriberId = claim.Member.SubscriberId,
         benefitPlanId = validationPlanId,
         serviceDate = DateOnly.FromDateTime(claim.DateOfService),
-        memberEffectiveDate = DateOnly.FromDateTime(claim.Member.CoverageEffectiveDate),
+        memberEffectiveDate = DateOnly.FromDateTime(memberEffectiveDate),
         memberTerminationDate = claim.Member.CoverageTermDate is DateTime termDate
             ? DateOnly.FromDateTime(termDate)
             : (DateOnly?)null,
