@@ -1377,6 +1377,7 @@ static void NormalizeClaimDates(List<SyntheticClaim> claims, int seed)
         var dateShift = normalizedServiceDate - originalServiceDate;
 
         claim.DateOfService = claim.DateOfService.Date.Add(dateShift);
+        ShiftMemberCoverageDates(claim.Member, dateShift);
 
         foreach (var line in claim.Lines)
         {
@@ -1392,6 +1393,32 @@ static void NormalizeClaimDates(List<SyntheticClaim> claims, int seed)
             .DefaultIfEmpty(claim.DateOfService)
             .Max();
         claim.DateReceived = latestServiceDate.Date.AddDays(random.Next(1, 15));
+    }
+}
+
+static void ShiftMemberCoverageDates(SyntheticMember member, TimeSpan dateShift)
+{
+    if (member.CoverageEffectiveDate != default)
+    {
+        member.CoverageEffectiveDate = member.CoverageEffectiveDate.Date.Add(dateShift);
+    }
+
+    if (member.CoverageTermDate.HasValue)
+    {
+        member.CoverageTermDate = member.CoverageTermDate.Value.Date.Add(dateShift);
+    }
+
+    foreach (var coverage in member.Coverages)
+    {
+        if (coverage.EffectiveDate != default)
+        {
+            coverage.EffectiveDate = coverage.EffectiveDate.Date.Add(dateShift);
+        }
+
+        if (coverage.TermDate.HasValue)
+        {
+            coverage.TermDate = coverage.TermDate.Value.Date.Add(dateShift);
+        }
     }
 }
 
