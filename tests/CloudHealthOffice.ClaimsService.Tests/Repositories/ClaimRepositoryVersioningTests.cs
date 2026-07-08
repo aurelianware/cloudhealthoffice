@@ -631,27 +631,23 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     [Fact]
     public async Task UpdateAdjudicationSummaryAsync_onAlreadyFinalClaim_suppressesStatus_butPersistsFinancialData()
     {
-        // Approved (not Denied/Paid/Voided) deliberately: those map to
-        // VersionState.Denied/Paid/Voided, which UpdateAdjudicationSummaryAsync's
-        // own query excludes entirely (terminal VersionState — a separate,
-        // pre-existing guard, not what this test targets). Approved maps to
-        // VersionState.Adjudicated, which IS query-eligible, so this row
-        // reaches the BlocksSynchronousWriteback(Approved) check itself.
-        var head = BuildVersion("chain-summary-final", "row-1", n: 1, ClaimVersionState.Adjudicated);
-        head.Status = ClaimStatus.Approved;
+        var head = BuildVersion("chain-summary-final", "row-1", n: 1, ClaimVersionState.Denied);
+        head.Status = ClaimStatus.Denied;
         await _repo.CreateAsync(head);
 
         var result = await _repo.UpdateAdjudicationSummaryAsync(
             Tenant, "chain-summary-final",
             new AdjudicationResult { AllowedAmount = 50m, PayerPayment = 50m },
-            ClaimStatus.Denied);
+            ClaimStatus.Approved);
 
         result.Outcome.Should().Be(StatusWriteOutcome.Suppressed);
-        result.PersistedStatus.Should().Be(ClaimStatus.Approved);
+        result.PersistedStatus.Should().Be(ClaimStatus.Denied);
 
         var reread = await _repo.GetVersionAsync("chain-summary-final", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Approved, "a completed disposition must never be re-litigated by a stray write-back");
+        reread!.Status.Should().Be(ClaimStatus.Denied, "a completed disposition must never be re-litigated by a stray write-back");
+        reread.VersionState.Should().Be(ClaimVersionState.Denied);
         reread.AdjudicationResult!.PayerPayment.Should().Be(50m);
+        reread.AdjudicatedDate.Should().NotBeNull();
     }
 
     [Fact]

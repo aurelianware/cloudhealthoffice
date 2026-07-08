@@ -545,20 +545,13 @@ public class ClaimRepositoryMongo : IClaimRepository
                 b.Or(b.Eq(c => c.ClaimVersionId, string.Empty), b.Eq(c => c.ClaimVersionId, (string?)null)),
                 b.Eq(c => c.Id, claimVersionId)));
 
-        var stateFilter = b.Or(
-            b.Eq(c => c.VersionState, ClaimVersionState.Submitted),
-            b.Eq(c => c.VersionState, ClaimVersionState.Adjudicated),
-            b.Eq(c => c.VersionState, ClaimVersionState.Unknown));
-
-        var filter = b.And(b.Eq(c => c.TenantId, tenantId), chainFilter, stateFilter);
+        var filter = b.And(b.Eq(c => c.TenantId, tenantId), chainFilter);
         var now = DateTime.UtcNow;
 
         // Residual-race fix — financial/audit data (AdjudicationResult, dates)
-        // persists unconditionally: this method's caller (the validator's
-        // synchronous write-back) always has a legitimate adjudication result
-        // to record even when the status transition below gets suppressed.
-        // Only Status + VersionState are guarded, in a separate conditional
-        // update — see TryPatchStatusAsync.
+        // persists by chain/id even if async adjudication already finalized
+        // the row. Only Status + VersionState are guarded, in a separate
+        // conditional update — see TryPatchStatusAsync.
         var summaryUpdate = Builders<Claim>.Update
             .Set(c => c.AdjudicationResult, adjudicationResult)
             .Set(c => c.AdjudicatedDate, now)
