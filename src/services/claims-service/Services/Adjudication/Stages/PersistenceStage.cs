@@ -113,6 +113,6 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
         ClaimAdjudicationOutcome.Pend => ClaimStatus.Pended,
         ClaimAdjudicationOutcome.Deny => ClaimStatus.Denied,
         ClaimAdjudicationOutcome.Reject => ClaimStatus.Denied,
-        _ => ClaimStatus.Approved,
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Unexpected adjudication outcome."),
     };
 }

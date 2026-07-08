@@ -99,7 +99,7 @@ public class HttpBenefitCalculationEngineClientReverseTests
         Assert.Equal(NetworkTier.InNetwork, snapshot.NetworkTier);
 
         Assert.NotNull(_handler.LastBodyJson);
-        var requestJson = JsonDocument.Parse(_handler.LastBodyJson!);
+        using var requestJson = JsonDocument.Parse(_handler.LastBodyJson!);
         Assert.Equal("InNetwork", requestJson.RootElement.GetProperty("networkTier").GetString());
     }
 
