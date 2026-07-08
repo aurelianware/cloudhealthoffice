@@ -54,7 +54,7 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
         // Add additional lines for complex scenarios
         if (IsMultiLineScenario(scenario))
         {
-            var proc2 = _refData.GetProcedureCode(random, procSubType);
+            var proc2 = GetDistinctProcedureCode(random, procSubType, proc.Code);
             lines.Add(new ClaimLine
             {
                 LineNumber = 2,
@@ -229,6 +229,26 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
         return scenario is
             EdgeCaseScenario.NewbornMotherClaimLink or
             EdgeCaseScenario.SubrogationAccidentRelated;
+    }
+
+    private (string Code, string Description, decimal BaseCharge) GetDistinctProcedureCode(
+        Random random,
+        string procSubType,
+        string firstProcedureCode)
+    {
+        var candidate = _refData.GetProcedureCode(random, procSubType);
+        for (var attempt = 0; attempt < 100 && candidate.Code == firstProcedureCode; attempt++)
+        {
+            candidate = _refData.GetProcedureCode(random, procSubType);
+        }
+
+        if (candidate.Code == firstProcedureCode)
+        {
+            throw new InvalidOperationException(
+                $"Could not select a distinct procedure code for multi-line {procSubType} edge-case claim.");
+        }
+
+        return candidate;
     }
 
     private static decimal ChargeWithVariance(decimal baseCharge, Random random, int minVariance, int maxVariance)
