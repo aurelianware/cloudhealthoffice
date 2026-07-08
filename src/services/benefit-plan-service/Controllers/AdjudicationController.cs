@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
@@ -342,6 +343,31 @@ public class AdjudicationController : ControllerBase
                 carc = providerIntegrity.DenialCode,
                 integrityScore = providerIntegrity.IntegrityScore,
                 rating = providerIntegrity.Rating,
+                timings = stageTimings,
+            });
+        }
+
+        if (!IsMemberEligibleForServiceDate(request, out var eligibilityReason))
+        {
+            adjudicationSpan?.SetTag("cho.outcome", "member_not_eligible");
+            adjudicationSpan?.SetStatus(ActivityStatusCode.Error, eligibilityReason);
+
+            RecordLatency(sw, claimTypeCode, "member_not_eligible");
+
+            var serviceDateForLog = SanitizeForLog(
+                request.ServiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
+            _logger.LogWarning(
+                "Claim {ClaimId} denied: member {MemberId} not eligible on service date {ServiceDate}: {Reason}",
+                SanitizeForLog(request.ClaimId), SanitizeForLog(request.MemberId),
+                serviceDateForLog, SanitizeForLog(eligibilityReason));
+
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = "CARC_27",
+                message = eligibilityReason,
+                carc = "27",
                 timings = stageTimings,
             });
         }
@@ -908,6 +934,43 @@ public class AdjudicationController : ControllerBase
         _ => null
     };
 
+    private static bool IsMemberEligibleForServiceDate(
+        AdjudicationRequest request,
+        out string reason)
+    {
+        if (request.MemberEffectiveDate is DateOnly effectiveDate
+            && request.ServiceDate < effectiveDate)
+        {
+            reason = "Service date before member coverage effective date";
+            return false;
+        }
+
+        if (request.MemberTerminationDate is DateOnly terminationDate
+            && request.ServiceDate > terminationDate)
+        {
+            reason = "Service date after member coverage termination date";
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.MemberEnrollmentStatus)
+            && !request.MemberEnrollmentStatus.Equals("Active", StringComparison.OrdinalIgnoreCase)
+            && !request.MemberEnrollmentStatus.Equals("Terminated", StringComparison.OrdinalIgnoreCase))
+        {
+            reason = $"Member status is {request.MemberEnrollmentStatus}";
+            return false;
+        }
+
+        if (request.MemberEnrollmentStatus?.Equals("Terminated", StringComparison.OrdinalIgnoreCase) is true
+            && request.MemberTerminationDate is null)
+        {
+            reason = "Member coverage terminated";
+            return false;
+        }
+
+        reason = "Active coverage";
+        return true;
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // Helper: Map AdjudicationRequest → X12837Claim for scrub engine
     // ═══════════════════════════════════════════════════════════════════
@@ -999,6 +1062,9 @@ public record AdjudicationRequest
     public string SubscriberId { get; init; } = default!;
     public Guid BenefitPlanId { get; init; }
     public DateOnly ServiceDate { get; init; }
+    public DateOnly? MemberEffectiveDate { get; init; }
+    public DateOnly? MemberTerminationDate { get; init; }
+    public string? MemberEnrollmentStatus { get; init; }
     public string ProviderNpi { get; init; } = default!;
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
