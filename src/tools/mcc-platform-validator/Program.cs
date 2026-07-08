@@ -1112,11 +1112,12 @@ static async Task EnsureProviderCredentialingAsync(
     }
 
     var credentialingDateUtc = DateTime.SpecifyKind(credentialingDate.Date, DateTimeKind.Utc);
+    var recredentialingDueDateUtc = DateTime.SpecifyKind(DateTime.UtcNow.Date.AddYears(2), DateTimeKind.Utc);
     var payload = new
     {
         status = "approved",
         credentialingDate = credentialingDateUtc,
-        recredentialingDueDate = DateTime.UtcNow.Date.AddYears(2)
+        recredentialingDueDate = recredentialingDueDateUtc
     };
 
     using var update = await http.PutAsJsonAsync(

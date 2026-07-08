@@ -88,7 +88,10 @@ public class InMemoryMessageBusTests : MessageBusContractTests
             .WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal("wanted", value);
-        Assert.False(received.Reader.TryRead(out _));
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            received.Reader.ReadAsync()
+                .AsTask()
+                .WaitAsync(TimeSpan.FromMilliseconds(250)));
     }
 
     private static void UpdateMax(ref int target, int value)
