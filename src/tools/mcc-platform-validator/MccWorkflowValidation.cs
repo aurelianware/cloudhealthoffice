@@ -37,11 +37,20 @@ public static class MccWorkflowValidation
         if (claim.EdgeCase is not null && claim.ExpectedOutcome is not null)
         {
             var scenario = $"EdgeCase:{claim.EdgeCase}";
-            var expectedCode = NormalizeExpectedCode(claim.ExpectedOutcome.DenialReasonCode);
             var expectedOutcome = OutcomeFromDisposition(claim.ExpectedOutcome.Disposition);
+            var expectedCode = expectedOutcome is ClaimValidationOutcome.BusinessDenial
+                && IsPriorAuthEdgeCase(claim.EdgeCase.Value)
+                    ? PriorAuthRequiredCode
+                    : NormalizeExpectedCode(claim.ExpectedOutcome.DenialReasonCode);
 
             if (expectedOutcome is ClaimValidationOutcome.Pended
                 && IsUnsupportedPendedEdgeCase(claim.EdgeCase.Value))
+            {
+                return ExpectedValidation.Unsupported(scenario, expectedCode);
+            }
+
+            if (expectedOutcome is ClaimValidationOutcome.BusinessDenial
+                && IsUnsupportedPriorAuthValidationEdgeCase(claim.EdgeCase.Value))
             {
                 return ExpectedValidation.Unsupported(scenario, expectedCode);
             }
@@ -149,6 +158,24 @@ public static class MccWorkflowValidation
             EdgeCaseScenario.SubrogationWorkersComp or
             EdgeCaseScenario.SubrogationThirdPartyLiability or
             EdgeCaseScenario.MedicaidSpendDown;
+    }
+
+    private static bool IsUnsupportedPriorAuthValidationEdgeCase(EdgeCaseScenario scenario)
+    {
+        return scenario is
+            EdgeCaseScenario.PriorAuthRequired_ExpiredAuth or
+            EdgeCaseScenario.PriorAuthRequired_WrongProvider or
+            EdgeCaseScenario.PriorAuthRequired_WrongProcedure;
+    }
+
+    private static bool IsPriorAuthEdgeCase(EdgeCaseScenario scenario)
+    {
+        return scenario is
+            EdgeCaseScenario.PriorAuthRequired_AuthOnFile or
+            EdgeCaseScenario.PriorAuthRequired_NoAuth or
+            EdgeCaseScenario.PriorAuthRequired_ExpiredAuth or
+            EdgeCaseScenario.PriorAuthRequired_WrongProvider or
+            EdgeCaseScenario.PriorAuthRequired_WrongProcedure;
     }
 
     private static string? NormalizeExpectedCode(string? code)

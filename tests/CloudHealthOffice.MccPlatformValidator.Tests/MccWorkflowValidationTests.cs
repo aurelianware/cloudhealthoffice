@@ -137,6 +137,35 @@ public class MccWorkflowValidationTests
             priorAuthStatus: "Required",
             priorAuthNumber: null,
             renderingState: "AZ");
+        claim.EdgeCase = EdgeCaseScenario.RetroEligibilityTermination;
+        claim.ExpectedOutcome = new ExpectedOutcome
+        {
+            Disposition = "Denied",
+            DenialReasonCode = "27"
+        };
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.BusinessDenial,
+            actualBusinessDenialCode: "CARC_27");
+
+        Assert.Equal("EdgeCase:RetroEligibilityTermination", expected.Scenario);
+        Assert.Equal(ClaimValidationOutcome.BusinessDenial, expected.ExpectedOutcome);
+        Assert.Equal("CARC_27", expected.ExpectedBusinessDenialCode);
+        Assert.Equal("Matched", status);
+    }
+
+    [Fact]
+    public void ExpectedValidationFor_PriorAuthNoAuthEdgeCase_UsesPlatformBusinessCode()
+    {
+        var claim = CreateClaim(
+            claimType: "EdgeCase",
+            benefitPlanId: "MCC-PLAN",
+            placeOfService: "21",
+            priorAuthStatus: "Required",
+            priorAuthNumber: null,
+            renderingState: "TX");
         claim.EdgeCase = EdgeCaseScenario.PriorAuthRequired_NoAuth;
         claim.ExpectedOutcome = new ExpectedOutcome
         {
@@ -148,12 +177,47 @@ public class MccWorkflowValidationTests
         var status = MccWorkflowValidation.ValidationStatus(
             expected,
             ClaimValidationOutcome.BusinessDenial,
-            actualBusinessDenialCode: "CARC_197");
+            actualBusinessDenialCode: MccWorkflowValidation.PriorAuthRequiredCode);
 
         Assert.Equal("EdgeCase:PriorAuthRequired_NoAuth", expected.Scenario);
         Assert.Equal(ClaimValidationOutcome.BusinessDenial, expected.ExpectedOutcome);
-        Assert.Equal("CARC_197", expected.ExpectedBusinessDenialCode);
-        Assert.Equal("Matched", status);
+        Assert.Equal(MccWorkflowValidation.PriorAuthRequiredCode, expected.ExpectedBusinessDenialCode);
+        Assert.False(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, status);
+    }
+
+    [Theory]
+    [InlineData(EdgeCaseScenario.PriorAuthRequired_ExpiredAuth)]
+    [InlineData(EdgeCaseScenario.PriorAuthRequired_WrongProvider)]
+    [InlineData(EdgeCaseScenario.PriorAuthRequired_WrongProcedure)]
+    public void ExpectedValidationFor_UnsupportedPriorAuthValidationEdgeCase_ReturnsUnsupported(
+        EdgeCaseScenario scenario)
+    {
+        var claim = CreateClaim(
+            claimType: "EdgeCase",
+            benefitPlanId: "MCC-PLAN",
+            placeOfService: "21",
+            priorAuthStatus: "OnFile",
+            priorAuthNumber: "AUTH-TEST",
+            renderingState: "TX");
+        claim.EdgeCase = scenario;
+        claim.ExpectedOutcome = new ExpectedOutcome
+        {
+            Disposition = "Denied",
+            DenialReasonCode = "197"
+        };
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.Paid,
+            actualBusinessDenialCode: null);
+
+        Assert.Equal($"EdgeCase:{scenario}", expected.Scenario);
+        Assert.Null(expected.ExpectedOutcome);
+        Assert.Equal(MccWorkflowValidation.PriorAuthRequiredCode, expected.ExpectedBusinessDenialCode);
+        Assert.True(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, status);
     }
 
     [Fact]
