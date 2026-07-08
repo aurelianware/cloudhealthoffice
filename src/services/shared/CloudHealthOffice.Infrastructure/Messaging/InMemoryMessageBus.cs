@@ -101,6 +101,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
             channel,
             env => handler((T)env.Message, env.ToContext(), env.CancellationToken),
             Math.Max(1, options?.MaxConcurrentCalls ?? 1),
+            options?.RequiredProperties,
             _logger);
         _subscriptions.Add(new WeakReference<InMemorySubscription>(sub));
         return sub;
@@ -193,6 +194,7 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
         private readonly Channel<Envelope> _channel;
         private readonly Func<Envelope, Task> _dispatch;
         private readonly int _maxConcurrentCalls;
+        private readonly IReadOnlyDictionary<string, string>? _requiredProperties;
         private readonly ILogger _logger;
         private readonly CancellationTokenSource _internalCts = new();
         private CancellationTokenSource? _linkedCts;
@@ -205,12 +207,14 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
             Channel<Envelope> channel,
             Func<Envelope, Task> dispatch,
             int maxConcurrentCalls,
+            IReadOnlyDictionary<string, string>? requiredProperties,
             ILogger logger)
         {
             _queueOrTopic = queueOrTopic;
             _channel = channel;
             _dispatch = dispatch;
             _maxConcurrentCalls = maxConcurrentCalls;
+            _requiredProperties = requiredProperties;
             _logger = logger;
         }
 
@@ -250,6 +254,14 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
 
         private async Task DispatchAsync(Envelope envelope, CancellationToken ct)
         {
+            if (!MatchesRequiredProperties(envelope.Properties))
+            {
+                _logger.LogDebug(
+                    "InMemoryMessageBus ignored {Queue} message {MessageId}: subscription property filter did not match",
+                    _queueOrTopic, envelope.MessageId);
+                return;
+            }
+
             ActivityContext parentCtx = default;
             var hasParent = envelope.Properties.TryGetValue(TraceparentPropertyName, out var tp) &&
                 ActivityContext.TryParse(tp, null, out parentCtx);
@@ -277,6 +289,22 @@ public sealed class InMemoryMessageBus : IMessageBus, IAsyncDisposable
                     _queueOrTopic, envelope.MessageId);
                 // In-memory has no DLQ; rethrow would kill the pump — swallow after logging.
             }
+        }
+
+        private bool MatchesRequiredProperties(IReadOnlyDictionary<string, string> properties)
+        {
+            if (_requiredProperties is null || _requiredProperties.Count == 0) return true;
+
+            foreach (var (key, expectedValue) in _requiredProperties)
+            {
+                if (!properties.TryGetValue(key, out var actualValue) ||
+                    !string.Equals(actualValue, expectedValue, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         public async ValueTask DisposeAsync()

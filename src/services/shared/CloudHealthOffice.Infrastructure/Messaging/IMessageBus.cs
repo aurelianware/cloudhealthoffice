@@ -67,10 +67,16 @@ public record SendOptions(
 /// for completeness but the implementation ignores true.
 /// </param>
 /// <param name="SubscriptionName">Topic subscription name (topics only).</param>
+/// <param name="RequiredProperties">
+/// Optional application-property filter for local parity with Service Bus
+/// subscription rules. Messages that do not contain every required key/value
+/// are ignored by this subscriber.
+/// </param>
 public record SubscriptionOptions(
     int MaxConcurrentCalls = 4,
     bool AutoComplete = false,
-    string? SubscriptionName = null);
+    string? SubscriptionName = null,
+    IReadOnlyDictionary<string, string>? RequiredProperties = null);
 
 /// <summary>Context surfaced to handlers alongside the deserialized message.</summary>
 public record MessageContext(

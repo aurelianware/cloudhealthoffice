@@ -6,6 +6,11 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   MongoDb__DatabaseName: "cloudhealthoffice"
+  Services__BenefitPlanService: "http://benefit-plan-service"
+  Services__CoverageService: "http://coverage-service"
+  Services__MemberService: "http://member-service"
+  Services__ProviderService: "http://provider-service"
+  Messaging__AdjudicationMaxConcurrentCalls: "32"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -50,6 +55,31 @@ spec:
             configMapKeyRef:
               name: claims-service-config
               key: MongoDb__DatabaseName
+        - name: Services__BenefitPlanService
+          valueFrom:
+            configMapKeyRef:
+              name: claims-service-config
+              key: Services__BenefitPlanService
+        - name: Services__CoverageService
+          valueFrom:
+            configMapKeyRef:
+              name: claims-service-config
+              key: Services__CoverageService
+        - name: Services__MemberService
+          valueFrom:
+            configMapKeyRef:
+              name: claims-service-config
+              key: Services__MemberService
+        - name: Services__ProviderService
+          valueFrom:
+            configMapKeyRef:
+              name: claims-service-config
+              key: Services__ProviderService
+        - name: Messaging__AdjudicationMaxConcurrentCalls
+          valueFrom:
+            configMapKeyRef:
+              name: claims-service-config
+              key: Messaging__AdjudicationMaxConcurrentCalls
         - name: Redis__ConnectionString
           valueFrom:
             secretKeyRef:

@@ -17,8 +17,14 @@ default it on:
 PEND_OBSERVATION_ENABLED=true \
 PEND_OBSERVATION_TIMEOUT_SECONDS=45 \
 PEND_OBSERVATION_INTERVAL_MS=1000 \
+SEED_MEMBERS=true \
 ./scripts/run-mcc-local-k8s.sh
 ```
+
+Keep member seeding enabled unless the tenant already has the exact synthetic
+members generated for the run. The async claims-service path resolves DOB and
+gender from member-service; if those members are missing, structural scrubbing
+can reject the claim before pend-producing edits run.
 
 If expected-pend claims do not reach a pended or terminal claim status within
 the configured window, the validator reports `ObservationTimeout` separately

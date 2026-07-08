@@ -35,6 +35,7 @@ Console.WriteLine("Million Claim Challenge - Platform Validator");
 Console.WriteLine($"  Tenant:      {options.TenantId}");
 Console.WriteLine($"  Claims URL:  {options.ClaimsUrl}");
 Console.WriteLine($"  Benefit URL: {options.BenefitUrl}");
+Console.WriteLine($"  Member URL:  {options.MemberUrl}");
 Console.WriteLine($"  Provider URL:{options.ProviderUrl}");
 Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
@@ -47,6 +48,10 @@ Console.WriteLine();
 
 await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
 await RequireHealthyAsync(http, $"{options.BenefitUrl}/health", "benefit-plan-service");
+if (options.SeedMembers)
+{
+    await RequireHealthyAsync(http, $"{options.MemberUrl}/health", "member-service");
+}
 if (options.SeedProviders)
 {
     await RequireHealthyAsync(http, $"{options.ProviderUrl}/health", "provider-service");
@@ -59,11 +64,18 @@ var validationPlanId = Guid.NewGuid();
 await CreateValidationPlanAsync(http, options, validationPlanId, json);
 
 var claims = await GenerateClaimsAsync(options);
+NormalizeValidationProviderProfiles(claims, options.Seed);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 var answerKey = MccAnswerKey.FromClaims(claims);
 
+if (options.SeedMembers)
+{
+    await SeedMembersAsync(http, options, claims, json);
+}
+
 if (options.SeedProviders)
 {
+    await SeedProviderNetworksAsync(http, options, json);
     await SeedProvidersAsync(http, options, claims, validationPlanId, json);
 }
 
@@ -169,7 +181,10 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         stage.Stop();
         adjudicationElapsed = stage.Elapsed;
 
-        if (!options.SkipClaimUpdate)
+        var skipSynchronousWriteback = options.SkipClaimUpdate
+            || expectedValidation.ExpectedOutcome is ClaimValidationOutcome.Pended;
+
+        if (!skipSynchronousWriteback)
         {
             failureStage = "writeback";
             stage.Restart();
@@ -383,6 +398,33 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
     InjectUncoveredServiceScenarios(claims);
     InjectPriorAuthScenarios(claims, options);
     return claims;
+}
+
+static void NormalizeValidationProviderProfiles(List<SyntheticClaim> claims, int seed)
+{
+    var scenarioIndex = 0;
+    foreach (var claim in claims.OrderBy(c => c.ClaimId, StringComparer.Ordinal))
+    {
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        if (expected.ExpectedOutcome is null)
+        {
+            continue;
+        }
+
+        ForceAdjudicatableProviderProfile(claim.BillingProvider);
+        claim.BillingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, scenarioIndex, role: 0);
+
+        if (!string.Equals(
+                expected.ExpectedBusinessDenialCode,
+                MccWorkflowValidation.ProviderExcludedCode,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            ForceAdjudicatableProviderProfile(claim.RenderingProvider);
+            claim.RenderingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, scenarioIndex, role: 1);
+        }
+
+        scenarioIndex++;
+    }
 }
 
 static void InjectCleanPaidScenarios(List<SyntheticClaim> claims)
@@ -694,6 +736,15 @@ static void ForceCleanProfessionalPaidProviderProfile(SyntheticProvider provider
     provider.ContractType = "FeeForService";
 }
 
+static void ForceAdjudicatableProviderProfile(SyntheticProvider provider)
+{
+    provider.IsParticipating = true;
+    provider.NetworkStatus = "InNetwork";
+    provider.CredentialingStatus = "Active";
+    provider.TermDate = null;
+    provider.AcceptingNewPatients = true;
+}
+
 static void ForceExcludedProviderProfile(SyntheticProvider provider, int seed, int index)
 {
     provider.Npi = BuildSyntheticExcludedProviderNpi(seed, index);
@@ -712,6 +763,17 @@ static string BuildSyntheticExcludedProviderNpi(int seed, int index)
         var combined = (uint)(seed * 1_000_003 + index);
         var value = combined % 1_000_000;
         var baseNineDigits = $"900{value:D6}";
+        return $"{baseNineDigits}{CalculateNpiCheckDigit(baseNineDigits)}";
+    }
+}
+
+static string BuildSyntheticValidationProviderNpi(int seed, int index, int role)
+{
+    unchecked
+    {
+        var combined = (uint)(seed * 1_000_003 + index * 17 + role);
+        var value = combined % 1_000_000;
+        var baseNineDigits = $"91{role}{value:D6}";
         return $"{baseNineDigits}{CalculateNpiCheckDigit(baseNineDigits)}";
     }
 }
@@ -740,6 +802,112 @@ static int CalculateNpiCheckDigit(string baseNineDigits)
     }
 
     return (10 - (sum % 10)) % 10;
+}
+
+static async Task SeedMembersAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    IReadOnlyCollection<SyntheticClaim> claims,
+    JsonSerializerOptions json)
+{
+    var members = claims
+        .Select(claim => claim.Member)
+        .Where(member => !string.IsNullOrWhiteSpace(member.MemberId))
+        .GroupBy(member => member.MemberId, StringComparer.Ordinal)
+        .Select(group => group.First())
+        .OrderBy(member => member.MemberId, StringComparer.Ordinal)
+        .ToList();
+
+    var created = 0;
+    var existing = 0;
+
+    foreach (var member in members)
+    {
+        if (await MemberExistsAsync(http, options, member.MemberId))
+        {
+            existing++;
+            continue;
+        }
+
+        var didCreate = await CreateMemberAsync(http, options, member, json);
+        if (didCreate)
+        {
+            created++;
+        }
+        else
+        {
+            existing++;
+        }
+    }
+
+    Console.WriteLine($"seeded: {created:N0} synthetic members ({existing:N0} already present)");
+}
+
+static async Task<bool> MemberExistsAsync(HttpClient http, ValidatorOptions options, string memberId)
+{
+    using var response = await http.GetAsync($"{options.MemberUrl}/api/v1/members/{Uri.EscapeDataString(memberId)}");
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        return false;
+    }
+
+    if (response.IsSuccessStatusCode)
+    {
+        return true;
+    }
+
+    var body = await response.Content.ReadAsStringAsync();
+    throw new InvalidOperationException($"member lookup failed ({memberId}): {(int)response.StatusCode} {body}");
+}
+
+static async Task<bool> CreateMemberAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    SyntheticMember member,
+    JsonSerializerOptions json)
+{
+    var effectiveDate = DateTime.SpecifyKind(member.CoverageEffectiveDate == default
+        ? DateTime.UtcNow.Date.AddYears(-1)
+        : member.CoverageEffectiveDate.Date, DateTimeKind.Utc);
+
+    var payload = new
+    {
+        memberId = member.MemberId,
+        ssn = member.SSN,
+        groupNumber = NullIfWhiteSpace(member.GroupNumber) ?? "MCC-GRP-001",
+        isSubscriber = member.IsSubscriber,
+        subscriberMemberId = (string?)null,
+        relationshipCode = NullIfWhiteSpace(member.RelationshipCode) ?? (member.IsSubscriber ? "18" : null),
+        firstName = NullIfWhiteSpace(member.FirstName) ?? "MCC",
+        lastName = NullIfWhiteSpace(member.LastName) ?? "Member",
+        middleName = NullIfWhiteSpace(member.MiddleName),
+        dateOfBirth = DateTime.SpecifyKind(member.DateOfBirth.Date, DateTimeKind.Utc),
+        gender = NullIfWhiteSpace(member.Gender),
+        address = NullIfWhiteSpace(member.Address),
+        city = NullIfWhiteSpace(member.City),
+        state = NullIfWhiteSpace(member.State),
+        zipCode = NullIfWhiteSpace(member.ZipCode),
+        phone = NullIfWhiteSpace(member.Phone),
+        email = NullIfWhiteSpace(member.Email),
+        effectiveDate,
+        terminationDate = member.CoverageTermDate,
+        maintenanceTypeCode = NullIfWhiteSpace(member.MaintenanceTypeCode) ?? "021",
+        eventId = $"mcc-validator-member-created:{options.Seed}:{member.MemberId}"
+    };
+
+    using var response = await http.PostAsJsonAsync($"{options.MemberUrl}/api/v1/members", payload, json);
+    var body = await response.Content.ReadAsStringAsync();
+    if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+    {
+        return false;
+    }
+
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException($"member seed failed ({member.MemberId}): {(int)response.StatusCode} {body}");
+    }
+
+    return true;
 }
 
 static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
@@ -778,22 +946,62 @@ static async Task SeedProvidersAsync(
 
     foreach (var provider in providers)
     {
-        if (await ProviderExistsAsync(http, options, provider.Npi))
+        var providerId = await GetProviderIdByNpiAsync(http, options, provider.Npi);
+        if (providerId is not null)
         {
             existing++;
-            continue;
+        }
+        else
+        {
+            providerId = await CreateProviderAsync(http, options, provider, validationPlanId, json);
+            created++;
         }
 
-        await CreateProviderAsync(http, options, provider, validationPlanId, json);
-        created++;
+        if (!IsProviderExcluded(provider))
+        {
+            await EnsureProviderCredentialingAsync(
+                http,
+                options,
+                providerId,
+                EffectiveDateForProvider(provider),
+                json);
+        }
     }
 
     Console.WriteLine($"seeded: {created:N0} synthetic providers ({existing:N0} already present)");
 }
 
-static async Task<bool> ProviderExistsAsync(HttpClient http, ValidatorOptions options, string npi)
+static async Task SeedProviderNetworksAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    JsonSerializerOptions json)
 {
-    using var response = await http.GetAsync($"{options.ProviderUrl}/api/v1/providers/npi/{Uri.EscapeDataString(npi)}");
+    var networks = new[]
+    {
+        ("mcc-local-network", "MCC Local In-Network"),
+        ("mcc-local-out-network", "MCC Local Out-of-Network")
+    };
+
+    var created = 0;
+    var existing = 0;
+    foreach (var (networkId, name) in networks)
+    {
+        if (await ProviderNetworkExistsAsync(http, options, networkId))
+        {
+            existing++;
+            continue;
+        }
+
+        await CreateProviderNetworkAsync(http, options, networkId, name, json);
+        created++;
+    }
+
+    Console.WriteLine($"seeded: {created:N0} provider networks ({existing:N0} already present)");
+}
+
+static async Task<bool> ProviderNetworkExistsAsync(HttpClient http, ValidatorOptions options, string networkId)
+{
+    using var response = await http.GetAsync($"{options.ProviderUrl}/api/v1/networks/{Uri.EscapeDataString(networkId)}");
     if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
     {
         return false;
@@ -805,10 +1013,126 @@ static async Task<bool> ProviderExistsAsync(HttpClient http, ValidatorOptions op
     }
 
     var body = await response.Content.ReadAsStringAsync();
-    throw new InvalidOperationException($"provider lookup failed ({npi}): {(int)response.StatusCode} {body}");
+    throw new InvalidOperationException($"provider network lookup failed ({networkId}): {(int)response.StatusCode} {body}");
 }
 
-static async Task CreateProviderAsync(
+static async Task CreateProviderNetworkAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    string networkId,
+    string name,
+    JsonSerializerOptions json)
+{
+    var effectiveDate = DateTime.SpecifyKind(DateTime.UtcNow.Date.AddYears(-2), DateTimeKind.Utc);
+    var payload = new
+    {
+        tenantId = options.TenantId,
+        id = networkId,
+        organizationId = networkId,
+        name,
+        networkType = "custom",
+        lineOfBusiness = LineOfBusinessName(options.LineOfBusiness),
+        effectiveDate,
+        status = "active",
+        identifiers = new[]
+        {
+            new
+            {
+                system = "urn:cho:network",
+                value = networkId,
+                type = "NIIP",
+                use = "official"
+            }
+        }
+    };
+
+    using var response = await http.PostAsJsonAsync($"{options.ProviderUrl}/api/v1/networks", payload, json);
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode && response.StatusCode is not System.Net.HttpStatusCode.Conflict)
+    {
+        throw new InvalidOperationException($"provider network seed failed ({networkId}): {(int)response.StatusCode} {body}");
+    }
+}
+
+static async Task<string?> GetProviderIdByNpiAsync(HttpClient http, ValidatorOptions options, string npi)
+{
+    using var response = await http.GetAsync($"{options.ProviderUrl}/api/v1/providers/npi/{Uri.EscapeDataString(npi)}");
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        return null;
+    }
+
+    if (response.IsSuccessStatusCode)
+    {
+        var successBody = await response.Content.ReadAsStringAsync();
+        return ExtractProviderId(successBody)
+            ?? throw new InvalidOperationException($"provider lookup returned no provider id ({npi}): {successBody}");
+    }
+
+    var failureBody = await response.Content.ReadAsStringAsync();
+    throw new InvalidOperationException($"provider lookup failed ({npi}): {(int)response.StatusCode} {failureBody}");
+}
+
+static string? ExtractProviderId(string body)
+{
+    using var document = JsonDocument.Parse(body);
+    var root = document.RootElement;
+    if (root.TryGetProperty("providerId", out var providerIdElement)
+        && !string.IsNullOrWhiteSpace(providerIdElement.GetString()))
+    {
+        return providerIdElement.GetString();
+    }
+
+    return root.TryGetProperty("id", out var idElement)
+        ? idElement.GetString()
+        : null;
+}
+
+static async Task EnsureProviderCredentialingAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    string providerId,
+    DateTime credentialingDate,
+    JsonSerializerOptions json)
+{
+    var asOfDate = Uri.EscapeDataString(DateTime.UtcNow.ToString("O"));
+    using (var response = await http.GetAsync(
+               $"{options.ProviderUrl}/api/v1/providers/{Uri.EscapeDataString(providerId)}/credentialing/status-as-of?asOfDate={asOfDate}"))
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.TryGetProperty("status", out var statusElement)
+                && string.Equals(statusElement.GetString(), "Approved", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+    }
+
+    var credentialingDateUtc = DateTime.SpecifyKind(credentialingDate.Date, DateTimeKind.Utc);
+    var recredentialingDueDateUtc = DateTime.SpecifyKind(DateTime.UtcNow.Date.AddYears(2), DateTimeKind.Utc);
+    var payload = new
+    {
+        status = "approved",
+        credentialingDate = credentialingDateUtc,
+        recredentialingDueDate = recredentialingDueDateUtc
+    };
+
+    using var update = await http.PutAsJsonAsync(
+        $"{options.ProviderUrl}/api/v1/providers/{Uri.EscapeDataString(providerId)}/credentialing",
+        payload,
+        json);
+    var updateBody = await update.Content.ReadAsStringAsync();
+    if (!update.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException(
+            $"provider credentialing seed failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+    }
+}
+
+static async Task<string> CreateProviderAsync(
     HttpClient http,
     ValidatorOptions options,
     SyntheticProvider provider,
@@ -816,12 +1140,9 @@ static async Task CreateProviderAsync(
     JsonSerializerOptions json)
 {
     var isOrganization = provider.ProviderType.Equals("Organization", StringComparison.OrdinalIgnoreCase);
-    var effectiveDate = DateTime.SpecifyKind(provider.EffectiveDate == default
-        ? DateTime.UtcNow.Date.AddYears(-2)
-        : provider.EffectiveDate.Date, DateTimeKind.Utc);
+    var effectiveDate = EffectiveDateForProvider(provider);
     var now = DateTimeOffset.UtcNow;
-    var isProviderExcluded = string.Equals(provider.CredentialingStatus, "Excluded", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(provider.NetworkStatus, "Excluded", StringComparison.OrdinalIgnoreCase);
+    var isProviderExcluded = IsProviderExcluded(provider);
 
     var payload = new
     {
@@ -856,14 +1177,14 @@ static async Task CreateProviderAsync(
             {
                 planId = validationPlanId.ToString(),
                 networkId = provider.IsParticipating ? "mcc-local-network" : "mcc-local-out-network",
-                lineOfBusiness = "commercial",
+                lineOfBusiness = LineOfBusinessName(options.LineOfBusiness),
                 networkTier = provider.IsParticipating ? "InNetwork" : "OutOfNetwork",
                 effectiveDate,
                 terminationDate = provider.TermDate,
                 acceptingNewPatients = provider.AcceptingNewPatients,
                 panelLimit = 2500,
                 panelAccepted = provider.AcceptingNewPatients,
-                acceptedLobs = new[] { "commercial" },
+                acceptedLobs = new[] { LineOfBusinessName(options.LineOfBusiness) },
                 minAcceptedAgeYears = (int?)null,
                 maxAcceptedAgeYears = (int?)null,
                 rates = new
@@ -883,7 +1204,19 @@ static async Task CreateProviderAsync(
     {
         throw new InvalidOperationException($"provider seed failed ({provider.Npi}): {(int)response.StatusCode} {body}");
     }
+
+    return ExtractProviderId(body)
+        ?? throw new InvalidOperationException($"provider seed returned no provider id ({provider.Npi}): {body}");
 }
+
+static DateTime EffectiveDateForProvider(SyntheticProvider provider) =>
+    DateTime.SpecifyKind(provider.EffectiveDate == default
+        ? DateTime.UtcNow.Date.AddYears(-2)
+        : provider.EffectiveDate.Date, DateTimeKind.Utc);
+
+static bool IsProviderExcluded(SyntheticProvider provider) =>
+    string.Equals(provider.CredentialingStatus, "Excluded", StringComparison.OrdinalIgnoreCase)
+    || string.Equals(provider.NetworkStatus, "Excluded", StringComparison.OrdinalIgnoreCase);
 
 static string? NullIfWhiteSpace(string? value)
     => string.IsNullOrWhiteSpace(value) ? null : value;
@@ -1152,10 +1485,13 @@ static async Task<List<ClaimValidationResult>> ObserveExpectedPendResultsAsync(
     var observed = new ConcurrentDictionary<string, ClaimValidationResult>(StringComparer.Ordinal);
     var timeout = TimeSpan.FromSeconds(options.PendObservationTimeoutSeconds);
     var interval = TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds);
+    var observationParallelism = Math.Min(
+        expectedPendResults.Count,
+        Math.Max(options.Parallelism, 64));
 
     await Parallel.ForEachAsync(
         expectedPendResults,
-        new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
+        new ParallelOptions { MaxDegreeOfParallelism = observationParallelism },
         async (result, cancellationToken) =>
         {
             var updated = await observer.ObserveExpectedPendAsync(result, timeout, interval, cancellationToken);
@@ -1456,7 +1792,9 @@ static void PrintUsage()
       --tenant <tenant-id>       Tenant header to use (default: demo)
       --claims-url <url>         Claims service URL (default: http://localhost:5001)
       --benefit-url <url>        Benefit plan service URL (default: http://localhost:5002)
+      --member-url <url>         Member service URL (default: http://localhost:5003)
       --provider-url <url>       Provider service URL (default: http://localhost:5004)
+      --no-seed-members          Skip synthetic member seeding
       --no-seed-providers        Skip synthetic provider seeding
       --skip-claim-update        Do not write adjudication projection back to claims-service
       --no-pend-observation      Do not poll claims-service for expected-pend claim status
@@ -1575,7 +1913,9 @@ internal sealed record MassAdjudicationRun(
     int Parallelism,
     string ClaimsUrl,
     string BenefitUrl,
+    string MemberUrl,
     string ProviderUrl,
+    bool SeedMembers,
     bool SeedProviders,
     bool SkipClaimUpdate,
     int LineOfBusiness,

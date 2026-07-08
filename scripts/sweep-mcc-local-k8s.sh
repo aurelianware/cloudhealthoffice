@@ -17,6 +17,7 @@ IMAGE="${IMAGE:-cloudhealthoffice-mcc-platform-validator:local}"
 CLAIMS="${CLAIMS:-1000}"
 MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
+SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
@@ -95,10 +96,14 @@ run_case() {
   local job_name="mcc-sweep-p${parallelism}-r${repeat}-$(date +%H%M%S)"
   local log_file="$OUTPUT_DIR/${job_name}.log"
   local json_file="$OUTPUT_DIR/${job_name}.json"
+  local seed_member_arg=""
   local seed_provider_arg=""
   local pend_observation_arg=""
   local status="ok"
 
+  if [[ "$SEED_MEMBERS" != "true" ]]; then
+    seed_member_arg='                --no-seed-members \'
+  fi
   if [[ "$SEED_PROVIDERS" != "true" ]]; then
     seed_provider_arg='                --no-seed-providers \'
   fi
@@ -138,10 +143,12 @@ spec:
                 --parallelism "${parallelism}" \
                 --claims-url http://claims-service \
                 --benefit-url http://benefit-plan-service \
+                --member-url http://member-service \
                 --provider-url http://provider-service \
                 --pend-observation-timeout "${PEND_OBSERVATION_TIMEOUT_SECONDS}" \
                 --pend-observation-interval-ms "${PEND_OBSERVATION_INTERVAL_MS}" \
                 --progress-every "${PROGRESS_EVERY}" \
+${seed_member_arg}
 ${seed_provider_arg}
 ${pend_observation_arg}
                 --summary-json /tmp/mcc-summary.json
