@@ -105,6 +105,22 @@ public class EdgeCaseClaimGeneratorTests
         Assert.InRange(ageAtServiceDays, 0, 30);
     }
 
+    [Theory]
+    [InlineData("NewbornMotherClaimLink")]
+    [InlineData("SubrogationAccidentRelated")]
+    public void Generate_MultiLineScenario_UsesDistinctLineProcedureCodes(string scenario)
+    {
+        for (var seed = 0; seed < 100; seed++)
+        {
+            var claim = _generator.Generate(seed + 1, scenario, new Random(seed));
+
+            Assert.Equal(2, claim.Lines.Count);
+            Assert.Equal(
+                claim.Lines.Count,
+                claim.Lines.Select(line => line.ProcedureCode).Distinct(StringComparer.Ordinal).Count());
+        }
+    }
+
     [Fact]
     public void Generate_CobSecondary_PendsForReview()
     {
