@@ -93,6 +93,7 @@ internal static class MccRunSummaryBuilder
                 options.ClaimsUrl,
                 options.BenefitUrl,
                 options.MemberUrl,
+                options.CoverageUrl,
                 options.ProviderUrl,
                 options.SeedMembers,
                 options.SeedProviders,

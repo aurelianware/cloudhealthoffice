@@ -98,6 +98,21 @@ public class EdgeCaseClaimGeneratorTests
     }
 
     [Fact]
+    public void Generate_AllScenarios_ProducePositiveLineCharges()
+    {
+        foreach (var scenario in Enum.GetValues<EdgeCaseScenario>())
+        {
+            for (var seed = 0; seed < 100; seed++)
+            {
+                var claim = _generator.Generate(seed + 1, scenario.ToString(), new Random(seed));
+
+                Assert.All(claim.Lines, line => Assert.True(line.ChargeAmount > 0m));
+                Assert.True(claim.TotalCharges > 0m);
+            }
+        }
+    }
+
+    [Fact]
     public void Generate_DeniedClaims_HaveZeroPaidAmount()
     {
         var random = new Random(42);
