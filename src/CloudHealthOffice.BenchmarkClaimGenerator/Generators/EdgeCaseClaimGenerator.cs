@@ -92,8 +92,28 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
             PayerToPayerReady = true
         };
 
+        ApplyScenarioCoverageWindow(claim, scenario);
         claim.ExpectedOutcome = ComputeExpectedOutcome(claim, scenario, random);
         return claim;
+    }
+
+    private static void ApplyScenarioCoverageWindow(SyntheticClaim claim, EdgeCaseScenario scenario)
+    {
+        if (scenario is not EdgeCaseScenario.RetroEligibilityTermination)
+        {
+            return;
+        }
+
+        var serviceDate = claim.DateOfService.Date;
+        claim.Member.CoverageEffectiveDate = serviceDate.AddYears(-1);
+        claim.Member.CoverageTermDate = serviceDate.AddDays(-30);
+        claim.Member.EnrollmentStatus = "Active";
+
+        foreach (var coverage in claim.Member.Coverages)
+        {
+            coverage.EffectiveDate = claim.Member.CoverageEffectiveDate;
+            coverage.TermDate = claim.Member.CoverageTermDate;
+        }
     }
 
     private SyntheticMember GenerateMemberForScenario(EdgeCaseScenario scenario, Random random)
@@ -112,10 +132,6 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
 
             case EdgeCaseScenario.CobBirthdayRule:
                 member.Relationship = "Child";
-                break;
-
-            case EdgeCaseScenario.RetroEligibilityTermination:
-                member.CoverageTermDate = member.CoverageEffectiveDate.AddMonths(random.Next(3, 12));
                 break;
 
             case EdgeCaseScenario.MedicaidDualEligible:

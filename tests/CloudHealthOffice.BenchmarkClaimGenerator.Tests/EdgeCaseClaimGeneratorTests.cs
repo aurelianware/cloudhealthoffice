@@ -124,6 +124,16 @@ public class EdgeCaseClaimGeneratorTests
     }
 
     [Fact]
+    public void Generate_RetroEligibilityTermination_TerminatesBeforeServiceDate()
+    {
+        var claim = _generator.Generate(1, "RetroEligibilityTermination", new Random(42));
+
+        Assert.NotNull(claim.Member.CoverageTermDate);
+        Assert.True(claim.Member.CoverageEffectiveDate.Date < claim.Member.CoverageTermDate.Value.Date);
+        Assert.True(claim.Member.CoverageTermDate.Value.Date < claim.DateOfService.Date);
+    }
+
+    [Fact]
     public void Generate_AllScenarios_ProduceValidClaims()
     {
         var random = new Random(42);
