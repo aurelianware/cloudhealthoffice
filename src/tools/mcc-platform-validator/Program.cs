@@ -1474,6 +1474,10 @@ static async Task<(AdjudicationResponseDto Response, string RawBody)> Adjudicate
     string networkTier,
     JsonSerializerOptions json)
 {
+    var memberEffectiveDate = claim.Member.CoverageEffectiveDate == default
+        ? claim.DateOfService.Date.AddYears(-1)
+        : claim.Member.CoverageEffectiveDate.Date;
+
     var payload = new
     {
         claimId = submittedClaimId,
@@ -1481,6 +1485,11 @@ static async Task<(AdjudicationResponseDto Response, string RawBody)> Adjudicate
         subscriberId = claim.Member.SubscriberId,
         benefitPlanId = validationPlanId,
         serviceDate = DateOnly.FromDateTime(claim.DateOfService),
+        memberEffectiveDate = DateOnly.FromDateTime(memberEffectiveDate),
+        memberTerminationDate = claim.Member.CoverageTermDate is DateTime termDate
+            ? DateOnly.FromDateTime(termDate)
+            : (DateOnly?)null,
+        memberEnrollmentStatus = claim.Member.EnrollmentStatus,
         providerNpi = claim.RenderingProvider.Npi,
         networkTier,
         lineOfBusiness = options.LineOfBusiness,
@@ -1554,6 +1563,7 @@ static bool IsKnownBusinessDenialCode(string errorCode)
     => NormalizeBusinessDenialCode(errorCode) is
         "SCRUB_VALIDATION_FAILURE" or
         "NCCI_MUE_EDIT_FAILURE" or
+        "CARC_27" or
         "CARC_96" or
         "PROVIDER_EXCLUDED" or
         "PRIOR_AUTH_REQUIRED";
