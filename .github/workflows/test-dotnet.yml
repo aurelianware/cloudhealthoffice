@@ -39,8 +39,15 @@ jobs:
           echo "Discovering .NET test projects"
           echo "=========================================="
 
-          # Discover unit/integration test projects (exclude E2E tests that require Docker services)
-          mapfile -t TEST_PROJECTS < <(find src tests -name '*.Tests.csproj' | sort)
+          # Discover unit/integration test projects. Keep E2E and load tests
+          # out of this job; they require a different runtime/dependency shape
+          # and are covered by dedicated Quality Gate jobs.
+          mapfile -t TEST_PROJECTS < <(
+            find src tests -name '*.Tests.csproj' \
+              ! -name '*E2ETests.csproj' \
+              ! -name '*LoadTests.csproj' \
+              | sort
+          )
           PROJECT_COUNT=${#TEST_PROJECTS[@]}
 
           if [ "$PROJECT_COUNT" -eq 0 ]; then
