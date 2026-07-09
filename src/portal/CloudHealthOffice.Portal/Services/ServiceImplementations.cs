@@ -74,8 +74,10 @@ public class ClaimsService : IClaimsService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var response = await _httpClient.GetAsync(
+            using var request = CreateMassAdjudicationRequest(
+                HttpMethod.Get,
                 $"{baseUrl}/mass-adjudication/runs?limit={Math.Clamp(limit, 1, 100)}");
+            var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
             return await ReadOptionalJsonAsync<List<MassAdjudicationRunSummary>>(response)
                 ?? new List<MassAdjudicationRunSummary>();
@@ -92,7 +94,10 @@ public class ClaimsService : IClaimsService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var response = await _httpClient.GetAsync($"{baseUrl}/mass-adjudication/runs/{Uri.EscapeDataString(runId)}");
+            using var request = CreateMassAdjudicationRequest(
+                HttpMethod.Get,
+                $"{baseUrl}/mass-adjudication/runs/{Uri.EscapeDataString(runId)}");
+            var response = await _httpClient.SendAsync(request);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return null;
@@ -122,8 +127,10 @@ public class ClaimsService : IClaimsService
                 query += $"&outcome={Uri.EscapeDataString(outcome)}";
             }
 
-            var response = await _httpClient.GetAsync(
+            using var request = CreateMassAdjudicationRequest(
+                HttpMethod.Get,
                 $"{baseUrl}/mass-adjudication/runs/{Uri.EscapeDataString(runId)}/claims?{query}");
+            var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
             return await ReadOptionalJsonAsync<List<MassAdjudicationClaimResult>>(response)
                 ?? new List<MassAdjudicationClaimResult>();
@@ -133,6 +140,19 @@ public class ClaimsService : IClaimsService
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
             throw new ServiceUnavailableException("Claims Service", ex);
         }
+    }
+
+    private HttpRequestMessage CreateMassAdjudicationRequest(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var tenantId = _configuration["Services:ClaimsServiceTenantId"]
+            ?? _configuration["Authentication:LocalDemo:TenantId"];
+        if (!string.IsNullOrWhiteSpace(tenantId))
+        {
+            request.Headers.TryAddWithoutValidation("X-Tenant-ID", tenantId);
+        }
+
+        return request;
     }
 
     public async Task<string> SubmitClaimAsync(SubmitClaimRequest request)
@@ -190,7 +210,14 @@ public class ClaimsService : IClaimsService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<AdjudicationTransparencyData>($"{baseUrl}/claims/{claimId}/adjudication-detail");
+            var response = await _httpClient.GetAsync($"{baseUrl}/claims/{claimId}/adjudication-detail");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<AdjudicationTransparencyData>(JsonOptions);
         }
         catch (HttpRequestException ex)
         {
