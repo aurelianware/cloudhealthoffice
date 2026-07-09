@@ -159,6 +159,52 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetAdjudicationDetail_AdjudicatedClaim_ReturnsProjection()
+    {
+        var claim = CreateValidClaim();
+        claim.Id = "claim-adj-1";
+        claim.Status = ClaimStatus.Approved;
+        claim.AdjudicationResult = new AdjudicationResult
+        {
+            NetworkTier = "InNetwork",
+            AllowedAmount = 100m,
+            DeductibleAmount = 10m,
+            CoinsuranceAmount = 5m,
+            CopayAmount = 20m,
+            PatientResponsibility = 35m,
+            PayerPayment = 65m
+        };
+        claim.ClaimLines[0].AdjudicationResult = new LineAdjudicationResult
+        {
+            AllowedAmount = 100m,
+            PaidAmount = 65m,
+            PatientResponsibility = 35m
+        };
+        _repo.GetByIdAsync("claim-adj-1").Returns(claim);
+
+        var response = await _client.GetAsync("/api/claims/claim-adj-1/adjudication-detail");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var returned = await response.Content.ReadFromJsonAsync<AdjudicationTransparencyData>();
+        Assert.NotNull(returned);
+        Assert.NotEmpty(returned!.Steps);
+        Assert.Single(returned.FeeScheduleResults);
+        Assert.Equal(65m, returned.BenefitCalculation!.PlanPayment);
+    }
+
+    [Fact]
+    public async Task GetAdjudicationDetail_MissingProjection_Returns404()
+    {
+        var claim = CreateValidClaim();
+        claim.Id = "claim-unadjudicated";
+        _repo.GetByIdAsync("claim-unadjudicated").Returns(claim);
+
+        var response = await _client.GetAsync("/api/claims/claim-unadjudicated/adjudication-detail");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // GET CLAIM BY NUMBER
     // ═══════════════════════════════════════════════════════════════════

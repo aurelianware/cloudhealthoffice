@@ -623,7 +623,21 @@ public class IdCardHistoryView
 // DTOs
 public class ClaimSummary
 {
-    public string ClaimId { get; set; } = string.Empty;
+    private string _claimId = string.Empty;
+
+    public string ClaimId
+    {
+        get => _claimId;
+        set => _claimId = string.IsNullOrWhiteSpace(value) ? _claimId : value;
+    }
+
+    [JsonPropertyName("id")]
+    public string? Id
+    {
+        get => _claimId;
+        set => _claimId = string.IsNullOrWhiteSpace(value) ? _claimId : value;
+    }
+
     public string ClaimNumber { get; set; } = string.Empty;
     public string MemberName { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
@@ -631,9 +645,13 @@ public class ClaimSummary
     public string ProviderId { get; set; } = string.Empty;
     [JsonConverter(typeof(FlexibleClaimTypeJsonConverter))]
     public string ClaimType { get; set; } = string.Empty; // Professional, Institutional, Dental
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal TotalChargeAmount { get; set; }
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal AllowedAmount { get; set; }
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal PaidAmount { get; set; }
+    [JsonConverter(typeof(FlexibleClaimStatusJsonConverter))]
     public string Status { get; set; } = string.Empty;
     public DateTime ServiceDateFrom { get; set; }
     public DateTime ServiceDateTo { get; set; }
@@ -646,6 +664,10 @@ public class ClaimSummary
 
 public class ClaimDetails : ClaimSummary
 {
+    private List<ClaimDiagnosisCode> _diagnosisCodes = new();
+    private List<ClaimServiceLine> _serviceLines = new();
+    private List<ClaimAudit> _auditTrail = new();
+
     public string SubscriberId { get; set; } = string.Empty;
     public string SubscriberName { get; set; } = string.Empty;
     public string PatientName { get; set; } = string.Empty;
@@ -667,14 +689,32 @@ public class ClaimDetails : ClaimSummary
     public DateTime? PaidDate { get; set; }
     public string? CheckNumber { get; set; }
     public string? DenialReason { get; set; }
-    public List<ClaimDiagnosisCode> DiagnosisCodes { get; set; } = new();
-    public List<ClaimServiceLine> ServiceLines { get; set; } = new();
+    public List<ClaimDiagnosisCode> DiagnosisCodes
+    {
+        get => _diagnosisCodes;
+        set => _diagnosisCodes = value ?? new();
+    }
+    public List<ClaimServiceLine> ServiceLines
+    {
+        get => _serviceLines;
+        set => _serviceLines = value ?? new();
+    }
+    [JsonPropertyName("claimLines")]
+    public List<ClaimServiceLine>? ClaimLines
+    {
+        get => _serviceLines;
+        set => _serviceLines = value ?? new();
+    }
     public ClaimAdjustmentInfo? AdjustmentInfo { get; set; }
     public bool IsEditable { get; set; }
     public bool CanApprove { get; set; }
     public bool CanDeny { get; set; }
     public bool CanReverse { get; set; }
-    public List<ClaimAudit> AuditTrail { get; set; } = new();
+    public List<ClaimAudit> AuditTrail
+    {
+        get => _auditTrail;
+        set => _auditTrail = value ?? new();
+    }
 }
 
 public class ClaimDiagnosisCode
@@ -687,20 +727,41 @@ public class ClaimDiagnosisCode
 
 public class ClaimServiceLine
 {
+    private List<string> _modifiers = new();
+    private List<int> _diagnosisPointers = new();
+    private List<ClaimLineAdjustment> _adjustments = new();
+
     public int LineNumber { get; set; }
     public string ProcedureCode { get; set; } = string.Empty;
     public string ProcedureDescription { get; set; } = string.Empty;
-    public List<string> Modifiers { get; set; } = new();
+    public List<string> Modifiers
+    {
+        get => _modifiers;
+        set => _modifiers = value ?? new();
+    }
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal Units { get; set; }
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal ChargeAmount { get; set; }
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal AllowedAmount { get; set; }
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal PaidAmount { get; set; }
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal PatientResponsibility { get; set; }
     public DateTime ServiceDateFrom { get; set; }
     public DateTime ServiceDateTo { get; set; }
     public string? RevenueCode { get; set; } // Institutional
-    public List<int> DiagnosisPointers { get; set; } = new();
-    public List<ClaimLineAdjustment> Adjustments { get; set; } = new();
+    public List<int> DiagnosisPointers
+    {
+        get => _diagnosisPointers;
+        set => _diagnosisPointers = value ?? new();
+    }
+    public List<ClaimLineAdjustment> Adjustments
+    {
+        get => _adjustments;
+        set => _adjustments = value ?? new();
+    }
     public string? LineStatus { get; set; }
 }
 
@@ -708,6 +769,7 @@ public class ClaimLineAdjustment
 {
     public string GroupCode { get; set; } = string.Empty;
     public string ReasonCode { get; set; } = string.Empty;
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal Amount { get; set; }
     public string Description { get; set; } = string.Empty;
 }
@@ -717,6 +779,7 @@ public class ClaimAdjustmentInfo
     public string AdjustmentType { get; set; } = string.Empty; // Reversal, Adjustment, Correction
     public string? OriginalClaimId { get; set; }
     public string? RelatedClaimId { get; set; }
+    [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal AdjustmentAmount { get; set; }
     public string? Reason { get; set; }
     public DateTime? AdjustmentDate { get; set; }

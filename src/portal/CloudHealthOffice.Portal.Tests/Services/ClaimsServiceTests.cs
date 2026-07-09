@@ -248,6 +248,92 @@ public class ClaimsServiceTests
     }
 
     [Fact]
+    public async Task GetClaimByIdAsync_WhenApiReturnsMassAdjudicationClaimShape_DeserializesSafely()
+    {
+        const string json = """
+        {
+          "id": "4ff4516a-9e97-4038-80c1-3a2cd6e5d952",
+          "claimNumber": "MCC-D-0000004",
+          "memberId": "MBR-7242385",
+          "subscriberId": "SUB-7242385",
+          "subscriberFirstName": "Sandra",
+          "subscriberLastName": "Anderson",
+          "patientFirstName": "Sandra",
+          "patientLastName": "Anderson",
+          "patientRelationship": "Self",
+          "billingProviderNPI": "1141521249",
+          "billingProviderName": "Thomas White",
+          "renderingProviderNPI": "1681064964",
+          "renderingProviderName": "Susan Moore",
+          "placeOfServiceCode": "11",
+          "claimType": 3,
+          "status": 5,
+          "totalChargeAmount": 100,
+          "allowedAmount": null,
+          "paidAmount": null,
+          "serviceDateFrom": "2026-06-15T07:00:00Z",
+          "serviceDateTo": "2026-06-15T07:00:00Z",
+          "submittedDate": "2026-07-09T22:03:53Z",
+          "receivedDate": "2026-07-09T22:03:53Z",
+          "adjudicatedDate": "2026-07-09T22:03:55.045Z",
+          "diagnosisCodes": [
+            {
+              "code": "K05.10",
+              "codeQualifier": "ABK",
+              "pointerNumber": 1
+            }
+          ],
+          "adjudicationResult": {
+            "allowedAmount": 0,
+            "deductibleAmount": 0
+          },
+          "claimLines": [
+            {
+              "lineNumber": 1,
+              "procedureCode": "D0150",
+              "procedureDescription": "Comprehensive oral evaluation — new or established patient",
+              "modifiers": [],
+              "units": 1,
+              "chargeAmount": 100,
+              "allowedAmount": null,
+              "paidAmount": null,
+              "patientResponsibility": null,
+              "serviceDateFrom": "2026-06-15T07:00:00Z",
+              "serviceDateTo": "2026-06-15T07:00:00Z",
+              "placeOfServiceCode": "11",
+              "diagnosisPointers": [1],
+              "adjustments": null,
+              "mpipMultiplierApplied": null,
+              "adjudicationResult": null,
+              "lineStatus": null
+            }
+          ],
+          "auditTrail": null
+        }
+        """;
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetClaimByIdAsync("4ff4516a-9e97-4038-80c1-3a2cd6e5d952");
+
+        result.Should().NotBeNull();
+        result!.ClaimId.Should().Be("4ff4516a-9e97-4038-80c1-3a2cd6e5d952");
+        result.Status.Should().Be("Approved");
+        result.ClaimType.Should().Be("Dental");
+        result.TotalChargeAmount.Should().Be(100m);
+        result.DiagnosisCodes.Should().ContainSingle()
+            .Which.Code.Should().Be("K05.10");
+        result.AuditTrail.Should().BeEmpty();
+        result.ServiceLines.Should().ContainSingle();
+        result.ServiceLines[0].ProcedureCode.Should().Be("D0150");
+        result.ServiceLines[0].AllowedAmount.Should().Be(0m);
+        result.ServiceLines[0].Modifiers.Should().BeEmpty();
+        result.ServiceLines[0].DiagnosisPointers.Should().ContainSingle()
+            .Which.Should().Be(1);
+        result.ServiceLines[0].Adjustments.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetClaimByIdAsync_WhenApiReturnsNull_ReturnsNull()
     {
         var sut = CreateService(new HttpClient(

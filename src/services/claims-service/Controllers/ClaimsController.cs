@@ -205,6 +205,31 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
+    /// Get a persisted adjudication projection for claim detail transparency.
+    /// </summary>
+    [HttpGet("{id}/adjudication-detail")]
+    [ProducesResponseType(typeof(AdjudicationTransparencyData), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdjudicationTransparencyData>> GetAdjudicationDetail(string id)
+    {
+        _logger.LogInformation("Fetching adjudication detail for claim ID: {Id}", SanitizeForLog(id));
+
+        var claim = await _claimRepository.GetByIdAsync(id);
+        if (claim == null)
+        {
+            return NotFound($"Claim {id} not found");
+        }
+
+        var detail = AdjudicationTransparencyBuilder.Build(claim);
+        if (detail is null)
+        {
+            return NotFound($"Claim {id} has no persisted adjudication detail");
+        }
+
+        return Ok(detail);
+    }
+
+    /// <summary>
     /// Get claim by claim number
     /// </summary>
     [HttpGet("number/{claimNumber}")]

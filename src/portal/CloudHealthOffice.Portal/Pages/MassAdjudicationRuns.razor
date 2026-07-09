@@ -1,5 +1,6 @@
 @page "/mass-adjudication-runs"
 @attribute [Authorize]
+@implements IAsyncDisposable
 @using CloudHealthOffice.Portal.Services
 @inject IClaimsService ClaimsService
 @inject ISnackbar Snackbar
@@ -88,10 +89,20 @@
     <MudButton Variant="Variant.Outlined"
                Color="Color.Default"
                StartIcon="@Icons.Material.Filled.Refresh"
-               OnClick="LoadRuns"
+               OnClick="@(() => LoadRuns())"
                Disabled="_loading">
         Refresh
     </MudButton>
+    <MudButton Variant="@(_autoRefresh ? Variant.Filled : Variant.Outlined)"
+               Color="@(_autoRefresh ? Color.Success : Color.Default)"
+               StartIcon="@(_autoRefresh ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)"
+               OnClick="ToggleAutoRefresh"
+               Disabled="_loading">
+        @(_autoRefresh ? "Watching" : "Watch Runs")
+    </MudButton>
+    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55);">
+        @RefreshStatus
+    </MudText>
     <MudSpacer />
     @if (_selectedRun is not null)
     {
@@ -235,19 +246,19 @@
                         <MudTh>Payment</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd DataLabel="Claim">
+                        <MudTd DataLabel="Claim" Style="min-width: 170px;">
                             @if (!string.IsNullOrWhiteSpace(context.SubmittedClaimId))
                             {
-                                <MudLink Href="@ClaimHref(context.SubmittedClaimId!)" Color="Color.Primary" Style="font-family: monospace; font-weight: 700;">
-                                    @ShortId(context.SubmittedClaimId!)
+                                <MudLink Href="@ClaimHref(context.SubmittedClaimId!, _selectedRun?.Id)" Color="Color.Primary" Style="font-family: monospace; font-weight: 700; white-space: nowrap; display: inline-block;">
+                                    @DisplayClaimId(context)
                                 </MudLink>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body2" Style="font-family: monospace;">@ShortId(context.GeneratedClaimId)</MudText>
+                                <MudText Typo="Typo.body2" Style="font-family: monospace; font-weight: 700; white-space: nowrap;">@DisplayClaimId(context)</MudText>
                             }
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
-                                @context.ClaimType · @ShortId(context.GeneratedClaimId)
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace; display: block; white-space: nowrap;">
+                                @context.ClaimType · @ShortId(context.SubmittedClaimId ?? context.Id)
                             </MudText>
                         </MudTd>
                         <MudTd DataLabel="Validation">
@@ -397,34 +408,75 @@
     private MassAdjudicationRunSummary? _selectedRun;
     private bool _loading;
     private bool _claimResultsLoading;
+    private bool _autoRefresh;
     private string _claimOutcomeFilter = string.Empty;
     private string? _error;
+    private DateTimeOffset? _lastRefreshedAt;
+    private int _newRunsSeen;
+    private CancellationTokenSource? _refreshCts;
+    private PeriodicTimer? _refreshTimer;
+
+    [SupplyParameterFromQuery(Name = "run")]
+    public string? RunId { get; set; }
+
+    private string RefreshStatus
+        => _lastRefreshedAt is null
+            ? "Not checked yet"
+            : $"{(_autoRefresh ? "Watching for newly published runs" : "Last checked")} {_lastRefreshedAt.Value.LocalDateTime:HH:mm:ss}"
+              + (_newRunsSeen > 0 ? $" · {_newRunsSeen} new this session" : string.Empty);
 
     protected override async Task OnInitializedAsync()
     {
         await LoadRuns();
     }
 
-    private async Task LoadRuns()
+    private async Task LoadRuns(bool preserveSelection = true, bool silent = false)
     {
-        _loading = true;
+        if (!silent)
+        {
+            _loading = true;
+        }
+
         _error = null;
         try
         {
+            var previousSelectedId = preserveSelection ? _selectedRun?.Id ?? RunId : RunId;
+            var previousRunIds = _runs.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var runs = await ClaimsService.GetMassAdjudicationRunsAsync(50);
+            var newRunCount = previousRunIds.Count == 0
+                ? 0
+                : runs.Count(x => !previousRunIds.Contains(x.Id));
+
             _runs.Clear();
             _runs.AddRange(runs);
-            _selectedRun = _runs.FirstOrDefault();
-            await LoadClaimResults();
+            _selectedRun = previousSelectedId is null
+                ? _runs.FirstOrDefault()
+                : _runs.FirstOrDefault(x => string.Equals(x.Id, previousSelectedId, StringComparison.OrdinalIgnoreCase))
+                  ?? _runs.FirstOrDefault();
+            _lastRefreshedAt = DateTimeOffset.Now;
+
+            if (newRunCount > 0)
+            {
+                _newRunsSeen += newRunCount;
+                Snackbar.Add($"{newRunCount} new mass adjudication run{(newRunCount == 1 ? string.Empty : "s")} published", Severity.Info);
+            }
+
+            await LoadClaimResults(silent);
         }
         catch (Exception ex)
         {
             _error = ex.Message;
-            Snackbar.Add("Unable to load mass adjudication runs", Severity.Error);
+            if (!silent)
+            {
+                Snackbar.Add("Unable to load mass adjudication runs", Severity.Error);
+            }
         }
         finally
         {
-            _loading = false;
+            if (!silent)
+            {
+                _loading = false;
+            }
         }
     }
 
@@ -441,7 +493,7 @@
         await LoadClaimResults();
     }
 
-    private async Task LoadClaimResults()
+    private async Task LoadClaimResults(bool silent = false)
     {
         _claimResults.Clear();
         if (_selectedRun is null)
@@ -449,7 +501,11 @@
             return;
         }
 
-        _claimResultsLoading = true;
+        if (!silent)
+        {
+            _claimResultsLoading = true;
+        }
+
         try
         {
             var results = await ClaimsService.GetMassAdjudicationClaimResultsAsync(
@@ -461,16 +517,80 @@
         catch (Exception ex)
         {
             _error = ex.Message;
-            Snackbar.Add("Unable to load claim-level results", Severity.Warning);
+            if (!silent)
+            {
+                Snackbar.Add("Unable to load claim-level results", Severity.Warning);
+            }
         }
         finally
         {
-            _claimResultsLoading = false;
+            if (!silent)
+            {
+                _claimResultsLoading = false;
+            }
         }
     }
 
-    private static string ClaimHref(string claimId)
-        => $"/claims/{Uri.EscapeDataString(claimId)}";
+    private void ToggleAutoRefresh()
+    {
+        if (_autoRefresh)
+        {
+            StopAutoRefresh();
+            return;
+        }
+
+        _autoRefresh = true;
+        _refreshCts = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        _ = WatchForRunsAsync(_refreshCts.Token);
+    }
+
+    private async Task WatchForRunsAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (_refreshTimer is not null && await _refreshTimer.WaitForNextTickAsync(ct))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadRuns(silent: true);
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void StopAutoRefresh()
+    {
+        _autoRefresh = false;
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+        _refreshCts = null;
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        StopAutoRefresh();
+        return ValueTask.CompletedTask;
+    }
+
+    private static string ClaimHref(string claimId, string? runId = null)
+    {
+        var href = $"/claims/{Uri.EscapeDataString(claimId)}";
+        return string.IsNullOrWhiteSpace(runId)
+            ? href
+            : $"{href}?fromRun={Uri.EscapeDataString(runId)}";
+    }
+
+    private static string DisplayClaimId(MassAdjudicationClaimResult result)
+        => !string.IsNullOrWhiteSpace(result.GeneratedClaimId)
+            ? result.GeneratedClaimId
+            : ShortId(result.SubmittedClaimId ?? result.Id);
 
     private static string ShortId(string id)
         => string.IsNullOrWhiteSpace(id) ? "run" : id[..Math.Min(8, id.Length)];
