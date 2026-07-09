@@ -82,11 +82,15 @@ public class MassAdjudicationRunSummary
     public int TotalClaims { get; set; }
     public int Processed { get; set; }
     public int Paid { get; set; }
+    public int Pended { get; set; }
     public int BusinessDenials { get; set; }
+    public int ObservationTimeouts { get; set; }
     public int PlatformFailures { get; set; }
     public int WorkflowScenarios { get; set; }
     public int WorkflowMatches { get; set; }
     public int WorkflowMismatches { get; set; }
+    public int WorkflowUnsupported { get; set; }
+    public int WorkflowObservationTimeouts { get; set; }
     public TimeSpan Elapsed { get; set; }
     public double ThroughputClaimsPerSecond { get; set; }
     public double P95LatencyMilliseconds { get; set; }
@@ -97,6 +101,7 @@ public class MassAdjudicationRunSummary
     public List<MassAdjudicationStageTiming> AdjudicationStepTimings { get; set; } = new();
     public decimal? AveragePaymentDelta { get; set; }
     public List<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown { get; set; } = new();
+    public List<MassAdjudicationWorkflowScenarioSummary> WorkflowScenarioBreakdown { get; set; } = new();
     public List<MassAdjudicationFailureSummary> SampleFailures { get; set; } = new();
     public List<MassAdjudicationClaimResult> ClaimResults { get; set; } = new();
     public DateTime CreatedAtUtc { get; set; }
@@ -110,9 +115,13 @@ public class MassAdjudicationRunMetadata
     public int Parallelism { get; set; }
     public string ClaimsUrl { get; set; } = string.Empty;
     public string BenefitUrl { get; set; } = string.Empty;
+    public string MemberUrl { get; set; } = string.Empty;
+    public string CoverageUrl { get; set; } = string.Empty;
     public string ProviderUrl { get; set; } = string.Empty;
+    public bool SeedMembers { get; set; }
     public bool SeedProviders { get; set; }
     public bool SkipClaimUpdate { get; set; }
+    public int LineOfBusiness { get; set; }
     public DateTimeOffset StartedAtUtc { get; set; }
     public DateTimeOffset CompletedAtUtc { get; set; }
 }
@@ -128,6 +137,17 @@ public class MassAdjudicationBusinessDenialSummary
 {
     public string Code { get; set; } = string.Empty;
     public int Count { get; set; }
+}
+
+public class MassAdjudicationWorkflowScenarioSummary
+{
+    public string Scenario { get; set; } = string.Empty;
+    public int Total { get; set; }
+    public int Matches { get; set; }
+    public int Mismatches { get; set; }
+    public int Unsupported { get; set; }
+    public int ObservationTimeouts { get; set; }
+    public int Unspecified { get; set; }
 }
 
 public class MassAdjudicationFailureSummary

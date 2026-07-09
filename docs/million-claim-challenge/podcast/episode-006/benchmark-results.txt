@@ -3,21 +3,43 @@
 ## Environment
 
 - Environment: local Kubernetes via Docker Desktop
+- Docker Desktop resources: 18 CPUs, 25,159,270,400 bytes memory (~23.4 GiB)
 - Tenant: `demo`
 - Workload: synthetic Million Claim Challenge claim corpus
+- Generator seed: 42
+- Line of business: Medicaid (3)
+- Prior-auth scenarios: enabled at 2%
 - Pend observation: enabled
 - Pend observation timeout: 45 seconds
 - Parallelism: 10
+- Member seeding: enabled
+- Provider seeding: enabled
+- Source revision for packet: `8d55a38b` (`Fix MCC COB fixture isolation (#858)`)
+- Raw final 50K validator output: `raw-validator-output-50k.txt`
 - Important caveat: these are local validation benchmarks, not production cloud benchmarks
+
+Tenant-state caveat:
+
+The final 50K run used the long-lived local `demo` tenant, not a freshly reset tenant. The raw seeding log shows 49,425 members and 99,956 providers already present before the run, plus 12 existing COB coverage rows. The validator added 448 synthetic members and 448 COB coverage rows for the final 50K run. A clean cluster should reproduce the same workflow logic, but seeding counts and any state-sensitive behavior can differ.
+
+Payment-delta caveat:
+
+`Avg payment delta` is the average absolute difference, for paid claims only, between the adjudication response's `Totals.PlanPayment` and the synthetic corpus answer key's `ExpectedPaidAmount`. In the final 50K raw output it was `$59.36`. Episode 006 workflow scoring validates disposition and workflow outcomes: paid, denied with the expected business reason, pended, unsupported, or platform failure. Payment-amount accuracy is visible as a diagnostic, but it is not yet a pass/fail scoring gate in this packet.
 
 ## Current baseline: 5,000-claim breadth validation
 
 This run was completed after PR 856.
 
+The raw console output was not retained as a separate artifact, but the exact command, summary, and scenario table are recorded below.
+
+Run source revision:
+
+- `0c0b8f14` (`Avoid duplicate MCC newborn mother line codes (#856)`)
+
 Command:
 
 ```bash
-CLAIMS=5000 MAX_CLAIMS=5000 PARALLELISM=10 PROGRESS_EVERY=500 PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+CLAIMS=5000 MAX_CLAIMS=5000 PARALLELISM=10 PROGRESS_EVERY=500 SEED_MEMBERS=true SEED_PROVIDERS=true PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
 ```
 
 Summary:
@@ -89,10 +111,16 @@ The 5K run is the first clean breadth baseline for Episode 006. It is not a fina
 
 This run was completed after the COB fixture-isolation fix and before the clean 50K breadth validation run.
 
+The clean 10K run was part of the post-PR-858 confidence gate. The raw console output was not retained as a separate artifact, but the exact command, summary, and scenario table are recorded below.
+
+Run source revision:
+
+- `8d55a38b` (`Fix MCC COB fixture isolation (#858)`)
+
 Command:
 
 ```bash
-CLAIMS=10000 MAX_CLAIMS=10000 PARALLELISM=10 PROGRESS_EVERY=1000 PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+CLAIMS=10000 MAX_CLAIMS=10000 PARALLELISM=10 PROGRESS_EVERY=1000 SEED_MEMBERS=true SEED_PROVIDERS=true PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
 ```
 
 Summary:
@@ -150,10 +178,14 @@ Purpose:
 - confirm the Part 6 story scales from breadth smoke to a meaningful local workload
 - provide a direct bridge from Episode 005 throughput work to Episode 006 correctness work
 
+Run source revision:
+
+- `8d55a38b` (`Fix MCC COB fixture isolation (#858)`)
+
 Command:
 
 ```bash
-CLAIMS=50000 MAX_CLAIMS=50000 PARALLELISM=10 PROGRESS_EVERY=5000 PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+CLAIMS=50000 MAX_CLAIMS=50000 PARALLELISM=10 PROGRESS_EVERY=5000 SEED_MEMBERS=true SEED_PROVIDERS=true PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
 ```
 
 Summary:
@@ -175,6 +207,7 @@ Summary:
 | Throughput | 68.86 claims/sec |
 | P95 latency | 298 ms |
 | P99 latency | 369 ms |
+| Avg payment delta | $59.36 |
 
 Timing:
 
@@ -208,10 +241,21 @@ Key matched scenario groups:
 | EdgeCase:NewbornFirstThirtyDays | 100/100 matched |
 | EdgeCase:NewbornMotherClaimLink | 100/100 matched |
 | EdgeCase:RetroEligibilityTermination | 133/133 matched |
+| EdgeCase:RetroEligibilityAdd | 134/134 matched |
 | EdgeCase:CobBirthdayRule | 100/100 matched |
 | EdgeCase:CobGenderRule | 100/100 matched |
+| EdgeCase:CobMedicareSecondary | 100/100 matched |
+| EdgeCase:CobPrimaryPayer | 100/100 matched |
 | EdgeCase:CobSecondaryPayer | 100/100 matched |
+| EdgeCase:CobTertiaryPayer | 100/100 matched |
+| EdgeCase:MedicaidCHIP | 60/60 matched |
+| EdgeCase:MedicaidDualEligible | 60/60 matched |
+| EdgeCase:MedicaidSSI | 60/60 matched |
+| EdgeCase:MedicaidTANF | 60/60 matched |
+| EdgeCase:BehavioralHealthCarveIn | 100/100 matched |
+| EdgeCase:BehavioralHealthParityCheck | 100/100 matched |
 | EdgeCase:PriorAuthRequired_NoAuth | 80/80 matched |
+| EdgeCase:PriorAuthRequired_AuthOnFile | 80/80 matched |
 
 Unsupported scenario groups:
 
@@ -233,6 +277,10 @@ The 50K gate passed cleanly: every claim processed, expected pends were observed
 
 This run replaced the earlier one-mismatch 50K result after isolating supported COB-pend members by generated claim. The earlier mismatch was a benchmark fixture-isolation issue: expected-pend COB scenarios could share a generated member, so one scenario could miss its own seeded COB row. The clean rerun confirms `EdgeCase:CobSecondaryPayer` at 100/100 matched.
 
+Pend-observation caveat:
+
+The pend-observation pass polls persisted claim status only for scenarios whose answer-key outcome is `Pended`. It proves expected-pend claims persisted as pended. It does not, by itself, detect the inverse error where a claim expected to pay or deny later persists as pended. A future validator enhancement should add an optional persisted-status sweep for non-pend scenarios to detect false pends.
+
 ## Future milestone: 100,000 claims
 
 The next publication candidate after Part 6 is a focused 100K milestone.
@@ -253,3 +301,5 @@ In MCC reporting:
 - `Platform failure` means the platform failed to submit, adjudicate, or write back a claim.
 
 Unsupported scenarios are honest gaps. They are not successes, and they are not platform failures.
+
+The current unsupported bucket is concentrated in subrogation, prior-authorization edge variants, retroactive coverage change, behavioral health carve-out, and Medicaid spend-down scenarios. Those categories are the next adjudication edit-model roadmap, not hidden successes.
