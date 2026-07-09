@@ -463,7 +463,7 @@ jobs:
 
       - name: Post DNS Instructions as PR Comment
         if: steps.get-swa.outputs.swa_exists == 'true' && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
