@@ -33,7 +33,7 @@ The episode should make clear that:
 
 ## Packet files
 
-- `article.txt` - working Medium article draft.
+- `article.txt` - synced source snapshot of the published Medium article.
 - `pr-summary.txt` - implementation and PR context for PRs #853-#856 and #858.
 - `benchmark-results.txt` - exact 5K, 10K, and 50K breadth validation results.
 - `raw-validator-output-50k.txt` - raw final 50K validator console output.
