@@ -1,0 +1,107 @@
+# Episode 006 podcast prompt
+
+Create a 10-12 minute two-host engineering podcast episode for Cloud Health Office's Million Claim Challenge series.
+
+Use the recurring host style from:
+
+- `../host-personas.md`
+- `../intro-script.md`
+- `../outro-script.md`
+
+## Episode title
+
+From Fast Runs to Honest Edge-Case Scoring
+
+## Core thesis
+
+The Million Claim Challenge is becoming more credible because it now separates speed from correctness, matched outcomes from mismatches, and unsupported validation gaps from true failures.
+
+## Source material to use
+
+- `article.txt`
+- `pr-summary.txt`
+- `benchmark-results.txt`
+- `../../2026-07-07-expected-pend-diagnostics.md`
+- `../../pend-validation.md`
+- `../../../POSITIONING.md`
+
+## Required discussion points
+
+The hosts should explain:
+
+1. Why Part 5 was about repeatable local Kubernetes throughput, while Part 6 is about correctness breadth.
+2. Why a healthcare claims platform should not treat "paid" as the only successful outcome.
+3. Why expected pends need to be observed through persisted claim status instead of guessed from synchronous adjudication responses.
+4. Why unsupported scenarios are honest gaps, not wins and not platform failures.
+5. How retro eligibility termination and newborn scenarios exposed fixture-quality issues.
+6. How the 5K breadth run reached zero mismatches after PRs #853-#856.
+7. Why the clean 10K run was a confidence gate, and how the 50K result became clean after closing the COB fixture-isolation mismatch.
+8. Why 100K is intentionally deferred into its own later milestone instead of being added to Part 6.
+
+## Exact 5K numbers to include
+
+- Claims processed: 5,000/5,000
+- Platform failures: 0
+- Expected-pend observations: 46/46 pended
+- Pend observation timeouts: 0
+- Workflow checks: 577/650 matched
+- Mismatches: 0
+- Unsupported: 73
+- Throughput: 83.71 claims/sec
+- P95 latency: 204 ms
+- P99 latency: 278 ms
+- NewbornMotherClaimLink: 10/10 matched
+- RetroEligibilityTermination: 13/13 matched
+
+## Exact 10K numbers to include
+
+- Claims processed: 10,000/10,000
+- Platform failures: 0
+- Expected-pend observations: 92/92 pended
+- Pend observation timeouts: 0
+- Workflow checks: 1,154/1,300 matched
+- Mismatches: 0
+- Unsupported: 146
+- Throughput: 78.12 claims/sec
+- P95 latency: 272 ms
+- P99 latency: 306 ms
+
+## Exact 50K numbers to include
+
+- Claims processed: 50,000/50,000
+- Platform failures: 0
+- Expected-pend observations: 460/460 pended
+- Pend observation timeouts: 0
+- Workflow checks: 5,767/6,500 matched
+- Mismatches: 0
+- Unsupported: 733
+- Throughput: 68.86 claims/sec
+- P95 latency: 298 ms
+- P99 latency: 369 ms
+- CobSecondaryPayer: 100/100 matched
+
+## Important caveats
+
+The hosts must say that:
+
+- these are local Docker Desktop Kubernetes results, not production cloud results
+- the 5K run is a baseline, not the final Part 6 headline
+- the first 50K attempt found one COB secondary-payer mismatch, which was fixed by isolating supported COB-pend fixture members before the clean rerun
+- 100K should be discussed only as a future focused milestone, not as a Part 6 requirement
+- unsupported scenarios should not be oversold as validated correctness
+
+## Tone
+
+Make the conversation practical, candid, and engineering-led.
+
+Avoid marketing hype. The strongest point is honesty: the benchmark got better because it became more willing to name gaps precisely.
+
+## Suggested episode arc
+
+1. Quick recap of Part 5: repeatable local Kubernetes benchmarking.
+2. The next problem: throughput without correctness is not enough.
+3. Explain pends and why persisted status matters.
+4. Explain fixture bugs: retro dates, newborn age, authorization, duplicate line codes.
+5. Walk through the 5K result.
+6. Explain unsupported scenarios and why they are intentionally visible.
+7. Close with the Part 6 plan: publish the clean 50K breadth result, then make 100K its own milestone.
