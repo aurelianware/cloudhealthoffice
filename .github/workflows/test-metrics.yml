@@ -456,7 +456,7 @@ jobs:
           retention-days: 365
 
       - name: Upload to coverage
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         if: hashFiles('coverage/lcov.info') != ''
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
