@@ -1,6 +1,8 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using FluentAssertions;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using NSubstitute;
 
@@ -36,6 +38,52 @@ public class MassAdjudicationRunRepositoryTests
         saved.ClaimResults[0].CreatedAtUtc.Should().Be(saved.CreatedAtUtc);
         saved.ClaimResults[0].ValidationScenario.Should().Be("TxStarInpatientNoAuth");
         saved.ClaimResults[0].ValidationStatus.Should().Be("Matched");
+    }
+
+    [Fact]
+    public async Task SaveAsync_preserves_mcc_evidence_summary_fields()
+    {
+        var repo = new InMemoryMassAdjudicationRunRepository();
+        var summary = CreateSummary();
+        summary.Pended = 46;
+        summary.ObservationTimeouts = 1;
+        summary.WorkflowUnsupported = 73;
+        summary.WorkflowObservationTimeouts = 2;
+        summary.AveragePaymentDelta = 59.36m;
+        summary.Run.MemberUrl = "https://member";
+        summary.Run.CoverageUrl = "https://coverage";
+        summary.Run.SeedMembers = true;
+        summary.Run.LineOfBusiness = 3;
+        summary.WorkflowScenarioBreakdown.Add(new MassAdjudicationWorkflowScenarioSummary
+        {
+            Scenario = "EdgeCase:CobSecondaryPayer",
+            Total = 10,
+            Matches = 9,
+            Mismatches = 0,
+            Unsupported = 0,
+            ObservationTimeouts = 1,
+            Unspecified = 0
+        });
+
+        var saved = await repo.SaveAsync(summary);
+        var persisted = saved.ToBson();
+        var reread = BsonSerializer.Deserialize<MassAdjudicationRunSummary>(persisted);
+
+        reread.Should().NotBeNull();
+        reread.Pended.Should().Be(46);
+        reread.ObservationTimeouts.Should().Be(1);
+        reread.WorkflowUnsupported.Should().Be(73);
+        reread.WorkflowObservationTimeouts.Should().Be(2);
+        reread.AveragePaymentDelta.Should().Be(59.36m);
+        reread.Run.MemberUrl.Should().Be("https://member");
+        reread.Run.CoverageUrl.Should().Be("https://coverage");
+        reread.Run.SeedMembers.Should().BeTrue();
+        reread.Run.LineOfBusiness.Should().Be(3);
+        reread.WorkflowScenarioBreakdown.Should().ContainSingle(s =>
+            s.Scenario == "EdgeCase:CobSecondaryPayer"
+            && s.Total == 10
+            && s.Matches == 9
+            && s.ObservationTimeouts == 1);
     }
 
     [Fact]

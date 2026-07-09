@@ -238,7 +238,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -456,7 +456,7 @@ jobs:
           retention-days: 365
 
       - name: Upload to coverage
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         if: hashFiles('coverage/lcov.info') != ''
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

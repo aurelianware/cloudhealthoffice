@@ -12,7 +12,7 @@
     Mass Adjudication Runs
 </MudText>
 <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.55);" Class="mb-4">
-    Production mass adjudication runs, outcome mix, timing, and platform failure signal.
+    Million Claim Challenge and production mass adjudication evidence: outcome mix, workflow scoring, timing, and platform failure signal.
 </MudText>
 
 @if (!string.IsNullOrWhiteSpace(_error))
@@ -28,7 +28,7 @@
 }
 
 <MudGrid Spacing="3" Class="mb-4">
-    <MudItem xs="6" sm="3">
+    <MudItem xs="6" sm="2">
         <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 8px;">
             <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Style="color: #00ffff; font-size: 2rem;" />
             <div>
@@ -37,7 +37,7 @@
             </div>
         </MudPaper>
     </MudItem>
-    <MudItem xs="6" sm="3">
+    <MudItem xs="6" sm="2">
         <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 8px;">
             <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
             <div>
@@ -46,7 +46,16 @@
             </div>
         </MudPaper>
     </MudItem>
-    <MudItem xs="6" sm="3">
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,202,40,0.06); border: 1px solid rgba(255,202,40,0.25); border-radius: 8px;">
+            <MudIcon Icon="@Icons.Material.Filled.PendingActions" Style="color: #ffca28; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffca28; font-weight: 700;">@_runs.Sum(x => x.Pended).ToString("N0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55);">Pended</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
         <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,202,40,0.06); border: 1px solid rgba(255,202,40,0.25); border-radius: 8px;">
             <MudIcon Icon="@Icons.Material.Filled.Rule" Style="color: #ffca28; font-size: 2rem;" />
             <div>
@@ -55,7 +64,16 @@
             </div>
         </MudPaper>
     </MudItem>
-    <MudItem xs="6" sm="3">
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(148,163,184,0.08); border: 1px solid rgba(148,163,184,0.25); border-radius: 8px;">
+            <MudIcon Icon="@Icons.Material.Filled.VisibilityOff" Style="color: #94a3b8; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #cbd5e1; font-weight: 700;">@_runs.Sum(x => x.WorkflowUnsupported).ToString("N0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55);">Unsupported</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
         <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 8px;">
             <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: #ff0055; font-size: 2rem;" />
             <div>
@@ -148,12 +166,23 @@
                 <MudGrid Spacing="2" Class="mb-3">
                     <MudItem xs="6" md="4">@Metric("Processed", $"{_selectedRun.Processed:N0}", "#00ffff")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Paid", $"{_selectedRun.Paid:N0}", "#00ff88")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Pended", $"{_selectedRun.Pended:N0}", "#ffca28")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Business Denials", $"{_selectedRun.BusinessDenials:N0}", "#ffca28")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Platform Failures", $"{_selectedRun.PlatformFailures:N0}", "#ff0055")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Observation Timeouts", $"{_selectedRun.ObservationTimeouts:N0}", _selectedRun.ObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Throughput", $"{_selectedRun.ThroughputClaimsPerSecond:N2}/s", "#7dd3fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("P95 / P99", $"{_selectedRun.P95LatencyMilliseconds:N0} / {_selectedRun.P99LatencyMilliseconds:N0} ms", "#c084fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Checks", $"{_selectedRun.WorkflowMatches:N0} / {_selectedRun.WorkflowScenarios:N0}", "#00ff88")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Mismatches", $"{_selectedRun.WorkflowMismatches:N0}", _selectedRun.WorkflowMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Unsupported", $"{_selectedRun.WorkflowUnsupported:N0}", "#cbd5e1")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Workflow Timeouts", $"{_selectedRun.WorkflowObservationTimeouts:N0}", _selectedRun.WorkflowObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Avg Payment Delta", _selectedRun.AveragePaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.AveragePaymentDelta))</MudItem>
+                </MudGrid>
+
+                <MudGrid Spacing="2" Class="mb-3">
+                    <MudItem xs="12" md="4">@RunFact("Seed / Parallelism", $"{_selectedRun.Run.Seed} / p{_selectedRun.Run.Parallelism}")</MudItem>
+                    <MudItem xs="12" md="4">@RunFact("Line of Business", LineOfBusinessLabel(_selectedRun.Run.LineOfBusiness))</MudItem>
+                    <MudItem xs="12" md="4">@RunFact("Seeding", $"members {OnOff(_selectedRun.Run.SeedMembers)} · providers {OnOff(_selectedRun.Run.SeedProviders)}")</MudItem>
                 </MudGrid>
 
                 <MudGrid Spacing="2">
@@ -184,7 +213,9 @@
                                Dense="true" Variant="Variant.Outlined" Style="width: 190px;">
                         <MudSelectItem Value="@("")">All outcomes</MudSelectItem>
                         <MudSelectItem Value="@("Paid")">Paid</MudSelectItem>
+                        <MudSelectItem Value="@("Pended")">Pended</MudSelectItem>
                         <MudSelectItem Value="@("BusinessDenial")">Business denials</MudSelectItem>
+                        <MudSelectItem Value="@("ObservationTimeout")">Observation timeouts</MudSelectItem>
                         <MudSelectItem Value="@("PlatformFailure")">Platform failures</MudSelectItem>
                     </MudSelect>
                 </div>
@@ -272,6 +303,52 @@
                     </PagerContent>
                 </MudTable>
             </MudPaper>
+
+            @if (_selectedRun.WorkflowScenarioBreakdown.Count > 0)
+            {
+                <MudPaper Class="pa-4 mb-3" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;">
+                    <div class="d-flex align-center gap-2 mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.FactCheck" Color="Color.Primary" />
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Workflow Scenario Breakdown</MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45);">
+                            Matched, mismatched, unsupported, and observation-timeout counts by answer-key scenario.
+                        </MudText>
+                    </div>
+
+                    <MudTable Items="@_selectedRun.WorkflowScenarioBreakdown" Dense="true" Hover="true" T="MassAdjudicationWorkflowScenarioSummary" RowsPerPage="10">
+                        <HeaderContent>
+                            <MudTh>Scenario</MudTh>
+                            <MudTh>Matched</MudTh>
+                            <MudTh>Mismatched</MudTh>
+                            <MudTh>Unsupported</MudTh>
+                            <MudTh>Timeouts</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Scenario">
+                                <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.Scenario</MudText>
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45);">@context.Total.ToString("N0") total checks</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Matched">
+                                <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ff88;">@context.Matches.ToString("N0")</MudText>
+                                <MudProgressLinear Value="@ScenarioPercent(context.Matches, context.Total)" Color="Color.Success" Style="height: 5px; border-radius: 3px;" />
+                            </MudTd>
+                            <MudTd DataLabel="Mismatched">
+                                <MudText Typo="Typo.body2" Style="@ScenarioCountStyle(context.Mismatches, "#ff0055")">@context.Mismatches.ToString("N0")</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Unsupported">
+                                <MudText Typo="Typo.body2" Style="@ScenarioCountStyle(context.Unsupported, "#cbd5e1")">@context.Unsupported.ToString("N0")</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Timeouts">
+                                <MudText Typo="Typo.body2" Style="@ScenarioCountStyle(context.ObservationTimeouts, "#ff0055")">@context.ObservationTimeouts.ToString("N0")</MudText>
+                            </MudTd>
+                        </RowTemplate>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="new[] { 10, 25, 50 }" />
+                        </PagerContent>
+                    </MudTable>
+                </MudPaper>
+            }
 
             <MudGrid Spacing="3">
                 <MudItem xs="12" md="6">
@@ -406,10 +483,33 @@
             ? 0
             : (double)count / _selectedRun.BusinessDenials * 100;
 
+    private static double ScenarioPercent(int count, int total)
+        => total <= 0 ? 0 : (double)count / total * 100;
+
+    private static string OnOff(bool value) => value ? "on" : "off";
+
+    private static string LineOfBusinessLabel(int lineOfBusiness) => lineOfBusiness switch
+    {
+        1 => "Commercial (1)",
+        2 => "Medicare (2)",
+        3 => "Medicaid (3)",
+        4 => "CHIP (4)",
+        5 => "Exchange (5)",
+        _ => lineOfBusiness <= 0 ? "Unspecified" : $"LOB {lineOfBusiness}"
+    };
+
+    private static string ScenarioCountStyle(int count, string highlightColor)
+        => $"font-family: monospace; color: {(count == 0 ? "rgba(255,255,255,0.55)" : highlightColor)};";
+
+    private static string PaymentDeltaColor(decimal? paymentDelta)
+        => paymentDelta is null ? "#cbd5e1" : paymentDelta == 0 ? "#00ff88" : "#ffca28";
+
     private static Color OutcomeColor(string outcome) => outcome switch
     {
         "Paid" => Color.Success,
+        "Pended" => Color.Warning,
         "BusinessDenial" => Color.Warning,
+        "ObservationTimeout" => Color.Error,
         "PlatformFailure" => Color.Error,
         _ => Color.Default
     };
@@ -417,6 +517,7 @@
     private static string OutcomeLabel(string outcome) => outcome switch
     {
         "BusinessDenial" => "Business Denial",
+        "ObservationTimeout" => "Observation Timeout",
         "PlatformFailure" => "Platform Failure",
         _ => outcome
     };
@@ -425,6 +526,8 @@
     {
         "Matched" => Color.Success,
         "Mismatched" => Color.Error,
+        "Unsupported" => Color.Default,
+        "ObservationTimeout" => Color.Error,
         _ => Color.Default
     };
 
@@ -432,6 +535,8 @@
     {
         "Matched" => "Expected",
         "Mismatched" => "Mismatch",
+        "Unsupported" => "Unsupported",
+        "ObservationTimeout" => "Observation Timeout",
         _ => "Unscored"
     };
 
@@ -447,6 +552,23 @@
         builder.OpenComponent<MudText>(7);
         builder.AddAttribute(8, "Typo", Typo.h6);
         builder.AddAttribute(9, "Style", $"color: {color}; font-weight: 700; font-family: monospace;");
+        builder.AddAttribute(10, "ChildContent", (RenderFragment)(b => b.AddContent(11, value)));
+        builder.CloseComponent();
+        builder.CloseElement();
+    };
+
+    private RenderFragment RunFact(string label, string value) => builder =>
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "style", "border: 1px solid rgba(0,255,255,0.18); background: rgba(0,255,255,0.05); border-radius: 8px; padding: 10px;");
+        builder.OpenComponent<MudText>(2);
+        builder.AddAttribute(3, "Typo", Typo.caption);
+        builder.AddAttribute(4, "Style", "color: rgba(255,255,255,0.55);");
+        builder.AddAttribute(5, "ChildContent", (RenderFragment)(b => b.AddContent(6, label)));
+        builder.CloseComponent();
+        builder.OpenComponent<MudText>(7);
+        builder.AddAttribute(8, "Typo", Typo.body2);
+        builder.AddAttribute(9, "Style", "color: #e2e8f0; font-family: monospace;");
         builder.AddAttribute(10, "ChildContent", (RenderFragment)(b => b.AddContent(11, value)));
         builder.CloseComponent();
         builder.CloseElement();
