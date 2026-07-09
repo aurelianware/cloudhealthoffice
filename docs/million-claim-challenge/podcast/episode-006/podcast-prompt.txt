@@ -78,6 +78,7 @@ The hosts should explain:
 - Throughput: 68.86 claims/sec
 - P95 latency: 298 ms
 - P99 latency: 369 ms
+- Avg payment delta: $59.36, diagnostic only
 - CobSecondaryPayer: 100/100 matched
 
 ## Important caveats
@@ -85,10 +86,17 @@ The hosts should explain:
 The hosts must say that:
 
 - these are local Docker Desktop Kubernetes results, not production cloud results
+- the local Docker Desktop allocation for the final 50K run was 18 CPUs and about 23.4 GiB memory
+- the final 50K run used the long-lived local `demo` tenant, not a freshly reset tenant; raw seeding showed 49,425 members and 99,956 providers already present
+- the run used seed 42, Medicaid line of business, prior-auth scenarios enabled at 2%, member seeding enabled, and provider seeding enabled
 - the 5K run is a baseline, not the final Part 6 headline
 - the first 50K attempt found one COB secondary-payer mismatch, which was fixed by isolating supported COB-pend fixture members before the clean rerun
+- pend observation polls only expected-pend claims, so these results prove expected pends persisted as pended but do not yet include a false-pend sweep over expected-pay or expected-deny claims
+- the `$59.36` average payment delta is the average absolute paid-claim difference between platform plan payment and the synthetic answer key; payment-amount accuracy is visible but is not yet part of the zero-mismatch workflow scoring gate
 - 100K should be discussed only as a future focused milestone, not as a Part 6 requirement
 - unsupported scenarios should not be oversold as validated correctness
+- unsupported scenarios are concentrated in subrogation, prior-authorization edge variants, retro coverage change, behavioral health carve-out, and Medicaid spend-down
+- the matched 50K footprint includes broader COB, Medicaid, retro eligibility, behavioral health, and newborn scenarios beyond the short headline list
 
 ## Tone
 

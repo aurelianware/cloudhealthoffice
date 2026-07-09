@@ -1,4 +1,6 @@
-Running a Healthcare Claims Platform Locally in Kubernetes, Part 6: From Fast Runs to Honest Edge-Case Scoring
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 6: From Fast Runs to Honest Edge-Case Scoring
+
+Published article: https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-6-from-fast-runs-to-honest-4b58288da8da
 
 In the previous part of this series, Cloud Health Office moved the Million Claim Challenge from one-off local runs into repeatable Kubernetes benchmarking.
 
@@ -14,37 +16,25 @@ That is where Part 6 begins.
 
 ## Payment is not the only successful outcome
 
-Claims adjudication has a trap that benchmark dashboards can easily fall into.
-
-They can treat paid claims as good and unpaid claims as bad.
+Claims adjudication has a trap that benchmark dashboards can easily fall into: treating paid claims as good and unpaid claims as bad.
 
 That is not how claims work.
 
 A claim can deny correctly because the provider is excluded. A claim can deny correctly because the service is uncovered. A claim can deny correctly because prior authorization is required and no authorization is on file. A claim can pend correctly because coordination of benefits needs human or downstream review.
 
-In other words, a correct platform does not maximize payments. It applies the contract, policy, edit, coverage, and workflow rules consistently.
+A correct platform does not maximize payments. It applies the contract, policy, edit, coverage, and workflow rules consistently.
 
 That is why the Million Claim Challenge has to report workflow outcomes, not just throughput.
 
 ## The uncomfortable value of unsupported
 
-One of the most important changes in this phase was adding a sharper distinction between three states:
+One of the most important changes in this phase was adding a sharper distinction between three states: matched, mismatched, and unsupported.
 
-- matched
-- mismatched
-- unsupported
+A matched scenario means the platform produced the expected scoreable outcome. A mismatched scenario means the platform produced a scoreable outcome that disagreed with the answer key. An unsupported scenario means the benchmark corpus expects behavior that the current validation path cannot honestly observe or score yet.
 
-A matched scenario means the platform produced the expected scoreable outcome.
+That third category matters. Without it, a benchmark has two bad options: count unsupported behavior as a failure even when the platform has no observable signal for the validator to read, or quietly count it as success, which is worse.
 
-A mismatched scenario means the platform produced a scoreable outcome that disagreed with the answer key.
-
-An unsupported scenario means the benchmark corpus expects behavior that the current validation path cannot honestly observe or score yet.
-
-That third category matters.
-
-Without it, a benchmark has two bad options. It can count unsupported behavior as a failure even when the platform has no observable signal for the validator to read. Or it can quietly count unsupported behavior as success, which is worse.
-
-The Million Claim Challenge should do neither.
+The Million Claim Challenge does neither.
 
 Unsupported is an honest gap. It is a work queue, not a win.
 
@@ -52,17 +42,17 @@ Unsupported is an honest gap. It is a work queue, not a win.
 
 Expected-pend scenarios were the first big test of that philosophy.
 
-The corpus includes scenarios where the expected outcome is not paid and not denied. For example, some coordination-of-benefits cases should pend for review.
+The corpus includes scenarios where the expected outcome is not paid and not denied. Some coordination-of-benefits cases, for example, should pend for review.
 
 The benefit-plan adjudication response is intentionally synchronous. It reports success, denial, totals, and timing. It does not fully represent every persisted claim workflow state.
 
 The claims service, however, does expose the authoritative persisted status. A claim can be read back with `ClaimStatus.Pended`, and pend details can include a reason.
 
-That means the validator should not fake pend results from lower-precision signals. It should submit and adjudicate the claim, then observe expected-pend claims through the persisted claim API after the timed benchmark path completes.
+That means the validator should not fake pend results from lower-precision signals. It submits and adjudicates the claim, then observes expected-pend claims through the persisted claim API after the timed benchmark path completes.
 
-The benchmark timing remains scoped to submit, adjudicate, and writeback. Pend observation happens afterward and is reported separately.
+The benchmark timing remains scoped to submit, adjudicate, and writeback. Pend observation happens afterward and is reported separately. That distinction keeps the throughput number clean while making the correctness story more honest.
 
-That distinction keeps the throughput number clean while making the correctness story more honest.
+There is still an important limitation. The pend-observation pass polls persisted status only for scenarios the answer key expects to pend. It proves those expected-pend claims really pended, but it does not by itself detect the inverse error: a claim expected to pay or deny that later persists as pended. That false-pend sweep is a future validator improvement, and until it exists, the pend numbers in this article should be read as one-directional proof.
 
 ## Fixture bugs are benchmark bugs
 
@@ -70,17 +60,13 @@ The next set of fixes was less glamorous and more important.
 
 Several mismatches were not adjudication failures. They were fixture problems.
 
-Retroactive eligibility termination depends on dates. The claim service date has to fall after the member coverage termination date. The validator normalizes claim dates into a current local testing window, which is useful for running against live services, but if only the claim date moves and the coverage window does not move with it, the scenario changes meaning.
-
-So the retro eligibility fixture had to preserve its date relationship during normalization.
+Retroactive eligibility termination depends on dates. The claim service date has to fall after the member coverage termination date. The validator normalizes claim dates into a current local testing window, which is useful for running against live services — but if only the claim date moves and the coverage window does not move with it, the scenario changes meaning. So the retro eligibility fixture had to preserve its date relationship during normalization.
 
 Newborn scenarios had a similar problem. A newborn claim should involve a newborn at the service date. If the service date moves forward during normalization but the date of birth does not, the claim can stop being a newborn scenario. The fixture also needed to make the member relationship explicit as a dependent child and provide prior authorization for paid inpatient newborn scenarios.
 
 Then the 5,000-claim breadth run found one more issue: `NewbornMotherClaimLink` could generate the same procedure code on both lines. That can trigger duplicate or unit-limit edits even though the scenario is supposed to validate a paid newborn workflow. The fix was to make multi-line edge-case fixtures choose distinct procedure codes, and to add regression coverage for the current multi-line edge scenarios.
 
-This is the kind of detail that makes benchmarks credible.
-
-The work is not just making the platform look better. It is making the benchmark harder to fool.
+This is the kind of detail that makes benchmarks credible. The work is not just making the platform look better. It is making the benchmark harder to fool.
 
 ## The 5K breadth baseline
 
@@ -96,46 +82,29 @@ The result:
 - 0 workflow mismatches
 - 73 unsupported scenarios reported separately
 
-The newborn scenarios that had previously exposed fixture issues were clean:
+The newborn scenarios that had previously exposed fixture issues were clean: `NewbornAutoAdjudication`, `NewbornFirstThirtyDays`, and `NewbornMotherClaimLink` each finished 10/10 matched. Retro eligibility termination was also clean at 13/13.
 
-- `NewbornAutoAdjudication`: 10/10 matched
-- `NewbornFirstThirtyDays`: 10/10 matched
-- `NewbornMotherClaimLink`: 10/10 matched
+The run also preserved the earlier deterministic validation groups: clean professional paid claims, excluded provider denials, uncovered service denials, and Texas STAR inpatient prior-authorization denials.
 
-Retro eligibility termination was also clean:
-
-- `RetroEligibilityTermination`: 13/13 matched
-
-The run also preserved the earlier deterministic validation groups:
-
-- clean professional paid claims
-- excluded provider denials
-- uncovered service denials
-- Texas STAR inpatient prior-authorization denials
-
-That is the new baseline for Part 6.
-
-It is not the final headline.
+That is the new baseline for Part 6. It is not the final headline.
 
 ## Why 10K and 50K still matter
 
-A 5,000-claim run is useful because it is fast enough to iterate and large enough to expose fixture collisions that a 1,000-claim smoke can miss.
+A 5,000-claim run is useful because it is fast enough to iterate and large enough to expose fixture collisions that a 1,000-claim smoke can miss. But Part 6 should not stop at 5K.
 
-But Part 6 should not stop at 5K.
+The first attempt at a broader 50K run did exactly what a useful benchmark should do: it found a real scoreable mismatch.
 
-The 10K run confirmed that the zero-mismatch breadth result holds at the scale used in the earlier tuning sweep.
+That first 50K attempt showed one workflow mismatch in `EdgeCase:CobSecondaryPayer`: 99 of 100 matched. That mattered. A single mismatch is not an operational failure, and it is not a reason to throw away the run, but it is also not something to hide.
 
-At 10,000 claims after the fixture-isolation fix, the platform processed every claim, observed all 92 expected-pend claims as pended, reported zero platform failures, and finished with 1,154 of 1,300 workflow checks matched, zero mismatches, and 146 unsupported scenarios labeled separately.
+The fix was in the benchmark fixture setup, not the adjudication rule. Expected-pend COB scenarios could share a synthetic member with another generated claim, which meant one scenario could miss its own seeded COB coverage row. The validator now isolates supported COB-pend members by generated claim before seeding and adjudication.
 
-The 50K run replaced the older narrow 50K proof point with a broader validation result.
+That fix merged as PR #858, `Fix MCC COB fixture isolation`. It touched only benchmark fixture and seeding code — zero adjudication rules changed. It is the provenance for everything that follows.
 
-At 50,000 claims, the platform processed every claim, observed 460 of 460 expected-pend claims as pended, reported zero platform failures, and finished with 5,767 of 6,500 workflow checks matched. It also reported 733 unsupported scenarios separately.
+After that, the 10K run became the confidence gate. At 10,000 claims post-fix, the platform processed every claim, observed all 92 expected-pend claims as pended, reported zero platform failures, and finished with 1,154 of 1,300 workflow checks matched, zero mismatches, and 146 unsupported scenarios labeled separately.
 
-It was a clean scoreable correctness run.
+Then a full clean 50K rerun replaced the older narrow 50K proof point.
 
-The first 50K attempt found one scoreable workflow mismatch in `EdgeCase:CobSecondaryPayer`: 99 of 100 matched. That mattered. A single mismatch is not an operational failure, and it is not a reason to throw away the run, but it is also not something to hide.
-
-The fix was in the benchmark fixture setup, not the adjudication rule. Expected-pend COB scenarios could share a synthetic member with another generated claim, which meant one scenario could miss its own seeded COB coverage row. The validator now isolates supported COB-pend members by generated claim before seeding and adjudication. After that fix, `EdgeCase:CobSecondaryPayer` finished 100 of 100 matched.
+At 50,000 claims, the platform processed every claim, observed 460 of 460 expected-pend claims as pended, reported zero platform failures, and finished with 5,767 of 6,500 workflow checks matched, with 733 unsupported scenarios reported separately.
 
 The 50K run also produced a local throughput result:
 
@@ -143,32 +112,47 @@ The 50K run also produced a local throughput result:
 - 298 ms P95 latency
 - 369 ms P99 latency
 
-Those are local Docker Desktop Kubernetes numbers, not production cloud claims. They are useful because they tie correctness breadth back to the repeatable local benchmark path from Part 5.
+Those are local Docker Desktop Kubernetes numbers (18 CPUs, ~23.4 GiB allocated), not production cloud claims, and the run executed against a long-lived local tenant rather than a freshly reset cluster. The raw validator output, exact commands, commit SHAs, and full scenario tables are published alongside this article so the run can be checked, not just believed.
 
-There is an obvious next milestone after that: 100,000 claims.
+## The payment delta: the number we are not claiming yet
 
-But that should be its own article and its own proof moment. Part 6 should not make 100K the bar for publication. The disciplined move is to make 50K boring first, then use 100K as a focused follow-on milestone once the broader correctness path has already been established.
+The raw output also reports an average payment delta of $59.36.
 
-The target is not to make every scenario green by definition.
+Here is exactly what that number is. For claims that were both expected to pay and actually paid — and where the synthetic corpus defines an expected paid amount — the validator computes the absolute difference between the platform's plan payment and the answer key's expected amount, then averages it.
 
-The target is to report the truth:
+Here is what it means for this article: the zero-mismatch result is disposition-level and workflow-level correctness. It says the platform paid what should pay, denied what should deny for the right business reason, and pended what should pend. It does not say the platform paid the right dollar amount.
+
+A mean also hides a distribution. A $59 average could be many small rounding-scale differences or a few badly wrong payments, and those are very different findings. Before payment accuracy becomes a headline, the validator needs a proper amount-level scoring gate that reports the delta distribution, not just the mean.
+
+So Part 6 treats the payment delta the same way it treats unsupported scenarios: visible, named, and explicitly not counted as a win. Payment-amount accuracy is the next scoring gate, not a solved problem.
+
+## The wider matched footprint
+
+The matched results run broader than the highlights above. The clean 50K run matched the full COB set — primary, secondary, tertiary, birthday-rule, gender-rule, and Medicare-secondary. It matched Medicaid dual-eligible, CHIP, SSI, and TANF scenarios, retro eligibility add and termination, behavioral health carve-in and parity-check, prior-auth on-file and no-auth variants, and all three newborn scenarios.
+
+The unsupported bucket is equally worth naming. It is concentrated in subrogation, prior-authorization edge variants (expired auth, wrong procedure, wrong provider), retroactive coverage change, behavioral health carve-out, and Medicaid spend-down. That is not a footnote; it is the roadmap for the next layer of adjudication edit-model work.
+
+## What comes next
+
+There is an obvious next milestone: 100,000 claims.
+
+But that should be its own article and its own proof moment. The disciplined move is to make 50K boring first. And the 100K article should not just be a bigger number — it should be a bigger number under stricter scoring: the false-pend sweep and the payment-amount gate both belong there. Scale plus rigor is the milestone. Scale alone is a rerun.
+
+The target is not to make every scenario green by definition. The target is to report the truth:
 
 - matched where the platform and answer key agree
 - mismatched where a scoreable outcome is wrong
 - unsupported where the validation path cannot honestly score the scenario yet
 - platform failure where the system fails operationally
+- payment delta where a paid claim reached the right disposition but the dollar amount still needs its own scoring gate
 
 That is a much stronger story than a perfect-looking number with hidden caveats.
 
 ## What this proves
 
-This phase proves that the Million Claim Challenge is becoming more than a load test.
+This phase proves that the Million Claim Challenge is becoming more than a load test. It is becoming a credibility system.
 
-It is becoming a credibility system.
-
-It checks whether the benchmark corpus still means what it claims to mean after date normalization. It checks whether pended workflows are observable. It checks whether valid business denials are counted as correct outcomes. It checks whether unsupported scenarios are separated from failures and wins.
-
-That is the right foundation for bigger numbers.
+It checks whether the benchmark corpus still means what it claims to mean after date normalization. It checks whether pended workflows are observable. It checks whether valid business denials are counted as correct outcomes. It checks whether unsupported scenarios are separated from failures and wins. And it publishes the raw output that lets anyone check the checker.
 
 The honest path is:
 
@@ -176,16 +160,15 @@ The honest path is:
 2. make fixtures truthful
 3. separate unsupported gaps
 4. run breadth validation at 5K
-5. confirm at 10K
-6. run the 50K breadth result
-7. triage and close the COB secondary-payer mismatch
-8. treat 100K as the next focused milestone
-9. then climb toward 250K, 500K, and the full million
+5. run the first 50K breadth attempt and find the COB secondary-payer mismatch
+6. fix the COB fixture isolation gap in PR #858
+7. confirm the fix at 10K
+8. rerun 50K cleanly, in full
+9. treat 100K — with stricter scoring — as the next focused milestone
+10. then climb toward 250K, 500K, and the full million
 
-The Million Claim Challenge brand is ambitious.
-
-It should be.
+The Million Claim Challenge brand is ambitious. It should be.
 
 But the evidence has to climb the ladder in order.
 
-Part 6 is about that next rung: not just faster claims processing, but honest edge-case scoring under repeatable local Kubernetes load.
+Part 6 is that next rung: not just faster claims processing, but honest edge-case scoring under repeatable local Kubernetes load.
