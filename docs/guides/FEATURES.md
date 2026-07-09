@@ -112,9 +112,9 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 | **Enterprise** | Custom | Unlimited | White-label + SLA | 24/7 + Dedicated CSM | Custom |
 
 **Stripe Integration**:
-- Test Mode: `pk_test_51SZR4gJu0wSGGF9nlno2s1eJG6l640809UK0Rhn2YkQCSB1FLaCorJH6eY72QikKvo4w1JMCOUyYGupFgfP3Ye5W0081VorcHa`
+- Test Mode: `pk_test_...`
 - Price IDs: Starter `price_1SyhLMJu0wSGGF9n9zqtS7Kh`, Professional `price_1SyhMmJu0wSGGF9no72J2xY9`
-- Trial Period: 14 days (ends Feb 23, 2026)
+- Trial Period: 14 days
 - Payment Methods: Credit card, ACH (US), SEPA (EU)
 
 #### Mobile Features
