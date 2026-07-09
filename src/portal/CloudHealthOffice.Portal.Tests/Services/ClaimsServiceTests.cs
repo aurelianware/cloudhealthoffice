@@ -16,7 +16,8 @@ public class ClaimsServiceTests
         _configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Services:ClaimsService"] = "http://localhost:5000"
+                ["Services:ClaimsService"] = "http://localhost:5000",
+                ["Authentication:LocalDemo:TenantId"] = "demo"
             })
             .Build();
     }
@@ -129,6 +130,16 @@ public class ClaimsServiceTests
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
             () => sut.GetAdjudicationDataAsync("CLM-2026-00001"));
         ex.Message.Should().Contain("Claims Service");
+    }
+
+    [Fact]
+    public async Task GetAdjudicationDataAsync_WhenApiReturns404_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.NotFound)));
+
+        var result = await sut.GetAdjudicationDataAsync("CLM-NO-DETAIL");
+
+        result.Should().BeNull();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -265,30 +276,69 @@ public class ClaimsServiceTests
                     parallelism = 8,
                     claimsUrl = "https://claims",
                     benefitUrl = "https://benefit",
+                    memberUrl = "https://member",
+                    coverageUrl = "https://coverage",
                     providerUrl = "https://provider",
+                    seedMembers = true,
                     seedProviders = true,
                     skipClaimUpdate = false,
+                    lineOfBusiness = 3,
                     startedAtUtc = "2026-07-01T00:00:00Z",
                     completedAtUtc = "2026-07-01T00:01:00Z"
                 },
                 totalClaims = 100,
                 processed = 100,
                 paid = 97,
+                pended = 1,
                 businessDenials = 2,
+                observationTimeouts = 0,
                 platformFailures = 1,
+                workflowScenarios = 12,
+                workflowMatches = 10,
+                workflowMismatches = 1,
+                workflowUnsupported = 1,
+                workflowObservationTimeouts = 0,
                 throughputClaimsPerSecond = 15.5,
+                averagePaymentDelta = 59.36m,
+                workflowScenarioBreakdown = new[]
+                {
+                    new
+                    {
+                        scenario = "EdgeCase:CobSecondaryPayer",
+                        total = 10,
+                        matches = 9,
+                        mismatches = 1,
+                        unsupported = 0,
+                        observationTimeouts = 0,
+                        unspecified = 0
+                    }
+                },
                 createdAtUtc = "2026-07-01T00:01:05Z"
             }
         }, JsonOpts);
 
-        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
 
         var result = await sut.GetMassAdjudicationRunsAsync();
 
+        handler.CapturedRequests.Should().ContainSingle();
+        handler.CapturedRequests[0].Headers.GetValues("X-Tenant-ID").Should().ContainSingle("demo");
         result.Should().ContainSingle();
         result[0].Id.Should().Be("run-001");
         result[0].Run.TenantId.Should().Be("tenant-a");
+        result[0].Run.MemberUrl.Should().Be("https://member");
+        result[0].Run.CoverageUrl.Should().Be("https://coverage");
+        result[0].Run.SeedMembers.Should().BeTrue();
+        result[0].Run.LineOfBusiness.Should().Be(3);
         result[0].Processed.Should().Be(100);
+        result[0].Pended.Should().Be(1);
+        result[0].WorkflowUnsupported.Should().Be(1);
+        result[0].AveragePaymentDelta.Should().Be(59.36m);
+        result[0].WorkflowScenarioBreakdown.Should().ContainSingle(s =>
+            s.Scenario == "EdgeCase:CobSecondaryPayer"
+            && s.Matches == 9
+            && s.Mismatches == 1);
         result[0].PlatformFailures.Should().Be(1);
     }
 

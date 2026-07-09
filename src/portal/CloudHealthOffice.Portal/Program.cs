@@ -380,11 +380,9 @@ if (useLocalDemoAuth)
 {
     app.MapGet("/local-demo/sign-in", async (HttpContext context) =>
     {
-        var redirectUri = context.Request.Query["redirectUri"].FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(redirectUri) || !redirectUri.StartsWith("/", StringComparison.Ordinal))
-        {
-            redirectUri = "/";
-        }
+        var redirectUri = NormalizeLocalDemoRedirect(
+            context.Request.Query["redirectUri"].FirstOrDefault(),
+            context.Request);
 
         var email = builder.Configuration["Authentication:LocalDemo:Email"]
             ?? "local-demo-user";
@@ -433,6 +431,31 @@ if (useLocalDemoAuth)
         await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return Results.Redirect("/");
     }).WithMetadata(new Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute());
+}
+
+static string NormalizeLocalDemoRedirect(string? redirectUri, HttpRequest request)
+{
+    if (string.IsNullOrWhiteSpace(redirectUri))
+    {
+        return "/";
+    }
+
+    if (redirectUri.StartsWith("/", StringComparison.Ordinal)
+        && !redirectUri.StartsWith("//", StringComparison.Ordinal))
+    {
+        return redirectUri;
+    }
+
+    if (Uri.TryCreate(redirectUri, UriKind.Absolute, out var absolute)
+        && string.Equals(absolute.Host, request.Host.Host, StringComparison.OrdinalIgnoreCase)
+        && (!absolute.IsDefaultPort || absolute.Port == request.Host.Port))
+    {
+        return string.IsNullOrEmpty(absolute.PathAndQuery)
+            ? "/"
+            : absolute.PathAndQuery;
+    }
+
+    return "/";
 }
 
 // Health endpoint - anonymous access for Kubernetes probes
