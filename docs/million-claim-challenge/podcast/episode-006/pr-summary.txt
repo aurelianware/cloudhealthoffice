@@ -57,6 +57,20 @@ Key outcome:
 - the rerun 5K breadth validation completed with zero mismatches
 - `NewbornMotherClaimLink` improved from 9/10 matched to 10/10 matched
 
+### PR 858: Fix MCC COB fixture isolation
+
+The first 50K breadth run after the newborn and retro fixes found one scoreable mismatch in `EdgeCase:CobSecondaryPayer`: 99 of 100 matched.
+
+The cause was fixture-side, not an adjudication-rule failure. Supported COB-pend scenarios could share a synthetic member with another generated claim. Because COB coverage is seeded by member, one expected-pend scenario could miss its own seeded COB row and therefore fail to pend.
+
+PR 858 isolated supported COB-pend members by generated claim before member/coverage seeding and adjudication. It also tightened the isolated member ID shape so derived Medicare beneficiary IDs stay within coverage-service validation limits.
+
+Key outcome:
+
+- `EdgeCase:CobSecondaryPayer` improved from 99/100 matched to 100/100 matched in the clean 50K rerun.
+- expected-pend observations increased from 459/459 to 460/460 because the missing COB fixture row was eliminated.
+- the final 50K breadth validation completed with zero workflow mismatches.
+
 ## Engineering interpretation
 
 The key lesson is that benchmark integrity is part of product engineering.
@@ -67,6 +81,8 @@ Several issues were not platform outages. They were evidence-quality issues:
 - a retro eligibility scenario needed its date relationships preserved
 - newborn scenarios needed age, relationship, authorization, and benefit category fixtures aligned with the adjudication path
 - unsupported scenario expectations needed to be labeled as unsupported instead of hidden inside mismatch counts
+- COB-pend scenarios needed member-level fixture isolation so seeded COB rows match the generated claim that expects the pend
+- payment-amount differences are visible through the validator's average payment delta diagnostic, but are not yet part of the workflow pass/fail scoring gate
 
 That is the right kind of progress for the Million Claim Challenge. It makes the benchmark less flattering in the short term, but more credible.
 
@@ -76,3 +92,4 @@ That is the right kind of progress for the Million Claim Challenge. It makes the
 - PR 854: Preserve MCC retro eligibility coverage windows.
 - PR 855: Fix MCC newborn validation fixtures.
 - PR 856: Avoid duplicate MCC newborn mother line codes.
+- PR 858: Fix MCC COB fixture isolation.
