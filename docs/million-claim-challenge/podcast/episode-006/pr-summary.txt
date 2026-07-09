@@ -1,0 +1,78 @@
+# Episode 006 PR summary
+
+Episode 006 is based on the work that moved MCC validation from a narrow throughput proof to broader, more honest edge-case scoring.
+
+## Relevant changes
+
+### PR 853: Score MCC retro eligibility termination
+
+Retroactive eligibility termination became a scoreable workflow outcome.
+
+The adjudication path now exposes member coverage ineligibility as CARC 27 instead of collapsing the scenario into a generic unsupported or mismatched result. The validator can therefore distinguish a true retro-termination denial from a platform failure.
+
+Key outcome:
+
+- `RetroEligibilityTermination` is expected to deny with CARC 27.
+- The benchmark can count those claims as matched when the platform denies them for the right reason.
+
+### PR 854: Preserve MCC retro eligibility coverage windows
+
+The validator normalizes synthetic claim service dates into a current local testing window. That is useful for live services, but it can accidentally break time-sensitive edge cases.
+
+Retro termination depends on the relationship between service date, coverage effective date, and coverage termination date. PR 854 preserved that relationship during date normalization.
+
+Key outcome:
+
+- Retro termination fixtures remain terminated before service date after normalization.
+- The benchmark no longer creates false mismatches by moving only part of the scenario timeline.
+
+### PR 855: Fix MCC newborn validation fixtures
+
+Newborn edge cases were expected to pay, but the local validation path exposed several fixture and scoring problems:
+
+- newborn date of birth was not reliably relative to service date
+- service-date normalization could age a newborn out of the newborn window
+- newborn dependent relationship fields needed to be explicit
+- paid inpatient newborn scenarios needed prior authorization on file
+- local validation plan inpatient service category needed to align with POS fallback
+- behavioral health carve-out denial was not observable and should be unsupported, not mismatched
+
+PR 855 fixed the newborn fixtures and moved claim date normalization into a tested helper.
+
+Key outcome:
+
+- `NewbornAutoAdjudication`, `NewbornFirstThirtyDays`, and `NewbornMotherClaimLink` became scoreable as paid scenarios in the 1K smoke.
+- unsupported behavioral carve-out expectations are labeled honestly.
+
+### PR 856: Avoid duplicate MCC newborn mother line codes
+
+The first 5K breadth run after PR 855 found one remaining mismatch in `NewbornMotherClaimLink`.
+
+The cause was fixture-side: multi-line newborn mother-link claims could randomly generate the same E/M procedure code on both lines. That can trip duplicate or MUE-style edits even though the edge scenario expects a paid newborn claim.
+
+PR 856 made multi-line edge-case fixtures choose distinct procedure codes and added regression coverage for all current multi-line edge scenarios.
+
+Key outcome:
+
+- the rerun 5K breadth validation completed with zero mismatches
+- `NewbornMotherClaimLink` improved from 9/10 matched to 10/10 matched
+
+## Engineering interpretation
+
+The key lesson is that benchmark integrity is part of product engineering.
+
+Several issues were not platform outages. They were evidence-quality issues:
+
+- a pended outcome needed an observable persisted status
+- a retro eligibility scenario needed its date relationships preserved
+- newborn scenarios needed age, relationship, authorization, and benefit category fixtures aligned with the adjudication path
+- unsupported scenario expectations needed to be labeled as unsupported instead of hidden inside mismatch counts
+
+That is the right kind of progress for the Million Claim Challenge. It makes the benchmark less flattering in the short term, but more credible.
+
+## Pull request references
+
+- PR 853: Score MCC retro eligibility termination.
+- PR 854: Preserve MCC retro eligibility coverage windows.
+- PR 855: Fix MCC newborn validation fixtures.
+- PR 856: Avoid duplicate MCC newborn mother line codes.

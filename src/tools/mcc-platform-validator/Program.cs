@@ -68,6 +68,7 @@ await CreateValidationPlanAsync(http, options, validationPlanId, json);
 var claims = await GenerateClaimsAsync(options);
 NormalizePriorAuthEdgeCases(claims, options);
 NormalizeValidationProviderProfiles(claims, options.Seed);
+MccFixtureIsolation.IsolateCobPendMembers(claims, options.Seed);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 var answerKey = MccAnswerKey.FromClaims(claims);
 
