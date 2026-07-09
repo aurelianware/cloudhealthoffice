@@ -15,7 +15,7 @@ This document provides a comprehensive overview of all features available in Clo
 | **Enhanced Claim Status** | ValueAdds277 (60+ fields) | ✅ Complete | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
 | **Security Hardening** | 6 production controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
 | **Deployment** | Gated release strategy | ✅ Complete | [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) |
-| **Testing** | 5,133 automated tests across 44 test projects | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| **Testing** | 5,135 automated tests across 44 test projects | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | **Multi-Tenant Security** | Cross-tenant isolation | ✅ Complete | [portal/CloudHealthOffice.Portal.Tests/](./portal/CloudHealthOffice.Portal.Tests/) |
 | **Premium Billing** | Monthly premium invoicing, NACHA/ACH EFT drafts, Stripe ACH | ✅ Complete | [src/services/premium-billing-service/](../src/services/premium-billing-service/) |
 
@@ -112,9 +112,9 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 | **Enterprise** | Custom | Unlimited | White-label + SLA | 24/7 + Dedicated CSM | Custom |
 
 **Stripe Integration**:
-- Test Mode: `pk_test_51SZR4gJu0wSGGF9nlno2s1eJG6l640809UK0Rhn2YkQCSB1FLaCorJH6eY72QikKvo4w1JMCOUyYGupFgfP3Ye5W0081VorcHa`
+- Test Mode: `pk_test_...`
 - Price IDs: Starter `price_1SyhLMJu0wSGGF9n9zqtS7Kh`, Professional `price_1SyhMmJu0wSGGF9no72J2xY9`
-- Trial Period: 14 days (ends Feb 23, 2026)
+- Trial Period: 14 days
 - Payment Methods: Credit card, ACH (US), SEPA (EU)
 
 #### Mobile Features
