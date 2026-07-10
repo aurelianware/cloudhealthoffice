@@ -71,15 +71,15 @@ public class ClaimsService : IClaimsService
 
     public async Task<string?> GetExplanationOfBenefitJsonAsync(string claimId)
     {
-        var baseUrl = GetClaimsServiceRootUrl();
         try
         {
+            var baseUrl = GetClaimsServiceRootUrl();
             using var request = new HttpRequestMessage(
                 HttpMethod.Get,
                 $"{baseUrl}/fhir/ExplanationOfBenefit/{Uri.EscapeDataString(claimId)}");
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/fhir+json"));
 
-            var response = await _httpClient.SendAsync(request);
+            using var response = await _httpClient.SendAsync(request);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return null;
@@ -91,6 +91,11 @@ public class ClaimsService : IClaimsService
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Service configuration invalid: {ServiceName}", "Claims Service");
             throw new ServiceUnavailableException("Claims Service", ex);
         }
     }
@@ -255,6 +260,11 @@ public class ClaimsService : IClaimsService
     private string GetClaimsServiceRootUrl()
     {
         var baseUrl = (_configuration["Services:ClaimsService"] ?? string.Empty).TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            throw new InvalidOperationException("Services:ClaimsService is not configured.");
+        }
+
         return baseUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase)
             ? baseUrl[..^"/api".Length]
             : baseUrl;

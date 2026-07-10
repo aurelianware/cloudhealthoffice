@@ -388,6 +388,20 @@ public class ClaimsServiceTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetExplanationOfBenefitJsonAsync_WhenClaimsServiceBaseUrlMissing_ThrowsServiceUnavailableWithoutRequest()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler), "");
+
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetExplanationOfBenefitJsonAsync("claim-1"));
+
+        ex.ServiceName.Should().Be("Claims Service");
+        ex.InnerException.Should().BeOfType<InvalidOperationException>();
+        handler.CapturedRequests.Should().BeEmpty();
+    }
+
     // ── GetMassAdjudicationRunsAsync ──
 
     [Fact]
