@@ -21,7 +21,9 @@ public class NetworkCredentialingStageTests
     private const string Network1 = "net-1";
     private const string Network2 = "net-2";
     private const string Npi = "1234567890";
+    private const string RenderingNpi = "9000000011";
     private const string ProviderId = "p-001";
+    private const string RenderingProviderId = "p-rendering-excluded";
 
     private readonly IProviderMembershipClient _membership = Substitute.For<IProviderMembershipClient>();
     private readonly ICredentialingStatusClient _credentialing = Substitute.For<ICredentialingStatusClient>();
@@ -55,6 +57,115 @@ public class NetworkCredentialingStageTests
         Assert.Equal(Network1, ctx.MatchedNetworkTier!.NetworkId);
         Assert.Equal(2, ctx.EnforcementOutcomes.Count);
         Assert.All(ctx.EnforcementOutcomes, o => Assert.Equal(EnforcementDecision.Allow, o.Decision));
+    }
+
+    [Fact]
+    public async Task StaleInactiveMembership_force_refreshes_before_denying()
+    {
+        _membership.GetMembershipAsync(TenantId, Network1, Npi, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns(new NetworkMembership
+            {
+                NetworkId = Network1, Npi = Npi, ProviderId = ProviderId,
+                IsActiveMember = false, AsOfDate = DateTime.UtcNow,
+                ParticipationStatus = "not_a_member",
+            });
+        _membership.GetMembershipAsync(TenantId, Network1, Npi, Arg.Any<DateTime>(), true, Arg.Any<CancellationToken>())
+            .Returns(new NetworkMembership
+            {
+                NetworkId = Network1, Npi = Npi, ProviderId = ProviderId,
+                IsActiveMember = true, AsOfDate = DateTime.UtcNow,
+            });
+        _credentialing.GetStatusAsOfAsync(TenantId, ProviderId, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns(new CredentialingStatusSnapshot
+            {
+                ProviderId = ProviderId, AsOfDate = DateTime.UtcNow, Status = "Approved",
+            });
+
+        var ctx = NewContext(tiers: new[] { Tier(Network1, "InNetwork", 1) });
+        var sut = NewStage(new TenantEnforcementPolicyOptions());
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.All(ctx.EnforcementOutcomes, o => Assert.Equal(EnforcementDecision.Allow, o.Decision));
+        await _membership.Received(1).GetMembershipAsync(
+            TenantId, Network1, Npi, Arg.Any<DateTime>(), true, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StaleCredentialingStatus_force_refreshes_before_denying()
+    {
+        _membership.GetMembershipAsync(TenantId, Network1, Npi, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns(new NetworkMembership
+            {
+                NetworkId = Network1, Npi = Npi, ProviderId = ProviderId,
+                IsActiveMember = true, AsOfDate = DateTime.UtcNow,
+            });
+        _credentialing.GetStatusAsOfAsync(TenantId, ProviderId, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns(new CredentialingStatusSnapshot
+            {
+                ProviderId = ProviderId, AsOfDate = DateTime.UtcNow, Status = "Unknown",
+            });
+        _credentialing.GetStatusAsOfAsync(TenantId, ProviderId, Arg.Any<DateTime>(), true, Arg.Any<CancellationToken>())
+            .Returns(new CredentialingStatusSnapshot
+            {
+                ProviderId = ProviderId, AsOfDate = DateTime.UtcNow, Status = "Approved",
+            });
+
+        var ctx = NewContext(tiers: new[] { Tier(Network1, "InNetwork", 1) });
+        var sut = NewStage(new TenantEnforcementPolicyOptions());
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.All(ctx.EnforcementOutcomes, o => Assert.Equal(EnforcementDecision.Allow, o.Decision));
+        await _credentialing.Received(1).GetStatusAsOfAsync(
+            TenantId, ProviderId, Arg.Any<DateTime>(), true, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RenderingProviderCredentialingDenial_denies_even_when_billing_provider_allows()
+    {
+        _membership.GetMembershipAsync(TenantId, Network1, Npi, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns(new NetworkMembership
+            {
+                NetworkId = Network1, Npi = Npi, ProviderId = ProviderId,
+                IsActiveMember = true, AsOfDate = DateTime.UtcNow,
+            });
+        _credentialing.GetStatusAsOfAsync(TenantId, ProviderId, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns(new CredentialingStatusSnapshot
+            {
+                ProviderId = ProviderId, AsOfDate = DateTime.UtcNow, Status = "Approved",
+            });
+        _membership.GetMembershipAsync(TenantId, Network1, RenderingNpi, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns(new NetworkMembership
+            {
+                NetworkId = Network1, Npi = RenderingNpi, ProviderId = RenderingProviderId,
+                IsActiveMember = true, AsOfDate = DateTime.UtcNow,
+            });
+        _credentialing.GetStatusAsOfAsync(TenantId, RenderingProviderId, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns(new CredentialingStatusSnapshot
+            {
+                ProviderId = RenderingProviderId, AsOfDate = DateTime.UtcNow, Status = "Denied",
+            });
+
+        var claim = NewClaim();
+        claim.RenderingProviderNPI = RenderingNpi;
+        var ctx = NewContext(claim, tiers: new[] { Tier(Network1, "InNetwork", 1) });
+        var sut = NewStage(new TenantEnforcementPolicyOptions());
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.False(result.Continue);
+        Assert.Equal(4, ctx.EnforcementOutcomes.Count);
+        Assert.NotNull(ctx.BillingProviderCredentialingStatus);
+        Assert.NotNull(ctx.RenderingProviderCredentialingStatus);
+        Assert.Equal("Denied", ctx.RenderingProviderCredentialingStatus!.Status);
+        Assert.Contains(ctx.EnforcementOutcomes, outcome =>
+            outcome.Check == EnforcementCheck.Credentialing
+            && outcome.Decision == EnforcementDecision.Deny
+            && (outcome.Reason?.Contains("Rendering provider", StringComparison.Ordinal) ?? false));
     }
 
     [Fact]

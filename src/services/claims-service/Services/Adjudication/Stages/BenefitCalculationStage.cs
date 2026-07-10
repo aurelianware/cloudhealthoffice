@@ -37,6 +37,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 {
     public const string StageName = "BenefitCalculation";
     public const string MemberNotEligibleCarc = "27";
+    public const string PriorAuthorizationRequiredCode = "197";
+    public const string PriorAuthorizationRequiredReason = "Prior authorization required but not provided";
 
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
@@ -85,6 +87,16 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Deny(
                 StageName,
                 eligibilityReason);
+        }
+
+        if (RequiresPriorAuthorizationDenial(claim))
+        {
+            context.AdjudicationResult.DenialReasonCode = PriorAuthorizationRequiredCode;
+            context.AdjudicationResult.DenialReason = PriorAuthorizationRequiredReason;
+
+            return ClaimAdjudicationStageResult.Deny(
+                StageName,
+                PriorAuthorizationRequiredReason);
         }
 
         var subscriberId = await ResolveSubscriberIdAsync(context, ct).ConfigureAwait(false);
@@ -162,6 +174,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         reason = "Active coverage";
         return true;
+    }
+
+    internal static bool RequiresPriorAuthorizationDenial(AdapterClaim claim)
+    {
+        return claim.ClaimType is ClaimsService.Models.ClaimType.Institutional
+            && claim.LineOfBusiness is LineOfBusiness.Medicaid
+            && string.Equals(claim.PlaceOfServiceCode, "21", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(claim.PriorAuthorizationNumber);
     }
 
     private async Task<string> ResolveSubscriberIdAsync(
