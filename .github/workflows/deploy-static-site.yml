@@ -288,7 +288,7 @@ jobs:
           fi
 
       - name: Download latest test metrics
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: test-metrics.yml
           name: test-metrics
@@ -463,7 +463,7 @@ jobs:
 
       - name: Post DNS Instructions as PR Comment
         if: steps.get-swa.outputs.swa_exists == 'true' && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
