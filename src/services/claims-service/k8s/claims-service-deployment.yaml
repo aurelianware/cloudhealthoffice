@@ -10,6 +10,7 @@ data:
   Services__CoverageService: "http://coverage-service"
   Services__MemberService: "http://member-service"
   Services__ProviderService: "http://provider-service"
+  Services__BenefitPlanServiceTimeoutSeconds: "5"
   Messaging__AdjudicationMaxConcurrentCalls: "32"
 ---
 apiVersion: apps/v1
@@ -75,6 +76,11 @@ spec:
             configMapKeyRef:
               name: claims-service-config
               key: Services__ProviderService
+        - name: Services__BenefitPlanServiceTimeoutSeconds
+          valueFrom:
+            configMapKeyRef:
+              name: claims-service-config
+              key: Services__BenefitPlanServiceTimeoutSeconds
         - name: Messaging__AdjudicationMaxConcurrentCalls
           valueFrom:
             configMapKeyRef:
