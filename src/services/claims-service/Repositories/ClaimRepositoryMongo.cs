@@ -648,17 +648,26 @@ public class ClaimRepositoryMongo : IClaimRepository
         var options = new FindOneAndUpdateOptions<Claim>
         {
             Sort = Builders<Claim>.Sort.Descending(c => c.VersionNumber),
-            Projection = Builders<Claim>.Projection.Include(c => c.Id),
-            ReturnDocument = ReturnDocument.After,
+            Projection = Builders<Claim>.Projection
+                .Include(c => c.Id)
+                .Include(c => c.Status),
+            ReturnDocument = ReturnDocument.Before,
         };
 
-        var summaryUpdated = await _collection.FindOneAndUpdateAsync(filter, summaryUpdate, options, ct);
-        if (summaryUpdated is null)
+        var preWriteHead = await _collection.FindOneAndUpdateAsync(filter, summaryUpdate, options, ct);
+        if (preWriteHead is null)
         {
             return StatusWriteResult.NotFoundResult;
         }
 
-        return await TryPatchStatusAsync(tenantId, summaryUpdated.Id, status, ClaimVersionState.Adjudicated, ct);
+        return await TryPatchStatusAsync(
+            tenantId,
+            preWriteHead.Id,
+            status,
+            ClaimVersionState.Adjudicated,
+            ct,
+            adjudicationResult,
+            preWriteHead.Status);
     }
 
     public Task<StatusWriteResult> TryTransitionStatusAsync(
@@ -686,7 +695,9 @@ public class ClaimRepositoryMongo : IClaimRepository
         string rowId,
         ClaimStatus desiredStatus,
         ClaimVersionState desiredVersionState,
-        CancellationToken ct)
+        CancellationToken ct,
+        AdjudicationResult? incomingAdjudication = null,
+        ClaimStatus? preWriteStatus = null)
     {
         var b = Builders<Claim>.Filter;
         var statusFilter = b.And(
@@ -701,6 +712,29 @@ public class ClaimRepositoryMongo : IClaimRepository
         if (result.MatchedCount > 0)
         {
             return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
+        }
+
+        if (incomingAdjudication is not null
+            && preWriteStatus is not null
+            && ClaimRepository.CanRepairContradictoryDeniedSummary(
+                preWriteStatus.Value,
+                desiredStatus,
+                incomingAdjudication))
+        {
+            var repairFilter = b.And(
+                b.Eq(c => c.TenantId, tenantId),
+                b.Eq(c => c.Id, rowId),
+                b.Eq(c => c.Status, ClaimStatus.Denied),
+                b.Gt(c => c.AdjudicationResult!.PayerPayment, 0m),
+                b.Or(
+                    b.Eq(c => c.AdjudicationResult!.DenialReasonCode, null),
+                    b.Eq(c => c.AdjudicationResult!.DenialReasonCode, string.Empty)));
+
+            var repairResult = await _collection.UpdateOneAsync(repairFilter, statusUpdate, cancellationToken: ct);
+            if (repairResult.MatchedCount > 0)
+            {
+                return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
+            }
         }
 
         var existing = await _collection

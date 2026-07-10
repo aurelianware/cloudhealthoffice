@@ -605,6 +605,30 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     }
 
     [Fact]
+    public void CanRepairContradictoryDeniedSummary_only_allows_paid_denial_without_denial_evidence()
+    {
+        var paidSummary = new AdjudicationResult { PayerPayment = 150m };
+
+        ClaimRepository.CanRepairContradictoryDeniedSummary(
+                ClaimStatus.Denied,
+                ClaimStatus.Approved,
+                paidSummary)
+            .Should().BeTrue();
+
+        ClaimRepository.CanRepairContradictoryDeniedSummary(
+                ClaimStatus.Pended,
+                ClaimStatus.Approved,
+                paidSummary)
+            .Should().BeFalse("pends remain protected from synchronous summary writeback");
+
+        ClaimRepository.CanRepairContradictoryDeniedSummary(
+                ClaimStatus.Denied,
+                ClaimStatus.Approved,
+                new AdjudicationResult { PayerPayment = 150m, DenialReasonCode = "96" })
+            .Should().BeFalse("an incoming summary with denial evidence is not a paid contradiction");
+    }
+
+    [Fact]
     public async Task UpdateAdjudicationSummaryAsync_onNonPendedClaim_appliesStatusAndData()
     {
         // Regression: the unguarded, normal case is byte-identical to
@@ -656,10 +680,17 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UpdateAdjudicationSummaryAsync_onAlreadyFinalClaim_suppressesStatus_butPersistsFinancialData()
+    public async Task UpdateAdjudicationSummaryAsync_onAlreadyFinalDeniedClaim_repairsPaidSummaryStatus()
     {
         var head = BuildVersion("chain-summary-final", "row-1", n: 1, ClaimVersionState.Denied);
         head.Status = ClaimStatus.Denied;
+        head.AdjudicationResult = new AdjudicationResult
+        {
+            AllowedAmount = 0m,
+            PayerPayment = 0m,
+            DenialReasonCode = "96",
+            DenialReason = "Non-covered charge"
+        };
         await _repo.CreateAsync(head);
         await _repo.CreateAsync(BuildVersion("chain-summary-final", "row-2", n: 2, ClaimVersionState.Draft));
 
@@ -668,17 +699,40 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
             new AdjudicationResult { AllowedAmount = 50m, PayerPayment = 50m },
             ClaimStatus.Approved);
 
-        result.Outcome.Should().Be(StatusWriteOutcome.Suppressed);
-        result.PersistedStatus.Should().Be(ClaimStatus.Denied);
+        result.Outcome.Should().Be(StatusWriteOutcome.Applied);
+        result.PersistedStatus.Should().Be(ClaimStatus.Approved);
 
         var reread = await _repo.GetVersionAsync("chain-summary-final", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Denied, "a completed disposition must never be re-litigated by a stray write-back");
-        reread.VersionState.Should().Be(ClaimVersionState.Denied);
+        reread!.Status.Should().Be(ClaimStatus.Approved, "a paid summary must not leave a denied lifecycle status behind");
+        reread.VersionState.Should().Be(ClaimVersionState.Adjudicated);
         reread.AdjudicationResult!.PayerPayment.Should().Be(50m);
         reread.AdjudicatedDate.Should().NotBeNull();
 
         var draft = await _repo.GetVersionAsync("chain-summary-final", "row-2");
         draft!.AdjudicationResult.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateAdjudicationSummaryAsync_onDeniedWithoutDenialEvidence_repairsPaidSummaryStatus()
+    {
+        var head = BuildVersion("chain-summary-repair", "row-1", n: 1, ClaimVersionState.Denied);
+        head.Status = ClaimStatus.Denied;
+        head.AdjudicationResult = null;
+        await _repo.CreateAsync(head);
+
+        var result = await _repo.UpdateAdjudicationSummaryAsync(
+            Tenant, "chain-summary-repair",
+            new AdjudicationResult { AllowedAmount = 180m, PatientResponsibility = 30m, PayerPayment = 150m },
+            ClaimStatus.Approved);
+
+        result.Outcome.Should().Be(StatusWriteOutcome.Applied);
+        result.PersistedStatus.Should().Be(ClaimStatus.Approved);
+
+        var reread = await _repo.GetVersionAsync("chain-summary-repair", "row-1");
+        reread!.Status.Should().Be(ClaimStatus.Approved);
+        reread.VersionState.Should().Be(ClaimVersionState.Adjudicated);
+        reread.AdjudicationResult!.PayerPayment.Should().Be(150m);
+        reread.AdjudicationResult.DenialReasonCode.Should().BeNull();
     }
 
     [Fact]

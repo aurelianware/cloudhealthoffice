@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using FluentAssertions;
@@ -101,7 +102,10 @@ public sealed class ClaimRepositoryStatusWritebackGuardTests
         captured.Should().NotBeNull();
         foreach (var blocked in ClaimRepository.SynchronousWritebackBlockedStatuses)
         {
-            captured!.FilterPredicate.Should().Contain($"'{blocked}'");
+            captured!.FilterPredicate.Should()
+                .Contain($"'{JsonNamingPolicy.CamelCase.ConvertName(blocked.ToString())}'");
+            captured.FilterPredicate.Should()
+                .NotContain($"'{blocked}'", "Cosmos persists ClaimStatus enum strings as camelCase");
         }
     }
 
