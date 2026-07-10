@@ -961,7 +961,6 @@ static async Task<bool> UpdateMemberSeedStatusAsync(
         $"{options.MemberUrl}/api/v1/members/{Uri.EscapeDataString(member.MemberId)}",
         payload,
         json);
-    var body = await response.Content.ReadAsStringAsync();
 
     if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
     {
@@ -970,6 +969,7 @@ static async Task<bool> UpdateMemberSeedStatusAsync(
 
     if (!response.IsSuccessStatusCode)
     {
+        var body = await response.Content.ReadAsStringAsync();
         throw new InvalidOperationException($"member status alignment failed ({member.MemberId}): {(int)response.StatusCode} {body}");
     }
 

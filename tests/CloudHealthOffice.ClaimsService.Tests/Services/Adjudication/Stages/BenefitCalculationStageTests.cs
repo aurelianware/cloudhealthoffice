@@ -214,7 +214,7 @@ public class BenefitCalculationStageTests
     }
 
     [Fact]
-    public async Task Execute_TexasMedicaidInpatientWithoutPriorAuth_DeniesWithoutEngineCall()
+    public async Task Execute_MedicaidInstitutionalInpatientWithoutPriorAuth_DeniesWithoutEngineCall()
     {
         var claim = BuildClaim(Guid.NewGuid().ToString());
         claim.LineOfBusiness = LineOfBusiness.Medicaid;
@@ -237,6 +237,32 @@ public class BenefitCalculationStageTests
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, ctx.AdjudicationResult.DenialReasonCode);
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredReason, ctx.AdjudicationResult.DenialReason);
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Execute_ExchangeInstitutionalInpatientWithoutPriorAuth_ContinuesToBenefitEngine()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.LineOfBusiness = LineOfBusiness.Exchange;
+        claim.ClaimType = ClaimType.Institutional;
+        claim.PlaceOfServiceCode = "21";
+        claim.PriorAuthorizationNumber = null;
+
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

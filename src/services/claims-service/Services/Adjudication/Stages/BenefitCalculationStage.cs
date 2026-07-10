@@ -178,9 +178,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
     internal static bool RequiresPriorAuthorizationDenial(AdapterClaim claim)
     {
-        var lineOfBusiness = (int)claim.LineOfBusiness;
         return claim.ClaimType is ClaimsService.Models.ClaimType.Institutional
-            && lineOfBusiness is 3 or 4
+            && claim.LineOfBusiness is LineOfBusiness.Medicaid
             && string.Equals(claim.PlaceOfServiceCode, "21", StringComparison.OrdinalIgnoreCase)
             && string.IsNullOrWhiteSpace(claim.PriorAuthorizationNumber);
     }
