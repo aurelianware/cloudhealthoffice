@@ -509,8 +509,19 @@
                 @BackLabel
             </MudButton>
             <MudStack Row="true" Spacing="2">
-                <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Print">Print</MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download">Export EOB</MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Print"
+                           OnClick="PrintClaimAsync">
+                    Print
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Download"
+                           Disabled="_exportingEob"
+                           OnClick="ExportEobAsync">
+                    @(_exportingEob ? "Exporting..." : "Export EOB")
+                </MudButton>
             </MudStack>
         </MudPaper>
 
@@ -809,6 +820,7 @@
     private List<BreadcrumbItem> _breadcrumbItems = new();
     private string _noteInput = string.Empty;
     private string? _serviceError;
+    private bool _exportingEob;
     private string BackHref => string.IsNullOrWhiteSpace(FromRun)
         ? "/claims"
         : $"/mass-adjudication-runs?run={Uri.EscapeDataString(FromRun)}";
@@ -962,6 +974,57 @@
     private void ViewClaimDetails(string claimId)
     {
         NavigationManager.NavigateTo($"/claims/{claimId}");
+    }
+
+    private async Task PrintClaimAsync()
+    {
+        await JS.InvokeVoidAsync("window.print");
+    }
+
+    private async Task ExportEobAsync()
+    {
+        if (_claim == null || _exportingEob) return;
+
+        _exportingEob = true;
+        try
+        {
+            var eobJson = await ClaimsService.GetExplanationOfBenefitJsonAsync(_claim.ClaimId);
+            if (string.IsNullOrWhiteSpace(eobJson))
+            {
+                Snackbar.Add("No Explanation of Benefit is available for this claim.", Severity.Warning);
+                return;
+            }
+
+            var claimNumber = string.IsNullOrWhiteSpace(_claim.ClaimNumber)
+                ? _claim.ClaimId
+                : _claim.ClaimNumber;
+            var fileName = $"EOB_{SanitizeFileName(claimNumber)}.json";
+            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(eobJson));
+            await JS.InvokeVoidAsync("downloadBase64File", fileName, "application/fhir+json", base64);
+            Snackbar.Add("EOB exported.", Severity.Success);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error exporting EOB: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _exportingEob = false;
+        }
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        foreach (var invalid in System.IO.Path.GetInvalidFileNameChars())
+        {
+            value = value.Replace(invalid, '-');
+        }
+
+        return string.IsNullOrWhiteSpace(value) ? "claim" : value;
     }
 
     private async Task ApproveClaimAsync()

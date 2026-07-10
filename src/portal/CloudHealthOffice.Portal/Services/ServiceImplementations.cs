@@ -69,6 +69,32 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<string?> GetExplanationOfBenefitJsonAsync(string claimId)
+    {
+        var baseUrl = GetClaimsServiceRootUrl();
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{baseUrl}/fhir/ExplanationOfBenefit/{Uri.EscapeDataString(claimId)}");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/fhir+json"));
+
+            var response = await _httpClient.SendAsync(request);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
     public async Task<List<MassAdjudicationRunSummary>> GetMassAdjudicationRunsAsync(int limit = 25)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
@@ -224,6 +250,14 @@ public class ClaimsService : IClaimsService
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
             throw new ServiceUnavailableException("Claims Service", ex);
         }
+    }
+
+    private string GetClaimsServiceRootUrl()
+    {
+        var baseUrl = (_configuration["Services:ClaimsService"] ?? string.Empty).TrimEnd('/');
+        return baseUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase)
+            ? baseUrl[..^"/api".Length]
+            : baseUrl;
     }
 
     public async Task<EobSearchResponse> SearchClaimsByMemberAsync(string memberId, MemberClaimsFilter filter)

@@ -10,6 +10,7 @@ public interface IClaimsService
     Task<List<ClaimSummary>> GetRecentClaimsAsync(int count);
     Task<ClaimSearchResult> SearchClaimsAsync(ClaimSearchRequest request);
     Task<ClaimDetails?> GetClaimByIdAsync(string claimId);
+    Task<string?> GetExplanationOfBenefitJsonAsync(string claimId);
     Task<List<MassAdjudicationRunSummary>> GetMassAdjudicationRunsAsync(int limit = 25);
     Task<MassAdjudicationRunSummary?> GetMassAdjudicationRunAsync(string runId);
     Task<List<MassAdjudicationClaimResult>> GetMassAdjudicationClaimResultsAsync(
