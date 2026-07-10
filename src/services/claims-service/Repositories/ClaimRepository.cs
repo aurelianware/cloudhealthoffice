@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using ClaimsService.Exceptions;
 using ClaimsService.Models;
@@ -1473,7 +1474,8 @@ public class ClaimRepository : IClaimRepository
     private static string BuildStatusNotInFilterPredicate(IReadOnlyList<ClaimStatus> blockedStatuses) =>
         $"FROM c WHERE NOT (c.status IN ({string.Join(",", blockedStatuses.Select(s => $"'{CosmosStatusLiteral(s)}'"))}))";
 
-    private static string CosmosStatusLiteral(ClaimStatus status) => status.ToString();
+    private static string CosmosStatusLiteral(ClaimStatus status) =>
+        JsonNamingPolicy.CamelCase.ConvertName(status.ToString());
 
     public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
         string ownerId,
