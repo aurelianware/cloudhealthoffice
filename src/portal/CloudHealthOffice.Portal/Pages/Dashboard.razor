@@ -87,9 +87,15 @@
                         </MudButton>
                     </MudStack>
 
-                    @if (_recentRuns == null)
+                    @if (!_recentRunsLoaded)
                     {
                         <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else if (_recentRunsUnavailable || _recentRuns == null)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                            Mass adjudication run history is temporarily unavailable.
+                        </MudAlert>
                     }
                     else if (_recentRuns.Count == 0)
                     {
@@ -184,9 +190,15 @@
                         </MudButton>
                     </MudStack>
 
-                    @if (_workQueueSummary == null)
+                    @if (!_workQueueSummaryLoaded)
                     {
                         <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else if (_workQueueSummaryUnavailable || _workQueueSummary == null)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                            Claims work queue summary is temporarily unavailable.
+                        </MudAlert>
                     }
                     else
                     {
@@ -213,7 +225,17 @@
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary">Medical @_workQueueSummary.MedicalReview</MudChip>
                         </MudStack>
 
-                        @if (_workQueueItems is { Count: > 0 })
+                        @if (!_workQueueItemsLoaded)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                        }
+                        else if (_workQueueItemsUnavailable)
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                Queue preview is temporarily unavailable. Open the work queue to review pended items.
+                            </MudAlert>
+                        }
+                        else if (_workQueueItems is { Count: > 0 })
                         {
                             <MudTable Items="@_workQueueItems.Take(5)" Dense="true" Hover="true" Elevation="0">
                                 <HeaderContent>
@@ -245,6 +267,12 @@
                         {
                             <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
                                 No pended work queue items are waiting right now.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                @_workQueueTotal pended work queue items are open. Open the work queue to review them.
                             </MudAlert>
                         }
                     }
@@ -585,6 +613,12 @@
     private List<MassAdjudicationRunSummary>? _recentRuns;
     private WorkQueueSummary? _workQueueSummary;
     private List<WorkQueueItem>? _workQueueItems;
+    private bool _recentRunsLoaded;
+    private bool _recentRunsUnavailable;
+    private bool _workQueueSummaryLoaded;
+    private bool _workQueueSummaryUnavailable;
+    private bool _workQueueItemsLoaded;
+    private bool _workQueueItemsUnavailable;
     private bool _loading = true;
     private bool _metricsError;
     private string? _serviceError;
@@ -702,27 +736,41 @@
 
         await CheckSystemHealthAsync();
 
-        _alerts = await alertsTask;
-        _ediVolume = await ediTask;
-        _recentRuns = await runsTask ?? new();
-        _workQueueSummary = await queueSummaryTask ?? new();
-        _workQueueItems = await queueItemsTask ?? new();
+        _alerts = (await alertsTask).Value;
+        _ediVolume = (await ediTask).Value;
+
+        var runs = await runsTask;
+        _recentRuns = runs.Value;
+        _recentRunsLoaded = true;
+        _recentRunsUnavailable = !runs.Succeeded;
+
+        var queueSummary = await queueSummaryTask;
+        _workQueueSummary = queueSummary.Value;
+        _workQueueSummaryLoaded = true;
+        _workQueueSummaryUnavailable = !queueSummary.Succeeded;
+
+        var queueItems = await queueItemsTask;
+        _workQueueItems = queueItems.Value;
+        _workQueueItemsLoaded = true;
+        _workQueueItemsUnavailable = !queueItems.Succeeded;
 
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task<T?> TryLoadOperationalAsync<T>(Func<Task<T>> load, string label)
+    private async Task<OperationalLoadResult<T>> TryLoadOperationalAsync<T>(Func<Task<T>> load, string label)
     {
         try
         {
-            return await load();
+            return new(await load(), true);
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to load dashboard {OperationalPanel}", label);
-            return default;
+            return new(default, false);
         }
     }
+
+    private sealed record OperationalLoadResult<T>(T? Value, bool Succeeded);
 
     private async Task CheckSystemHealthAsync()
     {
