@@ -25,6 +25,13 @@
         <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
     }
 
+    @if (!string.IsNullOrWhiteSpace(RunId))
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.ReceiptLong">
+            Showing persisted claims submitted by MCC run <strong>@ShortId(RunId)</strong>.
+        </MudAlert>
+    }
+
     <!-- Advanced Search Form -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudText Typo="Typo.h6" GutterBottom="true">Search Criteria</MudText>
@@ -128,7 +135,7 @@
                         <MudButton Variant="Variant.Filled"
                                   Color="Color.Primary"
                                   FullWidth="true"
-                                  OnClick="PerformSearch"
+                                  OnClick="@(() => PerformSearch())"
                                   Disabled="_loading"
                                   Class="h-100">
                             <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
@@ -384,17 +391,27 @@
     private int _currentPage = 1;
     private string? _serviceError;
 
-    protected override void OnInitialized()
+    [SupplyParameterFromQuery(Name = "runId")]
+    public string? RunId { get; set; }
+
+    protected override async Task OnInitializedAsync()
     {
         _searchRequest.PageSize = 25;
+        if (!string.IsNullOrWhiteSpace(RunId))
+        {
+            _searchRequest.RunId = RunId;
+            await PerformSearch(skipValidation: true);
+        }
     }
 
-    private async Task PerformSearch()
+    private async Task PerformSearch(bool skipValidation = false, bool resetPage = true)
     {
         _showValidationMessage = false;
 
         // Validate at least one search criterion
-        if (string.IsNullOrWhiteSpace(_searchRequest.ClaimNumber)
+        if (!skipValidation
+            && string.IsNullOrWhiteSpace(_searchRequest.RunId)
+            && string.IsNullOrWhiteSpace(_searchRequest.ClaimNumber)
             && _selectedMember == null
             && _selectedProvider == null
             && string.IsNullOrWhiteSpace(_searchRequest.ClaimType)
@@ -407,7 +424,10 @@
 
         _loading = true;
         _hasSearched = true;
-        _currentPage = 1;
+        if (resetPage)
+        {
+            _currentPage = 1;
+        }
 
         try
         {
@@ -449,10 +469,11 @@
         }
     }
 
-    private void ClearSearch()
+    private async Task ClearSearch()
     {
         _searchRequest = new()
         {
+            RunId = RunId,
             PageSize = 25,
             SortBy = "SubmittedDate",
             SortOrder = "Descending"
@@ -464,6 +485,11 @@
         _hasSearched = false;
         _currentPage = 1;
         _showValidationMessage = false;
+
+        if (!string.IsNullOrWhiteSpace(RunId))
+        {
+            await PerformSearch(skipValidation: true);
+        }
     }
 
     private void ToggleAdvancedOptions()
@@ -505,13 +531,24 @@
     {
         _currentPage = page;
         _searchRequest.PageNumber = page;
-        await PerformSearch();
+        await PerformSearch(
+            skipValidation: !string.IsNullOrWhiteSpace(_searchRequest.RunId),
+            resetPage: false);
     }
 
     private void ViewClaimDetails(string claimId)
     {
-        NavigationManager.NavigateTo($"/claims/{claimId}");
+        var href = $"/claims/{Uri.EscapeDataString(claimId)}";
+        if (!string.IsNullOrWhiteSpace(_searchRequest.RunId))
+        {
+            href += $"?fromRun={Uri.EscapeDataString(_searchRequest.RunId)}";
+        }
+
+        NavigationManager.NavigateTo(href);
     }
+
+    private static string ShortId(string value)
+        => string.IsNullOrWhiteSpace(value) ? "run" : value[..Math.Min(8, value.Length)];
 
     private Color GetStatusColor(string status) => status switch
     {

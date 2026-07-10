@@ -14,6 +14,11 @@ public interface IMassAdjudicationRunRepository
         string? outcome,
         int limit,
         CancellationToken ct = default);
+
+    Task<IReadOnlyList<string>> ListSubmittedClaimIdsAsync(
+        string tenantId,
+        string runId,
+        CancellationToken ct = default);
 }
 
 public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRepository
@@ -113,6 +118,23 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
             .Limit(Math.Clamp(limit, 1, 1000))
             .ToListAsync(ct);
     }
+
+    public async Task<IReadOnlyList<string>> ListSubmittedClaimIdsAsync(
+        string tenantId,
+        string runId,
+        CancellationToken ct = default)
+    {
+        var filter = Builders<MassAdjudicationClaimResult>.Filter.And(
+            Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.RunId, runId),
+            Builders<MassAdjudicationClaimResult>.Filter.Ne(x => x.SubmittedClaimId, null),
+            Builders<MassAdjudicationClaimResult>.Filter.Ne(x => x.SubmittedClaimId, string.Empty));
+
+        return await _claimResults
+            .Find(filter)
+            .Project(x => x.SubmittedClaimId!)
+            .ToListAsync(ct);
+    }
 }
 
 public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRunRepository
@@ -189,6 +211,24 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
                 query
                     .OrderByDescending(x => x.ElapsedMilliseconds)
                     .Take(Math.Clamp(limit, 1, 1000))
+                    .ToList());
+        }
+    }
+
+    public Task<IReadOnlyList<string>> ListSubmittedClaimIdsAsync(
+        string tenantId,
+        string runId,
+        CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            return Task.FromResult<IReadOnlyList<string>>(
+                _claimResults
+                    .Where(x => x.TenantId == tenantId && x.RunId == runId)
+                    .Select(x => x.SubmittedClaimId)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Cast<string>()
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList());
         }
     }
