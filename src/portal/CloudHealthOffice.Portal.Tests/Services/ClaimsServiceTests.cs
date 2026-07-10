@@ -28,6 +28,19 @@ public class ClaimsServiceTests
         return new ClaimsService(httpClient, _configuration, _logger.Object);
     }
 
+    private ClaimsService CreateService(HttpClient httpClient, string claimsServiceBaseUrl)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Services:ClaimsService"] = claimsServiceBaseUrl,
+                ["Authentication:LocalDemo:TenantId"] = "demo"
+            })
+            .Build();
+
+        return new ClaimsService(httpClient, configuration, _logger.Object);
+    }
+
     // ── GetRecentClaimsAsync ──
 
     [Fact]
@@ -342,6 +355,51 @@ public class ClaimsServiceTests
         var result = await sut.GetClaimByIdAsync("CLM-NONE");
 
         result.Should().BeNull();
+    }
+
+    // ── GetExplanationOfBenefitJsonAsync ──
+
+    [Fact]
+    public async Task GetExplanationOfBenefitJsonAsync_StripsApiPrefixAndReturnsRawFhirJson()
+    {
+        const string eobJson = """
+        {"resourceType":"ExplanationOfBenefit","id":"claim-1","status":"active"}
+        """;
+        var handler = new FakeHandler(HttpStatusCode.OK, eobJson);
+        var sut = CreateService(new HttpClient(handler), "http://localhost:5000/api");
+
+        var result = await sut.GetExplanationOfBenefitJsonAsync("claim-1");
+
+        result.Should().Be(eobJson);
+        handler.CapturedRequests.Should().ContainSingle();
+        var request = handler.CapturedRequests.Single();
+        request.RequestUri!.AbsoluteUri.Should()
+            .Be("http://localhost:5000/fhir/ExplanationOfBenefit/claim-1");
+        request.Headers.Accept.Should().Contain(h => h.MediaType == "application/fhir+json");
+    }
+
+    [Fact]
+    public async Task GetExplanationOfBenefitJsonAsync_WhenApiReturns404_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.NotFound)));
+
+        var result = await sut.GetExplanationOfBenefitJsonAsync("missing-claim");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetExplanationOfBenefitJsonAsync_WhenClaimsServiceBaseUrlMissing_ThrowsServiceUnavailableWithoutRequest()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler), "");
+
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetExplanationOfBenefitJsonAsync("claim-1"));
+
+        ex.ServiceName.Should().Be("Claims Service");
+        ex.InnerException.Should().BeOfType<InvalidOperationException>();
+        handler.CapturedRequests.Should().BeEmpty();
     }
 
     // ── GetMassAdjudicationRunsAsync ──
