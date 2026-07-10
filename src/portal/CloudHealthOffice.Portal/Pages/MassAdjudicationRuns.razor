@@ -106,6 +106,12 @@
     <MudSpacer />
     @if (_selectedRun is not null)
     {
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Info"
+                   StartIcon="@Icons.Material.Filled.ReceiptLong"
+                   Href="@ClaimsSearchHref(_selectedRun.Id)">
+            View Claims
+        </MudButton>
         <MudChip T="string" Color="@(_selectedRun.PlatformFailures == 0 ? Color.Success : Color.Error)" Size="Size.Small">
             @(_selectedRun.PlatformFailures == 0 ? "Clean Run" : "Platform Failures")
         </MudChip>
@@ -586,6 +592,9 @@
             ? href
             : $"{href}?fromRun={Uri.EscapeDataString(runId)}";
     }
+
+    private static string ClaimsSearchHref(string runId)
+        => $"/claims?runId={Uri.EscapeDataString(runId)}";
 
     private static string DisplayClaimId(MassAdjudicationClaimResult result)
         => !string.IsNullOrWhiteSpace(result.GeneratedClaimId)

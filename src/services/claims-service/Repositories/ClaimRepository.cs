@@ -42,6 +42,26 @@ public interface IClaimRepository
         int page,
         int pageSize);
 
+    Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchWithCountAsync(
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        LineOfBusiness? lineOfBusiness,
+        int page,
+        int pageSize);
+
+    Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
+        IReadOnlyCollection<string> claimIds,
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        int page,
+        int pageSize);
+
     /// <summary>
     /// Member-scoped search with the filters the portal Member Details dialog
     /// exposes: date range, status, provider, claim type, amount range. Always
@@ -489,6 +509,29 @@ public class ClaimRepository : IClaimRepository
         int page,
         int pageSize)
     {
+        var (claims, _) = await SearchWithCountAsync(
+            memberId,
+            providerNPI,
+            serviceDateFrom,
+            serviceDateTo,
+            status,
+            lineOfBusiness,
+            page,
+            pageSize);
+
+        return claims;
+    }
+
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchWithCountAsync(
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        LineOfBusiness? lineOfBusiness,
+        int page,
+        int pageSize)
+    {
         var tenantId = GetTenantId();
 
         // Build dynamic query
@@ -531,11 +574,14 @@ public class ClaimRepository : IClaimRepository
             parameters["@lineOfBusiness"] = lineOfBusiness.Value.ToString();
         }
 
+        var totalCount = await CountClaimsAsync(conditions, parameters, tenantId);
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
         var queryText = $@"
             SELECT * FROM c
             WHERE {string.Join(" AND ", conditions)}
             ORDER BY c.submittedDate DESC
-            OFFSET {(page - 1) * pageSize} LIMIT {pageSize}";
+            OFFSET {(safePage - 1) * safePageSize} LIMIT {safePageSize}";
 
         var queryDef = new QueryDefinition(queryText);
         foreach (var (key, value) in parameters)
@@ -554,7 +600,124 @@ public class ClaimRepository : IClaimRepository
             results.AddRange(response);
         }
 
-        return results.Select(Hydrate);
+        return (results.Select(Hydrate).ToList(), totalCount);
+    }
+
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
+        IReadOnlyCollection<string> claimIds,
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        int page,
+        int pageSize)
+    {
+        if (claimIds.Count == 0)
+        {
+            return (Array.Empty<Claim>(), 0);
+        }
+
+        var tenantId = GetTenantId();
+        var distinctClaimIds = claimIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (distinctClaimIds.Length == 0)
+        {
+            return (Array.Empty<Claim>(), 0);
+        }
+
+        var conditions = new List<string>
+        {
+            "c.tenantId = @tenantId",
+            "ARRAY_CONTAINS(@claimIds, c.id)"
+        };
+        var parameters = new Dictionary<string, object>
+        {
+            ["@tenantId"] = tenantId,
+            ["@claimIds"] = distinctClaimIds
+        };
+
+        if (!string.IsNullOrWhiteSpace(memberId))
+        {
+            conditions.Add("c.memberId = @memberId");
+            parameters["@memberId"] = memberId;
+        }
+        if (!string.IsNullOrWhiteSpace(providerNPI))
+        {
+            conditions.Add("(c.billingProviderNPI = @providerNPI OR c.renderingProviderNPI = @providerNPI)");
+            parameters["@providerNPI"] = providerNPI;
+        }
+        if (serviceDateFrom.HasValue)
+        {
+            conditions.Add("c.serviceDateFrom >= @serviceDateFrom");
+            parameters["@serviceDateFrom"] = serviceDateFrom.Value;
+        }
+        if (serviceDateTo.HasValue)
+        {
+            conditions.Add("c.serviceDateTo <= @serviceDateTo");
+            parameters["@serviceDateTo"] = serviceDateTo.Value;
+        }
+        if (status.HasValue)
+        {
+            conditions.Add("c.status = @status");
+            parameters["@status"] = status.Value.ToString();
+        }
+
+        var totalCount = await CountClaimsAsync(conditions, parameters, tenantId);
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+        var queryText = $@"
+            SELECT * FROM c
+            WHERE {string.Join(" AND ", conditions)}
+            ORDER BY c.submittedDate DESC
+            OFFSET {(safePage - 1) * safePageSize} LIMIT {safePageSize}";
+
+        var queryDef = new QueryDefinition(queryText);
+        foreach (var (key, value) in parameters)
+        {
+            queryDef.WithParameter(key, value);
+        }
+
+        var iterator = _container.GetItemQueryIterator<Claim>(
+            queryDef,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        var results = new List<Claim>();
+
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            results.AddRange(response);
+        }
+
+        return (results.Select(Hydrate).ToList(), totalCount);
+    }
+
+    private async Task<int> CountClaimsAsync(
+        IReadOnlyCollection<string> conditions,
+        IReadOnlyDictionary<string, object> parameters,
+        string tenantId)
+    {
+        var queryDef = new QueryDefinition($"SELECT VALUE COUNT(1) FROM c WHERE {string.Join(" AND ", conditions)}");
+        foreach (var (key, value) in parameters)
+        {
+            queryDef.WithParameter(key, value);
+        }
+
+        var iterator = _container.GetItemQueryIterator<int>(
+            queryDef,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+
+        var count = 0;
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            count += response.FirstOrDefault();
+        }
+
+        return count;
     }
 
     public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchForMemberAsync(

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
@@ -13,6 +14,7 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     private readonly ClaimsApiFactory _factory;
     private readonly HttpClient _client;
     private readonly IClaimRepository _repo;
+    private readonly IMassAdjudicationRunRepository _massRunRepo;
     private readonly IClaimAcknowledgmentService _ackService;
     private readonly IClaimSubmissionService _submissionService;
 
@@ -20,6 +22,7 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     {
         _factory = factory;
         _repo = factory.ClaimRepository;
+        _massRunRepo = factory.MassAdjudicationRunRepository;
         _ackService = factory.AcknowledgmentService;
         _submissionService = factory.SubmissionService;
         _client = factory.CreateClient();
@@ -252,6 +255,91 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
         Assert.NotNull(results);
         Assert.Equal(2, results.Count);
         Assert.All(results, c => Assert.Equal("MEM-001", c.MemberId));
+    }
+
+    [Fact]
+    public async Task SearchClaimsPost_ByRunId_ReturnsClaimsFromMassAdjudicationRun()
+    {
+        var runId = $"run-{Guid.NewGuid():N}";
+        var claim = CreateValidClaim();
+        claim.Id = "submitted-claim-1";
+        claim.ClaimNumber = "MCC-P-0000001";
+
+        _massRunRepo.GetAsync("test-tenant", runId, Arg.Any<CancellationToken>())
+            .Returns(new MassAdjudicationRunSummary
+            {
+                Id = runId,
+                Run = new MassAdjudicationRunMetadata { TenantId = "test-tenant" }
+            });
+        _massRunRepo.ListSubmittedClaimIdsAsync("test-tenant", runId, Arg.Any<CancellationToken>())
+            .Returns(new List<string> { "submitted-claim-1", "submitted-claim-2" });
+        _repo.SearchByIdsAsync(
+                Arg.Any<IReadOnlyCollection<string>>(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                1,
+                25)
+            .Returns((new List<Claim> { claim }, 1));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/search", new ClaimSearchBody
+        {
+            RunId = runId,
+            PageNumber = 1,
+            PageSize = 25
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(1, doc.RootElement.GetProperty("totalCount").GetInt32());
+        var claims = doc.RootElement.GetProperty("claims");
+        Assert.Equal("MCC-P-0000001", claims[0].GetProperty("claimNumber").GetString());
+
+        await _repo.Received(1).SearchByIdsAsync(
+            Arg.Is<IReadOnlyCollection<string>>(ids => ids.Contains("submitted-claim-1") && ids.Contains("submitted-claim-2")),
+            null,
+            null,
+            null,
+            null,
+            null,
+            1,
+            25);
+    }
+
+    [Fact]
+    public async Task SearchClaimsPost_StandardSearch_ReturnsFullTotalCount()
+    {
+        var claim = CreateValidClaim();
+        claim.Id = "page-claim-1";
+        claim.ClaimNumber = "MCC-P-0000001";
+
+        _repo.SearchWithCountAsync(
+                "MEM-001",
+                null,
+                null,
+                null,
+                null,
+                null,
+                2,
+                1)
+            .Returns((new List<Claim> { claim }, 3));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/search", new ClaimSearchBody
+        {
+            MemberId = "MEM-001",
+            PageNumber = 2,
+            PageSize = 1
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(3, doc.RootElement.GetProperty("totalCount").GetInt32());
+        Assert.Equal(2, doc.RootElement.GetProperty("pageNumber").GetInt32());
+        Assert.Equal(1, doc.RootElement.GetProperty("claims").GetArrayLength());
     }
 
     // ═══════════════════════════════════════════════════════════════════
