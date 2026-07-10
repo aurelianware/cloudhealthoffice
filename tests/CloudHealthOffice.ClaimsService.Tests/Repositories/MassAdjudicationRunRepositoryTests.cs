@@ -87,6 +87,60 @@ public class MassAdjudicationRunRepositoryTests
     }
 
     [Fact]
+    public async Task ListClaimResultsAsync_filters_by_outcome_and_validation_status()
+    {
+        var repo = new InMemoryMassAdjudicationRunRepository();
+        var summary = CreateSummary();
+        summary.ClaimResults.AddRange(new[]
+        {
+            new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = "GEN-PAID-MATCHED",
+                ClaimType = "Professional",
+                Outcome = "Paid",
+                ValidationStatus = "Matched",
+                ElapsedMilliseconds = 10
+            },
+            new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = "GEN-PAID-UNSUPPORTED",
+                ClaimType = "Professional",
+                Outcome = "Paid",
+                ValidationStatus = "Unsupported",
+                ElapsedMilliseconds = 30
+            },
+            new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = "GEN-DENIAL-UNSUPPORTED",
+                ClaimType = "Professional",
+                Outcome = "BusinessDenial",
+                ValidationStatus = "Unsupported",
+                ElapsedMilliseconds = 20
+            }
+        });
+
+        var saved = await repo.SaveAsync(summary);
+
+        var unsupported = await repo.ListClaimResultsAsync(
+            saved.Run.TenantId,
+            saved.Id,
+            outcome: null,
+            validationStatus: "Unsupported",
+            limit: 10);
+        var unsupportedPaid = await repo.ListClaimResultsAsync(
+            saved.Run.TenantId,
+            saved.Id,
+            outcome: "Paid",
+            validationStatus: "Unsupported",
+            limit: 10);
+
+        unsupported.Select(x => x.GeneratedClaimId)
+            .Should().Equal("GEN-PAID-UNSUPPORTED", "GEN-DENIAL-UNSUPPORTED");
+        unsupportedPaid.Should().ContainSingle()
+            .Which.GeneratedClaimId.Should().Be("GEN-PAID-UNSUPPORTED");
+    }
+
+    [Fact]
     public async Task SaveAsync_when_claim_result_insert_fails_deletes_inserted_summary()
     {
         var database = Substitute.For<IMongoDatabase>();
