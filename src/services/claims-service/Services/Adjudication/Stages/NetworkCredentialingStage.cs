@@ -90,10 +90,18 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
 
         var serviceDate = ResolveEarliestServiceDate(claim);
 
+        var outcomes = new List<EnforcementOutcome>();
+
         // Membership: walk plan tiers in priority order. First tier whose
         // upstream returns IsActiveMember=true wins.
         var membershipOutcome = await ResolveMembershipAsync(
-            context, billingNpi, serviceDate, ct).ConfigureAwait(false);
+            context,
+            billingNpi,
+            serviceDate,
+            providerRole: "Billing provider",
+            captureBillingContext: true,
+            ct).ConfigureAwait(false);
+        outcomes.Add(membershipOutcome);
         context.EnforcementOutcomes.Add(membershipOutcome);
 
         // Credentialing: only call when we have a providerId from the
@@ -107,17 +115,54 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             && membershipOutcome.Decision == EnforcementDecision.Allow)
         {
             credentialingOutcome = await ResolveCredentialingAsync(
-                context, matchedProviderId!, serviceDate, ct).ConfigureAwait(false);
+                context,
+                matchedProviderId!,
+                serviceDate,
+                providerRole: "Billing provider",
+                captureBillingContext: true,
+                ct).ConfigureAwait(false);
+            outcomes.Add(credentialingOutcome);
             context.EnforcementOutcomes.Add(credentialingOutcome);
         }
 
-        return CombineOutcomes(membershipOutcome, credentialingOutcome);
+        var renderingNpi = claim.RenderingProviderNPI;
+        if (!string.IsNullOrWhiteSpace(renderingNpi)
+            && !string.Equals(renderingNpi, billingNpi, StringComparison.OrdinalIgnoreCase))
+        {
+            var renderingMembershipOutcome = await ResolveMembershipAsync(
+                context,
+                renderingNpi,
+                serviceDate,
+                providerRole: "Rendering provider",
+                captureBillingContext: false,
+                ct).ConfigureAwait(false);
+            outcomes.Add(renderingMembershipOutcome);
+            context.EnforcementOutcomes.Add(renderingMembershipOutcome);
+
+            if (!string.IsNullOrWhiteSpace(context.RenderingProviderNetworkMembership?.ProviderId)
+                && renderingMembershipOutcome.Decision == EnforcementDecision.Allow)
+            {
+                var renderingCredentialingOutcome = await ResolveCredentialingAsync(
+                    context,
+                    context.RenderingProviderNetworkMembership.ProviderId,
+                    serviceDate,
+                    providerRole: "Rendering provider",
+                    captureBillingContext: false,
+                    ct).ConfigureAwait(false);
+                outcomes.Add(renderingCredentialingOutcome);
+                context.EnforcementOutcomes.Add(renderingCredentialingOutcome);
+            }
+        }
+
+        return CombineOutcomes(outcomes);
     }
 
     private async Task<EnforcementOutcome> ResolveMembershipAsync(
         ClaimAdjudicationContext context,
         string billingNpi,
         DateTime serviceDate,
+        string providerRole,
+        bool captureBillingContext,
         CancellationToken ct)
     {
         var tiers = context.ResolvedPlan?.NetworkTiers
@@ -137,7 +182,7 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             return ApplyNetworkMode(
                 context,
                 EnforcementDecision.Deny,
-                reason: "No in-network tier configured for the resolved plan.",
+                reason: $"{providerRole}: no in-network tier configured for the resolved plan.",
                 serviceDate,
                 networkId: null,
                 tier: null);
@@ -149,6 +194,14 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             var membership = await _membershipClient.GetMembershipAsync(
                 context.TenantId, tier.NetworkId!, billingNpi, serviceDate, forceRefresh: false, ct)
                 .ConfigureAwait(false);
+
+            if (membership is null || !membership.IsActiveMember)
+            {
+                var refreshed = await _membershipClient.GetMembershipAsync(
+                    context.TenantId, tier.NetworkId!, billingNpi, serviceDate, forceRefresh: true, ct)
+                    .ConfigureAwait(false);
+                membership = refreshed ?? membership;
+            }
 
             if (membership is null)
             {
@@ -162,8 +215,16 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
 
             if (membership.IsActiveMember)
             {
-                context.BillingProviderNetworkMembership = membership;
-                context.MatchedNetworkTier = tier;
+                if (captureBillingContext)
+                {
+                    context.BillingProviderNetworkMembership = membership;
+                    context.MatchedNetworkTier = tier;
+                }
+                else
+                {
+                    context.RenderingProviderNetworkMembership = membership;
+                }
+
                 return new EnforcementOutcome(
                     Check: EnforcementCheck.Membership,
                     Decision: EnforcementDecision.Allow,
@@ -181,7 +242,7 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             return ApplyNetworkMode(
                 context,
                 EnforcementDecision.Deny,
-                reason: "membership-verification-unavailable",
+                reason: $"{providerRole}: membership-verification-unavailable",
                 serviceDate,
                 networkId: null,
                 tier: null);
@@ -192,7 +253,7 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
         return ApplyNetworkMode(
             context,
             EnforcementDecision.Deny,
-            reason: "Billing provider is not an active member of any plan tier on the service date.",
+            reason: $"{providerRole} is not an active member of any plan tier on the service date.",
             serviceDate,
             networkId: null,
             tier: null);
@@ -202,21 +263,38 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
         ClaimAdjudicationContext context,
         string providerId,
         DateTime serviceDate,
+        string providerRole,
+        bool captureBillingContext,
         CancellationToken ct)
     {
         var snapshot = await _credentialingClient.GetStatusAsOfAsync(
             context.TenantId, providerId, serviceDate, forceRefresh: false, ct)
             .ConfigureAwait(false);
 
+        if (snapshot is null || !snapshot.IsApprovedAtAsOf)
+        {
+            var refreshed = await _credentialingClient.GetStatusAsOfAsync(
+                context.TenantId, providerId, serviceDate, forceRefresh: true, ct)
+                .ConfigureAwait(false);
+            snapshot = refreshed ?? snapshot;
+        }
+
         if (snapshot is null)
         {
             return ApplyCredentialingMode(
                 EnforcementDecision.Deny,
-                reason: "credentialing-status-unavailable",
+                reason: $"{providerRole}: credentialing-status-unavailable",
                 serviceDate);
         }
 
-        context.BillingProviderCredentialingStatus = snapshot;
+        if (captureBillingContext)
+        {
+            context.BillingProviderCredentialingStatus = snapshot;
+        }
+        else
+        {
+            context.RenderingProviderCredentialingStatus = snapshot;
+        }
 
         if (snapshot.IsApprovedAtAsOf)
         {
@@ -230,7 +308,7 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
 
         // Pending / Denied / Expired / Suspended / Unknown → not approved
         // for the service date. Drive policy via mode.
-        var reason = $"Provider credentialing status is '{snapshot.Status}' on the service date.";
+        var reason = $"{providerRole} credentialing status is '{snapshot.Status}' on the service date.";
         return ApplyCredentialingMode(EnforcementDecision.Deny, reason, serviceDate);
     }
 
@@ -309,14 +387,9 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
     }
 
     private static ClaimAdjudicationStageResult CombineOutcomes(
-        EnforcementOutcome membership,
-        EnforcementOutcome? credentialing)
+        IReadOnlyList<EnforcementOutcome> outcomes)
     {
         // Deny dominates Pend; Pend dominates Allow/Observe.
-        var outcomes = credentialing is null
-            ? new[] { membership }
-            : new[] { membership, credentialing };
-
         var deny = outcomes.FirstOrDefault(o => o.Decision == EnforcementDecision.Deny);
         if (deny is not null)
         {

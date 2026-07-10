@@ -67,8 +67,8 @@ await CreateValidationPlanAsync(http, options, validationPlanId, json);
 
 var claims = await GenerateClaimsAsync(options);
 NormalizePriorAuthEdgeCases(claims, options);
-NormalizeValidationProviderProfiles(claims, options.Seed);
-MccFixtureIsolation.IsolateCobPendMembers(claims, options.Seed);
+NormalizeValidationProviderProfiles(claims, options.Seed, validationPlanId);
+MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 var answerKey = MccAnswerKey.FromClaims(claims);
 
@@ -188,20 +188,24 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
 
         var skipSynchronousWriteback = options.SkipClaimUpdate
             || expectedValidation.ExpectedOutcome is ClaimValidationOutcome.Pended;
+        var outcome = adjudicated.Success
+            ? ClaimValidationOutcome.Paid
+            : ClaimValidationOutcome.BusinessDenial;
 
         if (!skipSynchronousWriteback)
         {
             failureStage = "writeback";
             stage.Restart();
-            await UpdateClaimAdjudicationAsync(http, options, submitted.Id, networkTier, adjudicated, json);
+            var writebackOutcome = await UpdateClaimAdjudicationAsync(http, options, submitted.Id, networkTier, adjudicated, json);
+            if (writebackOutcome is not null)
+            {
+                outcome = writebackOutcome.Value;
+            }
             stage.Stop();
             updateElapsed = stage.Elapsed;
         }
 
         sw.Stop();
-        var outcome = adjudicated.Success
-            ? ClaimValidationOutcome.Paid
-            : ClaimValidationOutcome.BusinessDenial;
         var businessDenialCode = NormalizeBusinessDenialCode(adjudicated.BusinessDenialCode
             ?? adjudicated.DenialReasonCode
             ?? (outcome is ClaimValidationOutcome.BusinessDenial ? "ADJUDICATION_DENIAL" : null));
@@ -405,7 +409,7 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
     return claims;
 }
 
-static void NormalizeValidationProviderProfiles(List<SyntheticClaim> claims, int seed)
+static void NormalizeValidationProviderProfiles(List<SyntheticClaim> claims, int seed, Guid runId)
 {
     var scenarioIndex = 0;
     foreach (var claim in claims.OrderBy(c => c.ClaimId, StringComparer.Ordinal))
@@ -417,7 +421,7 @@ static void NormalizeValidationProviderProfiles(List<SyntheticClaim> claims, int
         }
 
         ForceAdjudicatableProviderProfile(claim.BillingProvider);
-        claim.BillingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, scenarioIndex, role: 0);
+        claim.BillingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, runId, scenarioIndex, role: 0);
 
         if (!string.Equals(
                 expected.ExpectedBusinessDenialCode,
@@ -425,7 +429,11 @@ static void NormalizeValidationProviderProfiles(List<SyntheticClaim> claims, int
                 StringComparison.OrdinalIgnoreCase))
         {
             ForceAdjudicatableProviderProfile(claim.RenderingProvider);
-            claim.RenderingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, scenarioIndex, role: 1);
+            claim.RenderingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, runId, scenarioIndex, role: 1);
+        }
+        else
+        {
+            claim.RenderingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, runId, scenarioIndex, role: 2);
         }
 
         scenarioIndex++;
@@ -785,11 +793,12 @@ static string BuildSyntheticExcludedProviderNpi(int seed, int index)
     }
 }
 
-static string BuildSyntheticValidationProviderNpi(int seed, int index, int role)
+static string BuildSyntheticValidationProviderNpi(int seed, Guid runId, int index, int role)
 {
     unchecked
     {
-        var combined = (uint)(seed * 1_000_003 + index * 17 + role);
+        var runHash = BitConverter.ToUInt32(runId.ToByteArray(), 0);
+        var combined = runHash ^ (uint)(seed * 1_000_003 + index * 17 + role);
         var value = combined % 1_000_000;
         var baseNineDigits = $"91{role}{value:D6}";
         return $"{baseNineDigits}{CalculateNpiCheckDigit(baseNineDigits)}";
@@ -838,12 +847,17 @@ static async Task SeedMembersAsync(
 
     var created = 0;
     var existing = 0;
+    var statusAligned = 0;
 
     foreach (var member in members)
     {
         if (await MemberExistsAsync(http, options, member.MemberId))
         {
             existing++;
+            if (await UpdateMemberSeedStatusAsync(http, options, member, json))
+            {
+                statusAligned++;
+            }
             continue;
         }
 
@@ -856,9 +870,14 @@ static async Task SeedMembersAsync(
         {
             existing++;
         }
+
+        if (await UpdateMemberSeedStatusAsync(http, options, member, json))
+        {
+            statusAligned++;
+        }
     }
 
-    Console.WriteLine($"seeded: {created:N0} synthetic members ({existing:N0} already present)");
+    Console.WriteLine($"seeded: {created:N0} synthetic members ({existing:N0} already present, {statusAligned:N0} status-aligned)");
 }
 
 static async Task<bool> MemberExistsAsync(HttpClient http, ValidatorOptions options, string memberId)
@@ -923,6 +942,35 @@ static async Task<bool> CreateMemberAsync(
     if (!response.IsSuccessStatusCode)
     {
         throw new InvalidOperationException($"member seed failed ({member.MemberId}): {(int)response.StatusCode} {body}");
+    }
+
+    return true;
+}
+
+static async Task<bool> UpdateMemberSeedStatusAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    SyntheticMember member,
+    JsonSerializerOptions json)
+{
+    var payload = new MemberStatusUpdateDto(
+        MccMemberSeedStatus.ToMemberServiceStatus(member.EnrollmentStatus),
+        $"mcc-validator-member-status:{options.Seed}:{member.MemberId}");
+
+    using var response = await http.PutAsJsonAsync(
+        $"{options.MemberUrl}/api/v1/members/{Uri.EscapeDataString(member.MemberId)}",
+        payload,
+        json);
+
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        return false;
+    }
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        throw new InvalidOperationException($"member status alignment failed ({member.MemberId}): {(int)response.StatusCode} {body}");
     }
 
     return true;
@@ -1110,6 +1158,12 @@ static async Task SeedProvidersAsync(
                 providerId,
                 EffectiveDateForProvider(provider),
                 json);
+            await EnsureProviderNetworkParticipationAsync(
+                http,
+                options,
+                providerId,
+                provider,
+                json);
         }
     }
 
@@ -1159,6 +1213,82 @@ static async Task<bool> ProviderNetworkExistsAsync(HttpClient http, ValidatorOpt
 
     var body = await response.Content.ReadAsStringAsync();
     throw new InvalidOperationException($"provider network lookup failed ({networkId}): {(int)response.StatusCode} {body}");
+}
+
+static async Task EnsureProviderNetworkParticipationAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    string providerId,
+    SyntheticProvider provider,
+    JsonSerializerOptions json)
+{
+    var effectiveDate = EffectiveDateForProvider(provider);
+    if (await ProviderHasActiveNetworkParticipationAsync(http, options, provider.Npi, "mcc-local-network", effectiveDate))
+    {
+        return;
+    }
+
+    var payload = new
+    {
+        planId = (string?)null,
+        networkId = "mcc-local-network",
+        lineOfBusiness = LineOfBusinessName(options.LineOfBusiness),
+        networkTier = "InNetwork",
+        effectiveDate,
+        terminationDate = (DateTime?)null,
+        acceptingNewPatients = true,
+        panelLimit = 2500,
+        panelAccepted = true,
+        acceptedLobs = new[] { LineOfBusinessName(options.LineOfBusiness) },
+        minAcceptedAgeYears = (int?)null,
+        maxAcceptedAgeYears = (int?)null,
+        rates = new
+        {
+            feeScheduleName = provider.FeeScheduleId ?? "MCC Local Fee Schedule",
+            percentOfMedicare = 1.10m,
+            pmpm = (decimal?)null,
+            caseRate = (decimal?)null
+        }
+    };
+
+    using var response = await http.PostAsJsonAsync(
+        $"{options.ProviderUrl}/api/v1/providers/{Uri.EscapeDataString(providerId)}/network-participations",
+        payload,
+        json);
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode && response.StatusCode is not System.Net.HttpStatusCode.Conflict)
+    {
+        throw new InvalidOperationException(
+            $"provider network participation seed failed ({providerId}/{provider.Npi}): {(int)response.StatusCode} {body}");
+    }
+}
+
+static async Task<bool> ProviderHasActiveNetworkParticipationAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    string npi,
+    string networkId,
+    DateTime effectiveDate)
+{
+    var url =
+        $"{options.ProviderUrl}/api/v1/networks/{Uri.EscapeDataString(networkId)}/members/{Uri.EscapeDataString(npi)}" +
+        $"?asOf={Uri.EscapeDataString(effectiveDate.ToString("O"))}";
+    using var response = await http.GetAsync(url);
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        return false;
+    }
+
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException(
+            $"provider network membership lookup failed ({networkId}/{npi}): {(int)response.StatusCode} {body}");
+    }
+
+    using var document = JsonDocument.Parse(body);
+    return document.RootElement.TryGetProperty("isActiveMember", out var active)
+        && active.ValueKind == JsonValueKind.True;
 }
 
 static async Task CreateProviderNetworkAsync(
@@ -1560,7 +1690,7 @@ static string LineOfBusinessName(int lineOfBusiness) => lineOfBusiness switch
     _ => throw new ArgumentOutOfRangeException(nameof(lineOfBusiness), lineOfBusiness, "Unsupported line-of-business code.")
 };
 
-static async Task UpdateClaimAdjudicationAsync(
+static async Task<ClaimValidationOutcome?> UpdateClaimAdjudicationAsync(
     HttpClient http,
     ValidatorOptions options,
     string submittedClaimId,
@@ -1587,6 +1717,19 @@ static async Task UpdateClaimAdjudicationAsync(
         var body = await response.Content.ReadAsStringAsync();
         throw new InvalidOperationException($"claim adjudication update failed ({submittedClaimId}): {(int)response.StatusCode} {body}");
     }
+
+    if (response.StatusCode != System.Net.HttpStatusCode.OK)
+    {
+        return null;
+    }
+
+    var writeback = await response.Content.ReadFromJsonAsync<AdjudicationSummaryWriteResponseDto>(json);
+    if (writeback is not { StatusPreserved: true })
+    {
+        return null;
+    }
+
+    return MccClaimStatusMapping.ToValidationOutcome(writeback.PersistedStatus);
 }
 
 static async Task<List<ClaimValidationResult>> ObserveExpectedPendResultsAsync(
@@ -2102,6 +2245,14 @@ internal sealed record AdjudicationResponseDto(
     AdjudicationTotalsDto Totals,
     string? BusinessDenialCode = null,
     IReadOnlyDictionary<string, double>? Timings = null);
+
+internal sealed record AdjudicationSummaryWriteResponseDto(
+    bool StatusPreserved,
+    int PersistedStatus);
+
+internal sealed record MemberStatusUpdateDto(
+    string Status,
+    string EventId);
 
 internal sealed record AdjudicationTotalsDto(
     decimal BilledAmount,

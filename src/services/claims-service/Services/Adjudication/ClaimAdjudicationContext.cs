@@ -62,10 +62,24 @@ public class ClaimAdjudicationContext
     public Resolution.NetworkMembership? BillingProviderNetworkMembership { get; set; }
 
     /// <summary>
+    /// Network-membership lookup for the rendering provider when it differs
+    /// from the billing provider. Populated by
+    /// <see cref="Stages.NetworkCredentialingStage"/> so rendering-provider
+    /// exclusions can deny without overwriting billing-provider tier context.
+    /// </summary>
+    public Resolution.NetworkMembership? RenderingProviderNetworkMembership { get; set; }
+
+    /// <summary>
     /// Credentialing-status snapshot for the billing provider as of the
     /// claim's earliest service date. Populated by capability 5.6.
     /// </summary>
     public Resolution.CredentialingStatusSnapshot? BillingProviderCredentialingStatus { get; set; }
+
+    /// <summary>
+    /// Credentialing-status snapshot for the rendering provider when it differs
+    /// from the billing provider. Populated by capability 5.6.
+    /// </summary>
+    public Resolution.CredentialingStatusSnapshot? RenderingProviderCredentialingStatus { get; set; }
 
     /// <summary>
     /// Plan tier the billing provider matched, or <c>null</c> when none

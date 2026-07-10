@@ -4,6 +4,26 @@ namespace CloudHealthOffice.Tools.MccPlatformValidator;
 
 internal static class MccFixtureIsolation
 {
+    public static void IsolateValidationMembers(IEnumerable<SyntheticClaim> claims, int seed, Guid runId)
+    {
+        var ordinal = 0;
+        foreach (var claim in claims.OrderBy(c => c.ClaimId, StringComparer.Ordinal))
+        {
+            var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+            if (expected.ExpectedOutcome is null)
+            {
+                continue;
+            }
+
+            ordinal++;
+            var isolatedId = IsSupportedCobPendScenario(claim)
+                ? BuildCobPendMemberId(claim.ClaimId, seed, ordinal)
+                : BuildValidationMemberId(claim.ClaimId, runId, ordinal);
+
+            RewriteMemberIdentity(claim, isolatedId);
+        }
+    }
+
     public static void IsolateCobPendMembers(IEnumerable<SyntheticClaim> claims, int seed)
     {
         var ordinal = 0;
@@ -11,24 +31,29 @@ internal static class MccFixtureIsolation
         {
             ordinal++;
             var isolatedId = BuildCobPendMemberId(claim.ClaimId, seed, ordinal);
-            claim.Member.MemberId = isolatedId;
-            claim.Member.SubscriberId = isolatedId;
+            RewriteMemberIdentity(claim, isolatedId);
+        }
+    }
 
-            foreach (var coverage in claim.Member.Coverages)
+    private static void RewriteMemberIdentity(SyntheticClaim claim, string isolatedId)
+    {
+        claim.Member.MemberId = isolatedId;
+        claim.Member.SubscriberId = isolatedId;
+
+        foreach (var coverage in claim.Member.Coverages)
+        {
+            coverage.MemberId = isolatedId;
+            coverage.SubscriberId = isolatedId;
+        }
+
+        foreach (var dependent in claim.Member.Dependents)
+        {
+            dependent.SubscriberMemberId = isolatedId;
+            dependent.SubscriberId = isolatedId;
+
+            foreach (var coverage in dependent.Coverages)
             {
-                coverage.MemberId = isolatedId;
                 coverage.SubscriberId = isolatedId;
-            }
-
-            foreach (var dependent in claim.Member.Dependents)
-            {
-                dependent.SubscriberMemberId = isolatedId;
-                dependent.SubscriberId = isolatedId;
-
-                foreach (var coverage in dependent.Coverages)
-                {
-                    coverage.SubscriberId = isolatedId;
-                }
             }
         }
     }
@@ -47,6 +72,14 @@ internal static class MccFixtureIsolation
         var normalizedClaimId = NormalizeClaimIdSuffix(claimId, ordinal);
 
         return $"MCCCB{normalizedSeed}{normalizedClaimId}";
+    }
+
+    private static string BuildValidationMemberId(string claimId, Guid runId, int ordinal)
+    {
+        var runSalt = runId.ToString("N")[..8].ToUpperInvariant();
+        var normalizedClaimId = NormalizeClaimIdSuffix(claimId, ordinal);
+
+        return $"MCCV{runSalt}{normalizedClaimId}";
     }
 
     private static string NormalizeClaimIdSuffix(string claimId, int ordinal)

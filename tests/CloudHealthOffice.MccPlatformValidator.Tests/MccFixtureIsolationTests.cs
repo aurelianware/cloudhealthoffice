@@ -98,4 +98,37 @@ public class MccFixtureIsolationTests
         Assert.Equal(originalPrimaryMemberId, primary.Member.MemberId);
         Assert.Equal(originalSubrogationMemberId, subrogation.Member.MemberId);
     }
+
+    [Fact]
+    public void IsolateValidationMembers_GivesScoreableNonCobScenariosRunScopedMemberIds()
+    {
+        var generator = new EdgeCaseClaimGenerator(new InMemoryReferenceDataProvider());
+        var retroAdd = generator.Generate(1, nameof(EdgeCaseScenario.RetroEligibilityAdd), new Random(42));
+        retroAdd.ClaimId = "MCC-E-0000013";
+        retroAdd.Member.MemberId = "MBR-SHARED";
+        retroAdd.Member.SubscriberId = "SUB-SHARED";
+
+        var runId = Guid.Parse("906f49d1-18cc-4d19-9c77-69822ad6d88b");
+
+        MccFixtureIsolation.IsolateValidationMembers([retroAdd], seed: 42, runId);
+
+        Assert.Equal("MCCV906F49D10000013", retroAdd.Member.MemberId);
+        Assert.Equal(retroAdd.Member.MemberId, retroAdd.Member.SubscriberId);
+        Assert.DoesNotContain("-", retroAdd.Member.MemberId, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IsolateValidationMembers_LeavesUnsupportedScenariosUnchanged()
+    {
+        var generator = new EdgeCaseClaimGenerator(new InMemoryReferenceDataProvider());
+        var subrogation = generator.Generate(2, nameof(EdgeCaseScenario.SubrogationWorkersComp), new Random(43));
+        var originalMemberId = subrogation.Member.MemberId;
+
+        MccFixtureIsolation.IsolateValidationMembers(
+            [subrogation],
+            seed: 42,
+            runId: Guid.Parse("906f49d1-18cc-4d19-9c77-69822ad6d88b"));
+
+        Assert.Equal(originalMemberId, subrogation.Member.MemberId);
+    }
 }
