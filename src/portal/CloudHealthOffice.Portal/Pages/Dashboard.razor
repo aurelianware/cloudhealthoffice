@@ -5,6 +5,7 @@
 @inject ILogger<Dashboard> Logger
 @inject IMetricsService MetricsService
 @inject IClaimsService ClaimsService
+@inject IWorkQueueService WorkQueueService
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject ITenantContextService TenantContextService
 @inject IUserContextService UserContextService
@@ -64,6 +65,193 @@
             Connecting to services...
         </MudAlert>
     }
+
+    @* ── Operations Cockpit ── *@
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" lg="7">
+            <MudCard Elevation="0">
+                <MudCardContent>
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.h6">Mass Adjudication Operations</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Latest benchmark run and validator signals
+                            </MudText>
+                        </MudStack>
+                        <MudButton Href="/mass-adjudication-runs"
+                                   Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   EndIcon="@Icons.Material.Filled.ArrowForward">
+                            View Runs
+                        </MudButton>
+                    </MudStack>
+
+                    @if (_recentRuns == null)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else if (_recentRuns.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                            No mass adjudication runs have been recorded for this tenant yet.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        var latestRun = _recentRuns[0];
+                        <MudGrid Class="mb-3">
+                            <MudItem xs="6" md="3">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Processed</MudText>
+                                <MudText Typo="Typo.h5">@latestRun.Processed.ToString("N0")</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">of @latestRun.TotalClaims.ToString("N0")</MudText>
+                            </MudItem>
+                            <MudItem xs="6" md="3">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Throughput</MudText>
+                                <MudText Typo="Typo.h5">@latestRun.ThroughputClaimsPerSecond.ToString("N2")/s</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">P95 @latestRun.P95LatencyMilliseconds.ToString("N0") ms</MudText>
+                            </MudItem>
+                            <MudItem xs="6" md="3">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Workflow</MudText>
+                                <MudText Typo="Typo.h5" Color="@GetWorkflowQualityColor(latestRun)">
+                                    @latestRun.WorkflowMatches.ToString("N0")/@latestRun.WorkflowScenarios.ToString("N0")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @latestRun.WorkflowMismatches mismatch / @latestRun.WorkflowUnsupported unsupported
+                                </MudText>
+                            </MudItem>
+                            <MudItem xs="6" md="3">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Outcomes</MudText>
+                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Paid @latestRun.Paid</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Pended @latestRun.Pended</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Denied @latestRun.BusinessDenials</MudChip>
+                                </MudStack>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudTable Items="@_recentRuns.Take(5)" Dense="true" Hover="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Run</MudTh>
+                                <MudTh>Claims</MudTh>
+                                <MudTh>Validator</MudTh>
+                                <MudTh>Latency</MudTh>
+                                <MudTh></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Run">
+                                    <MudText Typo="Typo.body2">@ShortRunId(context.Id)</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@DisplayRunStarted(context)</MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Claims">@context.Processed.ToString("N0") / @context.TotalClaims.ToString("N0")</MudTd>
+                                <MudTd DataLabel="Validator">
+                                    <MudChip T="string" Size="Size.Small" Color="@GetWorkflowQualityColor(context)" Variant="Variant.Outlined">
+                                        @context.WorkflowMismatches mismatch
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Latency">@context.P95LatencyMilliseconds.ToString("N0") ms P95</MudTd>
+                                <MudTd DataLabel="Actions" Style="text-align:right">
+                                    <MudButton Href="@($"/mass-adjudication-runs?run={Uri.EscapeDataString(context.Id)}")"
+                                               Variant="Variant.Text"
+                                               Size="Size.Small"
+                                               Color="Color.Primary">
+                                        Open
+                                    </MudButton>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" lg="5">
+            <MudCard Elevation="0">
+                <MudCardContent>
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.h6">Claims Work Queue</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Pended claims requiring examiner action
+                            </MudText>
+                        </MudStack>
+                        <MudButton Href="/work-queues"
+                                   Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   EndIcon="@Icons.Material.Filled.ArrowForward">
+                            Work Queue
+                        </MudButton>
+                    </MudStack>
+
+                    @if (_workQueueSummary == null)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else
+                    {
+                        <MudGrid Class="mb-3">
+                            <MudItem xs="6" sm="4">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Total</MudText>
+                                <MudText Typo="Typo.h4" Color="@(_workQueueTotal > 0 ? Color.Warning : Color.Success)">
+                                    @_workQueueTotal
+                                </MudText>
+                            </MudItem>
+                            <MudItem xs="6" sm="4">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">COB</MudText>
+                                <MudText Typo="Typo.h4">@_workQueueSummary.CobRequired</MudText>
+                            </MudItem>
+                            <MudItem xs="6" sm="4">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">NCCI/MUE</MudText>
+                                <MudText Typo="Typo.h4">@_workQueueSummary.NcciEditFailures</MudText>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mb-3">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">Auth @_workQueueSummary.MissingAuth</MudChip>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">OON @_workQueueSummary.ProviderNotContracted</MudChip>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary">Medical @_workQueueSummary.MedicalReview</MudChip>
+                        </MudStack>
+
+                        @if (_workQueueItems is { Count: > 0 })
+                        {
+                            <MudTable Items="@_workQueueItems.Take(5)" Dense="true" Hover="true" Elevation="0">
+                                <HeaderContent>
+                                    <MudTh>Claim</MudTh>
+                                    <MudTh>Reason</MudTh>
+                                    <MudTh>Age</MudTh>
+                                    <MudTh></MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Claim">@context.ClaimId</MudTd>
+                                    <MudTd DataLabel="Reason">
+                                        <MudChip T="string" Size="Size.Small" Color="@GetQueueColor(context.QueueReasonCode)">
+                                            @context.QueueReasonCode
+                                        </MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Age">@context.DaysInQueue d</MudTd>
+                                    <MudTd DataLabel="Actions" Style="text-align:right">
+                                        <MudButton Href="@($"/claims/{Uri.EscapeDataString(context.ClaimId)}")"
+                                                   Variant="Variant.Text"
+                                                   Size="Size.Small"
+                                                   Color="Color.Primary">
+                                            Open
+                                        </MudButton>
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else if (_workQueueTotal == 0)
+                        {
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                                No pended work queue items are waiting right now.
+                            </MudAlert>
+                        }
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
 
     @if (metrics != null)
     {
@@ -394,9 +582,18 @@
     private UserContext? _userContext;
     private OperationalAlerts? _alerts;
     private EdiVolumeSummary? _ediVolume;
+    private List<MassAdjudicationRunSummary>? _recentRuns;
+    private WorkQueueSummary? _workQueueSummary;
+    private List<WorkQueueItem>? _workQueueItems;
     private bool _loading = true;
     private bool _metricsError;
     private string? _serviceError;
+    private int _workQueueTotal => _workQueueSummary == null ? 0
+        : _workQueueSummary.NcciEditFailures
+          + _workQueueSummary.MissingAuth
+          + _workQueueSummary.ProviderNotContracted
+          + _workQueueSummary.CobRequired
+          + _workQueueSummary.MedicalReview;
 
     private Dictionary<string, bool> _systemHealth = new()
     {
@@ -487,23 +684,44 @@
 
     private async Task LoadOperationalDataAsync()
     {
+        var alertsTask = TryLoadOperationalAsync(
+            () => MetricsService.GetOperationalAlertsAsync(),
+            "operational alerts");
+        var ediTask = TryLoadOperationalAsync(
+            () => MetricsService.GetTodayEdiVolumeAsync(),
+            "EDI volume");
+        var runsTask = TryLoadOperationalAsync(
+            () => ClaimsService.GetMassAdjudicationRunsAsync(10),
+            "mass adjudication runs");
+        var queueSummaryTask = TryLoadOperationalAsync(
+            () => WorkQueueService.GetQueueSummaryAsync(),
+            "work queue summary");
+        var queueItemsTask = TryLoadOperationalAsync(
+            () => WorkQueueService.GetQueueItemsAsync(limit: 10),
+            "work queue items");
+
+        await CheckSystemHealthAsync();
+
+        _alerts = await alertsTask;
+        _ediVolume = await ediTask;
+        _recentRuns = await runsTask ?? new();
+        _workQueueSummary = await queueSummaryTask ?? new();
+        _workQueueItems = await queueItemsTask ?? new();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<T?> TryLoadOperationalAsync<T>(Func<Task<T>> load, string label)
+    {
         try
         {
-            var alertsTask = MetricsService.GetOperationalAlertsAsync();
-            var ediTask = MetricsService.GetTodayEdiVolumeAsync();
-            var healthTask = CheckSystemHealthAsync();
-
-            await Task.WhenAll(
-                alertsTask.ContinueWith(t => { if (t.IsCompletedSuccessfully) _alerts = t.Result; }, TaskContinuationOptions.OnlyOnRanToCompletion),
-                ediTask.ContinueWith(t => { if (t.IsCompletedSuccessfully) _ediVolume = t.Result; }, TaskContinuationOptions.OnlyOnRanToCompletion),
-                healthTask
-            );
+            return await load();
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to load operational data");
+            Logger.LogWarning(ex, "Failed to load dashboard {OperationalPanel}", label);
+            return default;
         }
-        await InvokeAsync(StateHasChanged);
     }
 
     private async Task CheckSystemHealthAsync()
@@ -558,6 +776,42 @@
         "Review Required" => Color.Info,
         _ => Color.Default
     };
+
+    private static Color GetWorkflowQualityColor(MassAdjudicationRunSummary run)
+    {
+        if (run.PlatformFailures > 0 || run.WorkflowMismatches > 0 || run.ObservationTimeouts > 0)
+            return Color.Error;
+        if (run.WorkflowUnsupported > 0 || run.WorkflowObservationTimeouts > 0)
+            return Color.Warning;
+        return Color.Success;
+    }
+
+    private static Color GetQueueColor(string reasonCode) => reasonCode switch
+    {
+        "NCCI" => Color.Error,
+        "AUTH" => Color.Warning,
+        "OON" => Color.Info,
+        "COB" => Color.Secondary,
+        "MED" => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private static string ShortRunId(string runId)
+    {
+        if (string.IsNullOrWhiteSpace(runId)) return "Run";
+        return runId.Length <= 12 ? runId : $"{runId[..8]}...";
+    }
+
+    private static string DisplayRunStarted(MassAdjudicationRunSummary run)
+    {
+        var started = run.Run.StartedAtUtc;
+        if (started == default)
+        {
+            return "Start time unavailable";
+        }
+
+        return started.LocalDateTime.ToString("MMM d, h:mm tt");
+    }
 
     private Color GetTierColor(string tier) => tier?.ToLowerInvariant() switch
     {
