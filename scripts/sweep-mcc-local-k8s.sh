@@ -19,6 +19,7 @@ MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
 SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
+CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS="${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS:-15}"
 PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
 PEND_OBSERVATION_INTERVAL_MS="${PEND_OBSERVATION_INTERVAL_MS:-1000}"
@@ -201,6 +202,14 @@ fi
 if [[ "$CLEAN_SWEEP_JOBS" == "true" ]]; then
   log "Cleaning previous MCC sweep jobs in namespace ${NAMESPACE}"
   kubectl delete job -n "$NAMESPACE" -l 'cho.cloudhealthoffice.com/sweep=true' --ignore-not-found >/dev/null
+fi
+
+if kubectl get deployment -n "$NAMESPACE" claims-service >/dev/null 2>&1; then
+  log "Setting claims-service benefit-plan timeout to ${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS}s"
+  kubectl set env deployment/claims-service \
+    -n "$NAMESPACE" \
+    "Services__BenefitPlanServiceTimeoutSeconds=${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS}" >/dev/null
+  kubectl rollout status deployment/claims-service -n "$NAMESPACE" --timeout=120s >/dev/null
 fi
 
 log "Writing sweep artifacts to ${OUTPUT_DIR}"
