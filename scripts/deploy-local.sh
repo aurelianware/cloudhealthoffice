@@ -287,6 +287,29 @@ ok "mongodb"
 
 log "Deploying Redis"
 kubectl apply -f infrastructure/k8s/redis-dataprotection.yaml
+# Local Docker Desktop runs use Redis as regeneratable cache/hot storage.
+# Keep the shared AKS manifest persistence-safe, but avoid local RDB growth
+# causing OOMKilled crash loops during MCC accumulator-heavy runs.
+kubectl patch deployment redis-dataprotection \
+  --namespace "$NAMESPACE" \
+  --type='json' \
+  --patch='[
+    {
+      "op": "add",
+      "path": "/spec/template/spec/containers/0/args",
+      "value": [
+        "redis-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "768mb",
+        "--maxmemory-policy",
+        "volatile-lru"
+      ]
+    }
+  ]' >/dev/null
 ok "redis"
 
 log "Waiting for MongoDB to be ready"

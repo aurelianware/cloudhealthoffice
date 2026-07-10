@@ -206,15 +206,20 @@ builder.Services.Configure<AdjudicationPipelineOptions>(
 builder.Services.Configure<TenantEnforcementPolicyOptions>(
     builder.Configuration.GetSection(TenantEnforcementPolicyOptions.SectionName));
 
-// Resolution clients — typed HttpClient + caching decorator. 5-second
-// timeout matches ClaimTenantConfigCache and HttpProviderService so a
-// flaky downstream service can't stall the pipeline.
+var benefitPlanServiceTimeoutSeconds = Math.Clamp(
+    builder.Configuration.GetValue<int?>("Services:BenefitPlanServiceTimeoutSeconds") ?? 5,
+    1,
+    300);
+
+// Resolution clients — typed HttpClient + caching decorator. The benefit-plan
+// client also backs the adjudication calculate-benefits shim, so benchmark
+// runners can raise this timeout without changing normal fail-fast defaults.
 builder.Services.AddHttpClient(HttpBenefitPlanResolver.HttpClientName, client =>
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:BenefitPlanService"]
         ?? "http://benefit-plan-service:8080");
-    client.Timeout = TimeSpan.FromSeconds(5);
+    client.Timeout = TimeSpan.FromSeconds(benefitPlanServiceTimeoutSeconds);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<HttpBenefitPlanResolver>();
