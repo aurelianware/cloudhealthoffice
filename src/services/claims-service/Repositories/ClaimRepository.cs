@@ -436,6 +436,28 @@ public class ClaimRepository : IClaimRepository
     public static readonly IReadOnlyList<ClaimStatus> SynchronousWritebackBlockedStatuses =
         Enum.GetValues<ClaimStatus>().Where(BlocksSynchronousWriteback).ToArray();
 
+    /// <summary>
+    /// True for the narrow repair allowed by benchmark summary writeback: a
+    /// row already says Denied, while the incoming summary is paid and carries
+    /// no denial evidence. This prevents an impossible "Denied + payer payment
+    /// + no denial reason" state from surviving while still protecting pends
+    /// and non-paid summaries.
+    /// </summary>
+    public static bool CanRepairContradictoryDeniedSummary(
+        ClaimStatus preWriteStatus,
+        ClaimStatus desiredStatus,
+        AdjudicationResult incomingAdjudication) =>
+        preWriteStatus == ClaimStatus.Denied
+        && desiredStatus == ClaimStatus.Approved
+        && incomingAdjudication.PayerPayment > 0
+        && !HasDenialEvidence(incomingAdjudication);
+
+    private static bool HasDenialEvidence(AdjudicationResult? adjudication) =>
+        adjudication is not null
+        && (!string.IsNullOrWhiteSpace(adjudication.DenialReasonCode)
+            || !string.IsNullOrWhiteSpace(adjudication.DenialReason)
+            || adjudication.AdjustmentReasons.Any());
+
     private static bool IsTerminal(ClaimVersionState state) => state switch
     {
         ClaimVersionState.Paid or
@@ -1287,7 +1309,7 @@ public class ClaimRepository : IClaimRepository
         CancellationToken ct = default)
     {
         var query = new QueryDefinition(@"
-            SELECT TOP 1 c.id
+            SELECT TOP 1 c.id, c.status, c.adjudicationResult
             FROM c
             WHERE c.tenantId = @tenantId
               AND (c.claimVersionId = @claimVersionId
@@ -1299,17 +1321,17 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@claimVersionId", claimVersionId)
             .WithParameter("@draft", ClaimVersionState.Draft.ToString());
 
-        string? rowId = null;
+        HeadIdResult? head = null;
         var iterator = _container.GetItemQueryIterator<HeadIdResult>(
             query,
             requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         if (iterator.HasMoreResults)
         {
             var page = await iterator.ReadNextAsync(ct);
-            rowId = page.FirstOrDefault()?.Id;
+            head = page.FirstOrDefault();
         }
 
-        if (string.IsNullOrEmpty(rowId)) return StatusWriteResult.NotFoundResult;
+        if (head is null || string.IsNullOrEmpty(head.Id)) return StatusWriteResult.NotFoundResult;
 
         // Residual-race fix — financial/audit data (AdjudicationResult, dates)
         // persists by chain/id even if async adjudication already finalized
@@ -1326,7 +1348,7 @@ public class ClaimRepository : IClaimRepository
         try
         {
             await _container.PatchItemAsync<Claim>(
-                rowId,
+                head.Id,
                 new PartitionKey(tenantId),
                 summaryOps,
                 cancellationToken: ct);
@@ -1336,7 +1358,14 @@ public class ClaimRepository : IClaimRepository
             return StatusWriteResult.NotFoundResult;
         }
 
-        return await TryPatchStatusAsync(tenantId, rowId, status, ClaimVersionState.Adjudicated, ct);
+        return await TryPatchStatusAsync(
+            tenantId,
+            head.Id,
+            status,
+            ClaimVersionState.Adjudicated,
+            ct,
+            adjudicationResult,
+            head.Status);
     }
 
     public Task<StatusWriteResult> TryTransitionStatusAsync(
@@ -1364,7 +1393,9 @@ public class ClaimRepository : IClaimRepository
         string rowId,
         ClaimStatus desiredStatus,
         ClaimVersionState desiredVersionState,
-        CancellationToken ct)
+        CancellationToken ct,
+        AdjudicationResult? incomingAdjudication = null,
+        ClaimStatus? preWriteStatus = null)
     {
         var statusOps = new List<PatchOperation>
         {
@@ -1384,6 +1415,31 @@ public class ClaimRepository : IClaimRepository
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
         {
+            if (incomingAdjudication is not null
+                && preWriteStatus is not null
+                && CanRepairContradictoryDeniedSummary(
+                    preWriteStatus.Value,
+                    desiredStatus,
+                    incomingAdjudication))
+            {
+                var repairOptions = new PatchItemRequestOptions { FilterPredicate = ContradictoryDeniedRepairFilterPredicate };
+                try
+                {
+                    await _container.PatchItemAsync<Claim>(rowId, new PartitionKey(tenantId), statusOps, repairOptions, ct);
+                    return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
+                }
+                catch (CosmosException repairEx) when (repairEx.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return StatusWriteResult.NotFoundResult;
+                }
+                catch (CosmosException repairEx) when (repairEx.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+                {
+                    // Another writer changed the row after summary writeback.
+                    // Fall through to the normal readback so callers see the
+                    // persisted status that actually won.
+                }
+            }
+
             try
             {
                 var read = await _container.ReadItemAsync<Claim>(rowId, new PartitionKey(tenantId), cancellationToken: ct);
@@ -1401,6 +1457,14 @@ public class ClaimRepository : IClaimRepository
     /// <summary>Cosmos patch FilterPredicate for <see cref="BlocksSynchronousWriteback"/> — built from <see cref="SynchronousWritebackBlockedStatuses"/> so it can't drift from the canonical rule.</summary>
     private static readonly string SynchronousWritebackBlockedFilterPredicate =
         BuildStatusNotInFilterPredicate(SynchronousWritebackBlockedStatuses);
+
+    private const string ContradictoryDeniedRepairFilterPredicate =
+        "FROM c WHERE c.status = 'Denied' " +
+        "AND IS_DEFINED(c.adjudicationResult) " +
+        "AND c.adjudicationResult.payerPayment > 0 " +
+        "AND (NOT IS_DEFINED(c.adjudicationResult.denialReasonCode) " +
+        "OR IS_NULL(c.adjudicationResult.denialReasonCode) " +
+        "OR c.adjudicationResult.denialReasonCode = '')";
 
     /// <summary>Cosmos patch FilterPredicate for <see cref="IsFinalDisposition"/> — built from <see cref="FinalDispositions"/>; Pended is deliberately absent (re-pending is allowed).</summary>
     private static readonly string FinalDispositionFilterPredicate =
@@ -1610,5 +1674,7 @@ public class ClaimRepository : IClaimRepository
     private sealed class HeadIdResult
     {
         public string Id { get; set; } = string.Empty;
+        public ClaimStatus Status { get; set; }
+        public AdjudicationResult? AdjudicationResult { get; set; }
     }
 }
