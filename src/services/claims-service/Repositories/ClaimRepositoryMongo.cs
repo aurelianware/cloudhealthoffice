@@ -152,6 +152,64 @@ public class ClaimRepositoryMongo : IClaimRepository
         return docs.Select(Hydrate);
     }
 
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
+        IReadOnlyCollection<string> claimIds,
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        int page,
+        int pageSize)
+    {
+        if (claimIds.Count == 0)
+        {
+            return (Array.Empty<Claim>(), 0);
+        }
+
+        var tenantId = GetTenantId();
+        var builder = Builders<Claim>.Filter;
+        var filter = builder.And(
+            builder.Eq(c => c.TenantId, tenantId),
+            builder.In(c => c.Id, claimIds.Distinct(StringComparer.OrdinalIgnoreCase)));
+
+        if (!string.IsNullOrEmpty(memberId))
+        {
+            filter = builder.And(filter, builder.Eq(c => c.MemberId, memberId));
+        }
+
+        if (!string.IsNullOrEmpty(providerNPI))
+        {
+            filter = builder.And(filter, builder.Or(
+                builder.Eq(c => c.BillingProviderNPI, providerNPI),
+                builder.Eq(c => c.RenderingProviderNPI, providerNPI)));
+        }
+
+        if (serviceDateFrom.HasValue)
+        {
+            filter = builder.And(filter, builder.Gte(c => c.ServiceDateFrom, serviceDateFrom.Value));
+        }
+
+        if (serviceDateTo.HasValue)
+        {
+            filter = builder.And(filter, builder.Lte(c => c.ServiceDateTo, serviceDateTo.Value));
+        }
+
+        if (status.HasValue)
+        {
+            filter = builder.And(filter, builder.Eq(c => c.Status, status.Value));
+        }
+
+        var totalCount = (int)await _collection.CountDocumentsAsync(filter);
+        var docs = await _collection.Find(filter)
+            .SortByDescending(c => c.SubmittedDate)
+            .Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 1000))
+            .Limit(Math.Clamp(pageSize, 1, 1000))
+            .ToListAsync();
+
+        return (docs.Select(Hydrate).ToList(), totalCount);
+    }
+
     public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchForMemberAsync(
         string memberId,
         DateTime? serviceDateFrom,

@@ -42,6 +42,16 @@ public interface IClaimRepository
         int page,
         int pageSize);
 
+    Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
+        IReadOnlyCollection<string> claimIds,
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        int page,
+        int pageSize);
+
     /// <summary>
     /// Member-scoped search with the filters the portal Member Details dialog
     /// exposes: date range, status, provider, claim type, amount range. Always
@@ -555,6 +565,67 @@ public class ClaimRepository : IClaimRepository
         }
 
         return results.Select(Hydrate);
+    }
+
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
+        IReadOnlyCollection<string> claimIds,
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        int page,
+        int pageSize)
+    {
+        if (claimIds.Count == 0)
+        {
+            return (Array.Empty<Claim>(), 0);
+        }
+
+        var claims = new List<Claim>();
+        foreach (var id in claimIds.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var claim = await GetByIdAsync(id);
+            if (claim is not null)
+            {
+                claims.Add(claim);
+            }
+        }
+
+        var query = claims.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(memberId))
+        {
+            query = query.Where(c => string.Equals(c.MemberId, memberId, StringComparison.OrdinalIgnoreCase));
+        }
+        if (!string.IsNullOrWhiteSpace(providerNPI))
+        {
+            query = query.Where(c =>
+                string.Equals(c.BillingProviderNPI, providerNPI, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(c.RenderingProviderNPI, providerNPI, StringComparison.OrdinalIgnoreCase));
+        }
+        if (serviceDateFrom.HasValue)
+        {
+            query = query.Where(c => c.ServiceDateFrom >= serviceDateFrom.Value);
+        }
+        if (serviceDateTo.HasValue)
+        {
+            query = query.Where(c => c.ServiceDateTo <= serviceDateTo.Value);
+        }
+        if (status.HasValue)
+        {
+            query = query.Where(c => c.Status == status.Value);
+        }
+
+        var filtered = query
+            .OrderByDescending(c => c.SubmittedDate)
+            .ToList();
+
+        return (
+            filtered
+                .Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 1000))
+                .Take(Math.Clamp(pageSize, 1, 1000))
+                .ToList(),
+            filtered.Count);
     }
 
     public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchForMemberAsync(

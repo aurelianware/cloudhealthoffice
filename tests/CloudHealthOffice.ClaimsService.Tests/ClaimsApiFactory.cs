@@ -17,6 +17,7 @@ namespace CloudHealthOffice.ClaimsService.Tests;
 public class ClaimsApiFactory : WebApplicationFactory<Program>
 {
     public IClaimRepository ClaimRepository { get; } = Substitute.For<IClaimRepository>();
+    public IMassAdjudicationRunRepository MassAdjudicationRunRepository { get; } = Substitute.For<IMassAdjudicationRunRepository>();
     public IClaimAcknowledgmentService AcknowledgmentService { get; } = Substitute.For<IClaimAcknowledgmentService>();
     public IAiExaminationAuditRepository AuditRepository { get; } = Substitute.For<IAiExaminationAuditRepository>();
     public IClaimSubmissionService SubmissionService { get; } = Substitute.For<IClaimSubmissionService>();
@@ -49,6 +50,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             // Remove real repository, services, and adapter registrations.
             var descriptorsToRemove = services
                 .Where(d => d.ServiceType == typeof(IClaimRepository)
+                         || d.ServiceType == typeof(IMassAdjudicationRunRepository)
                          || d.ServiceType == typeof(IClaimAcknowledgmentService)
                          || d.ServiceType == typeof(IProviderService)
                          || d.ServiceType == typeof(ITenantComplianceConfigService)
@@ -115,6 +117,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(Substitute.For<IBenefitCalculationEngine>());
 
             services.AddSingleton(ClaimRepository);
+            services.AddSingleton(MassAdjudicationRunRepository);
             services.AddSingleton(AcknowledgmentService);
             services.AddSingleton(Substitute.For<IProviderService>());
             services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());

@@ -13,6 +13,7 @@ namespace ClaimsService.Controllers;
 public class ClaimsController : ControllerBase
 {
     private readonly IClaimRepository _claimRepository;
+    private readonly IMassAdjudicationRunRepository _massAdjudicationRunRepository;
     private readonly IAiExaminationAuditRepository _auditRepository;
     private readonly IClaimAcknowledgmentService _ackService;
     private readonly IMpipAdjudicationEnhancer _mpipEnhancer;
@@ -24,6 +25,7 @@ public class ClaimsController : ControllerBase
 
     public ClaimsController(
         IClaimRepository claimRepository,
+        IMassAdjudicationRunRepository massAdjudicationRunRepository,
         IAiExaminationAuditRepository auditRepository,
         IClaimAcknowledgmentService ackService,
         IMpipAdjudicationEnhancer mpipEnhancer,
@@ -34,6 +36,7 @@ public class ClaimsController : ControllerBase
         ILogger<ClaimsController> logger)
     {
         _claimRepository = claimRepository;
+        _massAdjudicationRunRepository = massAdjudicationRunRepository;
         _auditRepository = auditRepository;
         _ackService = ackService;
         _mpipEnhancer = mpipEnhancer;
@@ -276,20 +279,46 @@ public class ClaimsController : ControllerBase
     /// <summary>Search claims via POST body (portal search form).</summary>
     [HttpPost("search")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    public async Task<IActionResult> SearchClaimsPost([FromBody] ClaimSearchBody body)
+    public async Task<IActionResult> SearchClaimsPost([FromBody] ClaimSearchBody body, CancellationToken ct = default)
     {
         ClaimStatus? status = null;
         if (!string.IsNullOrEmpty(body.Status) && Enum.TryParse<ClaimStatus>(body.Status, true, out var parsed))
             status = parsed;
 
-        var claims = await _claimRepository.SearchAsync(
-            body.MemberId, body.ProviderId,
-            body.ServiceDateFrom, body.ServiceDateTo,
-            status, null,
-            body.PageNumber, body.PageSize);
+        if (!string.IsNullOrWhiteSpace(body.RunId))
+        {
+            var tenantId = GetTenantId();
+            var run = await _massAdjudicationRunRepository.GetAsync(tenantId, body.RunId, ct);
+            if (run is null)
+            {
+                return Ok(new { claims = Array.Empty<Claim>(), totalCount = 0, pageNumber = body.PageNumber, pageSize = body.PageSize });
+            }
 
-        var list = claims.ToList();
-        return Ok(new { claims = list, totalCount = list.Count, page = body.PageNumber, pageSize = body.PageSize });
+            var submittedClaimIds = await _massAdjudicationRunRepository.ListSubmittedClaimIdsAsync(tenantId, body.RunId, ct);
+            var (runPage, runTotalCount) = await _claimRepository.SearchByIdsAsync(
+                submittedClaimIds,
+                body.MemberId,
+                body.ProviderId,
+                body.ServiceDateFrom,
+                body.ServiceDateTo,
+                status,
+                body.PageNumber,
+                body.PageSize);
+
+            return Ok(new { claims = runPage, totalCount = runTotalCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
+        }
+
+        var claims = (await _claimRepository.SearchAsync(
+            body.MemberId,
+            body.ProviderId,
+            body.ServiceDateFrom,
+            body.ServiceDateTo,
+            status,
+            null,
+            body.PageNumber,
+            body.PageSize)).ToList();
+
+        return Ok(new { claims, totalCount = claims.Count, pageNumber = body.PageNumber, pageSize = body.PageSize });
     }
 
     /// <summary>

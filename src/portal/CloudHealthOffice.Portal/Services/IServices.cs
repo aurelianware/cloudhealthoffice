@@ -807,6 +807,7 @@ public class ServiceLine
 
 public class ClaimSearchRequest
 {
+    public string? RunId { get; set; }
     public string? ClaimNumber { get; set; }
     public string? MemberId { get; set; }
     public string? MemberName { get; set; }
