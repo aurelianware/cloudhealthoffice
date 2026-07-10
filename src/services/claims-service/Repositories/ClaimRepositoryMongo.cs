@@ -106,6 +106,29 @@ public class ClaimRepositoryMongo : IClaimRepository
         int page,
         int pageSize)
     {
+        var (claims, _) = await SearchWithCountAsync(
+            memberId,
+            providerNPI,
+            serviceDateFrom,
+            serviceDateTo,
+            status,
+            lineOfBusiness,
+            page,
+            pageSize);
+
+        return claims;
+    }
+
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchWithCountAsync(
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        LineOfBusiness? lineOfBusiness,
+        int page,
+        int pageSize)
+    {
         var tenantId = GetTenantId();
         var builder = Builders<Claim>.Filter;
         var filter = builder.Eq(c => c.TenantId, tenantId);
@@ -144,12 +167,16 @@ public class ClaimRepositoryMongo : IClaimRepository
             filter = builder.And(filter, builder.Eq(c => c.LineOfBusiness, lineOfBusiness.Value));
         }
 
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+        var totalCount = (int)await _collection.CountDocumentsAsync(filter);
         var docs = await _collection.Find(filter)
             .SortByDescending(c => c.SubmittedDate)
-            .Skip((page - 1) * pageSize)
-            .Limit(pageSize)
+            .Skip((safePage - 1) * safePageSize)
+            .Limit(safePageSize)
             .ToListAsync();
-        return docs.Select(Hydrate);
+
+        return (docs.Select(Hydrate).ToList(), totalCount);
     }
 
     public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(

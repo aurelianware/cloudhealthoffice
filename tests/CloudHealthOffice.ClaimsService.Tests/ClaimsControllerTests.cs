@@ -309,6 +309,39 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
             25);
     }
 
+    [Fact]
+    public async Task SearchClaimsPost_StandardSearch_ReturnsFullTotalCount()
+    {
+        var claim = CreateValidClaim();
+        claim.Id = "page-claim-1";
+        claim.ClaimNumber = "MCC-P-0000001";
+
+        _repo.SearchWithCountAsync(
+                "MEM-001",
+                null,
+                null,
+                null,
+                null,
+                null,
+                2,
+                1)
+            .Returns((new List<Claim> { claim }, 3));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/search", new ClaimSearchBody
+        {
+            MemberId = "MEM-001",
+            PageNumber = 2,
+            PageSize = 1
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(3, doc.RootElement.GetProperty("totalCount").GetInt32());
+        Assert.Equal(2, doc.RootElement.GetProperty("pageNumber").GetInt32());
+        Assert.Equal(1, doc.RootElement.GetProperty("claims").GetArrayLength());
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // 277CA ACKNOWLEDGMENT
     // ═══════════════════════════════════════════════════════════════════

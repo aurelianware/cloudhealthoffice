@@ -308,7 +308,7 @@ public class ClaimsController : ControllerBase
             return Ok(new { claims = runPage, totalCount = runTotalCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
         }
 
-        var claims = (await _claimRepository.SearchAsync(
+        var (claims, totalCount) = await _claimRepository.SearchWithCountAsync(
             body.MemberId,
             body.ProviderId,
             body.ServiceDateFrom,
@@ -316,9 +316,9 @@ public class ClaimsController : ControllerBase
             status,
             null,
             body.PageNumber,
-            body.PageSize)).ToList();
+            body.PageSize);
 
-        return Ok(new { claims, totalCount = claims.Count, pageNumber = body.PageNumber, pageSize = body.PageSize });
+        return Ok(new { claims, totalCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
     }
 
     /// <summary>
