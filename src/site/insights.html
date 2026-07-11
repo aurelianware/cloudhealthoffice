@@ -291,36 +291,36 @@
 
         <article class="engineering-proof">
           <div class="proof-meta">Million Claim Challenge &middot; Local Kubernetes validation</div>
-          <h3>From Faster to Repeatably Faster</h3>
+          <h3>From Fast Runs to Inspectable Evidence</h3>
           <p>
-            Cloud Health Office moved from one-off fast local runs to repeatable claims adjudication benchmarks:
-            configurable Kubernetes Jobs, parallelism sweeps, repeated runs, hidden-cap detection, and workflow correctness checks reported alongside throughput.
-            The latest published result is a 50K local Kubernetes validation on 18 allocated Docker CPUs, not a production cloud benchmark.
+            Cloud Health Office moved from repeatable throughput runs into broader edge-case scoring and operator-visible evidence:
+            expected pends are observed from persisted claim status, unsupported scenarios are separated from mismatches, and the Mass Adjudication console can inspect run summaries and claim-level evidence.
+            The latest published scale result is a 50K local Kubernetes breadth validation on 18 allocated Docker CPUs, not a production cloud benchmark.
           </p>
 
           <div class="proof-metrics" aria-label="Latest Million Claim Challenge local benchmark metrics">
             <div class="proof-metric">
               <strong>50,000</strong>
-              <span>synthetic claims processed</span>
+              <span>synthetic claims processed in the clean breadth run</span>
             </div>
             <div class="proof-metric">
-              <strong>188.64 claims/sec</strong>
-              <span>repeat throughput, about 10.5 claims/sec per allocated CPU</span>
+              <strong>5,767 / 6,500</strong>
+              <span>workflow checks matched with zero scoreable mismatches</span>
             </div>
             <div class="proof-metric">
-              <strong>106 ms / 151 ms</strong>
-              <span>P95 and P99 latency</span>
+              <strong>460 / 460</strong>
+              <span>expected-pend claims observed as pended</span>
             </div>
             <div class="proof-metric">
-              <strong>4,000/4,000</strong>
-              <span>checks matched across four core dispositions</span>
+              <strong>733</strong>
+              <span>unsupported scenarios reported separately</span>
             </div>
           </div>
 
           <p>
             The benchmark distinguishes valid business denials from platform failures. Correct denials are not errors;
-            they are evidence that benefit rules, provider checks, prior authorization logic, and adjudication outcomes are being applied consistently.
-            The next proof milestone is broader coverage across the MCC's 29 edge-case scenarios before pushing toward 250K, 500K, and full-million adjudication runs.
+            unsupported scenarios are not wins; and payment delta remains visible as a diagnostic until amount-level scoring becomes a formal gate.
+            The next proof milestone is 100K with stricter scoring, not scale for scale's sake.
           </p>
           <p style="font-size:0.95rem;color:#888;">
             Local Docker Desktop Kubernetes benchmark, not a production cloud benchmark.
