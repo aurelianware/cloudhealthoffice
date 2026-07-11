@@ -103,6 +103,11 @@ public class MassAdjudicationRunSummary
     public MassAdjudicationStageTiming? WritebackTiming { get; set; }
     public List<MassAdjudicationStageTiming> AdjudicationStepTimings { get; set; } = new();
     public decimal? AveragePaymentDelta { get; set; }
+    public decimal PaymentTolerance { get; set; }
+    public int PaymentComparisons { get; set; }
+    public int PaymentMatches { get; set; }
+    public int PaymentMismatches { get; set; }
+    public decimal? MaximumPaymentDelta { get; set; }
     public List<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown { get; set; } = new();
     public List<MassAdjudicationWorkflowScenarioSummary> WorkflowScenarioBreakdown { get; set; } = new();
     public List<MassAdjudicationFailureSummary> SampleFailures { get; set; } = new();

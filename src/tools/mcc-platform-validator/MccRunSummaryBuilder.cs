@@ -32,6 +32,11 @@ internal static class MccRunSummaryBuilder
         var throughput = results.Count / Math.Max(0.001, elapsed.TotalSeconds);
         var comparable = results
             .Where(r => r.Outcome is ClaimValidationOutcome.Paid)
+            // Amount scoring is valid only when the expected amount was authored
+            // for the same benefit plan used by local adjudication. Generic MCC
+            // edge cases retain disposition scoring, but their amounts come from
+            // their original synthetic plans and are not contract-comparable.
+            .Where(r => r.ValidationScenario == MccWorkflowValidation.CleanProfessionalPaidScenario)
             .Where(r => r.ActualPlanPayment.HasValue && r.ExpectedPlanPayment.HasValue)
             .ToList();
         var avgDelta = comparable.Count == 0
@@ -247,6 +252,7 @@ internal static class MccRunSummaryBuilder
         }
 
         if (result.Outcome is ClaimValidationOutcome.Paid
+            && result.ValidationScenario == MccWorkflowValidation.CleanProfessionalPaidScenario
             && result.ActualPlanPayment.HasValue
             && result.ExpectedPlanPayment.HasValue
             && Math.Abs(result.ActualPlanPayment.Value - result.ExpectedPlanPayment.Value) > 0.01m)
