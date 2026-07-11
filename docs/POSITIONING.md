@@ -242,7 +242,7 @@ EDI coverage via Argo workflows: 270/271/275/276/277/278/834/837.
 - Portal under `src/portal/` for operational workflows across tenants, services, and operating modes.
 - `fhir-service` CapabilityStatement advertising CHO-authored profiles in addition to US Core.
 - Observability stack (OpenTelemetry with PHI-scrubbing SpanProcessor, merged in PR #666) applied across services.
-- Million Claim Challenge local Kubernetes validation: 50,000 synthetic claims processed on a repeat adjudication run at 188.64 claims/sec, 106 ms P95, 151 ms P99, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. This ran in local Docker Desktop Kubernetes with Docker allocated 18 CPUs, which makes the useful throughput frame roughly 10.5 claims/sec per allocated CPU for the measured workflow. This is a local validation benchmark, not a production cloud benchmark.
+- Million Claim Challenge local Kubernetes validation: a clean 50,000-claim breadth run with 50,000 claims processed, zero platform failures, 460/460 expected-pend claims observed as pended, 5,767/6,500 workflow checks matched, zero scoreable workflow mismatches, and 733 unsupported scenarios reported separately. The run completed at 68.86 claims/sec with 298 ms P95 and 369 ms P99 latency in local Docker Desktop Kubernetes with Docker allocated 18 CPUs and roughly 23.4 GiB memory. This is a local validation benchmark, not a production cloud benchmark. Part 7 added the portal Mass Adjudication console so run summaries, unsupported rows, mismatches, payment delta, and claim-level evidence are visible inside the product.
 
 #### Who enters here
 
@@ -285,14 +285,15 @@ The Million Claim Challenge is a source-available benchmarking asset (BSL 1.1, s
 
 We generate a stratified synthetic corpus of 1,000,000 healthcare claims — professional CMS-1500, institutional UB-04, dental ADA, and named edge-case scenarios — with pre-computed expected adjudication outcomes. Any claims adjudication engine can be benchmarked against the corpus and scored against the expected outcomes.
 
-Latest Cloud Health Office proof point: in local Docker Desktop Kubernetes with Docker allocated 18 CPUs, Cloud Health Office processed 50,000 synthetic claims on a repeat adjudication run at 188.64 claims/sec, with 106 ms P95 latency, 151 ms P99 latency, zero platform failures, and 4,000/4,000 deterministic workflow checks matched. That is roughly 10.5 claims/sec per allocated CPU for the measured workflow. This is intentionally framed as local validation, not a production cloud benchmark. Its value is that throughput, tail latency, platform reliability, and workflow correctness are measured together.
+Latest Cloud Health Office proof point: in local Docker Desktop Kubernetes with Docker allocated 18 CPUs and roughly 23.4 GiB memory, Cloud Health Office processed 50,000 synthetic claims with broader edge-case scoring, zero platform failures, 460/460 expected-pend claims observed as pended, 5,767/6,500 workflow checks matched, zero scoreable workflow mismatches, and 733 unsupported scenarios reported separately. The run completed at 68.86 claims/sec with 298 ms P95 latency and 369 ms P99 latency. This is intentionally framed as local validation, not a production cloud benchmark. Its value is that throughput, tail latency, platform reliability, workflow correctness, pended observation, and unsupported gaps are measured together.
 
-The published result should not be overstated. The MCC corpus is designed for 1,000,000 claims and 29 named edge-case scenarios; the latest published Cloud Health Office validation is a 50,000-claim local run with deterministic workflow checks across four core dispositions: clean paid, excluded provider, uncovered service, and prior authorization. The next proof priority is breadth before volume: publish a run that exercises more of the 29 edge scenarios, then extend volume to 250K, 500K, and the full million.
+The published result should not be overstated. The MCC corpus is designed for 1,000,000 claims and 29 named edge-case scenarios; the latest Cloud Health Office validation proves a 50,000-claim local breadth run, not the full million. Payment delta is visible but remains diagnostic, not a formal amount-level pass/fail scoring gate. Expected-pend observation proves expected-pend claims persisted as pended, but a future false-pend sweep is still needed to catch claims expected to pay or deny that later persist as pended. The next proof priority is stricter scoring before a larger headline: rerun 50K with the Part 7 evidence-first console path, add false-pend and payment-amount gates, then make 100K its own focused milestone.
 
 ### What we offer
 
 - `src/CloudHealthOffice.BenchmarkClaimGenerator/` — full .NET 8 library for parallel corpus generation.
 - `/docs/million-claim-challenge` — public landing page at cloudhealthoffice.com describing the benchmark.
+- Portal Mass Adjudication console — operator-facing run evidence with claim-level drilldown, validation-status filtering, human-readable MCC claim IDs, and evidence-first sampling for failures, observation failures, mismatches, unsupported rows, and slow claims.
 - `docs/million-claim-challenge/podcast/` — repeatable podcast packet workflow for turning Medium articles, pull requests, benchmark results, screenshots, and project context into Adobe Podcast / Acrobat Generate Podcast source material.
 - Reference data coverage across procedure codes, diagnosis codes, dental codes, taxonomy codes, modifier sets, revenue codes, network tiers, and benefit plan templates.
 - Dedicated Cosmos DB seeder scaffold (`CosmosDbSeeder`) for running the corpus against production-shape infrastructure — provides document-shape and adapter wiring; actual Cosmos DB persistence requires a concrete implementation or separate package (the base `WriteDocumentsAsync` is a no-op stub by design).
@@ -361,19 +362,19 @@ We are not in an active acquisition process. We are building the platform with t
 
 ## Canonical Facts
 
-*Last verified: April 2026*
+*Last verified: July 2026*
 
 These are the ground-truth numbers for CHO as of the most recent verification. Any artifact citing service counts, engine counts, test counts, or documentation volume should reconcile to this section. When these numbers drift from reality, update this section first; derivative artifacts then reconcile to it.
 
 | Metric | Value | Source |
 | --- | --- | --- |
-| Services | 36 | `src/services/*/` excluding `shared/` |
+| Service projects | 36 | `src/services/*/`, including the shared contracts project |
 | Adjudication/rules engines | 9 | BenefitEngine, FeeScheduleEngine, NcciEngine, CobEngine, RiskAdjustmentEngine, EncounterEngine, ClaimsScrubEngine, PriorAuthRuleEngine, ProviderVerificationEngine |
 | Supporting engine projects | 4 | DocumentStore, OperatingMode, ProviderEnrollmentService, enrollment-wiring |
-| Test projects | 44 | `*.Tests.csproj` files |
-| Test methods | ~2,800 | xUnit Facts + Theories |
-| Production C# lines | ~136,000 | Excluding tests, bin, obj |
-| Documentation lines | ~94,000 | Markdown under `docs/` |
+| Test projects | 45 | `*.Tests.csproj` files |
+| Test methods | ~4,100 | xUnit Facts + Theories |
+| Production C# lines | ~190,000 | Excluding tests, bin, obj, and migrations |
+| Documentation lines | ~108,000 | Markdown and text under `docs/` |
 | Pricing framework | PMPM-based, pilot-specific | See FINANCIAL-MODEL.md for indicative ranges |
 
 Verification procedure documented at `scripts/verify-canonical-facts.sh` (to be created in a follow-up PR). Numbers should be re-verified at each major release and when the Canonical Facts section is cited by another artifact.

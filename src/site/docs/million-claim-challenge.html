@@ -18,7 +18,7 @@
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png" />
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="article:published_time" content="2026-04-05T00:00:00Z" />
-  <meta property="article:modified_time" content="2026-07-06T00:00:00Z" />
+  <meta property="article:modified_time" content="2026-07-11T00:00:00Z" />
   <meta property="article:section" content="Testing &amp; Benchmarks" />
   <meta property="article:tag" content="claims adjudication" />
   <meta property="article:tag" content="benchmarking" />
@@ -49,7 +49,7 @@
       "logo": { "@type": "ImageObject", "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" }
     },
     "datePublished": "2026-04-05",
-    "dateModified": "2026-07-06",
+    "dateModified": "2026-07-11",
     "proficiencyLevel": "Intermediate",
     "about": [
       { "@type": "Thing", "name": "Claims Adjudication" },
@@ -291,20 +291,20 @@
         <div class="callout callout-success">
           <div class="callout-title">Latest local Kubernetes validation</div>
           <p>
-            Cloud Health Office processed <strong>50,000 synthetic claims</strong> in local Docker Desktop Kubernetes with Docker allocated 18 CPUs at
-            <strong>188.64 claims/sec</strong> on a repeat adjudication run with provider seeding skipped.
-            The run held <strong>106 ms P95</strong>, <strong>151 ms P99</strong>, <strong>zero platform failures</strong>,
-            and <strong>4,000/4,000 deterministic workflow checks matched</strong>.
+            Cloud Health Office processed <strong>50,000 synthetic claims</strong> in local Docker Desktop Kubernetes with Docker allocated 18 CPUs and roughly 23.4 GiB memory.
+            The clean breadth run completed at <strong>68.86 claims/sec</strong> with <strong>298 ms P95</strong>, <strong>369 ms P99</strong>,
+            <strong>zero platform failures</strong>, <strong>460/460 expected-pend claims observed as pended</strong>,
+            <strong>5,767/6,500 workflow checks matched</strong>, and <strong>zero scoreable workflow mismatches</strong>.
           </p>
           <p>
-            Framed per allocated CPU, that is roughly <strong>10.5 claims/sec per allocated CPU</strong> for the measured workflow.
-            This is a local validation benchmark, not a production cloud benchmark. Its value is repeatability:
-            throughput, tail latency, platform reliability, and workflow correctness measured together.
+            The run also reported <strong>733 unsupported scenarios</strong> separately instead of counting them as wins or failures.
+            This is a local validation benchmark, not a production cloud benchmark. Its value is honesty:
+            throughput, tail latency, platform reliability, pended observation, workflow correctness, unsupported gaps, and payment delta visible together.
           </p>
           <p>
             Scope matters: the MCC corpus is designed for one million claims and 29 named edge-case scenarios.
-            This published Cloud Health Office run proves a 50K local slice with deterministic checks across four core dispositions:
-            clean paid, excluded provider, uncovered service, and prior authorization.
+            This published Cloud Health Office run proves a 50K local breadth slice, not the full million.
+            Payment delta is still diagnostic, and false-pend detection across expected-pay and expected-deny claims remains a future scoring improvement.
           </p>
         </div>
 
@@ -334,11 +334,13 @@
         <div class="callout callout-success">
           <div class="callout-title">From local Kubernetes to workflow proof</div>
           <p>
-            We recently walked through the local Kubernetes path, used generated claims to validate real platform workflows end to end, then added provider seeding, tenant-aware integrity checks, stage-level timing, repeatable sweep runs, and a max-claims override for larger local validations.
+            We recently walked through the local Kubernetes path, used generated claims to validate real platform workflows end to end, then added provider seeding, tenant-aware integrity checks, stage-level timing, repeatable sweep runs, honest edge-case scoring, and an operator-facing Mass Adjudication console.
             Read the field notes:
-            <a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-then-validating-real-workflows-db3b6d691ac2" target="_blank" rel="noopener noreferrer">Part 1: Running a Healthcare Claims Platform Locally in Kubernetes, Then Validating Real Workflows</a>
+            <a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-then-validating-real-workflows-db3b6d691ac2" target="_blank" rel="noopener noreferrer">Part 1: Running a Healthcare Claims Platform Locally in Kubernetes, Then Validating Real Workflows</a>,
+            <a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-2-from-it-runs-to-it-measures-b36c915f08b9" target="_blank" rel="noopener noreferrer">Part 2: From It Runs to It Measures</a>,
+            <a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-6-from-fast-runs-to-honest-4b58288da8da" target="_blank" rel="noopener noreferrer">Part 6: From Fast Runs to Honest Edge-Case Scoring</a>,
             and
-            <a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-2-from-it-runs-to-it-measures-b36c915f08b9" target="_blank" rel="noopener noreferrer">Part 2: From It Runs to It Measures</a>.
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-007/article.txt" target="_blank" rel="noopener noreferrer">Part 7: From Benchmark Logs to an Operator Console</a>.
           </p>
         </div>
 
@@ -347,14 +349,14 @@
 
         <p>
           MCC is not only a generator. We use it as a repeatable validation loop for Cloud Health Office itself.
-          The latest published local result comes from Docker Desktop Kubernetes with Docker allocated 18 CPUs
-          and approximately 24 GB of memory. The raw throughput is less important than the shape of the measurement:
-          about 10.5 claims/sec per allocated CPU, tail latency reported with the run, and correctness checks kept in the same artifact.
+          The latest published scale result comes from Docker Desktop Kubernetes with Docker allocated 18 CPUs
+          and roughly 23.4 GiB of memory. The raw throughput is less important than the shape of the measurement:
+          tail latency, platform failures, expected pends, workflow checks, unsupported scenarios, and payment delta kept in the same artifact.
         </p>
 
         <table>
           <thead>
-            <tr><th>Run</th><th>Claims</th><th>Throughput</th><th>P95</th><th>P99</th><th>Platform Failures</th><th>Workflow Checks</th></tr>
+            <tr><th>Run</th><th>Claims</th><th>Throughput</th><th>P95</th><th>P99</th><th>Platform Failures</th><th>Workflow / Evidence</th></tr>
           </thead>
           <tbody>
             <tr>
@@ -385,13 +387,31 @@
               <td>4,000/4,000 matched</td>
             </tr>
             <tr>
-              <td><strong>50,000 repeat adjudication run, p=10</strong></td>
+              <td><strong>50,000 repeat throughput run, p=10</strong></td>
               <td>50,000</td>
               <td>188.64 claims/sec</td>
               <td>106 ms</td>
               <td>151 ms</td>
               <td>0</td>
-              <td>4,000/4,000 matched</td>
+              <td>4,000/4,000 matched; historical throughput baseline</td>
+            </tr>
+            <tr>
+              <td><strong>50,000 breadth validation, p=10</strong></td>
+              <td>50,000</td>
+              <td>68.86 claims/sec</td>
+              <td>298 ms</td>
+              <td>369 ms</td>
+              <td>0</td>
+              <td>5,767/6,500 matched; 0 mismatches; 733 unsupported; 460/460 expected pends observed</td>
+            </tr>
+            <tr>
+              <td><strong>5,000 console evidence run, p=10</strong></td>
+              <td>5,000</td>
+              <td>37.90 claims/sec</td>
+              <td>384 ms</td>
+              <td>466 ms</td>
+              <td>0</td>
+              <td>577/650 matched; 0 mismatches; 73 unsupported; evidence-first sample visible in portal</td>
             </tr>
           </tbody>
         </table>
@@ -401,7 +421,8 @@
           <p>
             The first 50,000-claim run includes provider seeding, which answers whether a local environment can prepare itself and process the workload correctly.
             The repeat run skips provider seeding against an already-prepared tenant, which gives a cleaner view of steady-state adjudication throughput.
-            Both are useful; they answer different questions.
+            The later breadth run answers a different question: whether more edge-case scenarios can be scored honestly, with unsupported gaps separated from mismatches.
+            All three are useful; they answer different questions.
           </p>
         </div>
 
@@ -415,12 +436,11 @@
           <div class="callout-title">Current proof vs benchmark design</div>
           <p>
             The benchmark design is the full million-claim corpus with 29 named edge-case scenarios and target scoring tiers.
-            The latest published Cloud Health Office result is narrower: a 50,000-claim local Kubernetes validation with
-            workflow checks across four deterministic dispositions. That gap is intentional and public.
+            The latest published Cloud Health Office result is narrower: a 50,000-claim local Kubernetes breadth validation with
+            pended observation, zero scoreable workflow mismatches, unsupported scenarios reported separately, and payment delta visible as a diagnostic. That gap is intentional and public.
           </p>
           <p>
-            Our next proof milestone is not just a larger run. It is broader accuracy coverage across more of the 29 edge scenarios,
-            followed by 250K, 500K, and full-million adjudication runs so the evidence catches up to the name.
+            Our next proof milestone is not just a larger run. It is stricter scoring: a false-pend sweep across expected-pay and expected-deny claims, a formal amount-level payment gate, a fresh 50K evidence-first console run, and then a focused 100K milestone before 250K, 500K, and full-million adjudication runs.
           </p>
         </div>
 
