@@ -147,7 +147,8 @@ public class ClaimsService : IClaimsService
     public async Task<List<MassAdjudicationClaimResult>> GetMassAdjudicationClaimResultsAsync(
         string runId,
         string? outcome = null,
-        int limit = 250)
+        int limit = 250,
+        string? validationStatus = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
         try
@@ -156,6 +157,11 @@ public class ClaimsService : IClaimsService
             if (!string.IsNullOrWhiteSpace(outcome))
             {
                 query += $"&outcome={Uri.EscapeDataString(outcome)}";
+            }
+
+            if (!string.IsNullOrWhiteSpace(validationStatus))
+            {
+                query += $"&validationStatus={Uri.EscapeDataString(validationStatus)}";
             }
 
             using var request = CreateMassAdjudicationRequest(

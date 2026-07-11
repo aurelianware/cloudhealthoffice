@@ -12,6 +12,7 @@ public interface IMassAdjudicationRunRepository
         string tenantId,
         string runId,
         string? outcome,
+        string? validationStatus,
         int limit,
         CancellationToken ct = default);
 
@@ -98,6 +99,7 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
         string tenantId,
         string runId,
         string? outcome,
+        string? validationStatus,
         int limit,
         CancellationToken ct = default)
     {
@@ -110,6 +112,11 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
         if (!string.IsNullOrWhiteSpace(outcome))
         {
             filters.Add(Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.Outcome, outcome));
+        }
+
+        if (!string.IsNullOrWhiteSpace(validationStatus))
+        {
+            filters.Add(Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.ValidationStatus, validationStatus));
         }
 
         return await _claimResults
@@ -194,6 +201,7 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
         string tenantId,
         string runId,
         string? outcome,
+        string? validationStatus,
         int limit,
         CancellationToken ct = default)
     {
@@ -205,6 +213,11 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
             if (!string.IsNullOrWhiteSpace(outcome))
             {
                 query = query.Where(x => string.Equals(x.Outcome, outcome, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(validationStatus))
+            {
+                query = query.Where(x => string.Equals(x.ValidationStatus, validationStatus, StringComparison.OrdinalIgnoreCase));
             }
 
             return Task.FromResult<IReadOnlyList<MassAdjudicationClaimResult>>(

@@ -16,7 +16,8 @@ public interface IClaimsService
     Task<List<MassAdjudicationClaimResult>> GetMassAdjudicationClaimResultsAsync(
         string runId,
         string? outcome = null,
-        int limit = 250);
+        int limit = 250,
+        string? validationStatus = null);
     Task<string> SubmitClaimAsync(SubmitClaimRequest request);
     Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null);
     Task<AdjudicationTransparencyData?> GetAdjudicationDataAsync(string claimId);

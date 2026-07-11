@@ -43,6 +43,7 @@ public sealed class MassAdjudicationRunsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<MassAdjudicationClaimResult>>> ListClaimResults(
         string id,
         [FromQuery] string? outcome = null,
+        [FromQuery] string? validationStatus = null,
         [FromQuery] int limit = 250,
         CancellationToken ct = default)
     {
@@ -53,7 +54,7 @@ public sealed class MassAdjudicationRunsController : ControllerBase
             return NotFound();
         }
 
-        var results = await _repository.ListClaimResultsAsync(tenantId, id, outcome, limit, ct);
+        var results = await _repository.ListClaimResultsAsync(tenantId, id, outcome, validationStatus, limit, ct);
         return Ok(results);
     }
 
