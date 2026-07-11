@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Running a Healthcare Claims Platform Locally in Kubernetes, Part 5: From Faster to Repeatably Faster | Cloud Health Office</title>
+  <meta name="description" content="How the local Kubernetes sweep harness turned isolated fast runs into repeatable performance evidence.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/million-claim-challenge/part-5-repeatably-faster">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Running a Healthcare Claims Platform Locally in Kubernetes, Part 5: From Faster to Repeatably Faster">
+  <meta property="og:description" content="How the local Kubernetes sweep harness turned isolated fast runs into repeatable performance evidence.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/million-claim-challenge/part-5-repeatably-faster">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .source-note { font-size: .9rem !important; color: #8b949e !important; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+    .evidence-block summary { cursor: pointer; padding: 18px 20px; color: #00ffff; font-weight: 700; background: #0d1117; }
+    .evidence-block pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 22px; background: #080c10; color: #c9d1d9; font-size: .84rem; line-height: 1.55; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/docs/million-claim-challenge">Million Claim Challenge</a></nav>
+    <div class="eyebrow">Million Claim Challenge · Part 5</div>
+    <h1>Running a Healthcare Claims Platform Locally in Kubernetes, Part 5: From Faster to Repeatably Faster</h1>
+    <div class="disclosure"><strong>Evidence scope:</strong> This engineering field note describes local Kubernetes development and validation. It is not a production-cloud capacity claim or evidence that the full one-million-claim corpus has been completed.</div>
+    <div class="article-links">
+      <a href="/docs/million-claim-challenge/evidence#episode-005">View evidence</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-005/article.txt" target="_blank" rel="noopener noreferrer">View article source</a>
+    </div>
+    <p>In the last few iterations of the Million Claim Challenge, CloudHealthOffice made a meaningful jump.</p>
+<p>We were no longer just proving that the platform could run locally in Kubernetes. We were proving that real healthcare administration workflows could execute end to end: claim submission, scrubbing, provider checks, prior authorization logic, benefit plan adjudication, accumulator updates, claim writeback, and outcome reporting.</p>
+<p>But there is a trap in performance work: one fast run can feel like progress, even when it is not yet evidence.</p>
+<p>So this phase was about repeatable measurement.</p>
+<p>Not &quot;it felt faster.&quot;</p>
+<p>Not &quot;this one run looked good.&quot;</p>
+<p>Repeatable measurement.</p>
+<h2 id="a-fast-run-is-not-a-benchmark">A fast run is not a benchmark</h2>
+<p>When tuning a claims platform, throughput alone is not enough.</p>
+<p>A benchmark has to answer more than one question:</p>
+<ul><li>How many claims per second did we process?</li><li>What was the P95 latency?</li><li>What happened at P99?</li><li>Did any platform failures occur?</li><li>Did workflow validation still pass?</li><li>Were business denials correctly distinguished from platform errors?</li><li>Did the same configuration perform consistently across repeated runs?</li></ul>
+<p>For CloudHealthOffice, the Million Claim Challenge is not just a speed test. It is a workflow validation exercise. The goal is to prove that the platform can process claims correctly under pressure, not merely move HTTP requests through a local cluster.</p>
+<h2 id="building-the-sweep-harness">Building the sweep harness</h2>
+<p>To make tuning more disciplined, we added a local Kubernetes sweep harness.</p>
+<p>The script runs the MCC validator across configurable parallelism values and repeats each value multiple times.</p>
+<p>``<code>bash SKIP_BUILD=true \ CLAIMS=1000 \ PARALLELISM_VALUES=&quot;8 10 11 12&quot; \ REPEATS=2 \ ./scripts/sweep-mcc-local-k8s.sh </code>``</p>
+<p>The harness captures raw Kubernetes job logs, machine-readable summary JSON, throughput, P95/P99 latency, stage-level adjudication timings, platform failures, workflow validation counts, and averaged results by parallelism.</p>
+<p>That changed the tuning conversation.</p>
+<p>Instead of guessing which setting is better, we can run a sweep and compare the output.</p>
+<h2 id="the-first-sweep">The first sweep</h2>
+<p>The first sweep compared parallelism values of 8, 10, 11, and 12.</p>
+<p>At 1,000 claims, parallelism 11 was the strongest setting:</p>
+<ul><li>247.10 claims per second</li><li>100.35 ms P95 latency</li><li>128.53 ms P99 latency</li><li>zero platform failures</li><li>160/160 workflow checks matched</li></ul>
+<p>That was a good result.</p>
+<p>But it was also the reason we needed a larger run.</p>
+<p>A setting that wins at 1,000 claims may not win at 10,000. And a setting that wins at 10,000 may behave differently at 50,000.</p>
+<p>That is the whole point of repeatable benchmarking.</p>
+<h2 id="the-10-000-claim-sweep-changed-the-answer">The 10,000-claim sweep changed the answer</h2>
+<p>At 10,000 claims, the answer changed.</p>
+<p>Parallelism 11 was no longer the clean winner. Parallelism 10 became the better balance.</p>
+<p>The 10,000-claim sweep showed:</p>
+<ul><li>p=10: 209.54 claims/sec, 103.47 ms P95, 149.85 ms P99</li><li>p=12: 209.81 claims/sec, 118.19 ms P95, 170.90 ms P99</li></ul>
+<p>Parallelism 12 had a tiny throughput edge, but parallelism 10 had cleaner latency.</p>
+<p>That matters.</p>
+<p>The goal is not to crank parallelism until the throughput number looks impressive. The goal is to find the setting where the system keeps its shape: throughput, tail latency, platform reliability, and workflow correctness together.</p>
+<p>These runs were performed locally on Docker Desktop Kubernetes with Docker allocated 18 CPUs and approximately 24 GB of memory. This is not a production benchmark. It is a local proving ground where the platform can be evaluated repeatably before moving to cloud-scale testing.</p>
+<h2 id="finding-a-benchmark-ceiling">Finding a benchmark ceiling</h2>
+<p>When we tried to move from 10,000 claims to 50,000, we found something important.</p>
+<p>The validator was intentionally capped at 10,000 claims to avoid excessive in-memory allocation during local validation.</p>
+<p>That was a reasonable safety guard earlier in the project.</p>
+<p>But now it was blocking the benchmark.</p>
+<p>So we made the cap explicit.</p>
+<p>The validator keeps the safe default cap, but allows larger runs when the caller intentionally opts in with a max-claims override. The local Kubernetes scripts pass that override when <code>CLAIMS</code> is set higher.</p>
+<p>That is the kind of thing a serious benchmark exposes.</p>
+<p>Not just &quot;how fast is it?&quot;</p>
+<p>But also:</p>
+<ul><li>Are we measuring what we think we are measuring?</li><li>Are there hidden caps?</li><li>Are the scripts honest?</li><li>Does the summary JSON match the requested workload?</li><li>Can the result be reproduced?</li></ul>
+<p>The first attempted 50,000-claim run silently processed 10,000 because of the cap.</p>
+<p>After the fix, the validator reported the real workload:</p>
+<ul><li>50,000 requested</li><li>50,000 generated</li><li>50,000 processed</li></ul>
+<p>That is benchmark discipline.</p>
+<h2 id="the-true-50-000-claim-local-kubernetes-run">The true 50,000-claim local Kubernetes run</h2>
+<p>With the cap fixed, we ran a true 50,000-claim local Kubernetes validation at parallelism 10.</p>
+<p>The result:</p>
+<ul><li>50,000 claims requested</li><li>50,000 claims generated</li><li>50,000 claims processed</li><li>157.07 claims per second</li><li>5 minutes 18 seconds elapsed</li><li>130 ms P95 latency</li><li>175 ms P99 latency</li><li>zero platform failures</li><li>4,000/4,000 workflow checks matched</li></ul>
+<p>This was not just a bigger number.</p>
+<p>It also validated a larger workflow mix:</p>
+<ul><li>1,000 clean paid scenarios</li><li>1,000 excluded provider scenarios</li><li>1,000 uncovered service scenarios</li><li>1,000 prior authorization scenarios</li></ul>
+<p>Every deterministic workflow check matched.</p>
+<p>That is the result that matters most.</p>
+<p>Throughput is important. But throughput without correctness is just fast noise.</p>
+<h2 id="separating-setup-cost-from-adjudication-throughput">Separating setup cost from adjudication throughput</h2>
+<p>After the true 50,000-claim run, we ran one more important test.</p>
+<p>The first successful 50,000-claim validation included provider seeding. That is useful for a first-time local validation because the demo tenant needs synthetic providers before claims can be checked against provider rules.</p>
+<p>But once the tenant has already been seeded, provider setup is no longer part of the steady-state adjudication path.</p>
+<p>So the local Kubernetes scripts now allow repeat benchmark runs to skip provider seeding:</p>
+<p>``<code>bash SEED_PROVIDERS=false </code>``</p>
+<p>That gives a cleaner view of repeat adjudication throughput against an already-prepared tenant.</p>
+<p>The difference was meaningful:</p>
+<ul><li>with provider seeding: 157.07 claims/sec, 130 ms P95, 175 ms P99</li><li>skipping provider seeding: 188.64 claims/sec, 106 ms P95, 151 ms P99</li></ul>
+<p>Both runs still completed with zero platform failures and 4,000/4,000 workflow checks matched.</p>
+<p>That is an important distinction.</p>
+<p>The first run answers, &quot;Can this local environment prepare itself and process the workload correctly?&quot;</p>
+<p>The repeat run answers, &quot;Once setup is out of the way, how fast can the adjudication path run while preserving correctness?&quot;</p>
+<p>Both questions matter. But they should not be blended together without saying so.</p>
+<h2 id="correct-denials-are-not-failures">Correct denials are not failures</h2>
+<p>One of the most important ideas in the Million Claim Challenge is that not every unpaid claim is a problem.</p>
+<p>Some claims should deny.</p>
+<p>A claim might fail business rules because of uncovered services, duplicate logic, excluded providers, prior authorization requirements, coding edits, or plan rules.</p>
+<p>Those are valid outcomes when the platform applies the rules correctly.</p>
+<p>The sweep preserves that distinction.</p>
+<p>A business denial is not counted as a platform failure. A platform failure is an unexpected error, infrastructure issue, service failure, or workflow breakdown.</p>
+<p>That distinction is essential if we are going to benchmark healthcare administration software honestly.</p>
+<p>A platform that pays everything quickly is not impressive.</p>
+<p>A platform that processes claims quickly, applies business rules correctly, explains denials, and records outcomes cleanly is much more interesting.</p>
+<h2 id="where-we-are-now">Where we are now</h2>
+<p>CloudHealthOffice can now run the Million Claim Challenge locally in Kubernetes, validate real workflow outcomes, record mass adjudication runs, inspect claim-level results, sweep performance configurations, and scale beyond the original 10,000-claim validation ceiling.</p>
+<p>The current local result:</p>
+<p>&gt; 50,000 claims processed in Kubernetes, 188.64 claims per second on a repeat run with provider seeding skipped, 106 ms P95 latency, 151 ms P99 latency, zero platform failures, and 4,000/4,000 workflow checks matched.</p>
+<p>That is a very good place to be.</p>
+<p>But more importantly, we now have a way to keep pushing.</p>
+<p>Not by guessing.</p>
+<p>By measuring.</p>
+    <div class="article-links"><a href="/insights/million-claim-challenge">All MCC articles</a><a href="/docs/million-claim-challenge/evidence">Evidence archive</a></div>
+  </main>
+</body>
+</html>

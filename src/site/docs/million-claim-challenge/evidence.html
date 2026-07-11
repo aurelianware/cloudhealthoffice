@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Million Claim Challenge Evidence Archive | Cloud Health Office</title>
+  <meta name="description" content="Dated benchmark summaries, environment details, limitations, and raw artifacts for published Million Claim Challenge engineering results.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/million-claim-challenge/evidence">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Million Claim Challenge Evidence Archive">
+  <meta property="og:description" content="Dated benchmark summaries, environment details, limitations, and raw artifacts for published Million Claim Challenge engineering results.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/million-claim-challenge/evidence">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .source-note { font-size: .9rem !important; color: #8b949e !important; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+    .evidence-block summary { cursor: pointer; padding: 18px 20px; color: #00ffff; font-weight: 700; background: #0d1117; }
+    .evidence-block pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 22px; background: #080c10; color: #c9d1d9; font-size: .84rem; line-height: 1.55; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/docs/million-claim-challenge">Million Claim Challenge</a></nav>
+    <div class="eyebrow">Reproducibility archive</div><h1>Million Claim Challenge Evidence</h1><p>This archive keeps the evidence behind the engineering series visible and reviewable. Results are historical records, not generalized production capacity claims.</p><div class="disclosure"><strong>Interpretation rules:</strong> distinguish platform failures from business dispositions; do not count unsupported scenarios as passes; preserve allocated compute, corpus size, latency, and validator limitations with every result.</div><section id="episode-005"><div class="eyebrow">Part 5 · recorded artifact</div><h2>How the local Kubernetes sweep harness turned isolated fast runs into repeatable performance evidence.</h2><div class="article-links"><a href="/insights/million-claim-challenge/part-5-repeatably-faster">Read article</a><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-005/benchmark-results.txt" target="_blank" rel="noopener noreferrer">Source artifact</a></div><details class="evidence-block" open><summary>Benchmark results recorded with Episode 005</summary><pre># Episode 005 benchmark results
+
+## Environment
+
+- Environment: local Kubernetes via Docker Desktop
+- Docker resource allocation: 18 CPUs, approximately 24 GB memory
+- Tenant: `demo`
+- Workload: synthetic Million Claim Challenge claim corpus
+- Important caveat: these are local validation benchmarks, not production cloud benchmarks
+
+## 1,000-claim sweep
+
+The first sweep compared parallelism values 8, 10, 11, and 12 with two repeats each.
+
+The strongest result at 1,000 claims was parallelism 11:
+
+| Metric | Value |
+| --- | ---: |
+| Claims processed | 1,000 |
+| Parallelism | 11 |
+| Throughput | 247.10 claims/sec |
+| P95 latency | 100.35 ms |
+| P99 latency | 128.53 ms |
+| Platform failures | 0 |
+| Workflow checks | 160/160 matched |
+
+Interpretation: At 1,000 claims, p=11 had the best combination of throughput, latency, and workflow correctness.
+
+## 10,000-claim sweep
+
+The larger sweep changed the answer.
+
+| Parallelism | Claims/sec | P95 | P99 | Interpretation |
+| ---: | ---: | ---: | ---: | --- |
+| 10 | 209.54 | 103.47 ms | 149.85 ms | Better balance |
+| 12 | 209.81 | 118.19 ms | 170.90 ms | Tiny throughput edge, worse latency |
+
+Conclusion: p=10 is the better 10,000-claim setting despite p=12 having a tiny throughput edge. The latency profile matters.
+
+## Hidden 10,000-claim cap
+
+An attempted 50,000-claim run initially processed only 10,000 claims because the validator had a local safety cap.
+
+The fix was to make the cap explicit:
+
+- keep default max claims at 10,000
+- add an intentional `--max-claims` override
+- have local Kubernetes scripts pass the override when larger `CLAIMS` values are requested
+
+This is an important podcast point: repeatable benchmarking also validates the benchmark tooling.
+
+## True 50,000-claim run
+
+After the max-claims override, the platform completed a true 50,000-claim local Kubernetes run.
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 50,000 |
+| Claims generated | 50,000 |
+| Claims processed | 50,000 |
+| Throughput | 157.07 claims/sec |
+| Elapsed time | 5 minutes 18 seconds |
+| P95 latency | 130 ms |
+| P99 latency | 175 ms |
+| Platform failures | 0 |
+| Workflow checks | 4,000/4,000 matched |
+
+The deterministic workflow checks included:
+
+- 1,000 clean paid scenarios
+- 1,000 excluded provider scenarios
+- 1,000 uncovered service scenarios
+- 1,000 prior authorization scenarios
+
+## Repeat benchmark without provider seeding
+
+Once the demo tenant had already been seeded with synthetic providers, the repeat benchmark could skip provider seeding.
+
+| Mode | Elapsed | Claims/sec | P95 | P99 | Platform failures | Workflow checks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| With provider seed | 5:18 | 157.07 | 130 ms | 175 ms | 0 | 4,000/4,000 |
+| Skip provider seed | 4:25 | 188.64 | 106 ms | 151 ms | 0 | 4,000/4,000 |
+
+Interpretation: skipping provider seeding for repeat runs gives a cleaner adjudication throughput measurement and avoids paying first-run setup cost every time.
+
+## Correctness framing
+
+Correct denials are not failures.
+
+Business denials can be valid outcomes when the platform applies rules correctly. Examples include uncovered services, excluded providers, prior authorization requirements, duplicate logic, coding edits, and benefit plan limits.
+
+Platform failures are unexpected system or workflow failures.
+
+The benchmark must always report speed and correctness together.
+</pre></details></section>
+<section id="episode-006"><div class="eyebrow">Part 6 · recorded artifact</div><h2>Why paid is not the only correct outcome, and why unsupported scenarios must remain visible.</h2><div class="article-links"><a href="/insights/million-claim-challenge/part-6-honest-edge-case-scoring">Read article</a><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-006/benchmark-results.txt" target="_blank" rel="noopener noreferrer">Source artifact</a><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-006/raw-validator-output-50k.txt" target="_blank" rel="noopener noreferrer">Raw 50K validator output</a></div><details class="evidence-block" open><summary>Benchmark results recorded with Episode 006</summary><pre># Episode 006 benchmark results
+
+## Environment
+
+- Environment: local Kubernetes via Docker Desktop
+- Docker Desktop resources: 18 CPUs, 25,159,270,400 bytes memory (~23.4 GiB)
+- Tenant: `demo`
+- Workload: synthetic Million Claim Challenge claim corpus
+- Generator seed: 42
+- Line of business: Medicaid (3)
+- Prior-auth scenarios: enabled at 2%
+- Pend observation: enabled
+- Pend observation timeout: 45 seconds
+- Parallelism: 10
+- Member seeding: enabled
+- Provider seeding: enabled
+- Source revision for packet: `8d55a38b` (`Fix MCC COB fixture isolation (#858)`)
+- Raw final 50K validator output: `raw-validator-output-50k.txt`
+- Important caveat: these are local validation benchmarks, not production cloud benchmarks
+
+Tenant-state caveat:
+
+The final 50K run used the long-lived local `demo` tenant, not a freshly reset tenant. The raw seeding log shows 49,425 members and 99,956 providers already present before the run, plus 12 existing COB coverage rows. The validator added 448 synthetic members and 448 COB coverage rows for the final 50K run. A clean cluster should reproduce the same workflow logic, but seeding counts and any state-sensitive behavior can differ.
+
+Payment-delta caveat:
+
+`Avg payment delta` is the average absolute difference, for paid claims only, between the adjudication response's `Totals.PlanPayment` and the synthetic corpus answer key's `ExpectedPaidAmount`. In the final 50K raw output it was `$59.36`. Episode 006 workflow scoring validates disposition and workflow outcomes: paid, denied with the expected business reason, pended, unsupported, or platform failure. Payment-amount accuracy is visible as a diagnostic, but it is not yet a pass/fail scoring gate in this packet.
+
+## Current baseline: 5,000-claim breadth validation
+
+This run was completed after PR 856.
+
+The raw console output was not retained as a separate artifact, but the exact command, summary, and scenario table are recorded below.
+
+Run source revision:
+
+- `0c0b8f14` (`Avoid duplicate MCC newborn mother line codes (#856)`)
+
+Command:
+
+```bash
+CLAIMS=5000 MAX_CLAIMS=5000 PARALLELISM=10 PROGRESS_EVERY=500 SEED_MEMBERS=true SEED_PROVIDERS=true PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+```
+
+Summary:
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 5,000 |
+| Claims processed | 5,000 |
+| Paid/adjudicated | 3,958 |
+| Pended | 46 |
+| Business denials | 996 |
+| Platform failures | 0 |
+| Observation timeouts | 0 |
+| Expected-pend observations | 46/46 pended |
+| Workflow checks | 577/650 matched |
+| Mismatches | 0 |
+| Unsupported | 73 |
+| Elapsed | 00:59.731 |
+| Throughput | 83.71 claims/sec |
+| P95 latency | 204 ms |
+| P99 latency | 278 ms |
+
+Business denial breakdown:
+
+| Denial | Count |
+| --- | ---: |
+| CARC_96 | 448 |
+| CARC_18 | 300 |
+| PRIOR_AUTH_REQUIRED | 108 |
+| PROVIDER_EXCLUDED | 100 |
+| NCCI_MUE_EDIT_FAILURE | 24 |
+
+Key matched scenario groups:
+
+| Scenario | Result |
+| --- | ---: |
+| CleanProfessionalPaid | 100/100 matched |
+| ExcludedProviderDenied | 100/100 matched |
+| TxStarInpatientNoAuth | 100/100 matched |
+| UncoveredServiceDenied | 100/100 matched |
+| EdgeCase:NewbornAutoAdjudication | 10/10 matched |
+| EdgeCase:NewbornFirstThirtyDays | 10/10 matched |
+| EdgeCase:NewbornMotherClaimLink | 10/10 matched |
+| EdgeCase:RetroEligibilityTermination | 13/13 matched |
+| EdgeCase:CobSecondaryPayer | 10/10 matched |
+| EdgeCase:CobBirthdayRule | 10/10 matched |
+| EdgeCase:CobGenderRule | 10/10 matched |
+| EdgeCase:PriorAuthRequired_NoAuth | 8/8 matched |
+
+Unsupported scenario groups:
+
+| Scenario | Unsupported |
+| --- | ---: |
+| EdgeCase:BehavioralHealthCarveOut | 10 |
+| EdgeCase:MedicaidSpendDown | 6 |
+| EdgeCase:PriorAuthRequired_ExpiredAuth | 8 |
+| EdgeCase:PriorAuthRequired_WrongProcedure | 8 |
+| EdgeCase:PriorAuthRequired_WrongProvider | 8 |
+| EdgeCase:RetroEligibilityCoverageChange | 13 |
+| EdgeCase:SubrogationAccidentRelated | 7 |
+| EdgeCase:SubrogationThirdPartyLiability | 6 |
+| EdgeCase:SubrogationWorkersComp | 7 |
+
+Interpretation:
+
+The 5K run is the first clean breadth baseline for Episode 006. It is not a final publication headline by itself, but it proves that the broader edge-case scoring path can run with zero mismatches and zero platform failures when unsupported scenarios are separated honestly.
+
+## 10,000-claim breadth validation
+
+This run was completed after the COB fixture-isolation fix and before the clean 50K breadth validation run.
+
+The clean 10K run was part of the post-PR-858 confidence gate. The raw console output was not retained as a separate artifact, but the exact command, summary, and scenario table are recorded below.
+
+Run source revision:
+
+- `8d55a38b` (`Fix MCC COB fixture isolation (#858)`)
+
+Command:
+
+```bash
+CLAIMS=10000 MAX_CLAIMS=10000 PARALLELISM=10 PROGRESS_EVERY=1000 SEED_MEMBERS=true SEED_PROVIDERS=true PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+```
+
+Summary:
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 10,000 |
+| Claims processed | 10,000 |
+| Paid/adjudicated | 7,910 |
+| Pended | 92 |
+| Business denials | 1,998 |
+| Platform failures | 0 |
+| Observation timeouts | 0 |
+| Expected-pend observations | 92/92 pended |
+| Workflow checks | 1,154/1,300 matched |
+| Mismatches | 0 |
+| Unsupported | 146 |
+| Elapsed | 02:08.011 |
+| Throughput | 78.12 claims/sec |
+| P95 latency | 272 ms |
+| P99 latency | 306 ms |
+
+Key matched scenario groups:
+
+| Scenario | Result |
+| --- | ---: |
+| CleanProfessionalPaid | 200/200 matched |
+| ExcludedProviderDenied | 200/200 matched |
+| TxStarInpatientNoAuth | 200/200 matched |
+| UncoveredServiceDenied | 200/200 matched |
+| EdgeCase:NewbornAutoAdjudication | 20/20 matched |
+| EdgeCase:NewbornFirstThirtyDays | 20/20 matched |
+| EdgeCase:NewbornMotherClaimLink | 20/20 matched |
+| EdgeCase:RetroEligibilityTermination | 27/27 matched |
+| EdgeCase:CobSecondaryPayer | 20/20 matched |
+| EdgeCase:CobBirthdayRule | 20/20 matched |
+| EdgeCase:CobGenderRule | 20/20 matched |
+| EdgeCase:PriorAuthRequired_NoAuth | 16/16 matched |
+
+Interpretation:
+
+The post-fix 10K gate passed. The 5K zero-mismatch breadth result held at double the volume, supported COB-pend fixture rows were isolated and seeded one-for-one, expected-pend observation remained reliable, and unsupported scenarios continued to be separated from mismatches.
+
+## Remaining Part 6 validation gate
+
+Part 6 now has 5K, 10K, and 50K breadth validation data.
+
+100K is intentionally out of scope for Part 6. After the clean 50K breadth result, 100K should become its own focused milestone article rather than a late addition to this one.
+
+### 50,000-claim breadth validation
+
+Purpose:
+
+- replace the older narrow 50K result with a broader edge-case validation result
+- confirm the Part 6 story scales from breadth smoke to a meaningful local workload
+- provide a direct bridge from Episode 005 throughput work to Episode 006 correctness work
+
+Run source revision:
+
+- `8d55a38b` (`Fix MCC COB fixture isolation (#858)`)
+
+Command:
+
+```bash
+CLAIMS=50000 MAX_CLAIMS=50000 PARALLELISM=10 PROGRESS_EVERY=5000 SEED_MEMBERS=true SEED_PROVIDERS=true PEND_OBSERVATION_ENABLED=true PEND_OBSERVATION_TIMEOUT_SECONDS=45 scripts/run-mcc-local-k8s.sh
+```
+
+Summary:
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 50,000 |
+| Claims processed | 50,000 |
+| Paid/adjudicated | 39,581 |
+| Pended | 460 |
+| Business denials | 9,959 |
+| Platform failures | 0 |
+| Observation timeouts | 0 |
+| Expected-pend observations | 460/460 pended |
+| Workflow checks | 5,767/6,500 matched |
+| Mismatches | 0 |
+| Unsupported | 733 |
+| Elapsed | 12:06.089 |
+| Throughput | 68.86 claims/sec |
+| P95 latency | 298 ms |
+| P99 latency | 369 ms |
+| Avg payment delta | $59.36 |
+
+Timing:
+
+| Stage | Avg | P95 |
+| --- | ---: | ---: |
+| Submit | 44 ms | 130 ms |
+| Adjudicate | 66 ms | 115 ms |
+| Writeback | 36 ms | 98 ms |
+| Benefit calculation | 61 ms | 104 ms |
+| Accumulator read | 60 ms | 103 ms |
+
+Business denial breakdown:
+
+| Denial | Count |
+| --- | ---: |
+| CARC_96 | 4,542 |
+| CARC_18 | 3,000 |
+| PRIOR_AUTH_REQUIRED | 1,080 |
+| PROVIDER_EXCLUDED | 1,000 |
+| NCCI_MUE_EDIT_FAILURE | 187 |
+
+Key matched scenario groups:
+
+| Scenario | Result |
+| --- | ---: |
+| CleanProfessionalPaid | 1,000/1,000 matched |
+| ExcludedProviderDenied | 1,000/1,000 matched |
+| TxStarInpatientNoAuth | 1,000/1,000 matched |
+| UncoveredServiceDenied | 1,000/1,000 matched |
+| EdgeCase:NewbornAutoAdjudication | 100/100 matched |
+| EdgeCase:NewbornFirstThirtyDays | 100/100 matched |
+| EdgeCase:NewbornMotherClaimLink | 100/100 matched |
+| EdgeCase:RetroEligibilityTermination | 133/133 matched |
+| EdgeCase:RetroEligibilityAdd | 134/134 matched |
+| EdgeCase:CobBirthdayRule | 100/100 matched |
+| EdgeCase:CobGenderRule | 100/100 matched |
+| EdgeCase:CobMedicareSecondary | 100/100 matched |
+| EdgeCase:CobPrimaryPayer | 100/100 matched |
+| EdgeCase:CobSecondaryPayer | 100/100 matched |
+| EdgeCase:CobTertiaryPayer | 100/100 matched |
+| EdgeCase:MedicaidCHIP | 60/60 matched |
+| EdgeCase:MedicaidDualEligible | 60/60 matched |
+| EdgeCase:MedicaidSSI | 60/60 matched |
+| EdgeCase:MedicaidTANF | 60/60 matched |
+| EdgeCase:BehavioralHealthCarveIn | 100/100 matched |
+| EdgeCase:BehavioralHealthParityCheck | 100/100 matched |
+| EdgeCase:PriorAuthRequired_NoAuth | 80/80 matched |
+| EdgeCase:PriorAuthRequired_AuthOnFile | 80/80 matched |
+
+Unsupported scenario groups:
+
+| Scenario | Unsupported |
+| --- | ---: |
+| EdgeCase:BehavioralHealthCarveOut | 100 |
+| EdgeCase:MedicaidSpendDown | 60 |
+| EdgeCase:PriorAuthRequired_ExpiredAuth | 80 |
+| EdgeCase:PriorAuthRequired_WrongProcedure | 80 |
+| EdgeCase:PriorAuthRequired_WrongProvider | 80 |
+| EdgeCase:RetroEligibilityCoverageChange | 133 |
+| EdgeCase:SubrogationAccidentRelated | 67 |
+| EdgeCase:SubrogationThirdPartyLiability | 66 |
+| EdgeCase:SubrogationWorkersComp | 67 |
+
+Interpretation:
+
+The 50K gate passed cleanly: every claim processed, expected pends were observed through persisted claim status, there were no platform failures, there were no pend observation timeouts, and there were no workflow mismatches.
+
+This run replaced the earlier one-mismatch 50K result after isolating supported COB-pend members by generated claim. The earlier mismatch was a benchmark fixture-isolation issue: expected-pend COB scenarios could share a generated member, so one scenario could miss its own seeded COB row. The clean rerun confirms `EdgeCase:CobSecondaryPayer` at 100/100 matched.
+
+Pend-observation caveat:
+
+The pend-observation pass polls persisted claim status only for scenarios whose answer-key outcome is `Pended`. It proves expected-pend claims persisted as pended. It does not, by itself, detect the inverse error where a claim expected to pay or deny later persists as pended. A future validator enhancement should add an optional persisted-status sweep for non-pend scenarios to detect false pends.
+
+## Future milestone: 100,000 claims
+
+The next publication candidate after Part 6 is a focused 100K milestone.
+
+That future article should answer a different question: once broader edge-case scoring is established at 50K, how far can the local Kubernetes validation path scale before the next bottleneck appears?
+
+100K should not block Part 6.
+
+## Correctness framing
+
+Correctness is not the same as payment.
+
+In MCC reporting:
+
+- `Matched` means the actual platform outcome agreed with the answer key.
+- `Mismatched` means the platform produced a scoreable outcome that disagreed with the answer key.
+- `Unsupported` means the answer key expects behavior that is not yet observable or implemented in the validator path.
+- `Platform failure` means the platform failed to submit, adjudicate, or write back a claim.
+
+Unsupported scenarios are honest gaps. They are not successes, and they are not platform failures.
+
+The current unsupported bucket is concentrated in subrogation, prior-authorization edge variants, retroactive coverage change, behavioral health carve-out, and Medicaid spend-down scenarios. Those categories are the next adjudication edit-model roadmap, not hidden successes.
+</pre></details></section>
+<section id="episode-007"><div class="eyebrow">Part 7 · recorded artifact</div><h2>Moving benchmark proof from terminal logs into an operator-facing Mass Adjudication console.</h2><div class="article-links"><a href="/insights/million-claim-challenge/part-7-operator-console">Read article</a><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-007/benchmark-results.txt" target="_blank" rel="noopener noreferrer">Source artifact</a></div><details class="evidence-block" open><summary>Benchmark results recorded with Episode 007</summary><pre># Episode 007 benchmark and console evidence notes
+
+## Environment
+
+- Environment: local Kubernetes via Docker Desktop
+- Tenant: `demo`
+- Workload: synthetic Million Claim Challenge claim corpus
+- Generator seed: 42
+- Line of business: Medicaid (3)
+- Parallelism: 6
+- Claim count: 5,000
+- Member seeding: enabled
+- Provider seeding: enabled
+- Portal URL during inspection: `http://localhost:5026`
+- Claims-service local tunnel during inspection: `http://localhost:18080`
+- Important caveat: this was a local dashboard evidence run, not a production cloud benchmark
+
+Tenant-state caveat:
+
+The run used a long-lived local demo tenant, not a freshly reset tenant. As with Episode 006, local accumulated state can affect seeding counts, duplicate-detection paths, accumulator state, and hot-path timing.
+
+Payment-delta caveat:
+
+`Avg payment delta` remains diagnostic only. It is not yet a pass/fail amount-level scoring gate. Episode 007 keeps it visible in the console story because disposition-level correctness and payment-amount correctness are related but not identical.
+
+Pend-observation caveat:
+
+Expected-pend observation remains one-directional. It verifies expected-pend claims persisted as pended, but it does not yet sweep expected-pay or expected-deny claims for false pends.
+
+## Fresh 5,000-claim dashboard evidence run
+
+Purpose:
+
+- verify the portal can inspect a freshly published mass adjudication run
+- verify claim-result filtering works for unsupported rows
+- verify the post-PR-875 evidence-first sample path is active
+- provide Part 7 with a current local run after the Mass Adjudication console work
+
+Run:
+
+- Run ID: `b376a131a5de4118a49129fd2449eaee`
+- Job name: `mcc-main875-5k-evidence`
+
+Command:
+
+```bash
+SKIP_BUILD=false CLAIMS=5000 MAX_CLAIMS=5000 PARALLELISM=6 PROGRESS_EVERY=1000 SEED_MEMBERS=true SEED_PROVIDERS=true CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS=15 JOB_NAME=mcc-main875-5k-evidence scripts/run-mcc-local-k8s.sh
+```
+
+Summary:
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 5,000 |
+| Claims processed | 5,000 |
+| Paid/adjudicated | 3,852 |
+| Pended | 46 |
+| Business denials | 1,102 |
+| Platform failures | 0 |
+| Observation timeouts | 0 |
+| Workflow checks | 577/650 matched |
+| Workflow mismatches | 0 |
+| Unsupported | 73 |
+| Workflow observation timeouts | 0 |
+| Elapsed | 02:11.910 |
+| Throughput | 37.90 claims/sec |
+| P95 latency | 384 ms |
+| P99 latency | 466 ms |
+| Avg payment delta | $66.90 |
+
+Timing:
+
+| Stage | Avg | P95 |
+| --- | ---: | ---: |
+| Submit | 8 ms | 32 ms |
+| Adjudicate | 143 ms | 375 ms |
+| Writeback | 8 ms | 48 ms |
+| Provider integrity hot path | 136 ms | 371 ms |
+| Benefit calculation | 32 ms | 90 ms |
+
+Business denial breakdown:
+
+| Denial | Count |
+| --- | ---: |
+| PROVIDER_EXCLUDED | 854 |
+| PRIOR_AUTH_REQUIRED | 108 |
+| CARC_96 | 100 |
+| NCCI_MUE_EDIT_FAILURE | 24 |
+| CARC_27 | 13 |
+
+Key matched scenario groups:
+
+| Scenario | Result |
+| --- | ---: |
+| CleanProfessionalPaid | 100/100 matched |
+| ExcludedProviderDenied | 100/100 matched |
+| TxStarInpatientNoAuth | 100/100 matched |
+| UncoveredServiceDenied | 100/100 matched |
+| EdgeCase:CobBirthdayRule | 10/10 matched |
+| EdgeCase:CobGenderRule | 10/10 matched |
+| EdgeCase:CobMedicareSecondary | 10/10 matched |
+| EdgeCase:CobPrimaryPayer | 10/10 matched |
+| EdgeCase:CobSecondaryPayer | 10/10 matched |
+| EdgeCase:CobTertiaryPayer | 10/10 matched |
+| EdgeCase:MedicaidCHIP | 6/6 matched |
+| EdgeCase:MedicaidDualEligible | 6/6 matched |
+| EdgeCase:MedicaidSSI | 6/6 matched |
+| EdgeCase:MedicaidTANF | 6/6 matched |
+| EdgeCase:NewbornAutoAdjudication | 10/10 matched |
+| EdgeCase:NewbornFirstThirtyDays | 10/10 matched |
+| EdgeCase:NewbornMotherClaimLink | 10/10 matched |
+| EdgeCase:PriorAuthRequired_AuthOnFile | 8/8 matched |
+| EdgeCase:PriorAuthRequired_NoAuth | 8/8 matched |
+| EdgeCase:RetroEligibilityAdd | 14/14 matched |
+| EdgeCase:RetroEligibilityTermination | 13/13 matched |
+
+Unsupported scenario groups:
+
+| Scenario | Unsupported |
+| --- | ---: |
+| EdgeCase:BehavioralHealthCarveOut | 10 |
+| EdgeCase:MedicaidSpendDown | 6 |
+| EdgeCase:PriorAuthRequired_ExpiredAuth | 8 |
+| EdgeCase:PriorAuthRequired_WrongProcedure | 8 |
+| EdgeCase:PriorAuthRequired_WrongProvider | 8 |
+| EdgeCase:RetroEligibilityCoverageChange | 13 |
+| EdgeCase:SubrogationAccidentRelated | 7 |
+| EdgeCase:SubrogationThirdPartyLiability | 6 |
+| EdgeCase:SubrogationWorkersComp | 7 |
+
+## Portal verification
+
+Dashboard API:
+
+- `GET http://localhost:18080/api/mass-adjudication/runs?limit=1`
+- Confirmed latest run ID: `b376a131a5de4118a49129fd2449eaee`
+
+Unsupported filter:
+
+- `GET http://localhost:18080/api/mass-adjudication/runs/b376a131a5de4118a49129fd2449eaee/claims?validationStatus=Unsupported&amp;pageSize=5`
+- Returned unsupported claim rows, including:
+  - `MCC-E-0000088`, `EdgeCase:RetroEligibilityCoverageChange`
+  - `MCC-E-0000092`, `EdgeCase:RetroEligibilityCoverageChange`
+  - `MCC-E-0000094`, `EdgeCase:RetroEligibilityCoverageChange`
+  - `MCC-E-0000167`, `EdgeCase:PriorAuthRequired_WrongProcedure`
+  - `MCC-E-0000155`, `EdgeCase:PriorAuthRequired_WrongProvider`
+
+Mismatch filter:
+
+- `GET http://localhost:18080/api/mass-adjudication/runs/b376a131a5de4118a49129fd2449eaee/claims?validationStatus=Mismatched&amp;pageSize=5`
+- Returned zero rows because the run had zero workflow mismatches.
+
+## Implementation provenance
+
+PR #874:
+
+- Added validation-status filtering to mass adjudication claim results.
+- Added unsupported and mismatch options to the portal claim-result filter.
+- Updated throughput labels to `claims/sec`.
+
+PR #875:
+
+- Changed validator claim-result sampling to preserve evidence-critical rows before slowest remaining rows.
+- Priority order: platform failures, observation failures, mismatches, unsupported, then slowest remaining claims.
+- Added deterministic tie-breakers by generated claim ID.
+
+## Interpretation
+
+The fresh 5K run is a console-evidence proof, not a new scale claim.
+
+The key result is that the current portal can now inspect a published mass adjudication run, show human-readable MCC claim IDs, filter unsupported results, preserve mismatch rows when they exist, and keep payment delta visible as an unresolved scoring gate.
+</pre></details></section>
+  </main>
+</body>
+</html>

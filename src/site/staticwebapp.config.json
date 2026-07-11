@@ -324,6 +324,31 @@
       "rewrite": "/docs/million-claim-challenge.html"
     },
     {
+      "route": "/docs/million-claim-challenge/evidence.html",
+      "redirect": "/docs/million-claim-challenge/evidence",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/million-claim-challenge/evidence",
+      "rewrite": "/docs/million-claim-challenge/evidence.html"
+    },
+    {
+      "route": "/insights/million-claim-challenge",
+      "rewrite": "/insights/million-claim-challenge/index.html"
+    },
+    {
+      "route": "/insights/million-claim-challenge/part-5-repeatably-faster",
+      "rewrite": "/insights/million-claim-challenge/part-5-repeatably-faster.html"
+    },
+    {
+      "route": "/insights/million-claim-challenge/part-6-honest-edge-case-scoring",
+      "rewrite": "/insights/million-claim-challenge/part-6-honest-edge-case-scoring.html"
+    },
+    {
+      "route": "/insights/million-claim-challenge/part-7-operator-console",
+      "rewrite": "/insights/million-claim-challenge/part-7-operator-console.html"
+    },
+    {
       "route": "/docs/prior-auth-guide.html",
       "redirect": "/docs/prior-auth-guide",
       "statusCode": 301
