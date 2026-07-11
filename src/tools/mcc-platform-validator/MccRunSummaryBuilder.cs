@@ -179,6 +179,7 @@ internal static class MccRunSummaryBuilder
             .Where(IsEvidencePriority)
             .OrderBy(PublishPriority)
             .ThenByDescending(r => r.Elapsed)
+            .ThenBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
             .Take(limit)
             .ToList();
 
@@ -194,6 +195,7 @@ internal static class MccRunSummaryBuilder
         selected.AddRange(results
             .Where(r => !selectedIds.Contains(r.GeneratedClaimId))
             .OrderByDescending(r => r.Elapsed)
+            .ThenBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
             .Take(limit - selected.Count));
 
         return selected;

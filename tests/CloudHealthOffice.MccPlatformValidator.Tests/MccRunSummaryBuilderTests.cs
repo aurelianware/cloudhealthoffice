@@ -58,16 +58,18 @@ public class MccRunSummaryBuilderTests
     public void Build_PrioritizesNonGreenClaimResultsBeforeSlowSuccessfulSamples()
     {
         var options = ValidatorOptions.Parse([
-            "--claims", "5",
-            "--claim-results-limit", "3"
+            "--claims", "7",
+            "--claim-results-limit", "5"
         ]);
         var results = new List<ClaimValidationResult>
         {
             Result("MCC-SLOW-MATCHED", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 5_000),
-            Result("MCC-MISMATCH", "CleanProfessionalPaid", MccWorkflowValidation.MismatchedStatus, ClaimValidationOutcome.BusinessDenial, elapsedMilliseconds: 10),
+            Result("MCC-MISMATCH-B", "CleanProfessionalPaid", MccWorkflowValidation.MismatchedStatus, ClaimValidationOutcome.BusinessDenial, elapsedMilliseconds: 10),
+            Result("MCC-MISMATCH-A", "CleanProfessionalPaid", MccWorkflowValidation.MismatchedStatus, ClaimValidationOutcome.BusinessDenial, elapsedMilliseconds: 10),
             Result("MCC-UNSUPPORTED", "EdgeCase:BehavioralHealthCarveOut", MccWorkflowValidation.UnsupportedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 20),
             Result("MCC-TIMEOUT", "EdgeCase:CobSecondaryPayer", MccWorkflowValidation.ObservationTimeoutStatus, ClaimValidationOutcome.ObservationTimeout, elapsedMilliseconds: 30),
-            Result("MCC-MEDIUM-MATCHED", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 4_000)
+            Result("MCC-MEDIUM-MATCHED-B", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 4_000),
+            Result("MCC-MEDIUM-MATCHED-A", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 4_000)
         };
 
         var summary = MccRunSummaryBuilder.Build(
@@ -78,7 +80,7 @@ public class MccRunSummaryBuilderTests
             DateTimeOffset.Parse("2026-07-07T00:00:10Z"));
 
         Assert.Equal(
-            ["MCC-TIMEOUT", "MCC-MISMATCH", "MCC-UNSUPPORTED"],
+            ["MCC-TIMEOUT", "MCC-MISMATCH-A", "MCC-MISMATCH-B", "MCC-UNSUPPORTED", "MCC-SLOW-MATCHED"],
             summary.ClaimResults.Select(r => r.GeneratedClaimId).ToArray());
     }
 
