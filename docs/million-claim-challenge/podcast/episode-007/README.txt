@@ -36,6 +36,10 @@ The episode should make clear that:
 - `article.txt` - draft Medium article source.
 - `benchmark-results.txt` - fresh 5K dashboard evidence run and portal verification notes.
 - `podcast-prompt.txt` - episode-specific prompt for Adobe Podcast / Acrobat Generate Podcast.
+- `screenshots/episode-007-local-docker-kubernetes-hardware-v2.png` - generated hero image showing the local Docker Desktop/Kubernetes hardware environment without benchmark result claims.
+- `screenshots/episode-007-mass-adjudication-dashboard.png` - Mass Adjudication run list and selected run detail.
+- `screenshots/episode-007-unsupported-filter.png` - claim results filtered to unsupported validation rows.
+- `screenshots/episode-007-claim-drilldown.png` - run-aware claim detail drilldown using a human-readable MCC claim ID.
 - `screenshots/.gitkeep` - placeholder for optional uploaded screenshots.
 
 ## Production notes
@@ -61,5 +65,6 @@ The hosts must clearly explain that the fresh 5K run is a dashboard evidence pro
 - [x] Payment delta is kept visible as diagnostic only.
 - [x] False-pend limitation is preserved.
 - [x] Live in-progress telemetry is described as future work.
+- [x] Screenshots are selected and added.
+- [x] Hardware/Docker/Kubernetes hero image is added without benchmark result claims.
 - [ ] Published Medium article URL is recorded.
-- [ ] Screenshots are selected and added if needed.
