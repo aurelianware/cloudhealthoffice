@@ -125,7 +125,7 @@
             <HeaderContent>
                 <MudTh>Run</MudTh>
                 <MudTh>Processed</MudTh>
-                <MudTh>Throughput</MudTh>
+                <MudTh>Claims/sec</MudTh>
                 <MudTh>P95</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -143,7 +143,7 @@
                                        Color="@(context.PlatformFailures == 0 ? Color.Success : Color.Error)"
                                        Style="width: 90px; height: 6px; border-radius: 3px;" />
                 </MudTd>
-                <MudTd DataLabel="Throughput">
+                <MudTd DataLabel="Claims/sec">
                     <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.ThroughputClaimsPerSecond.ToString("N2")/s</MudText>
                 </MudTd>
                 <MudTd DataLabel="P95">
@@ -187,7 +187,7 @@
                     <MudItem xs="6" md="4">@Metric("Business Denials", $"{_selectedRun.BusinessDenials:N0}", "#ffca28")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Platform Failures", $"{_selectedRun.PlatformFailures:N0}", "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Observation Timeouts", $"{_selectedRun.ObservationTimeouts:N0}", _selectedRun.ObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
-                    <MudItem xs="6" md="4">@Metric("Throughput", $"{_selectedRun.ThroughputClaimsPerSecond:N2}/s", "#7dd3fc")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Claims/sec", $"{_selectedRun.ThroughputClaimsPerSecond:N2}/s", "#7dd3fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("P95 / P99", $"{_selectedRun.P95LatencyMilliseconds:N0} / {_selectedRun.P99LatencyMilliseconds:N0} ms", "#c084fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Checks", $"{_selectedRun.WorkflowMatches:N0} / {_selectedRun.WorkflowScenarios:N0}", "#00ff88")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Mismatches", $"{_selectedRun.WorkflowMismatches:N0}", _selectedRun.WorkflowMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
@@ -226,12 +226,14 @@
                     <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Color="Color.Primary" />
                     <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Claim Results</MudText>
                     <MudSpacer />
-                    <MudSelect T="string" Value="_claimOutcomeFilter" ValueChanged="OnClaimOutcomeFilterChanged"
+                    <MudSelect T="string" Value="_claimResultFilter" ValueChanged="OnClaimResultFilterChanged"
                                Dense="true" Variant="Variant.Outlined" Style="width: 190px;">
-                        <MudSelectItem Value="@("")">All outcomes</MudSelectItem>
+                        <MudSelectItem Value="@("")">All results</MudSelectItem>
                         <MudSelectItem Value="@("Paid")">Paid</MudSelectItem>
                         <MudSelectItem Value="@("Pended")">Pended</MudSelectItem>
                         <MudSelectItem Value="@("BusinessDenial")">Business denials</MudSelectItem>
+                        <MudSelectItem Value="@("validation:Unsupported")">Unsupported</MudSelectItem>
+                        <MudSelectItem Value="@("validation:Mismatched")">Mismatches</MudSelectItem>
                         <MudSelectItem Value="@("ObservationTimeout")">Observation timeouts</MudSelectItem>
                         <MudSelectItem Value="@("PlatformFailure")">Platform failures</MudSelectItem>
                     </MudSelect>
@@ -415,7 +417,7 @@
     private bool _loading;
     private bool _claimResultsLoading;
     private bool _autoRefresh;
-    private string _claimOutcomeFilter = string.Empty;
+    private string _claimResultFilter = string.Empty;
     private string? _error;
     private DateTimeOffset? _lastRefreshedAt;
     private int _newRunsSeen;
@@ -489,13 +491,13 @@
     private async Task SelectRun(MassAdjudicationRunSummary run)
     {
         _selectedRun = run;
-        _claimOutcomeFilter = string.Empty;
+        _claimResultFilter = string.Empty;
         await LoadClaimResults();
     }
 
-    private async Task OnClaimOutcomeFilterChanged(string value)
+    private async Task OnClaimResultFilterChanged(string value)
     {
-        _claimOutcomeFilter = value;
+        _claimResultFilter = value;
         await LoadClaimResults();
     }
 
@@ -516,8 +518,9 @@
         {
             var results = await ClaimsService.GetMassAdjudicationClaimResultsAsync(
                 _selectedRun.Id,
-                string.IsNullOrWhiteSpace(_claimOutcomeFilter) ? null : _claimOutcomeFilter,
-                250);
+                ClaimOutcomeFilter,
+                250,
+                ClaimValidationStatusFilter);
             _claimResults.AddRange(results);
         }
         catch (Exception ex)
@@ -629,6 +632,16 @@
 
     private static string ScenarioCountStyle(int count, string highlightColor)
         => $"font-family: monospace; color: {(count == 0 ? "rgba(255,255,255,0.55)" : highlightColor)};";
+
+    private string? ClaimOutcomeFilter
+        => string.IsNullOrWhiteSpace(_claimResultFilter) || _claimResultFilter.StartsWith("validation:", StringComparison.Ordinal)
+            ? null
+            : _claimResultFilter;
+
+    private string? ClaimValidationStatusFilter
+        => _claimResultFilter.StartsWith("validation:", StringComparison.Ordinal)
+            ? _claimResultFilter["validation:".Length..]
+            : null;
 
     private static string PaymentDeltaColor(decimal? paymentDelta)
         => paymentDelta is null ? "#cbd5e1" : paymentDelta == 0 ? "#00ff88" : "#ffca28";
