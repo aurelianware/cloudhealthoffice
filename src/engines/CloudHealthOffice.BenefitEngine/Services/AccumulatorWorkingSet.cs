@@ -374,18 +374,29 @@ public class AccumulatorWorkingSet
         NetworkTier networkTier, decimal limitAmount)
     {
         var key = MakeKey(type, scope, networkTier);
-        if (!_entries.ContainsKey(key))
+        if (_entries.TryGetValue(key, out var existing))
         {
-            _entries[key] = new AccumulatorEntry
+            // Some source systems emit a zero-limit placeholder before a
+            // member has accumulator activity. The authored plan remains the
+            // source of truth for the limit; treating the placeholder as a
+            // real zero OOP maximum incorrectly shifts all cost share to the plan.
+            if (existing.LimitAmount <= 0 && limitAmount > 0)
             {
-                Type = type,
-                Scope = scope,
-                NetworkTier = networkTier,
-                LimitAmount = limitAmount,
-                OriginalAccumulated = 0,
-                CurrentAccumulated = 0
-            };
+                existing.LimitAmount = limitAmount;
+            }
+
+            return;
         }
+
+        _entries[key] = new AccumulatorEntry
+        {
+            Type = type,
+            Scope = scope,
+            NetworkTier = networkTier,
+            LimitAmount = limitAmount,
+            OriginalAccumulated = 0,
+            CurrentAccumulated = 0
+        };
     }
 
     private void RecordUpdate(AccumulatorEntry entry, decimal amount, string source)
