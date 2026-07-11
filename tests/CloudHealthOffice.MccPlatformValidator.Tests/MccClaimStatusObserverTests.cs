@@ -107,6 +107,43 @@ public class MccClaimStatusObserverTests
         Assert.True(observed.IsTerminal);
     }
 
+    [Fact]
+    public async Task DetectUnexpectedPendAsync_WhenExpectedPaidPersistedPended_ReturnsMismatch()
+    {
+        var observer = new MccClaimStatusObserver(new FakeClaimStatusSource([
+            new ObservedClaimStatus(ClaimValidationOutcome.Pended, "Pended", "MED_REVIEW", IsTerminal: true)
+        ]));
+        var source = Result(ClaimValidationOutcome.Paid) with
+        {
+            ExpectedOutcome = ClaimValidationOutcome.Paid.ToString(),
+            ValidationStatus = MccWorkflowValidation.MatchedStatus
+        };
+
+        var result = await observer.DetectUnexpectedPendAsync(source);
+
+        Assert.Equal(ClaimValidationOutcome.Pended, result.Outcome);
+        Assert.Equal(MccWorkflowValidation.MismatchedStatus, result.ValidationStatus);
+        Assert.Equal("false-pend-observation", result.FailureStage);
+        Assert.Contains("MED_REVIEW", result.Error);
+    }
+
+    [Fact]
+    public async Task DetectUnexpectedPendAsync_WhenExpectedDeniedPersistedDenied_PreservesResult()
+    {
+        var observer = new MccClaimStatusObserver(new FakeClaimStatusSource([
+            new ObservedClaimStatus(ClaimValidationOutcome.BusinessDenial, "Denied", null, IsTerminal: true)
+        ]));
+        var source = Result(ClaimValidationOutcome.BusinessDenial) with
+        {
+            ExpectedOutcome = ClaimValidationOutcome.BusinessDenial.ToString(),
+            ValidationStatus = MccWorkflowValidation.MatchedStatus
+        };
+
+        var result = await observer.DetectUnexpectedPendAsync(source);
+
+        Assert.Equal(source, result);
+    }
+
     private static ClaimValidationResult Result(ClaimValidationOutcome startingOutcome)
     {
         return new ClaimValidationResult(

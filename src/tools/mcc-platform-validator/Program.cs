@@ -184,6 +184,7 @@ var orderedResults = results
 if (options.PendObservationEnabled)
 {
     orderedResults = await ObserveExpectedPendResultsAsync(http, options, orderedResults);
+    orderedResults = await DetectUnexpectedPendResultsAsync(http, options, orderedResults);
 }
 
 if (!string.IsNullOrWhiteSpace(options.PendDiagnosticsPath))
@@ -1845,6 +1846,32 @@ static async Task<List<ClaimValidationResult>> ObserveExpectedPendResultsAsync(
         .ToList();
 }
 
+static async Task<List<ClaimValidationResult>> DetectUnexpectedPendResultsAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    List<ClaimValidationResult> results)
+{
+    var candidates = results
+        .Where(r => r.ExpectedOutcome is not null && r.ExpectedOutcome != ClaimValidationOutcome.Pended.ToString())
+        .Where(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure)
+        .ToList();
+    if (candidates.Count == 0) return results;
+
+    Console.WriteLine($"Sweeping {candidates.Count:N0} non-pend claims for unexpected persisted pends.");
+    var observer = new MccClaimStatusObserver(new HttpClaimStatusSource(http, options.ClaimsUrl));
+    var observed = new ConcurrentDictionary<string, ClaimValidationResult>(StringComparer.Ordinal);
+    await Parallel.ForEachAsync(candidates,
+        new ParallelOptions { MaxDegreeOfParallelism = Math.Min(candidates.Count, Math.Max(options.Parallelism, 64)) },
+        async (result, cancellationToken) =>
+            observed[result.GeneratedClaimId] = await observer.DetectUnexpectedPendAsync(result, cancellationToken));
+
+    var falsePends = observed.Values.Count(r => r.FailureStage == "false-pend-observation" && r.Outcome == ClaimValidationOutcome.Pended);
+    Console.WriteLine($"  False-pend sweep: {falsePends:N0} unexpected pends");
+    Console.WriteLine();
+    return results.Select(r => observed.TryGetValue(r.GeneratedClaimId, out var updated) ? updated : r)
+        .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal).ToList();
+}
+
 static List<object> BuildDiagnosisCodes(SyntheticClaim claim)
 {
     var codes = new List<string>();
@@ -2050,6 +2077,7 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     if (summary.AveragePaymentDelta.HasValue)
     {
         Console.WriteLine($"  Avg payment delta:  ${summary.AveragePaymentDelta:N2}");
+        Console.WriteLine($"  Payment gate:       {summary.PaymentMatches:N0}/{summary.PaymentComparisons:N0} within ${summary.PaymentTolerance:N2} ({summary.PaymentMismatches:N0} mismatched, max ${summary.MaximumPaymentDelta:N2})");
     }
 
     foreach (var denialGroup in summary.BusinessDenialBreakdown.Take(5))
@@ -2152,6 +2180,11 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         null,
         null,
         Array.Empty<MassAdjudicationStageTiming>(),
+        null,
+        0.01m,
+        0,
+        0,
+        0,
         null,
         Array.Empty<MassAdjudicationBusinessDenialSummary>(),
         Array.Empty<MassAdjudicationWorkflowScenarioSummary>(),
@@ -2397,6 +2430,11 @@ internal sealed record MassAdjudicationRunSummary(
     MassAdjudicationStageTiming? WritebackTiming,
     IReadOnlyList<MassAdjudicationStageTiming> AdjudicationStepTimings,
     decimal? AveragePaymentDelta,
+    decimal PaymentTolerance,
+    int PaymentComparisons,
+    int PaymentMatches,
+    int PaymentMismatches,
+    decimal? MaximumPaymentDelta,
     IReadOnlyList<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown,
     IReadOnlyList<MassAdjudicationWorkflowScenarioSummary> WorkflowScenarioBreakdown,
     IReadOnlyList<MassAdjudicationFailureSummary> SampleFailures,

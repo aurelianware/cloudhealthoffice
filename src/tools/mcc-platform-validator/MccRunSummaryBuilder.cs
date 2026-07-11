@@ -37,6 +37,12 @@ internal static class MccRunSummaryBuilder
         var avgDelta = comparable.Count == 0
             ? (decimal?)null
             : comparable.Average(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value));
+        const decimal paymentTolerance = 0.01m;
+        var paymentMatches = comparable.Count(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value) <= paymentTolerance);
+        var paymentMismatches = comparable.Count - paymentMatches;
+        var maxPaymentDelta = comparable.Count == 0
+            ? (decimal?)null
+            : comparable.Max(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value));
         var denialBreakdown = results
             .Where(r => r.Outcome is ClaimValidationOutcome.BusinessDenial)
             .GroupBy(r => r.BusinessDenialCode ?? "UNKNOWN")
@@ -130,6 +136,11 @@ internal static class MccRunSummaryBuilder
             BuildStageTiming("Writeback", results.Select(r => r.UpdateElapsed)),
             BuildAdjudicationStepTimings(results),
             avgDelta,
+            paymentTolerance,
+            comparable.Count,
+            paymentMatches,
+            paymentMismatches,
+            maxPaymentDelta,
             denialBreakdown,
             workflowBreakdown,
             failures,
@@ -233,6 +244,14 @@ internal static class MccRunSummaryBuilder
         if (result.ValidationStatus == MccWorkflowValidation.UnsupportedStatus)
         {
             return 2;
+        }
+
+        if (result.Outcome is ClaimValidationOutcome.Paid
+            && result.ActualPlanPayment.HasValue
+            && result.ExpectedPlanPayment.HasValue
+            && Math.Abs(result.ActualPlanPayment.Value - result.ExpectedPlanPayment.Value) > 0.01m)
+        {
+            return 3;
         }
 
         return 100;
