@@ -117,6 +117,45 @@ internal sealed class MccClaimStatusObserver
             }
         }
     }
+
+    public async Task<ClaimValidationResult> DetectUnexpectedPendAsync(
+        ClaimValidationResult result,
+        CancellationToken cancellationToken = default)
+    {
+        if (result.ExpectedOutcome == ClaimValidationOutcome.Pended.ToString()
+            || string.IsNullOrWhiteSpace(result.SubmittedClaimId)
+            || result.Outcome is ClaimValidationOutcome.PlatformFailure)
+        {
+            return result;
+        }
+
+        try
+        {
+            var observed = await _source.GetAsync(result.SubmittedClaimId, cancellationToken);
+            if (observed?.Outcome is not ClaimValidationOutcome.Pended)
+            {
+                return result;
+            }
+
+            return result with
+            {
+                Outcome = ClaimValidationOutcome.Pended,
+                ValidationStatus = MccWorkflowValidation.MismatchedStatus,
+                FailureStage = "false-pend-observation",
+                Error = $"Expected {result.ExpectedOutcome}, but persisted claim status is pended ({observed.PendCode ?? "no pend code"})"
+            };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return result with
+            {
+                ValidationStatus = MccWorkflowValidation.ObservationTimeoutStatus,
+                Outcome = ClaimValidationOutcome.ObservationTimeout,
+                FailureStage = "false-pend-observation",
+                Error = $"Claim status observation failed: {ex.Message}"
+            };
+        }
+    }
 }
 
 internal sealed record ObservedClaimStatus(

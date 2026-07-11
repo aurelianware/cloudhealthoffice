@@ -84,6 +84,27 @@ public class MccRunSummaryBuilderTests
             summary.ClaimResults.Select(r => r.GeneratedClaimId).ToArray());
     }
 
+    [Fact]
+    public void Build_ScoresPaymentAmountsAgainstExplicitTolerance()
+    {
+        var options = ValidatorOptions.Parse(["--claims", "3"]);
+        var results = new List<ClaimValidationResult>
+        {
+            Result("EXACT", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid),
+            Result("ROUNDING", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid) with { ActualPlanPayment = 100.01m },
+            Result("WRONG", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid) with { ActualPlanPayment = 101m }
+        };
+
+        var summary = MccRunSummaryBuilder.Build(results, TimeSpan.FromSeconds(1), options, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+
+        Assert.Equal(0.01m, summary.PaymentTolerance);
+        Assert.Equal(3, summary.PaymentComparisons);
+        Assert.Equal(2, summary.PaymentMatches);
+        Assert.Equal(1, summary.PaymentMismatches);
+        Assert.Equal(1m, summary.MaximumPaymentDelta);
+        Assert.Contains(summary.ClaimResults, r => r.GeneratedClaimId == "WRONG" && r.PaymentDelta == 1m);
+    }
+
     private static ClaimValidationResult Result(
         string claimId,
         string? scenario,
