@@ -54,11 +54,40 @@ public class MccRunSummaryBuilderTests
         Assert.Equal(0, behavioral.Unspecified);
     }
 
+    [Fact]
+    public void Build_PrioritizesNonGreenClaimResultsBeforeSlowSuccessfulSamples()
+    {
+        var options = ValidatorOptions.Parse([
+            "--claims", "5",
+            "--claim-results-limit", "3"
+        ]);
+        var results = new List<ClaimValidationResult>
+        {
+            Result("MCC-SLOW-MATCHED", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 5_000),
+            Result("MCC-MISMATCH", "CleanProfessionalPaid", MccWorkflowValidation.MismatchedStatus, ClaimValidationOutcome.BusinessDenial, elapsedMilliseconds: 10),
+            Result("MCC-UNSUPPORTED", "EdgeCase:BehavioralHealthCarveOut", MccWorkflowValidation.UnsupportedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 20),
+            Result("MCC-TIMEOUT", "EdgeCase:CobSecondaryPayer", MccWorkflowValidation.ObservationTimeoutStatus, ClaimValidationOutcome.ObservationTimeout, elapsedMilliseconds: 30),
+            Result("MCC-MEDIUM-MATCHED", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 4_000)
+        };
+
+        var summary = MccRunSummaryBuilder.Build(
+            results,
+            TimeSpan.FromSeconds(10),
+            options,
+            DateTimeOffset.Parse("2026-07-07T00:00:00Z"),
+            DateTimeOffset.Parse("2026-07-07T00:00:10Z"));
+
+        Assert.Equal(
+            ["MCC-TIMEOUT", "MCC-MISMATCH", "MCC-UNSUPPORTED"],
+            summary.ClaimResults.Select(r => r.GeneratedClaimId).ToArray());
+    }
+
     private static ClaimValidationResult Result(
         string claimId,
         string? scenario,
         string validationStatus,
-        ClaimValidationOutcome outcome)
+        ClaimValidationOutcome outcome,
+        double elapsedMilliseconds = 100)
     {
         return new ClaimValidationResult(
             claimId,
@@ -72,7 +101,7 @@ public class MccRunSummaryBuilderTests
             outcome is ClaimValidationOutcome.Paid,
             outcome is ClaimValidationOutcome.Paid ? 100m : null,
             outcome is ClaimValidationOutcome.Paid ? 100m : null,
-            TimeSpan.FromMilliseconds(100),
+            TimeSpan.FromMilliseconds(elapsedMilliseconds),
             TimeSpan.FromMilliseconds(10),
             TimeSpan.FromMilliseconds(80),
             TimeSpan.FromMilliseconds(10),

@@ -56,9 +56,7 @@ internal static class MccRunSummaryBuilder
             .Take(5)
             .Select(r => new MassAdjudicationFailureSummary(r.GeneratedClaimId, r.FailureStage, r.Error))
             .ToList();
-        var claimResults = results
-            .OrderByDescending(r => r.Elapsed)
-            .Take(options.PublishClaimResultsLimit)
+        var claimResults = SelectPublishedClaimResults(results, options.PublishClaimResultsLimit)
             .Select(r => new MassAdjudicationClaimResult(
                 r.GeneratedClaimId,
                 r.SubmittedClaimId,
@@ -166,6 +164,63 @@ internal static class MccRunSummaryBuilder
             .Cast<MassAdjudicationStageTiming>()
             .OrderByDescending(timing => timing.AverageMilliseconds)
             .ToList();
+    }
+
+    private static IReadOnlyList<ClaimValidationResult> SelectPublishedClaimResults(
+        IReadOnlyList<ClaimValidationResult> results,
+        int limit)
+    {
+        if (limit <= 0)
+        {
+            return Array.Empty<ClaimValidationResult>();
+        }
+
+        var selected = results
+            .Where(IsEvidencePriority)
+            .OrderBy(PublishPriority)
+            .ThenByDescending(r => r.Elapsed)
+            .Take(limit)
+            .ToList();
+
+        if (selected.Count >= limit)
+        {
+            return selected;
+        }
+
+        var selectedIds = selected
+            .Select(r => r.GeneratedClaimId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        selected.AddRange(results
+            .Where(r => !selectedIds.Contains(r.GeneratedClaimId))
+            .OrderByDescending(r => r.Elapsed)
+            .Take(limit - selected.Count));
+
+        return selected;
+    }
+
+    private static bool IsEvidencePriority(ClaimValidationResult result)
+        => PublishPriority(result) < 100;
+
+    private static int PublishPriority(ClaimValidationResult result)
+    {
+        if (result.Outcome is ClaimValidationOutcome.PlatformFailure or ClaimValidationOutcome.ObservationTimeout
+            || result.ValidationStatus == MccWorkflowValidation.ObservationTimeoutStatus)
+        {
+            return 0;
+        }
+
+        if (result.ValidationStatus == MccWorkflowValidation.MismatchedStatus)
+        {
+            return 1;
+        }
+
+        if (result.ValidationStatus == MccWorkflowValidation.UnsupportedStatus)
+        {
+            return 2;
+        }
+
+        return 100;
     }
 
     private static double Percentile(double[] values, double percentile)
