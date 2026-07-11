@@ -80,6 +80,7 @@ public class MemberAccumulators
 public class MassAdjudicationRunSummary
 {
     public string Id { get; set; } = string.Empty;
+    public string Status { get; set; } = "Completed";
     public MassAdjudicationRunMetadata Run { get; set; } = new();
     public int TotalClaims { get; set; }
     public int Processed { get; set; }
@@ -107,6 +108,8 @@ public class MassAdjudicationRunSummary
     public List<MassAdjudicationFailureSummary> SampleFailures { get; set; } = new();
     public List<MassAdjudicationClaimResult> ClaimResults { get; set; } = new();
     public DateTime CreatedAtUtc { get; set; }
+    public DateTime LastUpdatedAtUtc { get; set; }
+    public MassAdjudicationRunProgress? Progress { get; set; }
 }
 
 public class MassAdjudicationRunMetadata
@@ -126,6 +129,20 @@ public class MassAdjudicationRunMetadata
     public int LineOfBusiness { get; set; }
     public DateTimeOffset StartedAtUtc { get; set; }
     public DateTimeOffset CompletedAtUtc { get; set; }
+}
+
+public class MassAdjudicationRunProgress
+{
+    public string Phase { get; set; } = "Processing claims";
+    public int RequestedClaims { get; set; }
+    public int CompletedClaims { get; set; }
+    public int ProcessedClaims { get; set; }
+    public int PlatformFailures { get; set; }
+    public double PercentComplete { get; set; }
+    public double CurrentThroughputClaimsPerSecond { get; set; }
+    public double RollingP95LatencyMilliseconds { get; set; }
+    public double RollingP99LatencyMilliseconds { get; set; }
+    public DateTimeOffset LastPublishedAtUtc { get; set; }
 }
 
 public class MassAdjudicationStageTiming

@@ -17,6 +17,7 @@ if (options.ShowHelp)
     return;
 }
 
+var runId = Guid.NewGuid().ToString("N");
 var runStartedAtUtc = DateTimeOffset.UtcNow;
 var json = new JsonSerializerOptions(JsonSerializerDefaults.Web)
 {
@@ -85,11 +86,29 @@ if (options.SeedProviders)
 }
 
 var results = new ConcurrentBag<ClaimValidationResult>();
-var total = Stopwatch.StartNew();
+var total = new Stopwatch();
 var completed = 0;
 var platformFailures = 0;
+var lastProgressPublishTicks = 0L;
 var progressLock = new object();
+var progressPublishGate = new SemaphoreSlim(1, 1);
+Task? latestProgressPublishTask = null;
+var latestProgressPublishLock = new object();
 
+if (!options.NoPublishSummary)
+{
+    var initialProgress = BuildProgressSummary(
+        results.ToList(),
+        TimeSpan.Zero,
+        options,
+        runId,
+        runStartedAtUtc,
+        "Running",
+        "Processing claims");
+    await PublishSummaryAsync(http, options, initialProgress, json, quiet: true);
+}
+
+total.Start();
 await Parallel.ForEachAsync(
     claims,
     new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
@@ -112,10 +131,49 @@ await Parallel.ForEachAsync(
                 var failures = Math.Min(Volatile.Read(ref platformFailures), currentDone);
                 Console.Write($"\r  Processed: {currentDone:N0}/{claims.Count:N0}  processed={currentDone - failures:N0}  platformFailures={failures:N0}");
             }
+
+            if (!options.NoPublishSummary
+                && ShouldPublishProgress(done, claims.Count, ref lastProgressPublishTicks))
+            {
+                if (progressPublishGate.Wait(0))
+                {
+                    try
+                    {
+                        var progressSummary = BuildProgressSummary(
+                            results.ToList(),
+                            total.Elapsed,
+                            options,
+                            runId,
+                            runStartedAtUtc,
+                            "Running",
+                            "Processing claims");
+                        var publishTask = PublishProgressSummaryAsync(progressPublishGate, http, options, progressSummary, json);
+                        lock (latestProgressPublishLock)
+                        {
+                            latestProgressPublishTask = publishTask;
+                        }
+                    }
+                    catch
+                    {
+                        progressPublishGate.Release();
+                        throw;
+                    }
+                }
+            }
         }
     });
 
 total.Stop();
+Task? pendingProgressPublish;
+lock (latestProgressPublishLock)
+{
+    pendingProgressPublish = latestProgressPublishTask;
+}
+
+if (pendingProgressPublish is not null)
+{
+    await pendingProgressPublish;
+}
 Console.WriteLine();
 Console.WriteLine();
 
@@ -135,7 +193,17 @@ if (!string.IsNullOrWhiteSpace(options.PendDiagnosticsPath))
     PendDiagnostics.PrintAggregateTable(diagnosticsReport);
 }
 
-var summary = MccRunSummaryBuilder.Build(orderedResults, total.Elapsed, options, runStartedAtUtc, DateTimeOffset.UtcNow);
+var summary = MccRunSummaryBuilder.Build(
+    orderedResults,
+    total.Elapsed,
+    options,
+    runStartedAtUtc,
+    DateTimeOffset.UtcNow,
+    runId,
+    "Completed",
+    options.Claims,
+    CreateProgress(orderedResults, total.Elapsed, options, "Completed"),
+    publishClaimResults: true);
 WriteSummary(summary);
 
 if (!string.IsNullOrWhiteSpace(options.SummaryJsonPath))
@@ -2022,7 +2090,109 @@ static async Task WriteSummaryJsonAsync(string path, MassAdjudicationRunSummary 
     Console.WriteLine($"  Summary JSON:       {path}");
 }
 
-static async Task PublishSummaryAsync(
+static MassAdjudicationRunSummary BuildProgressSummary(
+    List<ClaimValidationResult> results,
+    TimeSpan elapsed,
+    ValidatorOptions options,
+    string runId,
+    DateTimeOffset runStartedAtUtc,
+    string status,
+    string phase)
+{
+    var runCompletedAtUtc = DateTimeOffset.UtcNow;
+    var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+    var paid = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
+    var pended = results.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
+    var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
+    var observationTimeouts = results.Count(r => r.Outcome is ClaimValidationOutcome.ObservationTimeout);
+    var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
+    var workflowScenarios = results.Count(r => r.ValidationStatus is not "Unspecified");
+    var workflowMatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus);
+    var workflowMismatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MismatchedStatus);
+    var workflowUnsupported = results.Count(r => r.ValidationStatus == MccWorkflowValidation.UnsupportedStatus);
+    var workflowObservationTimeouts = results.Count(r => r.ValidationStatus == MccWorkflowValidation.ObservationTimeoutStatus);
+    var progress = CreateProgress(results, elapsed, options, phase);
+
+    return new MassAdjudicationRunSummary(
+        runId,
+        status,
+        new MassAdjudicationRun(
+            options.TenantId,
+            options.Claims,
+            options.Seed,
+            options.Parallelism,
+            options.ClaimsUrl,
+            options.BenefitUrl,
+            options.MemberUrl,
+            options.CoverageUrl,
+            options.ProviderUrl,
+            options.SeedMembers,
+            options.SeedProviders,
+            options.SkipClaimUpdate,
+            options.LineOfBusiness,
+            runStartedAtUtc,
+            runCompletedAtUtc),
+        options.Claims,
+        processed,
+        paid,
+        pended,
+        businessDenials,
+        observationTimeouts,
+        platformFailures,
+        workflowScenarios,
+        workflowMatches,
+        workflowMismatches,
+        workflowUnsupported,
+        workflowObservationTimeouts,
+        elapsed,
+        progress.CurrentThroughputClaimsPerSecond,
+        progress.RollingP95LatencyMilliseconds,
+        progress.RollingP99LatencyMilliseconds,
+        null,
+        null,
+        null,
+        Array.Empty<MassAdjudicationStageTiming>(),
+        null,
+        Array.Empty<MassAdjudicationBusinessDenialSummary>(),
+        Array.Empty<MassAdjudicationWorkflowScenarioSummary>(),
+        Array.Empty<MassAdjudicationFailureSummary>(),
+        Array.Empty<MassAdjudicationClaimResult>(),
+        runStartedAtUtc.UtcDateTime,
+        runCompletedAtUtc.UtcDateTime,
+        progress);
+}
+
+static MassAdjudicationRunProgress CreateProgress(
+    IReadOnlyCollection<ClaimValidationResult> results,
+    TimeSpan elapsed,
+    ValidatorOptions options,
+    string phase)
+{
+    var orderedDurations = results
+        .Take(500)
+        .Select(r => r.Elapsed.TotalMilliseconds)
+        .Order()
+        .ToArray();
+    var completedClaims = results.Count;
+    var processedClaims = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+    var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
+    var throughput = completedClaims / Math.Max(0.001, elapsed.TotalSeconds);
+
+    return new MassAdjudicationRunProgress(
+        phase,
+        options.Claims,
+        completedClaims,
+        processedClaims,
+        platformFailures,
+        options.Claims <= 0 ? 0 : Math.Clamp((double)completedClaims / options.Claims * 100, 0, 100),
+        throughput,
+        Percentile(orderedDurations, 0.95),
+        Percentile(orderedDurations, 0.99),
+        DateTimeOffset.UtcNow);
+}
+
+static async Task PublishProgressSummaryAsync(
+    SemaphoreSlim gate,
     HttpClient http,
     ValidatorOptions options,
     MassAdjudicationRunSummary summary,
@@ -2030,19 +2200,74 @@ static async Task PublishSummaryAsync(
 {
     try
     {
+        await PublishSummaryAsync(http, options, summary, json, quiet: true);
+    }
+    finally
+    {
+        gate.Release();
+    }
+}
+
+static bool ShouldPublishProgress(int completedClaims, int totalClaims, ref long lastPublishTicks)
+{
+    if (completedClaims >= totalClaims)
+    {
+        return true;
+    }
+
+    var nowTicks = DateTimeOffset.UtcNow.Ticks;
+    var previousTicks = Interlocked.Read(ref lastPublishTicks);
+    if (previousTicks > 0 && nowTicks - previousTicks < TimeSpan.FromSeconds(2).Ticks)
+    {
+        return false;
+    }
+
+    return Interlocked.CompareExchange(ref lastPublishTicks, nowTicks, previousTicks) == previousTicks;
+}
+
+static double Percentile(double[] values, double percentile)
+{
+    if (values.Length == 0)
+    {
+        return 0;
+    }
+
+    var index = (int)Math.Ceiling(percentile * values.Length) - 1;
+    return values[Math.Clamp(index, 0, values.Length - 1)];
+}
+
+static async Task PublishSummaryAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    MassAdjudicationRunSummary summary,
+    JsonSerializerOptions json,
+    bool quiet = false)
+{
+    try
+    {
         using var response = await http.PostAsJsonAsync($"{options.ClaimsUrl}/api/mass-adjudication/runs", summary, json);
         if (response.IsSuccessStatusCode)
         {
-            Console.WriteLine("  Dashboard summary: published");
+            if (!quiet)
+            {
+                Console.WriteLine("  Dashboard summary: published");
+            }
+
             return;
         }
 
         var body = await response.Content.ReadAsStringAsync();
-        Console.WriteLine($"  Dashboard summary: publish skipped ({(int)response.StatusCode} {body})");
+        if (!quiet)
+        {
+            Console.WriteLine($"  Dashboard summary: publish skipped ({(int)response.StatusCode} {body})");
+        }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"  Dashboard summary: publish skipped ({ex.Message})");
+        if (!quiet)
+        {
+            Console.WriteLine($"  Dashboard summary: publish skipped ({ex.Message})");
+        }
     }
 }
 
@@ -2148,6 +2373,8 @@ internal sealed record ClaimValidationResult(
     JsonElement? SyncAdjudicationSnapshot = null);
 
 internal sealed record MassAdjudicationRunSummary(
+    string Id,
+    string Status,
     MassAdjudicationRun Run,
     int TotalClaims,
     int Processed,
@@ -2173,7 +2400,10 @@ internal sealed record MassAdjudicationRunSummary(
     IReadOnlyList<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown,
     IReadOnlyList<MassAdjudicationWorkflowScenarioSummary> WorkflowScenarioBreakdown,
     IReadOnlyList<MassAdjudicationFailureSummary> SampleFailures,
-    IReadOnlyList<MassAdjudicationClaimResult> ClaimResults);
+    IReadOnlyList<MassAdjudicationClaimResult> ClaimResults,
+    DateTime CreatedAtUtc,
+    DateTime LastUpdatedAtUtc,
+    MassAdjudicationRunProgress? Progress);
 
 internal sealed record MassAdjudicationRun(
     string TenantId,
@@ -2191,6 +2421,18 @@ internal sealed record MassAdjudicationRun(
     int LineOfBusiness,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset CompletedAtUtc);
+
+internal sealed record MassAdjudicationRunProgress(
+    string Phase,
+    int RequestedClaims,
+    int CompletedClaims,
+    int ProcessedClaims,
+    int PlatformFailures,
+    double PercentComplete,
+    double CurrentThroughputClaimsPerSecond,
+    double RollingP95LatencyMilliseconds,
+    double RollingP99LatencyMilliseconds,
+    DateTimeOffset LastPublishedAtUtc);
 
 internal sealed record MassAdjudicationStageTiming(
     string Label,
