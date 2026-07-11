@@ -133,7 +133,7 @@ public class MassAdjudicationRunMetadata
 
 public class MassAdjudicationRunProgress
 {
-    public string Phase { get; set; } = "Running";
+    public string Phase { get; set; } = "Processing claims";
     public int RequestedClaims { get; set; }
     public int CompletedClaims { get; set; }
     public int ProcessedClaims { get; set; }

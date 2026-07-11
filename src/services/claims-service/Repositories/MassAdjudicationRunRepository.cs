@@ -71,26 +71,13 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
 
         if (claimResults.Count > 0)
         {
-            try
-            {
-                var resultFilter = Builders<MassAdjudicationClaimResult>.Filter.And(
-                    Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.TenantId, summary.Run.TenantId),
-                    Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.RunId, summary.Id));
-                await _claimResults.DeleteManyAsync(resultFilter, ct);
-                await _claimResults.InsertManyAsync(claimResults, cancellationToken: ct);
-            }
-            catch
-            {
-                try
-                {
-                    await _collection.DeleteOneAsync(runFilter, cancellationToken: ct);
-                }
-                catch
-                {
-                }
-
-                throw;
-            }
+            await _claimResults.InsertManyAsync(claimResults, cancellationToken: ct);
+            var newResultIds = claimResults.Select(x => x.Id).ToArray();
+            var staleResultFilter = Builders<MassAdjudicationClaimResult>.Filter.And(
+                Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.TenantId, summary.Run.TenantId),
+                Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.RunId, summary.Id),
+                Builders<MassAdjudicationClaimResult>.Filter.Nin(x => x.Id, newResultIds));
+            await _claimResults.DeleteManyAsync(staleResultFilter, ct);
         }
 
         return summary;
@@ -187,20 +174,30 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
 
         summary.LastUpdatedAtUtc = now;
 
+        foreach (var result in summary.ClaimResults)
+        {
+            result.Id = Guid.NewGuid().ToString("N");
+            result.RunId = summary.Id;
+            result.TenantId = summary.Run.TenantId;
+            result.CreatedAtUtc = summary.CreatedAtUtc;
+        }
+
         lock (_sync)
         {
             _runs.RemoveAll(x => x.Run.TenantId == summary.Run.TenantId && x.Id == summary.Id);
             if (summary.ClaimResults.Count > 0)
             {
-                _claimResults.RemoveAll(x => x.TenantId == summary.Run.TenantId && x.RunId == summary.Id);
+                var newResultIds = summary.ClaimResults
+                    .Select(x => x.Id)
+                    .ToHashSet(StringComparer.Ordinal);
+                _claimResults.RemoveAll(x =>
+                    x.TenantId == summary.Run.TenantId
+                    && x.RunId == summary.Id
+                    && !newResultIds.Contains(x.Id));
             }
 
             foreach (var result in summary.ClaimResults)
             {
-                result.Id = Guid.NewGuid().ToString("N");
-                result.RunId = summary.Id;
-                result.TenantId = summary.Run.TenantId;
-                result.CreatedAtUtc = summary.CreatedAtUtc;
                 _claimResults.Add(result);
             }
 

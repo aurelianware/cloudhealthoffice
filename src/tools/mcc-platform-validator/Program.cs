@@ -91,7 +91,9 @@ var completed = 0;
 var platformFailures = 0;
 var lastProgressPublishTicks = 0L;
 var progressLock = new object();
-var progressPublishTasks = new ConcurrentBag<Task>();
+var progressPublishGate = new SemaphoreSlim(1, 1);
+Task? latestProgressPublishTask = null;
+var latestProgressPublishLock = new object();
 
 if (!options.NoPublishSummary)
 {
@@ -133,21 +135,45 @@ await Parallel.ForEachAsync(
             if (!options.NoPublishSummary
                 && ShouldPublishProgress(done, claims.Count, ref lastProgressPublishTicks))
             {
-                var progressSummary = BuildProgressSummary(
-                    results.ToList(),
-                    total.Elapsed,
-                    options,
-                    runId,
-                    runStartedAtUtc,
-                    "Running",
-                    "Processing claims");
-                progressPublishTasks.Add(PublishSummaryAsync(http, options, progressSummary, json, quiet: true));
+                if (progressPublishGate.Wait(0))
+                {
+                    try
+                    {
+                        var progressSummary = BuildProgressSummary(
+                            results.ToList(),
+                            total.Elapsed,
+                            options,
+                            runId,
+                            runStartedAtUtc,
+                            "Running",
+                            "Processing claims");
+                        var publishTask = PublishProgressSummaryAsync(progressPublishGate, http, options, progressSummary, json);
+                        lock (latestProgressPublishLock)
+                        {
+                            latestProgressPublishTask = publishTask;
+                        }
+                    }
+                    catch
+                    {
+                        progressPublishGate.Release();
+                        throw;
+                    }
+                }
             }
         }
     });
 
 total.Stop();
-await Task.WhenAll(progressPublishTasks);
+Task? pendingProgressPublish;
+lock (latestProgressPublishLock)
+{
+    pendingProgressPublish = latestProgressPublishTask;
+}
+
+if (pendingProgressPublish is not null)
+{
+    await pendingProgressPublish;
+}
 Console.WriteLine();
 Console.WriteLine();
 
@@ -2073,17 +2099,67 @@ static MassAdjudicationRunSummary BuildProgressSummary(
     string status,
     string phase)
 {
-    return MccRunSummaryBuilder.Build(
-        results,
-        elapsed,
-        options,
-        runStartedAtUtc,
-        DateTimeOffset.UtcNow,
+    var runCompletedAtUtc = DateTimeOffset.UtcNow;
+    var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+    var paid = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
+    var pended = results.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
+    var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
+    var observationTimeouts = results.Count(r => r.Outcome is ClaimValidationOutcome.ObservationTimeout);
+    var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
+    var workflowScenarios = results.Count(r => r.ValidationStatus is not "Unspecified");
+    var workflowMatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus);
+    var workflowMismatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MismatchedStatus);
+    var workflowUnsupported = results.Count(r => r.ValidationStatus == MccWorkflowValidation.UnsupportedStatus);
+    var workflowObservationTimeouts = results.Count(r => r.ValidationStatus == MccWorkflowValidation.ObservationTimeoutStatus);
+    var progress = CreateProgress(results, elapsed, options, phase);
+
+    return new MassAdjudicationRunSummary(
         runId,
         status,
+        new MassAdjudicationRun(
+            options.TenantId,
+            options.Claims,
+            options.Seed,
+            options.Parallelism,
+            options.ClaimsUrl,
+            options.BenefitUrl,
+            options.MemberUrl,
+            options.CoverageUrl,
+            options.ProviderUrl,
+            options.SeedMembers,
+            options.SeedProviders,
+            options.SkipClaimUpdate,
+            options.LineOfBusiness,
+            runStartedAtUtc,
+            runCompletedAtUtc),
         options.Claims,
-        CreateProgress(results, elapsed, options, phase),
-        publishClaimResults: false);
+        processed,
+        paid,
+        pended,
+        businessDenials,
+        observationTimeouts,
+        platformFailures,
+        workflowScenarios,
+        workflowMatches,
+        workflowMismatches,
+        workflowUnsupported,
+        workflowObservationTimeouts,
+        elapsed,
+        progress.CurrentThroughputClaimsPerSecond,
+        progress.RollingP95LatencyMilliseconds,
+        progress.RollingP99LatencyMilliseconds,
+        null,
+        null,
+        null,
+        Array.Empty<MassAdjudicationStageTiming>(),
+        null,
+        Array.Empty<MassAdjudicationBusinessDenialSummary>(),
+        Array.Empty<MassAdjudicationWorkflowScenarioSummary>(),
+        Array.Empty<MassAdjudicationFailureSummary>(),
+        Array.Empty<MassAdjudicationClaimResult>(),
+        runStartedAtUtc.UtcDateTime,
+        runCompletedAtUtc.UtcDateTime,
+        progress);
 }
 
 static MassAdjudicationRunProgress CreateProgress(
@@ -2093,6 +2169,7 @@ static MassAdjudicationRunProgress CreateProgress(
     string phase)
 {
     var orderedDurations = results
+        .Take(500)
         .Select(r => r.Elapsed.TotalMilliseconds)
         .Order()
         .ToArray();
@@ -2112,6 +2189,23 @@ static MassAdjudicationRunProgress CreateProgress(
         Percentile(orderedDurations, 0.95),
         Percentile(orderedDurations, 0.99),
         DateTimeOffset.UtcNow);
+}
+
+static async Task PublishProgressSummaryAsync(
+    SemaphoreSlim gate,
+    HttpClient http,
+    ValidatorOptions options,
+    MassAdjudicationRunSummary summary,
+    JsonSerializerOptions json)
+{
+    try
+    {
+        await PublishSummaryAsync(http, options, summary, json, quiet: true);
+    }
+    finally
+    {
+        gate.Release();
+    }
 }
 
 static bool ShouldPublishProgress(int completedClaims, int totalClaims, ref long lastPublishTicks)

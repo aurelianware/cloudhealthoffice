@@ -245,7 +245,7 @@ public class MassAdjudicationRunRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsync_when_claim_result_insert_fails_deletes_inserted_summary()
+    public async Task SaveAsync_when_claim_result_insert_fails_preserves_existing_summary_and_claim_results()
     {
         var database = Substitute.For<IMongoDatabase>();
         var runs = Substitute.For<IMongoCollection<MassAdjudicationRunSummary>>();
@@ -260,11 +260,6 @@ public class MassAdjudicationRunRepositoryTests
                 Arg.Any<MongoCollectionSettings?>())
             .Returns(claimResults);
 
-        claimResults
-            .DeleteManyAsync(
-                Arg.Any<FilterDefinition<MassAdjudicationClaimResult>>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Substitute.For<DeleteResult>()));
         runs
             .ReplaceOneAsync(
                 Arg.Any<FilterDefinition<MassAdjudicationRunSummary>>(),
@@ -292,8 +287,11 @@ public class MassAdjudicationRunRepositoryTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("insert failed");
-        await runs.Received(1).DeleteOneAsync(
+        await runs.DidNotReceive().DeleteOneAsync(
             Arg.Any<FilterDefinition<MassAdjudicationRunSummary>>(),
+            Arg.Any<CancellationToken>());
+        await claimResults.DidNotReceive().DeleteManyAsync(
+            Arg.Any<FilterDefinition<MassAdjudicationClaimResult>>(),
             Arg.Any<CancellationToken>());
     }
 
