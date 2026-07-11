@@ -50,6 +50,20 @@ public class MassAdjudicationRunRepositoryTests
         summary.WorkflowUnsupported = 73;
         summary.WorkflowObservationTimeouts = 2;
         summary.AveragePaymentDelta = 59.36m;
+        summary.Status = "Running";
+        summary.Progress = new MassAdjudicationRunProgress
+        {
+            Phase = "Processing claims",
+            RequestedClaims = 5000,
+            CompletedClaims = 2500,
+            ProcessedClaims = 2499,
+            PlatformFailures = 1,
+            PercentComplete = 50,
+            CurrentThroughputClaimsPerSecond = 75.5,
+            RollingP95LatencyMilliseconds = 250,
+            RollingP99LatencyMilliseconds = 320,
+            LastPublishedAtUtc = DateTimeOffset.Parse("2026-07-09T19:00:00Z")
+        };
         summary.Run.MemberUrl = "https://member";
         summary.Run.CoverageUrl = "https://coverage";
         summary.Run.SeedMembers = true;
@@ -75,6 +89,10 @@ public class MassAdjudicationRunRepositoryTests
         reread.WorkflowUnsupported.Should().Be(73);
         reread.WorkflowObservationTimeouts.Should().Be(2);
         reread.AveragePaymentDelta.Should().Be(59.36m);
+        reread.Status.Should().Be("Running");
+        reread.Progress.Should().NotBeNull();
+        reread.Progress!.CompletedClaims.Should().Be(2500);
+        reread.Progress.CurrentThroughputClaimsPerSecond.Should().Be(75.5);
         reread.Run.MemberUrl.Should().Be("https://member");
         reread.Run.CoverageUrl.Should().Be("https://coverage");
         reread.Run.SeedMembers.Should().BeTrue();
@@ -84,6 +102,92 @@ public class MassAdjudicationRunRepositoryTests
             && s.Total == 10
             && s.Matches == 9
             && s.ObservationTimeouts == 1);
+    }
+
+    [Fact]
+    public async Task SaveAsync_upserts_progress_updates_without_creating_duplicate_runs()
+    {
+        var repo = new InMemoryMassAdjudicationRunRepository();
+        var runId = Guid.NewGuid().ToString("N");
+        var initial = CreateSummary();
+        initial.Id = runId;
+        initial.Status = "Running";
+        initial.TotalClaims = 1000;
+        initial.Processed = 100;
+        initial.Progress = new MassAdjudicationRunProgress
+        {
+            Phase = "Processing claims",
+            RequestedClaims = 1000,
+            CompletedClaims = 100,
+            ProcessedClaims = 100,
+            PercentComplete = 10,
+            LastPublishedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        var update = CreateSummary();
+        update.Id = runId;
+        update.Status = "Running";
+        update.TotalClaims = 1000;
+        update.Processed = 400;
+        update.Progress = new MassAdjudicationRunProgress
+        {
+            Phase = "Processing claims",
+            RequestedClaims = 1000,
+            CompletedClaims = 400,
+            ProcessedClaims = 400,
+            PercentComplete = 40,
+            LastPublishedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        await repo.SaveAsync(initial);
+        await repo.SaveAsync(update);
+
+        var runs = await repo.ListAsync(initial.Run.TenantId, 10);
+
+        runs.Should().ContainSingle();
+        runs[0].Id.Should().Be(runId);
+        runs[0].Processed.Should().Be(400);
+        runs[0].Progress!.CompletedClaims.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task SaveAsync_progress_only_update_preserves_existing_claim_results()
+    {
+        var repo = new InMemoryMassAdjudicationRunRepository();
+        var runId = Guid.NewGuid().ToString("N");
+        var completed = CreateSummary();
+        completed.Id = runId;
+        completed.Status = "Completed";
+        completed.ClaimResults.Add(new MassAdjudicationClaimResult
+        {
+            GeneratedClaimId = "GEN-EVIDENCE",
+            SubmittedClaimId = "claim-001",
+            ClaimType = "Professional",
+            Outcome = "Paid",
+            ValidationStatus = "Matched",
+            ElapsedMilliseconds = 100
+        });
+
+        var progressOnly = CreateSummary();
+        progressOnly.Id = runId;
+        progressOnly.Status = "Running";
+        progressOnly.Progress = new MassAdjudicationRunProgress
+        {
+            Phase = "Processing claims",
+            RequestedClaims = 1000,
+            CompletedClaims = 500,
+            ProcessedClaims = 500,
+            PercentComplete = 50,
+            LastPublishedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        var saved = await repo.SaveAsync(completed);
+        await repo.SaveAsync(progressOnly);
+
+        var claimResults = await repo.ListClaimResultsAsync(saved.Run.TenantId, runId, null, null, 10);
+
+        claimResults.Should().ContainSingle()
+            .Which.GeneratedClaimId.Should().Be("GEN-EVIDENCE");
     }
 
     [Fact]
@@ -141,7 +245,7 @@ public class MassAdjudicationRunRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsync_when_claim_result_insert_fails_deletes_inserted_summary()
+    public async Task SaveAsync_when_claim_result_insert_fails_preserves_existing_summary_and_claim_results()
     {
         var database = Substitute.For<IMongoDatabase>();
         var runs = Substitute.For<IMongoCollection<MassAdjudicationRunSummary>>();
@@ -156,6 +260,13 @@ public class MassAdjudicationRunRepositoryTests
                 Arg.Any<MongoCollectionSettings?>())
             .Returns(claimResults);
 
+        runs
+            .ReplaceOneAsync(
+                Arg.Any<FilterDefinition<MassAdjudicationRunSummary>>(),
+                Arg.Any<MassAdjudicationRunSummary>(),
+                Arg.Any<ReplaceOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Substitute.For<ReplaceOneResult>()));
         claimResults
             .InsertManyAsync(
                 Arg.Any<IEnumerable<MassAdjudicationClaimResult>>(),
@@ -176,8 +287,11 @@ public class MassAdjudicationRunRepositoryTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("insert failed");
-        await runs.Received(1).DeleteOneAsync(
+        await runs.DidNotReceive().DeleteOneAsync(
             Arg.Any<FilterDefinition<MassAdjudicationRunSummary>>(),
+            Arg.Any<CancellationToken>());
+        await claimResults.DidNotReceive().DeleteManyAsync(
+            Arg.Any<FilterDefinition<MassAdjudicationClaimResult>>(),
             Arg.Any<CancellationToken>());
     }
 

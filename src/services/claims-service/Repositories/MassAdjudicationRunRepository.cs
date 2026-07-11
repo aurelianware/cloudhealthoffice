@@ -37,8 +37,18 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
 
     public async Task<MassAdjudicationRunSummary> SaveAsync(MassAdjudicationRunSummary summary, CancellationToken ct = default)
     {
-        summary.Id = Guid.NewGuid().ToString("N");
-        summary.CreatedAtUtc = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(summary.Id))
+        {
+            summary.Id = Guid.NewGuid().ToString("N");
+        }
+
+        if (summary.CreatedAtUtc == default)
+        {
+            summary.CreatedAtUtc = now;
+        }
+
+        summary.LastUpdatedAtUtc = now;
 
         var claimResults = summary.ClaimResults;
         foreach (var result in claimResults)
@@ -49,26 +59,25 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
             result.CreatedAtUtc = summary.CreatedAtUtc;
         }
 
-        await _collection.InsertOneAsync(summary, cancellationToken: ct);
+        var runFilter = Builders<MassAdjudicationRunSummary>.Filter.And(
+            Builders<MassAdjudicationRunSummary>.Filter.Eq(x => x.Run.TenantId, summary.Run.TenantId),
+            Builders<MassAdjudicationRunSummary>.Filter.Eq(x => x.Id, summary.Id));
+
+        await _collection.ReplaceOneAsync(
+            runFilter,
+            summary,
+            new ReplaceOptions { IsUpsert = true },
+            ct);
+
         if (claimResults.Count > 0)
         {
-            try
-            {
-                await _claimResults.InsertManyAsync(claimResults, cancellationToken: ct);
-            }
-            catch
-            {
-                try
-                {
-                    var filter = Builders<MassAdjudicationRunSummary>.Filter.Eq(x => x.Id, summary.Id);
-                    await _collection.DeleteOneAsync(filter, cancellationToken: ct);
-                }
-                catch
-                {
-                }
-
-                throw;
-            }
+            await _claimResults.InsertManyAsync(claimResults, cancellationToken: ct);
+            var newResultIds = claimResults.Select(x => x.Id).ToArray();
+            var staleResultFilter = Builders<MassAdjudicationClaimResult>.Filter.And(
+                Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.TenantId, summary.Run.TenantId),
+                Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.RunId, summary.Id),
+                Builders<MassAdjudicationClaimResult>.Filter.Nin(x => x.Id, newResultIds));
+            await _claimResults.DeleteManyAsync(staleResultFilter, ct);
         }
 
         return summary;
@@ -152,17 +161,43 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
 
     public Task<MassAdjudicationRunSummary> SaveAsync(MassAdjudicationRunSummary summary, CancellationToken ct = default)
     {
-        summary.Id = Guid.NewGuid().ToString("N");
-        summary.CreatedAtUtc = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(summary.Id))
+        {
+            summary.Id = Guid.NewGuid().ToString("N");
+        }
+
+        if (summary.CreatedAtUtc == default)
+        {
+            summary.CreatedAtUtc = now;
+        }
+
+        summary.LastUpdatedAtUtc = now;
+
+        foreach (var result in summary.ClaimResults)
+        {
+            result.Id = Guid.NewGuid().ToString("N");
+            result.RunId = summary.Id;
+            result.TenantId = summary.Run.TenantId;
+            result.CreatedAtUtc = summary.CreatedAtUtc;
+        }
 
         lock (_sync)
         {
+            _runs.RemoveAll(x => x.Run.TenantId == summary.Run.TenantId && x.Id == summary.Id);
+            if (summary.ClaimResults.Count > 0)
+            {
+                var newResultIds = summary.ClaimResults
+                    .Select(x => x.Id)
+                    .ToHashSet(StringComparer.Ordinal);
+                _claimResults.RemoveAll(x =>
+                    x.TenantId == summary.Run.TenantId
+                    && x.RunId == summary.Id
+                    && !newResultIds.Contains(x.Id));
+            }
+
             foreach (var result in summary.ClaimResults)
             {
-                result.Id = Guid.NewGuid().ToString("N");
-                result.RunId = summary.Id;
-                result.TenantId = summary.Run.TenantId;
-                result.CreatedAtUtc = summary.CreatedAtUtc;
                 _claimResults.Add(result);
             }
 

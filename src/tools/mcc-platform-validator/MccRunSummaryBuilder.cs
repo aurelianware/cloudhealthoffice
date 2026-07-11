@@ -7,8 +7,14 @@ internal static class MccRunSummaryBuilder
         TimeSpan elapsed,
         ValidatorOptions options,
         DateTimeOffset runStartedAtUtc,
-        DateTimeOffset runCompletedAtUtc)
+        DateTimeOffset runCompletedAtUtc,
+        string? runId = null,
+        string status = "Completed",
+        int? totalClaimsOverride = null,
+        MassAdjudicationRunProgress? progress = null,
+        bool publishClaimResults = true)
     {
+        var totalClaims = Math.Max(results.Count, totalClaimsOverride ?? results.Count);
         var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
         var adjudicated = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
         var pended = results.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
@@ -56,7 +62,8 @@ internal static class MccRunSummaryBuilder
             .Take(5)
             .Select(r => new MassAdjudicationFailureSummary(r.GeneratedClaimId, r.FailureStage, r.Error))
             .ToList();
-        var claimResults = SelectPublishedClaimResults(results, options.PublishClaimResultsLimit)
+        var claimResults = publishClaimResults
+            ? SelectPublishedClaimResults(results, options.PublishClaimResultsLimit)
             .Select(r => new MassAdjudicationClaimResult(
                 r.GeneratedClaimId,
                 r.SubmittedClaimId,
@@ -80,9 +87,12 @@ internal static class MccRunSummaryBuilder
                 r.AdjudicationElapsed.TotalMilliseconds,
                 r.UpdateElapsed.TotalMilliseconds,
                 r.AdjudicationStepTimings))
-            .ToList();
+            .ToList()
+            : new List<MassAdjudicationClaimResult>();
 
         return new MassAdjudicationRunSummary(
+            string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId,
+            status,
             new MassAdjudicationRun(
                 options.TenantId,
                 options.Claims,
@@ -99,7 +109,7 @@ internal static class MccRunSummaryBuilder
                 options.LineOfBusiness,
                 runStartedAtUtc,
                 runCompletedAtUtc),
-            results.Count,
+            totalClaims,
             processed,
             adjudicated,
             pended,
@@ -123,7 +133,10 @@ internal static class MccRunSummaryBuilder
             denialBreakdown,
             workflowBreakdown,
             failures,
-            claimResults);
+            claimResults,
+            runStartedAtUtc.UtcDateTime,
+            DateTimeOffset.UtcNow.UtcDateTime,
+            progress);
     }
 
     private static MassAdjudicationStageTiming? BuildStageTiming(string label, IEnumerable<TimeSpan> durations)

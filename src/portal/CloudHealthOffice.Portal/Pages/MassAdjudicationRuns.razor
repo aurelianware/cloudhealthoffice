@@ -103,6 +103,12 @@
     <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55);">
         @RefreshStatus
     </MudText>
+    @if (_runs.Any(IsRunActive))
+    {
+        <MudChip T="string" Color="Color.Info" Size="Size.Small" Icon="@Icons.Material.Filled.Sync">
+            @_runs.Count(IsRunActive) running
+        </MudChip>
+    }
     <MudSpacer />
     @if (_selectedRun is not null)
     {
@@ -136,6 +142,12 @@
                     <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
                         @($"{ShortId(context.Id)} · p{context.Run.Parallelism}")
                     </MudText>
+                    @if (IsRunActive(context))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Sync" Class="mt-1">
+                            @RunStatusLabel(context)
+                        </MudChip>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Processed">
                     <MudText Typo="Typo.body2">@context.Processed.ToString("N0") / @context.TotalClaims.ToString("N0")</MudText>
@@ -181,6 +193,26 @@
                 </div>
 
                 <MudGrid Spacing="2" Class="mb-3">
+                    @if (IsRunActive(_selectedRun))
+                    {
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-1">
+                                <div class="d-flex align-center gap-2">
+                                    <MudText Typo="Typo.body2">
+                                        @RunStatusLabel(_selectedRun): @_selectedRun.Progress?.CompletedClaims.ToString("N0") of @_selectedRun.TotalClaims.ToString("N0") claims observed
+                                    </MudText>
+                                    <MudSpacer />
+                                    <MudText Typo="Typo.caption" Style="font-family: monospace;">
+                                        @LastProgressText(_selectedRun)
+                                    </MudText>
+                                </div>
+                                <MudProgressLinear Value="@PercentProcessed(_selectedRun)"
+                                                   Color="Color.Info"
+                                                   Class="mt-2"
+                                                   Style="height: 6px; border-radius: 3px;" />
+                            </MudAlert>
+                        </MudItem>
+                    }
                     <MudItem xs="6" md="4">@Metric("Processed", $"{_selectedRun.Processed:N0}", "#00ffff")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Paid", $"{_selectedRun.Paid:N0}", "#00ff88")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Pended", $"{_selectedRun.Pended:N0}", "#ffca28")</MudItem>
@@ -194,6 +226,11 @@
                     <MudItem xs="6" md="4">@Metric("Unsupported", $"{_selectedRun.WorkflowUnsupported:N0}", "#cbd5e1")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Timeouts", $"{_selectedRun.WorkflowObservationTimeouts:N0}", _selectedRun.WorkflowObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Avg Payment Delta", _selectedRun.AveragePaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.AveragePaymentDelta))</MudItem>
+                    @if (_selectedRun.Progress is not null)
+                    {
+                        <MudItem xs="6" md="4">@Metric("Run Status", RunStatusLabel(_selectedRun), IsRunActive(_selectedRun) ? "#7dd3fc" : "#00ff88")</MudItem>
+                        <MudItem xs="6" md="4">@Metric("Last Progress", LastProgressText(_selectedRun), "#cbd5e1")</MudItem>
+                    }
                 </MudGrid>
 
                 <MudGrid Spacing="2" Class="mb-3">
@@ -609,6 +646,33 @@
 
     private static double PercentProcessed(MassAdjudicationRunSummary run)
         => run.TotalClaims <= 0 ? 0 : (double)run.Processed / run.TotalClaims * 100;
+
+    private static bool IsRunActive(MassAdjudicationRunSummary run)
+        => string.Equals(run.Status, "Running", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(run.Progress?.Phase, "Processing claims", StringComparison.OrdinalIgnoreCase);
+
+    private static string RunStatusLabel(MassAdjudicationRunSummary run)
+    {
+        if (!string.IsNullOrWhiteSpace(run.Progress?.Phase) && IsRunActive(run))
+        {
+            return run.Progress.Phase;
+        }
+
+        return string.IsNullOrWhiteSpace(run.Status) ? "Completed" : run.Status;
+    }
+
+    private static string LastProgressText(MassAdjudicationRunSummary run)
+    {
+        var timestamp = run.Progress?.LastPublishedAtUtc;
+        if (timestamp is null || timestamp.Value == default)
+        {
+            return run.LastUpdatedAtUtc == default
+                ? "not published yet"
+                : run.LastUpdatedAtUtc.ToLocalTime().ToString("HH:mm:ss");
+        }
+
+        return timestamp.Value.LocalDateTime.ToString("HH:mm:ss");
+    }
 
     private double DenialPercent(int count)
         => _selectedRun is null || _selectedRun.BusinessDenials <= 0
