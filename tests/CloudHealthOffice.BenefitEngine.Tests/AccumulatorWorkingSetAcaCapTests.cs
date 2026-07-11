@@ -171,4 +171,31 @@ public class AccumulatorWorkingSetAcaCapTests
         // Embedded uses the existing IndividualOutOfPocketMax, not the cap.
         Assert.Equal(5_000m, ws.GetRemainingOopMax(NetworkTier.InNetwork));
     }
+
+    [Fact]
+    public void Embedded_ZeroLimitPlaceholder_UsesAuthoredPlanOopLimit()
+    {
+        var plan = new BenefitPlanConfig
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-placeholder",
+            PlanName = "Placeholder Source",
+            PlanType = PlanType.PPO,
+            FamilyAccumulatorModel = FamilyAccumulatorModel.Embedded,
+            IndividualOopMax = 5_000m,
+            FamilyOopMax = 10_000m,
+        };
+        var sourcePlaceholder = new AccumulatorSnapshot
+        {
+            Type = AccumulatorType.IndividualOutOfPocketMax,
+            Scope = AccumulatorScope.Individual,
+            NetworkTier = NetworkTier.InNetwork,
+            LimitAmount = 0m,
+            AccumulatedAmountAfter = 0m,
+        };
+
+        var ws = new AccumulatorWorkingSet([sourcePlaceholder], plan);
+
+        Assert.Equal(5_000m, ws.GetRemainingOopMax(NetworkTier.InNetwork));
+    }
 }
