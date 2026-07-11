@@ -240,7 +240,7 @@ EDI coverage via Argo workflows: 270/271/275/276/277/278/834/837.
 - Argo-orchestrated adjudication workflow (`infrastructure/argo-workflows/claims-adjudication-workflow.yaml`) wiring the pipeline end-to-end.
 - Per-tenant multi-tenancy enforced across services, databases (Cosmos DB partitions), secrets (Key Vault namespacing), and Kafka topics.
 - Portal under `src/portal/` for operational workflows across tenants, services, and operating modes.
-- `fhir-service` CapabilityStatement advertising CHO-authored profiles in addition to US Core.
+- `fhir-service` CapabilityStatement advertising Cloud Health Office-authored profiles in addition to US Core.
 - Observability stack (OpenTelemetry with PHI-scrubbing SpanProcessor, merged in PR #666) applied across services.
 - Million Claim Challenge local Kubernetes validation: a clean 50,000-claim breadth run with 50,000 claims processed, zero platform failures, 460/460 expected-pend claims observed as pended, 5,767/6,500 workflow checks matched, zero scoreable workflow mismatches, and 733 unsupported scenarios reported separately. The run completed at 68.86 claims/sec with 298 ms P95 and 369 ms P99 latency in local Docker Desktop Kubernetes with Docker allocated 18 CPUs and roughly 23.4 GiB memory. This is a local validation benchmark, not a production cloud benchmark. Part 7 added the portal Mass Adjudication console so run summaries, unsupported rows, mismatches, payment delta, and claim-level evidence are visible inside the product.
 
@@ -364,11 +364,11 @@ We are not in an active acquisition process. We are building the platform with t
 
 *Last verified: July 2026*
 
-These are the ground-truth numbers for CHO as of the most recent verification. Any artifact citing service counts, engine counts, test counts, or documentation volume should reconcile to this section. When these numbers drift from reality, update this section first; derivative artifacts then reconcile to it.
+These are the ground-truth numbers for Cloud Health Office as of the most recent verification. Any artifact citing service counts, engine counts, test counts, or documentation volume should reconcile to this section. When these numbers drift from reality, update this section first; derivative artifacts then reconcile to it.
 
 | Metric | Value | Source |
 | --- | --- | --- |
-| Service projects | 36 | `src/services/*/`, including the shared contracts project |
+| Service projects | 36 | `src/services/*/`, including shared projects such as contracts, infrastructure, and events |
 | Adjudication/rules engines | 9 | BenefitEngine, FeeScheduleEngine, NcciEngine, CobEngine, RiskAdjustmentEngine, EncounterEngine, ClaimsScrubEngine, PriorAuthRuleEngine, ProviderVerificationEngine |
 | Supporting engine projects | 4 | DocumentStore, OperatingMode, ProviderEnrollmentService, enrollment-wiring |
 | Test projects | 45 | `*.Tests.csproj` files |
