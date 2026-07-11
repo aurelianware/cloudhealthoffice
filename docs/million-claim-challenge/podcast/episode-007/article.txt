@@ -1,0 +1,242 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 7: From Benchmark Logs to an Operator Console
+
+Part 6 of this series was about honesty.
+
+Cloud Health Office had moved the Million Claim Challenge beyond raw throughput and into outcome scoring. Paid claims, denied claims, and pended claims could all be correct. Unsupported scenarios were separated from mismatches instead of being quietly counted as wins or failures. Fixture bugs were treated as benchmark bugs. A clean 50,000-claim breadth run gave the project a stronger foundation than a faster but less inspectable number.
+
+But there was still a gap.
+
+The proof lived mostly in validator output, benchmark logs, and markdown tables.
+
+That is useful for engineers. It is not enough for operators.
+
+If this is supposed to become a real claims processing system, the evidence cannot only live in a terminal scrollback. A claim operations lead should be able to see the run, inspect the outcomes, filter the gaps, open a claim, and understand what happened without becoming a benchmark maintainer.
+
+That is where Part 7 begins.
+
+## A benchmark dashboard can hide the truth
+
+Dashboards have their own failure mode.
+
+They can make weak evidence look strong by compressing everything into a green number.
+
+For healthcare claims, that is dangerous. A run summary that says "50,000 claims processed" is not enough. A run summary that says "zero platform failures" is better, but still incomplete. A run summary that says "5,767 of 6,500 workflow checks matched, zero mismatches, 733 unsupported" is much more honest.
+
+But even that is still a summary.
+
+The next question is: can you click into the evidence?
+
+If a scenario is unsupported, which claim was it? If a mismatch exists, which claim produced it? If pended claims were observed, can the persisted claim state be inspected? If payment delta is visible, can paid claims eventually be drilled into by amount difference?
+
+The console should preserve the nuance of the benchmark instead of sanding it down.
+
+## Building the Mass Adjudication console
+
+The first version of the Mass Adjudication console turns local benchmark runs into an operator-facing view.
+
+It shows each published run with the things that matter during a claims benchmark:
+
+- processed claim count
+- claims per second
+- P95 and P99 latency
+- paid claims
+- pended claims
+- business denials
+- platform failures
+- workflow checks
+- workflow mismatches
+- unsupported scenarios
+- observation timeouts
+- average payment delta
+
+The page also keeps the claim-level result table close to the run summary. That matters because run-level metrics are only useful if the underlying claims are reachable.
+
+The claim table now uses the human-readable Million Claim Challenge IDs, such as `MCC-P-0007841`, instead of making the internal GUID the main visual anchor. The GUID is still available as a secondary technical identifier, but the screen leads with the identifier a human can connect back to the corpus and benchmark output.
+
+Claim detail navigation also preserves the originating run. When an operator opens a claim from a mass adjudication run, the claim detail page can return to that run instead of dumping the user back into generic claim search.
+
+Those sound like small interface decisions.
+
+They are not.
+
+They are what turn a benchmark from a one-way report into an evidence trail.
+
+## The console exposed a proof-system bug
+
+The most useful thing the dashboard did was not visual.
+
+It found a flaw in the evidence path.
+
+After PR #874, the claim results table could filter by validation status. That meant an operator could ask for unsupported claims or mismatched claims directly from the Mass Adjudication page.
+
+The filter worked.
+
+But the existing 50K run created an uncomfortable discovery: the run summary reported mismatches, while the stored claim-result sample did not include the mismatched rows.
+
+That was not a UI bug. It was a sampling bug.
+
+The validator had been publishing a limited claim-result sample, and that sample was biased toward slow claims. That is useful for latency triage, but it is not enough for correctness triage. A slow paid claim might be operationally interesting, but a mismatched claim is evidence-critical.
+
+If a dashboard can say "there were mismatches" but cannot show the mismatched claims, the dashboard is not yet an evidence console.
+
+So PR #875 changed the sampling model.
+
+Claim-result samples are now evidence-first:
+
+1. platform failures
+2. observation failures
+3. workflow mismatches
+4. unsupported scenarios
+5. slowest remaining claims for latency analysis
+
+The point is simple: the rows most likely to require human review should not be dropped just because they were not the slowest rows.
+
+That is an important product lesson. The console did not just display the benchmark. It improved the benchmark's accountability.
+
+## A fresh 5K dashboard evidence run
+
+After the evidence-first sampling fix, Cloud Health Office ran a fresh 5,000-claim local Kubernetes validation to prove the console path.
+
+This was not a new scale headline. The Part 6 50K breadth run is still the larger result.
+
+The purpose of this 5K run was narrower: confirm that a current validator run publishes evidence in a way the portal can inspect.
+
+The run completed with:
+
+- 5,000 claims processed
+- 3,852 paid or adjudicated
+- 46 pended
+- 1,102 business denials
+- 0 platform failures
+- 0 observation timeouts
+- 577 of 650 workflow checks matched
+- 0 workflow mismatches
+- 73 unsupported scenarios
+- 37.90 claims per second
+- 384 ms P95 latency
+- 466 ms P99 latency
+- $66.90 average payment delta
+
+The unsupported scenarios were not buried. The console filter could show them directly.
+
+Examples included retroactive eligibility coverage change and prior-authorization variants where the current validation path still reports unsupported instead of pretending the scenario is validated.
+
+The mismatch filter returned no rows in this run for the right reason: the run had zero workflow mismatches. That is very different from returning no rows because the sample failed to retain them.
+
+That distinction is the whole point.
+
+## The dashboard changes how gaps feel
+
+Before the console, unsupported scenarios were mostly a number in a table.
+
+Now they feel more like a work queue.
+
+That is the right direction. Unsupported should not be a vague caveat. It should be a set of inspectable claims connected to scenario names, generated claim IDs, outcomes, timings, and eventually the exact edit or workflow capability that needs to be built.
+
+The same is true for mismatches.
+
+When a mismatch exists, the useful question is not just "how many?" It is:
+
+- Which scenario produced it?
+- What did the answer key expect?
+- What did the platform produce?
+- Was the claim paid, denied, pended, or failed?
+- Was the issue fixture setup, adjudication logic, persistence, or observation?
+
+The console is not fully there yet, but the shape is clear.
+
+Benchmark credibility improves when every headline number has a drilldown path.
+
+## Why claims management and mass adjudication show different things
+
+One design issue became obvious during this phase: the generic Claims page and the Mass Adjudication page are not the same view.
+
+That is expected.
+
+Claims management shows operational claim records. It is organized around the current claim inventory.
+
+Mass adjudication shows benchmark runs. It is organized around run evidence: which claims were part of a specific run, what outcome each claim produced, what validation status it received, how long it took, and whether the run created failures or unsupported results.
+
+Those views can overlap, but they should not collapse into one another.
+
+An operator investigating a production claim needs a claim-centric screen. An engineer or claims operations lead reviewing a benchmark needs a run-centric screen.
+
+Part 7 made the run-centric path much clearer.
+
+## What the console still does not prove
+
+This is still a local benchmark system, not a production operations center.
+
+The run was executed in local Docker Desktop Kubernetes against a long-lived demo tenant. That means accumulated local state can affect seeding behavior and hot paths. The numbers are useful for repeatable local engineering, not for production capacity claims.
+
+The dashboard also shows average payment delta, but payment-amount accuracy is not yet a scored pass/fail gate. A claim can reach the right disposition while still paying the wrong amount. Part 6 named that gap. Part 7 keeps it visible.
+
+Pended observation still has the same limitation described in Part 6: it proves expected-pend claims persisted as pended, but it does not yet sweep expected-pay or expected-deny claims to catch false pends.
+
+And the console does not yet show true live in-progress run telemetry. It can watch for newly published runs and display completed summaries, but the next step is to publish progress while the benchmark is running: submitted, adjudicated, failed, pended, current throughput, rolling latency, and scenario progress.
+
+Those are not reasons to discount the console.
+
+They are the next backlog.
+
+## Why this matters
+
+There is a pattern emerging across the Million Claim Challenge work.
+
+First the benchmark got repeatable.
+
+Then the scoring got more honest.
+
+Then pended claims became observable.
+
+Then unsupported scenarios were separated from mismatches.
+
+Then the dashboard exposed that correctness evidence needed better sampling.
+
+That is the right kind of progress.
+
+The platform is not just chasing bigger numbers. It is building the machinery needed to believe those numbers.
+
+Part 7 is about that machinery.
+
+Not just "we ran claims."
+
+Not just "we processed them quickly."
+
+But:
+
+- the run is visible
+- the summary is understandable
+- the claim IDs are human-readable
+- unsupported scenarios are filterable
+- mismatches are preserved for review
+- platform failures are not mixed with business denials
+- payment delta remains visible as an unsolved scoring gate
+
+That is how a benchmark starts becoming an audit instrument.
+
+## What comes next
+
+The obvious next milestone is still 100,000 claims.
+
+But Part 7 makes the bar for 100K higher.
+
+The next big run should not only be larger. It should be more inspectable while it is running and more reviewable after it finishes.
+
+Before the 100K article, the strongest next steps are:
+
+1. publish in-progress run telemetry into the console
+2. add a false-pend sweep across expected-pay and expected-deny claims
+3. turn payment delta into an amount-level scoring gate
+4. rerun 50K with evidence-first claim sampling
+5. then run 100K as a focused milestone
+
+That is the ladder.
+
+Part 5 made the benchmark repeatable.
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+The Million Claim Challenge is still climbing toward the full million, but this is the kind of rung that matters: the proof is moving from logs into the product.
