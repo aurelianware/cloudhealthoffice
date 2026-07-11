@@ -1,0 +1,85 @@
+# Episode 007 podcast prompt
+
+Create a 10-12 minute two-host engineering podcast episode for Cloud Health Office's Million Claim Challenge series.
+
+Use the recurring host style from:
+
+- `../host-personas.md`
+- `../intro-script.md`
+- `../outro-script.md`
+
+## Episode title
+
+From Benchmark Logs to an Operator Console
+
+## Core thesis
+
+The Million Claim Challenge became more useful when benchmark evidence moved from terminal logs and markdown tables into an operator-facing Mass Adjudication console.
+
+## Source material to use
+
+- `article.txt`
+- `benchmark-results.txt`
+- `../../pend-validation.md`
+- `../../../POSITIONING.md`
+
+## Required discussion points
+
+The hosts should explain:
+
+1. Part 6 made scoring honest; Part 7 makes the evidence inspectable.
+2. Why a dashboard should preserve nuance instead of compressing a claims benchmark into one green number.
+3. What the Mass Adjudication console shows: claims/sec, P95/P99, workflow checks, unsupported, mismatches, platform failures, and payment delta.
+4. Why human-readable MCC claim IDs matter for operator review.
+5. Why Claims Management and Mass Adjudication are intentionally different views.
+6. How PR #874 enabled validation-status filtering for unsupported and mismatched claim rows.
+7. How the console exposed a sampling bug: old samples could report mismatches in the summary but omit the mismatched rows.
+8. How PR #875 made claim-result samples evidence-first.
+9. What the fresh 5K dashboard evidence run proved.
+10. Why 100K should come after live progress telemetry, false-pend sweep, payment-amount scoring, and a post-PR-875 50K rerun.
+
+## Exact fresh 5K numbers to include
+
+- Claims processed: 5,000/5,000
+- Paid/adjudicated: 3,852
+- Pended: 46
+- Business denials: 1,102
+- Platform failures: 0
+- Observation timeouts: 0
+- Workflow checks: 577/650 matched
+- Workflow mismatches: 0
+- Unsupported: 73
+- Throughput: 37.90 claims/sec
+- P95 latency: 384 ms
+- P99 latency: 466 ms
+- Avg payment delta: $66.90, diagnostic only
+
+## Important caveats
+
+The hosts must say that:
+
+- this was a local Docker Desktop Kubernetes run, not a production cloud benchmark
+- the fresh 5K run was a dashboard evidence proof, not a new scale headline
+- the Part 6 50K result remains the larger published correctness result
+- the local demo tenant was long-lived, not freshly reset
+- payment delta remains diagnostic and is not yet amount-level pass/fail scoring
+- pended observation is still one-directional and does not yet include a false-pend sweep
+- live in-progress telemetry is not complete yet; the console watches for newly published runs and displays completed summaries
+- unsupported scenarios are not wins; they are reviewable work items
+
+## Tone
+
+Keep the episode candid and practical. The strongest story is that the portal found an evidence problem, and the benchmark got better because the team fixed it.
+
+Avoid overstating the dashboard as production operations. It is a local evidence console moving in the right direction.
+
+## Suggested episode arc
+
+1. Recap Part 6: honest edge-case scoring.
+2. Explain the new problem: logs are not an operator console.
+3. Walk through the Mass Adjudication dashboard.
+4. Explain the evidence-sampling bug.
+5. Explain PR #875's evidence-first fix.
+6. Walk through the fresh 5K run.
+7. Name the remaining gaps: live telemetry, payment scoring, false-pend sweep.
+8. Close with why this makes the 100K milestone more meaningful.
