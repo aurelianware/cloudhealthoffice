@@ -311,7 +311,7 @@ Built by a solo founder with 25+ years of payer IT experience and AI-assisted de
 |Document                                                                          |Description                                   |
 |----------------------------------------------------------------------------------|----------------------------------------------|
 |[Quickstart](docs/guides/QUICKSTART.md)                                           |Get running in 5 minutes                      |
-|[Architecture](docs/guides/ARCHITECTURE.md)                                       |System design and service interactions        |
+|[Architecture](docs/architecture/ARCHITECTURE.md)                                  |System design and service interactions        |
 |[Deployment Guide](docs/guides/DEPLOYMENT.md)                                     |Production deployment for Azure and Kubernetes|
 |[CMS-0057-F Compliance](docs/features/CMS-0057-F-COMPLIANCE.md)                   |Regulatory compliance mapping                 |
 |[Claims Pipeline](docs/features/837-CLAIMS-PIPELINE.md)                           |End-to-end claims adjudication flow           |

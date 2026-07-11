@@ -1,1150 +1,349 @@
-# Cloud Health Office - Platform Architecture
+# Cloud Health Office Architecture
 
-This document provides a comprehensive overview of the Cloud Health Office multi-tenant SaaS platform architecture, component interactions, and data flows supporting unlimited health plans.
+**Status:** Canonical platform architecture overview
+**Last updated:** July 2026
+**Audience:** engineering, implementation partners, technical evaluators, and diligence reviewers
 
-## Table of Contents
-- [Overview](#overview)
-- [Deployment Architecture](#deployment-architecture)
-- [Platform Architecture](#platform-architecture)
-- [High-Level Architecture](#high-level-architecture)
-- [Component Details](#component-details)
-- [Data Flows](#data-flows)
-- [Integration Points](#integration-points)
-- [Design Decisions](#design-decisions)
-- [HIPAA Compliance](#hipaa-compliance)
-- [Scalability and Performance](#scalability-and-performance)
+Cloud Health Office is a Kubernetes-native, multi-tenant healthcare claims administration platform. It supports payer modernization across four entry points:
 
-## Detailed Architecture Documents
+- public tools and transactional APIs
+- managed healthcare data services
+- compliance accelerator deployments alongside existing core admin systems
+- progressive modernization toward a full claims administration platform
 
-- **[Authorization & Attachments Architecture](docs/AUTHORIZATION-ATTACHMENTS-ARCHITECTURE.md)** - Prior authorization (278), clinical attachments (275), and RFAI workflow
+This document is the current top-level architecture reference. Older Argo/SFTP and attachment-specific designs remain available as deep-dive documents, but they are no longer the best overview of the platform.
 
-## Overview
+## Architecture Principles
 
-Cloud Health Office is a **cloud-native multi-tenant SaaS platform** that processes healthcare EDI transactions for unlimited health plans. The platform supports claims, eligibility, attachments, authorizations, appeals, and claim status through configuration-driven deployment.
+| Principle | Implementation |
+| --- | --- |
+| Multi-tenant by default | Tenant routing through `X-Tenant-ID`, tenant-partitioned data stores, tenant-aware configuration, and tenant-scoped audit signals. |
+| Kubernetes-native | Services run as containerized workloads in local Docker Desktop Kubernetes, AKS, EKS, GKE, or customer-managed Kubernetes. |
+| Backend agnostic | Core admin integration is adapter-based so CHO can augment or progressively replace QNXT, Facets, HealthEdge, or custom payer platforms. |
+| Standards-based | X12 270/271/275/276/277/278/834/835/837, FHIR R4, Da Vinci implementation guides, SMART-on-FHIR scopes, and payer-specific compliance rules. |
+| Evidence-led | Benchmark, validation, and operational views separate platform failures, business denials, unsupported scenarios, workflow mismatches, pended outcomes, and payment diagnostics. |
+| Replace in layers | Customers can start with compliance APIs or data services, then expand into adjudication, payment, capitation, and full CAPS replacement over time. |
 
-**Deployment architecture:**
+## Deployment Model
 
-- **Kubernetes (AKS)** with **Argo Workflows** for orchestration — multi-cloud capable (AKS, EKS, GKE), greater infrastructure control
+Cloud Health Office supports two primary deployment shapes.
 
-> **Note:** The platform previously supported Azure Logic Apps as an orchestration layer. That option has been removed in favor of Argo Workflows on AKS. See [ADR 004](../adr/004-remove-logic-apps.md) for the rationale.
+### Local Engineering and Validation
 
-### Key Objectives
-- **Multi-Tenant SaaS**: Single codebase serves unlimited payers with per-tenant isolation
-- **Zero-Code Onboarding**: Add new payers through configuration (<1 hour to production)
-- **Backend Agnostic**: Works with any claims system (claims adjudication systems such as TriZetto, Epic, Cerner, custom)
-- **Cloud Agnostic**: Deploy to Azure, AWS, GCP, or on-premises with Kubernetes
-- **Enterprise Security**: HIPAA-compliant with Key Vault or HashiCorp Vault, private endpoints, PHI masking, automated rotation
-- **Reliability**: Comprehensive error handling, retry logic, dead-letter queues, and health monitoring
-- **Horizontal Scalability**: Auto-scales to handle any transaction volume across all tenants
-- **Complete Auditability**: Full transaction tracking, compliance logging, and per-payer reporting
-- **Standards-Based**: X12 EDI integration with the clearinghouse and other clearinghouses
-- **SaaS-Ready**: Marketplace-ready with billing integration and customer portal (roadmap)
+Local validation uses Docker Desktop Kubernetes to run the same service boundaries used in cloud environments.
 
-## Deployment Architecture
+Typical local stack:
 
-Cloud Health Office runs on **AKS (Azure Kubernetes Service)** with **Argo Workflows** for orchestration.
+- Docker Desktop Kubernetes
+- local `cloudhealthoffice` namespace
+- claims service, benefit-plan service, member service, coverage service, provider service, and portal
+- Million Claim Challenge validator jobs
+- local port-forwarding for portal and service inspection
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│              Kubernetes Architecture (AKS)                    │
-│         (Also deployable to EKS / GKE / On-Premises)         │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐   │
-│  │    Argo     │     │   Azure     │     │   Azure     │   │
-│  │  Workflows  │────▶│  Service Bus│────▶│   Storage   │   │
-│  │(Orchestration)    │ (Messaging) │     │  (Data Lake)│   │
-│  └─────────────┘     └─────────────┘     └─────────────┘   │
-│         │                                       │           │
-│         ▼                                       ▼           │
-│  ┌─────────────┐                        ┌─────────────┐   │
-│  │    Argo     │                        │    Azure    │   │
-│  │   Events    │                        │  Key Vault  │   │
-│  │ (Triggers)  │                        │  (Secrets)  │   │
-│  └─────────────┘                        └─────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
+This is the environment used for the Million Claim Challenge local benchmark series. Local benchmark results are useful for repeatability and correctness validation, but they are not production capacity claims.
 
-**Key Components:**
+### Production Cloud
 
-- Argo Workflows (workflow orchestration, DAG steps)
-- Argo Events (event-driven triggers)
-- Azure Service Bus (messaging)
-- Azure Storage Gen2 (Data Lake)
-- Azure Key Vault / Kubernetes Secrets (secrets management)
-- Prometheus/Grafana + Application Insights (monitoring)
-- **10 microservices** (Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, Claims Scrubbing)
-- **6 utility containers** (x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor)
-- X12 EDI parsing/generation handled in C# services (no Integration Account required)
+Production deployments are Kubernetes-first and can run on:
 
-**Workflow manifests:** `infrastructure/argo-workflows/` (YAML DAG definitions)
+- Azure AKS
+- AWS EKS
+- Google GKE
+- customer-managed Kubernetes
+- regulated private cloud / on-premises Kubernetes
 
-**See [Multi-Cloud Deployment Guide](./docs/MULTI-CLOUD-DEPLOYMENT.md) for detailed deployment instructions.**
+Common cloud dependencies:
 
-### Platform Context
+- Azure Service Bus or Kafka-compatible messaging
+- MongoDB or Cosmos DB for document persistence
+- PostgreSQL for structured reference data where appropriate
+- Redis for cache and accumulator acceleration
+- object storage for EDI files and audit artifacts
+- cloud key management or HashiCorp Vault for secrets
+- Prometheus/Grafana, Application Insights, or equivalent observability
 
-**Platform Model:**
-- **Multi-Tenant**: Single instance serves multiple payers with config-based isolation
-- **Configuration-Driven**: All payer-specific logic defined in configuration files
-- **Automated Deployment**: Config-to-Workflow Generator creates complete deployments
-- **Self-Service**: Interactive onboarding wizard for guided configuration
+## High-Level Platform View
 
-**Trading Partners (Generic):**
-- **Clearinghouse** (ID: 030240928) - EDI clearinghouse sending attachment requests
-- **Health Plans** (ID: {config.payerId}) - Individual payer claims processing systems
-
-**Supported Use Cases:**
-1. Inbound attachment requests from providers via the clearinghouse (275)
-2. Outbound status responses to the clearinghouse (277)
-3. Health care services review processing (278)
-4. Deterministic transaction replay for debugging
-5. Appeals integration with attachment workflows
-
-## Platform Architecture
-
-### Configuration-Driven Design
-
-The platform uses a **unified configuration schema** to support multiple payers without custom code:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│           Unified Configuration Schema                       │
-│  (Payer-specific settings, backend mappings, business rules) │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│           Config-to-Workflow Generator                       │
-│  (Generates Argo workflow YAML, Bicep infrastructure)        │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│           Payer-Specific Deployment Package                  │
-│  (Argo DAG manifests, infrastructure, K8s secrets, docs)     │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│           Argo Workflows on AKS                              │
-│  (Multi-tenant execution with config-based routing)          │
-└─────────────────────────────────────────────────────────────┘
+```text
+Users / Operators / APIs
+        |
+        v
+Portal, Public Tools, API Gateway, FHIR APIs
+        |
+        v
+Tenant Context + Auth + Rate Limits + Audit
+        |
+        +-------------------+-------------------+-------------------+
+        |                   |                   |                   |
+        v                   v                   v                   v
+ Claims Service      Benefit Plan Service  Member/Coverage      Provider Service
+        |                   |                   |                   |
+        +---------+---------+---------+---------+---------+---------+
+                  |
+                  v
+        Adjudication Pipeline and Engines
+                  |
+    +-------------+-------------+-------------+-------------+
+    |                           |                           |
+    v                           v                           v
+ Payment / Remittance      Work Queues / Pends        Benchmark Evidence
+    |                           |                           |
+    v                           v                           v
+ 835 / Finance             Examiner Operations        Mass Adjudication Console
 ```
 
-### Key Platform Components
-
-1. **Unified Configuration Schema** (`docs/UNIFIED-CONFIG-SCHEMA.md`)
-   - Payer organization information
-   - Module enablement (Appeals, ECS, Attachments, etc.)
-   - Backend system connections and field mappings
-   - X12 EDI settings per payer
-   - Business rules and validation logic
-
-2. **Config-to-Workflow Generator** (`docs/CONFIG-TO-WORKFLOW-GENERATOR.md`)
-   - Reads payer configuration files
-   - Generates Argo workflow YAML manifests (in `infrastructure/argo-workflows/`)
-   - Creates Bicep infrastructure templates
-   - Produces deployment scripts and documentation
-
-3. **Onboarding Wizard** (`scripts/cli/payer-onboarding-wizard.js`)
-   - Interactive CLI for guided configuration
-   - 10-step process from organization info to deployment
-   - Real-time validation and schema compliance
-
-4. **Multi-Tenant Runtime**
-   - Argo Workflows on AKS
-   - Config-based tenant isolation
-   - Payer-specific parameters injected at runtime via Kubernetes Secrets/ConfigMaps
-   - Shared infrastructure, isolated data and configuration
-
-## High-Level Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│              Cloud Health Office Platform                        │
-│                     (Azure West US / East US)                    │
-└─────────────────────────────────────────────────────────────────┘
-
-┌──────────────┐         ┌──────────────────────────────────┐
-│   Clearinghouse   │ SFTP    │     Argo Workflows on AKS         │
-│   (275/278)  │────────▶│  ┌────────────────────────────┐  │
-│              │         │  │  ingest275 DAG Step        │  │
-└──────────────┘         │  │  (SFTP Trigger)            │  │
-                         │  └────────────┬───────────────┘  │
-┌──────────────┐         │               │                  │
-│    claims backend      │◀────────│  ┌────────────▼───────────────┐  │
-│     API      │  HTTP   │  │  Parse X12 275 (C# svc)    │  │
-│              │         │  │  Extract Metadata          │  │
-└──────────────┘         │  │  Archive to Data Lake      │  │
-                         │  └────────────┬───────────────┘  │
-┌──────────────┐         │               │                  │
-│ Data Lake    │◀────────│  ┌────────────▼───────────────┐  │
-│  Storage     │  Blob   │  │  Publish to Service Bus    │  │
-│  Gen2        │         │  │  (attachments-in topic)    │  │
-│              │         │  └────────────────────────────┘  │
-└──────────────┘         │                                  │
-                         │  ┌────────────────────────────┐  │
-┌──────────────┐         │  │  rfai277 DAG Step          │  │
-│   Clearinghouse   │◀────────│  │  (Service Bus Trigger)     │  │
-│   (277)      │  SFTP   │  │  ▲                         │  │
-│              │         │  └──┼─────────────────────────┘  │
-└──────────────┘         │     │                            │
-                         │  ┌──┴─────────────────────────┐  │
-┌──────────────┐         │  │  Service Bus Namespace     │  │
-│ Service Bus  │         │  │  • attachments-in          │  │
-│  Topics      │         │  │  • rfai-requests           │  │
-│              │         │  │  • edi-278                 │  │
-└──────────────┘         │  └────────────────────────────┘  │
-                         │                                  │
-┌──────────────┐         │  ┌────────────────────────────┐  │
-│ C# X12       │         │  │  ingest278 DAG Step        │  │
-│ Services     │◀───────▶│  │  (SFTP Trigger)            │  │
-│ (EDI parse)  │         │  └────────────┬───────────────┘  │
-└──────────────┘         │               │                  │
-                         │  ┌────────────▼───────────────┐  │
-┌──────────────┐         │  │  replay278 DAG Step        │  │
-│   HTTP       │────────▶│  │  (HTTP Trigger)            │  │
-│  Client      │  POST   │  │  Queue to edi-278 topic    │  │
-└──────────────┘         │  └────────────────────────────┘  │
-                         │                                  │
-┌──────────────┐         │  ┌────────────────────────────┐  │
-│ Prometheus / │         │  │  Monitoring & Logging      │  │
-│ Grafana +    │◀────────│  │  • Workflow runs           │  │
-│ App Insights │         │  │  • Performance metrics     │  │
-└──────────────┘         │  │  • Error tracking          │  │
-                         │  └────────────────────────────┘  │
-                         └──────────────────────────────────┘
-```
-
-## Component Details
-
-### Argo Workflows on AKS
-
-**Purpose:** Hosts and executes the DAG-based workflows that orchestrate the attachment processing pipeline. Workflow manifests live in `infrastructure/argo-workflows/`.
-
-**Key Features:**
-
-- **DAG Workflows**: Multi-step directed acyclic graphs for reliable processing
-- **Kubernetes-Native**: Runs as pods on AKS with Workload Identity for secure Azure resource access
-- **Service Integration**: SFTP, Blob Storage, Service Bus accessed via C# microservices
-- **Retry Policies**: Configurable retry logic for transient failures
-- **Observability**: Prometheus/Grafana + Application Insights for telemetry and logging
-
-**Configuration:**
-
-- Argo Workflows controller deployed via Helm chart
-- Workflow templates defined in YAML (infrastructure/argo-workflows/)
-- Secrets managed via Kubernetes Secrets and Azure Key Vault (CSI driver)
-- Argo Events for event-driven triggers (Service Bus, SFTP polling)
-
-### Workflows (Argo DAG Steps)
-
-#### 1. ingest275 - Attachment Ingestion (275)
-
-**Trigger:** SFTP file polling  
-**Purpose:** Process inbound attachment requests from the clearinghouse  
-**Flow:**
-
-```
-SFTP New File Event
-  │
-  ├─▶ Get File Content (SFTP)
-  │
-  ├─▶ Store Raw File in Data Lake
-  │   Path: hipaa-attachments/raw/275/{yyyy}/{MM}/{dd}/
-  │
-  ├─▶ Parse X12 275 Message
-  │   (C# X12 service)
-  │
-  ├─▶ Extract Metadata
-  │   • Claim Number
-  │   • Member ID
-  │   • Provider NPI
-  │   • Attachment Reference
-  │
-  ├─▶ Call claims backend API
-  │   POST /api/claims/attachments/link
-  │   Retry: 4 attempts, 15s interval
-  │
-  ├─▶ Publish to Service Bus
-  │   Topic: attachments-in
-  │   Message: {claimId, memberId, blobPath, status}
-  │
-  └─▶ Delete File from SFTP
-      (After successful processing)
-```
-
-**Key DAG Steps:**
-
-- `sftp-fetch` - Trigger on new .edi files
-- `get-file-content` - Read file content
-- `store-raw-in-blob` - Archive to Data Lake
-- `parse-x12-275` - X12 parsing via C# service
-- `extract-metadata` - Parse decoded JSON
-- `call-claims-backend` - Link attachment to claim
-- `publish-to-service-bus` - Queue for downstream processing
-
-**Parameters:**
-```json
-{
-  "sftp_inbound_folder": "/inbound/attachments",
-  "blob_raw_folder": "hipaa-attachments/raw/275",
-  "sb_topic": "attachments-in",
-  "backend_base_url": "https://claims-backend-api.example.com",
-  "x12_messagetype_275": "X12_005010X210_275"
-}
-```
-
-#### 2. rfai277 - RFAI Response (277)
-
-**Trigger:** Service Bus topic subscription (rfai-requests)  
-**Purpose:** Generate and send attachment status responses to the clearinghouse  
-**Flow:**
-
-```
-Service Bus Message Received
-  (Topic: rfai-requests)
-  │
-  ├─▶ Parse RFAI Request
-  │   Extract: claimId, status, attachmentRef
-  │
-  ├─▶ Generate X12 277 Message
-  │   (C# X12 service)
-  │   Sender: Health Plan ({config.payerId})
-  │   Receiver: Clearinghouse (030240928)
-  │
-  ├─▶ Send to the clearinghouse via SFTP
-  │   Path: /outbound/277/
-  │
-  ├─▶ Archive Sent Message
-  │   Path: hipaa-attachments/sent/277/{yyyy}/{MM}/{dd}/
-  │
-  └─▶ Update claims backend Status
-      POST /api/claims/attachments/status
-```
-
-**Key DAG Steps:**
-
-- Service Bus trigger on `rfai-requests` topic (via Argo Events)
-- `generate-x12-277` - X12 generation via C# service
-- `send-to-sftp` - Upload to the clearinghouse
-- `archive-sent` - Store in Data Lake
-- `update-claims-backend` - Confirm delivery
-
-**Parameters:**
-```json
-{
-  "sb_topic_rfai": "rfai-requests",
-  "sftp_outbound_folder": "/outbound/277",
-  "blob_sent_folder": "hipaa-attachments/sent/277",
-  "x12_messagetype_277": "X12_005010X212_277"
-}
-```
-
-#### 3. ingest278 - Health Care Services Review (278)
-
-**Trigger:** SFTP file polling  
-**Purpose:** Process health care services review information  
-**Flow:**
-
-```
-SFTP New File Event
-  │
-  ├─▶ Get File Content (SFTP)
-  │
-  ├─▶ Store Raw File in Data Lake
-  │   Path: hipaa-attachments/raw/278/{yyyy}/{MM}/{dd}/
-  │
-  ├─▶ Parse X12 278 Message
-  │   (C# X12 service)
-  │
-  ├─▶ Extract Review Information
-  │   • Service Request
-  │   • Authorization Details
-  │   • Provider Information
-  │
-  ├─▶ Publish to Service Bus
-  │   Topic: edi-278
-  │   Message: {blobUrl, reviewType, status}
-  │
-  └─▶ Delete File from SFTP
-      (After successful processing)
-```
-
-**Parameters:**
-```json
-{
-  "blob_raw_folder_278": "hipaa-attachments/raw/278",
-  "sb_topic_edi278": "edi-278",
-  "x12_messagetype_278": "X12_005010X217_278"
-}
-```
-
-#### 4. replay278 - Deterministic Replay Endpoint
-
-**Trigger:** HTTP POST request  
-**Purpose:** Enable deterministic replay of 278 transactions for debugging  
-**Flow:**
-
-```
-HTTP POST /api/replay278/triggers/HTTP_Replay_278_Request/invoke
-  │
-  ├─▶ Validate Input
-  │   • blobUrl is not empty
-  │   • blobUrl contains "hipaa-attachments"
-  │
-  ├─▶ Queue Message to Service Bus
-  │   Topic: edi-278
-  │   Message: {blobUrl, fileName, timestamp}
-  │
-  └─▶ Return Response
-      Success: 200 {status, message, data}
-      Error: 400 {status, error, data}
-```
-
-**Request Example:**
-```json
-POST /api/replay278/triggers/HTTP_Replay_278_Request/invoke
-Content-Type: application/json
-
-{
-  "blobUrl": "hipaa-attachments/raw/278/2024/01/15/review-request.edi",
-  "fileName": "custom-replay-name"
-}
-```
-
-**Response Example:**
-```json
-{
-  "status": "success",
-  "message": "278 replay message queued successfully",
-  "data": {
-    "blobUrl": "hipaa-attachments/raw/278/2024/01/15/review-request.edi",
-    "fileName": "custom-replay-name",
-    "queueTimestamp": "2024-01-15T10:30:00Z",
-    "topicName": "edi-278"
-  }
-}
-```
-
-### Azure Data Lake Storage Gen2
-
-**Resource Name:** `{baseName}storage` (with hierarchical namespace)
-
-**Purpose:** Secure, scalable storage for all EDI files with HIPAA-compliant encryption
-
-**Container Structure:**
-```
-hipaa-attachments/
-├── raw/                      # Original inbound files
-│   ├── 275/
-│   │   └── {yyyy}/          # Year partition
-│   │       └── {MM}/        # Month partition
-│   │           └── {dd}/    # Day partition
-│   │               └── file_{timestamp}.edi
-│   └── 278/
-│       └── {yyyy}/
-│           └── {MM}/
-│               └── {dd}/
-│                   └── file_{timestamp}.edi
-├── sent/                     # Outbound transmitted files
-│   └── 277/
-│       └── {yyyy}/
-│           └── {MM}/
-│               └── {dd}/
-│                   └── file_{timestamp}.edi
-└── processed/               # Post-processing artifacts
-    └── {type}/
-        └── {yyyy}/{MM}/{dd}/
-```
-
-**Key Features:**
-- **Hierarchical Namespace**: Enables efficient directory operations
-- **Encryption at Rest**: Azure Storage Service Encryption (SSE) with Microsoft-managed keys
-- **Access Control**: Managed Identity + RBAC (Storage Blob Data Contributor)
-- **Soft Delete**: 7-day retention for accidental deletion recovery
-- **Versioning**: Enabled for data recovery
-- **Immutability**: Consider for compliance requirements
-
-**Date Partitioning Benefits:**
-- Efficient querying by date range
-- Simplified data lifecycle management
-- Optimized storage costs (archive older partitions)
-- Better performance for time-based queries
-
-### Service Bus Namespace
-
-**Resource Name:** `{baseName}-svc`  
-**SKU:** Standard (supports topics and subscriptions)
-
-**Topics:**
-
-#### 1. attachments-in
-**Purpose:** Queue successfully processed 275 attachment events  
-**Subscribers:** Downstream processing systems, analytics pipelines  
-**Message Schema:**
-```json
-{
-  "claimNumber": "CLM20240115001",
-  "memberId": "123456789",
-  "providerNpi": "1234567890",
-  "attachmentReference": "ATT001",
-  "blobPath": "hipaa-attachments/raw/275/2024/01/15/file.edi",
-  "status": "processed",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
-#### 2. rfai-requests
-**Purpose:** Queue RFAI (Request for Additional Information) requests for 277 generation  
-**Subscribers:** rfai277 workflow  
-**Message Schema:**
-```json
-{
-  "claimNumber": "CLM20240115001",
-  "rfaiReasonCode": "A7",
-  "rfaiReference": "RFAI20240115001",
-  "requestedDocuments": ["Medical Records", "Lab Results"],
-  "dueDate": "2024-01-22",
-  "timestamp": "2024-01-15T11:00:00Z"
-}
-```
-
-#### 3. edi-278
-**Purpose:** Queue 278 health care services review transactions for processing  
-**Subscribers:** Processing systems, analytics, replay handlers  
-**Message Schema:**
-```json
-{
-  "blobUrl": "hipaa-attachments/raw/278/2024/01/15/review.edi",
-  "fileName": "review-20240115.edi",
-  "reviewType": "authorization",
-  "status": "queued",
-  "timestamp": "2024-01-15T12:00:00Z"
-}
-```
-
-**Topic Configuration:**
-- **Max Message Size:** 256 KB
-- **TTL:** 14 days (default)
-- **Dead-letter Queue:** Enabled
-- **Duplicate Detection:** 10-minute window
-- **Sessions:** Disabled (not required)
-
-### X12 EDI Processing (C# Services)
-
-**Purpose:** X12 EDI parsing/generation handled by C# microservices running as AKS pods. No Azure Integration Account required.
-
-**Components:**
-
-#### Trading Partners
-| Partner | ID | Qualifier | Role |
-|---------|-----|-----------|------|
-| Clearinghouse | 030240928 | ZZ | Sender (275/278), Receiver (277) |
-| Health Plan Backend | {config.payerId} | ZZ | Receiver (275/278), Sender (277) |
-
-#### X12 Schemas
-| Transaction | Version | Schema Name | Purpose |
-|-------------|---------|-------------|---------|
-| 275 | 005010X210 | X12_005010X210_275 | Additional Information to Support Claim |
-| 277 | 005010X212 | X12_005010X212_277 | Healthcare Information Status Notification |
-| 278 | 005010X217 | X12_005010X217_278 | Health Care Services Review Information |
-
-#### X12 Agreements
-1. **Clearinghouse-to-Health Plan-275-Receive**
-   - Direction: Receive (Inbound)
-   - Host: Health Plan Backend
-   - Guest: Clearinghouse
-   - Transaction: 275
-
-2. **Health Plan-to-Clearinghouse-277-Send**
-   - Direction: Send (Outbound)
-   - Host: Health Plan Backend
-   - Guest: Clearinghouse
-   - Transaction: 277
-
-3. **Health Plan-278-Processing**
-   - Direction: Receive (Internal)
-   - Host: Health Plan Backend
-   - Guest: Health Plan Backend
-   - Transaction: 278
-
-### Application Insights
-
-**Resource Name:** `{baseName}-ai`
-
-**Purpose:** Telemetry, monitoring, and diagnostics for all workflows
-
-**Tracked Metrics:**
-- Workflow execution duration
-- Success/failure rates
-- API call latencies (claims backend)
-- Service Bus message processing
-- SFTP connection reliability
-- X12 decode/encode operations
-- Exception tracking and stack traces
-
-**Azure Monitor Workbooks:**
-
-Three production-ready dashboards are automatically deployed:
-
-1. **EDI Transaction Metrics** (`{baseName}-edi-metrics`)
-   - Real-time transaction volume, latency (P50/P95/P99), success rates
-   - Per-transaction-type breakdown (275, 277, 278)
-   - Error distribution and recent failures
-   - Dependency health (SFTP, Service Bus, Storage, claims backend)
-
-2. **Payer Integration Health** (`{baseName}-payer-health`)
-   - Per-payer health scoring (0-100%)
-   - Integration status and backend connectivity
-   - Transaction volume trends and latency by payer
-   - Error analysis and recent incidents
-
-3. **HIPAA Compliance Monitoring** (`{baseName}-hipaa-compliance`)
-   - PHI redaction validation
-   - Encryption in transit monitoring (HTTPS enforcement)
-   - Security audit events (PHI access, data exports)
-   - Data retention compliance tracking
-
-**Alerting Rules:**
-
-Six recommended alerts deployed via ARM template:
-- Low Success Rate (< 95%)
-- High Latency (P95 > 5000ms)
-- PHI Exposure Detection (CRITICAL)
-- Unencrypted Traffic (CRITICAL)
-- Payer Integration Failure
-- Dependency Failure
-
-See `docs/AZURE-MONITOR-DASHBOARDS.md` for complete documentation.
-
-**Custom Events:**
-```
-- workflow_started
-- workflow_completed
-- x12_decoded
-- x12_encoded
-- claims_backend_api_called
-- service_bus_published
-- blob_stored
-- sftp_file_deleted
-```
-
-**Queries for Common Scenarios:**
-```kusto
-// Failed workflow runs
-traces
-| where severityLevel >= 3
-| where message contains "workflow"
-| project timestamp, message, severityLevel
-
-// claims backend API performance
-dependencies
-| where name contains "claims backend"
-| summarize avg(duration), percentile(duration, 95) by bin(timestamp, 1h)
-
-// X12 decode failures
-traces
-| where message contains "Decode_X12"
-| where severityLevel >= 3
-```
-
-## Data Flows
-
-### 275 Attachment Ingestion Flow
-
-**Overview:** Process inbound attachment requests from the clearinghouse and link to claims in claims backend
-
-```
-┌─────────────┐
-│  Clearinghouse   │
-│    SFTP     │
-└──────┬──────┘
-       │ 1. New 275 file arrives
-       ▼
-┌─────────────────────────┐
-│  ingest275 Workflow     │
-│  (SFTP Trigger)         │
-└──────┬──────────────────┘
-       │ 2. Read file content
-       ▼
-┌─────────────────────────┐
-│  Data Lake Storage      │
-│  Archive raw file       │
-│  Path: raw/275/YYYY/MM/DD
-└──────┬──────────────────┘
-       │ 3. File stored
-       ▼
-┌─────────────────────────┐
-│  C# X12 Service         │
-│  Parse X12 275           │
-│  (Clearinghouse→Health Plan)
-└──────┬──────────────────┘
-       │ 4. Parsed JSON
-       ▼
-┌─────────────────────────┐
-│  Extract Metadata       │
-│  • Claim Number         │
-│  • Member ID            │
-│  • Provider NPI         │
-│  • Attachment Reference │
-└──────┬──────────────────┘
-       │ 5. Metadata extracted
-       ▼
-┌─────────────────────────┐
-│  claims backend API               │
-│  Link attachment to claim│
-│  Retry: 4x, 15s interval│
-└──────┬──────────────────┘
-       │ 6. Linkage confirmed
-       ▼
-┌─────────────────────────┐
-│  Service Bus            │
-│  Topic: attachments-in  │
-│  Message: claim details │
-└──────┬──────────────────┘
-       │ 7. Event published
-       ▼
-┌─────────────────────────┐
-│  Delete SFTP File       │
-│  (After success)        │
-└─────────────────────────┘
-```
-
-**Duration:** ~5-15 seconds per file  
-**Error Handling:** Retry logic for claims backend API (4 attempts, 15s intervals)  
-**Dead Letter:** Failed messages sent to Service Bus DLQ
-
-### 277 RFAI Response Flow
-
-**Overview:** Generate and send status responses back to the clearinghouse
-
-```
-┌─────────────────────────┐
-│  Backend System       │
-│  System                 │
-└──────┬──────────────────┘
-       │ 1. RFAI request created
-       ▼
-┌─────────────────────────┐
-│  Service Bus            │
-│  Topic: rfai-requests   │
-└──────┬──────────────────┘
-       │ 2. Message queued
-       ▼
-┌─────────────────────────┐
-│  rfai277 Workflow       │
-│  (Service Bus Trigger)  │
-└──────┬──────────────────┘
-       │ 3. Parse RFAI request
-       ▼
-┌─────────────────────────┐
-│  C# X12 Service         │
-│  Generate X12 277        │
-│  (Health Plan→Clearinghouse)│
-└──────┬──────────────────┘
-       │ 4. X12 277 created
-       ▼
-┌─────────────────────────┐
-│  Clearinghouse SFTP          │
-│  Send 277 file          │
-│  Path: /outbound/277/   │
-└──────┬──────────────────┘
-       │ 5. File transmitted
-       ▼
-┌─────────────────────────┐
-│  Data Lake Storage      │
-│  Archive sent file      │
-│  Path: sent/277/YYYY/MM/DD
-└──────┬──────────────────┘
-       │ 6. Archive complete
-       ▼
-┌─────────────────────────┐
-│  claims backend API               │
-│  Update status          │
-│  Status: transmitted    │
-└─────────────────────────┘
-```
-
-**Duration:** ~3-8 seconds per message  
-**Frequency:** Event-driven based on RFAI requests  
-**Monitoring:** Track delivery confirmations in Application Insights
-
-### 278 Processing and Replay Flow
-
-**Overview:** Process health care services review information with replay capability
-
-```
-┌─────────────────────────┐         ┌─────────────────────────┐
-│  SFTP Inbound           │         │  HTTP Client            │
-│  (278 files)            │         │  (Replay Request)       │
-└──────┬──────────────────┘         └──────┬──────────────────┘
-       │                                    │
-       │ 1. New 278 file                    │ 1. POST with blobUrl
-       ▼                                    ▼
-┌─────────────────────────┐         ┌─────────────────────────┐
-│  ingest278 Workflow     │         │  replay278 Workflow     │
-│  (SFTP Trigger)         │         │  (HTTP Trigger)         │
-└──────┬──────────────────┘         └──────┬──────────────────┘
-       │                                    │
-       │ 2. Store raw file                  │ 2. Validate blobUrl
-       ▼                                    │
-┌─────────────────────────┐                │
-│  Data Lake Storage      │                │
-│  Path: raw/278/YYYY/MM/DD◀───────────────┘
-└──────┬──────────────────┘         
-       │ 3. Decode X12 278
-       ▼
-┌─────────────────────────┐
-│  C# X12 Service         │
-│  X12_005010X217_278     │
-└──────┬──────────────────┘
-       │ 4. Extract review data
-       ▼
-┌─────────────────────────┐
-│  Service Bus            │
-│  Topic: edi-278         │◀─── 3. Queue replay message
-└──────┬──────────────────┘
-       │ 5. Message published
-       ▼
-┌─────────────────────────┐
-│  Downstream Processing  │
-│  • Authorization system │
-│  • Analytics pipeline   │
-│  • Audit logging        │
-└─────────────────────────┘
-```
-
-**Replay Benefits:**
-- Deterministic reprocessing for debugging
-- No need to re-upload files via SFTP
-- Controlled replay with specific blobUrl
-- Maintains audit trail
-
-## Integration Points
-
-### 1. Clearinghouse SFTP Integration
-
-**Protocol:** SSH File Transfer Protocol (SFTP)  
-**Authentication:** SSH Key-based  
-**Connection:** API Connection (`sftp-ssh`)
-
-**Inbound Paths:**
-- `/inbound/attachments/` - 275 attachment requests
-- `/inbound/278/` - Health care services review
-
-**Outbound Paths:**
-- `/outbound/277/` - Status responses
-
-**File Naming Convention:**
-- Inbound: `{source}_{date}_{sequence}.edi`
-- Outbound: `{destination}_{date}_{sequence}.edi`
-
-**Polling Interval:** 
-- Production: 5 minutes
-- UAT: 15 minutes
-- DEV: 30 minutes
-
-**Error Handling:**
-- Connection failures: Exponential backoff retry
-- File read errors: Move to error folder
-- Authentication failures: Alert operations team
-
-### 2. claims backend API Integration
-
-**Base URL:** Environment-specific (DEV/UAT/PROD)  
-**Authentication:** Bearer token (OAuth 2.0)  
-**Content-Type:** application/json
-
-**Endpoints:**
-
-#### Link Attachment to Claim
-```
-POST /api/claims/attachments/link
-Content-Type: application/json
-Authorization: Bearer {token}
-
-Request:
-{
-  "claimNumber": "CLM20240115001",
-  "memberId": "123456789",
-  "providerNpi": "1234567890",
-  "attachmentReference": "ATT001",
-  "documentType": "Medical Records",
-  "receivedDate": "2024-01-15T10:30:00Z",
-  "blobPath": "hipaa-attachments/raw/275/2024/01/15/file.edi"
-}
-
-Response:
-{
-  "success": true,
-  "linkageId": "LINK20240115001",
-  "claimStatus": "pending_review",
-  "message": "Attachment linked successfully"
-}
-```
-
-**Retry Policy:**
-- Attempts: 4
-- Interval: 15 seconds
-- Exponential: true
-- Max Interval: 60 seconds
-
-**Timeout:** 30 seconds per request
-
-**Error Codes:**
-- 400: Invalid request data
-- 401: Authentication failure
-- 404: Claim not found
-- 409: Attachment already linked
-- 500: Internal server error (retry)
-- 503: Service unavailable (retry)
-
-### 3. X12 EDI Processing
-
-**Provider:** C# microservices on AKS (no Azure Integration Account required)
-**Standard:** ANSI ASC X12
-
-**Supported Transactions:**
-
-| Code | Name | Version | Direction |
-|------|------|---------|-----------|
-| 275 | Additional Information | 005010X210 | Inbound |
-| 277 | Status Notification | 005010X212 | Outbound |
-| 278 | Services Review | 005010X217 | Inbound |
-
-**ISA/GS Identifiers:**
-```
-ISA Header:
-- ISA06: Sender ID (Clearinghouse: {config.clearinghouseId}, Health Plan: {config.payerId})
-- ISA08: Receiver ID
-- ISA11: Usage Indicator (T=Test, P=Production)
-
-GS Header:
-- GS02: Application Sender
-- GS03: Application Receiver
-- GS08: Version (e.g., 005010X210)
-```
-
-**Validation:**
-
-- Schema compliance (XSD validation in C# services)
-- Trading partner configuration match
-- Segment order and cardinality
-- Code set validation
-- Date/time format validation
-
-**Error Handling:**
-
-- Schema validation failures logged
-- TA1 technical acknowledgments generated
-- 997 functional acknowledgments sent
-- Failed messages moved to DLQ
-
-## Design Decisions
-
-### Why Argo Workflows on AKS?
-
-**Decision:** Use Argo Workflows on AKS (migrated from Logic Apps Standard; see [ADR 004](../adr/004-remove-logic-apps.md))
-
-**Rationale:**
-
-1. **DAG Workflows**: Required for reliable multi-step processing with explicit dependency graphs
-2. **Kubernetes-Native**: Runs alongside microservices on AKS, no separate orchestration platform needed
-3. **Multi-Cloud Portable**: Same workflow manifests deploy to AKS, EKS, GKE, or on-premises
-4. **X12 in C#**: EDI parsing/generation in C# services eliminates Azure Integration Account dependency
-5. **Cost Efficiency**: No per-execution billing; uses existing AKS compute
-6. **Local Development**: Argo CLI + Minikube for local testing
-
-**Trade-offs:**
-
-- Requires Kubernetes expertise to operate
-- Self-managed workflow engine (vs Azure-managed Logic Apps)
-- Must handle observability via Prometheus/Grafana
-
-### Why Data Lake Gen2?
-
-**Decision:** Use Azure Data Lake Storage Gen2 with hierarchical namespace
-
-**Rationale:**
-1. **HIPAA Compliance**: Built-in encryption and access controls
-2. **Scalability**: Petabyte-scale storage capacity
-3. **Performance**: Optimized for analytics workloads
-4. **Date Partitioning**: Efficient time-based queries
-5. **Lifecycle Management**: Automated archival to cool/archive tiers
-
-**Alternative Considered:** Blob Storage (flat namespace)  
-**Why Rejected:** Less efficient for directory operations, no hierarchical ACLs
-
-### Why Service Bus?
-
-**Decision:** Use Azure Service Bus (vs Event Grid, Storage Queues)
-
-**Rationale:**
-1. **Guaranteed Delivery**: At-least-once delivery semantics
-2. **Dead-letter Queue**: Built-in error handling
-3. **Message Sessions**: Future support for ordered processing
-4. **Duplicate Detection**: Prevents processing same message twice
-5. **AMQP Protocol**: Standard messaging protocol
-
-**Alternative Considered:** Event Grid  
-**Why Rejected:** Less suitable for guaranteed message processing
-
-### Why Separate Workflows?
-
-**Decision:** Separate Argo workflow templates for 275, 277, 278, and replay
-
-**Rationale:**
-
-1. **Single Responsibility**: Each workflow template has one clear purpose
-2. **Independent Scaling**: Scale workflow pods based on load
-3. **Easier Debugging**: Isolate issues to specific DAG
-4. **Deployment Flexibility**: Deploy/update workflow manifests independently
-5. **Monitoring**: Clear metrics per transaction type
-
-**Alternative Considered:** Single monolithic workflow
-**Why Rejected:** Complex, harder to maintain and troubleshoot
-
-### Why Retry Policies?
-
-**Decision:** Implement retry logic for external API calls
-
-**Rationale:**
-1. **Transient Failures**: Network issues, timeouts
-2. **Service Availability**: claims backend API may be temporarily unavailable
-3. **Success Rate**: Significantly improves overall success rate
-4. **Exponential Backoff**: Reduces load on struggling services
-
-**Configuration:**
-- claims backend API: 4 retries, 15s interval, exponential backoff
-- SFTP: 3 retries, 30s interval
-- Service Bus: Built-in retry (10 attempts)
-
-## HIPAA Compliance
-
-### Data Encryption
-
-**At Rest:**
-- Data Lake Storage: Azure SSE with Microsoft-managed keys
-- Service Bus: Encrypted using Microsoft-managed keys
-- Application Insights: Encrypted logs
-
-**In Transit:**
-- SFTP: SSH encryption (minimum TLS 1.2)
-- HTTPS: All API calls use TLS 1.2+
-- Service Bus: AMQP over TLS
-
-### Access Control
-
-**Workload Identity:**
-
-- AKS pods use Workload Identity (federated credentials) for secure Azure resource access
-- No connection strings or keys stored in code
-- RBAC role assignments:
-  - Storage Blob Data Contributor
-  - Azure Service Bus Data Sender
-- Kubernetes Secrets managed via Azure Key Vault CSI driver
-
-**Network Security:**
-- HTTPS only for all endpoints
-- Consider VNET integration for production
-- Private endpoints for storage and Service Bus
-- NSG rules to restrict access
-
-### Audit Logging
-
-**Application Insights:**
-- All workflow runs logged
-- API call tracking with request/response
-- Exception tracking with stack traces
-- Custom events for key milestones
-
-**Azure Activity Log:**
-- Resource changes tracked
-- Access attempts logged
-- Role assignments audited
-
-**Retention:**
-- Application Insights: 90 days
-- Activity Log: 90 days (default)
-- Storage audit logs: 365 days
-
-### Data Classification
-
-**PHI Elements Tracked:**
-- Member/Patient ID
-- Claim numbers
-- Provider NPI
-- Medical attachment references
-
-**Handling Requirements:**
-- Never log PHI in plain text
-- Mask/redact in Application Insights
-- Secure transmission only
-- Access logged and monitored
-
-### Business Associate Agreement (BAA)
-
-**Required With:**
-- Clearinghouse (trading partner)
-- Any downstream systems receiving PHI
-- Azure (Microsoft BAA in place)
-
-## Scalability and Performance
-
-### Current Capacity
-
-**Argo Workflows (AKS):**
-
-- Concurrent workflow pods: scales with AKS node pool
-- Typical duration: 5-15 seconds per 275
-- Throughput: scales horizontally with pod count
-
-**Service Bus:**
-- Max message size: 256 KB
-- Queue depth: 80 GB (Standard tier)
-- Throughput: 2,000 messages/second
-
-**Data Lake:**
-- Storage: Unlimited
-- Throughput: 60 Gbps per storage account
-- Operations: 20,000 requests/second
-
-### Scaling Strategies
-
-**Vertical Scaling:**
-
-- Upgrade AKS node pool VM SKU
-- Increase Service Bus tier (Standard → Premium)
-
-**Horizontal Scaling:**
-
-- AKS node pool auto-scaling + Argo parallelism settings
-- Service Bus partitioning for topics
-- Geo-redundant storage accounts
-
-**Performance Optimization:**
-- Batch processing for high volumes
-- Parallel workflow execution
-- Connection pooling for APIs
-- Caching for frequently accessed data
-
-### Monitoring and Alerts
-
-**Key Metrics:**
-- Workflow run success rate (target: >99%)
-- Average execution duration (target: <15s)
-- claims backend API latency (target: <2s)
-- Service Bus queue depth (alert if >1000)
-- Storage IOPS utilization
-
-**Alerts:**
-- Workflow failure rate >1%
-- claims backend API timeout rate >5%
-- Service Bus dead-letter count >10
-- Storage throttling detected
-
----
-
-For deployment procedures, see [DEPLOYMENT.md](DEPLOYMENT.md)  
-For troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)  
-For security guidelines, see [SECURITY.md](SECURITY.md)
+## Major Product Surfaces
+
+### Marketing Site and Public Tools
+
+The static site exposes the public product surface:
+
+- CMS-0057-F positioning
+- payer and provider solution pages
+- claims repricing and pricing API pages
+- documentation and quickstarts
+- sales/contact capture
+
+Public tools are intended to prove calculation credibility before a commercial relationship exists.
+
+### Portal
+
+The portal is the operator and administrator UI. Current surfaces include:
+
+- dashboard
+- claims search and claim detail
+- mass adjudication runs
+- work queues
+- eligibility and enrollment
+- authorizations
+- provider/member views
+- benefit plans
+- finance/payment surfaces
+- monitoring and compliance views
+
+The Mass Adjudication console is the benchmark evidence surface for the Million Claim Challenge. It shows run history, claims/sec, latency, workflow checks, unsupported scenarios, mismatches, payment delta, and claim-level drilldown.
+
+### APIs and Integration
+
+Cloud Health Office exposes:
+
+- REST APIs for service operations
+- FHIR R4 APIs for interoperability and CMS-0057-F surfaces
+- X12 ingestion and generation pipelines
+- service-specific APIs for pricing, benefit plans, claims, eligibility, authorizations, provider verification, terminology, and payment workflows
+
+## Core Service Domains
+
+The platform is organized around payer operating domains, not one monolithic application.
+
+| Domain | Responsibilities |
+| --- | --- |
+| Claims | claim submission, status, adjudication orchestration, claim persistence, line/header edits, pends, denials, payment outputs |
+| Benefit Plan | benefit rules, accumulator reads/writes, cost sharing, covered/uncovered services, prior-auth-sensitive benefits |
+| Member and Coverage | subscribers, dependents, eligibility windows, COB coverage, plan enrollment, PCP assignment |
+| Provider | provider identity, NPI, network participation, exclusion checks, verification, credentialing evidence |
+| Authorization | prior authorization intake, rule evaluation, PAS/CRD/DTR surfaces, authorization linkage |
+| Eligibility | X12 270/271 and FHIR coverage eligibility responses |
+| Pricing and Fee Schedules | Medicare/custom fee schedules, repricing, DRG/APC/RBRVS logic, line-level allowed amount calculation |
+| Terminology | SNOMED, CPT, ICD, HCPCS, FHIR ConceptMap, `$translate` support |
+| Payment and Finance | payment runs, remittance, statements, capitation, premium billing, balances |
+| Reference Data | codes, rule tables, state Medicaid policy data, NCCI/MUE data, regulatory reference inputs |
+
+## Claims Adjudication Architecture
+
+Claims adjudication is staged and observable. The pipeline is designed so each stage can be tested, measured, and replaced independently.
+
+Typical adjudication flow:
+
+1. Load claim and tenant context.
+2. Normalize claim data and service dates.
+3. Resolve member, coverage, plan, and line of business.
+4. Resolve provider identity, network participation, and exclusion status.
+5. Validate prior authorization requirements and authorization linkage.
+6. Apply benefit rules and coverage policy.
+7. Apply NCCI/MUE and other line/header edits.
+8. Resolve allowed amount through fee schedule, contract, or pricing logic.
+9. Calculate cost sharing and plan payment.
+10. Persist final status, pend details, denial reasons, and adjudication evidence.
+
+Claims can correctly finish as:
+
+- paid
+- denied for a valid business reason
+- pended for workflow or downstream review
+- unsupported by the current validation path
+- failed due to platform error
+
+The architecture deliberately separates valid business denials from platform failures.
+
+Key deep dives:
+
+- [Claim adjudication pipeline](claim-adjudication-pipeline.md)
+- [ADJUDICATION-PIPELINE](ADJUDICATION-PIPELINE.md)
+- [COB pipeline](claim-cob-pipeline.md)
+- [NCCI pipeline](claim-ncci-pipeline.md)
+- [Claim submission API](claim-submission-api.md)
+- [Claim versioning](claim-versioning.md)
+- [Claim remittance generation](claim-remittance-generation.md)
+
+## Benchmark Evidence Architecture
+
+The Million Claim Challenge is not only a load test. It is an evidence system for claims correctness and platform behavior.
+
+Current benchmark evidence captures:
+
+- processed claims
+- claims/sec
+- P95/P99 latency
+- stage timing
+- platform failures
+- pended observations
+- business denial codes
+- workflow checks
+- workflow mismatches
+- unsupported scenarios
+- payment delta diagnostics
+- claim-level samples prioritized for review
+
+Evidence-first sampling preserves:
+
+1. platform failures
+2. observation failures
+3. workflow mismatches
+4. unsupported scenarios
+5. slowest remaining claims for latency triage
+
+The Mass Adjudication console exposes this evidence inside the portal so benchmark claims can be inspected rather than merely reported.
+
+Relevant docs:
+
+- [Million Claim Challenge site docs](../../src/site/docs/million-claim-challenge.html)
+- [Episode 006: honest edge-case scoring](../million-claim-challenge/podcast/episode-006/README.txt)
+- [Episode 007: operator console evidence](../million-claim-challenge/podcast/episode-007/README.txt)
+
+## Messaging and Events
+
+Messaging is used for asynchronous workflows, integration events, and production decoupling. Depending on deployment target and customer constraints, the architecture supports Azure Service Bus or Kafka-compatible infrastructure.
+
+Common event surfaces:
+
+- claim submitted
+- claim version changed
+- claim pended
+- claim finalized
+- payment run created
+- remittance generated
+- authorization event
+- EDI file received or emitted
+
+See [shared message bus](shared-messagebus.md) for the current message bus design.
+
+## Data Architecture
+
+Data is tenant-scoped and domain-owned.
+
+Typical storage model:
+
+- MongoDB / Cosmos DB for document-oriented service data
+- PostgreSQL for structured reference datasets where relational access is useful
+- Redis for low-latency cache and accumulator workloads
+- object storage for EDI files, generated artifacts, audit packets, and long-lived evidence
+
+Tenant isolation is enforced through:
+
+- `X-Tenant-ID` request context
+- tenant-aware repositories
+- tenant partition keys
+- tenant-scoped configuration
+- audit records that include tenant context
+
+## Operating Modes
+
+Cloud Health Office can operate in multiple adoption modes.
+
+| Mode | Purpose |
+| --- | --- |
+| Public tools | Show calculation quality and product entry points without sales friction. |
+| Transactional API | Offer specific calculations or operations by API. |
+| Managed data service | Deliver continuously changing healthcare reference/compliance data. |
+| Compliance accelerator | Deploy CMS-0057-F / FHIR / interoperability layers beside existing core admin. |
+| Progressive modernization | Move selected engines or workflows from augment mode into replace mode. |
+| Full CAPS platform | Run core claims administration workloads on CHO services. |
+
+The operating model is intentionally incremental. A payer does not need to replace its entire core admin system on day one.
+
+## Security and Compliance
+
+Security goals:
+
+- HIPAA-aligned technical safeguards
+- least-privilege service access
+- tenant isolation
+- PHI-safe logs and telemetry
+- secrets managed through cloud key management or Vault
+- private networking where required
+- auditability for claim, authorization, payment, and EDI events
+
+The platform avoids treating observability as a PHI dumping ground. Logs and benchmark outputs should report operational evidence without exposing production patient data.
+
+## Observability
+
+The architecture expects service-level and workflow-level observability:
+
+- health checks
+- structured logs
+- request correlation
+- stage-level timing
+- benchmark run summaries
+- claim-level evidence samples
+- workflow and EDI operational dashboards
+- platform failure and timeout counters
+
+See [observability](observability.md) for service observability guidance.
+
+## Current Gaps and Boundaries
+
+The architecture is intentionally honest about what is not proven yet.
+
+- Local Million Claim Challenge numbers are not production cloud capacity claims.
+- Payment amount accuracy is visible as payment delta, but still needs a formal amount-level scoring gate.
+- Expected-pend observation proves expected pends persisted as pended, but a full false-pend sweep is future work.
+- Live in-progress benchmark telemetry is partially designed but not yet complete.
+- Some legacy architecture docs still describe older Argo/SFTP or attachment-specific designs; use this document as the canonical overview.
+
+## Related Architecture Documents
+
+Claims and adjudication:
+
+- [Claim adjudication pipeline](claim-adjudication-pipeline.md)
+- [COB pipeline](claim-cob-pipeline.md)
+- [NCCI pipeline](claim-ncci-pipeline.md)
+- [Claim submission API](claim-submission-api.md)
+- [Claim versioning](claim-versioning.md)
+- [Claim adjustment workflow](claim-adjustment-workflow.md)
+
+Plan, member, provider, and coverage:
+
+- [Declarative benefit model](declarative-benefit-model.md)
+- [Plan versioning](plan-versioning.md)
+- [Temporal eligibility](temporal-eligibility.md)
+- [Member foundation](member-foundation.md)
+- [Network as organization](network-as-organization.md)
+- [Provider adapter pattern](provider-adapter-pattern.md)
+- [Provider versioning](provider-versioning.md)
+
+Infrastructure and shared platform:
+
+- [Shared cache](shared-cache.md)
+- [Shared message bus](shared-messagebus.md)
+- [Shared JSON options](shared-json-options.md)
+- [Secret rotation](secret-rotation.md)
+- [Observability](observability.md)
+
+EDI and historical deep dives:
+
+- [SFTP architecture](SFTP-ARCHITECTURE.md)
+- [SFTP multi-tenant architecture](SFTP-MULTI-TENANT-ARCHITECTURE.md)
+- [Authorization attachments architecture](../features/AUTHORIZATION-ATTACHMENTS-ARCHITECTURE.md)
+- [Kubernetes microservices architecture](../features/KUBERNETES-MICROSERVICES-ARCHITECTURE.md)
+- [Multi-tenant SaaS architecture](../features/MULTI-TENANT-SAAS-ARCHITECTURE.md)
