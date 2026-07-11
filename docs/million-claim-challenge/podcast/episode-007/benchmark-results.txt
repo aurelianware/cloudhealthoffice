@@ -1,0 +1,171 @@
+# Episode 007 benchmark and console evidence notes
+
+## Environment
+
+- Environment: local Kubernetes via Docker Desktop
+- Tenant: `demo`
+- Workload: synthetic Million Claim Challenge claim corpus
+- Generator seed: 42
+- Line of business: Medicaid (3)
+- Parallelism: 6
+- Claim count: 5,000
+- Member seeding: enabled
+- Provider seeding: enabled
+- Portal URL during inspection: `http://localhost:5026`
+- Claims-service local tunnel during inspection: `http://localhost:18080`
+- Important caveat: this was a local dashboard evidence run, not a production cloud benchmark
+
+Tenant-state caveat:
+
+The run used a long-lived local demo tenant, not a freshly reset tenant. As with Episode 006, local accumulated state can affect seeding counts, duplicate-detection paths, accumulator state, and hot-path timing.
+
+Payment-delta caveat:
+
+`Avg payment delta` remains diagnostic only. It is not yet a pass/fail amount-level scoring gate. Episode 007 keeps it visible in the console story because disposition-level correctness and payment-amount correctness are related but not identical.
+
+Pend-observation caveat:
+
+Expected-pend observation remains one-directional. It verifies expected-pend claims persisted as pended, but it does not yet sweep expected-pay or expected-deny claims for false pends.
+
+## Fresh 5,000-claim dashboard evidence run
+
+Purpose:
+
+- verify the portal can inspect a freshly published mass adjudication run
+- verify claim-result filtering works for unsupported rows
+- verify the post-PR-875 evidence-first sample path is active
+- provide Part 7 with a current local run after the Mass Adjudication console work
+
+Run:
+
+- Run ID: `b376a131a5de4118a49129fd2449eaee`
+- Job name: `mcc-main875-5k-evidence`
+
+Command:
+
+```bash
+SKIP_BUILD=false CLAIMS=5000 MAX_CLAIMS=5000 PARALLELISM=6 PROGRESS_EVERY=1000 SEED_MEMBERS=true SEED_PROVIDERS=true CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS=15 JOB_NAME=mcc-main875-5k-evidence scripts/run-mcc-local-k8s.sh
+```
+
+Summary:
+
+| Metric | Value |
+| --- | ---: |
+| Claims requested | 5,000 |
+| Claims processed | 5,000 |
+| Paid/adjudicated | 3,852 |
+| Pended | 46 |
+| Business denials | 1,102 |
+| Platform failures | 0 |
+| Observation timeouts | 0 |
+| Workflow checks | 577/650 matched |
+| Workflow mismatches | 0 |
+| Unsupported | 73 |
+| Workflow observation timeouts | 0 |
+| Elapsed | 02:11.910 |
+| Throughput | 37.90 claims/sec |
+| P95 latency | 384 ms |
+| P99 latency | 466 ms |
+| Avg payment delta | $66.90 |
+
+Timing:
+
+| Stage | Avg | P95 |
+| --- | ---: | ---: |
+| Submit | 8 ms | 32 ms |
+| Adjudicate | 143 ms | 375 ms |
+| Writeback | 8 ms | 48 ms |
+| Provider integrity hot path | 136 ms | 371 ms |
+| Benefit calculation | 32 ms | 90 ms |
+
+Business denial breakdown:
+
+| Denial | Count |
+| --- | ---: |
+| PROVIDER_EXCLUDED | 854 |
+| PRIOR_AUTH_REQUIRED | 108 |
+| CARC_96 | 100 |
+| NCCI_MUE_EDIT_FAILURE | 24 |
+| CARC_27 | 13 |
+
+Key matched scenario groups:
+
+| Scenario | Result |
+| --- | ---: |
+| CleanProfessionalPaid | 100/100 matched |
+| ExcludedProviderDenied | 100/100 matched |
+| TxStarInpatientNoAuth | 100/100 matched |
+| UncoveredServiceDenied | 100/100 matched |
+| EdgeCase:CobBirthdayRule | 10/10 matched |
+| EdgeCase:CobGenderRule | 10/10 matched |
+| EdgeCase:CobMedicareSecondary | 10/10 matched |
+| EdgeCase:CobPrimaryPayer | 10/10 matched |
+| EdgeCase:CobSecondaryPayer | 10/10 matched |
+| EdgeCase:CobTertiaryPayer | 10/10 matched |
+| EdgeCase:MedicaidCHIP | 6/6 matched |
+| EdgeCase:MedicaidDualEligible | 6/6 matched |
+| EdgeCase:MedicaidSSI | 6/6 matched |
+| EdgeCase:MedicaidTANF | 6/6 matched |
+| EdgeCase:NewbornAutoAdjudication | 10/10 matched |
+| EdgeCase:NewbornFirstThirtyDays | 10/10 matched |
+| EdgeCase:NewbornMotherClaimLink | 10/10 matched |
+| EdgeCase:PriorAuthRequired_AuthOnFile | 8/8 matched |
+| EdgeCase:PriorAuthRequired_NoAuth | 8/8 matched |
+| EdgeCase:RetroEligibilityAdd | 14/14 matched |
+| EdgeCase:RetroEligibilityTermination | 13/13 matched |
+
+Unsupported scenario groups:
+
+| Scenario | Unsupported |
+| --- | ---: |
+| EdgeCase:BehavioralHealthCarveOut | 10 |
+| EdgeCase:MedicaidSpendDown | 6 |
+| EdgeCase:PriorAuthRequired_ExpiredAuth | 8 |
+| EdgeCase:PriorAuthRequired_WrongProcedure | 8 |
+| EdgeCase:PriorAuthRequired_WrongProvider | 8 |
+| EdgeCase:RetroEligibilityCoverageChange | 13 |
+| EdgeCase:SubrogationAccidentRelated | 7 |
+| EdgeCase:SubrogationThirdPartyLiability | 6 |
+| EdgeCase:SubrogationWorkersComp | 7 |
+
+## Portal verification
+
+Dashboard API:
+
+- `GET http://localhost:18080/api/mass-adjudication/runs?limit=1`
+- Confirmed latest run ID: `b376a131a5de4118a49129fd2449eaee`
+
+Unsupported filter:
+
+- `GET http://localhost:18080/api/mass-adjudication/runs/b376a131a5de4118a49129fd2449eaee/claims?validationStatus=Unsupported&pageSize=5`
+- Returned unsupported claim rows, including:
+  - `MCC-E-0000088`, `EdgeCase:RetroEligibilityCoverageChange`
+  - `MCC-E-0000092`, `EdgeCase:RetroEligibilityCoverageChange`
+  - `MCC-E-0000094`, `EdgeCase:RetroEligibilityCoverageChange`
+  - `MCC-E-0000167`, `EdgeCase:PriorAuthRequired_WrongProcedure`
+  - `MCC-E-0000155`, `EdgeCase:PriorAuthRequired_WrongProvider`
+
+Mismatch filter:
+
+- `GET http://localhost:18080/api/mass-adjudication/runs/b376a131a5de4118a49129fd2449eaee/claims?validationStatus=Mismatched&pageSize=5`
+- Returned zero rows because the run had zero workflow mismatches.
+
+## Implementation provenance
+
+PR #874:
+
+- Added validation-status filtering to mass adjudication claim results.
+- Added unsupported and mismatch options to the portal claim-result filter.
+- Updated throughput labels to `claims/sec`.
+
+PR #875:
+
+- Changed validator claim-result sampling to preserve evidence-critical rows before slowest remaining rows.
+- Priority order: platform failures, observation failures, mismatches, unsupported, then slowest remaining claims.
+- Added deterministic tie-breakers by generated claim ID.
+
+## Interpretation
+
+The fresh 5K run is a console-evidence proof, not a new scale claim.
+
+The key result is that the current portal can now inspect a published mass adjudication run, show human-readable MCC claim IDs, filter unsupported results, preserve mismatch rows when they exist, and keep payment delta visible as an unresolved scoring gate.
