@@ -5,6 +5,7 @@ namespace ClaimsService.Models;
 public class MassAdjudicationRunSummary
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Status { get; set; } = "Completed";
     public MassAdjudicationRunMetadata Run { get; set; } = new();
     public int TotalClaims { get; set; }
     public int Processed { get; set; }
@@ -33,6 +34,8 @@ public class MassAdjudicationRunSummary
     [BsonIgnore]
     public List<MassAdjudicationClaimResult> ClaimResults { get; set; } = new();
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime LastUpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public MassAdjudicationRunProgress? Progress { get; set; }
 }
 
 public class MassAdjudicationRunMetadata
@@ -52,6 +55,20 @@ public class MassAdjudicationRunMetadata
     public int LineOfBusiness { get; set; }
     public DateTimeOffset StartedAtUtc { get; set; }
     public DateTimeOffset CompletedAtUtc { get; set; }
+}
+
+public class MassAdjudicationRunProgress
+{
+    public string Phase { get; set; } = "Running";
+    public int RequestedClaims { get; set; }
+    public int CompletedClaims { get; set; }
+    public int ProcessedClaims { get; set; }
+    public int PlatformFailures { get; set; }
+    public double PercentComplete { get; set; }
+    public double CurrentThroughputClaimsPerSecond { get; set; }
+    public double RollingP95LatencyMilliseconds { get; set; }
+    public double RollingP99LatencyMilliseconds { get; set; }
+    public DateTimeOffset LastPublishedAtUtc { get; set; }
 }
 
 public class MassAdjudicationStageTiming
