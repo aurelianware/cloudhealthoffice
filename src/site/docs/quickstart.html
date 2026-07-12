@@ -140,7 +140,7 @@
 
         <h1>Quick Start</h1>
         <p class="docs-subtitle">
-          Run the full Cloud Health Office platform locally on Kubernetes, then validate claims adjudication and Da Vinci CRD discovery — no Azure account needed.
+          Run the full Cloud Health Office platform locally on Kubernetes, validate claims adjudication, run a scored Million Claim Challenge workload, and inspect the published evidence in the operator console — no Azure account needed.
         </p>
 
         <!-- Diagram -->
@@ -151,7 +151,7 @@
         <!-- What This Covers -->
         <div class="callout callout-success">
           <div class="callout-title">What you'll build</div>
-          <p>By the end of this guide you'll have the full service suite running in the <code>cloudhealthoffice</code> namespace with MongoDB, Redis, the portal, FHIR, claims, payment, enrollment, provider, and supporting services. You'll also run a claim through adjudication and verify CRD discovery.</p>
+          <p>By the end of this guide you'll have the full service suite running in the <code>cloudhealthoffice</code> namespace with MongoDB, Redis, the portal, FHIR, claims, payment, enrollment, provider, and supporting services. You'll run a claim through adjudication, execute a scored 1,000-claim benchmark, inspect its evidence in the Mass Adjudication console, and verify CRD discovery.</p>
         </div>
 
         <div class="callout callout-info">
@@ -269,10 +269,48 @@ BENEFIT_URL=http://localhost:5002 \
         </div>
 
         <!-- Step 5 -->
-        <h2 id="step-5">5. Verify CRD Discovery</h2>
+        <h2 id="step-5">5. Run the Million Claim Challenge</h2>
 
         <div class="step">
-          <span class="step-number">5</span>
+          <span class="step-number green">5</span>
+          <div class="step-body">
+            <h3>Run a scored 1,000-claim validation</h3>
+            <p>The validator generates a deterministic corpus, seeds the run-scoped fixtures needed by the platform, submits and adjudicates the claims, checks persisted pend state, scores workflow outcomes and comparable payments, and publishes the run summary to claims-service.</p>
+<pre><code>CLAIMS=1000 \
+MAX_CLAIMS=1000 \
+PARALLELISM=10 \
+PROGRESS_EVERY=100 \
+JOB_NAME=mcc-quickstart-1k \
+./scripts/run-mcc-local-k8s.sh</code></pre>
+            <p>The first invocation builds the validator image. The command waits for the Kubernetes job and prints the final evidence summary in the same terminal.</p>
+            <div class="callout callout-success">
+              <div class="callout-title">What a clean validation means</div>
+              <p>Confirm that the final summary reports <strong>zero platform failures</strong>, <strong>zero workflow mismatches</strong>, <strong>zero observation timeouts</strong>, <strong>zero unexpected pends</strong>, and <strong>zero payment mismatches</strong>. Unsupported scenarios are named product gaps; they are reported separately and are not counted as passes or platform failures.</p>
+            </div>
+            <p>If the terminal disconnects, inspect the same job directly:</p>
+<pre><code>kubectl get job -n cloudhealthoffice mcc-quickstart-1k
+kubectl logs -n cloudhealthoffice job/mcc-quickstart-1k</code></pre>
+
+            <h3>Inspect the published run in the console</h3>
+            <p>Keep the portal port-forward from Step 3 running, then open <a href="http://localhost:8080/mass-adjudication-runs" target="_blank" rel="noopener noreferrer">http://localhost:8080/mass-adjudication-runs</a>. Open the newest run to review throughput, P95/P99 latency, outcome counts, workflow scoring, payment accuracy, and retained claim-level evidence. Filter by validation status to inspect unsupported or mismatched rows, then open a claim for its persisted adjudication and benefit breakdown.</p>
+
+            <h3>Scale up only after 1K is clean</h3>
+<pre><code><span class="code-comment"># 10K confidence run</span>
+CLAIMS=10000 MAX_CLAIMS=10000 PROGRESS_EVERY=1000 \
+JOB_NAME=mcc-quickstart-10k ./scripts/run-mcc-local-k8s.sh
+
+<span class="code-comment"># 100K milestone; use the recommended 18 CPU / 24 GB Docker allocation</span>
+CLAIMS=100000 MAX_CLAIMS=100000 PROGRESS_EVERY=5000 \
+JOB_NAME=mcc-quickstart-100k ./scripts/run-mcc-local-k8s.sh</code></pre>
+            <p>Large runs include fixture seeding before timed submission. Do not calculate claims per second from total Kubernetes job duration; use the validator's reported timed throughput. See the <a href="/docs/million-claim-challenge">Million Claim Challenge guide</a> for corpus design and the <a href="/docs/million-claim-challenge/evidence">evidence archive</a> for published results and limitations.</p>
+          </div>
+        </div>
+
+        <!-- Step 6 -->
+        <h2 id="step-6">6. Verify CRD Discovery</h2>
+
+        <div class="step">
+          <span class="step-number">6</span>
           <div class="step-body">
             <h3>Call the Da Vinci CRD CDS Hooks discovery endpoint</h3>
 <pre><code>curl -s -H "X-Tenant-ID: demo" http://localhost:5080/cds-services | jq .</code></pre>
@@ -283,11 +321,11 @@ BENEFIT_URL=http://localhost:5002 \
           </div>
         </div>
 
-        <!-- Step 6 -->
-        <h2 id="step-6">6. Check System Health</h2>
+        <!-- Step 7 -->
+        <h2 id="step-7">7. Check System Health</h2>
 
         <div class="step">
-          <span class="step-number green">6</span>
+          <span class="step-number green">7</span>
           <div class="step-body">
             <h3>Inspect rollouts and logs</h3>
 <pre><code>kubectl get deployments -n cloudhealthoffice
@@ -304,7 +342,7 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
 
         <div class="callout callout-success">
           <div class="callout-title">You're done!</div>
-          <p>You now have the production-shaped Cloud Health Office platform running locally in Kubernetes, with claims adjudication and CRD discovery validated against the seeded <code>demo</code> tenant.</p>
+          <p>You now have the production-shaped Cloud Health Office platform running locally in Kubernetes, with claims adjudication, scored Million Claim Challenge evidence, and CRD discovery validated against the seeded <code>demo</code> tenant.</p>
         </div>
 
         <!-- Next Steps -->
@@ -317,6 +355,11 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
             <h3>Kubernetes Reference</h3>
             <p>Review deeper troubleshooting, resource guidance, common kubectl tasks, and teardown commands.</p>
             <span class="card-arrow">Reference guide &rarr;</span>
+          </a>
+          <a href="/docs/million-claim-challenge" class="docs-hub-card">
+            <h3>Million Claim Challenge</h3>
+            <p>Understand the deterministic corpus, answer key, workflow scoring, supported gaps, and published evidence.</p>
+            <span class="card-arrow">Challenge guide &rarr;</span>
           </a>
           <a href="/docs/compliance" class="docs-hub-card">
             <h3>CMS-0057-F Compliance</h3>
