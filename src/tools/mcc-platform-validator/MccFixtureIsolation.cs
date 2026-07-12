@@ -77,9 +77,18 @@ internal static class MccFixtureIsolation
     private static string BuildValidationMemberId(string claimId, Guid runId, int ordinal)
     {
         var runSalt = runId.ToString("N")[..8].ToUpperInvariant();
+        var claimType = ClaimTypeDiscriminator(claimId);
         var normalizedClaimId = NormalizeClaimIdSuffix(claimId, ordinal);
 
-        return $"MCCV{runSalt}{normalizedClaimId}";
+        return $"MCCV{runSalt}{claimType}{normalizedClaimId}";
+    }
+
+    private static char ClaimTypeDiscriminator(string claimId)
+    {
+        var parts = claimId.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 && parts[1].Length == 1 && char.IsLetter(parts[1][0])
+            ? char.ToUpperInvariant(parts[1][0])
+            : 'X';
     }
 
     private static string NormalizeClaimIdSuffix(string claimId, int ordinal)

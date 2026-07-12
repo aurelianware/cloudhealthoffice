@@ -70,6 +70,7 @@ var claims = await GenerateClaimsAsync(options);
 NormalizePriorAuthEdgeCases(claims, options);
 NormalizeValidationProviderProfiles(claims, options.Seed, validationPlanId);
 MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
+MccCleanPaidFixture.NormalizeClaims(claims);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 var answerKey = MccAnswerKey.FromClaims(claims);
 
@@ -649,7 +650,6 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
     claim.PriorAuthNumber = null;
     claim.PrimaryDiagnosisCode = "Z00.00";
     claim.SecondaryDiagnosisCodes.Clear();
-
     ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider);
     ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider);
 

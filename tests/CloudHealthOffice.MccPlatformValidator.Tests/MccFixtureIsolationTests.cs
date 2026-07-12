@@ -112,9 +112,35 @@ public class MccFixtureIsolationTests
 
         MccFixtureIsolation.IsolateValidationMembers([retroAdd], seed: 42, runId);
 
-        Assert.Equal("MCCV906F49D10000013", retroAdd.Member.MemberId);
+        Assert.Equal("MCCV906F49D1E0000013", retroAdd.Member.MemberId);
         Assert.Equal(retroAdd.Member.MemberId, retroAdd.Member.SubscriberId);
         Assert.DoesNotContain("-", retroAdd.Member.MemberId, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IsolateValidationMembers_PreservesClaimTypeToPreventCrossCorpusCollisions()
+    {
+        var professional = new SyntheticClaim
+        {
+            ClaimId = "MCC-P-0000787",
+            ClaimType = "Professional",
+            BenefitPlanId = MccWorkflowValidation.CleanProfessionalPaidPlanId,
+            PlaceOfService = "11",
+            PriorAuthStatus = "NotRequired",
+            Member = new SyntheticMember { MemberId = "SHARED", SubscriberId = "SHARED" }
+        };
+        var generator = new EdgeCaseClaimGenerator(new InMemoryReferenceDataProvider());
+        var edge = generator.Generate(787, nameof(EdgeCaseScenario.RetroEligibilityAdd), new Random(42));
+        edge.ClaimId = "MCC-E-0000787";
+        edge.Member.MemberId = "SHARED";
+        edge.Member.SubscriberId = "SHARED";
+        var runId = Guid.Parse("906f49d1-18cc-4d19-9c77-69822ad6d88b");
+
+        MccFixtureIsolation.IsolateValidationMembers([professional, edge], seed: 42, runId);
+
+        Assert.Equal("MCCV906F49D1P0000787", professional.Member.MemberId);
+        Assert.Equal("MCCV906F49D1E0000787", edge.Member.MemberId);
+        Assert.NotEqual(professional.Member.MemberId, edge.Member.MemberId);
     }
 
     [Fact]
