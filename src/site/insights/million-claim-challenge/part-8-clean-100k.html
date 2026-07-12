@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Running a Healthcare Claims Platform Locally in Kubernetes, Part 8: The Clean 100,000-Claim Run | Cloud Health Office</title>
+  <meta name="description" content="How stronger correctness gates reached a clean 100,000-claim run and exposed the next local scaling bottleneck.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/million-claim-challenge/part-8-clean-100k">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Running a Healthcare Claims Platform Locally in Kubernetes, Part 8: The Clean 100,000-Claim Run">
+  <meta property="og:description" content="How stronger correctness gates reached a clean 100,000-claim run and exposed the next local scaling bottleneck.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/million-claim-challenge/part-8-clean-100k">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .source-note { font-size: .9rem !important; color: #8b949e !important; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+    .evidence-block summary { cursor: pointer; padding: 18px 20px; color: #00ffff; font-weight: 700; background: #0d1117; }
+    .evidence-block pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 22px; background: #080c10; color: #c9d1d9; font-size: .84rem; line-height: 1.55; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/docs/million-claim-challenge">Million Claim Challenge</a></nav>
+    <div class="eyebrow">Million Claim Challenge · Part 8</div>
+    <h1>Running a Healthcare Claims Platform Locally in Kubernetes, Part 8: The Clean 100,000-Claim Run</h1>
+    <div class="disclosure"><strong>Evidence scope:</strong> This engineering field note describes local Kubernetes development and validation. It is not a production-cloud capacity claim or evidence that the full one-million-claim corpus has been completed.</div>
+    <div class="article-links">
+      <a href="/docs/million-claim-challenge/evidence#episode-008">View evidence</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-008/article.txt" target="_blank" rel="noopener noreferrer">View article source</a>
+    </div>
+    <p>Part 7 moved the Million Claim Challenge evidence out of terminal logs and into an operator console.</p>
+<p>Then the correctness bar changed.</p>
+<p>Payment accuracy became a gate instead of a diagnostic. Expected-pay and expected-deny claims were checked for false pends. Zero-limit accumulator placeholders stopped distorting expected payments. Generated members were isolated so one corpus segment could not contaminate another.</p>
+<p>Only after those changes did Cloud Health Office move to 100,000 claims.</p>
+<p>The result was clean: every claim processed, no platform failures, no scoreable workflow mismatches, no unexpected pends, and every comparable payment within one cent.</p>
+<p>The run also exposed the next scaling problem. Adjudication completed in less than 30 minutes, but the complete Kubernetes job took more than two hours because preparing a much larger set of run-scoped fixtures dominated the lifecycle.</p>
+<p>That is exactly the kind of result this series is supposed to produce: correctness held, and the next bottleneck became visible.</p>
+<h2 id="what-changed-before-100k">What changed before 100K</h2>
+<p>The previous 50K result proved broader outcome scoring, but it still left important questions open.</p>
+<p>A claim could reach the expected paid disposition while paying the wrong amount. Expected-pend claims were observed, but expected-pay and expected-deny claims were not swept for accidental pends. Placeholder accumulator limits could be interpreted as real zero-dollar limits. Reused generated member identities could let fixture state cross scenario boundaries.</p>
+<p>Those are not cosmetic benchmark concerns. They affect whether the answer key and the platform are actually evaluating the same claim context.</p>
+<p>The validator now includes:</p>
+<ul><li>a plan-aligned payment gate with a one-cent tolerance</li><li>a persisted false-pend sweep for scoreable non-pend claims</li><li>corrected zero-limit accumulator handling</li><li>cross-corpus member fixture isolation</li><li>evidence-first claim-result retention</li><li>in-progress run publication and a completed run summary in the console</li></ul>
+<p>The 100K run was not allowed to trade those gates for volume.</p>
+<h2 id="the-100k-result">The 100K result</h2>
+<p>The local Docker Desktop Kubernetes run processed 100,000 deterministic synthetic claims with parallelism set to 10.</p>
+<p>The final summary reported:</p>
+<ul><li>100,000 claims processed</li><li>79,164 paid or adjudicated</li><li>923 pended</li><li>19,913 business denials</li><li>0 platform failures</li><li>0 observation timeouts</li><li>11,534 of 13,000 workflow checks matched</li><li>0 workflow mismatches</li><li>1,466 unsupported scenarios</li><li>0 unexpected pends across 10,614 scoreable non-pend claims</li><li>2,000 of 2,000 comparable payments within one cent</li><li>$0.00 average payment delta</li><li>$0.00 maximum payment delta</li></ul>
+<p>Unsupported scenarios remained separate from passes and failures. They were concentrated in behavioral-health carve-out, Medicaid spend-down, prior-authorization edge variants, retroactive coverage change, and subrogation workflows.</p>
+<p>Those are named product gaps, not hidden successes.</p>
+<h2 id="performance-did-not-scale-linearly">Performance did not scale linearly</h2>
+<p>The timed claim-processing phase completed in 29 minutes and 40.851 seconds.</p>
+<p>That produced:</p>
+<ul><li>56.15 claims per second</li><li>358 ms P95 latency</li><li>451 ms P99 latency</li><li>199 ms P95 submission time</li><li>140 ms P95 adjudication time</li><li>102 ms P95 writeback time</li></ul>
+<p>The previous clean 50K run reached 82.40 claims per second with 129 ms P95 and 178 ms P99 latency.</p>
+<p>So doubling the corpus did not preserve the smaller run's throughput or tail latency. The platform remained correct, but the longer run created more pressure on the local working set, persistence path, and shared Docker Desktop resources.</p>
+<p>That is not a production capacity conclusion. It is a local scaling signal worth investigating.</p>
+<h2 id="timed-throughput-and-total-job-duration-are-different">Timed throughput and total job duration are different</h2>
+<p>The Kubernetes job existed for approximately 128 minutes, while the timed processing phase lasted just under 30 minutes.</p>
+<p>Most of that difference came before claims were timed. The validator generated the corpus and prepared the fixtures required to make the run scoreable. It seeded or aligned 99,591 member statuses, added 620 COB coverage rows, and processed a provider fixture set that included 174,202 new providers plus 25,644 already present.</p>
+<p>Fixture isolation improved correctness, but the current preparation strategy is expensive at 100K.</p>
+<p>This distinction matters when reading the result.</p>
+<p>The platform adjudicated at 56.15 claims per second during the measured phase. The end-to-end developer experience took more than two hours. Both numbers are true, and they answer different questions.</p>
+<h2 id="what-the-console-should-make-obvious">What the console should make obvious</h2>
+<p>A useful operator console should not show only the best-looking number.</p>
+<p>For this run, it should make clear:</p>
+<ul><li>when fixture preparation started and ended</li><li>when timed submission began</li><li>current and final throughput</li><li>platform failures versus business dispositions</li><li>expected pends versus unexpected pends</li><li>matched, mismatched, unsupported, and timed-out workflow checks</li><li>payment comparisons and maximum delta</li><li>claim-level evidence behind every exception category</li></ul>
+<p>The run summary was published successfully, so the completed result is available through the Mass Adjudication console. The next improvement is to make preparation progress and its cost as visible as adjudication progress.</p>
+<h2 id="the-next-local-optimization-target">The next local optimization target</h2>
+<p>The next target is not immediately 250K.</p>
+<p>First, the fixture path needs to become incremental and bounded. A benchmark claim should reference a deliberately sized reusable provider and member pool unless a scenario specifically requires claim-level isolation. Isolation should be applied where correctness requires it, not by multiplying every reference-data population with the claim count.</p>
+<p>That suggests several concrete experiments:</p>
+<ul><li>measure fixture-generation and API-seeding stages independently</li><li>reuse immutable provider fixtures across runs</li><li>isolate only member records whose scenario state can collide</li><li>batch or bulk-write fixture data where service contracts permit it</li><li>report preparation throughput and cache-hit rates</li><li>rerun 100K after each fixture optimization</li></ul>
+<p>The acceptance criterion stays the same: performance work cannot weaken the correctness gates.</p>
+<h2 id="what-comes-after-the-local-ceiling">What comes after the local ceiling</h2>
+<p>The Million Claim Challenge is still aimed at one million claims.</p>
+<p>But the local series should continue until the limiting resource is reproducible and explained. It may be CPU, memory, MongoDB, Docker networking, fixture preparation, or a combination of them.</p>
+<p>Once that ceiling is understood, the natural follow-up is a cloud scaling series using the same corpus and gates across Azure Kubernetes Service, Amazon Elastic Kubernetes Service, and Google Kubernetes Engine.</p>
+<p>The comparison should not ask only which cloud is fastest. It should ask how much infrastructure, time, and cost each environment needs to preserve zero platform failures, zero scoreable mismatches, zero unexpected pends, payment accuracy, and inspectable evidence.</p>
+<p>Part 5 made the benchmark repeatable.</p>
+<p>Part 6 made the scoring honest.</p>
+<p>Part 7 made the evidence visible.</p>
+<p>Part 8 proves that the stronger system can process 100,000 claims cleanly—and shows exactly where the local path needs to improve next.</p>
+    <div class="article-links"><a href="/insights/million-claim-challenge">All MCC articles</a><a href="/docs/million-claim-challenge/evidence">Evidence archive</a></div>
+  </main>
+</body>
+</html>

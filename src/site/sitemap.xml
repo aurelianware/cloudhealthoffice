@@ -145,6 +145,12 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://cloudhealthoffice.com/insights/million-claim-challenge/part-8-clean-100k</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://cloudhealthoffice.com/docs/benefit-plan-guide</loc>
     <lastmod>2026-04-07</lastmod>
     <changefreq>monthly</changefreq>

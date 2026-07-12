@@ -297,8 +297,12 @@ public class ClaimsServiceTests
             }
           ],
           "adjudicationResult": {
-            "allowedAmount": 0,
-            "deductibleAmount": 0
+            "allowedAmount": 80,
+            "deductibleAmount": 10,
+            "coinsuranceAmount": 5,
+            "copayAmount": 3,
+            "patientResponsibility": 18,
+            "payerPayment": 62
           },
           "claimLines": [
             {
@@ -308,16 +312,17 @@ public class ClaimsServiceTests
               "modifiers": [],
               "units": 1,
               "chargeAmount": 100,
-              "allowedAmount": null,
-              "paidAmount": null,
-              "patientResponsibility": null,
               "serviceDateFrom": "2026-06-15T07:00:00Z",
               "serviceDateTo": "2026-06-15T07:00:00Z",
               "placeOfServiceCode": "11",
               "diagnosisPointers": [1],
               "adjustments": null,
               "mpipMultiplierApplied": null,
-              "adjudicationResult": null,
+              "adjudicationResult": {
+                "allowedAmount": 80,
+                "paidAmount": 62,
+                "patientResponsibility": 18
+              },
               "lineStatus": null
             }
           ],
@@ -334,12 +339,20 @@ public class ClaimsServiceTests
         result.Status.Should().Be("Approved");
         result.ClaimType.Should().Be("Dental");
         result.TotalChargeAmount.Should().Be(100m);
+        result.AllowedAmount.Should().Be(80m);
+        result.PaidAmount.Should().Be(62m);
+        result.DeductibleAmount.Should().Be(10m);
+        result.CoinsuranceAmount.Should().Be(5m);
+        result.CopayAmount.Should().Be(3m);
+        result.PatientResponsibility.Should().Be(18m);
         result.DiagnosisCodes.Should().ContainSingle()
             .Which.Code.Should().Be("K05.10");
         result.AuditTrail.Should().BeEmpty();
         result.ServiceLines.Should().ContainSingle();
         result.ServiceLines[0].ProcedureCode.Should().Be("D0150");
-        result.ServiceLines[0].AllowedAmount.Should().Be(0m);
+        result.ServiceLines[0].AllowedAmount.Should().Be(80m);
+        result.ServiceLines[0].PaidAmount.Should().Be(62m);
+        result.ServiceLines[0].PatientResponsibility.Should().Be(18m);
         result.ServiceLines[0].Modifiers.Should().BeEmpty();
         result.ServiceLines[0].DiagnosisPointers.Should().ContainSingle()
             .Which.Should().Be(1);

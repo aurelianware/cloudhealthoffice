@@ -609,6 +609,104 @@ The fresh 5K run is a console-evidence proof, not a new scale claim.
 
 The key result is that the current portal can now inspect a published mass adjudication run, show human-readable MCC claim IDs, filter unsupported results, preserve mismatch rows when they exist, and keep payment delta visible as an unresolved scoring gate.
 </pre></details></section>
+<section id="episode-008"><div class="eyebrow">Part 8 · recorded artifact</div><h2>How stronger correctness gates reached a clean 100,000-claim run and exposed the next local scaling bottleneck.</h2><div class="article-links"><a href="/insights/million-claim-challenge/part-8-clean-100k">Read article</a><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-008/benchmark-results.txt" target="_blank" rel="noopener noreferrer">Source artifact</a></div><details class="evidence-block" open><summary>Benchmark results recorded with Episode 008</summary><pre># Episode 008 benchmark results
+
+## Run identity
+
+- Date: July 12, 2026
+- Kubernetes job: `mcc-part8-100k`
+- Environment: local Docker Desktop Kubernetes
+- Tenant: `demo`
+- Validator seed: 42
+- Claims: 100,000
+- Parallelism: 10
+- Line of business: Medicaid
+- Prior-authorization scenario rate: 2%
+- Pend observation: enabled, 45-second bound, 1-second polling interval
+- Pend diagnostics: disabled
+- Dashboard summary: published
+
+## Command
+
+```text
+CLAIMS=100000 MAX_CLAIMS=100000 JOB_NAME=mcc-part8-100k PARALLELISM=10 PROGRESS_EVERY=5000 ./scripts/run-mcc-local-k8s.sh
+```
+
+## Fixture preparation
+
+- Generated 100,000 MCC claims in memory.
+- Injected 2,000 clean professional paid scenarios.
+- Injected 2,000 excluded-provider denial scenarios.
+- Injected 2,000 uncovered-service denial scenarios.
+- Injected 2,000 TX STAR inpatient no-authorization scenarios.
+- Seeded 87,115 synthetic members; 12,476 already existed; 99,591 statuses aligned.
+- Seeded 620 COB coverage rows; 300 already existed.
+- Seeded 174,202 synthetic providers; 25,644 already existed.
+- Provider networks: 0 new; 2 already existed.
+
+## Correctness result
+
+- Total claims: 100,000
+- Processed: 100,000
+- Paid/adjudicated: 79,164
+- Pended: 923
+- Business denials: 19,913
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 920 pended, 0 timed out
+- False-pend sweep: 10,614 scoreable non-pend claims, 0 unexpected pends
+- Workflow scoring: 11,534/13,000 matched, 0 mismatched, 1,466 unsupported, 0 observation timeouts
+- Payment gate: 2,000/2,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+
+## Performance result
+
+- Timed claim-processing elapsed: 29:40.851
+- Throughput: 56.15 claims/second
+- P95 latency: 358 ms
+- P99 latency: 451 ms
+- Submit average/P95: 63 ms / 199 ms
+- Adjudicate average/P95: 75 ms / 140 ms
+- Writeback average/P95: 40 ms / 102 ms
+- Benefit calculation average/P95: 60 ms / 127 ms
+- Provider integrity average/P95: 12 ms / 39 ms
+- Kubernetes job duration: approximately 128 minutes, including corpus generation and fixture preparation
+
+## Business denials
+
+- CARC 96: 9,046
+- CARC 18: 6,000
+- PRIOR_AUTH_REQUIRED: 2,160
+- PROVIDER_EXCLUDED: 2,000
+- NCCI_MUE_EDIT_FAILURE: 393
+
+Business denials are valid platform outcomes, not platform failures.
+
+## Unsupported scenarios
+
+- BehavioralHealthCarveOut: 200
+- MedicaidSpendDown: 120
+- PriorAuthRequired_ExpiredAuth: 160
+- PriorAuthRequired_WrongProcedure: 160
+- PriorAuthRequired_WrongProvider: 160
+- RetroEligibilityCoverageChange: 266
+- SubrogationAccidentRelated: 134
+- SubrogationThirdPartyLiability: 133
+- SubrogationWorkersComp: 133
+
+Total unsupported: 1,466.
+
+Unsupported means the scenario is not currently scoreable through the implemented platform/validator path. It is not counted as matched, mismatched, or a platform failure.
+
+## Interpretation
+
+The 100K correctness gate passed cleanly. All claims processed; the scoreable workflow set produced no mismatches; expected-pend observation produced no timeouts; the non-pend sweep found no unexpected pends; and all 2,000 comparable payments matched within one cent.
+
+The timed adjudication result and total Kubernetes job duration must remain separate. Timed processing completed in 29:40.851 at 56.15 claims/second. The job lifecycle lasted about 128 minutes because large run-scoped member and provider fixture preparation occurred before timed processing.
+
+This is local Docker Desktop evidence, not a production-cloud capacity claim. The performance result identifies fixture preparation and increased local tail latency as the next scaling investigation.
+</pre></details></section>
   </main>
 </body>
 </html>

@@ -293,28 +293,28 @@
         <p>
           The Million Claim Challenge validates the platform under pressure by reporting throughput, tail latency,
           platform reliability, and deterministic healthcare workflow correctness together. The latest published Cloud Health Office run
-          is a 50K local Kubernetes validation, not a production cloud benchmark or full-million adjudication run.
+          is a clean 100K local Kubernetes validation, not a production cloud benchmark or full-million adjudication run.
         </p>
         <div class="mcc-proof-grid" aria-label="Latest local Million Claim Challenge validation metrics">
           <div class="mcc-proof-metric">
-            <strong>50,000</strong>
+            <strong>100,000</strong>
             <span>claims processed in local Kubernetes</span>
           </div>
           <div class="mcc-proof-metric">
-            <strong>188.64 claims/sec</strong>
-            <span>repeat throughput, about 10.5 claims/sec per allocated CPU</span>
+            <strong>56.15 claims/sec</strong>
+            <span>timed throughput with the stronger scoring gates enabled</span>
           </div>
           <div class="mcc-proof-metric">
-            <strong>106 ms / 151 ms</strong>
+            <strong>358 ms / 451 ms</strong>
             <span>P95 and P99 latency</span>
           </div>
           <div class="mcc-proof-metric">
             <strong>0 platform failures</strong>
-            <span>4,000/4,000 checks across four core dispositions</span>
+            <span>0 mismatches, unexpected pends, or payment mismatches</span>
           </div>
         </div>
         <p style="font-size:0.95rem; color:#888;">
-          The full MCC design covers one million claims and 29 edge-case scenarios; the next proof milestone is broader scenario coverage, then 250K+ volume.
+          The full MCC design covers one million claims and 29 edge-case scenarios; the next local work is to optimize fixture preparation and explain the reproducible local ceiling before increasing volume again.
           <a href="/docs/million-claim-challenge" style="color:#00ffff;">See the benchmark methodology &rarr;</a>
         </p>
       </section>
