@@ -121,52 +121,6 @@
       padding: 0 24px 80px;
     }
 
-    .audience-tab-buttons {
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 32px;
-    }
-
-    .audience-tab-button {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(0,255,255,0.18);
-      color: rgba(176,176,176,0.82);
-      border-radius: 999px;
-      padding: 12px 20px;
-      font-size: 0.9rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .audience-tab-button:hover,
-    .audience-tab-button:focus-visible {
-      color: #00ffff;
-      border-color: rgba(0,255,255,0.45);
-      outline: none;
-    }
-
-    .audience-tab-button.active {
-      background: rgba(0,255,255,0.08);
-      border-color: rgba(0,255,255,0.42);
-      color: #00ffff;
-      box-shadow: 0 0 24px rgba(0,255,255,0.12);
-    }
-
-    .audience-tab-panel {
-      display: none;
-    }
-
-    .audience-tab-panel.active {
-      display: block;
-    }
-
-    .provider-card-accent {
-      border-color: rgba(0,255,136,0.2);
-    }
-
     .proof-quote {
       max-width: 860px;
       margin: 0 auto;
@@ -560,73 +514,46 @@
       <div class="section-wrapper" style="padding-bottom: 32px;">
         <div class="section-header" style="margin-bottom: 40px;">
           <span class="section-eyebrow">Who is this for?</span>
-          <h2 id="audience-heading" class="section-title">Choose your lens.</h2>
-          <p class="section-subtitle">The same platform meets different teams where they are &mdash; payer infrastructure on one side, MCP and provider-group workflows on the other.</p>
+          <h2 id="audience-heading" class="section-title">Built for payer infrastructure.</h2>
+          <p class="section-subtitle">Cloud Health Office is the compliance and modernization layer for health plans, TPAs, and payer operations teams running on legacy core admin systems.</p>
         </div>
       </div>
       <div class="audience-tabs">
-        <div class="audience-tab-buttons" role="tablist" aria-label="Audience tabs">
-          <button type="button" class="audience-tab-button active" id="audience-tab-payers" role="tab" aria-selected="true" aria-controls="audience-panel-payers" data-audience="payers">For Payers</button>
-          <button type="button" class="audience-tab-button" id="audience-tab-aco" role="tab" aria-selected="false" aria-controls="audience-panel-aco" data-audience="aco">For ACOs &amp; Provider Groups</button>
-        </div>
-
-        <div class="audience-tab-panel active" id="audience-panel-payers" role="tabpanel" aria-labelledby="audience-tab-payers">
-          <div class="feature-grid">
-            <div class="feature-card">
-              <div class="feature-icon" aria-hidden="true">&#9889;</div>
-              <h3>CMS-0057-F Compliance</h3>
-              <p>Compliance surface for the CMS Interoperability and Prior Authorization Rule, deployable alongside existing core admin systems without replacing the adjudication path.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon" aria-hidden="true">&#128279;</div>
-              <h3>Multi-Clearinghouse EDI</h3>
-              <p>Multi-clearinghouse integration patterns for Availity, Change Healthcare, Optum, and Inovalon, with source-visible implementation and configurable routing.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon" aria-hidden="true">&#128260;</div>
-              <h3>X12 to FHIR R4 Transformation</h3>
-              <p>Automated transformation of X12 EDI transactions (270/837/278/835) to FHIR R4 resources, designed for repeatable validation and tenant-aware operation.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon" aria-hidden="true">&#127973;</div>
-              <h3>Legacy Core Augmentation</h3>
-              <p>Sits alongside QNXT, Facets, HealthEdge, or Amisys. Reads from your existing system, exposes FHIR R4 APIs &mdash; without touching your core operations.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon" aria-hidden="true">&#128274;</div>
-              <h3>HIPAA-Grade Security</h3>
-              <p>BAA-ready operating model, automated dependency scanning, encryption, PHI-aware telemetry controls, audit trails, and compliance reporting foundations.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon" aria-hidden="true">&#127760;</div>
-              <h3>Flexible Deployment</h3>
-              <p>Kubernetes-native architecture with Argo Workflows on AKS, EKS, or GKE. Container-based microservices with full infrastructure ownership. Deploy to your own subscription.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon" aria-hidden="true">&#128184;</div>
-              <h3>Premium Billing &amp; ACH</h3>
-              <p>Automated monthly premium invoicing with NACHA/ACH file generation, EFT draft lifecycle management, and Stripe ACH integration. Batch billing runs with sponsor-level invoicing and audit trails.</p>
-            </div>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#9889;</div>
+            <h3>CMS-0057-F Compliance</h3>
+            <p>Compliance surface for the CMS Interoperability and Prior Authorization Rule, deployable alongside existing core admin systems without replacing the adjudication path.</p>
           </div>
-        </div>
-
-        <div class="audience-tab-panel" id="audience-panel-aco" role="tabpanel" aria-labelledby="audience-tab-aco">
-          <div class="feature-grid">
-            <div class="feature-card provider-card-accent">
-              <div class="feature-icon" aria-hidden="true">&#129658;</div>
-              <h3>Care coordination workflow validation</h3>
-              <p>Validate referral, prior auth, and longitudinal care coordination workflows required for MCP model participation &mdash; before performance pressure turns into operational fire drills.</p>
-            </div>
-            <div class="feature-card provider-card-accent">
-              <div class="feature-icon" aria-hidden="true">&#128202;</div>
-              <h3>Attribution logic &amp; total cost of care reporting</h3>
-              <p>Stand up attribution logic, utilization views, and total cost of care reporting that leadership can review with confidence instead of reconciling across disconnected spreadsheets.</p>
-            </div>
-            <div class="feature-card provider-card-accent">
-              <div class="feature-icon" aria-hidden="true">&#128257;</div>
-              <h3>FHIR R4 interoperability without replacing your EHR</h3>
-              <p>Expose FHIR R4 workflows and interoperability layers around Epic, Cerner, athenahealth, or your current stack &mdash; without forcing an EHR rip-and-replace to get moving.</p>
-            </div>
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#128279;</div>
+            <h3>Multi-Clearinghouse EDI</h3>
+            <p>Multi-clearinghouse integration patterns for Availity, Change Healthcare, Optum, and Inovalon, with source-visible implementation and configurable routing.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#128260;</div>
+            <h3>X12 to FHIR R4 Transformation</h3>
+            <p>Automated transformation of X12 EDI transactions (270/837/278/835) to FHIR R4 resources, designed for repeatable validation and tenant-aware operation.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#127973;</div>
+            <h3>Legacy Core Augmentation</h3>
+            <p>Sits alongside QNXT, Facets, HealthEdge, or Amisys. Reads from your existing system, exposes FHIR R4 APIs &mdash; without touching your core operations.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#128274;</div>
+            <h3>HIPAA-Grade Security</h3>
+            <p>BAA-ready operating model, automated dependency scanning, encryption, PHI-aware telemetry controls, audit trails, and compliance reporting foundations.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#127760;</div>
+            <h3>Flexible Deployment</h3>
+            <p>Kubernetes-native architecture with Argo Workflows on AKS, EKS, or GKE. Container-based microservices with full infrastructure ownership. Deploy to your own subscription.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#128184;</div>
+            <h3>Premium Billing &amp; ACH</h3>
+            <p>Automated monthly premium invoicing with NACHA/ACH file generation, EFT draft lifecycle management, and Stripe ACH integration. Batch billing runs with sponsor-level invoicing and audit trails.</p>
           </div>
         </div>
       </div>
@@ -950,38 +877,6 @@
       });
     })();
 
-    (function() {
-      var buttons = Array.prototype.slice.call(document.querySelectorAll('.audience-tab-button'));
-      var panels = Array.prototype.slice.call(document.querySelectorAll('.audience-tab-panel'));
-      if (!buttons.length || !panels.length) return;
-
-      function setAudience(audience) {
-        buttons.forEach(function(button) {
-          var active = button.getAttribute('data-audience') === audience;
-          button.classList.toggle('active', active);
-          button.setAttribute('aria-selected', active ? 'true' : 'false');
-        });
-
-        panels.forEach(function(panel) {
-          var active = panel.id === 'audience-panel-' + audience;
-          panel.classList.toggle('active', active);
-        });
-      }
-
-      buttons.forEach(function(button) {
-        button.addEventListener('click', function() {
-          setAudience(button.getAttribute('data-audience'));
-        });
-      });
-
-      var params = new URLSearchParams(window.location.search);
-      var requested = params.get('audience');
-      if (requested && requested.toLowerCase() === 'aco') {
-        setAudience('aco');
-      } else {
-        setAudience('payers');
-      }
-    })();
     </script>
 
     <!-- ===== PORTFOLIO ===== -->
