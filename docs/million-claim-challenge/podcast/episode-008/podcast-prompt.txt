@@ -1,0 +1,29 @@
+Create a 10-12 minute two-host engineering podcast episode titled "The Clean 100,000-Claim Run."
+
+Use Alex and Jordan as experienced healthcare platform engineers. Make the discussion natural, analytical, and candid rather than reading the article aloud.
+
+The central story is that Cloud Health Office did not move from 50K to 100K by relaxing validation. Before scaling, the team added a payment gate, a false-pend sweep, corrected zero-limit accumulator placeholder handling, and eliminated cross-corpus member fixture collisions.
+
+Use these exact results:
+
+- 100,000 claims processed
+- 0 platform failures
+- 0 workflow mismatches
+- 0 observation timeouts
+- 0 unexpected pends across 10,614 scoreable non-pend claims
+- 11,534 of 13,000 workflow checks matched
+- 1,466 unsupported scenarios
+- 2,000 of 2,000 comparable payments within $0.01
+- $0.00 average and maximum payment delta
+- 56.15 claims per second
+- 358 ms P95 and 451 ms P99 latency
+- 29:40.851 timed claim-processing phase
+- approximately 128 minutes total Kubernetes job lifecycle including fixture preparation
+
+Explain why business denials are valid outcomes and why unsupported scenarios are visible product gaps rather than passes or failures.
+
+Spend meaningful time on the difference between timed adjudication and total developer wait time. Fixture preparation seeded or aligned almost 100,000 member statuses and processed roughly 200,000 provider records. Correctness held, but the fixture strategy became the clearest local scaling bottleneck.
+
+Compare the result with the prior clean 50K run at 82.40 claims per second, 129 ms P95, and 178 ms P99. Do not imply a production capacity conclusion. Frame the lower 100K throughput and higher latency as a local scaling signal.
+
+End with the next ladder: optimize and measure fixture preparation, rerun 100K, locate the reproducible local ceiling, then use the same deterministic corpus and correctness gates for a future AKS/EKS/GKE cloud scaling series.
