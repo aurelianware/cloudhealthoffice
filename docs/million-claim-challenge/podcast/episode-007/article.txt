@@ -1,5 +1,7 @@
 # Running a Healthcare Claims Platform Locally in Kubernetes, Part 7: From Benchmark Logs to an Operator Console
 
+**Update, July 12, 2026:** Subsequent work added false-pend and plan-aligned payment gates, corrected zero-limit accumulator placeholder handling, and eliminated cross-corpus member fixture collisions. A clean 50,000-claim local Kubernetes verification completed with zero platform failures, zero scoreable workflow mismatches, zero unexpected pends, and 1,000 of 1,000 comparable payments within one cent. The full investigation and evidence will be covered in Part 8.
+
 Part 6 of this series was about honesty.
 
 Cloud Health Office had moved the Million Claim Challenge beyond raw throughput and into outcome scoring. Paid claims, denied claims, and pended claims could all be correct. Unsupported scenarios were separated from mismatches instead of being quietly counted as wins or failures. Fixture bugs were treated as benchmark bugs. A clean 50,000-claim breadth run gave the project a stronger foundation than a faster but less inspectable number.
