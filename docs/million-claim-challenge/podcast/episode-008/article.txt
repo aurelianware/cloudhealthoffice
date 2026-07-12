@@ -1,0 +1,141 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 8: The Clean 100,000-Claim Run
+
+Part 7 moved the Million Claim Challenge evidence out of terminal logs and into an operator console.
+
+Then the correctness bar changed.
+
+Payment accuracy became a gate instead of a diagnostic. Expected-pay and expected-deny claims were checked for false pends. Zero-limit accumulator placeholders stopped distorting expected payments. Generated members were isolated so one corpus segment could not contaminate another.
+
+Only after those changes did Cloud Health Office move to 100,000 claims.
+
+The result was clean: every claim processed, no platform failures, no scoreable workflow mismatches, no unexpected pends, and every comparable payment within one cent.
+
+The run also exposed the next scaling problem. Adjudication completed in less than 30 minutes, but the complete Kubernetes job took more than two hours because preparing a much larger set of run-scoped fixtures dominated the lifecycle.
+
+That is exactly the kind of result this series is supposed to produce: correctness held, and the next bottleneck became visible.
+
+## What changed before 100K
+
+The previous 50K result proved broader outcome scoring, but it still left important questions open.
+
+A claim could reach the expected paid disposition while paying the wrong amount. Expected-pend claims were observed, but expected-pay and expected-deny claims were not swept for accidental pends. Placeholder accumulator limits could be interpreted as real zero-dollar limits. Reused generated member identities could let fixture state cross scenario boundaries.
+
+Those are not cosmetic benchmark concerns. They affect whether the answer key and the platform are actually evaluating the same claim context.
+
+The validator now includes:
+
+- a plan-aligned payment gate with a one-cent tolerance
+- a persisted false-pend sweep for scoreable non-pend claims
+- corrected zero-limit accumulator handling
+- cross-corpus member fixture isolation
+- evidence-first claim-result retention
+- in-progress run publication and a completed run summary in the console
+
+The 100K run was not allowed to trade those gates for volume.
+
+## The 100K result
+
+The local Docker Desktop Kubernetes run processed 100,000 deterministic synthetic claims with parallelism set to 10.
+
+The final summary reported:
+
+- 100,000 claims processed
+- 79,164 paid or adjudicated
+- 923 pended
+- 19,913 business denials
+- 0 platform failures
+- 0 observation timeouts
+- 11,534 of 13,000 workflow checks matched
+- 0 workflow mismatches
+- 1,466 unsupported scenarios
+- 0 unexpected pends across 10,614 scoreable non-pend claims
+- 2,000 of 2,000 comparable payments within one cent
+- $0.00 average payment delta
+- $0.00 maximum payment delta
+
+Unsupported scenarios remained separate from passes and failures. They were concentrated in behavioral-health carve-out, Medicaid spend-down, prior-authorization edge variants, retroactive coverage change, and subrogation workflows.
+
+Those are named product gaps, not hidden successes.
+
+## Performance did not scale linearly
+
+The timed claim-processing phase completed in 29 minutes and 40.851 seconds.
+
+That produced:
+
+- 56.15 claims per second
+- 358 ms P95 latency
+- 451 ms P99 latency
+- 199 ms P95 submission time
+- 140 ms P95 adjudication time
+- 102 ms P95 writeback time
+
+The previous clean 50K run reached 82.40 claims per second with 129 ms P95 and 178 ms P99 latency.
+
+So doubling the corpus did not preserve the smaller run's throughput or tail latency. The platform remained correct, but the longer run created more pressure on the local working set, persistence path, and shared Docker Desktop resources.
+
+That is not a production capacity conclusion. It is a local scaling signal worth investigating.
+
+## Timed throughput and total job duration are different
+
+The Kubernetes job existed for approximately 128 minutes, while the timed processing phase lasted just under 30 minutes.
+
+Most of that difference came before claims were timed. The validator generated the corpus and prepared the fixtures required to make the run scoreable. It seeded or aligned 99,591 member statuses, added 620 COB coverage rows, and processed a provider fixture set that included 174,202 new providers plus 25,644 already present.
+
+Fixture isolation improved correctness, but the current preparation strategy is expensive at 100K.
+
+This distinction matters when reading the result.
+
+The platform adjudicated at 56.15 claims per second during the measured phase. The end-to-end developer experience took more than two hours. Both numbers are true, and they answer different questions.
+
+## What the console should make obvious
+
+A useful operator console should not show only the best-looking number.
+
+For this run, it should make clear:
+
+- when fixture preparation started and ended
+- when timed submission began
+- current and final throughput
+- platform failures versus business dispositions
+- expected pends versus unexpected pends
+- matched, mismatched, unsupported, and timed-out workflow checks
+- payment comparisons and maximum delta
+- claim-level evidence behind every exception category
+
+The run summary was published successfully, so the completed result is available through the Mass Adjudication console. The next improvement is to make preparation progress and its cost as visible as adjudication progress.
+
+## The next local optimization target
+
+The next target is not immediately 250K.
+
+First, the fixture path needs to become incremental and bounded. A benchmark claim should reference a deliberately sized reusable provider and member pool unless a scenario specifically requires claim-level isolation. Isolation should be applied where correctness requires it, not by multiplying every reference-data population with the claim count.
+
+That suggests several concrete experiments:
+
+- measure fixture-generation and API-seeding stages independently
+- reuse immutable provider fixtures across runs
+- isolate only member records whose scenario state can collide
+- batch or bulk-write fixture data where service contracts permit it
+- report preparation throughput and cache-hit rates
+- rerun 100K after each fixture optimization
+
+The acceptance criterion stays the same: performance work cannot weaken the correctness gates.
+
+## What comes after the local ceiling
+
+The Million Claim Challenge is still aimed at one million claims.
+
+But the local series should continue until the limiting resource is reproducible and explained. It may be CPU, memory, MongoDB, Docker networking, fixture preparation, or a combination of them.
+
+Once that ceiling is understood, the natural follow-up is a cloud scaling series using the same corpus and gates across Azure Kubernetes Service, Amazon Elastic Kubernetes Service, and Google Kubernetes Engine.
+
+The comparison should not ask only which cloud is fastest. It should ask how much infrastructure, time, and cost each environment needs to preserve zero platform failures, zero scoreable mismatches, zero unexpected pends, payment accuracy, and inspectable evidence.
+
+Part 5 made the benchmark repeatable.
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+Part 8 proves that the stronger system can process 100,000 claims cleanly—and shows exactly where the local path needs to improve next.

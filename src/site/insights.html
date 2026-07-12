@@ -295,32 +295,32 @@
           <p>
             Cloud Health Office moved from repeatable throughput runs into broader edge-case scoring and operator-visible evidence:
             expected pends are observed from persisted claim status, unsupported scenarios are separated from mismatches, and the Mass Adjudication console can inspect run summaries and claim-level evidence.
-            The latest published scale result is a 50K local Kubernetes breadth validation on 18 allocated Docker CPUs, not a production cloud benchmark.
+            The latest published scale result is a clean 100K local Kubernetes validation on Docker Desktop, not a production cloud benchmark.
           </p>
 
           <div class="proof-metrics" aria-label="Latest Million Claim Challenge local benchmark metrics">
             <div class="proof-metric">
-              <strong>50,000</strong>
-              <span>synthetic claims processed in the clean breadth run</span>
+              <strong>100,000</strong>
+              <span>synthetic claims processed in the clean local run</span>
             </div>
             <div class="proof-metric">
-              <strong>5,767 / 6,500</strong>
+              <strong>11,534 / 13,000</strong>
               <span>workflow checks matched with zero scoreable mismatches</span>
             </div>
             <div class="proof-metric">
-              <strong>460 / 460</strong>
-              <span>expected-pend claims observed as pended</span>
+              <strong>0</strong>
+              <span>unexpected pends across the scoreable non-pend sweep</span>
             </div>
             <div class="proof-metric">
-              <strong>733</strong>
-              <span>unsupported scenarios reported separately</span>
+              <strong>2,000 / 2,000</strong>
+              <span>comparable payments within one cent</span>
             </div>
           </div>
 
           <p>
             The benchmark distinguishes valid business denials from platform failures. Correct denials are not errors;
-            unsupported scenarios are not wins; and payment delta remains visible as a diagnostic until amount-level scoring becomes a formal gate.
-            The next proof milestone is 100K with stricter scoring, not scale for scale's sake.
+            unsupported scenarios are not wins; and payment accuracy is now a formal gate for comparable claims.
+            The next work is to optimize fixture preparation and investigate the local scaling ceiling without weakening correctness.
           </p>
           <p style="font-size:0.95rem;color:#888;">
             Local Docker Desktop Kubernetes benchmark, not a production cloud benchmark.

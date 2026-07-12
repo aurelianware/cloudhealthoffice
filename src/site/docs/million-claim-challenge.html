@@ -293,20 +293,20 @@
         <div class="callout callout-success">
           <div class="callout-title">Latest local Kubernetes validation</div>
           <p>
-            Cloud Health Office processed <strong>50,000 synthetic claims</strong> in local Docker Desktop Kubernetes with Docker allocated 18 CPUs and roughly 23.4 GiB memory.
-            The clean breadth run completed at <strong>68.86 claims/sec</strong> with <strong>298 ms P95</strong>, <strong>369 ms P99</strong>,
-            <strong>zero platform failures</strong>, <strong>460/460 expected-pend claims observed as pended</strong>,
-            <strong>5,767/6,500 workflow checks matched</strong>, and <strong>zero scoreable workflow mismatches</strong>.
+            Cloud Health Office processed <strong>100,000 synthetic claims</strong> in local Docker Desktop Kubernetes.
+            The clean run completed its timed phase at <strong>56.15 claims/sec</strong> with <strong>358 ms P95</strong>, <strong>451 ms P99</strong>,
+            <strong>zero platform failures</strong>, <strong>zero unexpected pends</strong>,
+            <strong>11,534/13,000 workflow checks matched</strong>, and <strong>zero scoreable workflow mismatches</strong>.
           </p>
           <p>
-            The run also reported <strong>733 unsupported scenarios</strong> separately instead of counting them as wins or failures.
+            The run also reported <strong>1,466 unsupported scenarios</strong> separately instead of counting them as wins or failures, and <strong>2,000/2,000 comparable payments</strong> were within one cent.
             This is a local validation benchmark, not a production cloud benchmark. Its value is honesty:
             throughput, tail latency, platform reliability, pended observation, workflow correctness, unsupported gaps, and payment delta visible together.
           </p>
           <p>
             Scope matters: the MCC corpus is designed for one million claims and 29 named edge-case scenarios.
-            This published Cloud Health Office run proves a 50K local breadth slice, not the full million.
-            Payment delta is still diagnostic, and false-pend detection across expected-pay and expected-deny claims remains a future scoring improvement.
+            This published Cloud Health Office run proves a 100K local slice, not the full million or production-cloud capacity.
+            The payment and false-pend gates are now active; fixture preparation and higher local tail latency are the next scaling investigation.
           </p>
         </div>
 
@@ -356,9 +356,8 @@
 
         <p>
           MCC is not only a generator. We use it as a repeatable validation loop for Cloud Health Office itself.
-          The latest published scale result comes from Docker Desktop Kubernetes with Docker allocated 18 CPUs
-          and roughly 23.4 GiB of memory. The raw throughput is less important than the shape of the measurement:
-          tail latency, platform failures, expected pends, workflow checks, unsupported scenarios, and payment delta kept in the same artifact.
+          The latest published scale result comes from Docker Desktop Kubernetes. The raw throughput is less important than the shape of the measurement:
+          tail latency, platform failures, expected and unexpected pends, workflow checks, unsupported scenarios, and payment accuracy kept in the same artifact.
         </p>
 
         <table>
@@ -420,6 +419,15 @@
               <td>0</td>
               <td>577/650 matched; 0 mismatches; 73 unsupported; evidence-first sample visible in portal</td>
             </tr>
+            <tr>
+              <td><strong>100,000 clean gated run, p=10</strong></td>
+              <td>100,000</td>
+              <td>56.15 claims/sec</td>
+              <td>358 ms</td>
+              <td>451 ms</td>
+              <td>0</td>
+              <td>11,534/13,000 matched; 0 mismatches; 0 unexpected pends; 2,000/2,000 payments within $0.01</td>
+            </tr>
           </tbody>
         </table>
 
@@ -443,11 +451,11 @@
           <div class="callout-title">Current proof vs benchmark design</div>
           <p>
             The benchmark design is the full million-claim corpus with 29 named edge-case scenarios and target scoring tiers.
-            The latest published Cloud Health Office result is narrower: a 50,000-claim local Kubernetes breadth validation with
-            pended observation, zero scoreable workflow mismatches, unsupported scenarios reported separately, and payment delta visible as a diagnostic. That gap is intentional and public.
+            The latest published Cloud Health Office result is narrower: a 100,000-claim local Kubernetes validation with
+            pended observation, zero scoreable workflow mismatches, unsupported scenarios reported separately, zero unexpected pends, and payment accuracy gated for comparable claims. That gap is intentional and public.
           </p>
           <p>
-            Our next proof milestone is not just a larger run. It is stricter scoring: a false-pend sweep across expected-pay and expected-deny claims, a formal amount-level payment gate, a fresh 50K evidence-first console run, and then a focused 100K milestone before 250K, 500K, and full-million adjudication runs.
+            Our next proof milestone is not just a larger run. It is a faster and more observable fixture-preparation path, followed by a repeat 100K validation before 250K, 500K, and full-million adjudication runs.
           </p>
         </div>
 

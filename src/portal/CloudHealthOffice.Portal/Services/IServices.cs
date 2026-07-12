@@ -713,6 +713,27 @@ public class ClaimDetails : ClaimSummary
     public DateTime? PaidDate { get; set; }
     public string? CheckNumber { get; set; }
     public string? DenialReason { get; set; }
+    [JsonPropertyName("adjudicationResult")]
+    public ClaimAdjudicationProjection? AdjudicationResult
+    {
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            AllowedAmount = value.AllowedAmount;
+            PaidAmount = value.PayerPayment;
+            DeductibleAmount = value.DeductibleAmount;
+            CoinsuranceAmount = value.CoinsuranceAmount;
+            CopayAmount = value.CopayAmount;
+            PatientResponsibility = value.PatientResponsibility;
+            CheckNumber = value.CheckNumber;
+            PaidDate = value.PaymentDate;
+            DenialReason = value.DenialReason;
+        }
+    }
     public List<ClaimDiagnosisCode> DiagnosisCodes
     {
         get => _diagnosisCodes;
@@ -787,6 +808,41 @@ public class ClaimServiceLine
         set => _adjustments = value ?? new();
     }
     public string? LineStatus { get; set; }
+    [JsonPropertyName("adjudicationResult")]
+    public ClaimLineAdjudicationProjection? AdjudicationResult
+    {
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            AllowedAmount = value.AllowedAmount;
+            PaidAmount = value.PaidAmount;
+            PatientResponsibility = value.PatientResponsibility;
+        }
+    }
+}
+
+public class ClaimAdjudicationProjection
+{
+    public decimal AllowedAmount { get; set; }
+    public decimal DeductibleAmount { get; set; }
+    public decimal CoinsuranceAmount { get; set; }
+    public decimal CopayAmount { get; set; }
+    public decimal PatientResponsibility { get; set; }
+    public decimal PayerPayment { get; set; }
+    public string? CheckNumber { get; set; }
+    public DateTime? PaymentDate { get; set; }
+    public string? DenialReason { get; set; }
+}
+
+public class ClaimLineAdjudicationProjection
+{
+    public decimal AllowedAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal PatientResponsibility { get; set; }
 }
 
 public class ClaimLineAdjustment

@@ -1,0 +1,40 @@
+# Episode 008 implementation summary
+
+## PR #881 - in-progress MCC telemetry
+
+- Published active-run progress so the Mass Adjudication console could show more than completed summaries.
+
+## PR #883 - stricter MCC scoring gates
+
+- Added persisted false-pend checks for scoreable expected-pay and expected-deny claims.
+- Added payment-accuracy gating with explicit tolerance and comparison counts.
+
+## PR #884 - payment delta correction
+
+- Corrected zero-limit accumulator placeholder handling.
+- Aligned expected payments with the seeded benefit plan used by validation.
+
+## PR #886 - member fixture collision correction
+
+- Eliminated cross-corpus generated member collisions that could allow one scenario's fixture state to affect another.
+- Produced a clean 50K verification before advancing to 100K.
+
+## PR #887 - Part 7 post-publication note
+
+- Added the dated Part 7 update pointing readers to the corrected 50K verification and Part 8 investigation.
+
+## PR #888 - executable public quickstart
+
+- Added a clone-to-console Million Claim Challenge path to the public Quick Start.
+- Documented a safe 1K starting run, clean-gate interpretation, console navigation, and guarded 10K/100K progression.
+
+## 100K outcome
+
+No platform code was changed to make the 100K result look clean. The run used the stronger gates established above and published its completed summary to the console.
+
+## Claim-detail projection correction discovered during evidence review
+
+- The refreshed console correctly linked an unsupported MCC row to its persisted claim, but the portal displayed zero financial values because its DTO expected flat fields while claims-service returned nested `adjudicationResult` projections.
+- Added compatibility mapping for claim-level and service-line adjudication amounts.
+- Added a regression test covering allowed amount, payer payment, deductible, coinsurance, copay, and patient responsibility.
+- Rebuilt the local portal and verified the persisted claim detail displays $353 allowed, $30 copay/member responsibility, and $323 payer amount.

@@ -26,6 +26,12 @@ const publications = [
     part: 'Part 7',
     slug: 'part-7-operator-console',
     summary: 'Moving benchmark proof from terminal logs into an operator-facing Mass Adjudication console.'
+  },
+  {
+    episode: '008',
+    part: 'Part 8',
+    slug: 'part-8-clean-100k',
+    summary: 'How stronger correctness gates reached a clean 100,000-claim run and exposed the next local scaling bottleneck.'
   }
 ];
 
@@ -156,7 +162,7 @@ writeFileSync(join(outputDir, 'index.html'), pageShell({
   description: 'Engineering field notes documenting how the Million Claim Challenge became a repeatable, inspectable claims-adjudication benchmark.',
   canonical: 'https://cloudhealthoffice.com/insights/million-claim-challenge',
   type: 'website',
-  content: `<div class="eyebrow">Engineering series</div><h1>Million Claim Challenge Field Notes</h1><p>How the benchmark moved from local Kubernetes runs to repeatable measurement, honest workflow scoring, and operator-facing evidence.</p><div class="disclosure"><strong>Current verified scope:</strong> the latest published proof is a 50,000-claim local Kubernetes breadth run. The full million remains the target.</div>${cards}`
+  content: `<div class="eyebrow">Engineering series</div><h1>Million Claim Challenge Field Notes</h1><p>How the benchmark moved from local Kubernetes runs to repeatable measurement, honest workflow scoring, and operator-facing evidence.</p><div class="disclosure"><strong>Current verified scope:</strong> the latest published proof is a clean 100,000-claim local Kubernetes run. The full million remains the target.</div>${cards}`
 }));
 
 const evidenceSections = publications.map((publication) => {
