@@ -4,21 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quick Start — Cloud Health Office Documentation</title>
-  <meta name="description" content="Get Cloud Health Office running locally on Kubernetes. Deploy the full platform, validate claims adjudication, and test CRD discovery with no Azure account needed." />
+  <meta name="description" content="Get Cloud Health Office running locally on Kubernetes, run scored Million Claim Challenge validation, inspect the Mass Adjudication console, and compare your run to the published clean 100K evidence." />
   <meta name="keywords" content="Cloud Health Office quick start, Kubernetes local development, healthcare payer platform setup, FHIR R4 quick start, X12 EDI local development, claims adjudication tutorial, CMS-0057-F getting started" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/quickstart" />
 
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/quickstart" />
   <meta property="og:title" content="Quick Start — Cloud Health Office" />
-  <meta property="og:description" content="Get Cloud Health Office running locally on Kubernetes. Full platform deployment with claims adjudication and CRD discovery validation." />
+  <meta property="og:description" content="Run Cloud Health Office locally on Kubernetes, execute scored MCC validation, inspect the operator console, and compare against the published clean 100K evidence." />
 
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "Cloud Health Office Quick Start Guide",
-    "description": "Step-by-step guide to running Cloud Health Office locally on Kubernetes. Deploy the full platform, run adjudication, and verify CRD discovery.",
+    "description": "Step-by-step guide to running Cloud Health Office locally on Kubernetes, executing scored Million Claim Challenge validation, inspecting the operator console, and comparing against the published clean 100K evidence.",
     "url": "https://cloudhealthoffice.com/docs/quickstart",
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
     "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
@@ -140,7 +140,7 @@
 
         <h1>Quick Start</h1>
         <p class="docs-subtitle">
-          Run the full Cloud Health Office platform locally on Kubernetes, validate claims adjudication, run a scored Million Claim Challenge workload, and inspect the published evidence in the operator console — no Azure account needed.
+          Run the full Cloud Health Office platform locally on Kubernetes, validate claims adjudication, run a scored Million Claim Challenge workload, and inspect the run evidence in the operator console &mdash; no Azure account needed.
         </p>
 
         <!-- Diagram -->
@@ -155,6 +155,24 @@
         </div>
 
         <div class="callout callout-info">
+          <div class="callout-title">Current evidence to compare against</div>
+          <p>
+            The latest published Cloud Health Office proof is a clean <strong>100,000-claim local Docker Desktop Kubernetes run</strong>:
+            100,000 claims processed, zero platform failures, zero scoreable workflow mismatches, zero unexpected pends,
+            and 2,000/2,000 comparable payments within one cent. The timed adjudication phase ran at 56.15 claims/sec with 358 ms P95 latency.
+          </p>
+          <p>
+            Scope matters. This is local engineering evidence, not a production cloud capacity claim and not the full million yet.
+            Fixture preparation dominated the total Kubernetes job duration, so large-run tuning should focus on preparation visibility and bounded seeding before climbing to 250K, 500K, and the full million.
+          </p>
+          <p>
+            <a href="/docs/million-claim-challenge/evidence#episode-008"><strong>Inspect the 100K evidence archive</strong></a>
+            or read
+            <a href="/insights/million-claim-challenge/part-8-clean-100k"><strong>Part 8: The Clean 100,000-Claim Run</strong></a>.
+          </p>
+        </div>
+
+        <div class="callout callout-info">
           <div class="callout-title">Field note: local Kubernetes validation</div>
           <p>Want the story behind this walkthrough? The full local Kubernetes field-note series follows the path from first deployment to repeatable Million Claim Challenge benchmarking:</p>
           <ul>
@@ -163,6 +181,9 @@
             <li><a href="https://medium.com/@markus_31/part-3-running-a-healthcare-claims-platform-locally-in-kubernetes-from-it-measures-to-it-f4553a8ef5bc" target="_blank" rel="noopener noreferrer">Part 3: From It Measures to It Explains</a></li>
             <li><a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-4-from-it-explains-to-it-55f1b14f72b4" target="_blank" rel="noopener noreferrer">Part 4: From It Explains to It Improves</a></li>
             <li><a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-5-from-faster-to-repeatably-2bb9a65de8de" target="_blank" rel="noopener noreferrer">Part 5: From Faster to Repeatably Faster</a></li>
+            <li><a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-6-from-fast-runs-to-honest-4b58288da8da" target="_blank" rel="noopener noreferrer">Part 6: From Fast Runs to Honest Edge-Case Scoring</a></li>
+            <li><a href="/insights/million-claim-challenge/part-7-operator-console">Part 7: From Benchmark Logs to an Operator Console</a></li>
+            <li><a href="/insights/million-claim-challenge/part-8-clean-100k">Part 8: The Clean 100,000-Claim Run</a></li>
           </ul>
         </div>
 
@@ -184,7 +205,7 @@ curl http://localhost:5001/health/live</code></pre>
             <tr><th>Tool</th><th>Version</th><th>Notes</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>Docker Desktop</code></td><td>4.x+</td><td>Kubernetes enabled; 16 GB memory minimum, 24 GB recommended</td></tr>
+            <tr><td><code>Docker Desktop</code></td><td>4.x+</td><td>Kubernetes enabled; 16 GB memory minimum for small runs, 18 CPU / 24 GB allocation recommended for 100K validation</td></tr>
             <tr><td><code>kubectl</code></td><td>current</td><td>Bundled with Docker Desktop</td></tr>
             <tr><td><code>bash</code></td><td>4+</td><td>macOS: <code>brew install bash</code></td></tr>
             <tr><td><code>curl</code></td><td>any</td><td>For API calls</td></tr>
@@ -276,6 +297,7 @@ BENEFIT_URL=http://localhost:5002 \
           <div class="step-body">
             <h3>Run a scored 1,000-claim validation</h3>
             <p>The validator generates a deterministic corpus, seeds the run-scoped fixtures needed by the platform, submits and adjudicates the claims, checks persisted pend state, scores workflow outcomes and comparable payments, and publishes the run summary to claims-service.</p>
+            <p>Start at 1K. Treat 10K as a confidence gate. Attempt 100K only after the smaller run is clean and the Mass Adjudication console can load the published run.</p>
 <pre><code>CLAIMS=1000 \
 MAX_CLAIMS=1000 \
 PARALLELISM=10 \
@@ -300,9 +322,14 @@ CLAIMS=10000 MAX_CLAIMS=10000 PROGRESS_EVERY=1000 \
 JOB_NAME=mcc-quickstart-10k ./scripts/run-mcc-local-k8s.sh
 
 <span class="code-comment"># 100K milestone; use the recommended 18 CPU / 24 GB Docker allocation</span>
-CLAIMS=100000 MAX_CLAIMS=100000 PROGRESS_EVERY=5000 \
+CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=10 PROGRESS_EVERY=5000 \
 JOB_NAME=mcc-quickstart-100k ./scripts/run-mcc-local-k8s.sh</code></pre>
-            <p>Large runs include fixture seeding before timed submission. Do not calculate claims per second from total Kubernetes job duration; use the validator's reported timed throughput. See the <a href="/docs/million-claim-challenge">Million Claim Challenge guide</a> for corpus design and the <a href="/docs/million-claim-challenge/evidence">evidence archive</a> for published results and limitations.</p>
+            <p>Large runs include fixture generation and seeding before timed submission. Do not calculate claims per second from total Kubernetes job duration; use the validator's reported timed throughput. For the published clean 100K run, adjudication finished in under 30 minutes, while the full Kubernetes job took more than two hours because fixture preparation dominated the lifecycle.</p>
+            <div class="callout callout-info">
+              <div class="callout-title">100K reproducibility notes</div>
+              <p>Use Docker Desktop Kubernetes with the recommended 18 CPU / 24 GB allocation, keep the local service port-forwards active if you want console visibility, and expect existing demo-tenant state to affect seeding time. If the run publishes successfully, compare your output against the <a href="/docs/million-claim-challenge/evidence#episode-008">Episode 008 evidence archive</a>. The target gates are zero platform failures, zero scoreable workflow mismatches, zero unexpected pends, and all comparable payments within one cent.</p>
+            </div>
+            <p>See the <a href="/docs/million-claim-challenge">Million Claim Challenge guide</a> for corpus design and the <a href="/docs/million-claim-challenge/evidence">evidence archive</a> for published results and limitations.</p>
           </div>
         </div>
 
@@ -342,7 +369,7 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
 
         <div class="callout callout-success">
           <div class="callout-title">You're done!</div>
-          <p>You now have the production-shaped Cloud Health Office platform running locally in Kubernetes, with claims adjudication, scored Million Claim Challenge evidence, and CRD discovery validated against the seeded <code>demo</code> tenant.</p>
+          <p>You now have the Cloud Health Office platform running locally in Kubernetes, with claims adjudication, scored Million Claim Challenge evidence, and CRD discovery validated against the seeded <code>demo</code> tenant.</p>
         </div>
 
         <!-- Next Steps -->
@@ -361,14 +388,19 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
             <p>Understand the deterministic corpus, answer key, workflow scoring, supported gaps, and published evidence.</p>
             <span class="card-arrow">Challenge guide &rarr;</span>
           </a>
+          <a href="/docs/million-claim-challenge/evidence#episode-008" class="docs-hub-card">
+            <h3>100K Evidence Archive</h3>
+            <p>Review the clean 100K local Kubernetes result, run settings, correctness gates, and known scaling bottleneck.</p>
+            <span class="card-arrow">Inspect evidence &rarr;</span>
+          </a>
           <a href="/docs/compliance" class="docs-hub-card">
             <h3>CMS-0057-F Compliance</h3>
             <p>Verify your health plan's compliance readiness with the full Patient Access, Provider Access, and Prior Auth APIs.</p>
             <span class="card-arrow">View guide &rarr;</span>
           </a>
           <a href="/docs/deployment" class="docs-hub-card">
-            <h3>Deploy to Production</h3>
-            <p>Move from local Docker to production AKS, EKS, or GKE with gated releases and HIPAA-compliant infrastructure.</p>
+            <h3>Deployment Reference</h3>
+            <p>Review the path from local Docker to AKS, EKS, or GKE with gated releases, infrastructure controls, and environment-specific validation.</p>
             <span class="card-arrow">Deployment guide &rarr;</span>
           </a>
         </div>
