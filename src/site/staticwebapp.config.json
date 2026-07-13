@@ -181,6 +181,11 @@
       "statusCode": 301
     },
     {
+      "route": "/schedule-demo",
+      "redirect": "/contact",
+      "statusCode": 302
+    },
+    {
       "route": "/docs/commercial-licensing",
       "rewrite": "/docs/commercial-licensing.html"
     },
