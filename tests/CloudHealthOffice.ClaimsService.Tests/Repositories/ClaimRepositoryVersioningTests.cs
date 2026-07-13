@@ -629,6 +629,35 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     }
 
     [Fact]
+    public void CanRepairContradictoryApprovedSummary_only_allows_zeroPay_denial_with_evidence()
+    {
+        var deniedSummary = new AdjudicationResult
+        {
+            PayerPayment = 0m,
+            DenialReasonCode = "197",
+            DenialReason = "Prior authorization required"
+        };
+
+        ClaimRepository.CanRepairContradictoryApprovedSummary(
+                ClaimStatus.Approved,
+                ClaimStatus.Denied,
+                deniedSummary)
+            .Should().BeTrue();
+
+        ClaimRepository.CanRepairContradictoryApprovedSummary(
+                ClaimStatus.Pended,
+                ClaimStatus.Denied,
+                deniedSummary)
+            .Should().BeFalse("pends remain protected from synchronous summary writeback");
+
+        ClaimRepository.CanRepairContradictoryApprovedSummary(
+                ClaimStatus.Approved,
+                ClaimStatus.Denied,
+                new AdjudicationResult { PayerPayment = 0m })
+            .Should().BeFalse("zero payment without denial evidence is not enough to reopen a final status");
+    }
+
+    [Fact]
     public async Task UpdateAdjudicationSummaryAsync_onNonPendedClaim_appliesStatusAndData()
     {
         // Regression: the unguarded, normal case is byte-identical to
@@ -733,6 +762,34 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
         reread.VersionState.Should().Be(ClaimVersionState.Adjudicated);
         reread.AdjudicationResult!.PayerPayment.Should().Be(150m);
         reread.AdjudicationResult.DenialReasonCode.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateAdjudicationSummaryAsync_onApprovedWithDenialEvidence_repairsDeniedSummaryStatus()
+    {
+        var head = BuildVersion("chain-summary-denial-repair", "row-1", n: 1, ClaimVersionState.Adjudicated);
+        head.Status = ClaimStatus.Approved;
+        head.AdjudicationResult = new AdjudicationResult { PayerPayment = 125m };
+        await _repo.CreateAsync(head);
+
+        var result = await _repo.UpdateAdjudicationSummaryAsync(
+            Tenant, "chain-summary-denial-repair",
+            new AdjudicationResult
+            {
+                PayerPayment = 0m,
+                DenialReasonCode = "197",
+                DenialReason = "Prior authorization required"
+            },
+            ClaimStatus.Denied);
+
+        result.Outcome.Should().Be(StatusWriteOutcome.Applied);
+        result.PersistedStatus.Should().Be(ClaimStatus.Denied);
+
+        var reread = await _repo.GetVersionAsync("chain-summary-denial-repair", "row-1");
+        reread!.Status.Should().Be(ClaimStatus.Denied);
+        reread.VersionState.Should().Be(ClaimVersionState.Adjudicated);
+        reread.AdjudicationResult!.PayerPayment.Should().Be(0m);
+        reread.AdjudicationResult.DenialReasonCode.Should().Be("197");
     }
 
     [Fact]
