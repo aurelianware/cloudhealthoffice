@@ -453,6 +453,23 @@ public class ClaimRepository : IClaimRepository
         && incomingAdjudication.PayerPayment > 0
         && !HasDenialEvidence(incomingAdjudication);
 
+    /// <summary>
+    /// True for the inverse narrow repair allowed by benchmark summary
+    /// writeback: a row already says Approved, while the incoming summary is
+    /// denied, pays nothing, and carries explicit denial evidence. This
+    /// prevents an impossible "Approved + zero payer payment + denial reason"
+    /// state without weakening pend protection or reopening a consistent
+    /// final disposition.
+    /// </summary>
+    public static bool CanRepairContradictoryApprovedSummary(
+        ClaimStatus preWriteStatus,
+        ClaimStatus desiredStatus,
+        AdjudicationResult incomingAdjudication) =>
+        preWriteStatus == ClaimStatus.Approved
+        && desiredStatus == ClaimStatus.Denied
+        && incomingAdjudication.PayerPayment == 0
+        && HasDenialEvidence(incomingAdjudication);
+
     private static bool HasDenialEvidence(AdjudicationResult? adjudication) =>
         adjudication is not null
         && (!string.IsNullOrWhiteSpace(adjudication.DenialReasonCode)
@@ -1418,12 +1435,19 @@ public class ClaimRepository : IClaimRepository
         {
             if (incomingAdjudication is not null
                 && preWriteStatus is not null
-                && CanRepairContradictoryDeniedSummary(
-                    preWriteStatus.Value,
-                    desiredStatus,
-                    incomingAdjudication))
+                && (CanRepairContradictoryDeniedSummary(
+                        preWriteStatus.Value,
+                        desiredStatus,
+                        incomingAdjudication)
+                    || CanRepairContradictoryApprovedSummary(
+                        preWriteStatus.Value,
+                        desiredStatus,
+                        incomingAdjudication)))
             {
-                var repairOptions = new PatchItemRequestOptions { FilterPredicate = ContradictoryDeniedRepairFilterPredicate };
+                var repairFilter = desiredStatus == ClaimStatus.Denied
+                    ? ContradictoryApprovedRepairFilterPredicate
+                    : ContradictoryDeniedRepairFilterPredicate;
+                var repairOptions = new PatchItemRequestOptions { FilterPredicate = repairFilter };
                 try
                 {
                     await _container.PatchItemAsync<Claim>(rowId, new PartitionKey(tenantId), statusOps, repairOptions, ct);
@@ -1466,6 +1490,19 @@ public class ClaimRepository : IClaimRepository
         "AND (NOT IS_DEFINED(c.adjudicationResult.denialReasonCode) " +
         "OR IS_NULL(c.adjudicationResult.denialReasonCode) " +
         "OR c.adjudicationResult.denialReasonCode = '')";
+
+    private static readonly string ContradictoryApprovedRepairFilterPredicate =
+        $"FROM c WHERE c.status = '{CosmosStatusLiteral(ClaimStatus.Approved)}' " +
+        "AND IS_DEFINED(c.adjudicationResult) " +
+        "AND c.adjudicationResult.payerPayment = 0 " +
+        "AND ((IS_DEFINED(c.adjudicationResult.denialReasonCode) " +
+        "AND NOT IS_NULL(c.adjudicationResult.denialReasonCode) " +
+        "AND c.adjudicationResult.denialReasonCode != '') " +
+        "OR (IS_DEFINED(c.adjudicationResult.denialReason) " +
+        "AND NOT IS_NULL(c.adjudicationResult.denialReason) " +
+        "AND c.adjudicationResult.denialReason != '') " +
+        "OR (IS_DEFINED(c.adjudicationResult.adjustmentReasons) " +
+        "AND ARRAY_LENGTH(c.adjudicationResult.adjustmentReasons) > 0))";
 
     /// <summary>Cosmos patch FilterPredicate for <see cref="IsFinalDisposition"/> — built from <see cref="FinalDispositions"/>; Pended is deliberately absent (re-pending is allowed).</summary>
     private static readonly string FinalDispositionFilterPredicate =

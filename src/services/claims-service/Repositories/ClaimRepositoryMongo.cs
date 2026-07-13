@@ -716,19 +716,37 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         if (incomingAdjudication is not null
             && preWriteStatus is not null
-            && ClaimRepository.CanRepairContradictoryDeniedSummary(
-                preWriteStatus.Value,
-                desiredStatus,
-                incomingAdjudication))
+            && (ClaimRepository.CanRepairContradictoryDeniedSummary(
+                    preWriteStatus.Value,
+                    desiredStatus,
+                    incomingAdjudication)
+                || ClaimRepository.CanRepairContradictoryApprovedSummary(
+                    preWriteStatus.Value,
+                    desiredStatus,
+                    incomingAdjudication)))
         {
+            var repairEvidenceFilter = desiredStatus == ClaimStatus.Denied
+                ? b.And(
+                    b.Eq(c => c.Status, ClaimStatus.Approved),
+                    b.Eq(c => c.AdjudicationResult!.PayerPayment, 0m),
+                    b.Or(
+                        b.And(
+                            b.Ne(c => c.AdjudicationResult!.DenialReasonCode, null),
+                            b.Ne(c => c.AdjudicationResult!.DenialReasonCode, string.Empty)),
+                        b.And(
+                            b.Ne(c => c.AdjudicationResult!.DenialReason, null),
+                            b.Ne(c => c.AdjudicationResult!.DenialReason, string.Empty)),
+                        b.SizeGt(c => c.AdjudicationResult!.AdjustmentReasons, 0)))
+                : b.And(
+                    b.Eq(c => c.Status, ClaimStatus.Denied),
+                    b.Gt(c => c.AdjudicationResult!.PayerPayment, 0m),
+                    b.Or(
+                        b.Eq(c => c.AdjudicationResult!.DenialReasonCode, null),
+                        b.Eq(c => c.AdjudicationResult!.DenialReasonCode, string.Empty)));
             var repairFilter = b.And(
                 b.Eq(c => c.TenantId, tenantId),
                 b.Eq(c => c.Id, rowId),
-                b.Eq(c => c.Status, ClaimStatus.Denied),
-                b.Gt(c => c.AdjudicationResult!.PayerPayment, 0m),
-                b.Or(
-                    b.Eq(c => c.AdjudicationResult!.DenialReasonCode, null),
-                    b.Eq(c => c.AdjudicationResult!.DenialReasonCode, string.Empty)));
+                repairEvidenceFilter);
 
             var repairResult = await _collection.UpdateOneAsync(repairFilter, statusUpdate, cancellationToken: ct);
             if (repairResult.MatchedCount > 0)
