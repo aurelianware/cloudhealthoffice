@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Documentation — Cloud Health Office</title>
-  <meta name="description" content="Cloud Health Office documentation. Quick start guides, CMS-0057-F compliance, architecture overview, API reference, and deployment guides for healthcare payer integration." />
+  <meta name="description" content="Cloud Health Office documentation. Quick start guides, 100K Million Claim Challenge evidence, CMS-0057-F compliance, architecture overview, API reference, and deployment guides for healthcare payer integration." />
   <meta name="keywords" content="Cloud Health Office docs, CMS-0057-F compliance guide, healthcare payer integration documentation, FHIR R4 API reference, X12 EDI deployment guide, healthcare platform quick start" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs" />
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs" />
   <meta property="og:title" content="Documentation — Cloud Health Office" />
-  <meta property="og:description" content="Quick start guides, CMS-0057-F compliance, architecture, API reference, and deployment for healthcare payer integration." />
+  <meta property="og:description" content="Quick start guides, 100K Million Claim Challenge evidence, CMS-0057-F compliance, architecture, API reference, and deployment for healthcare payer integration." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
 
   <script type="application/ld+json">
@@ -20,7 +20,7 @@
     "@type": "WebPage",
     "name": "Cloud Health Office Documentation",
     "url": "https://cloudhealthoffice.com/docs",
-    "description": "Complete documentation for the Cloud Health Office healthcare payer integration platform.",
+    "description": "Complete documentation for the Cloud Health Office healthcare payer integration platform, including quick starts, Million Claim Challenge evidence, architecture, APIs, and deployment references.",
     "isPartOf": {
       "@type": "WebSite",
       "name": "Cloud Health Office",
@@ -83,6 +83,14 @@
             </ul>
           </div>
           <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Testing &amp; Benchmarks</div>
+            <ul>
+              <li><a href="/docs/million-claim-challenge/evidence#episode-008">100K Evidence Archive</a></li>
+              <li><a href="/docs/million-claim-challenge">Million Claim Challenge</a></li>
+              <li><a href="/insights/million-claim-challenge">Engineering Series</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
             <div class="docs-sidebar-section-title">Guides</div>
             <ul>
               <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
@@ -134,10 +142,24 @@
 
         <h1>Documentation</h1>
         <p class="docs-subtitle">
-          Everything you need to evaluate, deploy, and operate Cloud Health Office — the integration layer for healthcare payer core administration systems.
+          Everything you need to evaluate, deploy, and operate Cloud Health Office &mdash; including the public evidence behind the clean 100,000-claim local Kubernetes validation.
         </p>
 
         <div class="docs-hub-grid">
+
+          <a href="/docs/million-claim-challenge/evidence#episode-008" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F4CA;</span>
+            <h3>100K Evidence Archive</h3>
+            <p>Inspect the clean 100,000-claim local Kubernetes run: zero platform failures, zero scoreable mismatches, zero unexpected pends, and payment checks within one cent.</p>
+            <span class="card-arrow">Inspect evidence &rarr;</span>
+          </a>
+
+          <a href="/insights/million-claim-challenge/part-8-clean-100k" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F4DD;</span>
+            <h3>Part 8: Clean 100K Run</h3>
+            <p>Read the narrative behind the latest proof: stronger correctness gates held at 100K, while fixture preparation became the next local scaling bottleneck.</p>
+            <span class="card-arrow">Read writeup &rarr;</span>
+          </a>
 
           <a href="/docs/quickstart" class="docs-hub-card">
             <span class="docs-hub-card-icon">&#x26A1;</span>
@@ -149,8 +171,15 @@
           <a href="/docs/quickstart-kubernetes" class="docs-hub-card">
             <span class="docs-hub-card-icon">&#x2638;</span>
             <h3>Kubernetes Reference <span class="time-estimate">~15 min</span></h3>
-            <p>Deploy the full local Kubernetes platform on Docker Desktop Kubernetes — identical namespace, DNS, and manifests as production Azure AKS.</p>
+            <p>Deploy the full local Kubernetes platform on Docker Desktop Kubernetes with the same namespace, DNS, and manifest shape used for cloud validation.</p>
             <span class="card-arrow">Kubernetes guide &rarr;</span>
+          </a>
+
+          <a href="/docs/million-claim-challenge" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F9EA;</span>
+            <h3>Million Claim Challenge</h3>
+            <p>Understand the deterministic corpus, answer key, workflow scoring, unsupported scenarios, payment gate, and proof ladder toward the full million.</p>
+            <span class="card-arrow">Benchmark guide &rarr;</span>
           </a>
 
           <a href="/docs/compliance" class="docs-hub-card">
@@ -170,14 +199,14 @@
           <a href="/docs/api" class="docs-hub-card">
             <span class="docs-hub-card-icon">&#x1F517;</span>
             <h3>API Reference</h3>
-            <p>7 production FHIR R4 APIs with OpenAPI 3.1 specs. Patient Access, Provider Access, Prior Authorization, Payer-to-Payer, Claims Scrubbing, Risk Adjustment, and Encounter.</p>
+            <p>FHIR R4 APIs with OpenAPI 3.1 specs. Patient Access, Provider Access, Prior Authorization, Payer-to-Payer, Claims Scrubbing, Risk Adjustment, and Encounter.</p>
             <span class="card-arrow">Browse APIs &rarr;</span>
           </a>
 
           <a href="/docs/deployment" class="docs-hub-card">
             <span class="docs-hub-card-icon">&#x1F680;</span>
             <h3>Deployment</h3>
-            <p>From local Kubernetes to production AKS, EKS, or GKE. SaaS signup, self-hosted deployment, GitHub Actions CI/CD, Bicep IaC, and Helm charts.</p>
+            <p>From local Kubernetes to AKS, EKS, or GKE with environment-specific validation. Self-hosted deployment, GitHub Actions CI/CD, Bicep IaC, and Helm charts.</p>
             <span class="card-arrow">Deploy &rarr;</span>
           </a>
 
@@ -264,7 +293,7 @@
       <div class="footer-grid">
         <div class="footer-brand">
           <h4>Cloud Health Office</h4>
-          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F API surface, multi-clearinghouse EDI, FHIR R4 APIs, and inspectable claims benchmark evidence.</p>
           <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
         </div>
         <div class="footer-col">
@@ -283,6 +312,8 @@
           <ul>
             <li><a href="/docs/quickstart">Quick Start</a></li>
             <li><a href="/docs/quickstart-kubernetes">Kubernetes Reference</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/million-claim-challenge">Million Claim Challenge</a></li>
             <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
             <li><a href="/docs/architecture">Architecture</a></li>
             <li><a href="/docs/api">API Reference</a></li>
