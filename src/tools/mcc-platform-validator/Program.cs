@@ -71,7 +71,11 @@ NormalizePriorAuthEdgeCases(claims, options);
 NormalizeValidationProviderProfiles(claims, options.Seed, validationPlanId);
 MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
 MccCleanPaidFixture.NormalizeClaims(claims);
+var providerPool = MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId);
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
+Console.WriteLine(
+    $"Provider fixture pool: {providerPool.ProvidersBefore:N0} -> {providerPool.ProvidersAfter:N0} distinct NPIs " +
+    $"({providerPool.ReusedAssignments:N0} assignments reused, {providerPool.ProtectedClaims:N0} provider-sensitive claims preserved)");
 var answerKey = MccAnswerKey.FromClaims(claims);
 
 if (options.SeedMembers)
