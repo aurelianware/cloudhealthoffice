@@ -164,11 +164,11 @@ Interpretation:
 
 The post-fix 10K gate passed. The 5K zero-mismatch breadth result held at double the volume, supported COB-pend fixture rows were isolated and seeded one-for-one, expected-pend observation remained reliable, and unsupported scenarios continued to be separated from mismatches.
 
-## Remaining Part 6 validation gate
+## Part 6 validation boundary
 
 Part 6 now has 5K, 10K, and 50K breadth validation data.
 
-100K is intentionally out of scope for Part 6. After the clean 50K breadth result, 100K should become its own focused milestone article rather than a late addition to this one.
+At publication time, 100K was intentionally out of scope for Part 6. After the clean 50K breadth result, 100K belonged in its own focused milestone article rather than as a late addition to this one. That follow-on milestone was later published in Part 8.
 
 ### 50,000-claim breadth validation
 
@@ -281,13 +281,13 @@ Pend-observation caveat:
 
 The pend-observation pass polls persisted claim status only for scenarios whose answer-key outcome is `Pended`. It proves expected-pend claims persisted as pended. It does not, by itself, detect the inverse error where a claim expected to pay or deny later persists as pended. A future validator enhancement should add an optional persisted-status sweep for non-pend scenarios to detect false pends.
 
-## Future milestone: 100,000 claims
+## Later milestone: 100,000 claims
 
-The next publication candidate after Part 6 is a focused 100K milestone.
+The next publication candidate after Part 6 was a focused 100K milestone.
 
-That future article should answer a different question: once broader edge-case scoring is established at 50K, how far can the local Kubernetes validation path scale before the next bottleneck appears?
+That article needed to answer a different question: once broader edge-case scoring is established at 50K, how far can the local Kubernetes validation path scale before the next bottleneck appears?
 
-100K should not block Part 6.
+Part 8 now records that answer: a clean 100K local Kubernetes run passed the stronger correctness gates and exposed fixture preparation as the next local scaling bottleneck.
 
 ## Correctness framing
 
