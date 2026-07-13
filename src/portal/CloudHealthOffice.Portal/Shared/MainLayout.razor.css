@@ -13,6 +13,11 @@
     background-clip: text;
 }
 
+::deep .mud-main-content {
+    /* Keep content clear of the fixed app bar across pages. */
+    padding-top: calc(var(--mud-appbar-height, 48px) + 12px);
+}
+
 @media (max-width: 768px) {
     ::deep .appbar-logo {
         height: 24px;
@@ -22,6 +27,10 @@
 
     ::deep .appbar-title {
         font-size: 0.9rem;
+    }
+
+    ::deep .mud-main-content {
+        padding-top: calc(var(--mud-appbar-height, 48px) + 8px);
     }
 }
 
