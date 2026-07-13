@@ -6,6 +6,8 @@ Episode 008 covers the first clean 100,000-claim local Kubernetes validation aft
 
 The result held: 100,000 processed, zero platform failures, zero scoreable workflow mismatches, zero unexpected pends, and 2,000 of 2,000 comparable payments within one cent. The episode also explains why the 29:40 timed processing phase and 128-minute Kubernetes job lifecycle are different, and why fixture preparation is now the clearest local scaling target.
 
+The pend counts are intentionally reported with scope: 923 persisted pended outcomes overall, 920 expected-pend claims observed as pended, and zero unexpected pends across 10,614 scoreable expected-pay and expected-deny claims.
+
 ## Episode metadata
 
 - Episode title: The Clean 100,000-Claim Run
@@ -51,6 +53,7 @@ The episode must distinguish:
 
 - [x] Exact 100K results are recorded.
 - [x] Payment and false-pend gates are explained.
+- [x] Persisted-pend, expected-pend, and false-pend sweep scopes are separated.
 - [x] Unsupported scenarios remain visible and separate.
 - [x] Timed processing and total job duration are not conflated.
 - [x] Local results are not presented as production capacity.

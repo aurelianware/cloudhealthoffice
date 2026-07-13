@@ -53,6 +53,8 @@ The final summary reported:
 - $0.00 average payment delta
 - $0.00 maximum payment delta
 
+The pend numbers have two scopes. The run ended with 923 persisted pended outcomes overall. The validator specifically observed 920 expected-pend claims as pended, then swept 10,614 scoreable expected-pay and expected-deny claims and found zero unexpected pends. That distinction matters because unsupported scenarios remain separate from the scored non-pend set.
+
 Unsupported scenarios remained separate from passes and failures. They were concentrated in behavioral-health carve-out, Medicaid spend-down, prior-authorization edge variants, retroactive coverage change, and subrogation workflows.
 
 Those are named product gaps, not hidden successes.
