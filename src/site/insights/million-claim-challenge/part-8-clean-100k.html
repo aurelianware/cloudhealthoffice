@@ -61,6 +61,7 @@
 <p>The local Docker Desktop Kubernetes run processed 100,000 deterministic synthetic claims with parallelism set to 10.</p>
 <p>The final summary reported:</p>
 <ul><li>100,000 claims processed</li><li>79,164 paid or adjudicated</li><li>923 pended</li><li>19,913 business denials</li><li>0 platform failures</li><li>0 observation timeouts</li><li>11,534 of 13,000 workflow checks matched</li><li>0 workflow mismatches</li><li>1,466 unsupported scenarios</li><li>0 unexpected pends across 10,614 scoreable non-pend claims</li><li>2,000 of 2,000 comparable payments within one cent</li><li>$0.00 average payment delta</li><li>$0.00 maximum payment delta</li></ul>
+<p>The pend numbers have two scopes. The run ended with 923 persisted pended outcomes overall. The validator specifically observed 920 expected-pend claims as pended, then swept 10,614 scoreable expected-pay and expected-deny claims and found zero unexpected pends. That distinction matters because unsupported scenarios remain separate from the scored non-pend set.</p>
 <p>Unsupported scenarios remained separate from passes and failures. They were concentrated in behavioral-health carve-out, Medicaid spend-down, prior-authorization edge variants, retroactive coverage change, and subrogation workflows.</p>
 <p>Those are named product gaps, not hidden successes.</p>
 <h2 id="performance-did-not-scale-linearly">Performance did not scale linearly</h2>

@@ -7,9 +7,13 @@ The central story is that Cloud Health Office did not move from 50K to 100K by r
 Use these exact results:
 
 - 100,000 claims processed
+- 79,164 paid or adjudicated
+- 923 persisted pended outcomes
+- 19,913 business denials
 - 0 platform failures
 - 0 workflow mismatches
 - 0 observation timeouts
+- 920 expected-pend claims observed as pended
 - 0 unexpected pends across 10,614 scoreable non-pend claims
 - 11,534 of 13,000 workflow checks matched
 - 1,466 unsupported scenarios
@@ -21,6 +25,8 @@ Use these exact results:
 - approximately 128 minutes total Kubernetes job lifecycle including fixture preparation
 
 Explain why business denials are valid outcomes and why unsupported scenarios are visible product gaps rather than passes or failures.
+
+Make the pend scope explicit: the outcome mix had 923 persisted pended claims, the expected-pend observer verified 920 answer-key pend scenarios, and the false-pend sweep covered the scoreable expected-pay and expected-deny set. Do not imply unsupported scenarios were included in that non-pend sweep.
 
 Spend meaningful time on the difference between timed adjudication and total developer wait time. Fixture preparation seeded or aligned almost 100,000 member statuses and processed roughly 200,000 provider records. Correctness held, but the fixture strategy became the clearest local scaling bottleneck.
 
