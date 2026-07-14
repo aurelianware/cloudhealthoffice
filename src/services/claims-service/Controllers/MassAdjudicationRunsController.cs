@@ -44,6 +44,7 @@ public sealed class MassAdjudicationRunsController : ControllerBase
         string id,
         [FromQuery] string? outcome = null,
         [FromQuery] string? validationStatus = null,
+        [FromQuery] string? paymentStatus = null,
         [FromQuery] int limit = 250,
         CancellationToken ct = default)
     {
@@ -54,7 +55,15 @@ public sealed class MassAdjudicationRunsController : ControllerBase
             return NotFound();
         }
 
-        var results = await _repository.ListClaimResultsAsync(tenantId, id, outcome, validationStatus, limit, ct);
+        var results = await _repository.ListClaimResultsAsync(
+            tenantId,
+            id,
+            outcome,
+            validationStatus,
+            paymentStatus,
+            run.PaymentTolerance,
+            limit,
+            ct);
         return Ok(results);
     }
 

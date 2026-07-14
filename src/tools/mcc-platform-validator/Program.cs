@@ -2185,7 +2185,7 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         null,
         Array.Empty<MassAdjudicationStageTiming>(),
         null,
-        0.01m,
+        MccRunSummaryBuilder.PaymentTolerance,
         0,
         0,
         0,
