@@ -2,6 +2,8 @@ namespace CloudHealthOffice.Tools.MccPlatformValidator;
 
 internal static class MccRunSummaryBuilder
 {
+    internal const decimal PaymentTolerance = 0.01m;
+
     public static MassAdjudicationRunSummary Build(
         List<ClaimValidationResult> results,
         TimeSpan elapsed,
@@ -42,8 +44,7 @@ internal static class MccRunSummaryBuilder
         var avgDelta = comparable.Count == 0
             ? (decimal?)null
             : comparable.Average(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value));
-        const decimal paymentTolerance = 0.01m;
-        var paymentMatches = comparable.Count(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value) <= paymentTolerance);
+        var paymentMatches = comparable.Count(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value) <= PaymentTolerance);
         var paymentMismatches = comparable.Count - paymentMatches;
         var maxPaymentDelta = comparable.Count == 0
             ? (decimal?)null
@@ -141,7 +142,7 @@ internal static class MccRunSummaryBuilder
             BuildStageTiming("Writeback", results.Select(r => r.UpdateElapsed)),
             BuildAdjudicationStepTimings(results),
             avgDelta,
-            paymentTolerance,
+            PaymentTolerance,
             comparable.Count,
             paymentMatches,
             paymentMismatches,
@@ -255,7 +256,7 @@ internal static class MccRunSummaryBuilder
             && result.ValidationScenario == MccWorkflowValidation.CleanProfessionalPaidScenario
             && result.ActualPlanPayment.HasValue
             && result.ExpectedPlanPayment.HasValue
-            && Math.Abs(result.ActualPlanPayment.Value - result.ExpectedPlanPayment.Value) > 0.01m)
+            && Math.Abs(result.ActualPlanPayment.Value - result.ExpectedPlanPayment.Value) > PaymentTolerance)
         {
             return 3;
         }

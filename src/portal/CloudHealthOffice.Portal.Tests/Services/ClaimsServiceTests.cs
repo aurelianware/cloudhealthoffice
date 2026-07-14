@@ -638,10 +638,10 @@ public class ClaimsServiceTests
         var handler = new FakeHandler(HttpStatusCode.OK, "[]");
         var sut = CreateService(new HttpClient(handler));
 
-        await sut.GetMassAdjudicationClaimResultsAsync("run/001", "Business Denial", 5000, "Unsupported");
+        await sut.GetMassAdjudicationClaimResultsAsync("run/001", "Business Denial", 5000, "Unsupported", "Mismatched");
 
         handler.CapturedUrls.Should().ContainSingle()
-            .Which.Should().Be("http://localhost:5000/mass-adjudication/runs/run%2F001/claims?limit=1000&outcome=Business%20Denial&validationStatus=Unsupported");
+            .Which.Should().Be("http://localhost:5000/mass-adjudication/runs/run%2F001/claims?limit=1000&outcome=Business%20Denial&validationStatus=Unsupported&paymentStatus=Mismatched");
     }
 
     [Fact]
