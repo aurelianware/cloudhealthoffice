@@ -55,7 +55,15 @@ public sealed class MassAdjudicationRunsController : ControllerBase
             return NotFound();
         }
 
-        var results = await _repository.ListClaimResultsAsync(tenantId, id, outcome, validationStatus, paymentStatus, limit, ct);
+        var results = await _repository.ListClaimResultsAsync(
+            tenantId,
+            id,
+            outcome,
+            validationStatus,
+            paymentStatus,
+            run.PaymentTolerance,
+            limit,
+            ct);
         return Ok(results);
     }
 

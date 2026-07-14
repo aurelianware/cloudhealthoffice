@@ -228,8 +228,8 @@
                     <MudItem xs="6" md="4">@Metric("Workflow Timeouts", $"{_selectedRun.WorkflowObservationTimeouts:N0}", _selectedRun.WorkflowObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Payment Gate", PaymentGateLabel(_selectedRun), _selectedRun.PaymentMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Payment Mismatches", $"{_selectedRun.PaymentMismatches:N0}", _selectedRun.PaymentMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
-                    <MudItem xs="6" md="4">@Metric("Max Payment Delta", _selectedRun.MaximumPaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.MaximumPaymentDelta, _selectedRun.PaymentTolerance))</MudItem>
-                    <MudItem xs="6" md="4">@Metric("Avg Payment Delta", _selectedRun.AveragePaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.AveragePaymentDelta, _selectedRun.PaymentTolerance))</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Max Payment Delta", _selectedRun.MaximumPaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.MaximumPaymentDelta, PaymentTolerance(_selectedRun)))</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Avg Payment Delta", _selectedRun.AveragePaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.AveragePaymentDelta, PaymentTolerance(_selectedRun)))</MudItem>
                     @if (_selectedRun.Progress is not null)
                     {
                         <MudItem xs="6" md="4">@Metric("Run Status", RunStatusLabel(_selectedRun), IsRunActive(_selectedRun) ? "#7dd3fc" : "#00ff88")</MudItem>
@@ -355,7 +355,7 @@
                             }
                             @if (context.PaymentDelta.HasValue)
                             {
-                                <MudText Typo="Typo.caption" Style="@($"color: {PaymentDeltaColor(context.PaymentDelta, _selectedRun?.PaymentTolerance ?? 0.01m)}; font-family: monospace;")">
+                                <MudText Typo="Typo.caption" Style="@($"color: {PaymentDeltaColor(context.PaymentDelta, PaymentTolerance(_selectedRun))}; font-family: monospace;")">
                                     delta @context.PaymentDelta.Value.ToString("C")
                                 </MudText>
                             }
@@ -461,6 +461,7 @@
 </PermissionGate>
 
 @code {
+    private const decimal LegacyPaymentTolerance = 0.01m;
     private readonly List<MassAdjudicationRunSummary> _runs = new();
     private readonly List<MassAdjudicationClaimResult> _claimResults = new();
     private MassAdjudicationRunSummary? _selectedRun;
@@ -732,6 +733,9 @@
         => run.PaymentComparisons <= 0
             ? "-"
             : $"{run.PaymentMatches:N0} / {run.PaymentComparisons:N0}";
+
+    private static decimal PaymentTolerance(MassAdjudicationRunSummary? run)
+        => run?.PaymentTolerance > 0 ? run.PaymentTolerance : LegacyPaymentTolerance;
 
     private static string PaymentDeltaColor(decimal? paymentDelta, decimal tolerance)
         => paymentDelta is null ? "#cbd5e1" : paymentDelta <= tolerance ? "#00ff88" : "#ff0055";

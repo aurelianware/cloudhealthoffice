@@ -184,7 +184,7 @@ public class MassAdjudicationRunRepositoryTests
         var saved = await repo.SaveAsync(completed);
         await repo.SaveAsync(progressOnly);
 
-        var claimResults = await repo.ListClaimResultsAsync(saved.Run.TenantId, runId, null, null, null, 10);
+        var claimResults = await repo.ListClaimResultsAsync(saved.Run.TenantId, runId, null, null, null, 0.01m, 10);
 
         claimResults.Should().ContainSingle()
             .Which.GeneratedClaimId.Should().Be("GEN-EVIDENCE");
@@ -231,6 +231,7 @@ public class MassAdjudicationRunRepositoryTests
             outcome: null,
             validationStatus: "Unsupported",
             paymentStatus: null,
+            paymentTolerance: 0.01m,
             limit: 10);
         var unsupportedPaid = await repo.ListClaimResultsAsync(
             saved.Run.TenantId,
@@ -238,6 +239,7 @@ public class MassAdjudicationRunRepositoryTests
             outcome: "Paid",
             validationStatus: "Unsupported",
             paymentStatus: null,
+            paymentTolerance: 0.01m,
             limit: 10);
 
         unsupported.Select(x => x.GeneratedClaimId)
@@ -247,7 +249,7 @@ public class MassAdjudicationRunRepositoryTests
     }
 
     [Fact]
-    public async Task ListClaimResultsAsync_filters_by_payment_status()
+    public async Task ListClaimResultsAsync_filters_by_payment_status_using_run_tolerance()
     {
         var repo = new InMemoryMassAdjudicationRunRepository();
         var summary = CreateSummary();
@@ -268,7 +270,7 @@ public class MassAdjudicationRunRepositoryTests
                 ClaimType = "Professional",
                 Outcome = "Paid",
                 ValidationStatus = "Matched",
-                PaymentDelta = 0.01m,
+                PaymentDelta = 0.05m,
                 ElapsedMilliseconds = 20
             },
             new MassAdjudicationClaimResult
@@ -277,7 +279,7 @@ public class MassAdjudicationRunRepositoryTests
                 ClaimType = "Professional",
                 Outcome = "Paid",
                 ValidationStatus = "Matched",
-                PaymentDelta = 1.23m,
+                PaymentDelta = 0.06m,
                 ElapsedMilliseconds = 30
             },
             new MassAdjudicationClaimResult
@@ -299,6 +301,7 @@ public class MassAdjudicationRunRepositoryTests
             outcome: null,
             validationStatus: null,
             paymentStatus: "Mismatched",
+            paymentTolerance: 0.05m,
             limit: 10);
         var matched = await repo.ListClaimResultsAsync(
             saved.Run.TenantId,
@@ -306,6 +309,7 @@ public class MassAdjudicationRunRepositoryTests
             outcome: null,
             validationStatus: null,
             paymentStatus: "Matched",
+            paymentTolerance: 0.05m,
             limit: 10);
         var scored = await repo.ListClaimResultsAsync(
             saved.Run.TenantId,
@@ -313,6 +317,7 @@ public class MassAdjudicationRunRepositoryTests
             outcome: null,
             validationStatus: null,
             paymentStatus: "Scored",
+            paymentTolerance: 0.05m,
             limit: 10);
         var unscored = await repo.ListClaimResultsAsync(
             saved.Run.TenantId,
@@ -320,6 +325,7 @@ public class MassAdjudicationRunRepositoryTests
             outcome: null,
             validationStatus: null,
             paymentStatus: "Unscored",
+            paymentTolerance: 0.05m,
             limit: 10);
 
         mismatched.Should().ContainSingle()

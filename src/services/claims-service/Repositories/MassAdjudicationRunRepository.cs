@@ -14,6 +14,7 @@ public interface IMassAdjudicationRunRepository
         string? outcome,
         string? validationStatus,
         string? paymentStatus,
+        decimal paymentTolerance,
         int limit,
         CancellationToken ct = default);
 
@@ -111,6 +112,7 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
         string? outcome,
         string? validationStatus,
         string? paymentStatus,
+        decimal paymentTolerance,
         int limit,
         CancellationToken ct = default)
     {
@@ -130,7 +132,7 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
             filters.Add(Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.ValidationStatus, validationStatus));
         }
 
-        AddPaymentStatusFilter(filters, paymentStatus);
+        AddPaymentStatusFilter(filters, paymentStatus, paymentTolerance);
 
         return await _claimResults
             .Find(Builders<MassAdjudicationClaimResult>.Filter.And(filters))
@@ -141,23 +143,25 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
 
     private static void AddPaymentStatusFilter(
         List<FilterDefinition<MassAdjudicationClaimResult>> filters,
-        string? paymentStatus)
+        string? paymentStatus,
+        decimal paymentTolerance)
     {
         if (string.IsNullOrWhiteSpace(paymentStatus))
         {
             return;
         }
 
+        var tolerance = MassAdjudicationPaymentTolerance.Normalize(paymentTolerance);
         var builder = Builders<MassAdjudicationClaimResult>.Filter;
         switch (paymentStatus.Trim().ToLowerInvariant())
         {
             case "mismatched":
-                filters.Add(builder.Gt(x => x.PaymentDelta, 0.01m));
+                filters.Add(builder.Gt(x => x.PaymentDelta, tolerance));
                 break;
             case "matched":
                 filters.Add(builder.And(
                     builder.Ne(x => x.PaymentDelta, null),
-                    builder.Lte(x => x.PaymentDelta, 0.01m)));
+                    builder.Lte(x => x.PaymentDelta, tolerance)));
                 break;
             case "scored":
                 filters.Add(builder.Ne(x => x.PaymentDelta, null));
@@ -271,6 +275,7 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
         string? outcome,
         string? validationStatus,
         string? paymentStatus,
+        decimal paymentTolerance,
         int limit,
         CancellationToken ct = default)
     {
@@ -289,7 +294,7 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
                 query = query.Where(x => string.Equals(x.ValidationStatus, validationStatus, StringComparison.OrdinalIgnoreCase));
             }
 
-            query = ApplyPaymentStatusFilter(query, paymentStatus);
+            query = ApplyPaymentStatusFilter(query, paymentStatus, paymentTolerance);
 
             return Task.FromResult<IReadOnlyList<MassAdjudicationClaimResult>>(
                 query
@@ -301,12 +306,14 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
 
     private static IEnumerable<MassAdjudicationClaimResult> ApplyPaymentStatusFilter(
         IEnumerable<MassAdjudicationClaimResult> query,
-        string? paymentStatus)
+        string? paymentStatus,
+        decimal paymentTolerance)
     {
+        var tolerance = MassAdjudicationPaymentTolerance.Normalize(paymentTolerance);
         return paymentStatus?.Trim().ToLowerInvariant() switch
         {
-            "mismatched" => query.Where(x => x.PaymentDelta > 0.01m),
-            "matched" => query.Where(x => x.PaymentDelta is <= 0.01m),
+            "mismatched" => query.Where(x => x.PaymentDelta > tolerance),
+            "matched" => query.Where(x => x.PaymentDelta <= tolerance),
             "scored" => query.Where(x => x.PaymentDelta.HasValue),
             "unscored" => query.Where(x => !x.PaymentDelta.HasValue),
             _ => query
@@ -330,4 +337,12 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
                     .ToList());
         }
     }
+}
+
+internal static class MassAdjudicationPaymentTolerance
+{
+    internal const decimal LegacyDefault = 0.01m;
+
+    internal static decimal Normalize(decimal paymentTolerance)
+        => paymentTolerance > 0 ? paymentTolerance : LegacyDefault;
 }
