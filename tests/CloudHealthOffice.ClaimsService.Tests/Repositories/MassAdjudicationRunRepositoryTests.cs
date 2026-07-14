@@ -184,7 +184,7 @@ public class MassAdjudicationRunRepositoryTests
         var saved = await repo.SaveAsync(completed);
         await repo.SaveAsync(progressOnly);
 
-        var claimResults = await repo.ListClaimResultsAsync(saved.Run.TenantId, runId, null, null, 10);
+        var claimResults = await repo.ListClaimResultsAsync(saved.Run.TenantId, runId, null, null, null, 10);
 
         claimResults.Should().ContainSingle()
             .Which.GeneratedClaimId.Should().Be("GEN-EVIDENCE");
@@ -230,18 +230,106 @@ public class MassAdjudicationRunRepositoryTests
             saved.Id,
             outcome: null,
             validationStatus: "Unsupported",
+            paymentStatus: null,
             limit: 10);
         var unsupportedPaid = await repo.ListClaimResultsAsync(
             saved.Run.TenantId,
             saved.Id,
             outcome: "Paid",
             validationStatus: "Unsupported",
+            paymentStatus: null,
             limit: 10);
 
         unsupported.Select(x => x.GeneratedClaimId)
             .Should().Equal("GEN-PAID-UNSUPPORTED", "GEN-DENIAL-UNSUPPORTED");
         unsupportedPaid.Should().ContainSingle()
             .Which.GeneratedClaimId.Should().Be("GEN-PAID-UNSUPPORTED");
+    }
+
+    [Fact]
+    public async Task ListClaimResultsAsync_filters_by_payment_status()
+    {
+        var repo = new InMemoryMassAdjudicationRunRepository();
+        var summary = CreateSummary();
+        summary.ClaimResults.AddRange(new[]
+        {
+            new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = "GEN-PAYMENT-EXACT",
+                ClaimType = "Professional",
+                Outcome = "Paid",
+                ValidationStatus = "Matched",
+                PaymentDelta = 0m,
+                ElapsedMilliseconds = 10
+            },
+            new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = "GEN-PAYMENT-ROUNDING",
+                ClaimType = "Professional",
+                Outcome = "Paid",
+                ValidationStatus = "Matched",
+                PaymentDelta = 0.01m,
+                ElapsedMilliseconds = 20
+            },
+            new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = "GEN-PAYMENT-MISMATCH",
+                ClaimType = "Professional",
+                Outcome = "Paid",
+                ValidationStatus = "Matched",
+                PaymentDelta = 1.23m,
+                ElapsedMilliseconds = 30
+            },
+            new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = "GEN-PAYMENT-UNSCORED",
+                ClaimType = "Professional",
+                Outcome = "BusinessDenial",
+                ValidationStatus = "Matched",
+                PaymentDelta = null,
+                ElapsedMilliseconds = 40
+            }
+        });
+
+        var saved = await repo.SaveAsync(summary);
+
+        var mismatched = await repo.ListClaimResultsAsync(
+            saved.Run.TenantId,
+            saved.Id,
+            outcome: null,
+            validationStatus: null,
+            paymentStatus: "Mismatched",
+            limit: 10);
+        var matched = await repo.ListClaimResultsAsync(
+            saved.Run.TenantId,
+            saved.Id,
+            outcome: null,
+            validationStatus: null,
+            paymentStatus: "Matched",
+            limit: 10);
+        var scored = await repo.ListClaimResultsAsync(
+            saved.Run.TenantId,
+            saved.Id,
+            outcome: null,
+            validationStatus: null,
+            paymentStatus: "Scored",
+            limit: 10);
+        var unscored = await repo.ListClaimResultsAsync(
+            saved.Run.TenantId,
+            saved.Id,
+            outcome: null,
+            validationStatus: null,
+            paymentStatus: "Unscored",
+            limit: 10);
+
+        mismatched.Should().ContainSingle()
+            .Which.GeneratedClaimId.Should().Be("GEN-PAYMENT-MISMATCH");
+        matched.Select(x => x.GeneratedClaimId)
+            .Should().Equal("GEN-PAYMENT-ROUNDING", "GEN-PAYMENT-EXACT");
+        scored.Select(x => x.GeneratedClaimId)
+            .Should().Equal("GEN-PAYMENT-MISMATCH", "GEN-PAYMENT-ROUNDING", "GEN-PAYMENT-EXACT");
+        unscored.Should().ContainSingle()
+            .Which.GeneratedClaimId.Should().Be("GEN-PAYMENT-UNSCORED");
     }
 
     [Fact]

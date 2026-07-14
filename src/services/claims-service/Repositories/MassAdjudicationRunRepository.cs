@@ -13,6 +13,7 @@ public interface IMassAdjudicationRunRepository
         string runId,
         string? outcome,
         string? validationStatus,
+        string? paymentStatus,
         int limit,
         CancellationToken ct = default);
 
@@ -109,6 +110,7 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
         string runId,
         string? outcome,
         string? validationStatus,
+        string? paymentStatus,
         int limit,
         CancellationToken ct = default)
     {
@@ -128,11 +130,42 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
             filters.Add(Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.ValidationStatus, validationStatus));
         }
 
+        AddPaymentStatusFilter(filters, paymentStatus);
+
         return await _claimResults
             .Find(Builders<MassAdjudicationClaimResult>.Filter.And(filters))
             .SortByDescending(x => x.ElapsedMilliseconds)
             .Limit(Math.Clamp(limit, 1, 1000))
             .ToListAsync(ct);
+    }
+
+    private static void AddPaymentStatusFilter(
+        List<FilterDefinition<MassAdjudicationClaimResult>> filters,
+        string? paymentStatus)
+    {
+        if (string.IsNullOrWhiteSpace(paymentStatus))
+        {
+            return;
+        }
+
+        var builder = Builders<MassAdjudicationClaimResult>.Filter;
+        switch (paymentStatus.Trim().ToLowerInvariant())
+        {
+            case "mismatched":
+                filters.Add(builder.Gt(x => x.PaymentDelta, 0.01m));
+                break;
+            case "matched":
+                filters.Add(builder.And(
+                    builder.Ne(x => x.PaymentDelta, null),
+                    builder.Lte(x => x.PaymentDelta, 0.01m)));
+                break;
+            case "scored":
+                filters.Add(builder.Ne(x => x.PaymentDelta, null));
+                break;
+            case "unscored":
+                filters.Add(builder.Eq(x => x.PaymentDelta, null));
+                break;
+        }
     }
 
     public async Task<IReadOnlyList<string>> ListSubmittedClaimIdsAsync(
@@ -237,6 +270,7 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
         string runId,
         string? outcome,
         string? validationStatus,
+        string? paymentStatus,
         int limit,
         CancellationToken ct = default)
     {
@@ -255,12 +289,28 @@ public sealed class InMemoryMassAdjudicationRunRepository : IMassAdjudicationRun
                 query = query.Where(x => string.Equals(x.ValidationStatus, validationStatus, StringComparison.OrdinalIgnoreCase));
             }
 
+            query = ApplyPaymentStatusFilter(query, paymentStatus);
+
             return Task.FromResult<IReadOnlyList<MassAdjudicationClaimResult>>(
                 query
                     .OrderByDescending(x => x.ElapsedMilliseconds)
                     .Take(Math.Clamp(limit, 1, 1000))
                     .ToList());
         }
+    }
+
+    private static IEnumerable<MassAdjudicationClaimResult> ApplyPaymentStatusFilter(
+        IEnumerable<MassAdjudicationClaimResult> query,
+        string? paymentStatus)
+    {
+        return paymentStatus?.Trim().ToLowerInvariant() switch
+        {
+            "mismatched" => query.Where(x => x.PaymentDelta > 0.01m),
+            "matched" => query.Where(x => x.PaymentDelta is <= 0.01m),
+            "scored" => query.Where(x => x.PaymentDelta.HasValue),
+            "unscored" => query.Where(x => !x.PaymentDelta.HasValue),
+            _ => query
+        };
     }
 
     public Task<IReadOnlyList<string>> ListSubmittedClaimIdsAsync(

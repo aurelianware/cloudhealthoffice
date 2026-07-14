@@ -226,7 +226,10 @@
                     <MudItem xs="6" md="4">@Metric("Workflow Mismatches", $"{_selectedRun.WorkflowMismatches:N0}", _selectedRun.WorkflowMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Unsupported", $"{_selectedRun.WorkflowUnsupported:N0}", "#cbd5e1")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Timeouts", $"{_selectedRun.WorkflowObservationTimeouts:N0}", _selectedRun.WorkflowObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
-                    <MudItem xs="6" md="4">@Metric("Avg Payment Delta", _selectedRun.AveragePaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.AveragePaymentDelta))</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Payment Gate", PaymentGateLabel(_selectedRun), _selectedRun.PaymentMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Payment Mismatches", $"{_selectedRun.PaymentMismatches:N0}", _selectedRun.PaymentMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Max Payment Delta", _selectedRun.MaximumPaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.MaximumPaymentDelta, _selectedRun.PaymentTolerance))</MudItem>
+                    <MudItem xs="6" md="4">@Metric("Avg Payment Delta", _selectedRun.AveragePaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.AveragePaymentDelta, _selectedRun.PaymentTolerance))</MudItem>
                     @if (_selectedRun.Progress is not null)
                     {
                         <MudItem xs="6" md="4">@Metric("Run Status", RunStatusLabel(_selectedRun), IsRunActive(_selectedRun) ? "#7dd3fc" : "#00ff88")</MudItem>
@@ -265,13 +268,15 @@
                     <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Claim Results</MudText>
                     <MudSpacer />
                     <MudSelect T="string" Value="_claimResultFilter" ValueChanged="OnClaimResultFilterChanged"
-                               Dense="true" Variant="Variant.Outlined" Style="width: 190px;">
+                               Dense="true" Variant="Variant.Outlined" Style="width: 220px;">
                         <MudSelectItem Value="@("")">All results</MudSelectItem>
                         <MudSelectItem Value="@("Paid")">Paid</MudSelectItem>
                         <MudSelectItem Value="@("Pended")">Pended</MudSelectItem>
                         <MudSelectItem Value="@("BusinessDenial")">Business denials</MudSelectItem>
                         <MudSelectItem Value="@("validation:Unsupported")">Unsupported</MudSelectItem>
                         <MudSelectItem Value="@("validation:Mismatched")">Mismatches</MudSelectItem>
+                        <MudSelectItem Value="@("payment:Mismatched")">Payment mismatches</MudSelectItem>
+                        <MudSelectItem Value="@("payment:Scored")">Payment scored</MudSelectItem>
                         <MudSelectItem Value="@("ObservationTimeout")">Observation timeouts</MudSelectItem>
                         <MudSelectItem Value="@("PlatformFailure")">Platform failures</MudSelectItem>
                     </MudSelect>
@@ -342,9 +347,15 @@
                         </MudTd>
                         <MudTd DataLabel="Payment">
                             <MudText Typo="Typo.body2" Style="font-family: monospace;">@(context.ActualPlanPayment?.ToString("C") ?? "-")</MudText>
-                            @if (context.PaymentDelta.HasValue)
+                            @if (context.ExpectedPlanPayment.HasValue)
                             {
                                 <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">
+                                    expected @context.ExpectedPlanPayment.Value.ToString("C")
+                                </MudText>
+                            }
+                            @if (context.PaymentDelta.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Style="@($"color: {PaymentDeltaColor(context.PaymentDelta, _selectedRun?.PaymentTolerance ?? 0.01m)}; font-family: monospace;")">
                                     delta @context.PaymentDelta.Value.ToString("C")
                                 </MudText>
                             }
@@ -559,7 +570,8 @@
                 _selectedRun.Id,
                 ClaimOutcomeFilter,
                 250,
-                ClaimValidationStatusFilter);
+                ClaimValidationStatusFilter,
+                ClaimPaymentStatusFilter);
             _claimResults.AddRange(results);
         }
         catch (Exception ex)
@@ -700,7 +712,9 @@
         => $"font-family: monospace; color: {(count == 0 ? "rgba(255,255,255,0.55)" : highlightColor)};";
 
     private string? ClaimOutcomeFilter
-        => string.IsNullOrWhiteSpace(_claimResultFilter) || _claimResultFilter.StartsWith("validation:", StringComparison.Ordinal)
+        => string.IsNullOrWhiteSpace(_claimResultFilter)
+           || _claimResultFilter.StartsWith("validation:", StringComparison.Ordinal)
+           || _claimResultFilter.StartsWith("payment:", StringComparison.Ordinal)
             ? null
             : _claimResultFilter;
 
@@ -709,8 +723,18 @@
             ? _claimResultFilter["validation:".Length..]
             : null;
 
-    private static string PaymentDeltaColor(decimal? paymentDelta)
-        => paymentDelta is null ? "#cbd5e1" : paymentDelta == 0 ? "#00ff88" : "#ffca28";
+    private string? ClaimPaymentStatusFilter
+        => _claimResultFilter.StartsWith("payment:", StringComparison.Ordinal)
+            ? _claimResultFilter["payment:".Length..]
+            : null;
+
+    private static string PaymentGateLabel(MassAdjudicationRunSummary run)
+        => run.PaymentComparisons <= 0
+            ? "-"
+            : $"{run.PaymentMatches:N0} / {run.PaymentComparisons:N0}";
+
+    private static string PaymentDeltaColor(decimal? paymentDelta, decimal tolerance)
+        => paymentDelta is null ? "#cbd5e1" : paymentDelta <= tolerance ? "#00ff88" : "#ff0055";
 
     private static Color OutcomeColor(string outcome) => outcome switch
     {

@@ -148,7 +148,8 @@ public class ClaimsService : IClaimsService
         string runId,
         string? outcome = null,
         int limit = 250,
-        string? validationStatus = null)
+        string? validationStatus = null,
+        string? paymentStatus = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
         try
@@ -162,6 +163,11 @@ public class ClaimsService : IClaimsService
             if (!string.IsNullOrWhiteSpace(validationStatus))
             {
                 query += $"&validationStatus={Uri.EscapeDataString(validationStatus)}";
+            }
+
+            if (!string.IsNullOrWhiteSpace(paymentStatus))
+            {
+                query += $"&paymentStatus={Uri.EscapeDataString(paymentStatus)}";
             }
 
             using var request = CreateMassAdjudicationRequest(
