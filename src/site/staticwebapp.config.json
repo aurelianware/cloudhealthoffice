@@ -99,6 +99,11 @@
       "rewrite": "/docs/index.html"
     },
     {
+      "route": "/docs.html",
+      "redirect": "/docs",
+      "statusCode": 301
+    },
+    {
       "route": "/docs/quickstart.html",
       "redirect": "/docs/quickstart",
       "statusCode": 301

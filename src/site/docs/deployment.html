@@ -246,7 +246,7 @@ kubectl exec -it deploy/claims-service -n cloudhealthoffice -- curl -s localhost
 npm run test:e2e -- --environment=prod
 
 <span class="code-comment"># Verify FHIR endpoints</span>
-curl https://api.cloudhealthoffice.com/fhir/r4/metadata | jq .status</code></pre>
+curl https://api.your-domain.example/fhir/r4/metadata | jq .status</code></pre>
 
         <div class="callout callout-info">
           <div class="callout-title">Full deployment reference</div>

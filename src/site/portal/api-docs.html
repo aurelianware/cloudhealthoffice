@@ -349,7 +349,7 @@ curl -X POST https://sandbox.cloudhealthoffice.com/scrubbing/v1/claims/validate 
           </summary>
           <pre style="margin-top: 15px; padding: 20px; background: #000; border-radius: 8px; overflow-x: auto;"><code style="color: var(--neon-green);">// Fetch patient data
 const response = await fetch(
-  'https://api.cloudhealthoffice.com/fhir/r4/Patient/PAT001',
+  'https://api.your-domain.example/fhir/r4/Patient/PAT001',
   { headers: { 'Authorization': `Bearer ${accessToken}` } }
 );
 const patient = await response.json();
@@ -363,7 +363,7 @@ console.log(patient.name[0].given); // ["John"]</code></pre>
           <pre style="margin-top: 15px; padding: 20px; background: #000; border-radius: 8px; overflow-x: auto;"><code style="color: var(--neon-green);">import requests
 
 response = requests.get(
-    'https://api.cloudhealthoffice.com/fhir/r4/Patient/PAT001',
+    'https://api.your-domain.example/fhir/r4/Patient/PAT001',
     headers={'Authorization': f'Bearer {access_token}'}
 )
 patient = response.json()
@@ -378,7 +378,7 @@ print(patient['name'][0]['given'])</code></pre>
 using Hl7.Fhir.Model;
 
 var client = new FhirClient(
-    "https://api.cloudhealthoffice.com/fhir/r4");
+    "https://api.your-domain.example/fhir/r4");
 client.OnBeforeRequest += (sender, e) => {
     e.RawRequest.Headers.Add("Authorization", 
         $"Bearer {accessToken}");

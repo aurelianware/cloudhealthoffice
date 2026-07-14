@@ -451,7 +451,7 @@ Organizations that embrace Cloud Health Office will achieve:
 ### Immediate Actions
 
 1. **Schedule Demo**
-   - [Contact sales for platform walkthrough](https://portal.cloudhealthoffice.com/contact-sales)
+   - [Contact sales for platform walkthrough](/contact)
    - Review your specific payer requirements
    - See live deployment demonstration
 

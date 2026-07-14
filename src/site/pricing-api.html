@@ -463,7 +463,7 @@
       <div class="hero-radial" aria-hidden="true"></div>
 
       <div class="hero-content">
-        <div class="hero-badge">Claims Repricing API &nbsp;&middot;&nbsp; Free Tier Available</div>
+        <div class="hero-badge">Claims Repricing API &nbsp;&middot;&nbsp; Access by Request</div>
 
         <h1 class="hero-headline">
           Medicare Claims<br>
@@ -472,17 +472,16 @@
 
         <p class="hero-subheadline">
           Vendor-neutral pricing engine supporting RBRVS, OPPS, and MS-DRG fee schedules.<br>
-          Get started free with 1,000 claims/month. No credit card required.
+          Request access for pilots and local evaluation while the public API endpoint is being prepared.
         </p>
 
         <div class="hero-cta">
-          <a href="#signup"
+          <a href="/contact"
              class="button"
-             style="font-size:1.05rem; padding:15px 38px;">Get Free API Key &rarr;</a>
-          <a href="https://api.cloudhealthoffice.com/pricing/swagger"
+             style="font-size:1.05rem; padding:15px 38px;">Request API Access &rarr;</a>
+          <a href="/docs/api"
              class="button button-secondary"
-             style="font-size:1.05rem; padding:15px 38px;"
-             target="_blank" rel="noopener noreferrer">View API Docs &rarr;</a>
+             style="font-size:1.05rem; padding:15px 38px;">View API Docs &rarr;</a>
         </div>
       </div>
 
@@ -494,15 +493,15 @@
       <div class="section-wrapper">
         <div class="section-header">
           <span class="section-eyebrow">How It Works</span>
-          <h2 class="section-title">Three steps to<br><span>instant repricing.</span></h2>
-          <p class="section-subtitle">Submit a claim, get back Medicare-accurate pricing with full RVU, APC, and DRG breakdowns.</p>
+          <h2 class="section-title">Three steps to<br><span>your own repricing API.</span></h2>
+          <p class="section-subtitle">Deploy the source-available service locally or in your cloud, then submit claims for RVU, APC, and DRG breakdowns.</p>
         </div>
 
         <div class="steps-grid">
           <div class="step-card">
             <div class="step-number">1</div>
-            <h3>Sign Up Free</h3>
-            <p>Create an account and get your API key instantly. No credit card, no sales call, no contract.</p>
+            <h3>Request Access</h3>
+            <p>Use the docs and local deployment path today; request hosted API access when you are ready for a guided pilot.</p>
           </div>
           <div class="step-card">
             <div class="step-number">2</div>
@@ -558,22 +557,22 @@
       <div class="section-wrapper">
         <div class="section-header">
           <span class="section-eyebrow">Pricing</span>
-          <h2 class="section-title">Start free.<br><span>Scale when ready.</span></h2>
-          <p class="section-subtitle">No credit card required for the free tier. Upgrade or downgrade anytime.</p>
+          <h2 class="section-title">Start locally.<br><span>Scale when ready.</span></h2>
+          <p class="section-subtitle">The pricing engine can be evaluated locally today. Hosted API access is available by request for pilots.</p>
         </div>
 
         <div class="tier-grid">
           <div class="tier-card">
-            <div class="tier-name">Free</div>
+            <div class="tier-name">Self-hosted Evaluation</div>
             <div class="tier-price">$0<span>/mo</span></div>
-            <div class="tier-volume">1,000 claims/month</div>
+            <div class="tier-volume">Free for non-production use</div>
             <ul class="tier-features">
               <li>All fee schedules (RBRVS, OPPS, MS-DRG)</li>
               <li>Full modifier support</li>
-              <li>REST API access</li>
-              <li>Community support</li>
+              <li>Local REST API deployment</li>
+              <li>Source-available evaluation path</li>
             </ul>
-            <a href="#signup" class="tier-cta tier-cta-primary">Get Started Free</a>
+            <a href="/contact" class="tier-cta tier-cta-primary">Request API Access</a>
           </div>
 
           <div class="tier-card">
@@ -598,8 +597,8 @@
       <div class="section-wrapper">
         <div class="section-header">
           <span class="section-eyebrow" style="color:#00ff88;">Get Started</span>
-          <h2 class="section-title">Get your free<br><span>API key now.</span></h2>
-          <p class="section-subtitle">No credit card required. Start repricing claims in minutes.</p>
+          <h2 class="section-title">Request<br><span>API access.</span></h2>
+          <p class="section-subtitle">The public API host is not currently deployed. Contact us for pilot access or run the pricing engine locally.</p>
         </div>
 
         <div class="signup-section">
@@ -624,7 +623,7 @@
                   <input type="text" id="lastName" name="lastName" placeholder="Smith" />
                 </div>
               </div>
-              <button type="submit" class="form-submit" id="submitBtn">Get Free API Key</button>
+              <button type="submit" class="form-submit" id="submitBtn">Continue to Contact Sales</button>
             </form>
           </div>
 
@@ -644,10 +643,9 @@
                 <pre id="successCurl"></pre>
               </div>
             </div>
-            <a href="https://api.cloudhealthoffice.com/pricing/swagger"
+            <a href="/docs/api"
                class="button"
-               style="font-size:0.95rem; padding:13px 32px;"
-               target="_blank" rel="noopener noreferrer">View Full API Docs &rarr;</a>
+               style="font-size:0.95rem; padding:13px 32px;">View Full API Docs &rarr;</a>
           </div>
         </div>
       </div>
@@ -667,7 +665,7 @@
             <button class="code-copy" onclick="copyCode('curlExample')">Copy</button>
           </div>
           <div class="code-body">
-            <pre id="curlExample"><span class="code-keyword">curl</span> <span class="code-flag">-X POST</span> <span class="code-string">https://api.cloudhealthoffice.com/pricing/api/v1/reprice</span> \
+            <pre id="curlExample"><span class="code-keyword">curl</span> <span class="code-flag">-X POST</span> <span class="code-string">https://api.your-domain.example/pricing/api/v1/reprice</span> \
   <span class="code-flag">-H</span> <span class="code-string">"X-API-Key: cho_your_api_key"</span> \
   <span class="code-flag">-H</span> <span class="code-string">"Content-Type: application/json"</span> \
   <span class="code-flag">-d</span> <span class="code-string">'{
@@ -696,17 +694,16 @@
         </h2>
 
         <p style="font-size:1.15rem; color:rgba(176,176,176,0.8); margin:24px 0 48px 0; line-height:1.75; position:relative;">
-          Get started with the free tier or talk to our team about enterprise integration.
+          Start with local evaluation or talk to our team about hosted pilot access.
         </p>
 
         <div class="hero-cta" style="position:relative; opacity:1; animation:none;">
-          <a href="#signup"
+          <a href="/contact"
              class="button"
-             style="font-size:1.1rem; padding:17px 48px;">Get Free API Key &rarr;</a>
-          <a href="https://api.cloudhealthoffice.com/pricing/swagger"
+             style="font-size:1.1rem; padding:17px 48px;">Request API Access &rarr;</a>
+          <a href="/docs/api"
              class="button button-secondary"
-             style="font-size:1.1rem; padding:17px 48px;"
-             target="_blank" rel="noopener noreferrer">API Documentation &rarr;</a>
+             style="font-size:1.1rem; padding:17px 48px;">API Documentation &rarr;</a>
         </div>
 
         <p style="margin-top:28px; font-size:0.93rem; color:rgba(128,128,128,0.65); position:relative;">
@@ -784,35 +781,8 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating API Key...';
-
-      try {
-        const response = await fetch('https://api.cloudhealthoffice.com/pricing/api/v1/signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            organizationName: orgName,
-            email: email,
-            firstName: firstName || undefined,
-            lastName: lastName || undefined
-          })
-        });
-
-        if (!response.ok) {
-          const errBody = await response.text();
-          throw new Error(errBody || 'Signup failed');
-        }
-
-        const data = await response.json();
-        const apiKey = data.apiKey || data.key || data.token;
-
-        showSuccess(apiKey);
-      } catch (err) {
-        formError.innerHTML = 'Signup is temporarily unavailable. Please contact <a href="mailto:sales@cloudhealthoffice.com" style="color:#ff6666;">sales@cloudhealthoffice.com</a>.';
-        formError.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Get Free API Key';
-      }
+      submitBtn.textContent = 'Opening Contact Sales...';
+      window.location.href = '/contact';
     });
 
     function showSuccess(apiKey) {
@@ -822,7 +792,7 @@
       document.getElementById('apiKeyValue').textContent = apiKey;
 
       document.getElementById('successCurl').textContent =
-        'curl -X POST https://api.cloudhealthoffice.com/pricing/api/v1/reprice \\\n' +
+        'curl -X POST https://api.your-domain.example/pricing/api/v1/reprice \\\n' +
         '  -H "X-API-Key: ' + apiKey + '" \\\n' +
         '  -H "Content-Type: application/json" \\\n' +
         '  -d \'{\n' +

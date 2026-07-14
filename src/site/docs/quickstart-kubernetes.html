@@ -156,7 +156,7 @@
           </thead>
           <tbody>
             <tr><td>Microservices</td><td>30+</td><td>Claims, Members, Eligibility, Payments, FHIR, Appeals, Capitation, encounters, provider workflows, and supporting services.</td></tr>
-            <tr><td>Portal</td><td>1</td><td>Blazor Server UI &mdash; same as <code>portal.cloudhealthoffice.com</code></td></tr>
+            <tr><td>Portal</td><td>1</td><td>Blazor Server UI you can expose on your own portal host after deployment</td></tr>
             <tr><td>MongoDB</td><td>1</td><td>StatefulSet with persistent storage</td></tr>
             <tr><td>Redis</td><td>1</td><td>Data-protection key store and caching</td></tr>
             <tr><td>Namespace</td><td><code>cloudhealthoffice</code></td><td>Matches production layout</td></tr>
@@ -328,7 +328,7 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error</co
 
         <div class="callout callout-success">
           <div class="callout-title">You're running production-equivalent Kubernetes!</div>
-          <p>You now have the same production-shaped microservices architecture running locally that powers <code>portal.cloudhealthoffice.com</code> in production. Same namespace, same DNS, same manifests, same health probes.</p>
+          <p>You now have the same production-shaped microservices architecture running locally that you can later expose behind your own portal and API hosts. Same namespace, same DNS, same manifests, same health probes.</p>
         </div>
 
         <!-- Production Comparison -->

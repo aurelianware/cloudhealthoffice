@@ -508,17 +508,17 @@ Run this whenever you add or update public docs/quickstart pages:
 
 1. Open Google Search Console for both properties:
   - `https://cloudhealthoffice.com`
-  - `https://portal.cloudhealthoffice.com`
+  - `https://your-portal-host.example`
 2. Submit or re-submit sitemaps:
   - `https://cloudhealthoffice.com/sitemap.xml`
-  - `https://portal.cloudhealthoffice.com/sitemap.xml`
+  - `https://your-portal-host.example/sitemap.xml`
 3. Use URL Inspection and click **Request Indexing** for updated quickstart URLs:
   - `https://cloudhealthoffice.com/portal`
   - `https://cloudhealthoffice.com/portal/api-docs`
-  - `https://portal.cloudhealthoffice.com/quickstarts/local-claims`
+  - `https://your-portal-host.example/quickstarts/local-claims`
 4. Verify crawler accessibility:
   - `https://cloudhealthoffice.com/robots.txt`
-  - `https://portal.cloudhealthoffice.com/robots.txt`
+  - `https://your-portal-host.example/robots.txt`
 5. Re-check Search Console coverage/enhancements after 24-72 hours.
 
 ### Quarterly Reviews
