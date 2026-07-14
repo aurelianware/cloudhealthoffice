@@ -97,7 +97,7 @@ function generateHtmlPage(title, content, filename) {
         <p>Compliance first. Progressive modernization next.</p>
         <div style="margin-top: 30px;">
           <a href="platform.html" class="button">Platform Overview</a>
-          <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button button-green" target="_blank" rel="noopener noreferrer">Contact Sales</a>
+          <a href="/contact" class="button button-green" target="_blank" rel="noopener noreferrer">Contact Sales</a>
           <a href="https://github.com/aurelianware/cloudhealthoffice" class="button button-secondary" target="_blank" rel="noopener noreferrer">Clone Repository</a>
         </div>
       </section>

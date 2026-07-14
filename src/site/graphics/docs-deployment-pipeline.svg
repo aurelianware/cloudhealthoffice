@@ -27,7 +27,7 @@
   <g transform="translate(200, 145)">
     <rect x="-75" y="-22" width="150" height="44" rx="7" fill="rgba(0,255,136,0.1)" stroke="#00ff88" stroke-width="1.5"/>
     <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Sign Up</text>
-    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">portal.cloudhealthoffice.com</text>
+    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">your-portal-host.example</text>
   </g>
   <line x1="280" y1="145" x2="370" y2="145" stroke="#00ff88" stroke-width="1" opacity="0.4" marker-end="url(#arrowGreen)"/>
   <g transform="translate(460, 145)">

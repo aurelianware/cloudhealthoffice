@@ -387,7 +387,7 @@
       <!-- ===== INTERACTIVE DEMO ===== -->
       <section class="assessment-section" id="try-it">
         <h2>Try It — Look Up a Rate</h2>
-        <p>Enter a CPT or HCPCS code to see the Medicare allowed amount. No signup needed.</p>
+        <p>Enter a CPT or HCPCS code to see sample Medicare repricing output. The public API host is not currently deployed.</p>
 
         <div class="lookup-demo">
           <div class="lookup-row">
@@ -436,8 +436,8 @@
             </div>
           </div>
           <p style="text-align:center; margin-top:16px; font-size:0.82rem; color:rgba(176,176,176,0.5);">
-            Powered by the Cloud Health Office Repricing API.
-            <a href="/pricing-api" style="color:#00ffff;">Get your free API key</a> for programmatic access.
+            Powered by the same pricing model used by Cloud Health Office.
+            <a href="/pricing-api" style="color:#00ffff;">Request API access</a> for programmatic evaluation.
           </p>
         </div>
       </section>
@@ -598,43 +598,58 @@
       const resultDiv = document.getElementById('lookupResult');
       resultDiv.classList.remove('visible');
 
-      let url = `https://api.cloudhealthoffice.com/pricing/api/v1/lookup/${encodeURIComponent(code)}?feeScheduleId=${encodeURIComponent(fs)}&facility=${facility}`;
-      if (locality) url += `&locality=${encodeURIComponent(locality)}`;
-
-      try {
-        const resp = await fetch(url);
-        const json = await resp.json();
-
-        if (!json.success || !json.data) {
-          document.getElementById('resultAmount').textContent = 'Not Found';
-          document.getElementById('resultCode').textContent = code;
-          document.getElementById('resultDesc').textContent = json.error?.message || 'Code not found in this fee schedule';
-          document.getElementById('resultWorkRvu').textContent = '—';
-          document.getElementById('resultPeRvu').textContent = '—';
-          document.getElementById('resultMpRvu').textContent = '—';
-          document.getElementById('resultCf').textContent = '—';
-          document.getElementById('resultSetting').textContent = '—';
-          document.getElementById('resultFs').textContent = fs;
-          resultDiv.classList.add('visible');
-          return;
+      const sampleRates = {
+        '99213': {
+          allowedAmount: 92.47,
+          description: 'Established patient office visit, level 3',
+          workRvu: 1.30,
+          practiceExpenseRvu: facility === 'true' ? 0.55 : 1.47,
+          malpracticeRvu: 0.10,
+          conversionFactor: 32.74
+        },
+        '27447': {
+          allowedAmount: 1357.92,
+          description: 'Total knee arthroplasty',
+          workRvu: 20.72,
+          practiceExpenseRvu: facility === 'true' ? 6.25 : 12.64,
+          malpracticeRvu: 3.12,
+          conversionFactor: 32.74
+        },
+        '43239': {
+          allowedAmount: 211.18,
+          description: 'EGD with biopsy',
+          workRvu: 2.39,
+          practiceExpenseRvu: facility === 'true' ? 1.42 : 4.76,
+          malpracticeRvu: 0.24,
+          conversionFactor: 32.74
         }
+      };
 
-        const d = json.data;
-        document.getElementById('resultAmount').textContent = '$' + d.allowedAmount.toFixed(2);
-        document.getElementById('resultCode').textContent = d.procedureCode;
-        document.getElementById('resultDesc').textContent = d.description || '—';
-        document.getElementById('resultWorkRvu').textContent = d.workRvu?.toFixed(2) || '—';
-        document.getElementById('resultPeRvu').textContent = d.practiceExpenseRvu?.toFixed(2) || '—';
-        document.getElementById('resultMpRvu').textContent = d.malpracticeRvu?.toFixed(2) || '—';
-        document.getElementById('resultCf').textContent = d.conversionFactor ? ('$' + d.conversionFactor.toFixed(2)) : '—';
-        document.getElementById('resultSetting').textContent = d.facility ? 'Facility' : 'Non-Facility';
-        document.getElementById('resultFs').textContent = d.feeScheduleId;
+      const d = sampleRates[code.toUpperCase()];
+      if (!d) {
+        document.getElementById('resultAmount').textContent = 'Sample Only';
+        document.getElementById('resultCode').textContent = code;
+        document.getElementById('resultDesc').textContent = 'Try 99213, 27447, or 43239. Hosted lookup access is available by request.';
+        document.getElementById('resultWorkRvu').textContent = '—';
+        document.getElementById('resultPeRvu').textContent = '—';
+        document.getElementById('resultMpRvu').textContent = '—';
+        document.getElementById('resultCf').textContent = '—';
+        document.getElementById('resultSetting').textContent = facility === 'true' ? 'Facility' : 'Non-Facility';
+        document.getElementById('resultFs').textContent = fs;
         resultDiv.classList.add('visible');
-      } catch (err) {
-        document.getElementById('resultAmount').textContent = 'Error';
-        document.getElementById('resultDesc').textContent = 'Could not reach the repricing API. Try again later.';
-        resultDiv.classList.add('visible');
+        return;
       }
+
+      document.getElementById('resultAmount').textContent = '$' + d.allowedAmount.toFixed(2);
+      document.getElementById('resultCode').textContent = code.toUpperCase();
+      document.getElementById('resultDesc').textContent = d.description + (locality ? ' · locality ' + locality : '');
+      document.getElementById('resultWorkRvu').textContent = d.workRvu.toFixed(2);
+      document.getElementById('resultPeRvu').textContent = d.practiceExpenseRvu.toFixed(2);
+      document.getElementById('resultMpRvu').textContent = d.malpracticeRvu.toFixed(2);
+      document.getElementById('resultCf').textContent = '$' + d.conversionFactor.toFixed(2);
+      document.getElementById('resultSetting').textContent = facility === 'true' ? 'Facility' : 'Non-Facility';
+      document.getElementById('resultFs').textContent = fs;
+      resultDiv.classList.add('visible');
     }
     // Allow Enter key in the code input
     document.getElementById('cptCode')?.addEventListener('keydown', function(e) {
