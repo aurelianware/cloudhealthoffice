@@ -3,18 +3,355 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="robots" content="noindex, follow" />
-  <meta http-equiv="refresh" content="0;url=/docs" />
+  <title>Documentation — Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office documentation. Quick start guides, 100K Million Claim Challenge evidence, CMS-0057-F compliance, architecture overview, API reference, and deployment guides for healthcare payer integration." />
+  <meta name="keywords" content="Cloud Health Office docs, CMS-0057-F compliance guide, healthcare payer integration documentation, FHIR R4 API reference, X12 EDI deployment guide, healthcare platform quick start" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs" />
-  <title>Documentation - Cloud Health Office</title>
-  <script>
-    window.location.replace('/docs');
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs" />
+  <meta property="og:title" content="Documentation — Cloud Health Office" />
+  <meta property="og:description" content="Quick start guides, 100K Million Claim Challenge evidence, CMS-0057-F compliance, architecture, API reference, and deployment for healthcare payer integration." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "Cloud Health Office Documentation",
+    "url": "https://cloudhealthoffice.com/docs",
+    "description": "Complete documentation for the Cloud Health Office healthcare payer integration platform, including quick starts, Million Claim Challenge evidence, architecture, APIs, and deployment references.",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Cloud Health Office",
+      "url": "https://cloudhealthoffice.com"
+    },
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" }
+      ]
+    }
+  }
   </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
 </head>
 <body>
-  <main>
-    <h1>Redirecting to Documentation</h1>
-    <p>If you are not redirected automatically, <a href="/docs">continue to the Cloud Health Office documentation</a>.</p>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs" class="active">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+              <li><a href="/docs/quickstart-kubernetes">Kubernetes Reference</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Testing &amp; Benchmarks</div>
+            <ul>
+              <li><a href="/docs/million-claim-challenge/evidence#episode-008">100K Evidence Archive</a></li>
+              <li><a href="/docs/million-claim-challenge">Million Claim Challenge</a></li>
+              <li><a href="/insights/million-claim-challenge">Engineering Series</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">State Compliance</div>
+            <ul>
+              <li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li>
+              <li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Docs</span>
+        </div>
+
+        <h1>Documentation</h1>
+        <p class="docs-subtitle">
+          Everything you need to evaluate, deploy, and operate Cloud Health Office &mdash; including the public evidence behind the clean 100,000-claim local Kubernetes validation.
+        </p>
+
+        <div class="docs-hub-grid">
+
+          <a href="/docs/million-claim-challenge/evidence#episode-008" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F4CA;</span>
+            <h3>100K Evidence Archive</h3>
+            <p>Inspect the clean 100,000-claim local Kubernetes run: zero platform failures, zero scoreable mismatches, zero unexpected pends, and payment checks within one cent.</p>
+            <span class="card-arrow">Inspect evidence &rarr;</span>
+          </a>
+
+          <a href="/insights/million-claim-challenge/part-8-clean-100k" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F4DD;</span>
+            <h3>Part 8: Clean 100K Run</h3>
+            <p>Read the narrative behind the latest proof: stronger correctness gates held at 100K, while fixture preparation became the next local scaling bottleneck.</p>
+            <span class="card-arrow">Read writeup &rarr;</span>
+          </a>
+
+          <a href="/docs/quickstart" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x26A1;</span>
+            <h3>Quick Start <span class="time-estimate">~15 min</span></h3>
+            <p>Clone the repo, deploy the full local Kubernetes platform, validate claims adjudication, and verify CRD discovery — no Azure account needed.</p>
+            <span class="card-arrow">Get started &rarr;</span>
+          </a>
+
+          <a href="/docs/quickstart-kubernetes" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x2638;</span>
+            <h3>Kubernetes Reference <span class="time-estimate">~15 min</span></h3>
+            <p>Deploy the full local Kubernetes platform on Docker Desktop Kubernetes with the same namespace, DNS, and manifest shape used for cloud validation.</p>
+            <span class="card-arrow">Kubernetes guide &rarr;</span>
+          </a>
+
+          <a href="/docs/million-claim-challenge" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F9EA;</span>
+            <h3>Million Claim Challenge</h3>
+            <p>Understand the deterministic corpus, answer key, workflow scoring, unsupported scenarios, payment gate, and proof ladder toward the full million.</p>
+            <span class="card-arrow">Benchmark guide &rarr;</span>
+          </a>
+
+          <a href="/docs/compliance" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x2705;</span>
+            <h3>CMS-0057-F Compliance</h3>
+            <p>Complete guide to meeting the January 2027 CMS Interoperability and Prior Authorization Rule. Patient Access, Provider Access, Payer-to-Payer, and Prior Auth APIs.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+
+          <a href="/docs/architecture" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F3D7;&#xFE0F;</span>
+            <h3>Architecture</h3>
+            <p>Multi-tenant SaaS platform architecture. Kubernetes-native with Argo Workflows, 36 microservices, 9 adjudication engines, and configuration-driven deployment.</p>
+            <span class="card-arrow">Explore &rarr;</span>
+          </a>
+
+          <a href="/docs/api" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F517;</span>
+            <h3>API Reference</h3>
+            <p>FHIR R4 APIs with OpenAPI 3.1 specs. Patient Access, Provider Access, Prior Authorization, Payer-to-Payer, Claims Scrubbing, Risk Adjustment, and Encounter.</p>
+            <span class="card-arrow">Browse APIs &rarr;</span>
+          </a>
+
+          <a href="/docs/deployment" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F680;</span>
+            <h3>Deployment</h3>
+            <p>From local Kubernetes to AKS, EKS, or GKE with environment-specific validation. Self-hosted deployment, GitHub Actions CI/CD, Bicep IaC, and Helm charts.</p>
+            <span class="card-arrow">Deploy &rarr;</span>
+          </a>
+
+          <a href="/docs/finance-guide" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F4B0;</span>
+            <h3>Finance Guide</h3>
+            <p>User guide for Premium Billing, Accounts Receivable, Capitation payments, and FFS payment runs. GL accounts, aging, cash posting, and provider contract management.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+
+          <a href="/docs/benefit-plan-guide" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F4CB;</span>
+            <h3>Benefit Plan Configuration</h3>
+            <p>Plan hierarchy, coverage tiers, cost sharing rules, accumulators, and network assignment. Configure commercial, Medicare Advantage, and Medicaid managed care benefit structures.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F4C4;</span>
+            <h3>Claims Adjudication</h3>
+            <p>10-step auto-adjudication pipeline from claim ingestion through payment. Clinical edits, NCCI/MUE, repricing, COB, work queues, and 835 ERA generation.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+
+          <a href="/docs/prior-auth-guide" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F512;</span>
+            <h3>Prior Authorization</h3>
+            <p>Authorization requests, decision engine with 400&ndash;600+ clinical pathways, lifecycle management, and CMS-0057-F CRD/DTR/PAS API implementation.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+
+          <a href="/docs/eligibility-guide" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F464;</span>
+            <h3>Eligibility &amp; Enrollment</h3>
+            <p>834 enrollment file processing, real-time 270/271 eligibility verification, PCP assignment, FHIR Coverage API, and member coverage lifecycle management.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+
+          <a href="/docs/fee-schedule-engine" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x2699;&#xFE0F;</span>
+            <h3>Fee Schedule Engine</h3>
+            <p>Fee schedule ingestion pipeline and claim-time pricing engine. Ingest any schedule, price any claim line, audit every decision &mdash; sub-millisecond from Redis hot cache.</p>
+            <span class="card-arrow">Explore &rarr;</span>
+          </a>
+
+          <a href="/docs/fee-schedule-guide" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F4B2;</span>
+            <h3>Fee Schedule</h3>
+            <p>Medicare RBRVS, Medicaid state schedules, commercial contracted rates, DRG inpatient pricing, multiple procedure reduction rules, and cross-schedule resolution.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+
+          <a href="/docs/terminology-guide" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F50D;</span>
+            <h3>Terminology Crosswalk</h3>
+            <p>SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance. Context-aware disambiguation, plan-specific overrides, and FHIR ConceptMap/$translate API.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+
+          <a href="/docs/provider-verification-guide" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x2705;</span>
+            <h3>Provider Verification</h3>
+            <p>Multi-source provider verification and integrity scoring. NPPES, OIG/LEIE exclusion screening, PECOS enrollment, CMS Open Payments, and FSMB license data aggregated into a composite 0&ndash;100 score.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Interested in a platform walkthrough?</div>
+          <p>Contact our sales team to schedule a guided walkthrough of the platform — claims, authorizations, eligibility, member management, and FHIR R4 APIs. The <a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a> provides interactive OpenAPI documentation you can explore right now.</p>
+          <p style="margin-top:12px;"><a href="/contact" style="color:#00ff88; font-weight:600;">Contact Sales →</a></p>
+        </div>
+
+      </div>
+    </div>
   </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F API surface, multi-clearinghouse EDI, FHIR R4 APIs, and inspectable claims benchmark evidence.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/quickstart-kubernetes">Kubernetes Reference</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/million-claim-challenge">Million Claim Challenge</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="/contact">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile sidebar toggle for docs pages
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('open');
+      });
+      overlay.addEventListener('click', () => {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+      });
+    }
+  </script>
 </body>
 </html>
