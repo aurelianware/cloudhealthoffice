@@ -187,8 +187,7 @@
     },
     {
       "route": "/schedule-demo",
-      "redirect": "/contact",
-      "statusCode": 302
+      "rewrite": "/schedule-demo/index.html"
     },
     {
       "route": "/docs/commercial-licensing",

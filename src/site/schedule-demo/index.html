@@ -3,47 +3,217 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="robots" content="noindex, follow" />
-  <meta http-equiv="refresh" content="0;url=/contact" />
-  <link rel="canonical" href="https://cloudhealthoffice.com/contact" />
-  <title>Schedule a Demo - Cloud Health Office</title>
-  <script>
-    window.location.replace('/contact');
-  </script>
+  <meta name="description" content="Book a Cloud Health Office product demo to review claims adjudication evidence, the Mass Adjudication console, CMS-0057-F APIs, and deployment options." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/schedule-demo" />
+  <meta property="og:title" content="Schedule a Product Demo - Cloud Health Office" />
+  <meta property="og:description" content="Book time to review Cloud Health Office product evidence, local Kubernetes claims benchmarks, and deployment options." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/schedule-demo" />
+  <title>Schedule a Product Demo - Cloud Health Office</title>
   <style>
+    :root {
+      color-scheme: dark;
+      --cyan: #00ffff;
+      --green: #00ff88;
+      --bg: #000;
+      --panel: rgba(0, 255, 255, 0.06);
+      --border: rgba(0, 255, 255, 0.22);
+      --muted: rgba(210, 220, 220, 0.72);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.12), transparent 34%),
+        linear-gradient(180deg, #050606 0%, var(--bg) 100%);
+      color: #fff;
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .nav {
       display: flex;
       align-items: center;
-      justify-content: center;
-      background: #000;
-      color: #b0b0b0;
-      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-      text-align: center;
-      padding: 24px;
+      justify-content: space-between;
+      gap: 24px;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 24px;
+    }
+
+    .brand {
+      color: #fff;
+      font-weight: 800;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+    }
+
+    .nav a:not(.brand) {
+      color: var(--cyan);
+      font-weight: 700;
+      text-decoration: none;
     }
 
     main {
-      max-width: 520px;
+      display: grid;
+      place-items: center;
+      min-height: calc(100vh - 88px);
+      padding: 32px 24px 80px;
+    }
+
+    .card {
+      width: min(760px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(10, 14, 14, 0.94), rgba(0, 0, 0, 0.92));
+      box-shadow: 0 0 42px rgba(0, 255, 255, 0.14);
+      padding: clamp(32px, 6vw, 56px);
+    }
+
+    .eyebrow {
+      color: var(--green);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin: 0 0 14px;
     }
 
     h1 {
-      color: #fff;
-      font-size: 1.8rem;
-      margin: 0 0 12px;
+      margin: 0 0 18px;
+      font-size: clamp(2.1rem, 5vw, 4rem);
+      line-height: 1.02;
+      letter-spacing: 0;
     }
 
-    a {
-      color: #00ffff;
-      font-weight: 700;
+    p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.75;
+      margin: 0 0 22px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin: 30px 0;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 14px 22px;
+      border-radius: 8px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-decoration: none;
+    }
+
+    .button-primary {
+      background: linear-gradient(90deg, #00c060, var(--green));
+      color: #000;
+    }
+
+    .button-secondary {
+      border: 1px solid var(--border);
+      color: var(--cyan);
+      background: var(--panel);
+    }
+
+    .details {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .detail {
+      border: 1px solid rgba(0, 255, 255, 0.14);
+      border-radius: 8px;
+      padding: 16px;
+      background: rgba(0, 255, 255, 0.04);
+    }
+
+    .detail strong {
+      display: block;
+      color: var(--cyan);
+      margin-bottom: 6px;
+    }
+
+    .detail span {
+      color: rgba(220, 230, 230, 0.72);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 720px) {
+      .nav {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .actions,
+      .button {
+        width: 100%;
+      }
+
+      .details {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
+  <nav class="nav" aria-label="Demo scheduling navigation">
+    <a class="brand" href="/">Cloud Health Office</a>
+    <a href="/contact">Contact Sales</a>
+  </nav>
+
   <main>
-    <h1>Redirecting to Contact Sales</h1>
-    <p>If you are not redirected automatically, <a href="/contact">continue to the Cloud Health Office contact form</a>.</p>
+    <section class="card" aria-labelledby="schedule-title">
+      <p class="eyebrow">Product demo</p>
+      <h1 id="schedule-title">Book time to review Cloud Health Office.</h1>
+      <p>
+        Use the calendar link to schedule a product walkthrough focused on your priorities:
+        claims adjudication evidence, the Mass Adjudication console, CMS-0057-F APIs,
+        source-available deployment, or the Million Claim Challenge benchmark path.
+      </p>
+
+      <div class="actions">
+        <a
+          class="button button-primary"
+          href="https://calendar.proton.me/bookings#t8cx42xrcsdyKpyO-u6tOusw7bHVaQdosjyL0txXTQA="
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Book on Proton Calendar
+        </a>
+        <a class="button button-secondary" href="/contact">Send details first</a>
+      </div>
+
+      <div class="details" aria-label="Demo topics">
+        <div class="detail">
+          <strong>Evidence</strong>
+          <span>Review the clean 100K local Kubernetes result and claim-level evidence path.</span>
+        </div>
+        <div class="detail">
+          <strong>Platform</strong>
+          <span>Walk through claims, eligibility, prior authorization, APIs, and operator console flows.</span>
+        </div>
+        <div class="detail">
+          <strong>Deployment</strong>
+          <span>Discuss running the source-available stack in your own cloud or local environment.</span>
+        </div>
+      </div>
+    </section>
   </main>
 </body>
 </html>
