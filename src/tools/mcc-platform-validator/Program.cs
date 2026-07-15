@@ -77,25 +77,23 @@ await MeasureLifecyclePhaseAsync(lifecycleTimings, "Validation plan setup", "Pre
     await CreateValidationPlanAsync(http, options, validationPlanId, json);
 });
 
-var claims = new List<SyntheticClaim>();
-await MeasureLifecyclePhaseAsync(lifecycleTimings, "Corpus generation", "Preparation", async () =>
-{
-    claims = await GenerateClaimsAsync(options);
-});
+var claims = await MeasureLifecycleValuePhaseAsync(
+    lifecycleTimings,
+    "Corpus generation",
+    "Preparation",
+    () => GenerateClaimsAsync(options));
 
-MccProviderFixturePoolResult? providerPool = null;
-await MeasureLifecyclePhaseAsync(lifecycleTimings, "Fixture normalization", "Preparation", () =>
+var providerPool = await MeasureLifecycleValuePhaseAsync(lifecycleTimings, "Fixture normalization", "Preparation", () =>
 {
     NormalizePriorAuthEdgeCases(claims, options);
     NormalizeValidationProviderProfiles(claims, options.Seed, validationPlanId);
     MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
     MccCleanPaidFixture.NormalizeClaims(claims);
-    providerPool = MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId);
-    return Task.CompletedTask;
+    return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId));
 });
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 Console.WriteLine(
-    $"Provider fixture pool: {providerPool!.ProvidersBefore:N0} -> {providerPool.ProvidersAfter:N0} distinct NPIs " +
+    $"Provider fixture pool: {providerPool.ProvidersBefore:N0} -> {providerPool.ProvidersAfter:N0} distinct NPIs " +
     $"({providerPool.ReusedAssignments:N0} assignments reused, {providerPool.ProtectedClaims:N0} provider-sensitive claims preserved)");
 var answerKey = MccAnswerKey.FromClaims(claims);
 
@@ -272,11 +270,24 @@ static async Task MeasureLifecyclePhaseAsync(
     string category,
     Func<Task> action)
 {
+    await MeasureLifecycleValuePhaseAsync(timings, label, category, async () =>
+    {
+        await action();
+        return true;
+    });
+}
+
+static async Task<T> MeasureLifecycleValuePhaseAsync<T>(
+    ICollection<MassAdjudicationLifecycleTiming> timings,
+    string label,
+    string category,
+    Func<Task<T>> action)
+{
     var startedAtUtc = DateTimeOffset.UtcNow;
     var sw = Stopwatch.StartNew();
     try
     {
-        await action();
+        return await action();
     }
     finally
     {
