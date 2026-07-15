@@ -2018,7 +2018,8 @@ static List<object> BuildDiagnosisCodes(SyntheticClaim claim)
         {
             code,
             codeQualifier = index == 0 ? "ABK" : "ABF",
-            pointerNumber = index + 1
+            pointerNumber = index + 1,
+            description = DiagnosisCodes.FindDescription(code)
         })
         .Cast<object>()
         .ToList();
