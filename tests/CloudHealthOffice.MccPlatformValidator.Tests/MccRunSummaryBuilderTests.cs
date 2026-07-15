@@ -210,7 +210,10 @@ public class MccRunSummaryBuilderTests
         Assert.Equal(108, summary.FixturePreparation.MembersCreated);
         Assert.Equal(892, summary.FixturePreparation.MembersExisting);
         Assert.Equal(1_000, summary.FixturePreparation.MemberStatusesAligned);
+        Assert.Equal(0, summary.FixturePreparation.CobCoverageCreated);
         Assert.Equal(9, summary.FixturePreparation.CobCoverageExisting);
+        Assert.Equal(0, summary.FixturePreparation.ProviderNetworksCreated);
+        Assert.Equal(2, summary.FixturePreparation.ProviderNetworksExisting);
         Assert.Equal(1_077, summary.FixturePreparation.ProvidersCreated);
         Assert.Equal(19, summary.FixturePreparation.ProvidersExisting);
     }

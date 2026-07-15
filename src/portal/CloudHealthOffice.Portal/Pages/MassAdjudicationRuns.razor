@@ -253,9 +253,12 @@
                     var fixture = _selectedRun.FixturePreparation!;
                     <MudDivider Class="my-3" Style="border-color: rgba(0,255,255,0.12);" />
                     <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65); font-weight: 700;">Fixture Preparation</MudText>
+                    <MudText Typo="Typo.caption" Class="d-block mt-1" Style="color: rgba(255,255,255,0.62);">
+                        Preparation bottleneck: @PreparationBottleneck(_selectedRun)
+                    </MudText>
                     <MudGrid Spacing="2" Class="mt-1 mb-3">
                         <MudItem xs="12" sm="6" md="4">
-                            @FixtureFact("Generated Corpus", $"{fixture.GeneratedClaims:N0} claims", PreparationBottleneck(_selectedRun))
+                            @FixtureFact("Generated Corpus", $"{fixture.GeneratedClaims:N0} claims", "deterministic synthetic claims")
                         </MudItem>
                         <MudItem xs="12" sm="6" md="4">
                             @FixtureFact(
@@ -267,25 +270,25 @@
                             @FixtureFact(
                                 "Members",
                                 $"{fixture.MembersCreated:N0} new / {fixture.MembersExisting:N0} existing",
-                                $"{fixture.MemberStatusesAligned:N0} statuses aligned")
+                                MemberFixtureLabel(_selectedRun, fixture))
                         </MudItem>
                         <MudItem xs="12" sm="6" md="4">
                             @FixtureFact(
                                 "COB Coverage",
                                 $"{fixture.CobCoverageCreated:N0} new / {fixture.CobCoverageExisting:N0} existing",
-                                "expected-pend coverage rows")
+                                CobCoverageLabel(_selectedRun, fixture))
                         </MudItem>
                         <MudItem xs="12" sm="6" md="4">
                             @FixtureFact(
                                 "Provider Networks",
                                 $"{fixture.ProviderNetworksCreated:N0} new / {fixture.ProviderNetworksExisting:N0} existing",
-                                "local MCC network fixtures")
+                                ProviderNetworkLabel(_selectedRun, fixture))
                         </MudItem>
                         <MudItem xs="12" sm="6" md="4">
                             @FixtureFact(
                                 "Providers",
                                 $"{fixture.ProvidersCreated:N0} new / {fixture.ProvidersExisting:N0} existing",
-                                ProviderCacheLabel(fixture))
+                                ProviderCacheLabel(_selectedRun, fixture))
                         </MudItem>
                     </MudGrid>
                 }
@@ -770,8 +773,16 @@
         return fixture is not null
             && (fixture.GeneratedClaims > 0
                 || fixture.ProviderPoolDistinctBefore > 0
+                || fixture.ProviderPoolDistinctAfter > 0
+                || fixture.ProviderPoolReusedAssignments > 0
+                || fixture.ProviderPoolProtectedClaims > 0
                 || fixture.MembersCreated > 0
                 || fixture.MembersExisting > 0
+                || fixture.MemberStatusesAligned > 0
+                || fixture.CobCoverageCreated > 0
+                || fixture.CobCoverageExisting > 0
+                || fixture.ProviderNetworksCreated > 0
+                || fixture.ProviderNetworksExisting > 0
                 || fixture.ProvidersCreated > 0
                 || fixture.ProvidersExisting > 0);
     }
@@ -788,12 +799,56 @@
             : $"{bottleneck.Label} · {FormatDuration(bottleneck.DurationMilliseconds)}";
     }
 
-    private static string ProviderCacheLabel(MassAdjudicationFixturePreparation fixture)
+    private static string MemberFixtureLabel(MassAdjudicationRunSummary run, MassAdjudicationFixturePreparation fixture)
     {
+        if (!run.Run.SeedMembers)
+        {
+            return "member seeding disabled";
+        }
+
+        var total = fixture.MembersCreated + fixture.MembersExisting;
+        return total <= 0
+            ? "no member fixtures needed"
+            : $"{fixture.MemberStatusesAligned:N0} statuses aligned";
+    }
+
+    private static string CobCoverageLabel(MassAdjudicationRunSummary run, MassAdjudicationFixturePreparation fixture)
+    {
+        if (!run.Run.SeedMembers)
+        {
+            return "member seeding disabled";
+        }
+
+        var total = fixture.CobCoverageCreated + fixture.CobCoverageExisting;
+        return total <= 0
+            ? "no expected-pend COB rows"
+            : "expected-pend coverage rows";
+    }
+
+    private static string ProviderNetworkLabel(MassAdjudicationRunSummary run, MassAdjudicationFixturePreparation fixture)
+    {
+        if (!run.Run.SeedProviders)
+        {
+            return "provider seeding disabled";
+        }
+
+        var total = fixture.ProviderNetworksCreated + fixture.ProviderNetworksExisting;
+        return total <= 0
+            ? "no network fixtures needed"
+            : "local MCC network fixtures";
+    }
+
+    private static string ProviderCacheLabel(MassAdjudicationRunSummary run, MassAdjudicationFixturePreparation fixture)
+    {
+        if (!run.Run.SeedProviders)
+        {
+            return "provider seeding disabled";
+        }
+
         var total = fixture.ProvidersCreated + fixture.ProvidersExisting;
         if (total <= 0)
         {
-            return "provider seeding disabled";
+            return "no provider fixtures needed";
         }
 
         var hitRate = (double)fixture.ProvidersExisting / total;
