@@ -153,21 +153,32 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
 
         var tolerance = MassAdjudicationPaymentTolerance.Normalize(paymentTolerance);
         var builder = Builders<MassAdjudicationClaimResult>.Filter;
+        var hasPaymentDelta = builder.Exists(x => x.PaymentDelta, true);
+        var hasNoPaymentDelta = builder.Or(
+            builder.Exists(x => x.PaymentDelta, false),
+            builder.Eq(x => x.PaymentDelta, null));
+
         switch (paymentStatus.Trim().ToLowerInvariant())
         {
             case "mismatched":
-                filters.Add(builder.Gt(x => x.PaymentDelta, tolerance));
+                filters.Add(builder.And(
+                    hasPaymentDelta,
+                    builder.Ne(x => x.PaymentDelta, null),
+                    builder.Gt(x => x.PaymentDelta, tolerance)));
                 break;
             case "matched":
                 filters.Add(builder.And(
+                    hasPaymentDelta,
                     builder.Ne(x => x.PaymentDelta, null),
                     builder.Lte(x => x.PaymentDelta, tolerance)));
                 break;
             case "scored":
-                filters.Add(builder.Ne(x => x.PaymentDelta, null));
+                filters.Add(builder.And(
+                    hasPaymentDelta,
+                    builder.Ne(x => x.PaymentDelta, null)));
                 break;
             case "unscored":
-                filters.Add(builder.Eq(x => x.PaymentDelta, null));
+                filters.Add(hasNoPaymentDelta);
                 break;
         }
     }
