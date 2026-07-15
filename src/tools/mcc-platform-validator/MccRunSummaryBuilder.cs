@@ -33,13 +33,7 @@ internal static class MccRunSummaryBuilder
         var p99 = Percentile(orderedDurations, 0.99);
         var throughput = results.Count / Math.Max(0.001, elapsed.TotalSeconds);
         var comparable = results
-            .Where(r => r.Outcome is ClaimValidationOutcome.Paid)
-            // Amount scoring is valid only when the expected amount was authored
-            // for the same benefit plan used by local adjudication. Generic MCC
-            // edge cases retain disposition scoring, but their amounts come from
-            // their original synthetic plans and are not contract-comparable.
-            .Where(r => r.ValidationScenario == MccWorkflowValidation.CleanProfessionalPaidScenario)
-            .Where(r => r.ActualPlanPayment.HasValue && r.ExpectedPlanPayment.HasValue)
+            .Where(IsPaymentComparable)
             .ToList();
         var avgDelta = comparable.Count == 0
             ? (decimal?)null
@@ -90,10 +84,8 @@ internal static class MccRunSummaryBuilder
                 r.FailureStage,
                 r.Error,
                 r.ActualPlanPayment,
-                r.ExpectedPlanPayment,
-                r.ActualPlanPayment.HasValue && r.ExpectedPlanPayment.HasValue
-                    ? Math.Abs(r.ActualPlanPayment.Value - r.ExpectedPlanPayment.Value)
-                    : null,
+                IsPaymentComparable(r) ? r.ExpectedPlanPayment : null,
+                PaymentDelta(r),
                 r.Elapsed.TotalMilliseconds,
                 r.SubmitElapsed.TotalMilliseconds,
                 r.AdjudicationElapsed.TotalMilliseconds,
@@ -252,17 +244,29 @@ internal static class MccRunSummaryBuilder
             return 2;
         }
 
-        if (result.Outcome is ClaimValidationOutcome.Paid
-            && result.ValidationScenario == MccWorkflowValidation.CleanProfessionalPaidScenario
-            && result.ActualPlanPayment.HasValue
-            && result.ExpectedPlanPayment.HasValue
-            && Math.Abs(result.ActualPlanPayment.Value - result.ExpectedPlanPayment.Value) > PaymentTolerance)
+        var paymentDelta = PaymentDelta(result);
+        if (paymentDelta.HasValue && paymentDelta.Value > PaymentTolerance)
         {
             return 3;
         }
 
         return 100;
     }
+
+    private static bool IsPaymentComparable(ClaimValidationResult result)
+        => result.Outcome is ClaimValidationOutcome.Paid
+        // Amount scoring is valid only when the expected amount was authored
+        // for the same benefit plan used by local adjudication. Generic MCC
+        // edge cases retain disposition scoring, but their amounts come from
+        // their original synthetic plans and are not contract-comparable.
+        && result.ValidationScenario == MccWorkflowValidation.CleanProfessionalPaidScenario
+        && result.ActualPlanPayment.HasValue
+        && result.ExpectedPlanPayment.HasValue;
+
+    private static decimal? PaymentDelta(ClaimValidationResult result)
+        => IsPaymentComparable(result)
+            ? Math.Abs(result.ActualPlanPayment!.Value - result.ExpectedPlanPayment!.Value)
+            : null;
 
     private static double Percentile(double[] values, double percentile)
     {

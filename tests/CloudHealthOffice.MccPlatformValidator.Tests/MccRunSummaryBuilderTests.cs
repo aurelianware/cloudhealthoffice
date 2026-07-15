@@ -105,6 +105,43 @@ public class MccRunSummaryBuilderTests
         Assert.Contains(summary.ClaimResults, r => r.GeneratedClaimId == "WRONG" && r.PaymentDelta == 1m);
     }
 
+    [Fact]
+    public void Build_PublishesPaymentDeltaOnlyForPaymentComparableRows()
+    {
+        var options = ValidatorOptions.Parse([
+            "--claims", "2",
+            "--claim-results-limit", "10"
+        ]);
+        var results = new List<ClaimValidationResult>
+        {
+            Result("CLEAN-WRONG", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)
+                with { ActualPlanPayment = 101m, ExpectedPlanPayment = 100m },
+            Result("EDGE-NOT-COMPARABLE", "EdgeCase:BehavioralHealthCarveIn", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)
+                with { ActualPlanPayment = 250m, ExpectedPlanPayment = 100m }
+        };
+
+        var summary = MccRunSummaryBuilder.Build(
+            results,
+            TimeSpan.FromSeconds(1),
+            options,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(1, summary.PaymentComparisons);
+        Assert.Equal(1, summary.PaymentMismatches);
+        Assert.Equal(1m, summary.MaximumPaymentDelta);
+
+        var cleanWrong = Assert.Single(summary.ClaimResults, r => r.GeneratedClaimId == "CLEAN-WRONG");
+        Assert.Equal(101m, cleanWrong.ActualPlanPayment);
+        Assert.Equal(100m, cleanWrong.ExpectedPlanPayment);
+        Assert.Equal(1m, cleanWrong.PaymentDelta);
+
+        var edgeCase = Assert.Single(summary.ClaimResults, r => r.GeneratedClaimId == "EDGE-NOT-COMPARABLE");
+        Assert.Equal(250m, edgeCase.ActualPlanPayment);
+        Assert.Null(edgeCase.ExpectedPlanPayment);
+        Assert.Null(edgeCase.PaymentDelta);
+    }
+
     private static ClaimValidationResult Result(
         string claimId,
         string? scenario,
