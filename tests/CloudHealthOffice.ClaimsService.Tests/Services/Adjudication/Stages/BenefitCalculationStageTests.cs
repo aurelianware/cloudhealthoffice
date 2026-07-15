@@ -72,6 +72,56 @@ public class BenefitCalculationStageTests
     }
 
     [Fact]
+    public async Task Execute_HappyPath_ClearsStaleDenialReason()
+    {
+        var planGuid = Guid.NewGuid();
+        var claim = BuildClaim(planGuid.ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+            AdjudicationResult = new AdjudicationResult
+            {
+                DenialReasonCode = "96",
+                DenialReason = "Prior denied projection"
+            }
+        };
+
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult
+            {
+                Success = true,
+                Totals = new ClaimTotals
+                {
+                    TotalAllowed = 80m,
+                    TotalMemberResponsibility = 29m,
+                    TotalPlanPaid = 51m,
+                },
+                Lines = new List<LineBenefitResult>
+                {
+                    new()
+                    {
+                        LineNumber = 1,
+                        IsCovered = true,
+                        AllowedAmount = 80m,
+                        PlanPaidAmount = 51m,
+                        MemberResponsibility = 29m,
+                    },
+                },
+            });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
+        Assert.Null(ctx.AdjudicationResult.DenialReason);
+        Assert.Equal(80m, ctx.AdjudicationResult.AllowedAmount);
+        Assert.Equal(51m, ctx.AdjudicationResult.PayerPayment);
+    }
+
+    [Fact]
     public async Task Execute_MissingBenefitPlanId_RejectsWithoutEngineCall()
     {
         var claim = BuildClaim(planId: null);

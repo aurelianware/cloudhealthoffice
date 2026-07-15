@@ -354,8 +354,53 @@ public class ClaimRepository : IClaimRepository
         {
             claim.VersionState = MapStatusToVersionState(claim.Status);
         }
+        NormalizeAdjudicationProjection(claim);
         return claim;
     }
+
+    internal static Claim NormalizeAdjudicationProjection(Claim claim)
+    {
+        if (!ShouldNormalizeFinancialSummary(claim.Status)
+            || claim.ClaimLines.Count == 0)
+        {
+            return claim;
+        }
+
+        var lineAllowed = claim.ClaimLines.Sum(l => l.AdjudicationResult?.AllowedAmount ?? 0m);
+        var linePaid = claim.ClaimLines.Sum(l => l.AdjudicationResult?.PaidAmount ?? 0m);
+        var linePatientResponsibility = claim.ClaimLines.Sum(l => l.AdjudicationResult?.PatientResponsibility ?? 0m);
+
+        if (lineAllowed == 0m && linePaid == 0m && linePatientResponsibility == 0m)
+        {
+            return claim;
+        }
+
+        claim.AdjudicationResult ??= new AdjudicationResult();
+        if (HasEmptyFinancialSummary(claim.AdjudicationResult))
+        {
+            claim.AdjudicationResult.AllowedAmount = lineAllowed;
+            claim.AdjudicationResult.PayerPayment = linePaid;
+            claim.AdjudicationResult.PatientResponsibility = linePatientResponsibility;
+        }
+
+        claim.AdjudicationResult.DenialReasonCode = null;
+        claim.AdjudicationResult.DenialReason = null;
+        return claim;
+    }
+
+    private static bool ShouldNormalizeFinancialSummary(ClaimStatus status) => status switch
+    {
+        ClaimStatus.Approved or ClaimStatus.Paid or ClaimStatus.PartiallyPaid => true,
+        _ => false
+    };
+
+    private static bool HasEmptyFinancialSummary(AdjudicationResult result) =>
+        result.AllowedAmount == 0m
+        && result.PayerPayment == 0m
+        && result.PatientResponsibility == 0m
+        && result.DeductibleAmount == 0m
+        && result.CoinsuranceAmount == 0m
+        && result.CopayAmount == 0m;
 
     /// <summary>
     /// Maps the legacy <see cref="ClaimStatus"/> operational signal onto a

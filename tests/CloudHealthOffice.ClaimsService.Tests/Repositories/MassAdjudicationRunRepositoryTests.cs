@@ -1,5 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using EphemeralMongo;
 using FluentAssertions;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
@@ -336,6 +337,95 @@ public class MassAdjudicationRunRepositoryTests
             .Should().Equal("GEN-PAYMENT-MISMATCH", "GEN-PAYMENT-ROUNDING", "GEN-PAYMENT-EXACT");
         unscored.Should().ContainSingle()
             .Which.GeneratedClaimId.Should().Be("GEN-PAYMENT-UNSCORED");
+    }
+
+    [Fact]
+    public async Task ListClaimResultsAsync_mongo_payment_status_excludes_missing_payment_delta_from_scored_filters()
+    {
+        var runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
+        try
+        {
+            var client = new MongoClient(runner.ConnectionString);
+            var database = client.GetDatabase($"mass_run_repo_test_{Guid.NewGuid():N}");
+            var repo = new MassAdjudicationRunRepositoryMongo(database);
+
+            var summary = CreateSummary();
+            summary.Id = "run-payment-filter";
+            summary.ClaimResults.AddRange(new[]
+            {
+                new MassAdjudicationClaimResult
+                {
+                    GeneratedClaimId = "GEN-PAYMENT-MATCHED",
+                    ClaimType = "Professional",
+                    Outcome = "Paid",
+                    ValidationStatus = "Matched",
+                    PaymentDelta = 0.01m,
+                    ElapsedMilliseconds = 10
+                },
+                new MassAdjudicationClaimResult
+                {
+                    GeneratedClaimId = "GEN-PAYMENT-MISMATCHED",
+                    ClaimType = "Professional",
+                    Outcome = "Paid",
+                    ValidationStatus = "Matched",
+                    PaymentDelta = 0.02m,
+                    ElapsedMilliseconds = 20
+                }
+            });
+
+            var saved = await repo.SaveAsync(summary);
+            var rawClaimResults = database.GetCollection<BsonDocument>(
+                MassAdjudicationRunRepositoryMongo.ClaimResultsCollectionName);
+            await rawClaimResults.InsertOneAsync(new BsonDocument
+            {
+                ["_id"] = "missing-payment-delta",
+                ["RunId"] = saved.Id,
+                ["TenantId"] = saved.Run.TenantId,
+                ["GeneratedClaimId"] = "GEN-PAYMENT-MISSING",
+                ["ClaimType"] = "Professional",
+                ["ValidationStatus"] = "Matched",
+                ["Outcome"] = "Paid",
+                ["AdjudicationSuccess"] = true,
+                ["ElapsedMilliseconds"] = 30d,
+                ["CreatedAtUtc"] = DateTime.UtcNow
+            });
+
+            var matched = await repo.ListClaimResultsAsync(
+                saved.Run.TenantId,
+                saved.Id,
+                outcome: null,
+                validationStatus: null,
+                paymentStatus: "Matched",
+                paymentTolerance: 0.01m,
+                limit: 10);
+            var scored = await repo.ListClaimResultsAsync(
+                saved.Run.TenantId,
+                saved.Id,
+                outcome: null,
+                validationStatus: null,
+                paymentStatus: "Scored",
+                paymentTolerance: 0.01m,
+                limit: 10);
+            var unscored = await repo.ListClaimResultsAsync(
+                saved.Run.TenantId,
+                saved.Id,
+                outcome: null,
+                validationStatus: null,
+                paymentStatus: "Unscored",
+                paymentTolerance: 0.01m,
+                limit: 10);
+
+            matched.Select(x => x.GeneratedClaimId).Should().Equal("GEN-PAYMENT-MATCHED");
+            scored.Select(x => x.GeneratedClaimId)
+                .Should().Equal("GEN-PAYMENT-MISMATCHED", "GEN-PAYMENT-MATCHED");
+            unscored.Should().ContainSingle()
+                .Which.GeneratedClaimId.Should().Be("GEN-PAYMENT-MISSING");
+        }
+        finally
+        {
+            try { runner.Dispose(); }
+            catch (TypeLoadException) { /* see ProviderVersionEventPublisherTests note */ }
+        }
     }
 
     [Fact]
