@@ -4,7 +4,7 @@ namespace CloudHealthOffice.BenchmarkClaimGenerator.ReferenceData;
 /// Common ICD-10-CM diagnosis codes used in synthetic claim generation.
 /// Codes are organized by clinical category for realistic claim construction.
 /// </summary>
-internal static class DiagnosisCodes
+public static class DiagnosisCodes
 {
     /// <summary>General/primary care diagnosis codes.</summary>
     internal static readonly (string Code, string Description)[] General =
@@ -101,4 +101,27 @@ internal static class DiagnosisCodes
         ("P07.39", "Other preterm newborn"),
         ("P92.5", "Neonatal difficulty in feeding at breast")
     };
+
+    /// <summary>Returns the display description for a known synthetic ICD-10-CM diagnosis code.</summary>
+    public static string? FindDescription(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        return AllCodes()
+            .FirstOrDefault(dx => string.Equals(dx.Code, code, StringComparison.OrdinalIgnoreCase))
+            .Description;
+    }
+
+    private static IEnumerable<(string Code, string Description)> AllCodes()
+    {
+        foreach (var diagnosisCode in General) yield return diagnosisCode;
+        foreach (var diagnosisCode in Surgical) yield return diagnosisCode;
+        foreach (var diagnosisCode in Emergency) yield return diagnosisCode;
+        foreach (var diagnosisCode in BehavioralHealth) yield return diagnosisCode;
+        foreach (var diagnosisCode in Dental) yield return diagnosisCode;
+        foreach (var diagnosisCode in Newborn) yield return diagnosisCode;
+    }
 }

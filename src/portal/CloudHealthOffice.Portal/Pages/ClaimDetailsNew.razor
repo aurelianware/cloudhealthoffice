@@ -266,7 +266,9 @@
                             <MudText Typo="Typo.body2" Style="font-family: monospace; font-weight: 600;">@context.Code</MudText>
                         </MudTd>
                         <MudTd DataLabel="Description">
-                            <MudText Typo="Typo.body2">@context.Description</MudText>
+                            <MudText Typo="Typo.body2">
+                                @(string.IsNullOrWhiteSpace(context.Description) ? "Description unavailable" : context.Description)
+                            </MudText>
                         </MudTd>
                         <MudTd DataLabel="Type">
                             <MudChip Size="Size.Small" Variant="Variant.Outlined">@context.Type</MudChip>
