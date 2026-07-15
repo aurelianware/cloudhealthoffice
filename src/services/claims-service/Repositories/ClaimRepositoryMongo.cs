@@ -60,6 +60,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         {
             claim.VersionState = ClaimRepository.MapStatusToVersionState(claim.Status);
         }
+        ClaimRepository.NormalizeAdjudicationProjection(claim);
         return claim;
     }
 
