@@ -48,30 +48,49 @@ Console.WriteLine($"  Pend observe:{(options.PendObservationEnabled ? $" enabled
 Console.WriteLine($"  Pend diag:   {(options.PendDiagnosticsPath is not null ? $"enabled -> {options.PendDiagnosticsPath}" : "disabled")}");
 Console.WriteLine();
 
-await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
-await RequireHealthyAsync(http, $"{options.BenefitUrl}/health", "benefit-plan-service");
-if (options.SeedMembers)
-{
-    await RequireHealthyAsync(http, $"{options.MemberUrl}/health", "member-service");
-    await RequireHealthyAsync(http, $"{options.CoverageUrl}/health", "coverage-service");
-}
-if (options.SeedProviders)
-{
-    await RequireHealthyAsync(http, $"{options.ProviderUrl}/health", "provider-service");
-}
+var lifecycleTimings = new List<MassAdjudicationLifecycleTiming>();
 
-await SeedNcciAsync(http, options, json);
-await SeedPriorAuthRulesAsync(http, options, json);
+await MeasureLifecyclePhaseAsync(lifecycleTimings, "Service health checks", "Preparation", async () =>
+{
+    await RequireHealthyAsync(http, $"{options.ClaimsUrl}/health", "claims-service");
+    await RequireHealthyAsync(http, $"{options.BenefitUrl}/health", "benefit-plan-service");
+    if (options.SeedMembers)
+    {
+        await RequireHealthyAsync(http, $"{options.MemberUrl}/health", "member-service");
+        await RequireHealthyAsync(http, $"{options.CoverageUrl}/health", "coverage-service");
+    }
+    if (options.SeedProviders)
+    {
+        await RequireHealthyAsync(http, $"{options.ProviderUrl}/health", "provider-service");
+    }
+});
+
+await MeasureLifecyclePhaseAsync(lifecycleTimings, "Reference rule seeding", "Preparation", async () =>
+{
+    await SeedNcciAsync(http, options, json);
+    await SeedPriorAuthRulesAsync(http, options, json);
+});
 
 var validationPlanId = Guid.NewGuid();
-await CreateValidationPlanAsync(http, options, validationPlanId, json);
+await MeasureLifecyclePhaseAsync(lifecycleTimings, "Validation plan setup", "Preparation", async () =>
+{
+    await CreateValidationPlanAsync(http, options, validationPlanId, json);
+});
 
-var claims = await GenerateClaimsAsync(options);
-NormalizePriorAuthEdgeCases(claims, options);
-NormalizeValidationProviderProfiles(claims, options.Seed, validationPlanId);
-MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
-MccCleanPaidFixture.NormalizeClaims(claims);
-var providerPool = MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId);
+var claims = await MeasureLifecycleValuePhaseAsync(
+    lifecycleTimings,
+    "Corpus generation",
+    "Preparation",
+    () => GenerateClaimsAsync(options));
+
+var providerPool = await MeasureLifecycleValuePhaseAsync(lifecycleTimings, "Fixture normalization", "Preparation", () =>
+{
+    NormalizePriorAuthEdgeCases(claims, options);
+    NormalizeValidationProviderProfiles(claims, options.Seed, validationPlanId);
+    MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
+    MccCleanPaidFixture.NormalizeClaims(claims);
+    return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId));
+});
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 Console.WriteLine(
     $"Provider fixture pool: {providerPool.ProvidersBefore:N0} -> {providerPool.ProvidersAfter:N0} distinct NPIs " +
@@ -80,14 +99,20 @@ var answerKey = MccAnswerKey.FromClaims(claims);
 
 if (options.SeedMembers)
 {
-    await SeedMembersAsync(http, options, claims, json);
-    await SeedCoverageAsync(http, options, claims, validationPlanId, json);
+    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Member and coverage seeding", "Preparation", async () =>
+    {
+        await SeedMembersAsync(http, options, claims, json);
+        await SeedCoverageAsync(http, options, claims, validationPlanId, json);
+    });
 }
 
 if (options.SeedProviders)
 {
-    await SeedProviderNetworksAsync(http, options, json);
-    await SeedProvidersAsync(http, options, claims, validationPlanId, json);
+    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Provider seeding", "Preparation", async () =>
+    {
+        await SeedProviderNetworksAsync(http, options, json);
+        await SeedProvidersAsync(http, options, claims, validationPlanId, json);
+    });
 }
 
 var results = new ConcurrentBag<ClaimValidationResult>();
@@ -113,6 +138,7 @@ if (!options.NoPublishSummary)
     await PublishSummaryAsync(http, options, initialProgress, json, quiet: true);
 }
 
+var processingStartedAtUtc = DateTimeOffset.UtcNow;
 total.Start();
 await Parallel.ForEachAsync(
     claims,
@@ -169,6 +195,7 @@ await Parallel.ForEachAsync(
     });
 
 total.Stop();
+AddLifecycleTiming(lifecycleTimings, "Timed adjudication", "Processing", processingStartedAtUtc, DateTimeOffset.UtcNow, total.Elapsed);
 Task? pendingProgressPublish;
 lock (latestProgressPublishLock)
 {
@@ -188,15 +215,24 @@ var orderedResults = results
 
 if (options.PendObservationEnabled)
 {
-    orderedResults = await ObserveExpectedPendResultsAsync(http, options, orderedResults);
-    orderedResults = await DetectUnexpectedPendResultsAsync(http, options, orderedResults);
+    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Expected-pend observation", "Observation", async () =>
+    {
+        orderedResults = await ObserveExpectedPendResultsAsync(http, options, orderedResults);
+    });
+    await MeasureLifecyclePhaseAsync(lifecycleTimings, "False-pend sweep", "Observation", async () =>
+    {
+        orderedResults = await DetectUnexpectedPendResultsAsync(http, options, orderedResults);
+    });
 }
 
 if (!string.IsNullOrWhiteSpace(options.PendDiagnosticsPath))
 {
-    var diagnosticsReport = await PendDiagnostics.CollectAsync(http, options, orderedResults);
-    await PendDiagnostics.WriteReportAsync(options.PendDiagnosticsPath, diagnosticsReport, json);
-    PendDiagnostics.PrintAggregateTable(diagnosticsReport);
+    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Pend diagnostics", "Diagnostics", async () =>
+    {
+        var diagnosticsReport = await PendDiagnostics.CollectAsync(http, options, orderedResults);
+        await PendDiagnostics.WriteReportAsync(options.PendDiagnosticsPath, diagnosticsReport, json);
+        PendDiagnostics.PrintAggregateTable(diagnosticsReport);
+    });
 }
 
 var summary = MccRunSummaryBuilder.Build(
@@ -209,7 +245,8 @@ var summary = MccRunSummaryBuilder.Build(
     "Completed",
     options.Claims,
     CreateProgress(orderedResults, total.Elapsed, options, "Completed"),
-    publishClaimResults: true);
+    publishClaimResults: true,
+    lifecycleTimings: lifecycleTimings);
 WriteSummary(summary);
 
 if (!string.IsNullOrWhiteSpace(options.SummaryJsonPath))
@@ -225,6 +262,54 @@ if (!options.NoPublishSummary)
 if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure))
 {
     Environment.ExitCode = 1;
+}
+
+static async Task MeasureLifecyclePhaseAsync(
+    ICollection<MassAdjudicationLifecycleTiming> timings,
+    string label,
+    string category,
+    Func<Task> action)
+{
+    await MeasureLifecycleValuePhaseAsync(timings, label, category, async () =>
+    {
+        await action();
+        return true;
+    });
+}
+
+static async Task<T> MeasureLifecycleValuePhaseAsync<T>(
+    ICollection<MassAdjudicationLifecycleTiming> timings,
+    string label,
+    string category,
+    Func<Task<T>> action)
+{
+    var startedAtUtc = DateTimeOffset.UtcNow;
+    var sw = Stopwatch.StartNew();
+    try
+    {
+        return await action();
+    }
+    finally
+    {
+        sw.Stop();
+        AddLifecycleTiming(timings, label, category, startedAtUtc, DateTimeOffset.UtcNow, sw.Elapsed);
+    }
+}
+
+static void AddLifecycleTiming(
+    ICollection<MassAdjudicationLifecycleTiming> timings,
+    string label,
+    string category,
+    DateTimeOffset startedAtUtc,
+    DateTimeOffset completedAtUtc,
+    TimeSpan duration)
+{
+    timings.Add(new MassAdjudicationLifecycleTiming(
+        label,
+        category,
+        Math.Max(0, duration.TotalMilliseconds),
+        startedAtUtc,
+        completedAtUtc));
 }
 
 static async Task<ClaimValidationResult> ProcessClaimAsync(
@@ -2070,6 +2155,7 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     Console.WriteLine($"  Throughput:         {summary.ThroughputClaimsPerSecond:N2} claims/sec");
     Console.WriteLine($"  P95 latency:        {summary.P95LatencyMilliseconds:N0} ms");
     Console.WriteLine($"  P99 latency:        {summary.P99LatencyMilliseconds:N0} ms");
+    WriteLifecycleTimings(summary.LifecycleTimings);
     WriteStageTiming(summary.SubmitTiming);
     WriteStageTiming(summary.AdjudicateTiming);
     WriteStageTiming(summary.WritebackTiming);
@@ -2109,6 +2195,31 @@ static void WriteStageTiming(MassAdjudicationStageTiming? timing)
 
     Console.WriteLine($"  {timing.Label,-12} avg/p95: {timing.AverageMilliseconds:N0} ms / {timing.P95Milliseconds:N0} ms");
 }
+
+static void WriteLifecycleTimings(IReadOnlyList<MassAdjudicationLifecycleTiming> timings)
+{
+    if (timings.Count == 0)
+    {
+        return;
+    }
+
+    var preparationMilliseconds = timings
+        .Where(t => string.Equals(t.Category, "Preparation", StringComparison.OrdinalIgnoreCase))
+        .Sum(t => t.DurationMilliseconds);
+    var lifecycleMilliseconds = timings.Sum(t => t.DurationMilliseconds);
+
+    Console.WriteLine($"  Preparation time:   {FormatDuration(TimeSpan.FromMilliseconds(preparationMilliseconds))}");
+    Console.WriteLine($"  Tracked lifecycle:  {FormatDuration(TimeSpan.FromMilliseconds(lifecycleMilliseconds))}");
+    foreach (var timing in timings)
+    {
+        Console.WriteLine($"  Lifecycle.{timing.Label,-28} {FormatDuration(TimeSpan.FromMilliseconds(timing.DurationMilliseconds))}");
+    }
+}
+
+static string FormatDuration(TimeSpan duration)
+    => duration.TotalHours >= 1
+        ? duration.ToString("h\\:mm\\:ss")
+        : duration.ToString("m\\:ss\\.fff");
 
 static async Task WriteSummaryJsonAsync(string path, MassAdjudicationRunSummary summary, JsonSerializerOptions json)
 {
@@ -2184,6 +2295,7 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         null,
         null,
         Array.Empty<MassAdjudicationStageTiming>(),
+        Array.Empty<MassAdjudicationLifecycleTiming>(),
         null,
         MccRunSummaryBuilder.PaymentTolerance,
         0,
@@ -2433,6 +2545,7 @@ internal sealed record MassAdjudicationRunSummary(
     MassAdjudicationStageTiming? AdjudicateTiming,
     MassAdjudicationStageTiming? WritebackTiming,
     IReadOnlyList<MassAdjudicationStageTiming> AdjudicationStepTimings,
+    IReadOnlyList<MassAdjudicationLifecycleTiming> LifecycleTimings,
     decimal? AveragePaymentDelta,
     decimal PaymentTolerance,
     int PaymentComparisons,
@@ -2480,6 +2593,13 @@ internal sealed record MassAdjudicationStageTiming(
     string Label,
     double AverageMilliseconds,
     double P95Milliseconds);
+
+internal sealed record MassAdjudicationLifecycleTiming(
+    string Label,
+    string Category,
+    double DurationMilliseconds,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset CompletedAtUtc);
 
 internal sealed record MassAdjudicationBusinessDenialSummary(
     string Code,
