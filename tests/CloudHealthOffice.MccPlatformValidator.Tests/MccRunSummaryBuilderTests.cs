@@ -171,6 +171,50 @@ public class MccRunSummaryBuilderTests
         Assert.Equal(completedAt, timing.CompletedAtUtc);
     }
 
+    [Fact]
+    public void Build_IncludesFixturePreparationSummary()
+    {
+        var startedAt = DateTimeOffset.Parse("2026-07-14T00:00:00Z");
+        var completedAt = DateTimeOffset.Parse("2026-07-14T00:00:01Z");
+        var options = ValidatorOptions.Parse(["--claims", "1"]);
+        var fixturePreparation = new MassAdjudicationFixturePreparation(
+            GeneratedClaims: 1_000,
+            ProviderPoolDistinctBefore: 2_000,
+            ProviderPoolDistinctAfter: 1_096,
+            ProviderPoolReusedAssignments: 904,
+            ProviderPoolProtectedClaims: 28,
+            MembersCreated: 108,
+            MembersExisting: 892,
+            MemberStatusesAligned: 1_000,
+            CobCoverageCreated: 0,
+            CobCoverageExisting: 9,
+            ProviderNetworksCreated: 0,
+            ProviderNetworksExisting: 2,
+            ProvidersCreated: 1_077,
+            ProvidersExisting: 19);
+
+        var summary = MccRunSummaryBuilder.Build(
+            [Result("MCC-1", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)],
+            TimeSpan.FromSeconds(1),
+            options,
+            startedAt,
+            completedAt,
+            fixturePreparation: fixturePreparation);
+
+        Assert.NotNull(summary.FixturePreparation);
+        Assert.Equal(1_000, summary.FixturePreparation.GeneratedClaims);
+        Assert.Equal(2_000, summary.FixturePreparation.ProviderPoolDistinctBefore);
+        Assert.Equal(1_096, summary.FixturePreparation.ProviderPoolDistinctAfter);
+        Assert.Equal(904, summary.FixturePreparation.ProviderPoolReusedAssignments);
+        Assert.Equal(28, summary.FixturePreparation.ProviderPoolProtectedClaims);
+        Assert.Equal(108, summary.FixturePreparation.MembersCreated);
+        Assert.Equal(892, summary.FixturePreparation.MembersExisting);
+        Assert.Equal(1_000, summary.FixturePreparation.MemberStatusesAligned);
+        Assert.Equal(9, summary.FixturePreparation.CobCoverageExisting);
+        Assert.Equal(1_077, summary.FixturePreparation.ProvidersCreated);
+        Assert.Equal(19, summary.FixturePreparation.ProvidersExisting);
+    }
+
     private static ClaimValidationResult Result(
         string claimId,
         string? scenario,

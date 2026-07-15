@@ -248,6 +248,48 @@
                     <MudItem xs="12" md="4">@RunFact("Seeding", $"members {OnOff(_selectedRun.Run.SeedMembers)} · providers {OnOff(_selectedRun.Run.SeedProviders)}")</MudItem>
                 </MudGrid>
 
+                @if (HasFixturePreparation(_selectedRun))
+                {
+                    var fixture = _selectedRun.FixturePreparation!;
+                    <MudDivider Class="my-3" Style="border-color: rgba(0,255,255,0.12);" />
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65); font-weight: 700;">Fixture Preparation</MudText>
+                    <MudGrid Spacing="2" Class="mt-1 mb-3">
+                        <MudItem xs="12" sm="6" md="4">
+                            @FixtureFact("Generated Corpus", $"{fixture.GeneratedClaims:N0} claims", PreparationBottleneck(_selectedRun))
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            @FixtureFact(
+                                "Provider Pool",
+                                $"{fixture.ProviderPoolDistinctBefore:N0} -> {fixture.ProviderPoolDistinctAfter:N0}",
+                                $"{fixture.ProviderPoolReusedAssignments:N0} reused · {fixture.ProviderPoolProtectedClaims:N0} protected")
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            @FixtureFact(
+                                "Members",
+                                $"{fixture.MembersCreated:N0} new / {fixture.MembersExisting:N0} existing",
+                                $"{fixture.MemberStatusesAligned:N0} statuses aligned")
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            @FixtureFact(
+                                "COB Coverage",
+                                $"{fixture.CobCoverageCreated:N0} new / {fixture.CobCoverageExisting:N0} existing",
+                                "expected-pend coverage rows")
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            @FixtureFact(
+                                "Provider Networks",
+                                $"{fixture.ProviderNetworksCreated:N0} new / {fixture.ProviderNetworksExisting:N0} existing",
+                                "local MCC network fixtures")
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            @FixtureFact(
+                                "Providers",
+                                $"{fixture.ProvidersCreated:N0} new / {fixture.ProvidersExisting:N0} existing",
+                                ProviderCacheLabel(fixture))
+                        </MudItem>
+                    </MudGrid>
+                }
+
                 <MudGrid Spacing="2">
                     <MudItem xs="12" sm="4">@Timing(_selectedRun.SubmitTiming)</MudItem>
                     <MudItem xs="12" sm="4">@Timing(_selectedRun.AdjudicateTiming)</MudItem>
@@ -722,6 +764,42 @@
     private static double LifecycleDuration(MassAdjudicationRunSummary run)
         => run.LifecycleTimings.Sum(t => t.DurationMilliseconds);
 
+    private static bool HasFixturePreparation(MassAdjudicationRunSummary run)
+    {
+        var fixture = run.FixturePreparation;
+        return fixture is not null
+            && (fixture.GeneratedClaims > 0
+                || fixture.ProviderPoolDistinctBefore > 0
+                || fixture.MembersCreated > 0
+                || fixture.MembersExisting > 0
+                || fixture.ProvidersCreated > 0
+                || fixture.ProvidersExisting > 0);
+    }
+
+    private static string PreparationBottleneck(MassAdjudicationRunSummary run)
+    {
+        var bottleneck = run.LifecycleTimings
+            .Where(t => string.Equals(t.Category, "Preparation", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(t => t.DurationMilliseconds)
+            .FirstOrDefault();
+
+        return bottleneck is null
+            ? "preparation timing unavailable"
+            : $"{bottleneck.Label} · {FormatDuration(bottleneck.DurationMilliseconds)}";
+    }
+
+    private static string ProviderCacheLabel(MassAdjudicationFixturePreparation fixture)
+    {
+        var total = fixture.ProvidersCreated + fixture.ProvidersExisting;
+        if (total <= 0)
+        {
+            return "provider seeding disabled";
+        }
+
+        var hitRate = (double)fixture.ProvidersExisting / total;
+        return $"{hitRate:P0} already present";
+    }
+
     private static string FormatDuration(double milliseconds)
     {
         var duration = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
@@ -841,6 +919,28 @@
         builder.AddAttribute(8, "Typo", Typo.body2);
         builder.AddAttribute(9, "Style", "color: #e2e8f0; font-family: monospace;");
         builder.AddAttribute(10, "ChildContent", (RenderFragment)(b => b.AddContent(11, value)));
+        builder.CloseComponent();
+        builder.CloseElement();
+    };
+
+    private RenderFragment FixtureFact(string label, string value, string detail) => builder =>
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "style", "border: 1px solid rgba(250,204,21,0.25); background: rgba(250,204,21,0.06); border-radius: 8px; padding: 10px; min-height: 76px;");
+        builder.OpenComponent<MudText>(2);
+        builder.AddAttribute(3, "Typo", Typo.caption);
+        builder.AddAttribute(4, "Style", "color: rgba(255,255,255,0.55);");
+        builder.AddAttribute(5, "ChildContent", (RenderFragment)(b => b.AddContent(6, label)));
+        builder.CloseComponent();
+        builder.OpenComponent<MudText>(7);
+        builder.AddAttribute(8, "Typo", Typo.body2);
+        builder.AddAttribute(9, "Style", "color: #facc15; font-family: monospace; font-weight: 700;");
+        builder.AddAttribute(10, "ChildContent", (RenderFragment)(b => b.AddContent(11, value)));
+        builder.CloseComponent();
+        builder.OpenComponent<MudText>(12);
+        builder.AddAttribute(13, "Typo", Typo.caption);
+        builder.AddAttribute(14, "Style", "color: rgba(255,255,255,0.62);");
+        builder.AddAttribute(15, "ChildContent", (RenderFragment)(b => b.AddContent(16, detail)));
         builder.CloseComponent();
         builder.CloseElement();
     };
