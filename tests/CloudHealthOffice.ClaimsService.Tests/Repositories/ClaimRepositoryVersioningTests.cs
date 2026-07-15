@@ -84,6 +84,45 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
         hydrated.VersionState.Should().Be(ClaimVersionState.Adjudicated);
     }
 
+    [Fact]
+    public async Task ApprovedRow_with_empty_claim_financials_hydrates_from_line_adjudication()
+    {
+        var collection = _database.GetCollection<Claim>("Claims");
+        var doc = Sample("legacy-approved-financials");
+        doc.Status = ClaimStatus.Approved;
+        doc.AdjudicationResult = new AdjudicationResult
+        {
+            DenialReasonCode = "96",
+            DenialReason = "Stale denial projection"
+        };
+        doc.ClaimLines.Add(new ClaimLine
+        {
+            LineNumber = 1,
+            ProcedureCode = "99203",
+            Units = 1,
+            ChargeAmount = 191m,
+            ServiceDateFrom = doc.ServiceDateFrom,
+            ServiceDateTo = doc.ServiceDateTo,
+            AdjudicationResult = new LineAdjudicationResult
+            {
+                AllowedAmount = 191m,
+                PaidAmount = 161m,
+                PatientResponsibility = 30m
+            }
+        });
+        await collection.InsertOneAsync(doc);
+
+        var hydrated = await _repo.GetByIdAsync(doc.Id);
+
+        hydrated.Should().NotBeNull();
+        hydrated!.AdjudicationResult.Should().NotBeNull();
+        hydrated.AdjudicationResult!.AllowedAmount.Should().Be(191m);
+        hydrated.AdjudicationResult.PayerPayment.Should().Be(161m);
+        hydrated.AdjudicationResult.PatientResponsibility.Should().Be(30m);
+        hydrated.AdjudicationResult.DenialReasonCode.Should().BeNull();
+        hydrated.AdjudicationResult.DenialReason.Should().BeNull();
+    }
+
     [Theory]
     [InlineData(ClaimStatus.Submitted, ClaimVersionState.Submitted)]
     [InlineData(ClaimStatus.Received, ClaimVersionState.Submitted)]
