@@ -28,6 +28,7 @@ public class MassAdjudicationRunSummary
     public MassAdjudicationStageTiming? WritebackTiming { get; set; }
     public List<MassAdjudicationStageTiming> AdjudicationStepTimings { get; set; } = new();
     public List<MassAdjudicationLifecycleTiming> LifecycleTimings { get; set; } = new();
+    public MassAdjudicationFixturePreparation? FixturePreparation { get; set; }
     public decimal? AveragePaymentDelta { get; set; }
     public decimal PaymentTolerance { get; set; }
     public int PaymentComparisons { get; set; }
@@ -91,6 +92,24 @@ public class MassAdjudicationLifecycleTiming
     public double DurationMilliseconds { get; set; }
     public DateTimeOffset StartedAtUtc { get; set; }
     public DateTimeOffset CompletedAtUtc { get; set; }
+}
+
+public class MassAdjudicationFixturePreparation
+{
+    public int GeneratedClaims { get; set; }
+    public int ProviderPoolDistinctBefore { get; set; }
+    public int ProviderPoolDistinctAfter { get; set; }
+    public int ProviderPoolReusedAssignments { get; set; }
+    public int ProviderPoolProtectedClaims { get; set; }
+    public int MembersCreated { get; set; }
+    public int MembersExisting { get; set; }
+    public int MemberStatusesAligned { get; set; }
+    public int CobCoverageCreated { get; set; }
+    public int CobCoverageExisting { get; set; }
+    public int ProviderNetworksCreated { get; set; }
+    public int ProviderNetworksExisting { get; set; }
+    public int ProvidersCreated { get; set; }
+    public int ProvidersExisting { get; set; }
 }
 
 public class MassAdjudicationBusinessDenialSummary

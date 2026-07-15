@@ -97,23 +97,53 @@ Console.WriteLine(
     $"({providerPool.ReusedAssignments:N0} assignments reused, {providerPool.ProtectedClaims:N0} provider-sensitive claims preserved)");
 var answerKey = MccAnswerKey.FromClaims(claims);
 
+var memberFixtures = MemberFixturePreparation.Empty;
+var cobCoverageFixtures = FixtureCount.Empty;
 if (options.SeedMembers)
 {
-    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Member and coverage seeding", "Preparation", async () =>
+    (memberFixtures, cobCoverageFixtures) = await MeasureLifecycleValuePhaseAsync(
+        lifecycleTimings,
+        "Member and coverage seeding",
+        "Preparation",
+        async () =>
     {
-        await SeedMembersAsync(http, options, claims, json);
-        await SeedCoverageAsync(http, options, claims, validationPlanId, json);
+        var members = await SeedMembersAsync(http, options, claims, json);
+        var coverage = await SeedCoverageAsync(http, options, claims, validationPlanId, json);
+        return (members, coverage);
     });
 }
 
+var providerNetworkFixtures = FixtureCount.Empty;
+var providerFixtures = FixtureCount.Empty;
 if (options.SeedProviders)
 {
-    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Provider seeding", "Preparation", async () =>
+    (providerNetworkFixtures, providerFixtures) = await MeasureLifecycleValuePhaseAsync(
+        lifecycleTimings,
+        "Provider seeding",
+        "Preparation",
+        async () =>
     {
-        await SeedProviderNetworksAsync(http, options, json);
-        await SeedProvidersAsync(http, options, claims, validationPlanId, json);
+        var networks = await SeedProviderNetworksAsync(http, options, json);
+        var providers = await SeedProvidersAsync(http, options, claims, validationPlanId, json);
+        return (networks, providers);
     });
 }
+
+var fixturePreparation = new MassAdjudicationFixturePreparation(
+    claims.Count,
+    providerPool.ProvidersBefore,
+    providerPool.ProvidersAfter,
+    providerPool.ReusedAssignments,
+    providerPool.ProtectedClaims,
+    memberFixtures.Created,
+    memberFixtures.Existing,
+    memberFixtures.StatusAligned,
+    cobCoverageFixtures.Created,
+    cobCoverageFixtures.Existing,
+    providerNetworkFixtures.Created,
+    providerNetworkFixtures.Existing,
+    providerFixtures.Created,
+    providerFixtures.Existing);
 
 var results = new ConcurrentBag<ClaimValidationResult>();
 var total = new Stopwatch();
@@ -134,7 +164,8 @@ if (!options.NoPublishSummary)
         runId,
         runStartedAtUtc,
         "Running",
-        "Processing claims");
+        "Processing claims",
+        fixturePreparation);
     await PublishSummaryAsync(http, options, initialProgress, json, quiet: true);
 }
 
@@ -177,7 +208,8 @@ await Parallel.ForEachAsync(
                             runId,
                             runStartedAtUtc,
                             "Running",
-                            "Processing claims");
+                            "Processing claims",
+                            fixturePreparation);
                         var publishTask = PublishProgressSummaryAsync(progressPublishGate, http, options, progressSummary, json);
                         lock (latestProgressPublishLock)
                         {
@@ -246,7 +278,8 @@ var summary = MccRunSummaryBuilder.Build(
     options.Claims,
     CreateProgress(orderedResults, total.Elapsed, options, "Completed"),
     publishClaimResults: true,
-    lifecycleTimings: lifecycleTimings);
+    lifecycleTimings: lifecycleTimings,
+    fixturePreparation: fixturePreparation);
 WriteSummary(summary);
 
 if (!string.IsNullOrWhiteSpace(options.SummaryJsonPath))
@@ -989,7 +1022,7 @@ static int CalculateNpiCheckDigit(string baseNineDigits)
     return (10 - (sum % 10)) % 10;
 }
 
-static async Task SeedMembersAsync(
+static async Task<MemberFixturePreparation> SeedMembersAsync(
     HttpClient http,
     ValidatorOptions options,
     IReadOnlyCollection<SyntheticClaim> claims,
@@ -1036,6 +1069,7 @@ static async Task SeedMembersAsync(
     }
 
     Console.WriteLine($"seeded: {created:N0} synthetic members ({existing:N0} already present, {statusAligned:N0} status-aligned)");
+    return new MemberFixturePreparation(created, existing, statusAligned);
 }
 
 static async Task<bool> MemberExistsAsync(HttpClient http, ValidatorOptions options, string memberId)
@@ -1134,7 +1168,7 @@ static async Task<bool> UpdateMemberSeedStatusAsync(
     return true;
 }
 
-static async Task SeedCoverageAsync(
+static async Task<FixtureCount> SeedCoverageAsync(
     HttpClient http,
     ValidatorOptions options,
     IReadOnlyCollection<SyntheticClaim> claims,
@@ -1151,7 +1185,7 @@ static async Task SeedCoverageAsync(
     if (cobClaims.Count == 0)
     {
         Console.WriteLine("seeded: 0 COB coverage rows (no supported COB-pend scenarios)");
-        return;
+        return FixtureCount.Empty;
     }
 
     var created = 0;
@@ -1169,6 +1203,7 @@ static async Task SeedCoverageAsync(
     }
 
     Console.WriteLine($"seeded: {created:N0} COB coverage rows ({existing:N0} already present)");
+    return new FixtureCount(created, existing);
 }
 
 static bool IsCobPendScenario(SyntheticClaim claim)
@@ -1277,7 +1312,7 @@ static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
     }
 }
 
-static async Task SeedProvidersAsync(
+static async Task<FixtureCount> SeedProvidersAsync(
     HttpClient http,
     ValidatorOptions options,
     IReadOnlyCollection<SyntheticClaim> claims,
@@ -1326,9 +1361,10 @@ static async Task SeedProvidersAsync(
     }
 
     Console.WriteLine($"seeded: {created:N0} synthetic providers ({existing:N0} already present)");
+    return new FixtureCount(created, existing);
 }
 
-static async Task SeedProviderNetworksAsync(
+static async Task<FixtureCount> SeedProviderNetworksAsync(
     HttpClient http,
     ValidatorOptions options,
     JsonSerializerOptions json)
@@ -1354,6 +1390,7 @@ static async Task SeedProviderNetworksAsync(
     }
 
     Console.WriteLine($"seeded: {created:N0} provider networks ({existing:N0} already present)");
+    return new FixtureCount(created, existing);
 }
 
 static async Task<bool> ProviderNetworkExistsAsync(HttpClient http, ValidatorOptions options, string networkId)
@@ -2240,7 +2277,8 @@ static MassAdjudicationRunSummary BuildProgressSummary(
     string runId,
     DateTimeOffset runStartedAtUtc,
     string status,
-    string phase)
+    string phase,
+    MassAdjudicationFixturePreparation fixturePreparation)
 {
     var runCompletedAtUtc = DateTimeOffset.UtcNow;
     var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
@@ -2296,6 +2334,7 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         null,
         Array.Empty<MassAdjudicationStageTiming>(),
         Array.Empty<MassAdjudicationLifecycleTiming>(),
+        fixturePreparation,
         null,
         MccRunSummaryBuilder.PaymentTolerance,
         0,
@@ -2546,6 +2585,7 @@ internal sealed record MassAdjudicationRunSummary(
     MassAdjudicationStageTiming? WritebackTiming,
     IReadOnlyList<MassAdjudicationStageTiming> AdjudicationStepTimings,
     IReadOnlyList<MassAdjudicationLifecycleTiming> LifecycleTimings,
+    MassAdjudicationFixturePreparation? FixturePreparation,
     decimal? AveragePaymentDelta,
     decimal PaymentTolerance,
     int PaymentComparisons,
@@ -2600,6 +2640,32 @@ internal sealed record MassAdjudicationLifecycleTiming(
     double DurationMilliseconds,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset CompletedAtUtc);
+
+internal sealed record MassAdjudicationFixturePreparation(
+    int GeneratedClaims,
+    int ProviderPoolDistinctBefore,
+    int ProviderPoolDistinctAfter,
+    int ProviderPoolReusedAssignments,
+    int ProviderPoolProtectedClaims,
+    int MembersCreated,
+    int MembersExisting,
+    int MemberStatusesAligned,
+    int CobCoverageCreated,
+    int CobCoverageExisting,
+    int ProviderNetworksCreated,
+    int ProviderNetworksExisting,
+    int ProvidersCreated,
+    int ProvidersExisting);
+
+internal sealed record MemberFixturePreparation(int Created, int Existing, int StatusAligned)
+{
+    public static MemberFixturePreparation Empty { get; } = new(0, 0, 0);
+}
+
+internal sealed record FixtureCount(int Created, int Existing)
+{
+    public static FixtureCount Empty { get; } = new(0, 0);
+}
 
 internal sealed record MassAdjudicationBusinessDenialSummary(
     string Code,
