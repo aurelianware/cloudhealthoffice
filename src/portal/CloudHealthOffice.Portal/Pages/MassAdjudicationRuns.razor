@@ -230,6 +230,11 @@
                     <MudItem xs="6" md="4">@Metric("Payment Mismatches", $"{_selectedRun.PaymentMismatches:N0}", _selectedRun.PaymentMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Max Payment Delta", _selectedRun.MaximumPaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.MaximumPaymentDelta, PaymentTolerance(_selectedRun)))</MudItem>
                     <MudItem xs="6" md="4">@Metric("Avg Payment Delta", _selectedRun.AveragePaymentDelta?.ToString("C") ?? "-", PaymentDeltaColor(_selectedRun.AveragePaymentDelta, PaymentTolerance(_selectedRun)))</MudItem>
+                    @if (_selectedRun.LifecycleTimings.Count > 0)
+                    {
+                        <MudItem xs="6" md="4">@Metric("Preparation", FormatDuration(PreparationDuration(_selectedRun)), "#facc15")</MudItem>
+                        <MudItem xs="6" md="4">@Metric("Tracked Lifecycle", FormatDuration(LifecycleDuration(_selectedRun)), "#7dd3fc")</MudItem>
+                    }
                     @if (_selectedRun.Progress is not null)
                     {
                         <MudItem xs="6" md="4">@Metric("Run Status", RunStatusLabel(_selectedRun), IsRunActive(_selectedRun) ? "#7dd3fc" : "#00ff88")</MudItem>
@@ -248,6 +253,18 @@
                     <MudItem xs="12" sm="4">@Timing(_selectedRun.AdjudicateTiming)</MudItem>
                     <MudItem xs="12" sm="4">@Timing(_selectedRun.WritebackTiming)</MudItem>
                 </MudGrid>
+
+                @if (_selectedRun.LifecycleTimings.Count > 0)
+                {
+                    <MudDivider Class="my-3" Style="border-color: rgba(0,255,255,0.12);" />
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65); font-weight: 700;">Run Lifecycle</MudText>
+                    <MudGrid Spacing="2" Class="mt-1">
+                        @foreach (var timing in _selectedRun.LifecycleTimings)
+                        {
+                            <MudItem xs="12" sm="6" md="4">@LifecycleTiming(timing)</MudItem>
+                        }
+                    </MudGrid>
+                }
 
                 @if (_selectedRun.AdjudicationStepTimings.Count > 0)
                 {
@@ -697,6 +714,24 @@
     private static double ScenarioPercent(int count, int total)
         => total <= 0 ? 0 : (double)count / total * 100;
 
+    private static double PreparationDuration(MassAdjudicationRunSummary run)
+        => run.LifecycleTimings
+            .Where(t => string.Equals(t.Category, "Preparation", StringComparison.OrdinalIgnoreCase))
+            .Sum(t => t.DurationMilliseconds);
+
+    private static double LifecycleDuration(MassAdjudicationRunSummary run)
+        => run.LifecycleTimings.Sum(t => t.DurationMilliseconds);
+
+    private static string FormatDuration(double milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        return duration.TotalSeconds < 1
+            ? $"{milliseconds:N0} ms"
+            : duration.TotalHours >= 1
+            ? duration.ToString("h\\:mm\\:ss")
+            : duration.ToString("m\\:ss");
+    }
+
     private static string OnOff(bool value) => value ? "on" : "off";
 
     private static string LineOfBusinessLabel(int lineOfBusiness) => lineOfBusiness switch
@@ -825,6 +860,34 @@
         builder.AddAttribute(8, "Typo", Typo.body2);
         builder.AddAttribute(9, "Style", "color: #7dd3fc; font-family: monospace;");
         builder.AddAttribute(10, "ChildContent", (RenderFragment)(b => b.AddContent(11, value)));
+        builder.CloseComponent();
+        builder.CloseElement();
+    };
+
+    private RenderFragment LifecycleTiming(MassAdjudicationLifecycleTiming timing) => builder =>
+    {
+        var categoryColor = string.Equals(timing.Category, "Preparation", StringComparison.OrdinalIgnoreCase)
+            ? "#facc15"
+            : string.Equals(timing.Category, "Processing", StringComparison.OrdinalIgnoreCase)
+                ? "#7dd3fc"
+                : "#cbd5e1";
+
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "style", $"border: 1px solid {categoryColor}55; background: {categoryColor}12; border-radius: 8px; padding: 10px;");
+        builder.OpenComponent<MudText>(2);
+        builder.AddAttribute(3, "Typo", Typo.caption);
+        builder.AddAttribute(4, "Style", "color: rgba(255,255,255,0.55);");
+        builder.AddAttribute(5, "ChildContent", (RenderFragment)(b => b.AddContent(6, timing.Category)));
+        builder.CloseComponent();
+        builder.OpenComponent<MudText>(7);
+        builder.AddAttribute(8, "Typo", Typo.body2);
+        builder.AddAttribute(9, "Style", $"color: {categoryColor}; font-family: monospace; font-weight: 700;");
+        builder.AddAttribute(10, "ChildContent", (RenderFragment)(b => b.AddContent(11, FormatDuration(timing.DurationMilliseconds))));
+        builder.CloseComponent();
+        builder.OpenComponent<MudText>(12);
+        builder.AddAttribute(13, "Typo", Typo.caption);
+        builder.AddAttribute(14, "Style", "color: rgba(255,255,255,0.65);");
+        builder.AddAttribute(15, "ChildContent", (RenderFragment)(b => b.AddContent(16, timing.Label)));
         builder.CloseComponent();
         builder.CloseElement();
     };

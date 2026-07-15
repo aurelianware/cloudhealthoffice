@@ -27,6 +27,7 @@ public class MassAdjudicationRunSummary
     public MassAdjudicationStageTiming? AdjudicateTiming { get; set; }
     public MassAdjudicationStageTiming? WritebackTiming { get; set; }
     public List<MassAdjudicationStageTiming> AdjudicationStepTimings { get; set; } = new();
+    public List<MassAdjudicationLifecycleTiming> LifecycleTimings { get; set; } = new();
     public decimal? AveragePaymentDelta { get; set; }
     public decimal PaymentTolerance { get; set; }
     public int PaymentComparisons { get; set; }
@@ -81,6 +82,15 @@ public class MassAdjudicationStageTiming
     public string Label { get; set; } = string.Empty;
     public double AverageMilliseconds { get; set; }
     public double P95Milliseconds { get; set; }
+}
+
+public class MassAdjudicationLifecycleTiming
+{
+    public string Label { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public double DurationMilliseconds { get; set; }
+    public DateTimeOffset StartedAtUtc { get; set; }
+    public DateTimeOffset CompletedAtUtc { get; set; }
 }
 
 public class MassAdjudicationBusinessDenialSummary

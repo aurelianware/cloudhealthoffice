@@ -14,7 +14,8 @@ internal static class MccRunSummaryBuilder
         string status = "Completed",
         int? totalClaimsOverride = null,
         MassAdjudicationRunProgress? progress = null,
-        bool publishClaimResults = true)
+        bool publishClaimResults = true,
+        IReadOnlyList<MassAdjudicationLifecycleTiming>? lifecycleTimings = null)
     {
         var totalClaims = Math.Max(results.Count, totalClaimsOverride ?? results.Count);
         var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
@@ -133,6 +134,7 @@ internal static class MccRunSummaryBuilder
             BuildStageTiming("Adjudicate", results.Select(r => r.AdjudicationElapsed)),
             BuildStageTiming("Writeback", results.Select(r => r.UpdateElapsed)),
             BuildAdjudicationStepTimings(results),
+            lifecycleTimings ?? Array.Empty<MassAdjudicationLifecycleTiming>(),
             avgDelta,
             PaymentTolerance,
             comparable.Count,
