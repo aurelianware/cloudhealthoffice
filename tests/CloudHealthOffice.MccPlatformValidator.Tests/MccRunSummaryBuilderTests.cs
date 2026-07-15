@@ -142,6 +142,35 @@ public class MccRunSummaryBuilderTests
         Assert.Null(edgeCase.PaymentDelta);
     }
 
+    [Fact]
+    public void Build_IncludesLifecycleTimings()
+    {
+        var startedAt = DateTimeOffset.Parse("2026-07-13T00:00:00Z");
+        var completedAt = DateTimeOffset.Parse("2026-07-13T00:00:01Z");
+        var options = ValidatorOptions.Parse(["--claims", "1"]);
+        var phase = new MassAdjudicationLifecycleTiming(
+            "Corpus generation",
+            "Preparation",
+            1_000,
+            startedAt,
+            completedAt);
+
+        var summary = MccRunSummaryBuilder.Build(
+            [Result("MCC-1", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)],
+            TimeSpan.FromSeconds(1),
+            options,
+            startedAt,
+            completedAt,
+            lifecycleTimings: [phase]);
+
+        var timing = Assert.Single(summary.LifecycleTimings);
+        Assert.Equal("Corpus generation", timing.Label);
+        Assert.Equal("Preparation", timing.Category);
+        Assert.Equal(1_000, timing.DurationMilliseconds);
+        Assert.Equal(startedAt, timing.StartedAtUtc);
+        Assert.Equal(completedAt, timing.CompletedAtUtc);
+    }
+
     private static ClaimValidationResult Result(
         string claimId,
         string? scenario,
