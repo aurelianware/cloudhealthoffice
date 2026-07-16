@@ -153,6 +153,33 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     }
 
     [Fact]
+    public async Task GetClaimById_EnrichesDiagnosisMetadataForDisplay()
+    {
+        var claim = CreateValidClaim();
+        claim.Id = "claim-dx";
+        claim.DiagnosisCodes = new List<DiagnosisCode>
+        {
+            new() { Code = "K08.1" },
+            new() { Code = "M79.3", CodeQualifier = "", PointerNumber = 2 }
+        };
+
+        _repo.GetByIdAsync("claim-dx").Returns(claim);
+
+        var response = await _client.GetAsync("/api/claims/claim-dx");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var returned = await response.Content.ReadFromJsonAsync<Claim>();
+        Assert.NotNull(returned);
+        Assert.Equal("Complete loss of teeth", returned!.DiagnosisCodes[0].Description);
+        Assert.Equal("ABK", returned.DiagnosisCodes[0].CodeQualifier);
+        Assert.Equal(1, returned.DiagnosisCodes[0].PointerNumber);
+        Assert.Equal("Panniculitis, unspecified", returned.DiagnosisCodes[1].Description);
+        Assert.Equal("ABF", returned.DiagnosisCodes[1].CodeQualifier);
+        Assert.Equal(2, returned.DiagnosisCodes[1].PointerNumber);
+    }
+
+    [Fact]
     public async Task GetClaimById_NonexistentClaim_Returns404()
     {
         _repo.GetByIdAsync("nonexistent").Returns((Claim?)null);

@@ -20,6 +20,7 @@ public class ClaimsController : ControllerBase
     private readonly IClaimEventPublisher _eventPublisher;
     private readonly IClaimSubmissionService _submissionService;
     private readonly IClaimFinalizationService _finalizationService;
+    private readonly IClaimDiagnosisMetadataEnricher _diagnosisMetadataEnricher;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ClaimsController> _logger;
 
@@ -32,6 +33,7 @@ public class ClaimsController : ControllerBase
         IClaimEventPublisher eventPublisher,
         IClaimSubmissionService submissionService,
         IClaimFinalizationService finalizationService,
+        IClaimDiagnosisMetadataEnricher diagnosisMetadataEnricher,
         IConfiguration configuration,
         ILogger<ClaimsController> logger)
     {
@@ -43,6 +45,7 @@ public class ClaimsController : ControllerBase
         _eventPublisher = eventPublisher;
         _submissionService = submissionService;
         _finalizationService = finalizationService;
+        _diagnosisMetadataEnricher = diagnosisMetadataEnricher;
         _configuration = configuration;
         _logger = logger;
     }
@@ -185,6 +188,7 @@ public class ClaimsController : ControllerBase
             status: null, lineOfBusiness: null,
             page: 1, pageSize: count);
 
+        await _diagnosisMetadataEnricher.EnrichAsync(claims);
         return Ok(claims);
     }
 
@@ -204,6 +208,7 @@ public class ClaimsController : ControllerBase
             return NotFound($"Claim {id} not found");
         }
 
+        await _diagnosisMetadataEnricher.EnrichAsync(claim);
         return Ok(claim);
     }
 
@@ -248,6 +253,7 @@ public class ClaimsController : ControllerBase
             return NotFound($"Claim {claimNumber} not found");
         }
 
+        await _diagnosisMetadataEnricher.EnrichAsync(claim);
         return Ok(claim);
     }
 
@@ -273,6 +279,7 @@ public class ClaimsController : ControllerBase
         var claims = await _claimRepository.SearchAsync(
             memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness, page, pageSize);
 
+        await _diagnosisMetadataEnricher.EnrichAsync(claims);
         return Ok(claims);
     }
 
@@ -305,6 +312,7 @@ public class ClaimsController : ControllerBase
                 body.PageNumber,
                 body.PageSize);
 
+            await _diagnosisMetadataEnricher.EnrichAsync(runPage, ct);
             return Ok(new { claims = runPage, totalCount = runTotalCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
         }
 
@@ -318,6 +326,7 @@ public class ClaimsController : ControllerBase
             body.PageNumber,
             body.PageSize);
 
+        await _diagnosisMetadataEnricher.EnrichAsync(claims, ct);
         return Ok(new { claims, totalCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
     }
 
