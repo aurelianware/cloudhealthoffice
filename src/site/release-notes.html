@@ -303,12 +303,12 @@
 
   <main id="main-content">
     <div class="release-hero">
-      <span class="version-badge">V4.1 Release</span>
-      <h1>Cloud Health Office V4</h1>
+      <span class="version-badge">Version History</span>
+      <h1>Cloud Health Office Release Notes</h1>
       <p style="font-size: 1.5rem; max-width: 800px; margin: 0 auto;">
-        Production-shape SaaS architecture. Security-scanned release process.<br>
+        Source-available payer platform history. Security-scanned release process.<br>
         36 Microservices. 9 Adjudication Engines.<br>
-        <strong>CMS-0057-F Compliant &mdash; 10 Months Early</strong>
+        <strong>CMS-0057-F Readiness &mdash; Evidence Before the Deadline</strong>
       </p>
     </div>
 
@@ -334,8 +334,8 @@
             <div class="metric-label">Dependency Checks</div>
           </div>
           <div class="metric-card">
-            <div class="metric-value">0</div>
-            <div class="metric-label">Security Vulnerabilities</div>
+            <div class="metric-value">Scan</div>
+            <div class="metric-label">Current Security Posture</div>
           </div>
           <div class="metric-card">
             <div class="metric-value">5</div>
@@ -346,14 +346,14 @@
 
       <!-- V4 Features -->
       <section id="v4-features" class="feature-section">
-        <h2>V4 &mdash; Production SaaS</h2>
-        <p>V4 delivered multi-tenant SaaS isolation, security hardening, cloud portability, and a developer-first API experience. Current security posture should always be evaluated from the latest dependency and secret scans.</p>
+        <h2>V4 &mdash; SaaS Architecture Foundation</h2>
+        <p>V4 delivered multi-tenant isolation, security hardening, cloud portability, and a developer-first API experience. Current security posture should always be evaluated from the latest dependency and secret scans.</p>
 
         <div class="feature-grid">
           <div class="feature-card">
             <span class="status-badge status-new">NEW IN V4</span>
             <h3>Multi-Tenant SaaS Isolation</h3>
-            <p>Enterprise-grade tenant isolation for production SaaS deployments.</p>
+            <p>Tenant isolation patterns for payer evaluation and customer-owned deployments.</p>
             <ul>
               <li>TenantContextService maps Azure AD tenant to CHO tenant</li>
               <li>X-Tenant-ID header injection on all API calls</li>
@@ -492,8 +492,8 @@
 
       <!-- CMS-0057-F Compliance -->
       <section class="feature-section">
-        <h2>CMS-0057-F Compliance Status</h2>
-        <p>Cloud Health Office V4 provides production-ready compliance for all CMS-0057-F requirements, with full FHIR R4, US Core, and Da Vinci Implementation Guide coverage.</p>
+        <h2>CMS-0057-F Readiness Status</h2>
+        <p>Cloud Health Office provides implemented CMS-0057-F readiness surfaces with FHIR R4, US Core, and Da Vinci Implementation Guide coverage that still require payer-specific validation before production use.</p>
 
         <table class="compliance-table">
           <thead>
@@ -509,42 +509,42 @@
               <td>Patient Access API</td>
               <td>FHIR R4 &mdash; Claim, EOB, Coverage, Patient, Encounter</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Production</span></td>
+              <td><span class="check-icon">&#10003; Implemented</span></td>
             </tr>
             <tr>
               <td>Provider Access API</td>
               <td>FHIR R4 &mdash; Claim, EOB, Patient, Condition, Observation</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Production</span></td>
+              <td><span class="check-icon">&#10003; Implemented</span></td>
             </tr>
             <tr>
               <td>Prior Authorization API</td>
               <td>FHIR R4 + CDS Hooks &mdash; real-time PA decisions</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Production</span></td>
+              <td><span class="check-icon">&#10003; Implemented</span></td>
             </tr>
             <tr>
               <td>Payer-to-Payer API</td>
               <td>FHIR R4 &mdash; bidirectional member data exchange</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Production</span></td>
+              <td><span class="check-icon">&#10003; Implemented</span></td>
             </tr>
             <tr>
               <td>Provider Directory API</td>
               <td>FHIR R4 &mdash; Practitioner, Organization, Location, Network</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Production</span></td>
+              <td><span class="check-icon">&#10003; Implemented</span></td>
             </tr>
             <tr>
               <td>USCDI v1/v2</td>
               <td>US Core profiles, Da Vinci IGs (PDex, PAS, CRD, DTR, HRex)</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Production</span></td>
+              <td><span class="check-icon">&#10003; Implemented</span></td>
             </tr>
           </tbody>
         </table>
 
-        <p><strong>Full compliance documentation:</strong> <a href="/docs/compliance" target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide &rarr;</a></p>
+        <p><strong>Full readiness documentation:</strong> <a href="/docs/compliance" target="_blank" rel="noopener noreferrer">CMS-0057-F Readiness Guide &rarr;</a></p>
       </section>
 
       <!-- V3 Features (Retained) -->
@@ -582,7 +582,7 @@
       <!-- V2 Features (Retained) -->
       <section class="feature-section">
         <h2>V2 Features (Included)</h2>
-        <p>V4 includes all V2 features: complete CMS-0057-F compliance with production-ready FHIR R4 APIs.</p>
+        <p>V4 includes the V2 FHIR surfaces as part of the CMS-0057-F readiness path, with payer-specific validation still required before production use.</p>
 
         <div class="feature-grid">
           <div class="feature-card">
@@ -638,7 +638,7 @@ npm install &amp;&amp; npm test
 
         <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json" class="button button-green" target="_blank" rel="noopener noreferrer">Deploy to Azure &rarr;</a>
 
-        <p style="margin-top: 30px; color: #888;">Docker Compose for local evaluation (first run builds images, typically 10&ndash;20 minutes; instant on repeat runs). Kubernetes for production in 1&ndash;2 hours.</p>
+        <p style="margin-top: 30px; color: #888;">Docker Compose for local evaluation (first run builds images, typically 10&ndash;20 minutes; instant on repeat runs). Kubernetes deployment requires customer-specific cloud, identity, security, and data validation.</p>
       </section>
 
       <!-- Documentation Links -->
@@ -659,13 +659,13 @@ npm install &amp;&amp; npm test
 
           <div class="feature-card">
             <h3>CMS-0057-F Compliance</h3>
-            <p>Complete regulatory compliance mapping with FHIR R4 implementation details.</p>
+            <p>Regulatory readiness mapping with FHIR R4 implementation details.</p>
             <a href="/docs/compliance" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
           </div>
 
           <div class="feature-card">
             <h3>Deployment Guide</h3>
-            <p>Production deployment for Azure and Kubernetes with Helm charts.</p>
+            <p>Deployment reference for Azure and Kubernetes with environment-specific validation.</p>
             <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
           </div>
         </div>
@@ -673,10 +673,10 @@ npm install &amp;&amp; npm test
 
       <!-- CTA Section -->
       <section class="cta-section" style="text-align: center; margin: 60px 0;">
-        <h2>Production-Ready Payer Platform</h2>
+        <h2>Evidence-Backed Payer Platform</h2>
         <p style="font-size: 1.2rem; max-width: 700px; margin: 20px auto;">
           36 microservices. 9 adjudication engines. 5 FHIR R4 APIs.<br>
-          CMS-0057-F compliance surface. Security-scanned. Deployable to customer-owned cloud infrastructure.
+          CMS-0057-F readiness surface. Security-scanned. Deployable to customer-owned cloud infrastructure after payer validation.
         </p>
         <div style="margin-top: 30px;">
           <a href="https://github.com/aurelianware/cloudhealthoffice" class="button" target="_blank" rel="noopener noreferrer">View on GitHub</a>
@@ -688,7 +688,7 @@ npm install &amp;&amp; npm test
 
   <footer>
     <p>
-      <strong>Cloud Health Office V4 &mdash; Production SaaS</strong><br>
+      <strong>Cloud Health Office &mdash; Source-Available Payer Platform</strong><br>
       36 Microservices. 9 Engines. 5 FHIR R4 APIs. Security-scanned release process.
     </p>
     <p>
