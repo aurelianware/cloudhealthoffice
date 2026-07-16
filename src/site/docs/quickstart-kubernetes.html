@@ -4,21 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kubernetes Reference — Cloud Health Office Documentation</title>
-  <meta name="description" content="Run the full Cloud Health Office platform on Docker Desktop Kubernetes — the same architecture, namespaces, and manifests used in production on Azure AKS. Under 15 minutes." />
+  <meta name="description" content="Run the full Cloud Health Office platform on Docker Desktop Kubernetes with the same service shape, namespace, and reference manifests used for cloud deployment evaluation. Under 15 minutes." />
   <meta name="keywords" content="Cloud Health Office Kubernetes, local Kubernetes development, Docker Desktop Kubernetes, healthcare payer platform k8s, microservices local deployment, CMS-0057-F Kubernetes" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/quickstart-kubernetes" />
 
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/quickstart-kubernetes" />
   <meta property="og:title" content="Kubernetes Reference — Cloud Health Office" />
-  <meta property="og:description" content="Deploy Cloud Health Office to local Kubernetes with the same architecture as production: production-shaped microservices, MongoDB, and Redis—identical to Azure AKS." />
+  <meta property="og:description" content="Deploy Cloud Health Office to local Kubernetes with production-shaped microservices, MongoDB, Redis, and reference cloud-deployment patterns." />
 
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "Cloud Health Office Kubernetes Reference",
-    "description": "Step-by-step guide to deploying Cloud Health Office on Docker Desktop Kubernetes — matching the production Azure AKS architecture.",
+    "description": "Step-by-step guide to deploying Cloud Health Office on Docker Desktop Kubernetes with production-shaped services and reference cloud-deployment patterns.",
     "url": "https://cloudhealthoffice.com/docs/quickstart-kubernetes",
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
     "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
@@ -99,7 +99,7 @@
               <li><a href="#step-4">4. Access the Platform</a></li>
               <li><a href="#step-5">5. Seed &amp; Test</a></li>
               <li><a href="#step-6">6. Verify System Health</a></li>
-              <li><a href="#production-comparison">Production Comparison</a></li>
+              <li><a href="#deployment-comparison">Deployment Comparison</a></li>
               <li><a href="#common-tasks">Common Tasks</a></li>
               <li><a href="#troubleshooting">Troubleshooting</a></li>
               <li><a href="#tear-down">Tear Down</a></li>
@@ -139,12 +139,12 @@
 
         <h1>Kubernetes Reference</h1>
         <p class="docs-subtitle">
-          Run the full Cloud Health Office platform on Docker Desktop Kubernetes &mdash; the same architecture, namespaces, services, and manifests used in production on Azure AKS. No Azure account needed.
+          Run the full Cloud Health Office platform on Docker Desktop Kubernetes &mdash; the same service shape, namespace, and reference manifests used for cloud-deployment evaluation. No Azure account needed.
         </p>
 
         <div class="callout callout-info">
           <div class="callout-title">Quick Start vs Reference</div>
-          <p>The <a href="/docs/quickstart">primary Quick Start</a> is the shortest local Kubernetes path. This reference guide adds deeper troubleshooting, teardown, resource guidance, and common kubectl workflows for the same production-equivalent deployment.</p>
+          <p>The <a href="/docs/quickstart">primary Quick Start</a> is the shortest local Kubernetes path. This reference guide adds deeper troubleshooting, teardown, resource guidance, and common kubectl workflows for the same production-shaped local deployment.</p>
         </div>
 
         <!-- What You Get -->
@@ -159,11 +159,11 @@
             <tr><td>Portal</td><td>1</td><td>Blazor Server UI you can expose on your own portal host after deployment</td></tr>
             <tr><td>MongoDB</td><td>1</td><td>StatefulSet with persistent storage</td></tr>
             <tr><td>Redis</td><td>1</td><td>Data-protection key store and caching</td></tr>
-            <tr><td>Namespace</td><td><code>cloudhealthoffice</code></td><td>Matches production layout</td></tr>
+            <tr><td>Namespace</td><td><code>cloudhealthoffice</code></td><td>Matches the reference cloud layout</td></tr>
           </tbody>
         </table>
 
-        <p>All services communicate over Kubernetes DNS (<code>service-name.cloudhealthoffice</code>) &mdash; identical to production.</p>
+        <p>All services communicate over Kubernetes DNS (<code>service-name.cloudhealthoffice</code>) &mdash; the same service-discovery pattern used by the reference cloud deployment.</p>
 
         <!-- Prerequisites -->
         <h2 id="prerequisites">Prerequisites</h2>
@@ -231,7 +231,7 @@ kubectl cluster-info
           <div class="step-body">
             <h3>One command deploys the entire platform</h3>
 <pre><code>./scripts/deploy-local.sh</code></pre>
-            <p>This builds Docker images for all 30+ services plus the portal, creates the <code>cloudhealthoffice</code> namespace, deploys MongoDB and Redis, creates all Kubernetes secrets, seeds demo data, and deploys all microservices using the same k8s manifests as production.</p>
+            <p>This builds Docker images for all 30+ services plus the portal, creates the <code>cloudhealthoffice</code> namespace, deploys MongoDB and Redis, creates local Kubernetes secrets, seeds demo data, and deploys the microservices using the repository's reference manifests with local patches.</p>
             <p><strong>First run:</strong> ~10&ndash;15 minutes (image builds). <strong>Subsequent runs:</strong> ~2 minutes.</p>
 
             <table>
@@ -327,16 +327,16 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error</co
         </div>
 
         <div class="callout callout-success">
-          <div class="callout-title">You're running production-equivalent Kubernetes!</div>
-          <p>You now have the same production-shaped microservices architecture running locally that you can later expose behind your own portal and API hosts. Same namespace, same DNS, same manifests, same health probes.</p>
+          <div class="callout-title">You're running production-shaped local Kubernetes!</div>
+          <p>You now have the microservices architecture running locally with the same namespace, service DNS pattern, and health probes used by the reference deployment path. A payer production rollout still needs environment-specific security, ingress, identity, data, and operational validation.</p>
         </div>
 
-        <!-- Production Comparison -->
-        <h2 id="production-comparison">How This Matches Production</h2>
+        <!-- Deployment Comparison -->
+        <h2 id="deployment-comparison">How This Maps to a Cloud Deployment</h2>
 
         <table>
           <thead>
-            <tr><th>Aspect</th><th>Local (Docker Desktop)</th><th>Production (Azure AKS)</th></tr>
+            <tr><th>Aspect</th><th>Local (Docker Desktop)</th><th>Reference cloud deployment</th></tr>
           </thead>
           <tbody>
             <tr><td>Namespace</td><td><code>cloudhealthoffice</code></td><td><code>cloudhealthoffice</code></td></tr>
@@ -429,8 +429,8 @@ docker volume prune -f</code></pre>
             <span class="card-arrow">View guide &rarr;</span>
           </a>
           <a href="/docs/deployment" class="docs-hub-card">
-            <h3>Deploy to Production</h3>
-            <p>Move from local Kubernetes to Azure AKS with gated CI/CD releases and HIPAA-compliant infrastructure.</p>
+            <h3>Deployment Reference</h3>
+            <p>Move from local Kubernetes to a reviewed cloud deployment path with gated CI/CD, environment-specific security, and payer validation.</p>
             <span class="card-arrow">Deployment guide &rarr;</span>
           </a>
           <a href="/docs/architecture" class="docs-hub-card">

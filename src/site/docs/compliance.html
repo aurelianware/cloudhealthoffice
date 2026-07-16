@@ -4,18 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CMS-0057-F Compliance Guide — Cloud Health Office Documentation</title>
-  <meta name="description" content="Complete CMS-0057-F compliance guide for healthcare payers. Patient Access API, Provider Access API, Payer-to-Payer API, Prior Authorization API, SNOMED-to-ICD terminology translation, and provider verification — achieve compliance ahead of the January 2027 deadline." />
+  <meta name="description" content="CMS-0057-F readiness guide for healthcare payers. Patient Access API, Provider Access API, Payer-to-Payer API, Prior Authorization API, SNOMED-to-ICD terminology translation, and provider verification surfaces with implementation evidence." />
   <meta name="keywords" content="CMS-0057-F compliance guide, CMS interoperability rule, healthcare payer FHIR API, prior authorization API compliance, January 2027 deadline, Patient Access API, Da Vinci implementation guide, FHIR R4 healthcare payer, SNOMED CT ICD-10-CM translation, terminology crosswalk, provider verification, NPPES" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/compliance" />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/compliance" />
   <meta property="og:title" content="CMS-0057-F Compliance Guide — Cloud Health Office" />
-  <meta property="og:description" content="Achieve CMS-0057-F compliance ahead of the January 2027 deadline. Complete FHIR R4 API implementation with built-in terminology translation and provider verification for healthcare payers." />
+  <meta property="og:description" content="Evaluate the CMS-0057-F readiness surface in Cloud Health Office: FHIR R4 APIs, terminology translation, provider verification, and payer validation evidence." />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org", "@type": "TechArticle",
     "headline": "CMS-0057-F Compliance Guide for Healthcare Payers",
-    "description": "Complete guide to CMS-0057-F (Advancing Interoperability and Improving Prior Authorization) compliance using Cloud Health Office FHIR R4 APIs, terminology crosswalk, and provider verification.",
+    "description": "Guide to CMS-0057-F (Advancing Interoperability and Improving Prior Authorization) readiness using Cloud Health Office FHIR R4 APIs, terminology crosswalk, provider verification, and implementation evidence.",
     "url": "https://cloudhealthoffice.com/docs/compliance",
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
     "datePublished": "2026-03-24",
@@ -64,11 +64,11 @@
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">CMS-0057-F Compliance</span></div>
 
         <h1>CMS-0057-F Compliance Guide</h1>
-        <p class="docs-subtitle">Cloud Health Office delivers a CMS-0057-F compliance surface &mdash; FHIR R4 APIs, X12 EDI transformation, SNOMED&ndash;CPT&ndash;ICD terminology translation, and multi-source provider verification &mdash; designed to deploy alongside existing payer core admin systems.</p>
+        <p class="docs-subtitle">Cloud Health Office delivers a CMS-0057-F readiness surface &mdash; FHIR R4 APIs, X12 EDI mapping, SNOMED&ndash;CPT&ndash;ICD terminology translation, and multi-source provider verification &mdash; designed to be validated alongside existing payer core admin systems.</p>
 
         <figure class="docs-diagram">
-          <img src="/graphics/cms-0057f-compliance.svg" alt="CMS-0057-F compliance diagram showing Patient Access API, Provider Access API, Prior Authorization, Payer-to-Payer API, and Provider Directory API — all complete" />
-          <figcaption>All five CMS-0057-F required API categories &mdash; implemented and production-tested</figcaption>
+          <img src="/graphics/cms-0057f-compliance.svg" alt="CMS-0057-F readiness diagram showing Patient Access API, Provider Access API, Prior Authorization, Payer-to-Payer API, and Provider Directory API implementation surfaces" />
+          <figcaption>CMS-0057-F API categories &mdash; implementation surfaces with validation evidence</figcaption>
         </figure>
 
         <!-- ============================================================ -->
@@ -80,7 +80,7 @@
 
         <div class="callout callout-warning">
           <div class="callout-title">Deadline: January 1, 2027</div>
-          <p>All impacted payers must have Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs live in production by this date. Cloud Health Office is designed to help payers stand up that compliance surface without replacing the core admin system first.</p>
+          <p>All impacted payers must have Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs live in production by this date. Cloud Health Office is designed to help payers stand up and validate that readiness surface without replacing the core admin system first.</p>
         </div>
 
         <p>Achieving compliance requires more than standing up four FHIR endpoints. The rule depends on Da Vinci Implementation Guides (PAS, CRD, DTR, PDex) that exchange clinical data in <strong>SNOMED CT</strong> &mdash; a code system that payer core admin platforms do not natively speak. It also requires provider directory accuracy and real-time eligibility verification against validated provider records. CHO is built to address the full compliance surface in a single deployable stack: APIs, EDI transformation, terminology translation, and provider data integrity.</p>
@@ -105,8 +105,8 @@
             <tr><td>Terminology Translation (SNOMED &#8596; CPT/ICD)</td><td><span class="badge badge-complete">Complete</span></td><td>ConceptMap/$translate</td><td>FHIR R4 ConceptMap</td></tr>
             <tr><td>Provider Verification &amp; Directory</td><td><span class="badge badge-complete">Complete</span></td><td>Integrity Score Engine</td><td>Da Vinci PDex Plan-Net</td></tr>
             <tr><td>OAuth 2.0 / SMART on FHIR</td><td><span class="badge badge-complete">Complete</span></td><td>Auth flow tests</td><td>SMART App Launch</td></tr>
-            <tr><td>X12 EDI &#8596; FHIR Bidirectional</td><td><span class="badge badge-production">Production</span></td><td>6 parsers, 0 deps</td><td>&mdash;</td></tr>
-            <tr><td>Claims Adjudication Pipeline</td><td><span class="badge badge-production">Production</span></td><td>10-step DAG</td><td>&mdash;</td></tr>
+            <tr><td>X12 EDI &#8596; FHIR Bidirectional</td><td><span class="badge badge-complete">Implemented</span></td><td>Mapping and parser coverage</td><td>&mdash;</td></tr>
+            <tr><td>Claims Adjudication Pipeline</td><td><span class="badge badge-complete">Evidence-backed</span></td><td>MCC benchmark runs</td><td>&mdash;</td></tr>
           </tbody>
         </table>
 
@@ -139,18 +139,18 @@
         <!-- X12 TO FHIR                                                  -->
         <!-- ============================================================ -->
         <h2 id="x12-to-fhir">X12 to FHIR R4 Transformation</h2>
-        <p>Every X12 transaction your core admin system produces is automatically transformed to FHIR R4 resources conforming to Da Vinci profiles. Bidirectional. Real-time. All six parsers are written in-house with zero external dependencies &mdash; no third-party libraries, no open-source tooling relabeled as proprietary.</p>
+        <p>Cloud Health Office includes X12-to-FHIR mapping surfaces for core payer transactions. Some paths are implemented directly in the platform and the X12 container uses purpose-built parsing support where appropriate; production use should validate companion guides, trading-partner variations, and payer-specific mappings.</p>
 
         <table>
           <thead><tr><th>X12 Transaction</th><th>FHIR Resource</th><th>Profile</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>X12 270/271 Eligibility</td><td>Patient, CoverageEligibilityRequest/Response</td><td>US Core 3.1.1</td><td><span class="badge badge-production">Production</span></td></tr>
-            <tr><td>X12 837 Claims (I/P/D)</td><td>Claim</td><td>Da Vinci PDex</td><td><span class="badge badge-production">Production</span></td></tr>
-            <tr><td>X12 835 Remittance</td><td>ExplanationOfBenefit</td><td>Da Vinci PDex</td><td><span class="badge badge-production">Production</span></td></tr>
-            <tr><td>X12 278 Prior Auth</td><td>ServiceRequest, ClaimResponse</td><td>Da Vinci PAS</td><td><span class="badge badge-production">Production</span></td></tr>
-            <tr><td>X12 276/277 Claim Status</td><td>Claim (status query)</td><td>US Core</td><td><span class="badge badge-production">Production</span></td></tr>
-            <tr><td>X12 275 Attachments</td><td>DocumentReference</td><td>US Core</td><td><span class="badge badge-production">Production</span></td></tr>
-            <tr><td>X12 834 Enrollment</td><td>Coverage, Patient</td><td>US Core</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 270/271 Eligibility</td><td>Patient, CoverageEligibilityRequest/Response</td><td>US Core 3.1.1</td><td><span class="badge badge-complete">Implemented</span></td></tr>
+            <tr><td>X12 837 Claims (I/P/D)</td><td>Claim</td><td>Da Vinci PDex</td><td><span class="badge badge-complete">Implemented</span></td></tr>
+            <tr><td>X12 835 Remittance</td><td>ExplanationOfBenefit</td><td>Da Vinci PDex</td><td><span class="badge badge-complete">Mapped</span></td></tr>
+            <tr><td>X12 278 Prior Auth</td><td>ServiceRequest, ClaimResponse</td><td>Da Vinci PAS</td><td><span class="badge badge-complete">Implemented</span></td></tr>
+            <tr><td>X12 276/277 Claim Status</td><td>Claim (status query)</td><td>US Core</td><td><span class="badge badge-complete">Implemented</span></td></tr>
+            <tr><td>X12 275 Attachments</td><td>DocumentReference</td><td>US Core</td><td><span class="badge badge-complete">Implemented</span></td></tr>
+            <tr><td>X12 834 Enrollment</td><td>Coverage, Patient</td><td>US Core</td><td><span class="badge badge-complete">Implemented</span></td></tr>
           </tbody>
         </table>
 
@@ -259,7 +259,7 @@
           <thead><tr><th>Capability</th><th>CHO</th><th>Typical Implementation</th></tr></thead>
           <tbody>
             <tr><td>FHIR R4 APIs (Patient, Provider, P2P, PA)</td><td><span class="badge badge-complete">Built-in</span></td><td>Varies &mdash; often assembled from open-source tooling</td></tr>
-            <tr><td>X12 EDI Parsers</td><td><span class="badge badge-complete">6 parsers, zero dependencies, in-house</span></td><td>Third-party libraries or manual mapping</td></tr>
+            <tr><td>X12 EDI Mapping</td><td><span class="badge badge-complete">Implemented mapping surfaces</span></td><td>Third-party libraries or manual mapping</td></tr>
             <tr><td>SNOMED &#8596; CPT/ICD Terminology Translation</td><td><span class="badge badge-complete">Native ConceptMap/$translate</span></td><td>Not included &mdash; &ldquo;customer responsibility&rdquo;</td></tr>
             <tr><td>Context-Aware Disambiguation</td><td><span class="badge badge-complete">Rule engine with plan overrides</span></td><td>Not available</td></tr>
             <tr><td>Provider Verification (NPPES, OIG, PECOS, FSMB)</td><td><span class="badge badge-complete">Multi-source Integrity Score</span></td><td>Manual or separate product</td></tr>
@@ -267,7 +267,7 @@
             <tr><td>Benefit Engine (HDHP, HSA, COB, NCCI, DRG)</td><td><span class="badge badge-complete">9 calculation engines</span></td><td>Depends on legacy CAPS</td></tr>
             <tr><td>Core Admin Adapter Pattern</td><td><span class="badge badge-complete">Vendor-neutral ICoreAdminAdapter</span></td><td>Hard-coded to one CAPS</td></tr>
             <tr><td>Multi-Tenant SaaS</td><td><span class="badge badge-complete">X-Tenant-ID isolation</span></td><td>Single-tenant or per-client deployment</td></tr>
-            <tr><td>Implementation Timeline</td><td><span class="badge badge-complete">&lt;1 hour to production</span></td><td>6&ndash;18 months</td></tr>
+            <tr><td>Evaluation Timeline</td><td><span class="badge badge-complete">&lt;1 hour local start</span></td><td>6&ndash;18 months</td></tr>
           </tbody>
         </table>
 
@@ -285,12 +285,12 @@
         <table>
           <thead><tr><th>Requirement</th><th>CMS Effective Date</th><th>CHO Status</th><th>CHO Ready Since</th></tr></thead>
           <tbody>
-            <tr><td>Patient Access API</td><td>January 1, 2026</td><td><span class="badge badge-complete">Live</span></td><td>November 2024</td></tr>
-            <tr><td>Provider Access API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td><td>November 2024</td></tr>
-            <tr><td>Payer-to-Payer API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td><td>November 2024</td></tr>
-            <tr><td>Prior Authorization API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td><td>November 2024</td></tr>
-            <tr><td>Terminology Translation</td><td>Required for CRD/DTR/PAS</td><td><span class="badge badge-complete">Ready</span></td><td>March 2025</td></tr>
-            <tr><td>Provider Directory Accuracy</td><td>Required for Provider Access</td><td><span class="badge badge-complete">Ready</span></td><td>April 2025</td></tr>
+            <tr><td>Patient Access API</td><td>January 1, 2026</td><td><span class="badge badge-complete">Implemented</span></td><td>November 2024</td></tr>
+            <tr><td>Provider Access API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Implemented</span></td><td>November 2024</td></tr>
+            <tr><td>Payer-to-Payer API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Implemented</span></td><td>November 2024</td></tr>
+            <tr><td>Prior Authorization API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Implemented</span></td><td>November 2024</td></tr>
+            <tr><td>Terminology Translation</td><td>Required for CRD/DTR/PAS</td><td><span class="badge badge-complete">Implemented</span></td><td>March 2025</td></tr>
+            <tr><td>Provider Directory Accuracy</td><td>Required for Provider Access</td><td><span class="badge badge-complete">Implemented</span></td><td>April 2025</td></tr>
           </tbody>
         </table>
 
