@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.ReferenceData;
 using Microsoft.Extensions.Caching.Memory;
 using ClaimsService.Models;
 
@@ -151,17 +152,17 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             return cached?.Description;
         }
 
-        if (SyntheticDiagnosisDescriptions.TryGetValue(normalizedCode, out var syntheticDescription))
-        {
-            Cache(cacheKey, syntheticDescription);
-            return syntheticDescription;
-        }
-
         var terminologyDescription = await TryFindTerminologyDescriptionAsync(normalizedCode, ct);
         if (!string.IsNullOrWhiteSpace(terminologyDescription))
         {
             Cache(cacheKey, terminologyDescription);
             return terminologyDescription;
+        }
+
+        if (SyntheticDiagnosisDescriptions.TryGetValue(normalizedCode, out var syntheticDescription))
+        {
+            Cache(cacheKey, syntheticDescription);
+            return syntheticDescription;
         }
 
         var referenceDataDescription = await TryFindReferenceDataDescriptionAsync(normalizedCode, ct);
@@ -314,71 +315,8 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
     }
 
     private static readonly IReadOnlyDictionary<string, string> SyntheticDiagnosisDescriptions =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["J06.9"] = "Acute upper respiratory infection, unspecified",
-            ["J20.9"] = "Acute bronchitis, unspecified",
-            ["J18.9"] = "Pneumonia, unspecified organism",
-            ["M54.5"] = "Low back pain",
-            ["M79.3"] = "Panniculitis, unspecified",
-            ["R10.9"] = "Unspecified abdominal pain",
-            ["R51.9"] = "Headache, unspecified",
-            ["I10"] = "Essential (primary) hypertension",
-            ["E11.9"] = "Type 2 diabetes mellitus without complications",
-            ["E11.65"] = "Type 2 diabetes mellitus with hyperglycemia",
-            ["E78.5"] = "Dyslipidemia, unspecified",
-            ["F41.1"] = "Generalized anxiety disorder",
-            ["F32.1"] = "Major depressive disorder, single episode, moderate",
-            ["K21.0"] = "Gastro-esophageal reflux disease with esophagitis",
-            ["N39.0"] = "Urinary tract infection, site not specified",
-            ["J45.20"] = "Mild intermittent asthma, uncomplicated",
-            ["L30.9"] = "Dermatitis, unspecified",
-            ["H66.90"] = "Otitis media, unspecified, unspecified ear",
-            ["B34.9"] = "Viral infection, unspecified",
-            ["Z00.00"] = "Encounter for general adult medical examination without abnormal findings",
-            ["K80.20"] = "Calculus of gallbladder without cholecystitis without obstruction",
-            ["K40.90"] = "Unilateral inguinal hernia, without obstruction or gangrene, not specified as recurrent",
-            ["M17.11"] = "Primary osteoarthritis, right knee",
-            ["M17.12"] = "Primary osteoarthritis, left knee",
-            ["M16.11"] = "Primary osteoarthritis, right hip",
-            ["G56.00"] = "Carpal tunnel syndrome, unspecified upper limb",
-            ["H25.11"] = "Age-related nuclear cataract, right eye",
-            ["K35.80"] = "Unspecified acute appendicitis",
-            ["M75.110"] = "Incomplete rotator cuff tear of right shoulder",
-            ["N20.0"] = "Calculus of kidney",
-            ["I21.3"] = "ST elevation (STEMI) myocardial infarction of unspecified site",
-            ["I63.9"] = "Cerebral infarction, unspecified",
-            ["S72.001A"] = "Fracture of unspecified part of neck of right femur, initial encounter",
-            ["S52.501A"] = "Unspecified fracture of the lower end of right radius, initial encounter",
-            ["K92.2"] = "Gastrointestinal hemorrhage, unspecified",
-            ["R55"] = "Syncope and collapse",
-            ["R07.9"] = "Chest pain, unspecified",
-            ["S06.0X0A"] = "Concussion without loss of consciousness, initial encounter",
-            ["T78.2XXA"] = "Anaphylactic shock, unspecified, initial encounter",
-            ["J96.00"] = "Acute respiratory failure, unspecified whether with hypoxia or hypercapnia",
-            ["F33.1"] = "Major depressive disorder, recurrent, moderate",
-            ["F41.0"] = "Panic disorder without agoraphobia",
-            ["F43.10"] = "Post-traumatic stress disorder, unspecified",
-            ["F10.20"] = "Alcohol dependence, uncomplicated",
-            ["F11.20"] = "Opioid dependence, uncomplicated",
-            ["F31.9"] = "Bipolar disorder, unspecified",
-            ["F84.0"] = "Autistic disorder",
-            ["F90.9"] = "Attention-deficit hyperactivity disorder, unspecified type",
-            ["K02.9"] = "Dental caries, unspecified",
-            ["K04.0"] = "Pulpitis",
-            ["K05.10"] = "Chronic gingivitis, plaque induced",
-            ["K05.31"] = "Chronic periodontitis, localized, moderate",
-            ["K08.1"] = "Complete loss of teeth",
-            ["K08.401"] = "Partial loss of teeth, unspecified cause, class I",
-            ["K12.1"] = "Other forms of stomatitis",
-            ["M26.69"] = "Other specified disorders of temporomandibular joint",
-            ["K03.0"] = "Excessive attrition of teeth",
-            ["S02.5XXA"] = "Fracture of tooth (traumatic), initial encounter",
-            ["Z38.00"] = "Single liveborn infant, delivered vaginally",
-            ["Z38.01"] = "Single liveborn infant, delivered by cesarean",
-            ["P59.9"] = "Neonatal jaundice, unspecified",
-            ["P22.1"] = "Transient tachypnea of newborn",
-            ["P07.39"] = "Other preterm newborn",
-            ["P92.5"] = "Neonatal difficulty in feeding at breast"
-        };
+        SyntheticIcd10CmCatalog.Diagnoses.ToDictionary(
+            diagnosis => diagnosis.Code,
+            diagnosis => diagnosis.Display,
+            StringComparer.OrdinalIgnoreCase);
 }

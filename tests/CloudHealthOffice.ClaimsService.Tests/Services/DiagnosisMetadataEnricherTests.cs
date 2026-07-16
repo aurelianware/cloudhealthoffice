@@ -27,10 +27,25 @@ public sealed class DiagnosisMetadataEnricherTests
     }
 
     [Fact]
-    public async Task FindDescriptionAsync_SyntheticHit_DoesNotCallTerminology()
+    public async Task FindDescriptionAsync_TerminologyHitForSyntheticCode_ReturnsTerminologyDisplay()
     {
-        var terminologyHandler = FakeHttpMessageHandler.Throw(
-            new InvalidOperationException("Terminology should not be called for known synthetic codes."));
+        var terminologyHandler = FakeHttpMessageHandler.Json(
+            """{"result":true,"display":"Terminology catalog display for diabetes"}""");
+        var referenceHandler = FakeHttpMessageHandler.Throw(
+            new InvalidOperationException("Reference data should not be called when terminology resolves."));
+        var lookup = CreateLookup(referenceHandler, terminologyHandler);
+
+        var description = await lookup.FindDescriptionAsync("E11.65");
+
+        Assert.Equal("Terminology catalog display for diabetes", description);
+        Assert.Equal(1, terminologyHandler.RequestCount);
+        Assert.Equal(0, referenceHandler.RequestCount);
+    }
+
+    [Fact]
+    public async Task FindDescriptionAsync_TerminologyUnavailable_UsesSyntheticFallback()
+    {
+        var terminologyHandler = FakeHttpMessageHandler.Status(HttpStatusCode.ServiceUnavailable);
         var referenceHandler = FakeHttpMessageHandler.Throw(
             new InvalidOperationException("Reference data should not be called for known synthetic codes."));
         var lookup = CreateLookup(referenceHandler, terminologyHandler);
@@ -38,7 +53,7 @@ public sealed class DiagnosisMetadataEnricherTests
         var description = await lookup.FindDescriptionAsync("M79.3");
 
         Assert.Equal("Panniculitis, unspecified", description);
-        Assert.Equal(0, terminologyHandler.RequestCount);
+        Assert.Equal(1, terminologyHandler.RequestCount);
         Assert.Equal(0, referenceHandler.RequestCount);
     }
 
