@@ -116,6 +116,7 @@ public interface IDiagnosisDescriptionLookup
 public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
 {
     private const string CacheKeyPrefix = "claims-service:diagnosis-description:";
+    private const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(6);
     private static readonly TimeSpan NegativeCacheDuration = TimeSpan.FromMinutes(10);
 
@@ -150,17 +151,78 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             return cached?.Description;
         }
 
+        var terminologyDescription = await TryFindTerminologyDescriptionAsync(normalizedCode, ct);
+        if (!string.IsNullOrWhiteSpace(terminologyDescription))
+        {
+            Cache(cacheKey, terminologyDescription);
+            return terminologyDescription;
+        }
+
         if (SyntheticDiagnosisDescriptions.TryGetValue(normalizedCode, out var syntheticDescription))
         {
             Cache(cacheKey, syntheticDescription);
             return syntheticDescription;
         }
 
-        // CHO.TerminologyService currently owns crosswalk/translation. The
-        // reference-data service is today's ICD-10 code-system display source.
         var referenceDataDescription = await TryFindReferenceDataDescriptionAsync(normalizedCode, ct);
         Cache(cacheKey, referenceDataDescription);
         return referenceDataDescription;
+    }
+
+    private async Task<string?> TryFindTerminologyDescriptionAsync(string code, CancellationToken ct)
+    {
+        var timeoutMilliseconds = Math.Clamp(
+            _configuration.GetValue<int?>("Services:TerminologyDisplayLookupTimeoutMilliseconds") ?? 750,
+            100,
+            3_000);
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromMilliseconds(timeoutMilliseconds));
+
+            var client = _httpClientFactory.CreateClient(UpstreamClientNames.TerminologyService);
+            var response = await client.GetFromJsonAsync<TerminologyCodeLookupResponse>(
+                "fhir/CodeSystem/$lookup" +
+                $"?system={Uri.EscapeDataString(Icd10CmSystem)}" +
+                $"&code={Uri.EscapeDataString(code)}",
+                timeout.Token);
+
+            return response is { Result: true } && !string.IsNullOrWhiteSpace(response.Display)
+                ? response.Display
+                : null;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogDebug(
+                "Terminology ICD-10 display lookup timed out for {Code}",
+                SanitizeForLog(code));
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Terminology ICD-10 display lookup failed for {Code}",
+                SanitizeForLog(code));
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Terminology ICD-10 display lookup returned malformed JSON for {Code}",
+                SanitizeForLog(code));
+            return null;
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Terminology ICD-10 display lookup returned an unsupported response for {Code}",
+                SanitizeForLog(code));
+            return null;
+        }
     }
 
     private async Task<string?> TryFindReferenceDataDescriptionAsync(string code, CancellationToken ct)
@@ -175,7 +237,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromMilliseconds(timeoutMilliseconds));
 
-            var client = _httpClientFactory.CreateClient("ReferenceDataService");
+            var client = _httpClientFactory.CreateClient(UpstreamClientNames.ReferenceDataService);
             var response = await client.GetFromJsonAsync<ReferenceDataValidationResponse>(
                 $"api/ReferenceData/icd10/{Uri.EscapeDataString(code)}/validate",
                 timeout.Token);
@@ -239,6 +301,12 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
         value.Replace("\r", "").Replace("\n", "");
 
     private sealed record CachedDiagnosisDescription(string? Description);
+
+    private sealed class TerminologyCodeLookupResponse
+    {
+        public bool Result { get; set; }
+        public string? Display { get; set; }
+    }
 
     private sealed class ReferenceDataValidationResponse
     {
