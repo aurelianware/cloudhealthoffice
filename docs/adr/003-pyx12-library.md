@@ -26,7 +26,7 @@ We will use **pyx12** as the foundation for X12 parsing, supplemented with custo
    - Supports 005010 transaction sets
    - Validates against HIPAA implementation guides
 
-2. **Open Source**
+2. **Permissively Licensed Dependency**
    - Apache 2.0 license
    - Active maintenance
    - Community contributions
