@@ -8,7 +8,7 @@ CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engi
 Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrate workloads on your timeline.
 
 [![Version](https://img.shields.io/badge/version-v4.4.0-blue)](./CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-5214%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
+[![Tests](https://img.shields.io/badge/tests-5224%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
 [![Test Projects](https://img.shields.io/badge/test%20projects-44-brightgreen)](./tests/)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-BSL%201.1-orange.s
@@ -64,7 +64,7 @@ Customers enter at any product line and expand over time. See
 |Portal Pages         |97       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                                                |
 |CI/CD Workflows      |18       |GitHub Actions — build, test, deploy, security scan                                                         |
 |Claims Scrubbing     |20+ rules|Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits                                         |
-|Automated Tests      |5214     |C# xUnit, TypeScript Jest, Python pytest                                                                    |
+|Automated Tests      |5224     |C# xUnit, TypeScript Jest, Python pytest                                                                    |
 |Test Projects        |44       |Repositories and suites covered by automated test execution                                                |
 
 ### Services
@@ -296,7 +296,7 @@ cloudhealthoffice/
 |Documentation    |150,000  |Architecture, ADRs, deployment guides, features, security, sales|
 |**Total**        |**~500,000+**|                                                             |
 
-~5,214 automated tests across 44 test projects in C# (xUnit), TypeScript (Jest), and Python (pytest).
+~5,224 automated tests across 44 test projects in C# (xUnit), TypeScript (Jest), and Python (pytest).
 Built by a solo founder with 25+ years of payer IT experience and AI-assisted development.
 
 ## Deployment Options
