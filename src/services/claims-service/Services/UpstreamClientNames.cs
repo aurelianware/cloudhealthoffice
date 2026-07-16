@@ -26,7 +26,10 @@ public static class UpstreamClientNames
     /// <summary>member-service — capability 5.5 member resolver.</summary>
     public const string MemberService = "MemberService";
 
-    /// <summary>reference-data-service — terminology lookups.</summary>
+    /// <summary>terminology-service — authoritative coding-system display/crosswalk lookups.</summary>
+    public const string TerminologyService = "TerminologyService";
+
+    /// <summary>reference-data-service — fallback coding-system lookups.</summary>
     public const string ReferenceDataService = "ReferenceDataService";
 
     /// <summary>coverage-service — capability 5.8 Coordination of Benefits
