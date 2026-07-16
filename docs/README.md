@@ -1,164 +1,119 @@
 # CloudHealthOffice Documentation
 
-This directory contains comprehensive documentation for the CloudHealthOffice platform.
+This is the documentation home for CloudHealthOffice. It is organized for a
+first-time engineer who needs to understand the platform, run it locally, inspect
+the architecture, and find an area to contribute.
 
-## 🚀 v3.0.0 Documentation
+## Start Here
 
-CloudHealthOffice v3.0.0 — The Open Frontier Release delivers multi-cloud independence and commercial launch readiness.
+| Need | Start with |
+| --- | --- |
+| Understand the project | [Repository README](../README.md) |
+| Run it locally | [Quickstart](guides/QUICKSTART.md) |
+| Understand services and data flow | [Architecture](architecture/README.md) |
+| Learn payer-domain concepts | [Healthcare domain](domain/README.md) |
+| Reproduce benchmark evidence | [Benchmarks](benchmarks/README.md) |
+| Deploy beyond local development | [Deployment](deployment/DEPLOYMENT.md) |
+| Contribute | [Developer guide](developer/README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
 
-| Document | Description |
-|----------|-------------|
-| [v3.0.0 Features Overview](./releases/v3.0.0-features-overview.md) | Comprehensive features matrix and capability overview |
-| [v3.0.0 Release Notes](./releases/RELEASE_NOTES_v3.0.0.md) | Detailed release notes with upgrade instructions |
-| [v3.0.0 Announcement](./announcements/v3.0.0-announcement.md) | Executive summary and stakeholder benefits |
-| [Release Documentation Index](./releases/README.md) | All release documentation and migration guides |
+## Getting Started
 
-## Key Documents
+- [Quickstart](guides/QUICKSTART.md)
+- [Feature overview](guides/FEATURES.md)
+- [Repository layout](developer/README.md#repository-layout)
+- [Running locally](developer/README.md#running-locally)
+- [Testing](../tests/README.md)
 
-### Multi-Cloud & Deployment
+## Architecture
 
-| Document | Description |
-|----------|-------------|
-| [MULTI-CLOUD-DEPLOYMENT.md](MULTI-CLOUD-DEPLOYMENT.md) | Deploy on Azure, AWS (EKS), GCP (GKE), or any Kubernetes cluster |
-| [ARGO-MIGRATION-GUIDE.md](ARGO-MIGRATION-GUIDE.md) | Migrate from Azure Logic Apps to Argo Workflows |
-| [ARGO-OPERATIONS.md](ARGO-OPERATIONS.md) | Argo Workflows operational runbook |
+- [Architecture index](architecture/README.md)
+- [System architecture](architecture/ARCHITECTURE.md)
+- [Claim adjudication pipeline](architecture/claim-adjudication-pipeline.md)
+- [FHIR conformance](architecture/fhir-conformance.md)
+- [FHIR endpoint projection](architecture/fhir-endpoint-projection.md)
+- [Claim FHIR projection](architecture/claim-fhir-projection.md)
+- [Shared message bus](architecture/shared-messagebus.md)
+- [Declarative benefit model](architecture/declarative-benefit-model.md)
+- [Accumulator service](architecture/accumulator-service.md)
+- [Temporal eligibility](architecture/temporal-eligibility.md)
+- [Observability](architecture/observability.md)
 
-### Compliance & Regulatory
+## Deployment And Operations
 
-| Document | Description |
-|----------|-------------|
-| [WHITEPAPER-CMS-0057-F-COMPLIANCE.md](security/WHITEPAPER-CMS-0057-F-COMPLIANCE.md) | Executive whitepaper for CMS-0057-F compliance strategy |
-| [CMS-0057-F-COMPLIANCE.md](features/CMS-0057-F-COMPLIANCE.md) | Technical compliance guide with API specifications |
-| [Compliance README](compliance/README.md) | Compliance document index and CMS-0057-F pilot package workflow |
-| [CMS-0057-F-READINESS-MATRIX.md](compliance/CMS-0057-F-READINESS-MATRIX.md) | Canonical cross-service CMS-0057-F readiness matrix and gap record |
-| [CMS-0057-F-COMPLIANCE-ACCELERATOR-BRIEF.md](compliance/CMS-0057-F-COMPLIANCE-ACCELERATOR-BRIEF.md) | Buyer-facing CMS-0057-F accelerator brief |
-| [CMS-0057-F-PILOT-DILIGENCE-CHECKLIST.md](compliance/CMS-0057-F-PILOT-DILIGENCE-CHECKLIST.md) | Pilot diligence checklist for CMS-0057-F implementation planning |
-| [HIPAA-COMPLIANCE-MATRIX.md](features/HIPAA-COMPLIANCE-MATRIX.md) | HIPAA security control mapping |
-| [HIPAA-AUDIT-REPORT.md](features/HIPAA-AUDIT-REPORT.md) | Audit report template |
-| [FL-AHCA-COMPLIANCE.md](compliance/FL-AHCA-COMPLIANCE.md) | Florida AHCA / SMMC 3.0 compliance guide — FMMIS, MPIP, encounter submission |
+- [Deployment guide](deployment/DEPLOYMENT.md)
+- [Deployment gates](deployment/DEPLOYMENT-GATES-GUIDE.md)
+- [Known deployment gaps](deployment/KNOWN-GAPS.md)
+- [Kubernetes infrastructure](../infrastructure/k8s/README.md)
+- [Health-check dependency matrix](health-check-dependency-matrix.md)
+- [Monitoring and observability](features/MONITORING-AND-OBSERVABILITY.md)
 
-### Adjudication Engines
+## Healthcare Domain
 
-| Document | Description |
-|----------|-------------|
-| [ACCUMULATOR-ENGINE.md](engines/ACCUMULATOR-ENGINE.md) | Redis-backed deductible/OOP/visit accumulator engine — design, key layout, cache miss/rebuild, and DI wiring |
-| [FEE-SCHEDULE-ENGINE.md](engines/FEE-SCHEDULE-ENGINE.md) | Rate resolution engine — MPFS RVU calc, modifier rules, provider contracts, and persistence |
+- [Domain index](domain/README.md)
+- Claims
+- Benefits
+- Provider networks
+- Pricing
+- Authorizations
+- Eligibility
+- Members and employers
+- Appeals
+- Accumulators
 
-### Technical Guides
+The domain index is intentionally written for software engineers who are new to
+healthcare payer systems.
 
-| Document | Description |
-|----------|-------------|
-| [FHIR-INTEGRATION.md](FHIR-INTEGRATION.md) | FHIR R4 API integration guide |
-| [PRIOR-AUTHORIZATION-API.md](PRIOR-AUTHORIZATION-API.md) | Prior authorization workflow APIs |
-| [PATIENT-ACCESS-API.md](PATIENT-ACCESS-API.md) | Patient Access API documentation |
-| [BACKEND-INTERFACE.md](BACKEND-INTERFACE.md) | Backend integration specifications |
+## Compliance And Interoperability
 
-### Implementation
+- [CMS-0057-F readiness matrix](compliance/CMS-0057-F-READINESS-MATRIX.md)
+- [CMS-0057-F compliance guide](features/CMS-0057-F-COMPLIANCE.md)
+- [FHIR integration](features/FHIR-INTEGRATION.md)
+- [Patient Access API](features/PATIENT-ACCESS-API.md)
+- [Prior Authorization API](features/PRIOR-AUTHORIZATION-API.md)
+- [HIPAA compliance matrix](features/HIPAA-COMPLIANCE-MATRIX.md)
 
-| Document | Description |
-|----------|-------------|
-| [CONFIG-TO-WORKFLOW-GENERATOR.md](CONFIG-TO-WORKFLOW-GENERATOR.md) | Configuration generator guide |
-| [ONBOARDING-CONFIGURATION-WORKSHEET.md](ONBOARDING-CONFIGURATION-WORKSHEET.md) | Payer onboarding worksheet |
-| [AZURE-MONITOR-DASHBOARDS.md](AZURE-MONITOR-DASHBOARDS.md) | Monitoring setup guide |
+## Benchmarks
 
----
+- [Benchmark index](benchmarks/README.md)
+- [Million Claim Challenge podcast series](million-claim-challenge/podcast/README.md)
+- [100K local Kubernetes result](million-claim-challenge/podcast/episode-008/article.txt)
+- [100K benchmark results](million-claim-challenge/podcast/episode-008/benchmark-results.txt)
+- [Pended-claim validation](million-claim-challenge/pend-validation.md)
 
-## Generating PDF from Whitepaper
+## Developer Guide
 
-The CMS-0057-F compliance whitepaper can be converted to a professional PDF document for offline distribution and executive presentations.
+- [Developer guide](developer/README.md)
+- [Coding standards](developer/coding-standards.md)
+- [Debugging guide](developer/debugging.md)
+- [CI/CD overview](developer/ci-cd.md)
+- [Testing guide](../tests/README.md)
 
-### Prerequisites
+## Architecture Decisions
 
-1. **pandoc** - Universal document converter
-   ```bash
-   # macOS
-   brew install pandoc
-   
-   # Ubuntu/Debian
-   sudo apt-get install pandoc
-   
-   # Windows
-   choco install pandoc
-   ```
+- [Architecture decision index](../ARCHITECTURE_DECISIONS.md)
+- [ADR directory](adr/)
+- [Argo vs Airflow](adr/001-argo-vs-airflow.md)
+- [Kafka vs NATS](adr/002-kafka-vs-nats.md)
+- [pyx12 library](adr/003-pyx12-library.md)
+- [Remove Logic Apps](adr/004-remove-logic-apps.md)
+- [Kubernetes-first runtime](adr/005-kubernetes-first.md)
+- [Persistence boundaries](adr/006-persistence-boundaries.md)
+- [Blazor/Razor portal](adr/007-blazor-portal.md)
+- [FHIR R4 projections](adr/008-fhir-r4-projections.md)
+- [X12 remains first-class](adr/009-x12-first-class.md)
+- [Event evidence before full event sourcing](adr/010-event-evidence-not-full-event-sourcing.md)
+- [Separate rules, scoring, and claims](adr/011-rules-and-evidence-model.md)
 
-2. **weasyprint** - PDF rendering engine
-   ```bash
-   pip install weasyprint
-   ```
+## Roadmap
 
-3. **mermaid-filter** (optional) - Render Mermaid diagrams
-   ```bash
-   npm install -g mermaid-filter
-   ```
+- [Public roadmap](roadmap/README.md)
+- [Claims phase 2 backlog](roadmap/claims-phase-2-backlog.md)
 
-### Generate PDF
+## Documentation Maintenance
 
-From the repository root:
-
-```bash
-# Using npm script (recommended)
-npm run generate-pdf
-
-# Or directly with bash script
-./scripts/generate-whitepaper-pdf.sh
-
-# Or with TypeScript (alternative)
-npx ts-node scripts/generate-whitepaper-pdf.ts
-
-# View help (TypeScript version)
-npx ts-node scripts/generate-whitepaper-pdf.ts --help
-```
-
-### Output
-
-The generated PDF will be saved to:
-```
-docs/WHITEPAPER-CMS-0057-F-COMPLIANCE.pdf
-```
-
-### Customizing PDF Style
-
-The PDF styling is controlled by `docs/whitepaper-style.css`. Key customization options:
-
-- **Page size**: Default is US Letter (8.5" × 11")
-- **Margins**: 1 inch on all sides
-- **Typography**: Segoe UI font family
-- **Colors**: Blue (#3498db) accent color
-- **Dark mode**: Supported for screen viewing
-
-### Note on Mermaid Diagrams
-
-If `mermaid-filter` is not installed, Mermaid code blocks will appear as syntax-highlighted code in the PDF. For fully rendered diagrams:
-
-1. Install mermaid-filter: `npm install -g mermaid-filter`
-2. Ensure Chrome/Chromium is available for headless rendering
-3. Re-run the PDF generation script
-
-Alternatively, pre-render Mermaid diagrams to PNG and reference them as images.
-
----
-
-## Contributing to Documentation
-
-When adding or updating documentation:
-
-1. Use Markdown format (`.md` files)
-2. Follow the existing document structure
-3. Add entries to this README for new documents
-4. Test rendering with the site build: `npm run build:site`
-5. For whitepapers, test PDF generation: `npm run generate-pdf`
-
-### Style Guidelines
-
-- Use sentence case for headings
-- Include table of contents for documents > 500 lines
-- Add alt text for all images
-- Use Mermaid for diagrams (with HTML comment alt text)
-- Include footnotes for citations
-
----
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/aurelianware/cloudhealthoffice/issues)
-- **Email**: support@aurelianware.com
+- Keep claims factual and dated when they rely on benchmark results.
+- Label planned capabilities as planned.
+- Do not include PHI, production credentials, real member data, or real claim
+  data in docs or screenshots.
+- Prefer Mermaid for diagrams that should render in GitHub.
+- Add new major docs to this index.
