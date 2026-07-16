@@ -151,17 +151,17 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             return cached?.Description;
         }
 
-        if (SyntheticDiagnosisDescriptions.TryGetValue(normalizedCode, out var syntheticDescription))
-        {
-            Cache(cacheKey, syntheticDescription);
-            return syntheticDescription;
-        }
-
         var terminologyDescription = await TryFindTerminologyDescriptionAsync(normalizedCode, ct);
         if (!string.IsNullOrWhiteSpace(terminologyDescription))
         {
             Cache(cacheKey, terminologyDescription);
             return terminologyDescription;
+        }
+
+        if (SyntheticDiagnosisDescriptions.TryGetValue(normalizedCode, out var syntheticDescription))
+        {
+            Cache(cacheKey, syntheticDescription);
+            return syntheticDescription;
         }
 
         var referenceDataDescription = await TryFindReferenceDataDescriptionAsync(normalizedCode, ct);

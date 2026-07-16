@@ -17,6 +17,7 @@ namespace CHO.TerminologyService.Services;
 public class TerminologyTranslationService : ITerminologyTranslationService
 {
     private readonly IConceptMapRepository _repository;
+    private readonly ICodeSystemCatalogRepository _codeSystemCatalog;
     private readonly IContextRuleEngine _ruleEngine;
     private readonly IMemoryCache _cache;
     private readonly ILogger<TerminologyTranslationService> _logger;
@@ -24,12 +25,14 @@ public class TerminologyTranslationService : ITerminologyTranslationService
 
     public TerminologyTranslationService(
         IConceptMapRepository repository,
+        ICodeSystemCatalogRepository codeSystemCatalog,
         IContextRuleEngine ruleEngine,
         IMemoryCache cache,
         ILogger<TerminologyTranslationService> logger,
         IOptions<TerminologyServiceOptions> options)
     {
         _repository = repository;
+        _codeSystemCatalog = codeSystemCatalog;
         _ruleEngine = ruleEngine;
         _cache = cache;
         _logger = logger;
@@ -143,6 +146,20 @@ public class TerminologyTranslationService : ITerminologyTranslationService
             System = request.System,
             Code = request.Code
         };
+
+        var codeSystemDisplay = await _codeSystemCatalog.FindDisplayAsync(
+            request.System,
+            request.Code,
+            request.TenantId,
+            ct);
+        if (codeSystemDisplay is not null)
+        {
+            response.Result = true;
+            response.Display = codeSystemDisplay.Display;
+            response.MapVersionId = codeSystemDisplay.Version;
+            response.Source = codeSystemDisplay.Source;
+            return response;
+        }
 
         var candidates = await _repository.FindDisplaysByCodeAsync(
             request.System,
