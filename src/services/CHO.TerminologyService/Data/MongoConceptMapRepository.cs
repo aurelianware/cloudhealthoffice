@@ -118,6 +118,41 @@ public class MongoConceptMapRepository : IConceptMapRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<ConceptMapEntry>> FindDisplaysByCodeAsync(
+        string system, string code, string? tenantId = null, CancellationToken ct = default)
+    {
+        var activeVersionIds = await _versions.Find(v => v.IsActive)
+            .Project(v => v.Id)
+            .ToListAsync(ct);
+
+        var codeFilter = Builders<ConceptMapEntry>.Filter.Or(
+            Builders<ConceptMapEntry>.Filter.And(
+                Builders<ConceptMapEntry>.Filter.Eq(e => e.SourceSystem, system),
+                Builders<ConceptMapEntry>.Filter.Eq(e => e.SourceCode, code)),
+            Builders<ConceptMapEntry>.Filter.And(
+                Builders<ConceptMapEntry>.Filter.Eq(e => e.TargetSystem, system),
+                Builders<ConceptMapEntry>.Filter.Eq(e => e.TargetCode, code)));
+
+        var activeFilter = Builders<ConceptMapEntry>.Filter.Or(
+            Builders<ConceptMapEntry>.Filter.And(
+                Builders<ConceptMapEntry>.Filter.In(e => e.MapVersionId, activeVersionIds),
+                Builders<ConceptMapEntry>.Filter.Eq(e => e.IsOverride, false)),
+            tenantId != null
+                ? Builders<ConceptMapEntry>.Filter.And(
+                    Builders<ConceptMapEntry>.Filter.Eq(e => e.IsOverride, true),
+                    Builders<ConceptMapEntry>.Filter.Eq(e => e.TenantId, tenantId))
+                : Builders<ConceptMapEntry>.Filter.Eq(e => e.Id, "__never_match__"));
+
+        var filter = Builders<ConceptMapEntry>.Filter.And(codeFilter, activeFilter);
+
+        return await _entries.Find(filter)
+            .Sort(Builders<ConceptMapEntry>.Sort
+                .Descending(e => e.IsOverride)
+                .Ascending(e => e.Priority))
+            .Limit(20)
+            .ToListAsync(ct);
+    }
+
     public async Task BulkInsertAsync(List<ConceptMapEntry> entries, CancellationToken ct = default)
     {
         if (entries.Count == 0) return;

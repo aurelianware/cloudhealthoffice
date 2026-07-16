@@ -133,6 +133,41 @@ public class TerminologyTranslationService : ITerminologyTranslationService
         return results.ToList();
     }
 
+    public async Task<CodeLookupResponse> LookupCodeAsync(CodeLookupRequest request, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(request.System, nameof(request.System));
+        ArgumentException.ThrowIfNullOrEmpty(request.Code, nameof(request.Code));
+
+        var response = new CodeLookupResponse
+        {
+            System = request.System,
+            Code = request.Code
+        };
+
+        var candidates = await _repository.FindDisplaysByCodeAsync(
+            request.System,
+            request.Code,
+            request.TenantId,
+            ct);
+
+        var match = candidates
+            .Select(entry => ToLookupCandidate(entry, request.System, request.Code))
+            .FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate.Display));
+
+        if (match is null)
+        {
+            response.Result = false;
+            response.Message = $"No display found for {request.System}|{request.Code}";
+            return response;
+        }
+
+        response.Result = true;
+        response.Display = match.Display;
+        response.MapVersionId = match.MapVersionId;
+        response.Source = match.Source;
+        return response;
+    }
+
     public async Task<List<MapVersion>> GetMapVersionsAsync(CancellationToken ct = default)
     {
         return await _repository.GetAllMapVersionsAsync(ct);
@@ -163,4 +198,23 @@ public class TerminologyTranslationService : ITerminologyTranslationService
         if (mapVersionId.StartsWith("SNOMED", StringComparison.OrdinalIgnoreCase)) return "SNOMED-Intl";
         return "Unknown";
     }
+
+    private static LookupCandidate ToLookupCandidate(ConceptMapEntry entry, string system, string code)
+    {
+        if (entry.SourceSystem.Equals(system, StringComparison.Ordinal) &&
+            entry.SourceCode.Equals(code, StringComparison.Ordinal))
+        {
+            return new LookupCandidate(
+                entry.SourceDisplay,
+                entry.MapVersionId,
+                entry.IsOverride ? "PlanOverride" : "ConceptMapSource");
+        }
+
+        return new LookupCandidate(
+            entry.TargetDisplay,
+            entry.MapVersionId,
+            entry.IsOverride ? "PlanOverride" : "ConceptMapTarget");
+    }
+
+    private sealed record LookupCandidate(string Display, string MapVersionId, string Source);
 }

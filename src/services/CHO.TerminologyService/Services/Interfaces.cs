@@ -21,6 +21,11 @@ public interface ITerminologyTranslationService
     Task<List<TranslateResponse>> BatchTranslateAsync(List<TranslateRequest> requests, CancellationToken ct = default);
 
     /// <summary>
+    /// Look up display metadata for a code already expressed in a known code system.
+    /// </summary>
+    Task<CodeLookupResponse> LookupCodeAsync(CodeLookupRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Get all loaded map versions (for admin/audit).
     /// </summary>
     Task<List<MapVersion>> GetMapVersionsAsync(CancellationToken ct = default);
@@ -41,6 +46,10 @@ public interface IConceptMapRepository
     Task<List<ConceptMapEntry>> FindByTargetCodeAsync(
         string targetSystem, string targetCode, string sourceSystem,
         string? tenantId = null, CancellationToken ct = default);
+
+    /// <summary>Find active entries where the supplied code appears as source or target.</summary>
+    Task<List<ConceptMapEntry>> FindDisplaysByCodeAsync(
+        string system, string code, string? tenantId = null, CancellationToken ct = default);
 
     /// <summary>Bulk insert entries during map loading.</summary>
     Task BulkInsertAsync(List<ConceptMapEntry> entries, CancellationToken ct = default);
