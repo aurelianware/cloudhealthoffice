@@ -1,6 +1,7 @@
 using CHO.TerminologyService.Configuration;
 using CHO.TerminologyService.Data;
 using CHO.TerminologyService.Services;
+using CHO.TerminologyService.Services.CodeSystemCatalog;
 using CHO.TerminologyService.Services.Loaders;
 using CHO.TerminologyService.Services.Rules;
 using MongoDB.Driver;
@@ -46,8 +47,10 @@ builder.Services.AddSingleton<IMongoDatabase>(sp =>
 // Services
 // ──────────────────────────────────────────────────────
 builder.Services.AddSingleton<IConceptMapRepository, MongoConceptMapRepository>();
+builder.Services.AddSingleton<ICodeSystemCatalogRepository, MongoCodeSystemCatalogRepository>();
 builder.Services.AddSingleton<IContextRuleEngine, ContextRuleEngine>();
 builder.Services.AddSingleton<ITerminologyTranslationService, TerminologyTranslationService>();
+builder.Services.AddHostedService<CodeSystemCatalogSeedService>();
 
 // Map loaders (register all implementations)
 builder.Services.AddSingleton<IMapLoader, Rf2MapLoader>();

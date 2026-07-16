@@ -71,6 +71,17 @@ public interface IConceptMapRepository
 }
 
 /// <summary>
+/// Repository for display metadata owned by a code system, independent of ConceptMap crosswalks.
+/// </summary>
+public interface ICodeSystemCatalogRepository
+{
+    Task<CodeSystemDisplay?> FindDisplayAsync(
+        string system, string code, string? tenantId = null, CancellationToken ct = default);
+
+    Task UpsertManyAsync(IEnumerable<CodeSystemConcept> concepts, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Loads crosswalk data from various source formats.
 /// Implementations: Rf2MapLoader (NLM SNOMED), CsvMapLoader (AMA CPT cross maps, plan-specific overrides).
 /// </summary>

@@ -14,6 +14,33 @@ public sealed class TerminologyTranslationServiceLookupTests
     private const string SnomedSystem = "http://snomed.info/sct";
 
     [Fact]
+    public async Task LookupCodeAsync_CodeSystemCatalogHit_ReturnsCatalogDisplayWithoutConceptMapLookup()
+    {
+        var repository = Substitute.For<IConceptMapRepository>();
+        var catalog = Substitute.For<ICodeSystemCatalogRepository>();
+        catalog.FindDisplayAsync(Icd10CmSystem, "E11.65", null, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<CodeSystemDisplay?>(
+                new CodeSystemDisplay(
+                    "Type 2 diabetes mellitus with hyperglycemia",
+                    "mcc-seed-2026",
+                    "BuiltInIcd10CmCatalog")));
+        var service = CreateService(repository, catalog);
+
+        var response = await service.LookupCodeAsync(new CodeLookupRequest
+        {
+            System = Icd10CmSystem,
+            Code = "E11.65"
+        });
+
+        Assert.True(response.Result);
+        Assert.Equal("Type 2 diabetes mellitus with hyperglycemia", response.Display);
+        Assert.Equal("BuiltInIcd10CmCatalog", response.Source);
+        Assert.Equal("mcc-seed-2026", response.MapVersionId);
+        await repository.DidNotReceiveWithAnyArgs()
+            .FindDisplaysByCodeAsync(default!, default!, default, default);
+    }
+
+    [Fact]
     public async Task LookupCodeAsync_SourceCodeMatch_ReturnsSourceDisplay()
     {
         var repository = Substitute.For<IConceptMapRepository>();
@@ -185,10 +212,20 @@ public sealed class TerminologyTranslationServiceLookupTests
         Assert.Contains("No display found", response.Message);
     }
 
-    private static TerminologyTranslationService CreateService(IConceptMapRepository repository)
+    private static TerminologyTranslationService CreateService(
+        IConceptMapRepository repository,
+        ICodeSystemCatalogRepository? catalog = null)
     {
+        if (catalog is null)
+        {
+            catalog = Substitute.For<ICodeSystemCatalogRepository>();
+            catalog.FindDisplayAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<CodeSystemDisplay?>(null));
+        }
+
         return new TerminologyTranslationService(
             repository,
+            catalog,
             Substitute.For<IContextRuleEngine>(),
             new MemoryCache(new MemoryCacheOptions()),
             NullLogger<TerminologyTranslationService>.Instance,
