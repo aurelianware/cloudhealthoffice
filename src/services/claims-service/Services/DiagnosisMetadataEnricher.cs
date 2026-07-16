@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using ClaimsService.Models;
 
@@ -21,13 +22,25 @@ public sealed class ClaimDiagnosisMetadataEnricher : IClaimDiagnosisMetadataEnri
 
     public async Task EnrichAsync(IEnumerable<Claim> claims, CancellationToken ct = default)
     {
+        var pendingDescriptions = new List<PendingDiagnosisDescription>();
         foreach (var claim in claims)
         {
-            await EnrichAsync(claim, ct);
+            PrepareDiagnosisMetadata(claim, pendingDescriptions);
         }
+
+        await PopulateDescriptionsAsync(pendingDescriptions, ct);
     }
 
     public async Task EnrichAsync(Claim claim, CancellationToken ct = default)
+    {
+        var pendingDescriptions = new List<PendingDiagnosisDescription>();
+        PrepareDiagnosisMetadata(claim, pendingDescriptions);
+        await PopulateDescriptionsAsync(pendingDescriptions, ct);
+    }
+
+    private static void PrepareDiagnosisMetadata(
+        Claim claim,
+        List<PendingDiagnosisDescription> pendingDescriptions)
     {
         for (var index = 0; index < claim.DiagnosisCodes.Count; index++)
         {
@@ -44,10 +57,55 @@ public sealed class ClaimDiagnosisMetadataEnricher : IClaimDiagnosisMetadataEnri
 
             if (string.IsNullOrWhiteSpace(diagnosis.Description))
             {
-                diagnosis.Description = await _descriptionLookup.FindDescriptionAsync(diagnosis.Code, ct);
+                var normalizedCode = NormalizeCode(diagnosis.Code);
+                if (normalizedCode is not null)
+                {
+                    pendingDescriptions.Add(new PendingDiagnosisDescription(diagnosis, normalizedCode));
+                }
             }
         }
     }
+
+    private async Task PopulateDescriptionsAsync(
+        IReadOnlyCollection<PendingDiagnosisDescription> pendingDescriptions,
+        CancellationToken ct)
+    {
+        if (pendingDescriptions.Count == 0)
+        {
+            return;
+        }
+
+        var lookups = pendingDescriptions
+            .Select(x => x.Code)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                code => code,
+                code => _descriptionLookup.FindDescriptionAsync(code, ct),
+                StringComparer.OrdinalIgnoreCase);
+
+        await Task.WhenAll(lookups.Values);
+
+        foreach (var pending in pendingDescriptions)
+        {
+            var description = await lookups[pending.Code];
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                pending.Diagnosis.Description = description;
+            }
+        }
+    }
+
+    private static string? NormalizeCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        return code.Trim().ToUpperInvariant();
+    }
+
+    private sealed record PendingDiagnosisDescription(DiagnosisCode Diagnosis, string Code);
 }
 
 public interface IDiagnosisDescriptionLookup
@@ -138,6 +196,22 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             _logger.LogDebug(
                 ex,
                 "Reference data ICD-10 display lookup failed for {Code}",
+                SanitizeForLog(code));
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Reference data ICD-10 display lookup returned malformed JSON for {Code}",
+                SanitizeForLog(code));
+            return null;
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Reference data ICD-10 display lookup returned an unsupported response for {Code}",
                 SanitizeForLog(code));
             return null;
         }
