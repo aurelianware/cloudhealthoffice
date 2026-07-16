@@ -85,3 +85,33 @@ public class TranslatedCoding
     public string Code { get; set; } = string.Empty;
     public string Display { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// Request model for a lightweight CodeSystem/$lookup display lookup.
+/// </summary>
+public class CodeLookupRequest
+{
+    /// <summary>FHIR coding system URI</summary>
+    public string System { get; set; } = string.Empty;
+
+    /// <summary>Code to look up</summary>
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>Optional tenant ID for plan-specific terminology overrides</summary>
+    public string? TenantId { get; set; }
+}
+
+/// <summary>
+/// Response model for a lightweight code display lookup.
+/// </summary>
+public class CodeLookupResponse
+{
+    public bool Result { get; set; }
+    public string System { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string? Display { get; set; }
+    public string? Message { get; set; }
+    public string? MapVersionId { get; set; }
+    public string? Source { get; set; }
+    public DateTime LookedUpAt { get; set; } = DateTime.UtcNow;
+}

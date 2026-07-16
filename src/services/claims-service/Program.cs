@@ -142,6 +142,16 @@ builder.Services.AddHttpClient("ReferenceDataService", client =>
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
+builder.Services.AddHttpClient(UpstreamClientNames.TerminologyService, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:TerminologyServiceUrl"]
+        ?? builder.Configuration["Services:TerminologyService"]
+        ?? "http://terminology-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
 // FL FMMIS encounter submission pipeline
 builder.Services.AddScoped<IProviderService, HttpProviderService>();
 builder.Services.AddScoped<ITenantComplianceConfigService, HttpTenantComplianceConfigService>();

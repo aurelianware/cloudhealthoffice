@@ -144,6 +144,37 @@ public class TerminologyController : ControllerBase
         return Ok(responses);
     }
 
+    /// <summary>
+    /// GET /fhir/CodeSystem/$lookup - Look up display metadata for a code.
+    ///
+    /// This intentionally returns a compact CHO payload rather than the full
+    /// FHIR Parameters resource so service consumers can cheaply enrich UI
+    /// display fields without taking a dependency on full terminology maps.
+    /// </summary>
+    [HttpGet("fhir/CodeSystem/$lookup")]
+    [ProducesResponseType(typeof(CodeLookupResponse), 200)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> LookupCodeGet(
+        [FromQuery] string system,
+        [FromQuery] string code,
+        [FromQuery] string? tenantId = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(system) || string.IsNullOrWhiteSpace(code))
+        {
+            return BadRequest(new { error = "system and code are required parameters" });
+        }
+
+        var response = await _translationService.LookupCodeAsync(new CodeLookupRequest
+        {
+            System = system,
+            Code = code,
+            TenantId = tenantId
+        }, ct);
+
+        return Ok(response);
+    }
+
     // ──────────────────────────────────────────────────────
     // Admin: Map management
     // ──────────────────────────────────────────────────────
