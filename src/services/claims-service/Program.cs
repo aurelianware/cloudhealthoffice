@@ -102,6 +102,8 @@ builder.Services.AddSingleton<IExplanationOfBenefitProjector, ExplanationOfBenef
 
 // 277CA acknowledgment generator
 builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();
+builder.Services.AddScoped<IDiagnosisDescriptionLookup, DiagnosisDescriptionLookup>();
+builder.Services.AddScoped<IClaimDiagnosisMetadataEnricher, ClaimDiagnosisMetadataEnricher>();
 
 // 5.10 — claim finalization (Approved/PartiallyPaid → Paid). Owns the
 // idempotent Paid transition with version-event chain advancement and

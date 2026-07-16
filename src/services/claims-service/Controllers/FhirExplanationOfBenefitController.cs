@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using ClaimsService.Fhir;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using ClaimsService.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaimsService.Controllers;
@@ -41,15 +42,18 @@ public class FhirExplanationOfBenefitController : ControllerBase
 
     private readonly IClaimRepository _repository;
     private readonly IExplanationOfBenefitProjector _projector;
+    private readonly IClaimDiagnosisMetadataEnricher _diagnosisMetadataEnricher;
     private readonly ILogger<FhirExplanationOfBenefitController> _logger;
 
     public FhirExplanationOfBenefitController(
         IClaimRepository repository,
         IExplanationOfBenefitProjector projector,
+        IClaimDiagnosisMetadataEnricher diagnosisMetadataEnricher,
         ILogger<FhirExplanationOfBenefitController> logger)
     {
         _repository = repository;
         _projector = projector;
+        _diagnosisMetadataEnricher = diagnosisMetadataEnricher;
         _logger = logger;
     }
 
@@ -108,6 +112,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
                 $"ExplanationOfBenefit/{id} not found.");
         }
 
+        await _diagnosisMetadataEnricher.EnrichAsync(claim, ct);
         var projected = _projector.Project(claim);
         return new ContentResult
         {
@@ -191,6 +196,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
                     // existence-of-resource through the status code.
                     return BuildBundleResponse(Array.Empty<Claim>(), total: 0);
                 }
+                await _diagnosisMetadataEnricher.EnrichAsync(single, ct);
                 return BuildBundleResponse(new[] { single }, total: 1);
             }
 
@@ -206,6 +212,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
                 page: pageNumber,
                 pageSize: pageSize);
 
+            await _diagnosisMetadataEnricher.EnrichAsync(items, ct);
             return BuildBundleResponse(items, totalCount);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
