@@ -145,6 +145,11 @@ available there, it falls back to display text present on active ConceptMap
 entries. This keeps ICD-10-CM claim displays independent from SNOMED-to-ICD
 crosswalk files, whose target displays may be blank in RF2 source data.
 
+The built-in MCC/demo ICD-10-CM seed uses the shared
+`SyntheticIcd10CmCatalog` reference data also used by claims-service as its
+fail-soft fallback when TerminologyService is unavailable, so the startup seed
+and local fallback do not drift independently.
+
 ### Load a crosswalk map
 
 ```bash
