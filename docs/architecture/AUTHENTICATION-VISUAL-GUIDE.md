@@ -45,12 +45,12 @@ The login page (`/login.html`) follows the Cloud Health Office Sentinel theme:
         │    ┌──────────────────────────────┐     │
         │    │ Why Cloud Health Office?     │     │
         │    ├──────────────────────────────┤     │
-        │    │ ✓ Deploy production-grade    │     │
-        │    │   payer EDI in under 1 hour  │     │
+        │    │ ✓ Deploy payer EDI for       │     │
+        │    │   validation in under 1 hour │     │
         │    │ ✓ Zero custom code required  │     │
         │    │ ✓ Azure-native, HIPAA-       │     │
         │    │   compliant architecture     │     │
-        │    │ ✓ CMS-0057-F compliant       │     │
+        │    │ ✓ CMS-0057-F readiness       │     │
         │    │   FHIR R4 APIs               │     │
         │    │ ✓ Complete X12 transaction   │     │
         │    │   support (270/271/275/277/  │     │
