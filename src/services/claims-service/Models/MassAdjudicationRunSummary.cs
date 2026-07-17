@@ -35,6 +35,7 @@ public class MassAdjudicationRunSummary
     public int PaymentMatches { get; set; }
     public int PaymentMismatches { get; set; }
     public decimal? MaximumPaymentDelta { get; set; }
+    public List<MassAdjudicationPaymentDeltaBucket> PaymentDeltaDistribution { get; set; } = new();
     public List<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown { get; set; } = new();
     public List<MassAdjudicationWorkflowScenarioSummary> WorkflowScenarioBreakdown { get; set; } = new();
     public List<MassAdjudicationFailureSummary> SampleFailures { get; set; } = new();
@@ -110,6 +111,14 @@ public class MassAdjudicationFixturePreparation
     public int ProviderNetworksExisting { get; set; }
     public int ProvidersCreated { get; set; }
     public int ProvidersExisting { get; set; }
+}
+
+public class MassAdjudicationPaymentDeltaBucket
+{
+    public string Label { get; set; } = string.Empty;
+    public decimal? LowerBoundExclusive { get; set; }
+    public decimal? UpperBoundInclusive { get; set; }
+    public int Count { get; set; }
 }
 
 public class MassAdjudicationBusinessDenialSummary

@@ -106,6 +106,40 @@ public class MccRunSummaryBuilderTests
     }
 
     [Fact]
+    public void Build_GroupsPaymentDeltaDistributionForComparableRowsOnly()
+    {
+        var options = ValidatorOptions.Parse(["--claims", "6"]);
+        var results = new List<ClaimValidationResult>
+        {
+            Result("EXACT", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid),
+            Result("WITHIN-TOLERANCE", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)
+                with { ActualPlanPayment = 100.01m },
+            Result("UNDER-ONE", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)
+                with { ActualPlanPayment = 100.50m },
+            Result("UNDER-TEN", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)
+                with { ActualPlanPayment = 105m },
+            Result("OVER-TEN", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)
+                with { ActualPlanPayment = 125m },
+            Result("EDGE-NOT-COMPARABLE", "EdgeCase:BehavioralHealthCarveIn", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)
+                with { ActualPlanPayment = 250m, ExpectedPlanPayment = 100m }
+        };
+
+        var summary = MccRunSummaryBuilder.Build(results, TimeSpan.FromSeconds(1), options, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+
+        Assert.Equal(5, summary.PaymentComparisons);
+        Assert.Equal(2, summary.PaymentMatches);
+        Assert.Equal(3, summary.PaymentMismatches);
+        Assert.Equal(25m, summary.MaximumPaymentDelta);
+        Assert.Equal(5, summary.PaymentDeltaDistribution.Sum(b => b.Count));
+
+        AssertPaymentBucket(summary, "Exact", 1);
+        AssertPaymentBucket(summary, "Within tolerance", 1);
+        AssertPaymentBucket(summary, "<= $1", 1);
+        AssertPaymentBucket(summary, "<= $10", 1);
+        AssertPaymentBucket(summary, "> $10", 1);
+    }
+
+    [Fact]
     public void Build_PublishesPaymentDeltaOnlyForPaymentComparableRows()
     {
         var options = ValidatorOptions.Parse([
@@ -216,6 +250,12 @@ public class MccRunSummaryBuilderTests
         Assert.Equal(2, summary.FixturePreparation.ProviderNetworksExisting);
         Assert.Equal(1_077, summary.FixturePreparation.ProvidersCreated);
         Assert.Equal(19, summary.FixturePreparation.ProvidersExisting);
+    }
+
+    private static void AssertPaymentBucket(MassAdjudicationRunSummary summary, string label, int count)
+    {
+        var bucket = Assert.Single(summary.PaymentDeltaDistribution, b => b.Label == label);
+        Assert.Equal(count, bucket.Count);
     }
 
     private static ClaimValidationResult Result(

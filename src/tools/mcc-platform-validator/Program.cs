@@ -2206,6 +2206,10 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     {
         Console.WriteLine($"  Avg payment delta:  ${summary.AveragePaymentDelta:N2}");
         Console.WriteLine($"  Payment gate:       {summary.PaymentMatches:N0}/{summary.PaymentComparisons:N0} within ${summary.PaymentTolerance:N2} ({summary.PaymentMismatches:N0} mismatched, max ${summary.MaximumPaymentDelta:N2})");
+        foreach (var bucket in summary.PaymentDeltaDistribution.Where(b => b.Count > 0))
+        {
+            Console.WriteLine($"  Payment delta:      {bucket.Label} ({bucket.Count:N0})");
+        }
     }
 
     foreach (var denialGroup in summary.BusinessDenialBreakdown.Take(5))
@@ -2342,6 +2346,7 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         0,
         0,
         null,
+        Array.Empty<MassAdjudicationPaymentDeltaBucket>(),
         Array.Empty<MassAdjudicationBusinessDenialSummary>(),
         Array.Empty<MassAdjudicationWorkflowScenarioSummary>(),
         Array.Empty<MassAdjudicationFailureSummary>(),
@@ -2593,6 +2598,7 @@ internal sealed record MassAdjudicationRunSummary(
     int PaymentMatches,
     int PaymentMismatches,
     decimal? MaximumPaymentDelta,
+    IReadOnlyList<MassAdjudicationPaymentDeltaBucket> PaymentDeltaDistribution,
     IReadOnlyList<MassAdjudicationBusinessDenialSummary> BusinessDenialBreakdown,
     IReadOnlyList<MassAdjudicationWorkflowScenarioSummary> WorkflowScenarioBreakdown,
     IReadOnlyList<MassAdjudicationFailureSummary> SampleFailures,
@@ -2657,6 +2663,12 @@ internal sealed record MassAdjudicationFixturePreparation(
     int ProviderNetworksExisting,
     int ProvidersCreated,
     int ProvidersExisting);
+
+internal sealed record MassAdjudicationPaymentDeltaBucket(
+    string Label,
+    decimal? LowerBoundExclusive,
+    decimal? UpperBoundInclusive,
+    int Count);
 
 internal sealed record MemberFixturePreparation(int Created, int Existing, int StatusAligned)
 {

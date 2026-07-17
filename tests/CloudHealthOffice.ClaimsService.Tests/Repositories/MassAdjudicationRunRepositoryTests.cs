@@ -51,6 +51,13 @@ public class MassAdjudicationRunRepositoryTests
         summary.WorkflowUnsupported = 73;
         summary.WorkflowObservationTimeouts = 2;
         summary.AveragePaymentDelta = 59.36m;
+        summary.PaymentDeltaDistribution.Add(new MassAdjudicationPaymentDeltaBucket
+        {
+            Label = "<= $1",
+            LowerBoundExclusive = 0.01m,
+            UpperBoundInclusive = 1m,
+            Count = 3
+        });
         summary.Status = "Running";
         summary.Progress = new MassAdjudicationRunProgress
         {
@@ -90,6 +97,11 @@ public class MassAdjudicationRunRepositoryTests
         reread.WorkflowUnsupported.Should().Be(73);
         reread.WorkflowObservationTimeouts.Should().Be(2);
         reread.AveragePaymentDelta.Should().Be(59.36m);
+        reread.PaymentDeltaDistribution.Should().ContainSingle(b =>
+            b.Label == "<= $1"
+            && b.LowerBoundExclusive == 0.01m
+            && b.UpperBoundInclusive == 1m
+            && b.Count == 3);
         reread.Status.Should().Be("Running");
         reread.Progress.Should().NotBeNull();
         reread.Progress!.CompletedClaims.Should().Be(2500);

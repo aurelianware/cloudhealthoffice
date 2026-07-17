@@ -248,6 +248,20 @@
                     <MudItem xs="12" md="4">@RunFact("Seeding", $"members {OnOff(_selectedRun.Run.SeedMembers)} · providers {OnOff(_selectedRun.Run.SeedProviders)}")</MudItem>
                 </MudGrid>
 
+                @if (_selectedRun.PaymentDeltaDistribution.Count > 0)
+                {
+                    <MudDivider Class="my-3" Style="border-color: rgba(0,255,255,0.12);" />
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65); font-weight: 700;">Payment Delta Distribution</MudText>
+                    <MudGrid Spacing="2" Class="mt-1 mb-3">
+                        @foreach (var bucket in _selectedRun.PaymentDeltaDistribution)
+                        {
+                            <MudItem xs="6" sm="4" md="2">
+                                @Metric(bucket.Label, $"{bucket.Count:N0}", PaymentDeltaBucketColor(bucket))
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+
                 @if (HasFixturePreparation(_selectedRun))
                 {
                     var fixture = _selectedRun.FixturePreparation!;
@@ -907,6 +921,23 @@
 
     private static string PaymentDeltaColor(decimal? paymentDelta, decimal tolerance)
         => paymentDelta is null ? "#cbd5e1" : paymentDelta <= tolerance ? "#00ff88" : "#ff0055";
+
+    private static string PaymentDeltaBucketColor(MassAdjudicationPaymentDeltaBucket bucket)
+    {
+        if (bucket.Count == 0)
+        {
+            return "#64748b";
+        }
+
+        if (bucket.UpperBoundInclusive is null)
+        {
+            return "#ff0055";
+        }
+
+        return bucket.LowerBoundExclusive is null || bucket.LowerBoundExclusive == 0m
+            ? "#00ff88"
+            : "#facc15";
+    }
 
     private static Color OutcomeColor(string outcome) => outcome switch
     {
