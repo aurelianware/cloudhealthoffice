@@ -37,14 +37,18 @@ internal static class MccRunSummaryBuilder
         var comparable = results
             .Where(IsPaymentComparable)
             .ToList();
-        var avgDelta = comparable.Count == 0
+        var paymentDeltas = comparable
+            .Select(r => PaymentDelta(r)!.Value)
+            .ToList();
+        var avgDelta = paymentDeltas.Count == 0
             ? (decimal?)null
-            : comparable.Average(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value));
-        var paymentMatches = comparable.Count(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value) <= PaymentTolerance);
+            : paymentDeltas.Average();
+        var paymentMatches = paymentDeltas.Count(d => d <= PaymentTolerance);
         var paymentMismatches = comparable.Count - paymentMatches;
-        var maxPaymentDelta = comparable.Count == 0
+        var maxPaymentDelta = paymentDeltas.Count == 0
             ? (decimal?)null
-            : comparable.Max(r => Math.Abs(r.ActualPlanPayment!.Value - r.ExpectedPlanPayment!.Value));
+            : paymentDeltas.Max();
+        var paymentDeltaDistribution = BuildPaymentDeltaDistribution(paymentDeltas);
         var denialBreakdown = results
             .Where(r => r.Outcome is ClaimValidationOutcome.BusinessDenial)
             .GroupBy(r => r.BusinessDenialCode ?? "UNKNOWN")
@@ -143,6 +147,7 @@ internal static class MccRunSummaryBuilder
             paymentMatches,
             paymentMismatches,
             maxPaymentDelta,
+            paymentDeltaDistribution,
             denialBreakdown,
             workflowBreakdown,
             failures,
@@ -190,6 +195,24 @@ internal static class MccRunSummaryBuilder
             .Cast<MassAdjudicationStageTiming>()
             .OrderByDescending(timing => timing.AverageMilliseconds)
             .ToList();
+    }
+
+    private static IReadOnlyList<MassAdjudicationPaymentDeltaBucket> BuildPaymentDeltaDistribution(
+        IReadOnlyCollection<decimal> paymentDeltas)
+    {
+        if (paymentDeltas.Count == 0)
+        {
+            return Array.Empty<MassAdjudicationPaymentDeltaBucket>();
+        }
+
+        return
+        [
+            new("Exact", null, 0m, paymentDeltas.Count(d => d == 0m)),
+            new("Within tolerance", 0m, PaymentTolerance, paymentDeltas.Count(d => d > 0m && d <= PaymentTolerance)),
+            new("<= $1", PaymentTolerance, 1m, paymentDeltas.Count(d => d > PaymentTolerance && d <= 1m)),
+            new("<= $10", 1m, 10m, paymentDeltas.Count(d => d > 1m && d <= 10m)),
+            new("> $10", 10m, null, paymentDeltas.Count(d => d > 10m))
+        ];
     }
 
     private static IReadOnlyList<ClaimValidationResult> SelectPublishedClaimResults(
