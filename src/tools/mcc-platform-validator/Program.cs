@@ -612,7 +612,7 @@ static void NormalizeValidationProviderProfiles(List<SyntheticClaim> claims, int
             continue;
         }
 
-        ForceAdjudicatableProviderProfile(claim.BillingProvider);
+        ForceAdjudicatableProviderProfile(claim.BillingProvider, claim.DateOfService);
         claim.BillingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, runId, scenarioIndex, role: 0);
 
         if (!string.Equals(
@@ -620,7 +620,7 @@ static void NormalizeValidationProviderProfiles(List<SyntheticClaim> claims, int
                 MccWorkflowValidation.ProviderExcludedCode,
                 StringComparison.OrdinalIgnoreCase))
         {
-            ForceAdjudicatableProviderProfile(claim.RenderingProvider);
+            ForceAdjudicatableProviderProfile(claim.RenderingProvider, claim.DateOfService);
             claim.RenderingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, runId, scenarioIndex, role: 1);
         }
         else
@@ -763,6 +763,7 @@ static void NormalizePriorAuthEdgeCases(List<SyntheticClaim> claims, ValidatorOp
 
 static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
 {
+    var serviceDate = claim.DateOfService.Date;
     claim.BenefitPlanId = MccWorkflowValidation.CleanProfessionalPaidPlanId;
     claim.PlaceOfService = "11";
     claim.FrequencyCode = "1";
@@ -772,10 +773,9 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
     claim.PriorAuthNumber = null;
     claim.PrimaryDiagnosisCode = "Z00.00";
     claim.SecondaryDiagnosisCodes.Clear();
-    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider);
-    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider);
+    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider, serviceDate);
+    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider, serviceDate);
 
-    var serviceDate = claim.DateOfService.Date;
     claim.Lines = new List<ClaimLine>
     {
         new()
@@ -820,6 +820,7 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
 
 static void ForceExcludedProviderScenario(SyntheticClaim claim, int seed, int index)
 {
+    var serviceDate = claim.DateOfService.Date;
     claim.BenefitPlanId = MccWorkflowValidation.ExcludedProviderPlanId;
     claim.PlaceOfService = "11";
     claim.FrequencyCode = "1";
@@ -830,11 +831,10 @@ static void ForceExcludedProviderScenario(SyntheticClaim claim, int seed, int in
     claim.PrimaryDiagnosisCode = "Z00.00";
     claim.SecondaryDiagnosisCodes.Clear();
 
-    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider);
-    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider);
+    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider, serviceDate);
+    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider, serviceDate);
     ForceExcludedProviderProfile(claim.RenderingProvider, seed, index);
 
-    var serviceDate = claim.DateOfService.Date;
     claim.Lines = new List<ClaimLine>
     {
         new()
@@ -881,6 +881,7 @@ static void ForceExcludedProviderScenario(SyntheticClaim claim, int seed, int in
 
 static void ForceUncoveredServiceScenario(SyntheticClaim claim)
 {
+    var serviceDate = claim.DateOfService.Date;
     claim.BenefitPlanId = MccWorkflowValidation.UncoveredServicePlanId;
     claim.PlaceOfService = "31";
     claim.FrequencyCode = "1";
@@ -891,10 +892,9 @@ static void ForceUncoveredServiceScenario(SyntheticClaim claim)
     claim.PrimaryDiagnosisCode = "Z00.00";
     claim.SecondaryDiagnosisCodes.Clear();
 
-    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider);
-    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider);
+    ForceCleanProfessionalPaidProviderProfile(claim.RenderingProvider, serviceDate);
+    ForceCleanProfessionalPaidProviderProfile(claim.BillingProvider, serviceDate);
 
-    var serviceDate = claim.DateOfService.Date;
     claim.Lines = new List<ClaimLine>
     {
         new()
@@ -939,27 +939,14 @@ static void ForceUncoveredServiceScenario(SyntheticClaim claim)
     };
 }
 
-static void ForceCleanProfessionalPaidProviderProfile(SyntheticProvider provider)
+static void ForceCleanProfessionalPaidProviderProfile(SyntheticProvider provider, DateTime serviceDate)
 {
-    provider.IsParticipating = true;
-    provider.NetworkStatus = "InNetwork";
-    provider.CredentialingStatus = "Active";
-    provider.TermDate = null;
-    provider.AcceptingNewPatients = true;
-    provider.State = "AZ";
-    provider.SpecialtyCode = "207Q00000X";
-    provider.SpecialtyDescription = "Family Medicine";
-    provider.TaxonomyCode = "207Q00000X";
-    provider.ContractType = "FeeForService";
+    MccValidationProviderProfile.ForceCleanProfessionalPaid(provider, serviceDate);
 }
 
-static void ForceAdjudicatableProviderProfile(SyntheticProvider provider)
+static void ForceAdjudicatableProviderProfile(SyntheticProvider provider, DateTime serviceDate)
 {
-    provider.IsParticipating = true;
-    provider.NetworkStatus = "InNetwork";
-    provider.CredentialingStatus = "Active";
-    provider.TermDate = null;
-    provider.AcceptingNewPatients = true;
+    MccValidationProviderProfile.ForceAdjudicatable(provider, serviceDate);
 }
 
 static void ForceExcludedProviderProfile(SyntheticProvider provider, int seed, int index)
