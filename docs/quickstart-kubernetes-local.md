@@ -7,7 +7,7 @@ Run the full Cloud Health Office platform on Docker Desktop Kubernetes — the s
 | Component | Count | Notes |
 |-----------|-------|-------|
 | Microservices | 25 | Claims, Members, Eligibility, Payments, FHIR, etc. |
-| Portal | 1 | Blazor Server UI (same as portal.cloudhealthoffice.com) |
+| Portal | 1 | Blazor Server UI exposed through your local or customer-owned endpoint |
 | MongoDB | 1 | StatefulSet with persistent storage |
 | Redis | 1 | Data-protection key store and caching |
 | Namespace | `cloudhealthoffice` | Matches production layout |

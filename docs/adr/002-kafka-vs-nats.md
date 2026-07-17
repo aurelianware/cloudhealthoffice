@@ -10,7 +10,7 @@ Cloud Health Office requires an event streaming platform to replace Azure Servic
 
 - High throughput (10,000+ messages/day)
 - Message durability and replay capability
-- HIPAA-compliant data handling
+- HIPAA-oriented data handling controls
 - Multi-consumer support (fan-out)
 - Dead-letter queue functionality
 

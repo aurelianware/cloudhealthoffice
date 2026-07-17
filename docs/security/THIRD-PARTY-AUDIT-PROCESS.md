@@ -240,7 +240,7 @@ Third-party security audits provide independent validation of Cloud Health Offic
 # Cloud Health Office Third-Party Security Audit RFP
 
 ## 1. Company Background
-Cloud Health Office is a source-available, Azure-native HIPAA-compliant EDI platform for healthcare payers. We process protected health information (PHI) including X12 275, 277, 278 transactions.
+Cloud Health Office is a source-available, Azure-native EDI platform for healthcare payers with HIPAA-oriented security controls. Customer deployments may process protected health information (PHI), including X12 275, 277, and 278 transactions.
 
 ## 2. Audit Scope
 - **Type:** [HIPAA Compliance Audit / Penetration Testing / SOC 2]

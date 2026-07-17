@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-This guide helps you deploy production-ready alert rules for Cloud Health Office monitoring dashboards.
+This guide helps you deploy alert rules for Cloud Health Office monitoring dashboards in validation or customer-owned environments.
 
 ---
 

@@ -54,7 +54,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - Storage account encryption configuration
 - RBAC role assignments for key access
 
-**Total Infrastructure Code**: 649 lines of production-ready Bicep
+**Total Infrastructure Code**: 649 lines of Bicep for validation and customer-owned deployments
 
 ---
 
@@ -76,7 +76,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - Security Incident Response (procedures and contacts)
 
 **Key Features:**
-- Production-ready deployment scripts
+- Deployment scripts for validation and customer-owned environments
 - Verification commands for each control
 - KQL queries for monitoring and compliance
 - Troubleshooting guides
@@ -509,15 +509,15 @@ dependencies
 
 ## Conclusion
 
-This implementation delivers a **comprehensive, production-ready security architecture** for PHI workloads:
+This implementation delivers a **comprehensive security-control architecture** for PHI workload validation:
 
 ✅ **9/10 Security Score** (Target achieved)
-✅ **100% HIPAA Compliance** (All technical safeguards)
+✅ **HIPAA Safeguard Mapping** (Technical safeguards represented for validation)
 ✅ **6 Major Security Controls** (Fully implemented)
 ✅ **3,000+ Lines of Documentation** (Complete guidance)
-✅ **Zero Security Vulnerabilities** (CodeQL verified)
+✅ **Automated Security Scanning** (CodeQL and dependency scanning configured)
 
-**The Cloud Health Office system is now production-ready for Protected Health Information processing.**
+**The Cloud Health Office system now has a documented security-control baseline for customer PHI validation.**
 
 ---
 
