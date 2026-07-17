@@ -134,7 +134,7 @@ Platform Engagement engages customers at three layers, each a coherent offering 
 
 #### What we claim
 
-A production-ready CMS-0057-F compliance surface that deploys alongside any existing core admin system (QNXT, HealthEdge, Facets, or home-grown) without touching the customer's adjudication path.
+An evidence-backed CMS-0057-F readiness surface that deploys alongside any existing core admin system (QNXT, HealthEdge, Facets, or home-grown) without touching the customer's adjudication path, then supports customer validation and attestation work.
 
 Layer 1 covers the CMS-0057-F interoperability surface end-to-end:
 
@@ -254,7 +254,7 @@ Three concrete personas — all three are real:
 
 #### What Layer 3 honestly is today
 
-Cloud Health Office is a full cloud-native CAPS platform, production-ready today for new entrants and greenfield deployments. For established payers, we recommend entering through Layer 1 or Layer 2 and progressing to Layer 3 on your timeline.
+Cloud Health Office is a full cloud-native CAPS platform with a working adjudication path, inspectable benchmark evidence, and an explicit hardening backlog. For new entrants and greenfield deployments, it is ready for customer-owned validation. For established payers, we recommend entering through Layer 1 or Layer 2 and progressing to Layer 3 on your timeline.
 
 Gaps we are closing deliberately:
 

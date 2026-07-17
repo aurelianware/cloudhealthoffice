@@ -148,8 +148,8 @@ Step 3: Merge → AdjudicationResponse
 
 | Engine | Status | Path |
 |--------|--------|------|
-| RiskAdjustmentEngine | Production-ready | Post-adjudication (encounter submission) |
-| EncounterEngine | Production-ready | Post-adjudication (encounter submission) |
+| RiskAdjustmentEngine | Implemented; validation pending | Post-adjudication (encounter submission) |
+| EncounterEngine | Implemented; validation pending | Post-adjudication (encounter submission) |
 
 ---
 

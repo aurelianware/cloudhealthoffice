@@ -130,7 +130,7 @@
         "name": "Can the Million Claim Challenge be used for load testing and capacity planning?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. The Million Claim Challenge corpus is large enough to stress-test a production-grade adjudication pipeline. Feed the million claims at pace to measure sustained throughput (claims per second), P99 latency, autoscaler behavior, and per-claim infrastructure cost. The deterministic corpus means you can repeat the load test and get directly comparable results as you tune. It answers whether accuracy holds steady or degrades under sustained volume."
+          "text": "Yes. The Million Claim Challenge corpus is large enough to stress-test an adjudication pipeline under production-shaped load. Feed the million claims at pace to measure sustained throughput (claims per second), P99 latency, autoscaler behavior, and per-claim infrastructure cost. The deterministic corpus means you can repeat the load test and get directly comparable results as you tune. It answers whether accuracy holds steady or degrades under sustained volume."
         }
       },
       {
@@ -1192,7 +1192,7 @@ dotnet run --project src/tools/mcc-runner -- --claims 10000 --seed 42</code></pr
 
         <h3>Throughput &amp; Load Testing</h3>
         <p>
-          The corpus is large enough to stress-test a production-grade pipeline. Feed it in at pace and you'll learn
+          The corpus is large enough to stress-test an adjudication pipeline under production-shaped load. Feed it in at pace and you'll learn
           how the engine behaves under sustained load &mdash; where the bottlenecks are, whether accuracy degrades
           at volume, and what the actual per-claim cost looks like when the cluster is under real pressure.
         </p>
@@ -1325,7 +1325,7 @@ dotnet run --project src/tools/mcc-runner -- --claims 10000 --seed 42</code></pr
 
         <h3>Can I use MCC for load testing and capacity planning?</h3>
         <p>
-          Absolutely. A million claims is a meaningful volume for stress-testing a production-grade adjudication
+          Absolutely. A million claims is a meaningful volume for stress-testing an adjudication
           pipeline. Feed them in at pace to measure sustained throughput, P99 latency, autoscaler behavior,
           and per-claim infrastructure cost. The deterministic corpus means you can run the same load test
           repeatedly and get directly comparable results as you tune.
@@ -1361,7 +1361,7 @@ dotnet run --project src/tools/mcc-runner -- --claims 10000 --seed 42</code></pr
           By default: 50,000 subscribers with ~25,000 dependents (75,000 total members), 5,000 individual
           providers, and 500 organizational providers (hospitals, clinics, SNFs). Both pools are configurable
           via <code>MemberPoolProfile</code> and <code>ProviderPoolProfile</code>. Scale down for quick
-          iteration; scale up for production-grade load testing.
+          iteration; scale up for customer-owned load testing.
         </p>
 
         <h3>What output formats does the seeding framework support?</h3>
