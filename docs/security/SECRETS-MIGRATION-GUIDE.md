@@ -96,7 +96,7 @@ az role assignment create \
 
 #### 2.1 Review Key Vault Bicep Module
 
-The repository already has a HIPAA-compliant Key Vault module at `infra/modules/deployment-keyvault.bicep`.
+The repository already has a HIPAA-oriented Key Vault module at `infra/modules/deployment-keyvault.bicep`.
 
 **Check current configuration:**
 ```bash

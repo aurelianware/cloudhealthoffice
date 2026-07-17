@@ -3,11 +3,13 @@
 
 set -e
 
+PORTAL_BASE_URL="${PORTAL_BASE_URL:-http://localhost:5026}"
+
 echo "🚀 Cloud Health Office - Stripe Signup Test"
 echo "=========================================="
 echo ""
 echo "📋 Test Instructions:"
-echo "1. Open: https://portal.cloudhealthoffice.com/signup"
+echo "1. Open: ${PORTAL_BASE_URL}/signup"
 echo "2. Fill in organization details:"
 echo "   - Organization: Test Health Plan $(date +%s)"
 echo "   - Tenant Name: test-$(date +%s)"

@@ -25,7 +25,7 @@ Before testing, **clear your browser cache** or use incognito/private mode to en
 ```
 
 ### 2. Open Developer Console
-1. Navigate to https://portal.cloudhealthoffice.com/signup
+1. Navigate to your local or customer-deployed portal signup page, for example `http://localhost:5026/signup` or `https://portal.<your-domain>/signup`
 2. Open browser console (F12 or Cmd+Option+I)
 3. Check the **Console** tab for debug messages
 

@@ -4,7 +4,7 @@ This document describes the automated tenant onboarding system for Cloud Health 
 
 ## Overview
 
-When a new health plan signs up at `https://portal.cloudhealthoffice.com/signup`, the system automatically:
+When a new health plan signs up through a local or customer-deployed portal, for example `https://portal.<your-domain>/signup`, the system automatically:
 
 1. Creates tenant record in database
 2. Provisions Cosmos DB containers
@@ -121,8 +121,8 @@ Subject: Welcome to Cloud Health Office
 Your account is ready!
 
 Tenant ID: blue-shield-of-california-a1b2c3
-Portal: https://portal.cloudhealthoffice.com
-API Endpoint: https://api.cloudhealthoffice.com
+Portal: https://portal.<your-domain>
+API Endpoint: https://api.<your-domain>
 
 Credentials:
 - Email: admin@blueshieldca.com
@@ -585,12 +585,12 @@ $session.Dispose()
 # Get SFTP activity log
 curl -H "X-API-Key: {api-key}" \
      -H "X-Tenant-ID: {tenant-id}" \
-     https://api.cloudhealthoffice.com/v1/sftp/activity
+     https://api.<your-domain>/v1/sftp/activity
 
 # Get failed uploads
 curl -H "X-API-Key: {api-key}" \
      -H "X-Tenant-ID: {tenant-id}" \
-     https://api.cloudhealthoffice.com/v1/sftp/failures
+     https://api.<your-domain>/v1/sftp/failures
 ```
 
 ### Security Best Practices

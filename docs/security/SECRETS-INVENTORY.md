@@ -160,7 +160,7 @@ GITHUB_TOKEN               - Automatically provided by GitHub Actions (no action
 
 ## 🤖 AI / LLM Provider Secrets
 
-These secrets are **runtime configuration** consumed by AI-enabled services and should live exclusively in Azure Key Vault. They never belong in GitHub Secrets because they are production API keys with PHI-adjacent access and must rotate on a HIPAA-compliant cadence.
+These secrets are **runtime configuration** consumed by AI-enabled services and should live exclusively in Azure Key Vault. They never belong in GitHub Secrets because they are production API keys with PHI-adjacent access and must rotate on a compliance-oriented cadence.
 
 ### Anthropic (Claude) — Claims Examiner Service
 ```

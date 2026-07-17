@@ -18,7 +18,7 @@ graph LR
 # Only needed if you don't have a Kubernetes cluster
 ./scripts/deploy-aks-cluster.sh
 
-# This creates a production-ready AKS cluster with:
+# This creates an AKS cluster suitable for validation with:
 # - 2-5 autoscaling nodes
 # - Azure CNI networking
 # - Standard LoadBalancer
