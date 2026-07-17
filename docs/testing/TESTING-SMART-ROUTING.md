@@ -9,24 +9,30 @@
 
 ### 2. Test Individual Routes
 
+Set `PORTAL_BASE_URL` to your local or customer-deployed portal URL:
+
+```bash
+export PORTAL_BASE_URL="${PORTAL_BASE_URL:-http://localhost:5026}"
+```
+
 **Demo Page (No Auth Required):**
 ```bash
-curl -I https://portal.cloudhealthoffice.com/demo
+curl -I "$PORTAL_BASE_URL/demo"
 # Should return: HTTP 200
 
 # Or open in browser:
-open https://portal.cloudhealthoffice.com/demo
+open "$PORTAL_BASE_URL/demo"
 ```
 
 **Root Route (Unauthenticated):**
 ```bash
-curl -I https://portal.cloudhealthoffice.com/
+curl -I "$PORTAL_BASE_URL/"
 # Should redirect to /welcome or Azure AD login
 ```
 
 **Signup Page:**
 ```bash
-open https://portal.cloudhealthoffice.com/signup
+open "$PORTAL_BASE_URL/signup"
 ```
 
 ### 3. Check Portal Logs (Real-time)
@@ -113,7 +119,7 @@ az cosmosdb sql container list \
 
 **Test:**
 ```bash
-curl -I https://portal.cloudhealthoffice.com/demo
+curl -I "$PORTAL_BASE_URL/demo"
 # Should return HTTP 200
 ```
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Production-grade SFTP configuration with:
+Customer-owned SFTP configuration with:
 - **Custom DNS name** (e.g., `sftp.cloudhealthoffice.com`)
 - **IP whitelisting** for clearinghouses and AKS/Argo Workflows
 - **SSL/TLS certificate** (optional, for FTPS)
