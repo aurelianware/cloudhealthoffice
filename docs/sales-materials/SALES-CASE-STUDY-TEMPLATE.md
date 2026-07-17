@@ -302,7 +302,7 @@ Example structure:
 
 ## About Cloud Health Office
 
-Cloud Health Office is the industry's first source-available, Azure-native EDI platform delivering complete CMS-0057-F compliance. The platform enables healthcare payers to deploy production-ready HIPAA infrastructure in under 5 minutes, with full FHIR R4 transformation, 60+ enhanced claim status fields, and enterprise-grade security.
+Cloud Health Office is a source-available, Azure-native EDI platform delivering inspectable CMS-0057-F readiness evidence. The platform enables healthcare payers to evaluate FHIR R4 transformation, enhanced claim status, and security controls in a customer-owned environment before production validation.
 
 **Learn More**:
 - Website: [cloudhealthoffice.com](https://cloudhealthoffice.com)

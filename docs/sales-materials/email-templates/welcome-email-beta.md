@@ -3,7 +3,7 @@
 **Template Name**: Welcome to Cloud Health Office - Beta Customer  
 **Sender**: Cloud Health Office Team <support@cloudhealthoffice.com>  
 **Reply-To**: support@cloudhealthoffice.com  
-**Subject**: Welcome to Cloud Health Office - Let's Get You Live in < 1 Hour  
+**Subject**: Welcome to Cloud Health Office - Let's Start Your Deployment Validation
 **Template Version**: 1.0  
 **Created**: February 17, 2026  
 **Use Case**: Sent to new Beta customers after contract signature and payment
@@ -13,11 +13,11 @@
 ## Email Template
 
 ```
-Subject: Welcome to Cloud Health Office - Let's Get You Live in <1 Hour
+Subject: Welcome to Cloud Health Office - Let's Start Your Deployment Validation
 
 Hi [Customer Contact Name],
 
-Congratulations on joining Cloud Health Office! We're excited to help you modernize EDI integration and achieve CMS-0057-F compliance.
+Congratulations on joining Cloud Health Office! We're excited to help you modernize EDI integration and validate CMS-0057-F readiness in your environment.
 
 As a Beta customer, you're part of an exclusive group pioneering the future of healthcare interoperability. Let's get you up and running.
 
@@ -27,7 +27,7 @@ As a Beta customer, you're part of an exclusive group pioneering the future of h
 
 Step 1: Activate Your Secure Access
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Your Cloud Health Office tenant has been provisioned. For security, credentials are never sent via email.
+Your Cloud Health Office tenant or evaluation environment has been provisioned. For security, credentials are never sent via email.
 
 📁 SFTP Access:
    • Host: sftp.cloudhealthoffice.com
@@ -36,19 +36,19 @@ Your Cloud Health Office tenant has been provisioned. For security, credentials 
    • Outbound folder: /outbound/
 
 **To set up SFTP credentials:**
-   1. Sign in to the portal: https://portal.cloudhealthoffice.com
+   1. Sign in to your deployed portal: https://portal.<your-domain>
    2. Authenticate with your Azure AD account
    3. Navigate to: Admin → Connectivity → SFTP
    4. Generate your SFTP username and password (one-time secure view in portal)
    5. Store credentials in your organization's secure vault (Azure Key Vault, 1Password, etc.)
 
 🌐 Portal Access:
-   • URL: https://portal.cloudhealthoffice.com
+   • URL: https://portal.<your-domain>
    • Login: Use your Azure AD credentials (SSO)
    • Tenant ID: [tenant-id]
 
 🔑 API Access (for developers):
-   • Base URL: https://api.cloudhealthoffice.com/v1
+   • Base URL: https://api.<your-domain>/v1
    • Documentation: https://docs.cloudhealthoffice.com/api
 
 **To obtain API credentials:**
@@ -76,7 +76,7 @@ Test Option A: 275 Attachment Processing
 4. Verify archival in Data Lake: /hipaa-attachments/raw/275/[date]/
 
 Test Option B: 837 Claim Submission (via API)
-1. Use our interactive API tester: https://portal.cloudhealthoffice.com/api-test
+1. Use the interactive API tester in your deployed portal: https://portal.<your-domain>/api-test
 2. Select "837P - Professional Claim"
 3. Click "Run Test with Sample Data"
 4. View FHIR ExplanationOfBenefit resource in response
@@ -183,7 +183,7 @@ Included in Your Plan:
 • Support: [response-time] response SLA
 • Uptime: [uptime-percentage]% SLA
 
-View or update subscription: https://portal.cloudhealthoffice.com/billing
+View or update subscription: https://portal.<your-domain>/billing
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -192,7 +192,7 @@ View or update subscription: https://portal.cloudhealthoffice.com/billing
 
 Day 1 (Today):
 ☐ Review this email and attached credentials
-☐ Log in to portal: https://portal.cloudhealthoffice.com
+☐ Log in to portal: https://portal.<your-domain>
 ☐ Run first transaction test (Step 2 above)
 ☐ Schedule onboarding call (Step 4 above)
 
@@ -242,7 +242,7 @@ Thank you for being an early adopter! 🙏
 
 Your next step: Log in to the portal and run your first test transaction.
 
-👉 Portal Login: https://portal.cloudhealthoffice.com
+👉 Portal Login: https://portal.<your-domain>
 👉 Schedule Onboarding Call: [CALENDLY_LINK]
 👉 Join Slack Community: https://cloudhealthoffice.slack.com/signup
 

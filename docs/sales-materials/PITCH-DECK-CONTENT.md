@@ -131,18 +131,18 @@ This pitch deck presents Cloud Health Office (CHO) across all four of its produc
 
 ### Platform Overview
 
-**The first source-available, Azure-native EDI platform with complete CMS-0057-F compliance**
+**A source-available, Azure-native EDI platform with inspectable CMS-0057-F readiness evidence**
 
 | Capability | Status |
 |------------|--------|
-| Patient Access API | ✅ Production Ready |
-| Provider Access API | ✅ Production Ready |
+| Patient Access API | ✅ Implemented |
+| Provider Access API | ✅ Implemented |
 | Prior Authorization API | ✅ Automated |
 | Payer-to-Payer API | ✅ Ready |
 | X12 ↔ FHIR R4 Transformation | ✅ 45 Tests Passing |
 | Da Vinci IG Conformance | ✅ PDex, PAS, CRD, DTR |
 
-*Production-ready as Layer 1 CMS-0057-F surface. First pilot deployment in motion; no production reference customer yet. See [POSITIONING.md](../POSITIONING.md) §Layer 3 ("what it honestly is today").*
+*Implemented as a Layer 1 CMS-0057-F readiness surface. First pilot deployment in motion; no production reference customer yet. See [POSITIONING.md](../POSITIONING.md) §Layer 3 ("what it honestly is today").*
 
 ### The Transformation
 
@@ -150,7 +150,7 @@ This pitch deck presents Cloud Health Office (CHO) across all four of its produc
 |--------|---------------------------|-------|
 | Deployment Time | 6-18 months | **Weeks to deploy (Layer 1)** |
 | Implementation Cost | $500K - $2M | **PMPM-based, pilot-custom** |
-| Compliance Readiness | Uncertain | **100%** |
+| Compliance Readiness | Uncertain | **Inspectable evidence** |
 | Source Code Access | None | **Full (BSL 1.1)** |
 
 ---
@@ -447,15 +447,15 @@ npm run generate -- interactive --output my-config.json --generate
 | **Contributors** | [PLACEHOLDER] | 30 |
 | **Test Suite** | ~2,800 test methods across 44 test projects | Maintain coverage |
 | **Documentation** | ~94,000 lines of markdown | Maintain coverage |
-| **CMS Compliance** | 100% | Maintained |
+| **CMS Readiness Evidence** | Implemented | Maintained |
 
 ### Product Milestones Achieved
 
-- ✅ Complete CMS-0057-F compliance (Nov 2024)
+- ✅ CMS-0057-F readiness surface (Nov 2024)
 - ✅ FHIR R4 transformation (X12 270/837/278/835)
 - ✅ ValueAdds277 enhanced claim status (60+ fields)
 - ✅ Zero-code payer onboarding
-- ✅ Production-grade security (HIPAA)
+- ✅ Security controls for payer validation
 - ✅ Gated release strategy
 
 ### Pipeline Status
@@ -667,7 +667,7 @@ Reference: [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md)
 
 *Cloud Health Office - The inevitable evolution of healthcare EDI*
 
-*Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
+*Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Readiness | Customer-Validated*
 
 ---
 

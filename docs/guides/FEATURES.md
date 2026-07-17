@@ -13,18 +13,18 @@ This document provides a comprehensive overview of all features available in Clo
 | **Zero-Code Onboarding** | Config-to-workflow generator | ✅ Complete | [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md) |
 | **FHIR Integration** | X12 → FHIR R4 mapping | ✅ Complete | [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md) |
 | **Enhanced Claim Status** | ValueAdds277 (60+ fields) | ✅ Complete | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
-| **Security Hardening** | 6 production controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
+| **Security Hardening** | 6 deployment controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
 | **Deployment** | Gated release strategy | ✅ Complete | [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) |
 | **Testing** | 5,230 automated tests across 44 test projects | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | **Multi-Tenant Security** | Cross-tenant isolation | ✅ Complete | [portal/CloudHealthOffice.Portal.Tests/](./portal/CloudHealthOffice.Portal.Tests/) |
 | **Premium Billing** | Monthly premium invoicing, NACHA/ACH EFT drafts, Stripe ACH | ✅ Complete | [src/services/premium-billing-service/](../src/services/premium-billing-service/) |
 
-## 🌐 Self-Service Portal
+## 🌐 Portal Module
 
-### Production Portal
+### Customer-Deployed Portal
 
-**URL**: [https://portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com)  
-**Status**: ✅ Production-Ready  
+**URL**: Customer-defined, for example `https://portal.<your-domain>` after deployment
+**Status**: ✅ Implemented for local and customer-owned deployments
 **Implementation Date**: January 2026  
 **Technology Stack**: Blazor Server, MudBlazor v6.14.0, Azure AD, Stripe, Cosmos DB
 
@@ -34,7 +34,7 @@ This document provides a comprehensive overview of all features available in Clo
 
 | Feature | Description | Status | Details |
 |---------|-------------|--------|---------|
-| **Self-Service Signup** | 5-minute onboarding with Stripe payment | ✅ Complete | Starter, Professional, Enterprise tiers — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing, 30-day trials |
+| **Self-Service Signup** | Customer-deployed onboarding flow with Stripe payment | ✅ Complete | Starter, Professional, Enterprise tiers — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing |
 | **Azure AD Authentication** | Multi-tenant OAuth2 with smart routing | ✅ Complete | Tenant-scoped access via claims, automatic user provisioning |
 | **Subscription Management** | Stripe-powered billing and subscriptions | ✅ Complete | Test mode, webhook integration, automatic renewals |
 | **Contact Sales** | Enterprise inquiry tracking | ✅ Complete | Cosmos DB integration, status workflow (New→Contacted→Qualified→Closed) |
@@ -44,7 +44,7 @@ This document provides a comprehensive overview of all features available in Clo
 
 #### Signup Flow
 
-1. **Visit Portal**: Navigate to portal.cloudhealthoffice.com
+1. **Visit Portal**: Navigate to your deployed portal hostname
 2. **Azure AD Login**: Sign in with Microsoft account (multi-tenant)
 3. **Select Tier**: Choose Starter (10K claims) or Professional (50K claims) — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing
 4. **Enter Payment**: Stripe payment method with PCI compliance
@@ -59,7 +59,7 @@ When a user completes signup, the system automatically:
 - ✅ Registers Azure AD application for API access
 - ✅ Creates Stripe customer and subscription with 14-day trial
 - ✅ Sends welcome email with access details
-- ✅ Provisions Portal, API, and Docs URLs
+- ✅ Provisions or records customer-owned Portal, API, and Docs URLs
 
 #### Contact Sales Integration
 
@@ -146,8 +146,8 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 - Secrets: `stripe-api-keys`, `cosmos-secret`
 
 **DNS**:
-- Production: portal.cloudhealthoffice.com
-- Staging: portal-staging.cloudhealthoffice.com
+- Customer production example: `portal.<your-domain>`
+- Customer staging example: `portal-staging.<your-domain>`
 
 **SSL/TLS**: Let's Encrypt with cert-manager auto-renewal
 
@@ -159,14 +159,14 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 
 | Transaction | Type | Direction | Status | Use Case |
 |------------|------|-----------|--------|----------|
-| **275** | Attachments | Inbound | ✅ Production | Clinical/administrative attachments for claims |
-| **277** | RFAI | Outbound | ✅ Production | Request for Additional Information |
-| **278** | Authorization | Inbound | ✅ Production | Prior authorization requests |
-| **278** | Authorization Inquiry | Inbound | ✅ Production | Real-time authorization status checks |
-| **278 Replay** | Reprocessing | HTTP API | ✅ Production | Deterministic transaction replay |
-| **837** | Claims | Inbound/Outbound | ✅ Production | Professional, Institutional, Dental claims with automated ingestion |
-| **270/271** | Eligibility | Bidirectional | ✅ Production | Real-time eligibility verification |
-| **276/277** | Claim Status | Bidirectional | ✅ Production | Claim status inquiries |
+| **275** | Attachments | Inbound | ✅ Implemented | Clinical/administrative attachments for claims |
+| **277** | RFAI | Outbound | ✅ Implemented | Request for Additional Information |
+| **278** | Authorization | Inbound | ✅ Implemented | Prior authorization requests |
+| **278** | Authorization Inquiry | Inbound | ✅ Implemented | Real-time authorization status checks |
+| **278 Replay** | Reprocessing | HTTP API | ✅ Implemented | Deterministic transaction replay |
+| **837** | Claims | Inbound/Outbound | ✅ Implemented | Professional, Institutional, Dental claims with automated ingestion |
+| **270/271** | Eligibility | Bidirectional | ✅ Implemented | Real-time eligibility verification |
+| **276/277** | Claim Status | Bidirectional | ✅ Implemented | Claim status inquiries |
 
 ### Features by Transaction
 
@@ -984,4 +984,4 @@ Cloud Health Office is designed to complement leading core administrative platfo
 
 **Cloud Health Office** – Advancing Healthcare EDI Integration
 
-*Source-Available | Azure-Native | Production-Grade | HIPAA-Compliant*
+*Source-Available | Azure-Native | Evidence-Backed | Customer-Validated*

@@ -141,7 +141,7 @@ docker build -f src/services/member-service/Dockerfile .
    - Minimal runtime image
    - Non-root user (`$APP_UID`)
    - EXPOSE ports 8080, 8081
-   - Production-ready configuration
+   - Runtime configuration suitable for validation deployments
 
 ### Build Optimization
 - ✅ **Layer caching** - GitHub Actions cache

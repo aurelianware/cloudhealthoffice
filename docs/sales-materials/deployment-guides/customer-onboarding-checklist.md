@@ -92,7 +92,7 @@ Use this streamlined checklist to track progress through the customer onboarding
 ## Day 2-3: Configuration & Integration Setup
 
 **Owner**: Cloud Health Office Implementation Team (with customer collaboration)  
-**Location**: Customer portal (https://portal.cloudhealthoffice.com)
+**Location**: Customer-deployed portal (for example, `https://portal.<your-domain>`)
 
 ### Portal Configuration Wizard (Customer Self-Service)
 - [ ] Customer logs into portal successfully

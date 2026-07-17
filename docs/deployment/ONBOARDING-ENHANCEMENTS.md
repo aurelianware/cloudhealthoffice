@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document summarizes the comprehensive enhancements made to the Cloud Health Office onboarding experience and automated testing capabilities. These improvements reduce onboarding time from hours to **&lt;5 minutes** and provide robust HIPAA-compliant testing infrastructure.
+This document summarizes the comprehensive enhancements made to the Cloud Health Office onboarding experience and automated testing capabilities. These improvements reduce local evaluation setup time and provide robust synthetic testing infrastructure.
 
 ## Implemented Features
 
@@ -68,7 +68,7 @@ node dist/scripts/utils/generate-837-claims.js 837I 5 ./test-data
 - One-click Azure deployment
 - Pre-configured infrastructure
   - Logic App Standard (WS1)
-  - Storage Gen2 (HIPAA-compliant)
+  - Storage Gen2 with security controls enabled
   - Service Bus (3 topics)
   - Integration Account (Free tier)
   - Application Insights
@@ -82,7 +82,7 @@ Click button in README.md or QUICKSTART.md
 **Benefits**:
 - Zero-to-running in &lt;5 minutes
 - No Bicep/ARM knowledge needed
-- Production-ready infrastructure
+- Evaluation-ready infrastructure
 - Cost-optimized for testing (~$50-100/month)
 
 ---
@@ -320,7 +320,7 @@ Total: &lt;5 minutes
 
 ## Conclusion
 
-These enhancements transform Cloud Health Office from a complex platform requiring hours of setup into a streamlined, user-friendly system deployable in **&lt;5 minutes**. The combination of interactive tooling, automated testing, and comprehensive documentation significantly reduces the barrier to entry while maintaining production-grade security and HIPAA compliance.
+These enhancements transform Cloud Health Office from a complex platform requiring hours of setup into a streamlined, user-friendly system for local and customer-owned evaluation. The combination of interactive tooling, automated testing, and comprehensive documentation significantly reduces the barrier to entry while preserving security controls that customers can validate for their environments.
 
 ### Key Achievements
 - ✅ **96% reduction** in onboarding time
