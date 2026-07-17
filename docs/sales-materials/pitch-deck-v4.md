@@ -36,7 +36,7 @@ This deck presents Cloud Health Office (CHO) across all four product lines: Publ
 - GitHub: github.com/aurelianware/cloudhealthoffice
 
 **Tagline at bottom**
-*Just emerged from the void. Production-ready for new entrants; Layer 2 pathway for established payers.*
+*Source-available and evidence-backed for evaluation; Layer 2 pathway for established payers.*
 
 ---
 
@@ -159,7 +159,7 @@ npm run generate -- interactive --output my-config.json --generate
 |---------|-------------|------------|
 | **Interactive Wizard** | Guided configuration in < 5 minutes | Zero technical expertise required |
 | **Config-to-Workflow Generator** | Automatic Argo Workflow generation | No custom code needed |
-| **FHIR R4 APIs** | Native X12 ↔ FHIR transformation | CMS-0057-F compliant out-of-box |
+| **FHIR R4 APIs** | Native X12 ↔ FHIR transformation | CMS-0057-F readiness surface |
 | **ValueAdds277** | 60+ enhanced claim status fields | Provider satisfaction++, call volume-- |
 | **Security Hardening** | HSM-backed keys, private endpoints, PHI masking | HIPAA-ready from Day 1 |
 
@@ -266,7 +266,7 @@ npm run generate -- interactive --output my-config.json --generate
 
 ### Competitive Advantages
 
-1. **10-month head start** on CMS compliance (production-ready today)
+1. **10-month head start** on CMS readiness evidence (implemented for validation today)
 2. **Up to 82% cost reduction** vs. enterprise vendors (results may vary)
 3. **Source-available transparency** eliminates vendor lock-in and security concerns
 4. **Azure Marketplace** enables instant evaluation and procurement
@@ -513,7 +513,7 @@ This is the precedent that every subsequent Layer 2 domain follows (capitation, 
 |------------|--------|--------|
 | **Beta Launch** | ✅ Live | Discount offer capped at first 10 customers (signup window closed), not a count of signed customers |
 | **Eligibility Microservice v2.0** | ✅ Complete | 50K req/sec, <100ms latency |
-| **Security Hardening** | ✅ Complete | Zero vulnerabilities (CodeQL) |
+| **Security Hardening** | ✅ Complete | Dependency and CodeQL scan coverage |
 | **Documentation Overhaul** | ✅ Complete | ~94,000 lines of markdown documentation |
 
 ### Q2 2026: Azure Marketplace + AI
@@ -569,7 +569,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 |------------|--------|---------|
 | **HIPAA** | ✅ Compliant | BAA included with all subscriptions |
 | **HITECH Act** | ✅ Compliant | Breach notification &lt; 24 hours |
-| **CMS-0057-F** | ✅ 100% Ready | All 4 APIs production-ready |
+| **CMS-0057-F** | ✅ Readiness Surface | All 4 APIs implemented for validation |
 | **State Breach Laws** | ✅ Compliant | 50-state compliance |
 | **SOC 2 Type II** | ✅ Inherited (Azure datacenter only) | Cloud Health Office's own Type II audit is in progress, not yet complete |
 | **ISO 27001** | ✅ Inherited (Azure datacenter only) | Via Azure infrastructure |
@@ -637,7 +637,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 **Cloud-Native Tools Now Ready**:
 - **Argo Workflows on AKS**: Cloud-native workflow orchestration for Kubernetes
 - **FHIR R4**: Stable standard (normative 2019)
-- **Da Vinci IGs**: Production-ready (v2.0 released 2023)
+- **Da Vinci IGs**: Implemented readiness target (v2.0 released 2023)
 - **Open Source Momentum**: Healthcare IT embracing OSS (95% of EHRs use Linux)
 
 **Result**: Building blocks exist, but no one assembled them—until now
@@ -667,7 +667,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 **Why Now is the Right Time to Invest**:
 
 1. **Market urgency**: Regulatory deadline creates a must-buy event
-2. **Product maturity**: Production-ready, not vaporware
+2. **Product maturity**: Source-available evidence, not vaporware
 3. **Competitive moat**: 10-month lead, source-available community
 4. **Capital efficiency**: Lean team, profitable in 3 years
 5. **Exit potential**: 8-12x ARR exit multiples (SaaS healthcare IT)
@@ -690,9 +690,9 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 - **No long-term commitment** (cancel anytime during Beta)
 
 **What You Get**:
-- ✅ 100% CMS-0057-F compliance
-- ✅ HIPAA BAA included
-- ✅ Production-grade platform
+- ✅ CMS-0057-F readiness evidence
+- ✅ Customer-deployed security model
+- ✅ Evidence-backed platform
 - ✅ Direct access to engineering team
 
 **How to Join**:
@@ -752,7 +752,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 
 **Cloud Health Office** – *The inevitable evolution of healthcare EDI*
 
-**Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready**
+**Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Readiness | Customer-Validated**
 
 © 2026 Aurelianware. All rights reserved.
 

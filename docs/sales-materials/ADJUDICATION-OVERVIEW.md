@@ -2,7 +2,7 @@
 
 ## For Health Plan Decision Makers
 
-Cloud Health Office (CHO) adjudicates claims today through a production-ready, multi-engine pipeline that processes professional and institutional claims end-to-end — from pre-payment validation through benefit cost-sharing to provider payment.
+Cloud Health Office (CHO) adjudicates claims today through an evidence-backed, multi-engine pipeline that processes professional and institutional claims end-to-end — from pre-payment validation through benefit cost-sharing to provider payment.
 
 ---
 

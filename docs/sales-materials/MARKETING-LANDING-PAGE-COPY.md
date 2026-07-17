@@ -13,13 +13,13 @@ This landing-page copy presents Cloud Health Office (CHO) across all four produc
 ## Hero Section
 
 ### Headline
-**CMS-0057-F Compliance in 5 Minutes, Not 18 Months**
+**CMS-0057-F Readiness Evidence in Days, Not 18 Months**
 
 ### Subheadline
-The source-available, Azure-native EDI platform that delivers complete Patient Access, Provider Access, and Prior Authorization APIs—production-ready from Day 1.
+The source-available, Azure-native payer platform that delivers an inspectable CMS-0057-F readiness surface for Patient Access, Provider Access, Prior Authorization, and payer interoperability workflows.
 
 ### Primary CTA
-**[Start Free Pilot]** — 60-day implementation, $0 cost
+**[Schedule Product Demo]** — review the evidence and deployment path
 
 ### Secondary CTA
 [Watch Demo] | [View on Azure Marketplace]
@@ -46,9 +46,9 @@ The source-available, Azure-native EDI platform that delivers complete Patient A
 
 | Stat | Value | Context |
 |------|-------|---------|
-| **193** | Tests Passing | Production-Grade Quality |
-| **< 5 min** | Deployment Time | vs. 18 Months Industry Average |
-| **100%** | CMS Compliance | APIs Ready Today |
+| **5,230+** | Tests in Repo | Evidence-Backed Quality |
+| **< 1 hr** | Local Evaluation | Source-available deployment path |
+| **CMS-0057-F** | Readiness Surface | APIs implemented for payer validation |
 | **82%** | Cost Reduction | vs. Enterprise Vendors (results may vary) |
 
 ---
@@ -58,14 +58,14 @@ The source-available, Azure-native EDI platform that delivers complete Patient A
 ### Headline
 **Why Health Plans Choose Cloud Health Office**
 
-### Value Prop 1: Instant Compliance
+### Value Prop 1: Inspectable Readiness
 [PLACEHOLDER: Shield/compliance icon]
 
-**100% CMS-0057-F Ready**
+**CMS-0057-F Readiness You Can Inspect**
 
-Every API required by the January 2027 deadline is production-ready today. Patient Access, Provider Access, Prior Authorization, Payer-to-Payer—all FHIR R4 compliant, all Da Vinci IG conformant.
+The required API surfaces are implemented for local and customer-owned validation. Patient Access, Provider Access, Prior Authorization, and Payer-to-Payer workflows are mapped to FHIR R4 and the relevant Da Vinci implementation guides.
 
-*"We went from compliance gap to production-ready in 30 days, not 18 months."*
+*"We could inspect the implementation instead of buying a promise."*
 
 ### Value Prop 2: Radical Cost Reduction
 [PLACEHOLDER: Dollar/savings icon]
@@ -88,9 +88,9 @@ Full source code access. Audit everything. Customize anything. Join a community 
 ### Value Prop 4: Azure-Native Security
 [PLACEHOLDER: Cloud security icon]
 
-**HIPAA-Compliant by Design**
+**Security Controls to Validate**
 
-HSM-backed Key Vault. Private endpoints. PHI masking. 7-year retention with automated lifecycle management. Security that meets the most rigorous compliance requirements.
+HSM-backed Key Vault patterns, private endpoints, PHI masking, and retention controls are available for customer-owned deployments. Each payer still validates HIPAA, security, and audit posture in its own environment.
 
 *"Our security team approved it in one review. That never happens."*
 
@@ -274,11 +274,11 @@ BSL 1.1 Licensed | 193 Tests | Community Driven
 
 ### FAQ 1: How long does deployment really take?
 
-**< 5 minutes** for basic deployment using our interactive wizard or Azure Marketplace. Full production configuration with trading partner integration typically takes 2-4 weeks, compared to 12-18 months for enterprise alternatives.
+**Under an hour** for local Kubernetes evaluation using the source repository. Customer-owned cloud deployment, identity, trading partner integration, and production validation depend on the payer environment.
 
-### FAQ 2: Is this actually CMS-0057-F compliant?
+### FAQ 2: Does this certify CMS-0057-F compliance?
 
-**Yes, 100%.** Cloud Health Office includes production-ready Patient Access API, Provider Access API, Prior Authorization API, and Payer-to-Payer API—all the APIs required by the January 1, 2027 deadline. Our FHIR R4 implementation conforms to US Core 3.1.1 and Da Vinci Implementation Guides (PDex, PAS, CRD, DTR).
+Cloud Health Office is **not a compliance certification**. It includes an implemented CMS-0057-F readiness surface for Patient Access API, Provider Access API, Prior Authorization API, and Payer-to-Payer API. Final compliance, attestation, security review, and production readiness remain the payer's responsibility.
 
 ### FAQ 3: What does "source-available" mean for a healthcare platform?
 
@@ -302,7 +302,7 @@ It means **full transparency and no vendor lock-in**. The complete source code i
 
 ### FAQ 8: How secure is patient health information (PHI)?
 
-**Enterprise-grade security built in**: HSM-backed encryption keys, private endpoints for all PHI-touching services, automated PHI masking in logs, 7-year compliant retention, and customer-managed key support. The platform addresses all HIPAA technical safeguard requirements.
+The platform includes security controls and deployment patterns for HSM-backed encryption keys, private endpoints, PHI masking in logs, retention, and customer-managed key support. These controls must be configured and validated in the payer's own environment.
 
 ### FAQ 9: What happens after the pilot ends?
 
@@ -371,9 +371,9 @@ CMS-0057-F compliance statements reflect platform capabilities; customers are re
 
 ### Primary Page
 
-**Title**: Cloud Health Office - CMS-0057-F Compliant EDI Platform | Source-Available, Azure-Native
+**Title**: Cloud Health Office - CMS-0057-F Readiness Platform | Source-Available, Azure-Native
 
-**Description**: Deploy HIPAA-compliant Patient Access, Provider Access, and Prior Authorization APIs in 5 minutes. Source-available, Azure-native EDI platform with up to 82% lower cost than enterprise vendors (results may vary). Start free pilot.
+**Description**: Evaluate Patient Access, Provider Access, and Prior Authorization API readiness in a source-available, Azure-native payer platform with inspectable implementation evidence.
 
 **Keywords**: CMS-0057-F compliance, healthcare EDI, FHIR R4, Patient Access API, Prior Authorization API, Azure healthcare, source-available healthcare, HIPAA compliant EDI
 

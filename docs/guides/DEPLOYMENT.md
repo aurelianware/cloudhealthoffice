@@ -1,50 +1,39 @@
 # Deployment Guide - Cloud Health Office
 
-This guide provides step-by-step instructions for deploying the Cloud Health Office multi-tenant SaaS platform to Azure environments (DEV/UAT/PROD).
+This guide provides step-by-step instructions for deploying the Cloud Health Office source-available platform into a customer-controlled environment.
+
+> **Current availability:** Cloud Health Office is not operated as a public hosted SaaS at `portal.cloudhealthoffice.com` or `api.cloudhealthoffice.com`. Download the source, run it locally, or deploy it into your own Azure/Kubernetes environment under the Business Source License (BSL 1.1). Public production use requires a commercial license.
 
 ## 🚀 Quick Start
 
 **New users?** Start here:
 
-### Option 1: Self-Service Signup (Recommended - 5 minutes)
+### Option 1: Local Kubernetes Evaluation (Recommended)
 
-The fastest way to get started is through our production portal:
+The fastest way to evaluate the platform is to run it on Docker Desktop Kubernetes:
 
 ```bash
-# 1. Visit the portal
-open https://portal.cloudhealthoffice.com
-
-# 2. Sign in with Azure AD (any Microsoft account)
-# 3. Select your tier:
-#    - Starter: 10K claims, 14-day trial
-#    - Professional: 50K claims, 14-day trial
-#    - Enterprise: Contact Sales for custom pricing
-#    Pricing: Contact sales@cloudhealthoffice.com
-
-# 4. Enter payment details (Stripe - PCI compliant)
-# 5. Choose modules (EDI, Claims, Provider Network, FHIR)
-# 6. Click "Start Free Trial"
-
-# 7. Access your tenant (auto-provisioned):
-#    - Portal: https://portal.cloudhealthoffice.com
-#    - API: https://api.cloudhealthoffice.com
-#    - Docs: https://docs.cloudhealthoffice.com
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
+./scripts/deploy-local.sh
 ```
 
-**What gets auto-provisioned:**
-- ✅ Cosmos DB tenant partition (`tenantId`)
-- ✅ SFTP credentials for clearinghouse integration
-- ✅ Azure AD application for API access
-- ✅ 14-day trial subscription (Stripe)
-- ✅ Welcome email with credentials
+Then follow the local access steps in [QUICKSTART.md](QUICKSTART.md) or the Kubernetes reference in [quickstart-kubernetes-local.md](../quickstart-kubernetes-local.md).
 
-**Enterprise customers:** [Contact Sales](https://portal.cloudhealthoffice.com/contact-sales) for custom SLAs, white-labeling, and dedicated support.
+**What gets created locally:**
+- Kubernetes namespace and service DNS for the platform
+- MongoDB and Redis local services
+- Portal and API services reachable through port-forwarding
+- Demo/reference data for local validation
+- A customer-owned path to connect Azure AD, Stripe, Service Bus, and clearinghouse credentials later
+
+For pilot scoping, commercial licensing, or a customer-owned deployment review, contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com).
 
 ---
 
-### Option 2: Self-Hosted Deployment (Advanced)
+### Option 2: Customer-Owned Cloud Deployment (Advanced)
 
-For customers requiring on-premise or Azure-hosted deployment:
+For customers requiring an Azure-hosted or private Kubernetes deployment:
 
 **New to deployment?** Follow these steps:
 1. **GitHub Actions Setup**: See [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md) for complete OIDC authentication and secrets configuration
@@ -2050,7 +2039,7 @@ For production PHI workloads, deploy comprehensive security controls to achieve 
 
 #### Security Score Impact
 - **Before**: 7/10 (Basic security)
-- **After**: 9/10 (Production-ready for PHI)
+- **After**: 9/10 target posture (requires environment validation before PHI)
 
 #### Deploy Security Modules
 

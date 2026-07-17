@@ -46,15 +46,15 @@ The challenge we're hearing from organizations like yours:
 • Custom development requires $2M+ and specialized talent
 • The deadline doesn't move, but budgets and resources are constrained
 
-Cloud Health Office is the industry's first source-available, Azure-native EDI platform with 100% CMS-0057-F compliance built in. What typically takes 12+ months, we deploy in under 5 minutes.
+Cloud Health Office is a source-available, Azure-native EDI platform with inspectable CMS-0057-F readiness evidence. What typically takes months to evaluate can be reviewed locally and then deployed into a customer-owned environment.
 
 **Quick Proof Points:**
-✓ Complete FHIR R4 Patient Access API (production-ready)
+✓ FHIR R4 Patient Access API implemented for validation
 ✓ Prior Authorization API with automated 72-hour/7-day response tracking
 ✓ Da Vinci IG conformance (PDex, PAS, CRD, DTR)
 ✓ Up to 82% lower cost than enterprise alternatives (results may vary)
 
-I'd welcome 20 minutes to show you how [Similar Regional Plan] went from compliance gap to production-ready in 30 days.
+I'd welcome 20 minutes to show you how [Similar Regional Plan] moved from compliance gap assessment to a validated pilot plan.
 
 Would [Day 1] at [Time 1] or [Day 2] at [Time 2] work for a brief call?
 
@@ -224,7 +224,7 @@ We accept only 5 pilot customers per quarter to ensure dedicated attention. Base
 • Application: This week
 • Discovery call: Within 5 days
 • Pilot kickoff: Within 15 days
-• Production-ready: Within 60 days
+• Pilot validation: Within 60 days
 
 Ready to reserve your slot? Reply to this email or book a discovery call directly: [Calendar Link]
 
@@ -266,8 +266,8 @@ Big news: Cloud Health Office is now available on the Azure Marketplace.
 
 What this means for [Company Name]:
 
-**Instant Deployment**
-Click "Deploy to Azure" and have a production-ready, CMS-0057-F compliant EDI platform running in your environment in under 5 minutes. No sales calls, no lengthy procurement, no implementation projects.
+**Customer-Owned Deployment**
+Deploy the source-available platform into your Azure/Kubernetes environment, then validate CMS-0057-F readiness evidence against your implementation controls. No black-box hosted endpoint required.
 
 **Azure Billing Simplicity**
 Pay through your existing Azure commitment. No separate vendor contracts, no new procurement processes. If you have Azure credits or an Enterprise Agreement, you may already be funded.

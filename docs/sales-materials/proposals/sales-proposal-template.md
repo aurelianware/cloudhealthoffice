@@ -93,14 +93,14 @@ The Cloud Health Office Platform is an Azure-native, configuration-driven soluti
 - X12 EDI decoding (275 Attachments, 277 RFAI, 278 Authorizations)
 - Integration with [Customer's Claims System]
 - Event-driven architecture for downstream workflows
-- HIPAA-compliant infrastructure with comprehensive security controls
+- HIPAA-oriented infrastructure patterns with comprehensive security controls for customer validation
 
 ### Architecture Components
 
 #### 1. SFTP Integration & Data Lake
 - **Automated Polling:** Checks Clearinghouse SFTP every 15 minutes for new files
 - **Azure Data Lake Gen2:** Archives raw EDI files with date-based partitioning
-- **Retention Management:** 7-year HIPAA-compliant retention with automated lifecycle policies
+- **Retention Management:** Configurable 7-year retention pattern with automated lifecycle policies
 - **Secure Storage:** Encryption at rest (AES-256), encryption in transit (TLS 1.2+)
 
 #### 2. X12 Processing

@@ -2,12 +2,14 @@
 
 ## Welcome to Cloud Health Office
 
-Welcome to **Cloud Health Office** – the premier source-available, Azure-native, multi-payer EDI integration platform. This guide will help you get started with the platform, understand key concepts, and ensure HIPAA-compliant operations.
+Welcome to **Cloud Health Office** – a source-available, Azure-native, multi-payer healthcare platform. This guide helps you evaluate the platform locally, understand the deployment model, and prepare a customer-owned environment for payer validation.
+
+> **Current availability:** Cloud Health Office is source-available software, not a currently operated public SaaS at `portal.cloudhealthoffice.com` or `api.cloudhealthoffice.com`. Run it locally or deploy it into your own environment. Public production use requires a commercial license under the BSL 1.1 model.
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Self-Service Signup](#self-service-signup)
+2. [Deployment Paths](#deployment-paths)
 3. [Prerequisites (Self-Hosted)](#prerequisites-self-hosted)
 4. [Quick Start](#quick-start)
 5. [Architecture Overview](#architecture-overview)
@@ -22,57 +24,56 @@ Welcome to **Cloud Health Office** – the premier source-available, Azure-nativ
 
 ## Overview
 
-Cloud Health Office provides a complete EDI integration solution for healthcare payers, supporting:
+Cloud Health Office provides healthcare payer platform capabilities for local evaluation and customer-owned deployment, supporting:
 
-- **Self-Service SaaS Platform**: 5-minute signup at portal.cloudhealthoffice.com with Stripe subscriptions and Azure AD authentication
+- **Source-Available Deployment**: local Kubernetes evaluation and customer-owned Azure/Kubernetes deployment paths
 - **HIPAA X12 Transactions**: 270/271 (Eligibility), 275 (Attachments), 276/277 (Claim Status), 278 (Authorization), 837 (Claims)
 - **Cloud-Native Architecture**: Kubernetes (AKS), Argo Workflows, 9 .NET microservices, Cosmos DB multi-tenancy
 - **Multi-Tenant Isolation**: Cosmos DB tenant partitions with smart routing via Azure AD claims
-- **Production-Grade Security**: HIPAA-compliant logging, encryption, audit trails, and automated vulnerability scanning
+- **Security Controls**: logging, encryption, audit trails, and automated scanning patterns that must be validated in each payer deployment
 
 ### Key Features
 
-- ✅ **&lt;5 Minute Onboarding**: Self-service signup with automatic tenant provisioning
-- ✅ **14-Day Free Trial**: Test all features (Starter, Professional, Enterprise tiers — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing)
+- ✅ **Local Kubernetes Evaluation**: run the platform locally for non-production validation
+- ✅ **Customer-Owned Deployment**: deploy into your Azure/Kubernetes environment for pilot work
 - ✅ **Zero Custom Code**: Template-driven workflow generation
-- ✅ **Production HIPAA Controls**: Built-in compliance and security
+- ✅ **Security and Audit Controls**: implementation patterns for payer validation
 - ✅ **Automated Testing**: Comprehensive test framework included
 - ✅ **Scalable Architecture**: Azure-native services for enterprise scale
 - ✅ **Contact Sales**: Enterprise inquiry tracking (New → Contacted → Qualified → Closed)
 
 ---
 
-## Self-Service Signup
+## Deployment Paths
 
-**Fastest Path**: Visit **[portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com)** to get started in 5 minutes.
+**Fastest Path**: follow [QUICKSTART.md](../guides/QUICKSTART.md) to run Cloud Health Office locally.
 
-### Signup Process
+### Local Evaluation Process
 
-1. **Azure AD Login**: Sign in with any Microsoft account
-2. **Select Tier**: Starter (10K claims) or Professional (50K claims) — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing
-3. **Enter Payment**: Stripe payment (14-day trial, no charge until trial ends)
-4. **Choose Modules**: EDI (270/271, 275, 276/277, 278, 837), Claims Adjudication, Provider Network, FHIR
-5. **Start Trial**: Complete signup to begin your 14-day free trial
+1. **Clone the Repository**: pull the source-available repo from GitHub.
+2. **Start Local Kubernetes**: enable Docker Desktop Kubernetes.
+3. **Deploy Locally**: run the local deploy script or follow the Quick Start.
+4. **Port-Forward Services**: access the portal and APIs through local ports.
+5. **Validate Evidence**: run smoke checks, claims adjudication examples, or MCC validator runs.
 
-### What Gets Auto-Provisioned
+### What Gets Provisioned Locally
 
-When you complete signup:
-- ✅ **Cosmos DB Tenant**: Partition created in Tenants container (`/tenantId`)
-- ✅ **Member Account**: Admin user added to Members container
-- ✅ **SFTP Credentials**: Generated for clearinghouse integration
-- ✅ **Azure AD App**: Registered for API access
-- ✅ **Stripe Subscription**: Created with 14-day trial (ends Feb 23, 2026)
-- ✅ **Welcome Email**: Sent with credentials and access URLs
+When you run a local evaluation:
+- ✅ **Kubernetes Namespace**: `cloudhealthoffice`
+- ✅ **Local Datastores**: MongoDB and Redis services
+- ✅ **Portal and APIs**: accessible by port-forwarding
+- ✅ **Demo Data**: seeded for local validation
+- ✅ **Extension Points**: Azure AD, Stripe, Service Bus, clearinghouse credentials, and customer-owned hostnames can be configured later
 
-### Access URLs
+### Customer-Owned Access URLs
 
-- **Portal**: https://portal.cloudhealthoffice.com - Manage subscription, view claims
-- **API**: https://api.cloudhealthoffice.com - RESTful endpoints with OpenAPI docs
-- **Docs**: https://docs.cloudhealthoffice.com - Integration guides
+For a payer deployment, you choose and operate your own hostnames, for example:
 
-### Enterprise
+- **Portal**: `https://portal.<your-domain>`
+- **API**: `https://api.<your-domain>`
+- **Docs**: `https://docs.<your-domain>` or your internal documentation portal
 
-For custom pricing, SLAs, or white-labeling: **[Contact Sales](https://portal.cloudhealthoffice.com/contact-sales)**
+For pilot scoping, commercial licensing, SLAs, or white-labeling: [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com)
 
 ---
 
@@ -324,7 +325,7 @@ PAYER_CONFIG_PATH=./config/payers/your-payer.json
 
 ### Branching Strategy
 
-- `main`: Production-ready code
+- `main`: current source-available code
 - `release/*`: Release candidates
 - `feature/*`: New features
 - `hotfix/*`: Critical production fixes
@@ -373,7 +374,7 @@ Use the provided PowerShell test scripts to validate workflows:
 
 ### Generate Test Data
 
-Create synthetic HIPAA-compliant test data:
+Create synthetic, PHI-safe test data:
 
 ```bash
 # Generate 837P (Professional) claims
@@ -460,7 +461,7 @@ az servicebus topic list --namespace-name your-sb-ns -g your-rg
 
 ### Monitoring & Dashboards
 
-Cloud Health Office includes three production-ready Azure Monitor Workbooks for real-time monitoring:
+Cloud Health Office includes three Azure Monitor Workbook templates for customer-deployed monitoring:
 
 1. **EDI Transaction Metrics**: Monitor transaction volume, latency (P50/P95/P99), success rates, and error patterns
 2. **Payer Integration Health**: Per-payer health scoring, integration status, and backend connectivity
@@ -638,7 +639,7 @@ Before deploying to production, verify:
 
 ### Sample Implementation
 
-Here's a complete example of HIPAA-compliant logging in a service workflow:
+Here's a complete example of HIPAA-oriented audit logging in a service workflow:
 
 ```typescript
 import { redactPHI, createHIPAALogger } from './src/security/hipaaLogger';

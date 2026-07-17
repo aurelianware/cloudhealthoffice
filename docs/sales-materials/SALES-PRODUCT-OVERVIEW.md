@@ -12,7 +12,7 @@ Cloud Health Office (CHO) engages customers across four product lines: **Public 
 
 ## Executive Summary
 
-CHO is a source-available, cloud-native platform for healthcare claims administration. Within Platform Engagement, it engages customers at three layers: a production-ready CMS-0057-F compliance surface (Layer 1 — Compliance Accelerator), a progressive modernization path with appeals as the shipped reference domain (Layer 2 — Progressive Modernization), and a full cloud-native CAPS platform for new entrants and established payers finishing their modernization (Layer 3 — Full CAPS Platform). See [POSITIONING.md](../POSITIONING.md) for the honest today-state of each layer.
+CHO is a source-available, cloud-native platform for healthcare claims administration. Within Platform Engagement, it engages customers at three layers: an evidence-backed CMS-0057-F readiness surface (Layer 1 — Compliance Accelerator), a progressive modernization path with appeals as the shipped reference domain (Layer 2 — Progressive Modernization), and a full cloud-native CAPS platform for new entrants and established payers finishing their modernization (Layer 3 — Full CAPS Platform). See [POSITIONING.md](../POSITIONING.md) for the honest today-state of each layer.
 
 ### The Compliance Imperative
 
@@ -25,11 +25,11 @@ CHO is a source-available, cloud-native platform for healthcare claims administr
 
 | Capability | Status | Compliance Impact |
 |------------|--------|-------------------|
-| Patient Access API (FHIR R4) | ✅ Production Ready | CMS-0057-F Required |
-| Provider Access API | ✅ Production Ready | CMS-0057-F Required |
+| Patient Access API (FHIR R4) | ✅ Implemented | CMS-0057-F Required |
+| Provider Access API | ✅ Implemented | CMS-0057-F Required |
 | Prior Authorization API | ✅ Automated 72hr/7-day | CMS-0057-F Required |
 | Payer-to-Payer API | ✅ Bulk FHIR Export | CMS-0057-F Required |
-| Da Vinci IG Conformance | ✅ PDex, PAS, CRD, DTR | ONC Certification Ready |
+| Da Vinci IG Conformance | ✅ PDex, PAS, CRD, DTR | Readiness evidence |
 | USCDI v1/v2 Data Classes | ✅ Complete | Federal Mandate |
 
 ---
@@ -40,7 +40,7 @@ CHO is a source-available, cloud-native platform for healthcare claims administr
 
 | Layer | Scope                                    | Today                                                                 |
 | ----- | ---------------------------------------- | --------------------------------------------------------------------- |
-| 1     | CMS-0057-F compliance surface            | Production-ready; Helm-deployable; pilot-validated                    |
+| 1     | CMS-0057-F readiness surface             | Implemented; deployable in customer environments; requires payer validation |
 | 2     | Progressive modernization (per domain)   | Appeals shipped (PRs #677, #678, #680, #681); capitation, claims, others in flight |
 | 3     | Full cloud-native CAPS platform          | Architecturally complete; test-coverage hardening on some services; no production reference customer yet |
 
@@ -71,7 +71,7 @@ Native X12 ↔ FHIR R4 transformation for modern interoperability:
 
 ### Security & Compliance
 
-Production-grade HIPAA infrastructure:
+Security and compliance controls for payer validation:
 
 - **Premium Key Vault** with HSM-backed keys (FIPS 140-2 Level 2)
 - **Private endpoints** for complete network isolation
@@ -87,8 +87,8 @@ Production-grade HIPAA infrastructure:
 
 | Factor | Change Healthcare | Cloud Health Office |
 |--------|-------------------|---------------------|
-| Implementation Time | 12-18 months | **< 5 minutes** |
-| CMS-0057-F Readiness | Partial | **100% Complete** |
+| Implementation Time | 12-18 months | **Local evaluation in under an hour** |
+| CMS-0057-F Readiness | Partial | **Implemented readiness surface with evidence** |
 | Pricing Model | Per-transaction + licensing | **Predictable subscription** |
 | Source Code Access | Proprietary | **Source-Available (BSL 1.1)** |
 | Customization | Professional services required | **Zero-code configuration** |
@@ -99,7 +99,7 @@ Production-grade HIPAA infrastructure:
 |--------|----------|---------------------|
 | Cloud-Native | Hybrid/legacy | **Azure-native** |
 | FHIR Support | Add-on module | **Built-in transformation** |
-| Da Vinci IGs | Roadmap | **Production ready** |
+| Da Vinci IGs | Roadmap | **Implemented readiness surface** |
 | AI/ML Integration | Limited | **Azure OpenAI ready** |
 | Scaling | Manual | **Auto-scaling included** |
 
@@ -108,8 +108,8 @@ Production-grade HIPAA infrastructure:
 | Factor | Custom Development | Cloud Health Office |
 |--------|-------------------|---------------------|
 | Total Cost | $2M+ development | **$12K-$96K/year** |
-| Time to Production | 18-36 months | **< 5 minutes** |
-| Compliance Risk | Team dependent | **Validated architecture** |
+| Time to First Evaluation | 18-36 months | **Local evaluation in under an hour** |
+| Compliance Risk | Team dependent | **Inspectable architecture and evidence** |
 | Ongoing Maintenance | Full burden | **Platform updates included** |
 | Community Support | Internal only | **Source-available community** |
 
@@ -139,7 +139,7 @@ Production-grade HIPAA infrastructure:
 - **Size**: 50,000 - 2,000,000 members
 - **Infrastructure**: Azure environment (or willing to adopt)
 - **Pain Points**: CMS compliance, EDI modernization, cost reduction
-- **Timeline**: Need production deployment within 6 months
+- **Timeline**: Need a validated deployment path within 6 months
 - **Budget**: $25K - $100K annual platform spend
 
 ---
@@ -160,10 +160,10 @@ Production-grade HIPAA infrastructure:
 ### What's Included Across Platform Engagement
 
 **Layer 1 — Compliance Accelerator**:
-- Production-ready CMS-0057-F compliance surface (Patient Access, Provider Directory, Prior Authorization, Payer-to-Payer)
+- Evidence-backed CMS-0057-F readiness surface (Patient Access, Provider Directory, Prior Authorization, Payer-to-Payer)
 - Four CHO-authored FHIR appeal profiles plus the `$cho-appeal-submit` operation
 - SMART-on-FHIR scope enforcement at the resource-type level
-- HIPAA-compliant Azure deployment (Helm chart into existing Kubernetes cluster or AKS)
+- Azure/Kubernetes deployment pattern for customer HIPAA validation
 - Standard support (email, 48-hour response)
 
 **Layer 2 — Progressive Modernization** (includes Layer 1):
@@ -295,7 +295,7 @@ Deploy instantly from the Azure Marketplace:
 
 *Cloud Health Office - The inevitable evolution of healthcare EDI*
 
-*Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
+*Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Readiness | Customer-Validated*
 
 ---
 

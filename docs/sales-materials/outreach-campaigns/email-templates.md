@@ -152,7 +152,7 @@ As promised, I've attached your formal proposal for the Cloud Health Office Plat
 **What's Included:**
 ✅ Complete 275/277/278 EDI processing
 ✅ Integration with your [Claims System]
-✅ HIPAA-compliant infrastructure with Premium Key Vault
+✅ HIPAA-oriented infrastructure patterns with Premium Key Vault
 ✅ Data Lake Gen2 with 7-year retention
 ✅ Dedicated implementation team
 ✅ Training and ongoing support
