@@ -973,14 +973,7 @@ static string BuildSyntheticExcludedProviderNpi(int seed, int index)
 
 static string BuildSyntheticValidationProviderNpi(int seed, Guid runId, int index, int role)
 {
-    unchecked
-    {
-        var runHash = BitConverter.ToUInt32(runId.ToByteArray(), 0);
-        var combined = runHash ^ (uint)(seed * 1_000_003 + index * 17 + role);
-        var value = combined % 1_000_000;
-        var baseNineDigits = $"91{role}{value:D6}";
-        return $"{baseNineDigits}{CalculateNpiCheckDigit(baseNineDigits)}";
-    }
+    return MccValidationProviderIdentity.BuildNpi(seed, runId, index, role);
 }
 
 static int CalculateNpiCheckDigit(string baseNineDigits)
