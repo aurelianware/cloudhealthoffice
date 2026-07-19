@@ -97,3 +97,45 @@ The 100K correctness gate passed cleanly. All claims processed; the scoreable wo
 The timed adjudication result and total Kubernetes job duration must remain separate. Timed processing completed in 29:40.851 at 56.15 claims/second. The job lifecycle lasted about 128 minutes because large run-scoped member and provider fixture preparation occurred before timed processing.
 
 This is local Docker Desktop evidence, not a production-cloud capacity claim. The performance result identifies fixture preparation and increased local tail latency as the next scaling investigation.
+
+## Post-#928 provider-fixture verification
+
+After PR #927 anchored validation providers as run-scoped fixtures, a follow-up 50K run still exposed 10 scoreable `TxStarInpatientNoAuth` mismatches. Those claims expected `PRIOR_AUTH_REQUIRED` but adjudicated as `PROVIDER_EXCLUDED`. Spot checks against provider-service showed the current generated rendering provider record was approved and in-network, which pointed to stale or colliding provider-integrity state around the old synthetic validation-provider NPI family.
+
+PR #928 moved MCC scoreable validation providers into wider, role-separated synthetic NPI namespaces:
+
+- `93...` billing providers
+- `94...` adjudicatable rendering providers
+- `95...` intentionally excluded rendering providers
+
+The post-#928 50K rerun was completed as `mcc-provider-namespace-50k-163946`.
+
+### Post-#928 50K correctness result
+
+- Total claims: 50,000
+- Processed: 50,000
+- Paid/adjudicated: 39,407
+- Pended: 463
+- Business denials: 10,130
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 460 pended, 0 timed out
+- False-pend sweep: 5,307 scoreable non-pend claims, 0 unexpected pends
+- Workflow scoring: 5,767/6,500 matched, 0 mismatched, 733 unsupported, 0 observation timeouts
+- Payment gate: 1,000/1,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+- `TxStarInpatientNoAuth`: 1,000/1,000 matched
+
+### Post-#928 50K performance result
+
+- Timed claim-processing elapsed: 14:13.279
+- Throughput: 58.60 claims/second
+- P95 latency: 380 ms
+- P99 latency: 515 ms
+- Preparation time: 2:54.130
+- Tracked lifecycle: 17:14.705
+- Provider fixtures created: 7,568
+- Provider fixtures already present: 491
+
+This post-#928 50K run is not a replacement for the 100K result above. It is the provider-fixture hardening proof point that should be included before the next 100K rerun.
