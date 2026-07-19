@@ -151,6 +151,7 @@ public class MassAdjudicationRunProgress
     public double CurrentThroughputClaimsPerSecond { get; set; }
     public double RollingP95LatencyMilliseconds { get; set; }
     public double RollingP99LatencyMilliseconds { get; set; }
+    public int PendingExpectedPendObservations { get; set; }
     public DateTimeOffset LastPublishedAtUtc { get; set; }
 }
 
