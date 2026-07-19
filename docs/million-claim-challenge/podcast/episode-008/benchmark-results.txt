@@ -2,9 +2,9 @@
 
 ## Run identity
 
-- Date: July 18, 2026 local time / July 19, 2026 UTC
-- Kubernetes job: `mcc-post928-100k-190641`
-- Dashboard run ID: `34db25825df04c8fa75eb5cc0e615291`
+- Date: July 19, 2026 local time / July 19, 2026 UTC
+- Kubernetes job: `mcc-main-100k-p10-112031`
+- Dashboard run ID: `dd0ebe4979e247bc95a980610de7d0be`
 - Environment: local Docker Desktop Kubernetes
 - Tenant: `demo`
 - Validator seed: 42
@@ -19,13 +19,17 @@
 ## Command
 
 ```text
-CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=10 PROGRESS_EVERY=5000 JOB_NAME=mcc-post928-100k-190641 ./scripts/run-mcc-local-k8s.sh
+JOB_NAME=mcc-main-100k-p10-112031 CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=10 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true SKIP_BUILD=true ./scripts/run-mcc-local-k8s.sh
 ```
+
+The local wrapper timed out while waiting for the Kubernetes job condition, but the Kubernetes job continued running and completed successfully. The pod exited successfully with 0 restarts, and the validator published the completed dashboard summary.
 
 ## Raw artifacts
 
-- `raw-validator-output-post928-100k.txt` - validator console output from the completed 100K run.
-- `run-summary-post928-100k.json` - completed Mass Adjudication run summary returned by claims-service.
+- `raw-validator-output-post934-100k.txt` - validator console output from the completed post-#934 100K run.
+- `run-summary-post934-100k.json` - completed Mass Adjudication run summary returned by claims-service for the post-#934 100K run.
+- `raw-validator-output-post928-100k.txt` - prior post-#928 100K validator output retained as provenance.
+- `run-summary-post928-100k.json` - prior post-#928 dashboard summary retained as provenance.
 
 ## Fixture preparation
 
@@ -34,66 +38,67 @@ CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=10 PROGRESS_EVERY=5000 JOB_NAME=mcc-
 - Injected 2,000 excluded-provider denial scenarios.
 - Injected 2,000 uncovered-service denial scenarios.
 - Injected 2,000 TX STAR inpatient no-authorization scenarios.
-- Provider fixture pool: 199,846 provider references reduced to 13,742 distinct NPIs.
+- Provider fixture pool: 199,847 provider references reduced to 13,742 distinct NPIs.
 - Provider assignments reused: 186,258.
 - Provider-sensitive claims preserved: 2,800.
 - Seeded 10,614 synthetic members; 88,977 already existed; 99,591 statuses aligned.
 - Seeded 0 COB coverage rows; 920 already existed.
 - Seeded 0 provider networks; 2 already existed.
-- Seeded 12,748 synthetic providers; 994 already existed.
+- Seeded 13,383 synthetic providers; 359 already existed.
 
 ## Correctness result
 
 - Total claims: 100,000
 - Processed: 100,000
-- Paid/adjudicated: 79,162
-- Pended: 921
-- Business denials: 19,917
+- Paid/adjudicated: 78,842
+- Pended: 924
+- Business denials: 20,234
 - Platform failures: 0
 - Observation timeouts: 0
 - Expected-pend observation: 920 pended, 0 timed out
-- False-pend sweep: 10,614 scoreable non-pend claims, 0 unexpected pends
-- Workflow scoring: 11,534/13,000 matched, 0 mismatched, 1,466 unsupported, 0 observation timeouts
+- False-pend sweep: 10,934 scoreable non-pend claims, 0 unexpected pends, 2,242 terminal outcomes reconciled
+- Workflow scoring: 11,854/13,000 matched, 0 mismatched, 1,146 unsupported, 0 observation timeouts
 - Payment gate: 2,000/2,000 within $0.01, 0 mismatched
 - Average payment delta: $0.00
 - Maximum payment delta: $0.00
 
-Pend-scope note: the final persisted outcome mix includes 921 pended claims. The expected-pend observer independently verified 920 answer-key pend scenarios as pended. The false-pend sweep then checked 10,614 scoreable expected-pay and expected-deny claims and found 0 unexpected pends. Unsupported scenarios remain outside the scoreable non-pend sweep.
+Pend-scope note: the final persisted outcome mix includes 924 pended claims. The expected-pend observer independently verified 920 answer-key pend scenarios as pended. The false-pend sweep then checked 10,934 scoreable expected-pay and expected-deny claims and found 0 unexpected pends. Unsupported scenarios remain outside the scoreable non-pend sweep.
 
 ## Performance result
 
-- Timed claim-processing elapsed: 27:54.381
-- Throughput: 59.72 claims/second
-- P95 latency: 296 ms
-- P99 latency: 377 ms
-- Submit average/P95: 61 ms / 115 ms
-- Adjudicate average/P95: 69 ms / 105 ms
-- Writeback average/P95: 38 ms / 95 ms
-- Benefit calculation average/P95: 65 ms / 100 ms
-- Provider integrity average/P95: 2 ms / 3 ms
-- Preparation time: 6:02.216
-- Tracked lifecycle: 34:03.458
+- Timed claim-processing elapsed: 30:05.013
+- Throughput: 55.40 claims/second
+- P95 latency: 324 ms
+- P99 latency: 480 ms
+- Submit average/P95: 67 ms / 194 ms
+- Adjudicate average/P95: 70 ms / 122 ms
+- Writeback average/P95: 45 ms / 101 ms
+- Benefit calculation average/P95: 65 ms / 115 ms
+- Provider integrity average/P95: 3 ms / 2 ms
+- Preparation time: 7:53.368
+- Tracked lifecycle: 38:05.792
 
 ## Lifecycle timings
 
-- Service health checks: 0:00.037
-- Reference rule seeding: 0:00.041
-- Validation plan setup: 0:00.017
-- Corpus generation: 0:01.039
-- Fixture normalization: 0:00.335
-- Member and coverage seeding: 2:51.219
-- Provider seeding: 3:09.524
-- Timed adjudication: 27:54.381
-- Expected-pend observation: 0:00.740
-- False-pend sweep: 0:06.120
+- Service health checks: 0:00.056
+- Reference rule seeding: 0:00.120
+- Validation plan setup: 0:00.018
+- Corpus generation: 0:01.201
+- Fixture normalization: 0:00.327
+- Authorization fixture seeding: 0:00.436
+- Member and coverage seeding: 2:47.051
+- Provider seeding: 5:04.155
+- Timed adjudication: 30:05.013
+- Expected-pend observation: 0:00.765
+- False-pend sweep: 0:06.644
 
 ## Business denials
 
 - CARC 96: 9,046
 - CARC 18: 6,000
-- PRIOR_AUTH_REQUIRED: 2,160
-- PROVIDER_EXCLUDED: 2,001
-- NCCI_MUE_EDIT_FAILURE: 396
+- PRIOR_AUTH_REQUIRED: 2,480
+- PROVIDER_EXCLUDED: 2,000
+- NCCI_MUE_EDIT_FAILURE: 394
 - CARC 27: 267
 - SCRUB_VALIDATION_FAILURE: 47
 
@@ -103,15 +108,13 @@ Business denials are valid platform outcomes, not platform failures.
 
 - BehavioralHealthCarveOut: 200
 - MedicaidSpendDown: 120
-- PriorAuthRequired_ExpiredAuth: 160
-- PriorAuthRequired_WrongProcedure: 160
 - PriorAuthRequired_WrongProvider: 160
 - RetroEligibilityCoverageChange: 266
 - SubrogationAccidentRelated: 134
 - SubrogationThirdPartyLiability: 133
 - SubrogationWorkersComp: 133
 
-Total unsupported: 1,466.
+Total unsupported: 1,146.
 
 Unsupported means the scenario is not currently scoreable through the implemented platform/validator path. It is not counted as matched, mismatched, or a platform failure.
 
@@ -126,13 +129,13 @@ Unsupported means the scenario is not currently scoreable through the implemente
 - Medicaid CHIP, dual-eligible, SSI, and TANF: 120/120 matched each
 - Retro eligibility add and termination: 267/267 matched each
 - Behavioral health carve-in and parity-check: 200/200 matched each
-- Prior-auth required auth-on-file and no-auth variants: 160/160 matched each
+- Prior-auth required auth-on-file, expired-auth, no-auth, and wrong-procedure variants: 160/160 matched each
 
 ## Interpretation
 
-The post-#928 100K correctness gate passed cleanly. All claims processed; the scoreable workflow set produced no mismatches; expected-pend observation produced no timeouts; the non-pend sweep found no unexpected pends; and all 2,000 comparable payments matched within one cent.
+The post-#934 100K correctness gate passed cleanly. All claims processed; the scoreable workflow set produced no mismatches; expected-pend observation produced no timeouts; the non-pend sweep found no unexpected pends; and all 2,000 comparable payments matched within one cent.
 
-Timed adjudication and full tracked lifecycle must remain separate. Timed processing completed in 27:54.381 at 59.72 claims/second. The tracked lifecycle completed in 34:03.458 after preparation, processing, expected-pend observation, and false-pend sweep.
+Timed adjudication and full tracked lifecycle must remain separate. Timed processing completed in 30:05.013 at 55.40 claims/second. The tracked lifecycle completed in 38:05.792 after preparation, processing, expected-pend observation, and false-pend sweep.
 
 This is local Docker Desktop evidence, not a production-cloud capacity claim. During the run, Docker Desktop showed significant CPU and memory headroom, so the next performance investigation should focus on internal throughput limits: validator parallelism, service concurrency, HTTP client limits, MongoDB/writeback behavior, and disk I/O.
 
@@ -182,4 +185,27 @@ The post-#928 50K rerun was completed as `mcc-provider-namespace-50k-163946`.
 - Provider fixtures created: 7,568
 - Provider fixtures already present: 491
 
-The post-#928 50K run proved the provider-fixture hardening. The 100K run above proves the same hardened fixture model at the next scale.
+The post-#928 50K run proved the provider-fixture hardening. Later PRs made seeded prior-auth evidence scoreable and normalized provider-exclusion denial labels.
+
+## Post-#934 50K scoring verification
+
+The post-#934 50K rerun was completed as `mcc-main-50k-p10-105103` with dashboard run ID `41301477f0eb437bb6a95bf3bd8d420b`.
+
+- Total claims: 50,000
+- Processed: 50,000
+- Paid/adjudicated: 39,377
+- Pended: 461
+- Business denials: 10,162
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 460 pended, 0 timed out
+- False-pend sweep: 5,467 scoreable non-pend claims, 0 unexpected pends
+- Workflow scoring: 5,927/6,500 matched, 0 mismatched, 573 unsupported, 0 observation timeouts
+- Payment gate: 1,000/1,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+- Throughput: 59.59 claims/second
+- P95 latency: 318 ms
+- P99 latency: 415 ms
+
+The post-#934 50K run proved the prior-auth and provider-exclusion scoring fixes. The 100K run above proves the same hardened scoring model at the next scale.

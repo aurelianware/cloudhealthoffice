@@ -41,17 +41,41 @@
 - Added regression coverage proving role separation and no collisions across the 50K scoreable scenario window.
 - Produced a clean post-fix 50K verification: 50,000 processed, 5,767/6,500 workflow checks matched, 0 workflow mismatches, 460/460 expected pends observed, 0 unexpected pends, and 1,000/1,000 comparable payments within tolerance.
 
-## Post-#928 100K outcome
+## PR #931 - prior-auth validation integration
 
-No platform code was changed to make the 100K result look clean. The final post-#928 run used the stronger gates established above, the hardened validation-provider namespaces, and the provider-pool fixture strategy.
+- Wired prior-authorization validation into the adjudication path so seeded authorization evidence could influence persisted outcomes.
+- Kept the evidence path explicit instead of treating prior-auth behavior as a fixture-only concern.
 
-The run completed cleanly: 100,000 processed, 0 platform failures, 11,534/13,000 workflow checks matched, 0 workflow mismatches, 1,466 unsupported, 920/920 expected pends observed, 0 unexpected pends across 10,614 scoreable non-pend claims, and 2,000/2,000 comparable payments within $0.01 with $0.00 maximum payment delta.
+## PR #932 - score seeded prior-auth evidence
+
+- Made seeded prior-authorization scenarios scoreable in the MCC validator.
+- Moved more prior-auth coverage out of the unsupported bucket and into matched/mismatched workflow evidence.
+
+## PR #933 - prior-auth evidence scoring correction
+
+- Fixed the prior-auth scoring path so expired-authorization and wrong-procedure scenarios could be counted honestly.
+- Preserved the wrong-provider prior-auth variant as unsupported because the current validation path still cannot score that behavior cleanly.
+
+## PR #934 - provider-exclusion denial normalization
+
+- Normalized provider-exclusion denial labels across `B7`, `CARC_B7`, and `PROVIDER_EXCLUDED`.
+- Prevented label-only differences from surfacing as false workflow mismatches when the business outcome was the expected excluded-provider denial.
+
+## Post-#934 50K scoring verification
+
+The post-#934 50K rerun completed cleanly: 50,000 processed, 0 platform failures, 5,927/6,500 workflow checks matched, 0 workflow mismatches, 573 unsupported, 460/460 expected pends observed, 0 unexpected pends across 5,467 scoreable non-pend claims, and 1,000/1,000 comparable payments within $0.01 with $0.00 maximum payment delta.
+
+## Post-#934 100K outcome
+
+No platform code was changed to make the 100K result look clean. The final post-#934 run used the stronger gates established above, the hardened validation-provider namespaces, the prior-auth scoring path, provider-exclusion label normalization, and the provider-pool fixture strategy.
+
+The run completed cleanly: 100,000 processed, 0 platform failures, 11,854/13,000 workflow checks matched, 0 workflow mismatches, 1,146 unsupported, 920/920 expected pends observed, 0 unexpected pends across 10,934 scoreable non-pend claims, and 2,000/2,000 comparable payments within $0.01 with $0.00 maximum payment delta.
 
 The completed summary was published to the Mass Adjudication console. During processing, the live console temporarily showed 920 workflow mismatches because expected-pend checks had not yet been observed. The final summary correctly resolved those provisional checks to matched pends.
 
-## Post-#928 fixture-preparation effect
+## Post-#934 fixture-preparation effect
 
-The final 100K run reduced 199,846 provider references to 13,742 distinct NPIs, reused 186,258 provider assignments, preserved 2,800 provider-sensitive claims, and created 12,748 providers. Preparation took 6:02.216 and the tracked lifecycle took 34:03.458.
+The final 100K run reduced 199,847 provider references to 13,742 distinct NPIs, reused 186,258 provider assignments, preserved 2,800 provider-sensitive claims, and created 13,383 providers. Preparation took 7:53.368 and the tracked lifecycle took 38:05.792.
 
 ## Claim-detail projection correction discovered during evidence review
 
