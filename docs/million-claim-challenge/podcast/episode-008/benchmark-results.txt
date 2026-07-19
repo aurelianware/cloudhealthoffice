@@ -2,8 +2,9 @@
 
 ## Run identity
 
-- Date: July 12, 2026
-- Kubernetes job: `mcc-part8-100k`
+- Date: July 18, 2026 local time / July 19, 2026 UTC
+- Kubernetes job: `mcc-post928-100k-190641`
+- Dashboard run ID: `34db25825df04c8fa75eb5cc0e615291`
 - Environment: local Docker Desktop Kubernetes
 - Tenant: `demo`
 - Validator seed: 42
@@ -18,8 +19,13 @@
 ## Command
 
 ```text
-CLAIMS=100000 MAX_CLAIMS=100000 JOB_NAME=mcc-part8-100k PARALLELISM=10 PROGRESS_EVERY=5000 ./scripts/run-mcc-local-k8s.sh
+CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=10 PROGRESS_EVERY=5000 JOB_NAME=mcc-post928-100k-190641 ./scripts/run-mcc-local-k8s.sh
 ```
+
+## Raw artifacts
+
+- `raw-validator-output-post928-100k.txt` - validator console output from the completed 100K run.
+- `run-summary-post928-100k.json` - completed Mass Adjudication run summary returned by claims-service.
 
 ## Fixture preparation
 
@@ -28,18 +34,21 @@ CLAIMS=100000 MAX_CLAIMS=100000 JOB_NAME=mcc-part8-100k PARALLELISM=10 PROGRESS_
 - Injected 2,000 excluded-provider denial scenarios.
 - Injected 2,000 uncovered-service denial scenarios.
 - Injected 2,000 TX STAR inpatient no-authorization scenarios.
-- Seeded 87,115 synthetic members; 12,476 already existed; 99,591 statuses aligned.
-- Seeded 620 COB coverage rows; 300 already existed.
-- Seeded 174,202 synthetic providers; 25,644 already existed.
-- Provider networks: 0 new; 2 already existed.
+- Provider fixture pool: 199,846 provider references reduced to 13,742 distinct NPIs.
+- Provider assignments reused: 186,258.
+- Provider-sensitive claims preserved: 2,800.
+- Seeded 10,614 synthetic members; 88,977 already existed; 99,591 statuses aligned.
+- Seeded 0 COB coverage rows; 920 already existed.
+- Seeded 0 provider networks; 2 already existed.
+- Seeded 12,748 synthetic providers; 994 already existed.
 
 ## Correctness result
 
 - Total claims: 100,000
 - Processed: 100,000
-- Paid/adjudicated: 79,164
-- Pended: 923
-- Business denials: 19,913
+- Paid/adjudicated: 79,162
+- Pended: 921
+- Business denials: 19,917
 - Platform failures: 0
 - Observation timeouts: 0
 - Expected-pend observation: 920 pended, 0 timed out
@@ -49,28 +58,44 @@ CLAIMS=100000 MAX_CLAIMS=100000 JOB_NAME=mcc-part8-100k PARALLELISM=10 PROGRESS_
 - Average payment delta: $0.00
 - Maximum payment delta: $0.00
 
-Pend-scope note: the final persisted outcome mix includes 923 pended claims. The expected-pend observer independently verified 920 answer-key pend scenarios as pended. The false-pend sweep then checked 10,614 scoreable expected-pay and expected-deny claims and found 0 unexpected pends. Unsupported scenarios remain outside the scoreable non-pend sweep.
+Pend-scope note: the final persisted outcome mix includes 921 pended claims. The expected-pend observer independently verified 920 answer-key pend scenarios as pended. The false-pend sweep then checked 10,614 scoreable expected-pay and expected-deny claims and found 0 unexpected pends. Unsupported scenarios remain outside the scoreable non-pend sweep.
 
 ## Performance result
 
-- Timed claim-processing elapsed: 29:40.851
-- Throughput: 56.15 claims/second
-- P95 latency: 358 ms
-- P99 latency: 451 ms
-- Submit average/P95: 63 ms / 199 ms
-- Adjudicate average/P95: 75 ms / 140 ms
-- Writeback average/P95: 40 ms / 102 ms
-- Benefit calculation average/P95: 60 ms / 127 ms
-- Provider integrity average/P95: 12 ms / 39 ms
-- Kubernetes job duration: approximately 128 minutes, including corpus generation and fixture preparation
+- Timed claim-processing elapsed: 27:54.381
+- Throughput: 59.72 claims/second
+- P95 latency: 296 ms
+- P99 latency: 377 ms
+- Submit average/P95: 61 ms / 115 ms
+- Adjudicate average/P95: 69 ms / 105 ms
+- Writeback average/P95: 38 ms / 95 ms
+- Benefit calculation average/P95: 65 ms / 100 ms
+- Provider integrity average/P95: 2 ms / 3 ms
+- Preparation time: 6:02.216
+- Tracked lifecycle: 34:03.458
+
+## Lifecycle timings
+
+- Service health checks: 0:00.037
+- Reference rule seeding: 0:00.041
+- Validation plan setup: 0:00.017
+- Corpus generation: 0:01.039
+- Fixture normalization: 0:00.335
+- Member and coverage seeding: 2:51.219
+- Provider seeding: 3:09.524
+- Timed adjudication: 27:54.381
+- Expected-pend observation: 0:00.740
+- False-pend sweep: 0:06.120
 
 ## Business denials
 
 - CARC 96: 9,046
 - CARC 18: 6,000
 - PRIOR_AUTH_REQUIRED: 2,160
-- PROVIDER_EXCLUDED: 2,000
-- NCCI_MUE_EDIT_FAILURE: 393
+- PROVIDER_EXCLUDED: 2,001
+- NCCI_MUE_EDIT_FAILURE: 396
+- CARC 27: 267
+- SCRUB_VALIDATION_FAILURE: 47
 
 Business denials are valid platform outcomes, not platform failures.
 
@@ -90,13 +115,32 @@ Total unsupported: 1,466.
 
 Unsupported means the scenario is not currently scoreable through the implemented platform/validator path. It is not counted as matched, mismatched, or a platform failure.
 
+## Matched scenario footprint
+
+- CleanProfessionalPaid: 2,000/2,000 matched
+- ExcludedProviderDenied: 2,000/2,000 matched
+- UncoveredServiceDenied: 2,000/2,000 matched
+- TxStarInpatientNoAuth: 2,000/2,000 matched
+- COB primary, secondary, tertiary, birthday-rule, gender-rule, and Medicare-secondary: 200/200 matched each
+- Newborn auto-adjudication, first-thirty-days, and mother-claim-link: 200/200 matched each
+- Medicaid CHIP, dual-eligible, SSI, and TANF: 120/120 matched each
+- Retro eligibility add and termination: 267/267 matched each
+- Behavioral health carve-in and parity-check: 200/200 matched each
+- Prior-auth required auth-on-file and no-auth variants: 160/160 matched each
+
 ## Interpretation
 
-The 100K correctness gate passed cleanly. All claims processed; the scoreable workflow set produced no mismatches; expected-pend observation produced no timeouts; the non-pend sweep found no unexpected pends; and all 2,000 comparable payments matched within one cent.
+The post-#928 100K correctness gate passed cleanly. All claims processed; the scoreable workflow set produced no mismatches; expected-pend observation produced no timeouts; the non-pend sweep found no unexpected pends; and all 2,000 comparable payments matched within one cent.
 
-The timed adjudication result and total Kubernetes job duration must remain separate. Timed processing completed in 29:40.851 at 56.15 claims/second. The job lifecycle lasted about 128 minutes because large run-scoped member and provider fixture preparation occurred before timed processing.
+Timed adjudication and full tracked lifecycle must remain separate. Timed processing completed in 27:54.381 at 59.72 claims/second. The tracked lifecycle completed in 34:03.458 after preparation, processing, expected-pend observation, and false-pend sweep.
 
-This is local Docker Desktop evidence, not a production-cloud capacity claim. The performance result identifies fixture preparation and increased local tail latency as the next scaling investigation.
+This is local Docker Desktop evidence, not a production-cloud capacity claim. During the run, Docker Desktop showed significant CPU and memory headroom, so the next performance investigation should focus on internal throughput limits: validator parallelism, service concurrency, HTTP client limits, MongoDB/writeback behavior, and disk I/O.
+
+## Live-progress caveat
+
+During claim processing, the console showed 920 workflow mismatches. That count matched the number of expected-pend scenarios and cleared after the expected-pend observation phase completed. The final run summary reported 0 workflow mismatches.
+
+The live console should distinguish expected-pend checks awaiting observation from true workflow mismatches. Completed summaries are correct; the issue is in-progress presentation.
 
 ## Post-#928 provider-fixture verification
 
@@ -138,4 +182,4 @@ The post-#928 50K rerun was completed as `mcc-provider-namespace-50k-163946`.
 - Provider fixtures created: 7,568
 - Provider fixtures already present: 491
 
-This post-#928 50K run is not a replacement for the 100K result above. It is the provider-fixture hardening proof point that should be included before the next 100K rerun.
+The post-#928 50K run proved the provider-fixture hardening. The 100K run above proves the same hardened fixture model at the next scale.

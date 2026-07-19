@@ -41,13 +41,17 @@
 - Added regression coverage proving role separation and no collisions across the 50K scoreable scenario window.
 - Produced a clean post-fix 50K verification: 50,000 processed, 5,767/6,500 workflow checks matched, 0 workflow mismatches, 460/460 expected pends observed, 0 unexpected pends, and 1,000/1,000 comparable payments within tolerance.
 
-## 100K outcome
+## Post-#928 100K outcome
 
-No platform code was changed to make the 100K result look clean. The run used the stronger gates established above and published its completed summary to the console.
+No platform code was changed to make the 100K result look clean. The final post-#928 run used the stronger gates established above, the hardened validation-provider namespaces, and the provider-pool fixture strategy.
 
-## Post-100K fixture-hardening note
+The run completed cleanly: 100,000 processed, 0 platform failures, 11,534/13,000 workflow checks matched, 0 workflow mismatches, 1,466 unsupported, 920/920 expected pends observed, 0 unexpected pends across 10,614 scoreable non-pend claims, and 2,000/2,000 comparable payments within $0.01 with $0.00 maximum payment delta.
 
-The PR #927/#928 provider-fixture hardening happened after the original 100K run. It does not replace the 100K evidence, but it is now part of the fixture model that should be used before publishing the next 100K rerun.
+The completed summary was published to the Mass Adjudication console. During processing, the live console temporarily showed 920 workflow mismatches because expected-pend checks had not yet been observed. The final summary correctly resolved those provisional checks to matched pends.
+
+## Post-#928 fixture-preparation effect
+
+The final 100K run reduced 199,846 provider references to 13,742 distinct NPIs, reused 186,258 provider assignments, preserved 2,800 provider-sensitive claims, and created 12,748 providers. Preparation took 6:02.216 and the tracked lifecycle took 34:03.458.
 
 ## Claim-detail projection correction discovered during evidence review
 
