@@ -36,4 +36,8 @@ public static class UpstreamClientNames
     /// /member/{id}/cob lookup driving CHO-primary vs CHO-secondary
     /// detection.</summary>
     public const string CoverageService = "CoverageService";
+
+    /// <summary>authorization-service — prior-authorization validation
+    /// lookup used by adjudication before paying PA-sensitive claims.</summary>
+    public const string AuthorizationService = "AuthorizationService";
 }

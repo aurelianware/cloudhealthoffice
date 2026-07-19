@@ -335,6 +335,19 @@ builder.Services.AddScoped<ICoverageClient>(sp =>
         sp.GetRequiredService<HttpCoverageClient>(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
 
+// Prior-authorization validation. The stage treats lookup degradation as
+// "not enough evidence to deny" while honoring known invalid auth responses.
+builder.Services.AddHttpClient(UpstreamClientNames.AuthorizationService, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:AuthorizationService"]
+        ?? "http://authorization-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<HttpAuthorizationValidationClient>();
+builder.Services.AddScoped<IAuthorizationValidationClient, HttpAuthorizationValidationClient>();
+
 // Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
 // 5.4-5.9 each replace one stub registration with the real stage that
 // wraps the corresponding engine. 5.4/5.6/5.7/5.8/5.9 swap the registration

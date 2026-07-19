@@ -39,18 +39,22 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     public const string MemberNotEligibleCarc = "27";
     public const string PriorAuthorizationRequiredCode = "197";
     public const string PriorAuthorizationRequiredReason = "Prior authorization required but not provided";
+    public const string PriorAuthorizationInvalidReason = "Prior authorization is not valid for this claim";
 
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
+    private readonly IAuthorizationValidationClient _authorizationValidationClient;
     private readonly ILogger<BenefitCalculationStage> _logger;
 
     public BenefitCalculationStage(
         IBenefitCalculationEngine engine,
         IMemberResolver memberResolver,
+        IAuthorizationValidationClient authorizationValidationClient,
         ILogger<BenefitCalculationStage> logger)
     {
         _engine = engine;
         _memberResolver = memberResolver;
+        _authorizationValidationClient = authorizationValidationClient;
         _logger = logger;
     }
 
@@ -89,14 +93,19 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 eligibilityReason);
         }
 
-        if (RequiresPriorAuthorizationDenial(claim))
+        var priorAuthorizationDenialReason = await ResolvePriorAuthorizationDenialReasonAsync(
+            context.TenantId,
+            claim,
+            ct).ConfigureAwait(false);
+
+        if (priorAuthorizationDenialReason is not null)
         {
             context.AdjudicationResult.DenialReasonCode = PriorAuthorizationRequiredCode;
-            context.AdjudicationResult.DenialReason = PriorAuthorizationRequiredReason;
+            context.AdjudicationResult.DenialReason = priorAuthorizationDenialReason;
 
             return ClaimAdjudicationStageResult.Deny(
                 StageName,
-                PriorAuthorizationRequiredReason);
+                priorAuthorizationDenialReason);
         }
 
         var subscriberId = await ResolveSubscriberIdAsync(context, ct).ConfigureAwait(false);
@@ -178,10 +187,53 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
     internal static bool RequiresPriorAuthorizationDenial(AdapterClaim claim)
     {
+        return RequiresPriorAuthorizationValidation(claim)
+            && string.IsNullOrWhiteSpace(claim.PriorAuthorizationNumber);
+    }
+
+    private async Task<string?> ResolvePriorAuthorizationDenialReasonAsync(
+        string tenantId,
+        AdapterClaim claim,
+        CancellationToken ct)
+    {
+        if (!RequiresPriorAuthorizationValidation(claim))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(claim.PriorAuthorizationNumber))
+        {
+            return PriorAuthorizationRequiredReason;
+        }
+
+        var procedureCode = claim.ClaimLines
+            .OrderBy(line => line.LineNumber)
+            .Select(line => line.ProcedureCode)
+            .FirstOrDefault(code => !string.IsNullOrWhiteSpace(code));
+
+        var validation = await _authorizationValidationClient.ValidateAsync(
+                tenantId,
+                claim.PriorAuthorizationNumber,
+                procedureCode,
+                claim.ServiceDateFrom,
+                ct)
+            .ConfigureAwait(false);
+
+        if (validation is null || validation.IsValid)
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(validation.ValidationMessage)
+            ? PriorAuthorizationInvalidReason
+            : validation.ValidationMessage;
+    }
+
+    private static bool RequiresPriorAuthorizationValidation(AdapterClaim claim)
+    {
         return claim.ClaimType is ClaimsService.Models.ClaimType.Institutional
             && claim.LineOfBusiness is LineOfBusiness.Medicaid
-            && string.Equals(claim.PlaceOfServiceCode, "21", StringComparison.OrdinalIgnoreCase)
-            && string.IsNullOrWhiteSpace(claim.PriorAuthorizationNumber);
+            && string.Equals(claim.PlaceOfServiceCode, "21", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<string> ResolveSubscriberIdAsync(

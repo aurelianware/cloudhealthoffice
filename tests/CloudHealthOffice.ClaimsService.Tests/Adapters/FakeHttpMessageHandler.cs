@@ -10,6 +10,7 @@ internal sealed class FakeHttpMessageHandler : HttpMessageHandler
 {
     private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
     public int RequestCount { get; private set; }
+    public string? LastClientName { get; set; }
 
     public FakeHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
     {
