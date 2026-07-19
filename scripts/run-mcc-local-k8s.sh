@@ -31,6 +31,7 @@ PARALLELISM="${PARALLELISM:-10}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-500}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-docker-desktop}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
+JOB_TIMEOUT="${JOB_TIMEOUT:-30m}"
 
 log() {
   printf '\033[1;34m==>\033[0m %s\n' "$*"
@@ -58,7 +59,7 @@ if kubectl get deployment -n "$NAMESPACE" claims-service >/dev/null 2>&1; then
   kubectl rollout status deployment/claims-service -n "$NAMESPACE" --timeout=120s >/dev/null
 fi
 
-log "Running ${CLAIMS} claims in namespace ${NAMESPACE}"
+log "Running ${CLAIMS} claims in namespace ${NAMESPACE} with wait timeout ${JOB_TIMEOUT}"
 kubectl delete job -n "$NAMESPACE" "$JOB_NAME" --ignore-not-found >/dev/null
 kubectl apply -n "$NAMESPACE" -f - <<EOF
 apiVersion: batch/v1
@@ -110,5 +111,5 @@ spec:
             - /tmp/mcc-summary.json
 EOF
 
-kubectl wait -n "$NAMESPACE" --for=condition=complete "job/${JOB_NAME}" --timeout=30m
+kubectl wait -n "$NAMESPACE" --for=condition=complete "job/${JOB_NAME}" --timeout="$JOB_TIMEOUT"
 kubectl logs -n "$NAMESPACE" "job/${JOB_NAME}"
