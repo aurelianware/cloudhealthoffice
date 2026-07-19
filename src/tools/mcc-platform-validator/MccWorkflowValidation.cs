@@ -168,6 +168,12 @@ public static class MccWorkflowValidation
             return PriorAuthRequiredCode;
         }
 
+        if (trimmed.Equals("B7", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("CARC_B7", StringComparison.OrdinalIgnoreCase))
+        {
+            return ProviderExcludedCode;
+        }
+
         return trimmed.All(char.IsDigit) ? $"CARC_{trimmed}" : trimmed;
     }
 
