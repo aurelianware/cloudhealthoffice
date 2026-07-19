@@ -2274,7 +2274,9 @@ static MassAdjudicationRunSummary BuildProgressSummary(
     var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
     var workflowScenarios = results.Count(r => r.ValidationStatus is not "Unspecified");
     var workflowMatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus);
-    var workflowMismatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MismatchedStatus);
+    var workflowMismatches = results.Count(r =>
+        r.ValidationStatus == MccWorkflowValidation.MismatchedStatus
+        && !IsAwaitingExpectedPendObservation(r, phase));
     var workflowUnsupported = results.Count(r => r.ValidationStatus == MccWorkflowValidation.UnsupportedStatus);
     var workflowObservationTimeouts = results.Count(r => r.ValidationStatus == MccWorkflowValidation.ObservationTimeoutStatus);
     var progress = CreateProgress(results, elapsed, options, phase);
@@ -2335,6 +2337,11 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         runCompletedAtUtc.UtcDateTime,
         progress);
 }
+
+static bool IsAwaitingExpectedPendObservation(ClaimValidationResult result, string phase)
+    => phase.Equals("Processing claims", StringComparison.OrdinalIgnoreCase)
+        && result.ExpectedOutcome == ClaimValidationOutcome.Pended.ToString()
+        && result.ValidationStatus == MccWorkflowValidation.MismatchedStatus;
 
 static MassAdjudicationRunProgress CreateProgress(
     IReadOnlyCollection<ClaimValidationResult> results,
