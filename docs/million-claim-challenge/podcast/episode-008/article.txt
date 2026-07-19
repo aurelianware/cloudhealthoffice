@@ -33,6 +33,16 @@ The validator now includes:
 
 The 100K run was not allowed to trade those gates for volume.
 
+There was one more fixture-hardening pass after the original 100K writeup.
+
+PR #927 anchored validation providers as run-scoped fixtures. A follow-up 50K verification then found 10 scoreable `TxStarInpatientNoAuth` mismatches: those claims should have denied for missing prior authorization, but provider-integrity evaluation treated the generated rendering provider as excluded. The current provider record was approved and in-network, which pointed to stale or colliding validation-provider identity state in the long-lived local tenant.
+
+PR #928 moved scoreable validation providers into wider, role-separated synthetic NPI namespaces: billing providers in the `93...` range, adjudicatable rendering providers in `94...`, and intentionally excluded rendering providers in `95...`.
+
+The rerun after PR #928 processed 50,000 claims cleanly: 5,767 of 6,500 workflow checks matched, zero workflow mismatches, 460 of 460 expected-pend claims observed, zero unexpected pends across 5,307 scoreable non-pend claims, and 1,000 of 1,000 payment comparisons within tolerance with a $0.00 maximum payment delta.
+
+That result does not replace the 100K evidence above. It tightens the fixture model that the next 100K rerun should use.
+
 ## The 100K result
 
 The local Docker Desktop Kubernetes run processed 100,000 deterministic synthetic claims with parallelism set to 10.
@@ -120,6 +130,7 @@ That suggests several concrete experiments:
 - isolate only member records whose scenario state can collide
 - batch or bulk-write fixture data where service contracts permit it
 - report preparation throughput and cache-hit rates
+- rerun 100K with the PR #928 validation-provider namespace hardening
 - rerun 100K after each fixture optimization
 
 The acceptance criterion stays the same: performance work cannot weaken the correctness gates.
