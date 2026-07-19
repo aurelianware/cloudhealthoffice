@@ -88,7 +88,11 @@ var claims = await MeasureLifecycleValuePhaseAsync(
 var providerPool = await MeasureLifecycleValuePhaseAsync(lifecycleTimings, "Fixture normalization", "Preparation", () =>
 {
     NormalizePriorAuthEdgeCases(claims, options);
-    NormalizeValidationProviderProfiles(claims, options.Seed, validationPlanId);
+    MccValidationProviderNormalizer.Normalize(
+        claims,
+        options.Seed,
+        validationPlanId,
+        new MccWorkflowValidationCapabilities(ScorePriorAuthValidationEvidence: options.SeedAuthorizations));
     MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
     MccCleanPaidFixture.NormalizeClaims(claims);
     return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId));
@@ -399,7 +403,8 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         adjudicationElapsed = stage.Elapsed;
 
         var skipSynchronousWriteback = options.SkipClaimUpdate
-            || expectedValidation.ExpectedOutcome is ClaimValidationOutcome.Pended;
+            || expectedValidation.ExpectedOutcome is ClaimValidationOutcome.Pended
+            || RequiresClaimsServiceWorkflowObservation(claim, expectedValidation);
         var outcome = adjudicated.Success
             ? ClaimValidationOutcome.Paid
             : ClaimValidationOutcome.BusinessDenial;
@@ -619,37 +624,6 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
     InjectUncoveredServiceScenarios(claims);
     InjectPriorAuthScenarios(claims, options);
     return claims;
-}
-
-static void NormalizeValidationProviderProfiles(List<SyntheticClaim> claims, int seed, Guid runId)
-{
-    var scenarioIndex = 0;
-    foreach (var claim in claims.OrderBy(c => c.ClaimId, StringComparer.Ordinal))
-    {
-        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
-        if (expected.ExpectedOutcome is null)
-        {
-            continue;
-        }
-
-        ForceAdjudicatableProviderProfile(claim.BillingProvider, claim.DateOfService);
-        claim.BillingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, runId, scenarioIndex, role: 0);
-
-        if (!string.Equals(
-                expected.ExpectedBusinessDenialCode,
-                MccWorkflowValidation.ProviderExcludedCode,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            ForceAdjudicatableProviderProfile(claim.RenderingProvider, claim.DateOfService);
-            claim.RenderingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, runId, scenarioIndex, role: 1);
-        }
-        else
-        {
-            claim.RenderingProvider.Npi = BuildSyntheticValidationProviderNpi(seed, runId, scenarioIndex, role: 2);
-        }
-
-        scenarioIndex++;
-    }
 }
 
 static void InjectCleanPaidScenarios(List<SyntheticClaim> claims)
@@ -1004,11 +978,6 @@ static string BuildSyntheticExcludedProviderNpi(int seed, int index)
         var baseNineDigits = $"900{value:D6}";
         return $"{baseNineDigits}{CalculateNpiCheckDigit(baseNineDigits)}";
     }
-}
-
-static string BuildSyntheticValidationProviderNpi(int seed, Guid runId, int index, int role)
-{
-    return MccValidationProviderIdentity.BuildNpi(seed, runId, index, role);
 }
 
 static int CalculateNpiCheckDigit(string baseNineDigits)
@@ -2121,15 +2090,15 @@ static bool IsKnownBusinessDenialCode(string errorCode)
         "PRIOR_AUTH_REQUIRED";
 
 static string? NormalizeBusinessDenialCode(string? code)
-{
-    if (string.IsNullOrWhiteSpace(code))
-    {
-        return null;
-    }
+    => MccWorkflowValidation.NormalizeBusinessDenialCode(code);
 
-    var trimmed = code.Trim();
-    return trimmed.All(char.IsDigit) ? $"CARC_{trimmed}" : trimmed;
-}
+static bool RequiresClaimsServiceWorkflowObservation(SyntheticClaim claim, ExpectedValidation expected)
+    => expected.ExpectedOutcome is ClaimValidationOutcome.BusinessDenial
+        && string.Equals(
+            expected.ExpectedBusinessDenialCode,
+            MccWorkflowValidation.PriorAuthRequiredCode,
+            StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(claim.PriorAuthNumber);
 
 static string LineOfBusinessName(int lineOfBusiness) => lineOfBusiness switch
 {
@@ -2245,10 +2214,15 @@ static async Task<List<ClaimValidationResult>> DetectUnexpectedPendResultsAsync(
     await Parallel.ForEachAsync(candidates,
         new ParallelOptions { MaxDegreeOfParallelism = Math.Min(candidates.Count, Math.Max(options.Parallelism, 64)) },
         async (result, cancellationToken) =>
-            observed[result.GeneratedClaimId] = await observer.DetectUnexpectedPendAsync(result, cancellationToken));
+            observed[result.GeneratedClaimId] = await observer.DetectUnexpectedPendAsync(
+                result,
+                TimeSpan.FromSeconds(options.PendObservationTimeoutSeconds),
+                TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds),
+                cancellationToken));
 
     var falsePends = observed.Values.Count(r => r.FailureStage == "false-pend-observation" && r.Outcome == ClaimValidationOutcome.Pended);
-    Console.WriteLine($"  False-pend sweep: {falsePends:N0} unexpected pends");
+    var terminalReconciliations = observed.Values.Count(r => r.FailureStage == "terminal-status-observation");
+    Console.WriteLine($"  False-pend sweep: {falsePends:N0} unexpected pends, {terminalReconciliations:N0} terminal outcomes reconciled");
     Console.WriteLine();
     return results.Select(r => observed.TryGetValue(r.GeneratedClaimId, out var updated) ? updated : r)
         .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal).ToList();

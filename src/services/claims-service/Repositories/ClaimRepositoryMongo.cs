@@ -609,7 +609,9 @@ public class ClaimRepositoryMongo : IClaimRepository
                     head.Id,
                     resolvedStatus.Value,
                     ClaimRepository.MapStatusToVersionState(resolvedStatus.Value),
-                    ct)
+                    ct,
+                    adjudicationResult,
+                    head.Status)
                 .ConfigureAwait(false);
         }
 
@@ -715,7 +717,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
         }
 
-        if (incomingAdjudication is not null
+        var snapshotAllowsRepair = incomingAdjudication is not null
             && preWriteStatus is not null
             && (ClaimRepository.CanRepairContradictoryDeniedSummary(
                     preWriteStatus.Value,
@@ -724,7 +726,11 @@ public class ClaimRepositoryMongo : IClaimRepository
                 || ClaimRepository.CanRepairContradictoryApprovedSummary(
                     preWriteStatus.Value,
                     desiredStatus,
-                    incomingAdjudication)))
+                    incomingAdjudication));
+        var liveEvidenceAllowsRepair = incomingAdjudication is not null
+            && ClaimRepository.CanAttemptContradictoryStatusRepair(desiredStatus, incomingAdjudication);
+
+        if (snapshotAllowsRepair || liveEvidenceAllowsRepair)
         {
             var repairEvidenceFilter = desiredStatus == ClaimStatus.Denied
                 ? b.And(

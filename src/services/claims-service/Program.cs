@@ -341,7 +341,7 @@ builder.Services.AddHttpClient(UpstreamClientNames.AuthorizationService, client 
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:AuthorizationService"]
-        ?? "http://authorization-service:8080");
+        ?? "http://authorization-service");
     client.Timeout = TimeSpan.FromSeconds(5);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));

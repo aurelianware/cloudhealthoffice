@@ -154,6 +154,23 @@ public static class MccWorkflowValidation
         return MatchedStatus;
     }
 
+    public static string? NormalizeBusinessDenialCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        var trimmed = code.Trim();
+        if (trimmed.Equals("197", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("CARC_197", StringComparison.OrdinalIgnoreCase))
+        {
+            return PriorAuthRequiredCode;
+        }
+
+        return trimmed.All(char.IsDigit) ? $"CARC_{trimmed}" : trimmed;
+    }
+
     private static ClaimValidationOutcome? OutcomeFromDisposition(string? disposition)
     {
         return disposition?.Trim() switch
@@ -210,15 +227,7 @@ public static class MccWorkflowValidation
     }
 
     private static string? NormalizeExpectedCode(string? code)
-    {
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            return null;
-        }
-
-        var trimmed = code.Trim();
-        return trimmed.All(char.IsDigit) ? $"CARC_{trimmed}" : trimmed;
-    }
+        => NormalizeBusinessDenialCode(code);
 }
 
 public sealed class MccAnswerKey

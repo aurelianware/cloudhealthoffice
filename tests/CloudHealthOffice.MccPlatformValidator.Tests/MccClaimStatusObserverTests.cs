@@ -108,6 +108,25 @@ public class MccClaimStatusObserverTests
     }
 
     [Fact]
+    public void FromClaimJson_ParsesNumericBusinessDenialCode()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse("""
+        {
+          "status": 6,
+          "adjudicationResult": {
+            "denialReasonCode": "197"
+          }
+        }
+        """);
+
+        var observed = ObservedClaimStatus.FromClaimJson(document.RootElement);
+
+        Assert.Equal(ClaimValidationOutcome.BusinessDenial, observed.Outcome);
+        Assert.Equal(MccWorkflowValidation.PriorAuthRequiredCode, observed.BusinessDenialCode);
+        Assert.True(observed.IsTerminal);
+    }
+
+    [Fact]
     public async Task DetectUnexpectedPendAsync_WhenExpectedPaidPersistedPended_ReturnsMismatch()
     {
         var observer = new MccClaimStatusObserver(new FakeClaimStatusSource([
@@ -142,6 +161,36 @@ public class MccClaimStatusObserverTests
         var result = await observer.DetectUnexpectedPendAsync(source);
 
         Assert.Equal(source, result);
+    }
+
+    [Fact]
+    public async Task DetectUnexpectedPendAsync_WhenExpectedDeniedDirectPaidButPersistedDenied_ReconcilesToMatched()
+    {
+        var observer = new MccClaimStatusObserver(new FakeClaimStatusSource([
+            new ObservedClaimStatus(
+                ClaimValidationOutcome.BusinessDenial,
+                "Denied",
+                null,
+                IsTerminal: true,
+                MccWorkflowValidation.PriorAuthRequiredCode)
+        ]));
+        var source = Result(ClaimValidationOutcome.Paid) with
+        {
+            ExpectedOutcome = ClaimValidationOutcome.BusinessDenial.ToString(),
+            ExpectedBusinessDenialCode = MccWorkflowValidation.PriorAuthRequiredCode,
+            ValidationStatus = MccWorkflowValidation.MismatchedStatus,
+            BusinessDenialCode = null
+        };
+
+        var result = await observer.DetectUnexpectedPendAsync(
+            source,
+            TimeSpan.FromSeconds(1),
+            TimeSpan.Zero);
+
+        Assert.Equal(ClaimValidationOutcome.BusinessDenial, result.Outcome);
+        Assert.Equal(MccWorkflowValidation.PriorAuthRequiredCode, result.BusinessDenialCode);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, result.ValidationStatus);
+        Assert.Equal("terminal-status-observation", result.FailureStage);
     }
 
     private static ClaimValidationResult Result(ClaimValidationOutcome startingOutcome)
