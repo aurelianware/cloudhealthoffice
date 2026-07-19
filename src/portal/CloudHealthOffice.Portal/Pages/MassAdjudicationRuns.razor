@@ -200,7 +200,7 @@
                             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-1">
                                 <div class="d-flex align-center gap-2">
                                     <MudText Typo="Typo.body2">
-                                        @RunStatusLabel(_selectedRun): @_selectedRun.Progress?.CompletedClaims.ToString("N0") of @_selectedRun.TotalClaims.ToString("N0") claims observed
+                                        @RunProgressText(_selectedRun)
                                     </MudText>
                                     <MudSpacer />
                                     <MudText Typo="Typo.caption" Style="font-family: monospace;">
@@ -224,6 +224,10 @@
                     <MudItem xs="6" md="4">@Metric("P95 / P99", $"{_selectedRun.P95LatencyMilliseconds:N0} / {_selectedRun.P99LatencyMilliseconds:N0} ms", "#c084fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Checks", $"{_selectedRun.WorkflowMatches:N0} / {_selectedRun.WorkflowScenarios:N0}", "#00ff88")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Mismatches", $"{_selectedRun.WorkflowMismatches:N0}", _selectedRun.WorkflowMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
+                    @if (IsRunActive(_selectedRun) && PendingExpectedPendObservations(_selectedRun) > 0)
+                    {
+                        <MudItem xs="6" md="4">@Metric("Pend Checks Pending", $"{PendingExpectedPendObservations(_selectedRun):N0}", "#ffca28")</MudItem>
+                    }
                     <MudItem xs="6" md="4">@Metric("Unsupported", $"{_selectedRun.WorkflowUnsupported:N0}", "#cbd5e1")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Timeouts", $"{_selectedRun.WorkflowObservationTimeouts:N0}", _selectedRun.WorkflowObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Payment Gate", PaymentGateLabel(_selectedRun), _selectedRun.PaymentMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
@@ -751,6 +755,20 @@
 
         return string.IsNullOrWhiteSpace(run.Status) ? "Completed" : run.Status;
     }
+
+    private static string RunProgressText(MassAdjudicationRunSummary run)
+    {
+        var completedClaims = run.Progress?.CompletedClaims ?? run.Processed;
+        var text = $"{RunStatusLabel(run)}: {completedClaims:N0} of {run.TotalClaims:N0} claims observed";
+        var pending = PendingExpectedPendObservations(run);
+
+        return pending <= 0
+            ? text
+            : $"{text} · {pending:N0} expected pends awaiting observation";
+    }
+
+    private static int PendingExpectedPendObservations(MassAdjudicationRunSummary run)
+        => run.Progress?.PendingExpectedPendObservations ?? 0;
 
     private static string LastProgressText(MassAdjudicationRunSummary run)
     {
