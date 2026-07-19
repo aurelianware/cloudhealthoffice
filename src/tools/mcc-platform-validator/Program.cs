@@ -39,11 +39,13 @@ Console.WriteLine($"  Benefit URL: {options.BenefitUrl}");
 Console.WriteLine($"  Member URL:  {options.MemberUrl}");
 Console.WriteLine($"  Coverage URL:{options.CoverageUrl}");
 Console.WriteLine($"  Provider URL:{options.ProviderUrl}");
+Console.WriteLine($"  Auth URL:    {options.AuthorizationUrl}");
 Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
 Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
+Console.WriteLine($"  Auth fixtures:{(options.SeedAuthorizations ? " enabled" : " disabled")}");
 Console.WriteLine($"  Pend observe:{(options.PendObservationEnabled ? $" enabled ({options.PendObservationTimeoutSeconds}s/{options.PendObservationIntervalMilliseconds}ms)" : " disabled")}");
 Console.WriteLine($"  Pend diag:   {(options.PendDiagnosticsPath is not null ? $"enabled -> {options.PendDiagnosticsPath}" : "disabled")}");
 Console.WriteLine();
@@ -95,7 +97,25 @@ Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 Console.WriteLine(
     $"Provider fixture pool: {providerPool.ProvidersBefore:N0} -> {providerPool.ProvidersAfter:N0} distinct NPIs " +
     $"({providerPool.ReusedAssignments:N0} assignments reused, {providerPool.ProtectedClaims:N0} provider-sensitive claims preserved)");
-var answerKey = MccAnswerKey.FromClaims(claims);
+
+var scorePriorAuthValidationEvidence = false;
+if (options.SeedAuthorizations)
+{
+    scorePriorAuthValidationEvidence = await MeasureLifecycleValuePhaseAsync(
+        lifecycleTimings,
+        "Authorization fixture seeding",
+        "Preparation",
+        () => SeedPriorAuthAuthorizationFixturesAsync(http, options, claims, json));
+}
+else
+{
+    Console.WriteLine("Authorization fixtures: skipped (--no-seed-authorizations)");
+}
+
+var answerKey = MccAnswerKey.FromClaims(
+    claims,
+    new MccWorkflowValidationCapabilities(
+        ScorePriorAuthValidationEvidence: scorePriorAuthValidationEvidence));
 
 var memberFixtures = MemberFixturePreparation.Empty;
 var cobCoverageFixtures = FixtureCount.Empty;
@@ -755,9 +775,24 @@ static void NormalizePriorAuthEdgeCases(List<SyntheticClaim> claims, ValidatorOp
         return;
     }
 
-    foreach (var claim in claims.Where(claim => claim.EdgeCase is EdgeCaseScenario.PriorAuthRequired_NoAuth))
+    foreach (var claim in claims.Where(claim => claim.EdgeCase is
+                 EdgeCaseScenario.PriorAuthRequired_AuthOnFile
+                 or EdgeCaseScenario.PriorAuthRequired_NoAuth
+                 or EdgeCaseScenario.PriorAuthRequired_ExpiredAuth
+                 or EdgeCaseScenario.PriorAuthRequired_WrongProvider
+                 or EdgeCaseScenario.PriorAuthRequired_WrongProcedure))
     {
-        ForceTexasMedicaidInpatientPriorAuthScenario(claim);
+        var priorAuthNumber = claim.EdgeCase is EdgeCaseScenario.PriorAuthRequired_NoAuth
+            ? null
+            : claim.PriorAuthNumber;
+        var priorAuthStatus = claim.EdgeCase switch
+        {
+            EdgeCaseScenario.PriorAuthRequired_NoAuth => "Required",
+            EdgeCaseScenario.PriorAuthRequired_ExpiredAuth => "Expired",
+            _ => "OnFile"
+        };
+
+        ForceTexasMedicaidInpatientPriorAuthScenario(claim, priorAuthStatus, priorAuthNumber);
     }
 }
 
@@ -1276,13 +1311,19 @@ static async Task CreateCobCoverageAsync(
     }
 }
 
-static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
+static void ForceTexasMedicaidInpatientPriorAuthScenario(
+    SyntheticClaim claim,
+    string priorAuthStatus = "Required",
+    string? priorAuthNumber = null)
 {
+    claim.ClaimType = "Institutional";
     claim.PlaceOfService = "21";
     claim.BillType = "0111";
-    claim.PriorAuthStatus = "Required";
-    claim.PriorAuthNumber = null;
+    claim.PriorAuthStatus = priorAuthStatus;
+    claim.PriorAuthNumber = priorAuthNumber;
 
+    ForceAdjudicatableProviderProfile(claim.RenderingProvider, claim.DateOfService);
+    ForceAdjudicatableProviderProfile(claim.BillingProvider, claim.DateOfService);
     claim.RenderingProvider.State = "TX";
     claim.BillingProvider.State = "TX";
 
@@ -1290,6 +1331,241 @@ static void ForceTexasMedicaidInpatientPriorAuthScenario(SyntheticClaim claim)
     {
         line.PlaceOfService = "21";
     }
+}
+
+static async Task<bool> SeedPriorAuthAuthorizationFixturesAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    IReadOnlyCollection<SyntheticClaim> claims,
+    JsonSerializerOptions json)
+{
+    if (!options.PriorAuthScenariosEnabled)
+    {
+        Console.WriteLine("Authorization fixtures: skipped (prior-auth scenarios disabled)");
+        return false;
+    }
+
+    if (options.LineOfBusiness != 3)
+    {
+        Console.WriteLine("Authorization fixtures: skipped (claims-service prior-auth validation is currently Medicaid-only)");
+        return false;
+    }
+
+    var fixtureClaims = claims
+        .Where(IsPriorAuthAuthorizationFixtureScenario)
+        .Where(claim => !string.IsNullOrWhiteSpace(claim.PriorAuthNumber))
+        .GroupBy(claim => claim.PriorAuthNumber!, StringComparer.OrdinalIgnoreCase)
+        .Select(group => group.OrderBy(claim => claim.ClaimId, StringComparer.Ordinal).First())
+        .OrderBy(claim => claim.PriorAuthNumber, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (fixtureClaims.Count == 0)
+    {
+        Console.WriteLine("Authorization fixtures: skipped (no scoreable prior-auth claims with auth numbers)");
+        return false;
+    }
+
+    var payload = new
+    {
+        authorizations = fixtureClaims.Select(claim => BuildPriorAuthAuthorizationFixture(claim, options)).ToList()
+    };
+
+    try
+    {
+        using var response = await http.PostAsJsonAsync($"{options.AuthorizationUrl}/api/authorizations/dev-seed", payload, json);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound
+            or System.Net.HttpStatusCode.Unauthorized
+            or System.Net.HttpStatusCode.Forbidden)
+        {
+            Console.WriteLine($"Authorization fixtures: skipped ({(int)response.StatusCode} from authorization-service)");
+            return false;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"Authorization fixture seed failed: {(int)response.StatusCode} {body}");
+        }
+
+        if (!TryReadAuthorizationFixtureSeedResponse(body, out var total, out var created, out var updated))
+        {
+            Console.WriteLine("Authorization fixtures: skipped (authorization-service did not expose compatible dev-seed evidence)");
+            return false;
+        }
+
+        Console.WriteLine(
+            $"Authorization fixtures: seeded {total:N0} prior authorization fixtures ({created:N0} new, {updated:N0} updated)");
+        return total > 0;
+    }
+    catch (HttpRequestException ex)
+    {
+        Console.WriteLine($"Authorization fixtures: skipped ({ex.Message})");
+        return false;
+    }
+    catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+    {
+        Console.WriteLine($"Authorization fixtures: skipped ({ex.Message})");
+        return false;
+    }
+}
+
+static bool IsPriorAuthAuthorizationFixtureScenario(SyntheticClaim claim)
+{
+    return claim.EdgeCase is
+        EdgeCaseScenario.PriorAuthRequired_AuthOnFile or
+        EdgeCaseScenario.PriorAuthRequired_ExpiredAuth or
+        EdgeCaseScenario.PriorAuthRequired_WrongProcedure;
+}
+
+static object BuildPriorAuthAuthorizationFixture(SyntheticClaim claim, ValidatorOptions options)
+{
+    var serviceDate = DateTime.SpecifyKind(claim.DateOfService.Date, DateTimeKind.Utc);
+    var expired = claim.EdgeCase is EdgeCaseScenario.PriorAuthRequired_ExpiredAuth;
+    var approvedFrom = expired ? serviceDate.AddDays(-90) : serviceDate.AddDays(-30);
+    var approvedTo = expired ? serviceDate.AddDays(-30) : serviceDate.AddDays(30);
+    var expirationDate = expired ? serviceDate.AddDays(-1) : serviceDate.AddDays(30);
+    var firstLine = claim.Lines.OrderBy(line => line.LineNumber).FirstOrDefault();
+    var units = claim.Lines.Sum(line => line.Units <= 0 ? 1 : line.Units);
+
+    return new
+    {
+        tenantId = options.TenantId,
+        authorizationNumber = claim.PriorAuthNumber,
+        memberId = claim.Member.MemberId,
+        patientFirstName = NullIfWhiteSpace(claim.Member.FirstName) ?? "MCC",
+        patientLastName = NullIfWhiteSpace(claim.Member.LastName) ?? "Member",
+        patientDateOfBirth = DateTime.SpecifyKind(
+            claim.Member.DateOfBirth == default ? serviceDate.AddYears(-30) : claim.Member.DateOfBirth.Date,
+            DateTimeKind.Utc),
+        lineOfBusiness = "Medicaid",
+        requestingProviderNPI = claim.RenderingProvider.Npi,
+        requestingProviderName = NullIfWhiteSpace(claim.RenderingProvider.FullName) ?? "MCC Provider",
+        servicingProviderNPI = claim.RenderingProvider.Npi,
+        servicingProviderName = NullIfWhiteSpace(claim.RenderingProvider.FullName) ?? "MCC Provider",
+        authorizationType = "PreAuthorization",
+        certificationType = "I",
+        serviceTypeCode = "48",
+        levelOfService = "E",
+        requestedServiceDateFrom = serviceDate,
+        requestedServiceDateTo = serviceDate,
+        diagnosisCodes = BuildAuthorizationDiagnosisCodes(claim),
+        requestedServices = new[]
+        {
+            new
+            {
+                procedureCode = AuthorizationProcedureCodeForClaim(claim),
+                procedureDescription = NullIfWhiteSpace(firstLine?.Description) ?? "MCC prior authorization fixture service",
+                modifiers = firstLine?.Modifiers ?? new List<string>(),
+                requestedUnits = units,
+                unitType = "UN",
+                placeOfServiceCode = "21",
+                revenueCode = NullIfWhiteSpace(firstLine?.RevenueCode),
+                approvedUnits = units,
+                serviceStatus = "A1"
+            }
+        },
+        status = "Approved",
+        reviewDecision = "A1",
+        approvedUnits = units,
+        approvedServiceDateFrom = approvedFrom,
+        approvedServiceDateTo = approvedTo,
+        expirationDate,
+        submittedDate = serviceDate.AddDays(-45),
+        reviewedDate = serviceDate.AddDays(-40),
+        createdBy = "mcc-platform-validator",
+        lastUpdatedBy = "mcc-platform-validator",
+        notes = $"MCC fixture for {claim.ClaimId}/{claim.EdgeCase}"
+    };
+}
+
+static List<object> BuildAuthorizationDiagnosisCodes(SyntheticClaim claim)
+{
+    var codes = new List<string>();
+    if (!string.IsNullOrWhiteSpace(claim.PrimaryDiagnosisCode))
+    {
+        codes.Add(claim.PrimaryDiagnosisCode);
+    }
+
+    codes.AddRange(claim.SecondaryDiagnosisCodes.Where(code => !string.IsNullOrWhiteSpace(code)));
+    if (codes.Count == 0)
+    {
+        codes.Add("Z00.00");
+    }
+
+    return codes
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Select((code, index) => new
+        {
+            code,
+            codeQualifier = index == 0 ? "BK" : "BF",
+            description = DiagnosisCodes.FindDescription(code)
+        })
+        .Cast<object>()
+        .ToList();
+}
+
+static string AuthorizationProcedureCodeForClaim(SyntheticClaim claim)
+{
+    var actualProcedureCode = NullIfWhiteSpace(
+        claim.Lines.OrderBy(line => line.LineNumber).FirstOrDefault()?.ProcedureCode) ?? "99213";
+
+    return claim.EdgeCase is EdgeCaseScenario.PriorAuthRequired_WrongProcedure
+        ? DifferentProcedureCode(actualProcedureCode)
+        : actualProcedureCode;
+}
+
+static string DifferentProcedureCode(string procedureCode)
+    => string.Equals(procedureCode, "99213", StringComparison.OrdinalIgnoreCase) ? "99214" : "99213";
+
+static bool TryReadAuthorizationFixtureSeedResponse(
+    string body,
+    out int total,
+    out int created,
+    out int updated)
+{
+    total = 0;
+    created = 0;
+    updated = 0;
+
+    try
+    {
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+        var hasTotal = TryGetInt32Property(root, "total", out total);
+        TryGetInt32Property(root, "created", out created);
+        TryGetInt32Property(root, "updated", out updated);
+        return hasTotal;
+    }
+    catch (JsonException)
+    {
+        return false;
+    }
+}
+
+static bool TryGetInt32Property(JsonElement element, string propertyName, out int value)
+{
+    foreach (var property in element.EnumerateObject())
+    {
+        if (!string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+        {
+            continue;
+        }
+
+        if (property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetInt32(out value))
+        {
+            return true;
+        }
+
+        if (property.Value.ValueKind == JsonValueKind.String
+            && int.TryParse(property.Value.GetString(), out value))
+        {
+            return true;
+        }
+    }
+
+    value = 0;
+    return false;
 }
 
 static async Task<FixtureCount> SeedProvidersAsync(
@@ -2469,8 +2745,10 @@ static void PrintUsage()
       --member-url <url>         Member service URL (default: http://localhost:5003)
       --coverage-url <url>       Coverage service URL (default: http://localhost:5005)
       --provider-url <url>       Provider service URL (default: http://localhost:5004)
+      --authorization-url <url>  Authorization service URL (default: http://authorization-service)
       --no-seed-members          Skip synthetic member seeding
       --no-seed-providers        Skip synthetic provider seeding
+      --no-seed-authorizations   Skip prior authorization fixture seeding
       --skip-claim-update        Do not write adjudication projection back to claims-service
       --no-pend-observation      Do not poll claims-service for expected-pend claim status
       --pend-observation-timeout <seconds>

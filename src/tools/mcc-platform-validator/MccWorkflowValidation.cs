@@ -14,6 +14,11 @@ public sealed record ExpectedValidation(
         => new(scenario, null, expectedBusinessDenialCode, IsUnsupported: true);
 }
 
+public sealed record MccWorkflowValidationCapabilities(bool ScorePriorAuthValidationEvidence = false)
+{
+    public static MccWorkflowValidationCapabilities Default { get; } = new();
+}
+
 public static class MccWorkflowValidation
 {
     public const string CleanProfessionalPaidScenario = "CleanProfessionalPaid";
@@ -32,8 +37,12 @@ public static class MccWorkflowValidation
     public const string MatchedStatus = "Matched";
     public const string ObservationTimeoutStatus = "ObservationTimeout";
 
-    public static ExpectedValidation ExpectedValidationFor(SyntheticClaim claim)
+    public static ExpectedValidation ExpectedValidationFor(
+        SyntheticClaim claim,
+        MccWorkflowValidationCapabilities? capabilities = null)
     {
+        var effectiveCapabilities = capabilities ?? MccWorkflowValidationCapabilities.Default;
+
         if (claim.EdgeCase is not null && claim.ExpectedOutcome is not null)
         {
             var scenario = $"EdgeCase:{claim.EdgeCase}";
@@ -50,7 +59,7 @@ public static class MccWorkflowValidation
             }
 
             if (expectedOutcome is ClaimValidationOutcome.BusinessDenial
-                && IsUnsupportedPriorAuthValidationEdgeCase(claim.EdgeCase.Value))
+                && IsUnsupportedPriorAuthValidationEdgeCase(claim.EdgeCase.Value, effectiveCapabilities))
             {
                 return ExpectedValidation.Unsupported(scenario, expectedCode);
             }
@@ -166,12 +175,23 @@ public static class MccWorkflowValidation
             EdgeCaseScenario.MedicaidSpendDown;
     }
 
-    private static bool IsUnsupportedPriorAuthValidationEdgeCase(EdgeCaseScenario scenario)
+    private static bool IsUnsupportedPriorAuthValidationEdgeCase(
+        EdgeCaseScenario scenario,
+        MccWorkflowValidationCapabilities capabilities)
     {
-        return scenario is
+        if (scenario is EdgeCaseScenario.PriorAuthRequired_WrongProvider)
+        {
+            return true;
+        }
+
+        if (scenario is
             EdgeCaseScenario.PriorAuthRequired_ExpiredAuth or
-            EdgeCaseScenario.PriorAuthRequired_WrongProvider or
-            EdgeCaseScenario.PriorAuthRequired_WrongProcedure;
+            EdgeCaseScenario.PriorAuthRequired_WrongProcedure)
+        {
+            return !capabilities.ScorePriorAuthValidationEvidence;
+        }
+
+        return false;
     }
 
     private static bool IsUnsupportedBusinessDenialEdgeCase(EdgeCaseScenario scenario)
@@ -210,9 +230,12 @@ public sealed class MccAnswerKey
         _entries = entries;
     }
 
-    public static MccAnswerKey FromClaims(IEnumerable<SyntheticClaim> claims)
+    public static MccAnswerKey FromClaims(
+        IEnumerable<SyntheticClaim> claims,
+        MccWorkflowValidationCapabilities? capabilities = null)
     {
         var entries = new Dictionary<string, ExpectedValidation>(StringComparer.Ordinal);
+        var effectiveCapabilities = capabilities ?? MccWorkflowValidationCapabilities.Default;
 
         foreach (var claim in claims)
         {
@@ -226,7 +249,7 @@ public sealed class MccAnswerKey
                 throw new InvalidOperationException($"Duplicate MCC answer-key claim id: {claim.ClaimId}");
             }
 
-            entries.Add(claim.ClaimId, MccWorkflowValidation.ExpectedValidationFor(claim));
+            entries.Add(claim.ClaimId, MccWorkflowValidation.ExpectedValidationFor(claim, effectiveCapabilities));
         }
 
         return new MccAnswerKey(entries);
