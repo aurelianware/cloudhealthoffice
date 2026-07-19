@@ -2,13 +2,13 @@
 
 ## Episode summary
 
-Episode 008 covers the clean post-#928 100,000-claim local Kubernetes validation after payment accuracy, false-pend detection, accumulator handling, member fixture isolation, and provider identity hardening became part of the scored path.
+Episode 008 covers the clean post-#934 100,000-claim local Kubernetes validation after payment accuracy, false-pend detection, accumulator handling, member fixture isolation, provider identity hardening, prior-auth scoring, and provider-exclusion label normalization became part of the scored path.
 
-The result held: 100,000 processed, zero platform failures, zero scoreable workflow mismatches, zero unexpected pends, and 2,000 of 2,000 comparable payments within one cent. The episode also explains why the 27:54 timed processing phase and 34:03 tracked lifecycle are different, and why the next local scaling target is controlled parallelism and internal service/writeback pressure rather than raw Docker CPU or memory.
+The result held: 100,000 processed, zero platform failures, zero scoreable workflow mismatches, zero unexpected pends, and 2,000 of 2,000 comparable payments within one cent. The episode also explains why the 30:05 timed processing phase and 38:05 tracked lifecycle are different, and why the next local scaling target is controlled parallelism and internal service/writeback pressure rather than raw Docker CPU or memory.
 
-The pend counts are intentionally reported with scope: 921 persisted pended outcomes overall, 920 expected-pend claims observed as pended, and zero unexpected pends across 10,614 scoreable expected-pay and expected-deny claims.
+The pend counts are intentionally reported with scope: 924 persisted pended outcomes overall, 920 expected-pend claims observed as pended, and zero unexpected pends across 10,934 scoreable expected-pay and expected-deny claims.
 
-Post-#928 note: provider-fixture hardening moved scoreable validation providers into wider, role-separated synthetic NPI namespaces. The follow-up 50K verification completed cleanly with zero workflow mismatches, 460/460 expected pends observed, zero unexpected pends, and 1,000/1,000 payment comparisons within tolerance. The final 100K run used that hardened fixture model.
+Post-#934 note: provider-fixture hardening moved scoreable validation providers into wider, role-separated synthetic NPI namespaces, prior-auth evidence became scoreable, and provider-exclusion denial labels were normalized. The follow-up 50K verification completed cleanly with zero workflow mismatches, 460/460 expected pends observed, zero unexpected pends, and 1,000/1,000 payment comparisons within tolerance. The final 100K run used that hardened fixture and scoring model.
 
 ## Episode metadata
 
@@ -39,8 +39,13 @@ The episode must distinguish:
 - `benchmark-results.txt` - exact 100K run command, environment, gates, timing, and limitations.
 - `pr-summary.txt` - implementation work that raised the correctness bar before 100K.
 - `podcast-prompt.txt` - episode-specific generation prompt.
-- `raw-validator-output-post928-100k.txt` - raw validator console output from the completed post-#928 100K run.
-- `run-summary-post928-100k.json` - completed dashboard summary returned by claims-service for the post-#928 100K run.
+- `raw-validator-output-post934-100k.txt` - raw validator console output from the completed post-#934 100K run.
+- `run-summary-post934-100k.json` - completed dashboard summary returned by claims-service for the post-#934 100K run.
+- `raw-validator-output-post928-100k.txt` - prior post-#928 100K validator output retained as provenance.
+- `run-summary-post928-100k.json` - prior post-#928 dashboard summary retained as provenance.
+
+The screenshots below are retained visual console evidence from the Part 8 console capture set. The post-#934 raw validator output and dashboard summary JSON are authoritative for the final 100K numbers.
+
 - `screenshots/episode-008-100k-dashboard.png` - completed 100K run list, run detail, timing, outcome mix, and claim-result evidence.
 - `screenshots/episode-008-100k-outcome-breakdown.png` - business-denial distribution and explicit zero-platform-failure evidence.
 - `screenshots/episode-008-100k-paid-results.png` - retained paid-claim evidence with payment amounts and per-claim stage timing.
@@ -65,7 +70,7 @@ The episode must distinguish:
 - [x] The next optimization target is evidence-driven.
 - [x] Primary completed-run console screenshot is captured.
 - [x] Unsupported claim sample and persisted payment drilldown are captured.
-- [x] Post-#928 50K provider-fixture verification is recorded.
-- [x] Final post-#928 100K raw validator output is recorded.
+- [x] Post-#934 50K scoring verification is recorded.
+- [x] Final post-#934 100K raw validator output is recorded.
 - [x] Live expected-pend progress caveat is recorded.
 - [ ] Published article URL is recorded.

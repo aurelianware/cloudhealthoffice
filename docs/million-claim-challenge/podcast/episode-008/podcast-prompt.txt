@@ -2,40 +2,40 @@ Create a 10-12 minute two-host engineering podcast episode titled "The Clean 100
 
 Use Alex and Jordan as experienced healthcare platform engineers. Make the discussion natural, analytical, and candid rather than reading the article aloud.
 
-The central story is that Cloud Health Office did not move from 50K to 100K by relaxing validation. Before scaling, the team added a payment gate, a false-pend sweep, corrected zero-limit accumulator placeholder handling, eliminated cross-corpus member fixture collisions, and hardened scoreable validation providers with role-separated synthetic NPI namespaces.
+The central story is that Cloud Health Office did not move from 50K to 100K by relaxing validation. Before scaling, the team added a payment gate, a false-pend sweep, corrected zero-limit accumulator placeholder handling, eliminated cross-corpus member fixture collisions, hardened scoreable validation providers with role-separated synthetic NPI namespaces, made seeded prior-authorization evidence scoreable, and normalized provider-exclusion denial labels.
 
-Include the provider-fixture thread clearly. PR #927 anchored validation providers as run-scoped fixtures. A follow-up 50K verification exposed 10 `TxStarInpatientNoAuth` mismatches caused by provider-integrity evaluation treating generated rendering providers as excluded. PR #928 moved scoreable validation providers into wider, role-separated synthetic NPI namespaces (`93...` billing, `94...` adjudicatable rendering, `95...` intentionally excluded). The post-#928 50K rerun was clean: 50,000 processed, 5,767/6,500 workflow checks matched, zero workflow mismatches, 460/460 expected pends observed, zero unexpected pends across 5,307 scoreable non-pend claims, and 1,000/1,000 payment comparisons within tolerance. The final 100K run used that hardened fixture model.
+Include the provider-fixture thread clearly. PR #927 anchored validation providers as run-scoped fixtures. A follow-up 50K verification exposed 10 `TxStarInpatientNoAuth` mismatches caused by provider-integrity evaluation treating generated rendering providers as excluded. PR #928 moved scoreable validation providers into wider, role-separated synthetic NPI namespaces (`93...` billing, `94...` adjudicatable rendering, `95...` intentionally excluded). Then PR #931 wired prior-auth validation into adjudication, PR #932 made seeded prior-auth evidence scoreable, PR #933 fixed the prior-auth scoring path, and PR #934 normalized provider-exclusion denial codes. The post-#934 50K rerun was clean: 50,000 processed, 5,927/6,500 workflow checks matched, zero workflow mismatches, 460/460 expected pends observed, zero unexpected pends across 5,467 scoreable non-pend claims, and 1,000/1,000 payment comparisons within tolerance. The final 100K run used that hardened fixture and scoring model.
 
-Use these exact final post-#928 100K results:
+Use these exact final post-#934 100K results:
 
 - 100,000 claims processed
-- 79,162 paid or adjudicated
-- 921 persisted pended outcomes
-- 19,917 business denials
+- 78,842 paid or adjudicated
+- 924 persisted pended outcomes
+- 20,234 business denials
 - 0 platform failures
 - 0 workflow mismatches
 - 0 observation timeouts
 - 920 expected-pend claims observed as pended
-- 0 unexpected pends across 10,614 scoreable non-pend claims
-- 11,534 of 13,000 workflow checks matched
-- 1,466 unsupported scenarios
+- 0 unexpected pends across 10,934 scoreable non-pend claims
+- 11,854 of 13,000 workflow checks matched
+- 1,146 unsupported scenarios
 - 2,000 of 2,000 comparable payments within $0.01
 - $0.00 average and maximum payment delta
-- 59.72 claims per second
-- 296 ms P95 and 377 ms P99 latency
-- 27:54.381 timed claim-processing phase
-- 6:02.216 preparation time
-- 34:03.458 tracked lifecycle
+- 55.40 claims per second
+- 324 ms P95 and 480 ms P99 latency
+- 30:05.013 timed claim-processing phase
+- 7:53.368 preparation time
+- 38:05.792 tracked lifecycle
 
 Explain why business denials are valid outcomes and why unsupported scenarios are visible product gaps rather than passes or failures.
 
-Make the pend scope explicit: the outcome mix had 921 persisted pended claims, the expected-pend observer verified 920 answer-key pend scenarios, and the false-pend sweep covered the scoreable expected-pay and expected-deny set. Do not imply unsupported scenarios were included in that non-pend sweep.
+Make the pend scope explicit: the outcome mix had 924 persisted pended claims, the expected-pend observer verified 920 answer-key pend scenarios, and the false-pend sweep covered the scoreable expected-pay and expected-deny set. Do not imply unsupported scenarios were included in that non-pend sweep.
 
-Spend meaningful time on the difference between timed adjudication and full tracked lifecycle. The post-#928 provider-pool work reduced 199,846 provider references to 13,742 distinct NPIs, reused 186,258 assignments, preserved 2,800 provider-sensitive claims, and created 12,748 providers. Correctness held, and fixture preparation became measurable rather than a hidden wall-clock sink.
+Spend meaningful time on the difference between timed adjudication and full tracked lifecycle. The post-#934 provider-pool work reduced 199,847 provider references to 13,742 distinct NPIs, reused 186,258 assignments, preserved 2,800 provider-sensitive claims, and created 13,383 providers. Correctness held, and fixture preparation became measurable rather than a hidden wall-clock sink.
 
 Mention the live-console lesson: during processing, the console showed 920 workflow mismatches because expected-pend checks were still awaiting post-processing observation. After expected-pend observation completed, the final summary correctly reported zero workflow mismatches. Frame this as an in-progress presentation issue, not an adjudication failure.
 
-Compare this result with the post-#928 50K verification at 58.60 claims per second, 380 ms P95, and 515 ms P99. Also note that Docker Desktop showed significant CPU and memory headroom during the 100K run, so the next performance questions are service concurrency, writeback behavior, MongoDB/disk I/O, HTTP client limits, and validator parallelism rather than simply adding more local CPU.
+Compare this result with the post-#934 50K verification at 59.59 claims per second, 318 ms P95, and 415 ms P99. Also note that Docker Desktop showed significant CPU and memory headroom during the 100K run, so the next performance questions are service concurrency, writeback behavior, MongoDB/disk I/O, HTTP client limits, and validator parallelism rather than simply adding more local CPU.
 
 Do not imply a production capacity conclusion. This is local Docker Desktop Kubernetes evidence.
 

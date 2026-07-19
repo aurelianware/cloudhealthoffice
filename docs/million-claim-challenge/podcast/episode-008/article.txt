@@ -6,11 +6,15 @@ Then the correctness bar changed.
 
 Payment accuracy became a gate instead of a diagnostic. Expected-pay and expected-deny claims were checked for false pends. Zero-limit accumulator placeholders stopped distorting expected payments. Generated members were isolated so one corpus segment could not contaminate another. Validation providers were moved into role-separated synthetic NPI namespaces so scoreable scenarios could not collide with stale provider-integrity state in a long-lived local tenant.
 
+Then the evidence bar moved again.
+
+Prior-authorization scenarios that had been partially unsupported became scoreable. Provider-exclusion denial codes were normalized so `B7`, `CARC_B7`, and `PROVIDER_EXCLUDED` represented the same expected business outcome instead of producing false mismatches.
+
 Only after those changes did Cloud Health Office move back to 100,000 claims.
 
 The result was clean: every claim processed, no platform failures, no scoreable workflow mismatches, no unexpected pends, and every comparable payment within one cent.
 
-The run also exposed the next local scaling question. Docker Desktop was not out of CPU or memory, and fixture preparation was no longer a two-hour wall-clock problem. The platform finished timed adjudication in 27 minutes and 54 seconds, with the full tracked lifecycle taking about 34 minutes.
+The run also exposed the next local scaling question. Docker Desktop was not out of CPU or memory, and fixture preparation was no longer a two-hour wall-clock problem. The platform finished timed adjudication in 30 minutes and 5 seconds, with the full tracked lifecycle taking about 38 minutes.
 
 That is exactly the kind of result this series is supposed to produce: correctness held, the evidence became inspectable, and the next performance question became sharper.
 
@@ -31,15 +35,17 @@ The validator now includes:
 - evidence-first claim-result retention
 - in-progress run publication and a completed run summary in the console
 
-One last fixture-hardening pass mattered before the final 100K rerun.
+Several final hardening passes mattered before the final 100K rerun.
 
 PR #927 anchored validation providers as run-scoped fixtures. A follow-up 50K verification then found 10 scoreable `TxStarInpatientNoAuth` mismatches: those claims should have denied for missing prior authorization, but provider-integrity evaluation treated the generated rendering provider as excluded. The current provider record was approved and in-network, which pointed to stale or colliding validation-provider identity state in the long-lived local tenant.
 
 PR #928 moved scoreable validation providers into wider, role-separated synthetic NPI namespaces: billing providers in the `93...` range, adjudicatable rendering providers in `94...`, and intentionally excluded rendering providers in `95...`.
 
-The post-#928 50K verification processed 50,000 claims cleanly: 5,767 of 6,500 workflow checks matched, zero workflow mismatches, 460 of 460 expected-pend claims observed, zero unexpected pends across 5,307 scoreable non-pend claims, and 1,000 of 1,000 payment comparisons within tolerance with a $0.00 maximum payment delta.
+Then PR #931 wired prior-authorization validation into adjudication, PR #932 made seeded prior-auth evidence scoreable, and PR #933 fixed the scoring path so expired-authorization and wrong-procedure scenarios could be counted honestly instead of left unsupported. PR #934 normalized provider-exclusion denial codes so `B7`, `CARC_B7`, and `PROVIDER_EXCLUDED` no longer disagreed as labels when they represented the same exclusion outcome.
 
-That hardened fixture model is what the final 100K run used.
+The post-#934 50K verification processed 50,000 claims cleanly: 5,927 of 6,500 workflow checks matched, zero workflow mismatches, 460 of 460 expected-pend claims observed, zero unexpected pends across 5,467 scoreable non-pend claims, and 1,000 of 1,000 payment comparisons within tolerance with a $0.00 maximum payment delta.
+
+That hardened fixture and scoring model is what the final 100K run used.
 
 ## The 100K result
 
@@ -48,41 +54,41 @@ The local Docker Desktop Kubernetes run processed 100,000 deterministic syntheti
 The final summary reported:
 
 - 100,000 claims processed
-- 79,162 paid or adjudicated
-- 921 pended
-- 19,917 business denials
+- 78,842 paid or adjudicated
+- 924 pended
+- 20,234 business denials
 - 0 platform failures
 - 0 observation timeouts
-- 11,534 of 13,000 workflow checks matched
+- 11,854 of 13,000 workflow checks matched
 - 0 workflow mismatches
-- 1,466 unsupported scenarios
-- 0 unexpected pends across 10,614 scoreable non-pend claims
+- 1,146 unsupported scenarios
+- 0 unexpected pends across 10,934 scoreable non-pend claims
 - 2,000 of 2,000 comparable payments within one cent
 - $0.00 average payment delta
 - $0.00 maximum payment delta
 
-The pend numbers have two scopes. The run ended with 921 persisted pended outcomes overall. The validator specifically observed 920 expected-pend claims as pended, then swept 10,614 scoreable expected-pay and expected-deny claims and found zero unexpected pends. That distinction matters because unsupported scenarios remain separate from the scored non-pend set.
+The pend numbers have two scopes. The run ended with 924 persisted pended outcomes overall. The validator specifically observed 920 expected-pend claims as pended, then swept 10,934 scoreable expected-pay and expected-deny claims and found zero unexpected pends. That distinction matters because unsupported scenarios remain separate from the scored non-pend set.
 
-Unsupported scenarios also remained separate from passes and failures. They were concentrated in behavioral-health carve-out, Medicaid spend-down, prior-authorization edge variants, retroactive coverage change, and subrogation workflows.
+Unsupported scenarios also remained separate from passes and failures. They were concentrated in behavioral-health carve-out, Medicaid spend-down, the prior-authorization wrong-provider variant, retroactive coverage change, and subrogation workflows.
 
 Those are named product gaps, not hidden successes.
 
 ## Performance did not saturate the machine
 
-The timed claim-processing phase completed in 27 minutes and 54.381 seconds.
+The timed claim-processing phase completed in 30 minutes and 5.013 seconds.
 
 That produced:
 
-- 59.72 claims per second
-- 296 ms P95 latency
-- 377 ms P99 latency
-- 115 ms P95 submission time
-- 105 ms P95 adjudication time
-- 95 ms P95 writeback time
+- 55.40 claims per second
+- 324 ms P95 latency
+- 480 ms P99 latency
+- 194 ms P95 submission time
+- 122 ms P95 adjudication time
+- 101 ms P95 writeback time
 
-The provider-pool fixture work changed the local lifecycle story. Earlier 100K preparation had been dominated by run-scoped provider creation. In this run, the validator reduced 199,846 provider references to 13,742 distinct NPIs, reused 186,258 provider assignments, and preserved 2,800 provider-sensitive claims. It created 12,748 synthetic providers instead of trying to create a provider record for every repeated reference.
+The provider-pool fixture work changed the local lifecycle story. Earlier 100K preparation had been dominated by run-scoped provider creation. In this run, the validator reduced 199,847 provider references to 13,742 distinct NPIs, reused 186,258 provider assignments, and preserved 2,800 provider-sensitive claims. It created 13,383 synthetic providers instead of trying to create a provider record for every repeated reference.
 
-That is why the tracked lifecycle was about 34 minutes instead of more than two hours.
+That is why the tracked lifecycle was about 38 minutes instead of more than two hours.
 
 The run still did not scale linearly from smaller benchmarks, and Docker Desktop showed plenty of CPU and memory headroom while the run was active. That points the next investigation away from raw host capacity and toward internal throughput limits: service concurrency, writeback behavior, MongoDB pressure, HTTP client settings, and validator parallelism.
 
@@ -90,20 +96,23 @@ That is not a production capacity conclusion. It is a local scaling signal worth
 
 ## Timed throughput and preparation are different
 
-The tracked lifecycle took 34 minutes and 3.458 seconds. The timed adjudication phase took 27 minutes and 54.381 seconds.
+The tracked lifecycle took 38 minutes and 5.792 seconds. The timed adjudication phase took 30 minutes and 5.013 seconds.
 
 The remaining tracked time was mostly preparation:
 
-- member and coverage seeding: 2:51.219
-- provider seeding: 3:09.524
-- corpus generation: 0:01.039
-- fixture normalization: 0:00.335
-- expected-pend observation: 0:00.740
-- false-pend sweep: 0:06.120
+- member and coverage seeding: 2:47.051
+- provider seeding: 5:04.155
+- authorization fixture seeding: 0:00.436
+- corpus generation: 0:01.201
+- fixture normalization: 0:00.327
+- expected-pend observation: 0:00.765
+- false-pend sweep: 0:06.644
 
 The validator seeded 10,614 synthetic members, reused 88,977 existing members, aligned 99,591 member statuses, found 920 COB coverage rows already present, and found both required provider networks already present.
 
-Both numbers matter. The platform adjudicated at 59.72 claims per second during the measured phase. The full local evidence run, including fixture preparation and observation, took about 34 minutes.
+Both numbers matter. The platform adjudicated at 55.40 claims per second during the measured phase. The full local evidence run, including fixture preparation and observation, took about 38 minutes.
+
+There is one reproducibility caveat in the local wrapper. The shell command that launched the Kubernetes job timed out while waiting for the job condition, but the Kubernetes job continued running, completed successfully, and published the completed Mass Adjudication summary. That is a local orchestration timeout, not a platform failure.
 
 ## What the console should make obvious
 
@@ -141,7 +150,7 @@ That suggests several concrete experiments:
 - keep unsupported scenarios visible instead of hiding them
 - report CPU, memory, and disk I/O alongside benchmark timing
 
-Unsupported scenarios should become their own product-evidence track. The first likely candidates are the prior-authorization edge variants, followed by retroactive coverage change, Medicaid spend-down, behavioral-health carve-out, and subrogation. They should be converted into scoreable behavior deliberately, not swept into the same PR as a benchmark evidence update.
+Unsupported scenarios should become their own product-evidence track. The first likely candidates are the prior-authorization wrong-provider variant, followed by retroactive coverage change, Medicaid spend-down, behavioral-health carve-out, and subrogation. They should be converted into scoreable behavior deliberately, not swept into the same PR as a benchmark evidence update.
 
 ## What comes after the local ceiling
 
