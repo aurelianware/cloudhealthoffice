@@ -75,6 +75,30 @@ public class MccWorkflowValidationTests
         Assert.Equal("Matched", status);
     }
 
+    [Theory]
+    [InlineData("B7")]
+    [InlineData("CARC_B7")]
+    public void ExpectedValidationFor_ExcludedProviderClaim_NormalizesCarcB7(string actualBusinessDenialCode)
+    {
+        var claim = CreateClaim(
+            claimType: "Professional",
+            benefitPlanId: MccWorkflowValidation.ExcludedProviderPlanId,
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        claim.RenderingProvider.CredentialingStatus = "Excluded";
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.BusinessDenial,
+            MccWorkflowValidation.NormalizeBusinessDenialCode(actualBusinessDenialCode));
+
+        Assert.Equal(MccWorkflowValidation.ProviderExcludedCode, expected.ExpectedBusinessDenialCode);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, status);
+    }
+
     [Fact]
     public void ExpectedValidationFor_UncoveredServiceClaim_ReturnsCoverageDenialScenario()
     {
