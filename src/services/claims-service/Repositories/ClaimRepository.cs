@@ -515,6 +515,23 @@ public class ClaimRepository : IClaimRepository
         && incomingAdjudication.PayerPayment == 0
         && HasDenialEvidence(incomingAdjudication);
 
+    /// <summary>
+    /// True when an incoming adjudication result is strong enough to attempt
+    /// the narrow live-row contradiction repair after a guarded status write
+    /// was blocked. The live datastore predicate still decides whether a row
+    /// is actually repairable, which lets this cover races where the status
+    /// changed after the caller's pre-write snapshot.
+    /// </summary>
+    public static bool CanAttemptContradictoryStatusRepair(
+        ClaimStatus desiredStatus,
+        AdjudicationResult incomingAdjudication) =>
+        (desiredStatus == ClaimStatus.Approved
+            && incomingAdjudication.PayerPayment > 0
+            && !HasDenialEvidence(incomingAdjudication))
+        || (desiredStatus == ClaimStatus.Denied
+            && incomingAdjudication.PayerPayment == 0
+            && HasDenialEvidence(incomingAdjudication));
+
     private static bool HasDenialEvidence(AdjudicationResult? adjudication) =>
         adjudication is not null
         && (!string.IsNullOrWhiteSpace(adjudication.DenialReasonCode)
@@ -1357,7 +1374,9 @@ public class ClaimRepository : IClaimRepository
                     rowId,
                     resolvedStatus.Value,
                     MapStatusToVersionState(resolvedStatus.Value),
-                    ct)
+                    ct,
+                    adjudicationResult,
+                    head.Status)
                 .ConfigureAwait(false);
         }
 
@@ -1478,7 +1497,7 @@ public class ClaimRepository : IClaimRepository
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
         {
-            if (incomingAdjudication is not null
+            var snapshotAllowsRepair = incomingAdjudication is not null
                 && preWriteStatus is not null
                 && (CanRepairContradictoryDeniedSummary(
                         preWriteStatus.Value,
@@ -1487,7 +1506,11 @@ public class ClaimRepository : IClaimRepository
                     || CanRepairContradictoryApprovedSummary(
                         preWriteStatus.Value,
                         desiredStatus,
-                        incomingAdjudication)))
+                        incomingAdjudication));
+            var liveEvidenceAllowsRepair = incomingAdjudication is not null
+                && CanAttemptContradictoryStatusRepair(desiredStatus, incomingAdjudication);
+
+            if (snapshotAllowsRepair || liveEvidenceAllowsRepair)
             {
                 var repairFilter = desiredStatus == ClaimStatus.Denied
                     ? ContradictoryApprovedRepairFilterPredicate

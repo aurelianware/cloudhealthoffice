@@ -93,7 +93,7 @@ internal sealed class MccClaimStatusObserver
                         result.BusinessDenialCode),
                     Outcome = observed.Outcome,
                     BusinessDenialCode = observed.Outcome is ClaimValidationOutcome.BusinessDenial
-                        ? result.BusinessDenialCode
+                        ? observed.BusinessDenialCode ?? result.BusinessDenialCode
                         : null
                 };
             }
@@ -121,6 +121,13 @@ internal sealed class MccClaimStatusObserver
     public async Task<ClaimValidationResult> DetectUnexpectedPendAsync(
         ClaimValidationResult result,
         CancellationToken cancellationToken = default)
+        => await DetectUnexpectedPendAsync(result, TimeSpan.Zero, TimeSpan.Zero, cancellationToken);
+
+    public async Task<ClaimValidationResult> DetectUnexpectedPendAsync(
+        ClaimValidationResult result,
+        TimeSpan terminalObservationTimeout,
+        TimeSpan terminalObservationInterval,
+        CancellationToken cancellationToken = default)
     {
         if (result.ExpectedOutcome == ClaimValidationOutcome.Pended.ToString()
             || string.IsNullOrWhiteSpace(result.SubmittedClaimId)
@@ -131,18 +138,52 @@ internal sealed class MccClaimStatusObserver
 
         try
         {
-            var observed = await _source.GetAsync(result.SubmittedClaimId, cancellationToken);
-            if (observed?.Outcome is not ClaimValidationOutcome.Pended)
+            var shouldWaitForTerminal = ShouldWaitForPersistedTerminalOutcome(result);
+            var observed = shouldWaitForTerminal
+                ? await ObserveTerminalAsync(result.SubmittedClaimId, terminalObservationTimeout, terminalObservationInterval, cancellationToken)
+                : await _source.GetAsync(result.SubmittedClaimId, cancellationToken);
+
+            if (shouldWaitForTerminal && observed is not { IsTerminal: true })
+            {
+                return result with
+                {
+                    ValidationStatus = MccWorkflowValidation.ObservationTimeoutStatus,
+                    Outcome = ClaimValidationOutcome.ObservationTimeout,
+                    FailureStage = "terminal-status-observation",
+                    Error = $"Timed out waiting for persisted claim status to become terminal after {terminalObservationTimeout.TotalSeconds:N0}s"
+                };
+            }
+
+            if (observed?.Outcome is ClaimValidationOutcome.Pended)
+            {
+                return result with
+                {
+                    Outcome = ClaimValidationOutcome.Pended,
+                    ValidationStatus = MccWorkflowValidation.MismatchedStatus,
+                    FailureStage = "false-pend-observation",
+                    Error = $"Expected {result.ExpectedOutcome}, but persisted claim status is pended ({observed.PendCode ?? "no pend code"})"
+                };
+            }
+
+            if (observed is null || !ShouldReconcilePersistedTerminalOutcome(result, observed))
             {
                 return result;
             }
 
+            var expected = ExpectedValidationFromResult(result);
+            var businessDenialCode = observed.Outcome is ClaimValidationOutcome.BusinessDenial
+                ? observed.BusinessDenialCode ?? result.BusinessDenialCode
+                : null;
+
             return result with
             {
-                Outcome = ClaimValidationOutcome.Pended,
-                ValidationStatus = MccWorkflowValidation.MismatchedStatus,
-                FailureStage = "false-pend-observation",
-                Error = $"Expected {result.ExpectedOutcome}, but persisted claim status is pended ({observed.PendCode ?? "no pend code"})"
+                Outcome = observed.Outcome,
+                BusinessDenialCode = businessDenialCode,
+                ValidationStatus = MccWorkflowValidation.ValidationStatus(
+                    expected,
+                    observed.Outcome,
+                    businessDenialCode),
+                FailureStage = "terminal-status-observation"
             };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -156,18 +197,83 @@ internal sealed class MccClaimStatusObserver
             };
         }
     }
+
+    private async Task<ObservedClaimStatus?> ObserveTerminalAsync(
+        string submittedClaimId,
+        TimeSpan timeout,
+        TimeSpan interval,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        while (true)
+        {
+            var observed = await _source.GetAsync(submittedClaimId, cancellationToken);
+            if (observed?.IsTerminal is true)
+            {
+                return observed;
+            }
+
+            var remaining = deadline - DateTimeOffset.UtcNow;
+            if (remaining <= TimeSpan.Zero || timeout <= TimeSpan.Zero)
+            {
+                return observed;
+            }
+
+            var delay = interval <= TimeSpan.Zero || interval < remaining ? interval : remaining;
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+        }
+    }
+
+    private static bool ShouldWaitForPersistedTerminalOutcome(ClaimValidationResult result)
+        => result.ExpectedOutcome == ClaimValidationOutcome.BusinessDenial.ToString()
+            && result.ValidationStatus == MccWorkflowValidation.MismatchedStatus;
+
+    private static bool ShouldReconcilePersistedTerminalOutcome(
+        ClaimValidationResult result,
+        ObservedClaimStatus observed)
+        => observed.IsTerminal
+            && observed.Outcome is ClaimValidationOutcome.Paid or ClaimValidationOutcome.BusinessDenial
+            && (observed.Outcome != result.Outcome
+                || (observed.Outcome is ClaimValidationOutcome.BusinessDenial
+                    && !string.Equals(
+                        observed.BusinessDenialCode,
+                        result.BusinessDenialCode,
+                        StringComparison.OrdinalIgnoreCase)));
+
+    private static ExpectedValidation ExpectedValidationFromResult(ClaimValidationResult result)
+        => new(
+            result.ValidationScenario,
+            ParseExpectedOutcome(result.ExpectedOutcome),
+            result.ExpectedBusinessDenialCode);
+
+    private static ClaimValidationOutcome? ParseExpectedOutcome(string? expectedOutcome)
+        => expectedOutcome?.Trim() switch
+        {
+            { } value when value.Equals(ClaimValidationOutcome.Paid.ToString(), StringComparison.OrdinalIgnoreCase) =>
+                ClaimValidationOutcome.Paid,
+            { } value when value.Equals(ClaimValidationOutcome.BusinessDenial.ToString(), StringComparison.OrdinalIgnoreCase) =>
+                ClaimValidationOutcome.BusinessDenial,
+            { } value when value.Equals(ClaimValidationOutcome.Pended.ToString(), StringComparison.OrdinalIgnoreCase) =>
+                ClaimValidationOutcome.Pended,
+            _ => null
+        };
 }
 
 internal sealed record ObservedClaimStatus(
     ClaimValidationOutcome Outcome,
     string RawStatus,
     string? PendCode,
-    bool IsTerminal)
+    bool IsTerminal,
+    string? BusinessDenialCode = null)
 {
     public static ObservedClaimStatus FromClaimJson(JsonElement root)
     {
         var rawStatus = TryReadStringOrNumber(root, "status") ?? string.Empty;
         var pendCode = TryReadPendCode(root);
+        var businessDenialCode = MccWorkflowValidation.NormalizeBusinessDenialCode(TryReadBusinessDenialCode(root));
         var outcome = rawStatus.Trim() switch
         {
             "4" => ClaimValidationOutcome.Pended,
@@ -188,7 +294,8 @@ internal sealed record ObservedClaimStatus(
             pendCode,
             outcome is ClaimValidationOutcome.Pended
                 or ClaimValidationOutcome.Paid
-                or ClaimValidationOutcome.BusinessDenial);
+                or ClaimValidationOutcome.BusinessDenial,
+            businessDenialCode);
     }
 
     private static string? TryReadStringOrNumber(JsonElement root, string propertyName)
@@ -217,5 +324,24 @@ internal sealed record ObservedClaimStatus(
         }
 
         return pendCode.GetString();
+    }
+
+    private static string? TryReadBusinessDenialCode(JsonElement root)
+    {
+        if (!root.TryGetProperty("adjudicationResult", out var adjudicationResult)
+            || adjudicationResult.ValueKind is not JsonValueKind.Object
+            || !adjudicationResult.TryGetProperty("denialReasonCode", out var denialReasonCode))
+        {
+            return null;
+        }
+
+        return denialReasonCode.ValueKind switch
+        {
+            JsonValueKind.String => denialReasonCode.GetString(),
+            JsonValueKind.Number => denialReasonCode.TryGetInt32(out var number)
+                ? number.ToString()
+                : denialReasonCode.GetRawText(),
+            _ => null
+        };
     }
 }

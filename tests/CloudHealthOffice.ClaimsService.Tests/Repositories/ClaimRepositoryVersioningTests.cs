@@ -523,6 +523,42 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UpdateAdjudicationProjectionAsync_withDeniedEvidence_repairsApprovedStatusRace()
+    {
+        // Regression for async pipeline races where the synchronous summary
+        // projected Approved first, then the async adjudication projection
+        // wrote denial evidence. The guarded status patch must repair the
+        // impossible Approved + denial-evidence state without weakening pend
+        // protection.
+        var head = BuildVersion("chain-approved-denial-race", "row-1", n: 1, ClaimVersionState.Adjudicated);
+        head.Status = ClaimStatus.Approved;
+        head.AdjudicationResult = new AdjudicationResult { AllowedAmount = 100m, PayerPayment = 80m };
+        await _repo.CreateAsync(head);
+
+        var ok = await _repo.UpdateAdjudicationProjectionAsync(
+            Tenant,
+            "chain-approved-denial-race",
+            new AdjudicationResult
+            {
+                AllowedAmount = 0m,
+                PayerPayment = 0m,
+                DenialReasonCode = "197",
+                DenialReason = "Authorization expired or not yet active"
+            },
+            Array.Empty<LineAdjudicationResult>(),
+            isPend: false,
+            resolvedStatus: ClaimStatus.Denied);
+
+        ok.Should().BeTrue();
+        var reread = await _repo.GetVersionAsync("chain-approved-denial-race", "row-1");
+        reread!.Status.Should().Be(ClaimStatus.Denied);
+        reread.VersionState.Should().Be(ClaimVersionState.Denied);
+        reread.AdjudicationResult.Should().NotBeNull();
+        reread.AdjudicationResult!.DenialReasonCode.Should().Be("197");
+        reread.AdjudicationResult.DenialReason.Should().Be("Authorization expired or not yet active");
+    }
+
+    [Fact]
     public async Task UpdateAdjudicationProjectionAsync_withIsPendTrue_onAlreadyApprovedClaim_doesNotDowngradeStatus()
     {
         // Precedence rule (task requirement A.3): a claim that already
