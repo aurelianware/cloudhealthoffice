@@ -100,6 +100,7 @@ public class AuthorizationsController : ControllerBase
     /// Check if authorization is valid for claim submission
     /// CRITICAL for claims processing: validates auth before submitting 837
     /// </summary>
+    [AllowAnonymous]
     [HttpGet("{authNumber}/validate")]
     [ProducesResponseType(typeof(AuthorizationValidationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -108,6 +109,11 @@ public class AuthorizationsController : ControllerBase
         [FromQuery] string? procedureCode = null,
         [FromQuery] DateTime? serviceDate = null)
     {
+        if (!AllowsAnonymousLocalValidation() && HttpContext?.User.Identity?.IsAuthenticated != true)
+        {
+            return Forbid();
+        }
+
         var checkDate = serviceDate ?? DateTime.UtcNow;
 
         _logger.LogInformation(
@@ -163,6 +169,10 @@ public class AuthorizationsController : ControllerBase
 
         return Ok(response);
     }
+
+    private bool AllowsAnonymousLocalValidation() =>
+        _environment.IsDevelopment() ||
+        string.Equals(_environment.EnvironmentName, "Test", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Seed deterministic prior authorization fixtures for local validation.
