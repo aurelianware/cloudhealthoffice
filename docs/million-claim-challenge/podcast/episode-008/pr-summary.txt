@@ -28,9 +28,26 @@
 - Added a clone-to-console Million Claim Challenge path to the public Quick Start.
 - Documented a safe 1K starting run, clean-gate interpretation, console navigation, and guarded 10K/100K progression.
 
+## PR #927 - validation provider fixture anchoring
+
+- Anchored MCC validation providers as run-scoped fixtures instead of relying on reusable generated identities alone.
+- Confirmed the fixture path still exposed a follow-up 50K signal: 10 `TxStarInpatientNoAuth` claims denied for `PROVIDER_EXCLUDED` instead of `PRIOR_AUTH_REQUIRED`.
+- Triaged that signal to stale or colliding provider-integrity state around the old synthetic validation-provider NPI family in the long-lived local tenant.
+
+## PR #928 - validation provider NPI namespace hardening
+
+- Moved MCC scoreable validation providers out of the old `91x` synthetic NPI family.
+- Added wider, role-separated synthetic NPI namespaces: `93...` for billing providers, `94...` for adjudicatable rendering providers, and `95...` for intentionally excluded rendering providers.
+- Added regression coverage proving role separation and no collisions across the 50K scoreable scenario window.
+- Produced a clean post-fix 50K verification: 50,000 processed, 5,767/6,500 workflow checks matched, 0 workflow mismatches, 460/460 expected pends observed, 0 unexpected pends, and 1,000/1,000 comparable payments within tolerance.
+
 ## 100K outcome
 
 No platform code was changed to make the 100K result look clean. The run used the stronger gates established above and published its completed summary to the console.
+
+## Post-100K fixture-hardening note
+
+The PR #927/#928 provider-fixture hardening happened after the original 100K run. It does not replace the 100K evidence, but it is now part of the fixture model that should be used before publishing the next 100K rerun.
 
 ## Claim-detail projection correction discovered during evidence review
 

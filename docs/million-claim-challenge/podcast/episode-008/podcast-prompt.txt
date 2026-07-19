@@ -4,6 +4,8 @@ Use Alex and Jordan as experienced healthcare platform engineers. Make the discu
 
 The central story is that Cloud Health Office did not move from 50K to 100K by relaxing validation. Before scaling, the team added a payment gate, a false-pend sweep, corrected zero-limit accumulator placeholder handling, and eliminated cross-corpus member fixture collisions.
 
+Also include the post-#928 provider-fixture addendum. After the original 100K run, PR #927 anchored validation providers as run-scoped fixtures, and a follow-up 50K verification exposed 10 `TxStarInpatientNoAuth` mismatches caused by provider-integrity evaluation treating generated rendering providers as excluded. PR #928 moved scoreable validation providers into wider, role-separated synthetic NPI namespaces (`93...` billing, `94...` adjudicatable rendering, `95...` intentionally excluded). The post-#928 50K rerun was clean: 50,000 processed, 5,767/6,500 workflow checks matched, zero workflow mismatches, 460/460 expected pends observed, zero unexpected pends across 5,307 scoreable non-pend claims, and 1,000/1,000 payment comparisons within tolerance. Make clear that this hardens the fixture model for the next 100K rerun rather than replacing the original 100K evidence.
+
 Use these exact results:
 
 - 100,000 claims processed
@@ -33,3 +35,5 @@ Spend meaningful time on the difference between timed adjudication and total dev
 Compare the result with the prior clean 50K run at 82.40 claims per second, 129 ms P95, and 178 ms P99. Do not imply a production capacity conclusion. Frame the lower 100K throughput and higher latency as a local scaling signal.
 
 End with the next ladder: optimize and measure fixture preparation, rerun 100K, locate the reproducible local ceiling, then use the same deterministic corpus and correctness gates for a future AKS/EKS/GKE cloud scaling series.
+
+The next 100K rerun should use the post-#928 validation-provider namespace hardening.

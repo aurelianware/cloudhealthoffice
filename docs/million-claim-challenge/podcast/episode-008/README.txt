@@ -8,6 +8,8 @@ The result held: 100,000 processed, zero platform failures, zero scoreable workf
 
 The pend counts are intentionally reported with scope: 923 persisted pended outcomes overall, 920 expected-pend claims observed as pended, and zero unexpected pends across 10,614 scoreable expected-pay and expected-deny claims.
 
+Post-#928 note: after the original 100K run, provider-fixture hardening moved scoreable validation providers into wider, role-separated synthetic NPI namespaces. The follow-up 50K verification completed cleanly with zero workflow mismatches, 460/460 expected pends observed, zero unexpected pends, and 1,000/1,000 payment comparisons within tolerance.
+
 ## Episode metadata
 
 - Episode title: The Clean 100,000-Claim Run
@@ -60,4 +62,5 @@ The episode must distinguish:
 - [x] The next optimization target is evidence-driven.
 - [x] Primary completed-run console screenshot is captured.
 - [x] Unsupported claim sample and persisted payment drilldown are captured.
+- [x] Post-#928 50K provider-fixture verification is recorded.
 - [ ] Published article URL is recorded.
