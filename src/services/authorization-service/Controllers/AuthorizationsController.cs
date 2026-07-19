@@ -14,13 +14,16 @@ namespace AuthorizationService.Controllers;
 public class AuthorizationsController : ControllerBase
 {
     private readonly IAuthorizationRepository _authorizationRepository;
+    private readonly IWebHostEnvironment _environment;
     private readonly ILogger<AuthorizationsController> _logger;
 
     public AuthorizationsController(
         IAuthorizationRepository authorizationRepository,
+        IWebHostEnvironment environment,
         ILogger<AuthorizationsController> logger)
     {
         _authorizationRepository = authorizationRepository;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -159,6 +162,69 @@ public class AuthorizationsController : ControllerBase
         };
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Seed deterministic prior authorization fixtures for local validation.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("dev-seed")]
+    [ApiExplorerSettings(IgnoreApi = true)]
+    [ProducesResponseType(typeof(DevelopmentAuthorizationSeedResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<DevelopmentAuthorizationSeedResponse>> SeedDevelopmentAuthorizations(
+        [FromBody] DevelopmentAuthorizationSeedRequest request)
+    {
+        if (!_environment.IsDevelopment() && !string.Equals(_environment.EnvironmentName, "Test", StringComparison.OrdinalIgnoreCase))
+        {
+            return Forbid();
+        }
+
+        if (request?.Authorizations is not { Count: > 0 })
+        {
+            return BadRequest("At least one authorization fixture is required");
+        }
+
+        var now = DateTime.UtcNow;
+        var created = 0;
+        var updated = 0;
+
+        foreach (var fixture in request.Authorizations)
+        {
+            if (string.IsNullOrWhiteSpace(fixture.AuthorizationNumber))
+            {
+                return BadRequest("Authorization fixtures must include authorizationNumber");
+            }
+
+            fixture.AuthorizationNumber = fixture.AuthorizationNumber.Trim();
+            fixture.MemberId = fixture.MemberId?.Trim() ?? string.Empty;
+            fixture.PatientFirstName = fixture.PatientFirstName?.Trim() ?? string.Empty;
+            fixture.PatientLastName = fixture.PatientLastName?.Trim() ?? string.Empty;
+            fixture.RequestingProviderNPI = fixture.RequestingProviderNPI?.Trim() ?? string.Empty;
+            fixture.CreatedDate = fixture.CreatedDate == default ? now : fixture.CreatedDate;
+            fixture.LastUpdatedDate = now;
+
+            var existing = await _authorizationRepository.GetByAuthorizationNumberAsync(fixture.AuthorizationNumber);
+            if (existing is null)
+            {
+                fixture.Id = string.IsNullOrWhiteSpace(fixture.Id) ? Guid.NewGuid().ToString() : fixture.Id;
+                await _authorizationRepository.CreateAsync(fixture);
+                created++;
+                continue;
+            }
+
+            fixture.Id = existing.Id;
+            fixture.CreatedDate = existing.CreatedDate == default ? fixture.CreatedDate : existing.CreatedDate;
+            await _authorizationRepository.UpdateAsync(fixture);
+            updated++;
+        }
+
+        _logger.LogInformation(
+            "Seeded {Total} development authorization fixtures ({Created} created, {Updated} updated)",
+            created + updated, created, updated);
+
+        return Ok(new DevelopmentAuthorizationSeedResponse(created + updated, created, updated));
     }
 
     /// <summary>
@@ -372,3 +438,7 @@ public class AuthorizationsController : ControllerBase
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
+
+public sealed record DevelopmentAuthorizationSeedRequest(List<Authorization> Authorizations);
+
+public sealed record DevelopmentAuthorizationSeedResponse(int Total, int Created, int Updated);

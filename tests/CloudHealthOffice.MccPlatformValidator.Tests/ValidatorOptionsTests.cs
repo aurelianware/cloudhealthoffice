@@ -56,6 +56,22 @@ public class ValidatorOptionsTests
     }
 
     [Fact]
+    public void Parse_WhenAuthorizationUrlProvided_AppliesOverride()
+    {
+        var options = ValidatorOptions.Parse(["--authorization-url", "http://authorization-service/"]);
+
+        Assert.Equal("http://authorization-service", options.AuthorizationUrl);
+    }
+
+    [Fact]
+    public void Parse_WhenNoSeedAuthorizationsProvided_DisablesAuthorizationSeeding()
+    {
+        var options = ValidatorOptions.Parse(["--no-seed-authorizations"]);
+
+        Assert.False(options.SeedAuthorizations);
+    }
+
+    [Fact]
     public void Parse_WhenPendObservationOptionsProvided_AppliesOverrides()
     {
         var options = ValidatorOptions.Parse([

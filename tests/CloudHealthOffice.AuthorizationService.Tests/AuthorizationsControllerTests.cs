@@ -197,6 +197,80 @@ public class AuthorizationsControllerTests : IClassFixture<AuthorizationApiFacto
         Assert.True(result.TryGetProperty("isValid", out _));
     }
 
+    [Fact]
+    public async Task DevSeed_WhenAuthorizationIsNew_CreatesApprovedFixture()
+    {
+        var authNumber = $"AUTH-SEED-{Guid.NewGuid():N}";
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(authNumber)
+            .Returns((Authorization?)null);
+        _factory.AuthorizationRepository.CreateAsync(Arg.Any<Authorization>())
+            .Returns(call => call.Arg<Authorization>());
+
+        var response = await _client.PostAsJsonAsync("/api/authorizations/dev-seed", new
+        {
+            authorizations = new[]
+            {
+                BuildSeedAuthorizationPayload(authNumber)
+            }
+        }, Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal(1, result.GetProperty("total").GetInt32());
+        Assert.Equal(1, result.GetProperty("created").GetInt32());
+        Assert.Equal(0, result.GetProperty("updated").GetInt32());
+        await _factory.AuthorizationRepository.Received(1).CreateAsync(
+            Arg.Is<Authorization>(authorization =>
+                authorization.AuthorizationNumber == authNumber
+                && authorization.Status == AuthorizationStatus.Approved));
+    }
+
+    [Fact]
+    public async Task DevSeed_WhenAuthorizationExists_UpdatesExistingFixture()
+    {
+        var authNumber = $"AUTH-SEED-{Guid.NewGuid():N}";
+        var existing = new Authorization
+        {
+            Id = Guid.NewGuid().ToString(),
+            TenantId = "test-tenant",
+            AuthorizationNumber = authNumber,
+            MemberId = "MBR-EXISTING",
+            PatientFirstName = "Existing",
+            PatientLastName = "Member",
+            PatientDateOfBirth = DateTime.UtcNow.AddYears(-30),
+            LineOfBusiness = LineOfBusiness.Medicaid,
+            RequestingProviderNPI = "1234567890",
+            AuthorizationType = AuthorizationType.PreAuthorization,
+            ServiceTypeCode = "48",
+            RequestedServiceDateFrom = DateTime.UtcNow.Date,
+            Status = AuthorizationStatus.Submitted,
+            CreatedDate = DateTime.UtcNow.AddDays(-3)
+        };
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(authNumber)
+            .Returns(existing);
+        _factory.AuthorizationRepository.UpdateAsync(Arg.Any<Authorization>())
+            .Returns(call => call.Arg<Authorization>());
+
+        var response = await _client.PostAsJsonAsync("/api/authorizations/dev-seed", new
+        {
+            authorizations = new[]
+            {
+                BuildSeedAuthorizationPayload(authNumber)
+            }
+        }, Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal(1, result.GetProperty("total").GetInt32());
+        Assert.Equal(0, result.GetProperty("created").GetInt32());
+        Assert.Equal(1, result.GetProperty("updated").GetInt32());
+        await _factory.AuthorizationRepository.Received(1).UpdateAsync(
+            Arg.Is<Authorization>(authorization =>
+                authorization.Id == existing.Id
+                && authorization.AuthorizationNumber == authNumber
+                && authorization.Status == AuthorizationStatus.Approved));
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // DELETE /api/authorizations/{id} — Cancel Authorization
     // ═══════════════════════════════════════════════════════════════════
@@ -234,5 +308,55 @@ public class AuthorizationsControllerTests : IClassFixture<AuthorizationApiFacto
         var response = await noAuthClient.GetAsync("/api/authorizations/search?page=1&pageSize=10");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    private static object BuildSeedAuthorizationPayload(string authNumber)
+    {
+        var serviceDate = DateTime.UtcNow.Date.AddDays(7);
+        return new
+        {
+            tenantId = "test-tenant",
+            authorizationNumber = authNumber,
+            memberId = "MBR-SEED-001",
+            patientFirstName = "Seed",
+            patientLastName = "Member",
+            patientDateOfBirth = DateTime.UtcNow.Date.AddYears(-30),
+            lineOfBusiness = "Medicaid",
+            requestingProviderNPI = "1234567890",
+            requestingProviderName = "Seed Provider",
+            servicingProviderNPI = "1234567890",
+            servicingProviderName = "Seed Provider",
+            authorizationType = "PreAuthorization",
+            certificationType = "I",
+            serviceTypeCode = "48",
+            levelOfService = "E",
+            requestedServiceDateFrom = serviceDate,
+            requestedServiceDateTo = serviceDate,
+            diagnosisCodes = new[]
+            {
+                new { code = "Z00.00", codeQualifier = "BK", description = "General examination" }
+            },
+            requestedServices = new[]
+            {
+                new
+                {
+                    procedureCode = "99213",
+                    procedureDescription = "Office visit",
+                    requestedUnits = 1,
+                    unitType = "UN",
+                    placeOfServiceCode = "21",
+                    approvedUnits = 1,
+                    serviceStatus = "A1"
+                }
+            },
+            status = "Approved",
+            reviewDecision = "A1",
+            approvedUnits = 1,
+            approvedServiceDateFrom = serviceDate.AddDays(-1),
+            approvedServiceDateTo = serviceDate.AddDays(30),
+            expirationDate = serviceDate.AddDays(30),
+            submittedDate = serviceDate.AddDays(-10),
+            reviewedDate = serviceDate.AddDays(-9)
+        };
     }
 }

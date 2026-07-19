@@ -14,8 +14,10 @@ BENEFIT_URL="${BENEFIT_URL:-http://benefit-plan-service}"
 MEMBER_URL="${MEMBER_URL:-http://member-service}"
 COVERAGE_URL="${COVERAGE_URL:-http://coverage-service}"
 PROVIDER_URL="${PROVIDER_URL:-http://provider-service}"
+AUTHORIZATION_URL="${AUTHORIZATION_URL:-http://authorization-service}"
 SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
+SEED_AUTHORIZATIONS="${SEED_AUTHORIZATIONS:-true}"
 CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS="${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS:-15}"
 PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
@@ -91,8 +93,11 @@ spec:
             - "${COVERAGE_URL}"
             - --provider-url
             - "${PROVIDER_URL}"
+            - --authorization-url
+            - "${AUTHORIZATION_URL}"
             $(if [[ "$SEED_MEMBERS" != "true" ]]; then printf -- '- --no-seed-members\n'; fi)
             $(if [[ "$SEED_PROVIDERS" != "true" ]]; then printf -- '- --no-seed-providers\n'; fi)
+            $(if [[ "$SEED_AUTHORIZATIONS" != "true" ]]; then printf -- '- --no-seed-authorizations\n'; fi)
             $(if [[ "$PEND_OBSERVATION_ENABLED" != "true" ]]; then printf -- '- --no-pend-observation\n'; fi)
             - --pend-observation-timeout
             - "${PEND_OBSERVATION_TIMEOUT_SECONDS}"

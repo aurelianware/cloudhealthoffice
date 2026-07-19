@@ -9,8 +9,10 @@ public sealed record ValidatorOptions(
     string MemberUrl,
     string CoverageUrl,
     string ProviderUrl,
+    string AuthorizationUrl,
     bool SeedMembers,
     bool SeedProviders,
+    bool SeedAuthorizations,
     bool SkipClaimUpdate,
     bool PendObservationEnabled,
     int PendObservationTimeoutSeconds,
@@ -62,11 +64,17 @@ public sealed record ValidatorOptions(
                 case "--provider-url" when i + 1 < args.Length:
                     options.ProviderUrl = args[++i].TrimEnd('/');
                     break;
+                case "--authorization-url" when i + 1 < args.Length:
+                    options.AuthorizationUrl = args[++i].TrimEnd('/');
+                    break;
                 case "--no-seed-members":
                     options.SeedMembers = false;
                     break;
                 case "--no-seed-providers":
                     options.SeedProviders = false;
+                    break;
+                case "--no-seed-authorizations":
+                    options.SeedAuthorizations = false;
                     break;
                 case "--skip-claim-update":
                     options.SkipClaimUpdate = true;
@@ -146,8 +154,10 @@ public sealed record ValidatorOptions(
             options.MemberUrl.TrimEnd('/'),
             options.CoverageUrl.TrimEnd('/'),
             options.ProviderUrl.TrimEnd('/'),
+            options.AuthorizationUrl.TrimEnd('/'),
             options.SeedMembers,
             options.SeedProviders,
+            options.SeedAuthorizations,
             options.SkipClaimUpdate,
             options.PendObservationEnabled,
             Math.Clamp(options.PendObservationTimeoutSeconds, 1, 300),
@@ -176,8 +186,10 @@ public sealed record ValidatorOptions(
         public string MemberUrl { get; set; } = "http://localhost:5003";
         public string CoverageUrl { get; set; } = "http://localhost:5005";
         public string ProviderUrl { get; set; } = "http://localhost:5004";
+        public string AuthorizationUrl { get; set; } = "http://authorization-service";
         public bool SeedMembers { get; set; } = true;
         public bool SeedProviders { get; set; } = true;
+        public bool SeedAuthorizations { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
         public bool PendObservationEnabled { get; set; } = true;
         public int PendObservationTimeoutSeconds { get; set; } = 45;
