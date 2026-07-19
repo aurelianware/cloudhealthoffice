@@ -15,12 +15,16 @@ public class BenefitCalculationStageTests
 {
     private readonly IBenefitCalculationEngine _engine = Substitute.For<IBenefitCalculationEngine>();
     private readonly IMemberResolver _memberResolver = Substitute.For<IMemberResolver>();
+    private readonly IAuthorizationValidationClient _authorizationValidationClient = Substitute.For<IAuthorizationValidationClient>();
     private readonly BenefitCalculationStage _sut;
 
     public BenefitCalculationStageTests()
     {
         _sut = new BenefitCalculationStage(
-            _engine, _memberResolver, NullLogger<BenefitCalculationStage>.Instance);
+            _engine,
+            _memberResolver,
+            _authorizationValidationClient,
+            NullLogger<BenefitCalculationStage>.Instance);
     }
 
     [Fact]
@@ -287,6 +291,8 @@ public class BenefitCalculationStageTests
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, ctx.AdjudicationResult.DenialReasonCode);
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredReason, ctx.AdjudicationResult.DenialReason);
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+        await _authorizationValidationClient.DidNotReceiveWithAnyArgs()
+            .ValidateAsync(default!, default!, default, default, default);
     }
 
     [Fact]
@@ -332,6 +338,87 @@ public class BenefitCalculationStageTests
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        await _authorizationValidationClient.Received(1).ValidateAsync(
+            "tenant-1",
+            "AUTH-123",
+            "99213",
+            claim.ServiceDateFrom,
+            Arg.Any<CancellationToken>());
+        await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_InpatientWithInvalidPriorAuth_DeniesWithoutEngineCall()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.LineOfBusiness = LineOfBusiness.Medicaid;
+        claim.ClaimType = ClaimType.Institutional;
+        claim.PlaceOfServiceCode = "21";
+        claim.PriorAuthorizationNumber = "AUTH-EXPIRED";
+
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+
+        _authorizationValidationClient.ValidateAsync(
+                "tenant-1",
+                "AUTH-EXPIRED",
+                "99213",
+                claim.ServiceDateFrom,
+                Arg.Any<CancellationToken>())
+            .Returns(new AuthorizationValidationResult(
+                "AUTH-EXPIRED",
+                false,
+                "Approved",
+                claim.ServiceDateFrom.AddDays(-30),
+                claim.ServiceDateFrom.AddDays(-1),
+                claim.ServiceDateFrom.AddDays(-1),
+                1,
+                "Authorization expired or not yet active"));
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.False(result.Continue);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, ctx.AdjudicationResult.DenialReasonCode);
+        Assert.Equal("Authorization expired or not yet active", ctx.AdjudicationResult.DenialReason);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Execute_InpatientWithPriorAuthLookupDegraded_ContinuesToBenefitEngine()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.LineOfBusiness = LineOfBusiness.Medicaid;
+        claim.ClaimType = ClaimType.Institutional;
+        claim.PlaceOfServiceCode = "21";
+        claim.PriorAuthorizationNumber = "AUTH-UNKNOWN";
+
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+
+        _authorizationValidationClient.ValidateAsync(
+                "tenant-1",
+                "AUTH-UNKNOWN",
+                "99213",
+                claim.ServiceDateFrom,
+                Arg.Any<CancellationToken>())
+            .Returns((AuthorizationValidationResult?)null);
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
             .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() });
 
