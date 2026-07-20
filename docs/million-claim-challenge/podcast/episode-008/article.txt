@@ -112,7 +112,7 @@ The validator seeded 10,614 synthetic members, reused 88,977 existing members, a
 
 Both numbers matter. The platform adjudicated at 55.40 claims per second during the measured phase. The full local evidence run, including fixture preparation and observation, took about 38 minutes.
 
-There is one reproducibility caveat in the local wrapper. The shell command that launched the Kubernetes job timed out while waiting for the job condition, but the Kubernetes job continued running, completed successfully, and published the completed Mass Adjudication summary. That is a local orchestration timeout, not a platform failure.
+There was one reproducibility caveat in the local wrapper. The shell command that launched the Kubernetes job timed out while waiting for the job condition, but the Kubernetes job continued running, completed successfully, and published the completed Mass Adjudication summary. That was a local orchestration timeout, not a platform failure. The wrapper now supports a configurable `JOB_TIMEOUT` so larger local runs can wait long enough without changing validator scoring behavior.
 
 ## What the console should make obvious
 
@@ -137,13 +137,21 @@ That is not an adjudication failure, but it is a product lesson: the live consol
 
 The next target is not immediately 250K.
 
-First, the team should run controlled 100K parallelism sweeps with the same seed, fixture model, and correctness gates. The p10 run used only a fraction of the allocated Docker Desktop CPU and memory, so p12 and p16 are natural next experiments.
+First, the team should run controlled 100K parallelism sweeps with the same seed, fixture model, and correctness gates. The p10 run used only a fraction of the allocated Docker Desktop CPU and memory, so p12 and p16 were natural experiments.
+
+The first of those sweeps is now complete. At p12, the same 100,000-claim gate stayed clean: 100,000 processed, zero platform failures, zero workflow mismatches, 920 of 920 expected-pend claims observed, zero unexpected pends across 10,934 scoreable non-pend claims, and 2,000 of 2,000 payment comparisons within one cent.
+
+Throughput improved from 55.40 to 58.55 claims per second. Tail latency moved the other direction: P95 increased from 324 ms to 416 ms and P99 increased from 480 ms to 580 ms. That is a good benchmark result because it is not a slogan. It says p12 buys some throughput, but the latency curve is starting to push back.
+
+The p16 run answered the next question. It also stayed correct: 100,000 processed, zero platform failures, zero workflow mismatches, 920 of 920 expected-pend claims observed, zero unexpected pends across 10,934 scoreable non-pend claims, and 2,000 of 2,000 payment comparisons within one cent.
+
+But p16 did not improve the local result. Throughput fell to 55.11 claims per second, P95 rose to 518 ms, and P99 rose to 683 ms. That makes the p16 run useful evidence in the other direction. The local system had enough raw Docker CPU and memory, but adding validator concurrency pushed internal service, persistence, or writeback pressure past the efficient point.
 
 The acceptance criterion stays the same: performance work cannot weaken the correctness gates.
 
 That suggests several concrete experiments:
 
-- rerun 100K at p12 and p16 with the same seed
+- analyze the p12/p16 crossover before attempting 250K
 - measure service concurrency and HTTP client limits
 - inspect MongoDB writeback and accumulator hot paths
 - preserve payment, false-pend, and workflow gates

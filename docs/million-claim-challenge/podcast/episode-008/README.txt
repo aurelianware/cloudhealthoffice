@@ -6,6 +6,8 @@ Episode 008 covers the clean post-#934 100,000-claim local Kubernetes validation
 
 The result held: 100,000 processed, zero platform failures, zero scoreable workflow mismatches, zero unexpected pends, and 2,000 of 2,000 comparable payments within one cent. The episode also explains why the 30:05 timed processing phase and 38:05 tracked lifecycle are different, and why the next local scaling target is controlled parallelism and internal service/writeback pressure rather than raw Docker CPU or memory.
 
+The controlled follow-up sweep is also recorded: p12 preserved the same correctness gates and improved throughput to 58.55 claims/second, but raised tail latency to 416 ms P95 and 580 ms P99. The p16 follow-up also stayed correct, but fell to 55.11 claims/second with 518 ms P95 and 683 ms P99. That makes p12 the current local sweet spot and argues against a 250K attempt before service/writeback pressure is understood.
+
 The pend counts are intentionally reported with scope: 924 persisted pended outcomes overall, 920 expected-pend claims observed as pended, and zero unexpected pends across 10,934 scoreable expected-pay and expected-deny claims.
 
 Post-#934 note: provider-fixture hardening moved scoreable validation providers into wider, role-separated synthetic NPI namespaces, prior-auth evidence became scoreable, and provider-exclusion denial labels were normalized. The follow-up 50K verification completed cleanly with zero workflow mismatches, 460/460 expected pends observed, zero unexpected pends, and 1,000/1,000 payment comparisons within tolerance. The final 100K run used that hardened fixture and scoring model.
@@ -41,6 +43,10 @@ The episode must distinguish:
 - `podcast-prompt.txt` - episode-specific generation prompt.
 - `raw-validator-output-post934-100k.txt` - raw validator console output from the completed post-#934 100K run.
 - `run-summary-post934-100k.json` - completed dashboard summary returned by claims-service for the post-#934 100K run.
+- `raw-validator-output-post937-100k-p12.txt` - raw validator console output from the completed 100K p12 confirmation run.
+- `run-summary-post937-100k-p12.json` - completed dashboard summary returned by claims-service for the 100K p12 confirmation run.
+- `raw-validator-output-post937-100k-p16.txt` - raw validator console output from the completed 100K p16 pressure run.
+- `run-summary-post937-100k-p16.json` - completed dashboard summary returned by claims-service for the 100K p16 pressure run.
 - `raw-validator-output-post928-100k.txt` - prior post-#928 100K validator output retained as provenance.
 - `run-summary-post928-100k.json` - prior post-#928 dashboard summary retained as provenance.
 
@@ -72,5 +78,7 @@ The screenshots below are retained visual console evidence from the Part 8 conso
 - [x] Unsupported claim sample and persisted payment drilldown are captured.
 - [x] Post-#934 50K scoring verification is recorded.
 - [x] Final post-#934 100K raw validator output is recorded.
+- [x] Post-#937 100K p12 confirmation run is recorded.
+- [x] Post-#937 100K p16 pressure run is recorded.
 - [x] Live expected-pend progress caveat is recorded.
 - [ ] Published article URL is recorded.
