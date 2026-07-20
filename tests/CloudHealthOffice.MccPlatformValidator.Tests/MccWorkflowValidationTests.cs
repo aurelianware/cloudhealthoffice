@@ -154,7 +154,7 @@ public class MccWorkflowValidationTests
     [Theory]
     [InlineData(EdgeCaseScenario.BehavioralHealthCarveIn)]
     [InlineData(EdgeCaseScenario.BehavioralHealthParityCheck)]
-    public void ExpectedValidationFor_BehavioralHealthPaidEdgeCases_ReturnsUnsupported(
+    public void ExpectedValidationFor_BehavioralHealthPaidEdgeCases_ReturnsScoreablePaid(
         EdgeCaseScenario scenario)
     {
         var claim = CreateClaim(
@@ -174,14 +174,14 @@ public class MccWorkflowValidationTests
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
         var status = MccWorkflowValidation.ValidationStatus(
             expected,
-            ClaimValidationOutcome.BusinessDenial,
-            actualBusinessDenialCode: MccWorkflowValidation.UncoveredServiceCode);
+            ClaimValidationOutcome.Paid,
+            actualBusinessDenialCode: null);
 
         Assert.Equal($"EdgeCase:{scenario}", expected.Scenario);
-        Assert.Null(expected.ExpectedOutcome);
+        Assert.Equal(ClaimValidationOutcome.Paid, expected.ExpectedOutcome);
         Assert.Null(expected.ExpectedBusinessDenialCode);
-        Assert.True(expected.IsUnsupported);
-        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, status);
+        Assert.False(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, status);
     }
 
     [Fact]

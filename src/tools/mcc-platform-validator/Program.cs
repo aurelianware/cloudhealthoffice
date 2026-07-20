@@ -540,6 +540,8 @@ static async Task SeedPriorAuthRulesAsync(HttpClient http, ValidatorOptions opti
     Console.WriteLine($"seeded: prior-auth platform rules ({seeded:N0} new)");
 }
 
+const string BehavioralHealthServiceTypeCode = "Behavioral Health";
+
 static async Task SeedServiceCategoryMappingsAsync(HttpClient http, ValidatorOptions options, JsonSerializerOptions json)
 {
     using var existingResponse = await http.GetAsync($"{options.BenefitUrl}/api/v1/service-category-mappings");
@@ -563,7 +565,7 @@ static async Task SeedServiceCategoryMappingsAsync(HttpClient http, ValidatorOpt
 
     var payload = new
     {
-        serviceTypeCode = "Behavioral Health",
+        serviceTypeCode = BehavioralHealthServiceTypeCode,
         serviceTypeDescription = "MCC behavioral-health carve-out validation category",
         rules = new[]
         {
@@ -601,7 +603,7 @@ static bool IsMccBehavioralHealthMappingPresent(ServiceCategoryMappingSeedView m
 {
     return mapping.PlanId is null
         && mapping.IsActive
-        && string.Equals(mapping.ServiceTypeCode, "Behavioral Health", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(mapping.ServiceTypeCode, BehavioralHealthServiceTypeCode, StringComparison.OrdinalIgnoreCase)
         && mapping.Rules.Any(rule =>
             string.Equals(rule.CodeType, "CPT", StringComparison.OrdinalIgnoreCase)
             && string.Equals(rule.CodePattern, "90785", StringComparison.OrdinalIgnoreCase)
@@ -671,6 +673,17 @@ static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions op
                 deductibleApplies = true,
                 oopApplies = true,
                 priorAuthRequired = true
+            },
+            new
+            {
+                benefitType = "medical",
+                serviceCategory = BehavioralHealthServiceTypeCode,
+                description = "Behavioral Health",
+                cptCodes = new[] { "90791", "90834", "90837", "90847", "90853", "96127" },
+                inNetworkCopay = 25.00m,
+                deductibleApplies = false,
+                oopApplies = true,
+                priorAuthRequired = false
             }
         }
     };

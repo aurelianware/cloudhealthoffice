@@ -60,12 +60,6 @@ public static class MccWorkflowValidation
                 return ExpectedValidation.Unsupported(scenario, expectedCode);
             }
 
-            if (expectedOutcome is ClaimValidationOutcome.Paid
-                && IsUnsupportedBehavioralHealthPaidEdgeCase(claim.EdgeCase.Value))
-            {
-                return ExpectedValidation.Unsupported(scenario, expectedCode);
-            }
-
             if (expectedOutcome is ClaimValidationOutcome.BusinessDenial
                 && IsUnsupportedPriorAuthValidationEdgeCase(claim.EdgeCase.Value, effectiveCapabilities))
             {
@@ -198,13 +192,6 @@ public static class MccWorkflowValidation
             EdgeCaseScenario.SubrogationWorkersComp or
             EdgeCaseScenario.SubrogationThirdPartyLiability or
             EdgeCaseScenario.MedicaidSpendDown;
-    }
-
-    private static bool IsUnsupportedBehavioralHealthPaidEdgeCase(EdgeCaseScenario scenario)
-    {
-        return scenario is
-            EdgeCaseScenario.BehavioralHealthCarveIn or
-            EdgeCaseScenario.BehavioralHealthParityCheck;
     }
 
     private static bool IsUnsupportedPriorAuthValidationEdgeCase(
