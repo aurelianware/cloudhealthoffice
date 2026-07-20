@@ -9,6 +9,7 @@ IMAGE="${IMAGE:-cloudhealthoffice-mcc-platform-validator:local}"
 CLAIMS="${CLAIMS:-5000}"
 MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
+SEED="${SEED:-42}"
 CLAIMS_URL="${CLAIMS_URL:-http://claims-service}"
 BENEFIT_URL="${BENEFIT_URL:-http://benefit-plan-service}"
 MEMBER_URL="${MEMBER_URL:-http://member-service}"
@@ -19,6 +20,7 @@ SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 SEED_AUTHORIZATIONS="${SEED_AUTHORIZATIONS:-true}"
 CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS="${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS:-15}"
+SERVICE_CATEGORY_ADMIN_WRITE_ENABLED="${SERVICE_CATEGORY_ADMIN_WRITE_ENABLED:-true}"
 PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
 PEND_OBSERVATION_INTERVAL_MS="${PEND_OBSERVATION_INTERVAL_MS:-1000}"
@@ -59,6 +61,14 @@ if kubectl get deployment -n "$NAMESPACE" claims-service >/dev/null 2>&1; then
   kubectl rollout status deployment/claims-service -n "$NAMESPACE" --timeout=120s >/dev/null
 fi
 
+if kubectl get deployment -n "$NAMESPACE" benefit-plan-service >/dev/null 2>&1; then
+  log "Setting benefit-plan service-category mapping seed gate to ${SERVICE_CATEGORY_ADMIN_WRITE_ENABLED}"
+  kubectl set env deployment/benefit-plan-service \
+    -n "$NAMESPACE" \
+    "ServiceCategoryMapping__AdminWriteEnabled=${SERVICE_CATEGORY_ADMIN_WRITE_ENABLED}" >/dev/null
+  kubectl rollout status deployment/benefit-plan-service -n "$NAMESPACE" --timeout=120s >/dev/null
+fi
+
 log "Running ${CLAIMS} claims in namespace ${NAMESPACE} with wait timeout ${JOB_TIMEOUT}"
 kubectl delete job -n "$NAMESPACE" "$JOB_NAME" --ignore-not-found >/dev/null
 kubectl apply -n "$NAMESPACE" -f - <<EOF
@@ -82,6 +92,8 @@ spec:
             - "${MAX_CLAIMS}"
             - --tenant
             - "${TENANT}"
+            - --seed
+            - "${SEED}"
             - --parallelism
             - "${PARALLELISM}"
             - --claims-url

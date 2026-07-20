@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.BenchmarkClaimGenerator;
@@ -71,6 +72,7 @@ await MeasureLifecyclePhaseAsync(lifecycleTimings, "Reference rule seeding", "Pr
 {
     await SeedNcciAsync(http, options, json);
     await SeedPriorAuthRulesAsync(http, options, json);
+    await SeedServiceCategoryMappingsAsync(http, options, json);
 });
 
 var validationPlanId = Guid.NewGuid();
@@ -527,6 +529,74 @@ static async Task SeedPriorAuthRulesAsync(HttpClient http, ValidatorOptions opti
     Console.WriteLine($"seeded: prior-auth platform rules ({seeded:N0} new)");
 }
 
+static async Task SeedServiceCategoryMappingsAsync(HttpClient http, ValidatorOptions options, JsonSerializerOptions json)
+{
+    using var existingResponse = await http.GetAsync($"{options.BenefitUrl}/api/v1/service-category-mappings");
+    if (!existingResponse.IsSuccessStatusCode)
+    {
+        var body = await existingResponse.Content.ReadAsStringAsync();
+        throw new InvalidOperationException(
+            "service-category mapping lookup failed: " +
+            $"{(int)existingResponse.StatusCode} {body}. " +
+            "The MCC validator needs to inspect tenant-default mappings before seeding its " +
+            "behavioral-health carve-out fixture.");
+    }
+
+    var existingBody = await existingResponse.Content.ReadAsStringAsync();
+    var existingMappings = JsonSerializer.Deserialize<List<ServiceCategoryMappingSeedView>>(existingBody, json) ?? [];
+    if (existingMappings.Any(IsMccBehavioralHealthMappingPresent))
+    {
+        Console.WriteLine("seeded: MCC behavioral-health service-category mapping already present");
+        return;
+    }
+
+    var payload = new
+    {
+        serviceTypeCode = "Behavioral Health",
+        serviceTypeDescription = "MCC behavioral-health carve-out validation category",
+        rules = new[]
+        {
+            new
+            {
+                priority = 10,
+                codeType = "CPT",
+                codePattern = "90785",
+                codeRangeEnd = "90899"
+            }
+        },
+        isActive = true
+    };
+
+    using var response = await http.PostAsJsonAsync(
+        $"{options.BenefitUrl}/api/v1/service-category-mappings",
+        payload,
+        json);
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        throw new InvalidOperationException(
+            "service-category mapping seed failed: " +
+            $"{(int)response.StatusCode} {body}. " +
+            "The MCC validator requires a tenant-applied Behavioral Health mapping so " +
+            "behavioral-health carve-out claims do not fall back to generic POS-based office-visit resolution. " +
+            "For local Kubernetes runs, keep SERVICE_CATEGORY_ADMIN_WRITE_ENABLED=true.");
+    }
+
+    _ = await response.Content.ReadAsStringAsync();
+    Console.WriteLine("seeded: MCC behavioral-health service-category mapping");
+}
+
+static bool IsMccBehavioralHealthMappingPresent(ServiceCategoryMappingSeedView mapping)
+{
+    return mapping.PlanId is null
+        && mapping.IsActive
+        && string.Equals(mapping.ServiceTypeCode, "Behavioral Health", StringComparison.OrdinalIgnoreCase)
+        && mapping.Rules.Any(rule =>
+            string.Equals(rule.CodeType, "CPT", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(rule.CodePattern, "90785", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(rule.CodeRangeEnd, "90899", StringComparison.OrdinalIgnoreCase));
+}
+
 static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions options, Guid planGuid, JsonSerializerOptions json)
 {
     var plan = new
@@ -542,8 +612,8 @@ static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions op
         isActive = true,
         networkTiers = new[]
         {
-            new { tierName = "In-Network", tierLevel = 1, networkId = "mcc-local-network" },
-            new { tierName = "Out-of-Network", tierLevel = 2, networkId = "mcc-local-out-network" }
+            new { tierName = "In-Network", tierLevel = 1, networkId = MccInNetworkId(options) },
+            new { tierName = "Out-of-Network", tierLevel = 2, networkId = MccOutOfNetworkId(options) }
         },
         costSharing = new
         {
@@ -1698,8 +1768,8 @@ static async Task<FixtureCount> SeedProviderNetworksAsync(
 {
     var networks = new[]
     {
-        ("mcc-local-network", "MCC Local In-Network"),
-        ("mcc-local-out-network", "MCC Local Out-of-Network")
+        (MccInNetworkId(options), "MCC Local In-Network"),
+        (MccOutOfNetworkId(options), "MCC Local Out-of-Network")
     };
 
     var created = 0;
@@ -1745,7 +1815,8 @@ static async Task EnsureProviderNetworkParticipationAsync(
     JsonSerializerOptions json)
 {
     var effectiveDate = EffectiveDateForProvider(provider);
-    if (await ProviderHasActiveNetworkParticipationAsync(http, options, provider.Npi, "mcc-local-network", effectiveDate))
+    var networkId = MccInNetworkId(options);
+    if (await ProviderHasActiveNetworkParticipationAsync(http, options, provider.Npi, networkId, effectiveDate))
     {
         return;
     }
@@ -1753,7 +1824,7 @@ static async Task EnsureProviderNetworkParticipationAsync(
     var payload = new
     {
         planId = (string?)null,
-        networkId = "mcc-local-network",
+        networkId,
         lineOfBusiness = LineOfBusinessName(options.LineOfBusiness),
         networkTier = "InNetwork",
         effectiveDate,
@@ -1973,7 +2044,7 @@ static async Task<string> CreateProviderAsync(
             new
             {
                 planId = validationPlanId.ToString(),
-                networkId = provider.IsParticipating ? "mcc-local-network" : "mcc-local-out-network",
+                networkId = provider.IsParticipating ? MccInNetworkId(options) : MccOutOfNetworkId(options),
                 lineOfBusiness = LineOfBusinessName(options.LineOfBusiness),
                 networkTier = provider.IsParticipating ? "InNetwork" : "OutOfNetwork",
                 effectiveDate,
@@ -2211,6 +2282,34 @@ static string LineOfBusinessName(int lineOfBusiness) => lineOfBusiness switch
     5 => "Exchange",
     _ => throw new ArgumentOutOfRangeException(nameof(lineOfBusiness), lineOfBusiness, "Unsupported line-of-business code.")
 };
+
+static string MccInNetworkId(ValidatorOptions options)
+    => MccNetworkId(options, "network");
+
+static string MccOutOfNetworkId(ValidatorOptions options)
+    => MccNetworkId(options, "out-network");
+
+static string MccNetworkId(ValidatorOptions options, string suffix)
+    => $"mcc-{NormalizeIdentifierSegment(options.TenantId)}-{suffix}";
+
+static string NormalizeIdentifierSegment(string value)
+{
+    var builder = new StringBuilder(value.Length);
+    foreach (var c in value.ToLowerInvariant())
+    {
+        if (char.IsLetterOrDigit(c))
+        {
+            builder.Append(c);
+        }
+        else if (builder.Length > 0 && builder[^1] != '-')
+        {
+            builder.Append('-');
+        }
+    }
+
+    var normalized = builder.ToString().Trim('-');
+    return string.IsNullOrWhiteSpace(normalized) ? "tenant" : normalized;
+}
 
 static async Task<ClaimValidationOutcome?> UpdateClaimAdjudicationAsync(
     HttpClient http,
@@ -3024,6 +3123,21 @@ internal sealed record FixtureCount(int Created, int Existing)
 {
     public static FixtureCount Empty { get; } = new(0, 0);
 }
+
+internal sealed record ServiceCategoryMappingSeedView(
+    Guid? PlanId,
+    string ServiceTypeCode,
+    IReadOnlyList<ProcedureCodeRuleSeedView> Rules,
+    bool IsActive);
+
+internal sealed record ProcedureCodeRuleSeedView(
+    int Priority,
+    string CodeType,
+    string CodePattern,
+    string? CodeRangeEnd,
+    string? PlaceOfServiceCode,
+    string? RequiredModifier,
+    string? RevenueCode);
 
 internal sealed record MassAdjudicationBusinessDenialSummary(
     string Code,
