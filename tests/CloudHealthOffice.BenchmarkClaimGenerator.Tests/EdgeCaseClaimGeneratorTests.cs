@@ -132,6 +132,17 @@ public class EdgeCaseClaimGeneratorTests
     }
 
     [Fact]
+    public void Generate_BehavioralHealthCarveOut_DeniesAsNonCoveredService()
+    {
+        var claim = _generator.Generate(1, "BehavioralHealthCarveOut", new Random(42));
+
+        Assert.Equal("Denied", claim.ExpectedOutcome.Disposition);
+        Assert.Equal("96", claim.ExpectedOutcome.DenialReasonCode);
+        Assert.Equal(0m, claim.ExpectedOutcome.ExpectedAllowedAmount);
+        Assert.Equal(0m, claim.ExpectedOutcome.ExpectedPaidAmount);
+    }
+
+    [Fact]
     public void Generate_AllScenarios_ProducePositiveLineCharges()
     {
         foreach (var scenario in Enum.GetValues<EdgeCaseScenario>())

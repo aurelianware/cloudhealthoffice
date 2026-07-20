@@ -66,7 +66,7 @@ public class MccRunSummaryBuilderTests
             Result("MCC-SLOW-MATCHED", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 5_000),
             Result("MCC-MISMATCH-B", "CleanProfessionalPaid", MccWorkflowValidation.MismatchedStatus, ClaimValidationOutcome.BusinessDenial, elapsedMilliseconds: 10),
             Result("MCC-MISMATCH-A", "CleanProfessionalPaid", MccWorkflowValidation.MismatchedStatus, ClaimValidationOutcome.BusinessDenial, elapsedMilliseconds: 10),
-            Result("MCC-UNSUPPORTED", "EdgeCase:BehavioralHealthCarveOut", MccWorkflowValidation.UnsupportedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 20),
+            Result("MCC-UNSUPPORTED", "EdgeCase:SubrogationWorkersComp", MccWorkflowValidation.UnsupportedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 20),
             Result("MCC-TIMEOUT", "EdgeCase:CobSecondaryPayer", MccWorkflowValidation.ObservationTimeoutStatus, ClaimValidationOutcome.ObservationTimeout, elapsedMilliseconds: 30),
             Result("MCC-MEDIUM-MATCHED-B", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 4_000),
             Result("MCC-MEDIUM-MATCHED-A", "CleanProfessionalPaid", MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid, elapsedMilliseconds: 4_000)

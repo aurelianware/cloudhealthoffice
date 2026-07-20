@@ -367,7 +367,7 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
             EdgeCaseScenario.SubrogationThirdPartyLiability => ("Pended", "W1", 0.65m),
 
             // Behavioral health
-            EdgeCaseScenario.BehavioralHealthCarveOut => ("Denied", "296", 0m), // CARC 296 = precertification
+            EdgeCaseScenario.BehavioralHealthCarveOut => ("Denied", "96", 0m), // CARC 96 = non-covered charge
             EdgeCaseScenario.BehavioralHealthCarveIn => ("Paid", null, 0.65m),
             EdgeCaseScenario.BehavioralHealthParityCheck => ("Paid", null, 0.65m),
 

@@ -623,6 +623,7 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
     InjectExcludedProviderScenarios(claims, options.Seed);
     InjectUncoveredServiceScenarios(claims);
     InjectPriorAuthScenarios(claims, options);
+    NormalizeBehavioralHealthCarveOutScenarios(claims);
     return claims;
 }
 
@@ -922,6 +923,86 @@ static void ForceUncoveredServiceScenario(SyntheticClaim claim)
         }
     };
     claim.TotalCharges = 850.00m;
+    claim.ExpectedOutcome = new ExpectedOutcome
+    {
+        Disposition = "Denied",
+        DenialReasonCode = MccWorkflowValidation.UncoveredServiceCode,
+        ExpectedAllowedAmount = 0.00m,
+        ExpectedPaidAmount = 0.00m,
+        ExpectedMemberLiability = 0.00m,
+        ExpectedCopay = 0.00m,
+        ExpectedCoinsurance = 0.00m,
+        ExpectedDeductible = 0.00m,
+        ExpectedFhirCompliant = true,
+        ExpectedPriorAuthDecision = "N/A",
+        LineOutcomes = new List<LineOutcome>
+        {
+            new()
+            {
+                LineNumber = 1,
+                Disposition = "Denied",
+                AllowedAmount = 0.00m,
+                PaidAmount = 0.00m,
+                ReasonCode = MccWorkflowValidation.UncoveredServiceCode
+            }
+        }
+    };
+}
+
+static void NormalizeBehavioralHealthCarveOutScenarios(List<SyntheticClaim> claims)
+{
+    var candidates = claims
+        .Where(c => c.EdgeCase is EdgeCaseScenario.BehavioralHealthCarveOut)
+        .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
+        .ToList();
+
+    if (candidates.Count == 0)
+    {
+        Console.WriteLine("Behavioral health carve-out scenarios: skipped (none generated)");
+        return;
+    }
+
+    foreach (var claim in candidates)
+    {
+        ForceBehavioralHealthCarveOutScenario(claim);
+    }
+
+    Console.WriteLine($"Behavioral health carve-out scenarios: normalized {candidates.Count:N0} claims expected to deny");
+}
+
+static void ForceBehavioralHealthCarveOutScenario(SyntheticClaim claim)
+{
+    var serviceDate = claim.DateOfService.Date;
+    claim.PlaceOfService = "11";
+    claim.FrequencyCode = "1";
+    claim.BillType = null;
+    claim.DrgCode = null;
+    claim.PriorAuthStatus = "NotRequired";
+    claim.PriorAuthNumber = null;
+    claim.PrimaryDiagnosisCode = "F41.1";
+    claim.SecondaryDiagnosisCodes.Clear();
+
+    ForceAdjudicatableProviderProfile(claim.RenderingProvider, serviceDate);
+    ForceAdjudicatableProviderProfile(claim.BillingProvider, serviceDate);
+
+    claim.Lines = new List<ClaimLine>
+    {
+        new()
+        {
+            LineNumber = 1,
+            ProcedureCode = "90834",
+            Description = "Psychotherapy, 45 minutes",
+            Modifiers = new List<string>(),
+            RevenueCode = null,
+            DiagnosisPointers = new List<int> { 1 },
+            Units = 1,
+            ChargeAmount = 165.00m,
+            ServiceDate = serviceDate,
+            ServiceEndDate = serviceDate,
+            PlaceOfService = "11"
+        }
+    };
+    claim.TotalCharges = 165.00m;
     claim.ExpectedOutcome = new ExpectedOutcome
     {
         Disposition = "Denied",
