@@ -351,7 +351,7 @@ public class MccWorkflowValidationTests
     }
 
     [Fact]
-    public void ExpectedValidationFor_UnsupportedBusinessDenialEdgeCase_ReturnsUnsupported()
+    public void ExpectedValidationFor_BehavioralHealthCarveOut_ReturnsScoreableCoverageDenial()
     {
         var claim = CreateClaim(
             claimType: "EdgeCase",
@@ -364,20 +364,20 @@ public class MccWorkflowValidationTests
         claim.ExpectedOutcome = new ExpectedOutcome
         {
             Disposition = "Denied",
-            DenialReasonCode = "296"
+            DenialReasonCode = "96"
         };
 
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
         var status = MccWorkflowValidation.ValidationStatus(
             expected,
-            ClaimValidationOutcome.Paid,
-            actualBusinessDenialCode: null);
+            ClaimValidationOutcome.BusinessDenial,
+            actualBusinessDenialCode: MccWorkflowValidation.UncoveredServiceCode);
 
         Assert.Equal("EdgeCase:BehavioralHealthCarveOut", expected.Scenario);
-        Assert.Null(expected.ExpectedOutcome);
-        Assert.Equal("CARC_296", expected.ExpectedBusinessDenialCode);
-        Assert.True(expected.IsUnsupported);
-        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, status);
+        Assert.Equal(ClaimValidationOutcome.BusinessDenial, expected.ExpectedOutcome);
+        Assert.Equal(MccWorkflowValidation.UncoveredServiceCode, expected.ExpectedBusinessDenialCode);
+        Assert.False(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, status);
     }
 
     [Fact]
