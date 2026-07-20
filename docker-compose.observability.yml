@@ -1,7 +1,8 @@
 # Observability overlay for Cloud Health Office local development.
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+#   docker compose --profile core --profile finance \
+#     -f docker-compose.yml -f docker-compose.observability.yml up -d
 #
 # Service URLs:
 #   Jaeger UI:     http://localhost:16686
