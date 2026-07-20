@@ -205,7 +205,7 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
         public string ServiceTypeDescription { get; set; } = default!;
 
         [BsonElement("rules")]
-        public List<ProcedureCodeRule> Rules { get; set; } = [];
+        public List<ProcedureCodeRuleDocument> Rules { get; set; } = [];
 
         // DateOnly persisted as ISO-yyyy-MM-dd string for cross-driver
         // portability. The Mongo BSON DateOnly serializer support is patchy
@@ -229,7 +229,7 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
             BenefitPlanId = m.BenefitPlanId?.ToString(),
             ServiceTypeCode = m.ServiceTypeCode,
             ServiceTypeDescription = m.ServiceTypeDescription,
-            Rules = m.Rules,
+            Rules = m.Rules.Select(ProcedureCodeRuleDocument.From).ToList(),
             EffectiveStart = m.EffectiveStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             EffectiveEnd = m.EffectiveEnd?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             IsActive = m.IsActive,
@@ -243,7 +243,7 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
             BenefitPlanId = string.IsNullOrEmpty(BenefitPlanId) ? null : Guid.Parse(BenefitPlanId),
             ServiceTypeCode = ServiceTypeCode,
             ServiceTypeDescription = ServiceTypeDescription,
-            Rules = Rules ?? [],
+            Rules = Rules?.Select(r => r.ToEntity()).ToList() ?? [],
             EffectiveStart = ParseDateOrNull(EffectiveStart),
             EffectiveEnd = ParseDateOrNull(EffectiveEnd),
             IsActive = IsActive,
@@ -259,6 +259,58 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
             => string.IsNullOrEmpty(s)
                 ? null
                 : DateOnly.ParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
+
+    [BsonIgnoreExtraElements]
+    internal sealed class ProcedureCodeRuleDocument
+    {
+        [BsonElement("id")]
+        public string Id { get; set; } = default!;
+
+        [BsonElement("priority")]
+        public int Priority { get; set; }
+
+        [BsonElement("codeType")]
+        public string CodeType { get; set; } = "CPT";
+
+        [BsonElement("codePattern")]
+        public string CodePattern { get; set; } = default!;
+
+        [BsonElement("codeRangeEnd")]
+        public string? CodeRangeEnd { get; set; }
+
+        [BsonElement("placeOfServiceCode")]
+        public string? PlaceOfServiceCode { get; set; }
+
+        [BsonElement("requiredModifier")]
+        public string? RequiredModifier { get; set; }
+
+        [BsonElement("revenueCode")]
+        public string? RevenueCode { get; set; }
+
+        public static ProcedureCodeRuleDocument From(ProcedureCodeRule r) => new()
+        {
+            Id = (r.Id == Guid.Empty ? Guid.NewGuid() : r.Id).ToString(),
+            Priority = r.Priority,
+            CodeType = r.CodeType,
+            CodePattern = r.CodePattern,
+            CodeRangeEnd = r.CodeRangeEnd,
+            PlaceOfServiceCode = r.PlaceOfServiceCode,
+            RequiredModifier = r.RequiredModifier,
+            RevenueCode = r.RevenueCode,
+        };
+
+        public ProcedureCodeRule ToEntity() => new()
+        {
+            Id = string.IsNullOrWhiteSpace(Id) ? Guid.NewGuid() : Guid.Parse(Id),
+            Priority = Priority,
+            CodeType = CodeType,
+            CodePattern = CodePattern,
+            CodeRangeEnd = CodeRangeEnd,
+            PlaceOfServiceCode = PlaceOfServiceCode,
+            RequiredModifier = RequiredModifier,
+            RevenueCode = RevenueCode,
+        };
     }
 
     [BsonIgnoreExtraElements]
