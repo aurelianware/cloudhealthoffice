@@ -5,9 +5,9 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "build:site": "node site/js/markdown-converter.js",
+    "build:site": "npm --prefix src/site run build",
     "inject:metrics": "node scripts/inject-test-metrics.js",
-    "validate:site": "node site/js/validate-accessibility.js",
+    "validate:site": "node src/site/js/validate-accessibility.js",
     "generate": "node dist/scripts/cli/payer-generator-cli.js",
     "generate-pdf": "./scripts/generate-whitepaper-pdf.sh",
     "test": "jest",

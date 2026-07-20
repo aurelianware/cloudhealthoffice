@@ -613,8 +613,9 @@ The key result is that the current portal can now inspect a published mass adjud
 
 ## Run identity
 
-- Date: July 12, 2026
-- Kubernetes job: `mcc-part8-100k`
+- Date: July 19, 2026 local time / July 19, 2026 UTC
+- Kubernetes job: `mcc-main-100k-p10-112031`
+- Dashboard run ID: `dd0ebe4979e247bc95a980610de7d0be`
 - Environment: local Docker Desktop Kubernetes
 - Tenant: `demo`
 - Validator seed: 42
@@ -629,8 +630,21 @@ The key result is that the current portal can now inspect a published mass adjud
 ## Command
 
 ```text
-CLAIMS=100000 MAX_CLAIMS=100000 JOB_NAME=mcc-part8-100k PARALLELISM=10 PROGRESS_EVERY=5000 ./scripts/run-mcc-local-k8s.sh
+JOB_NAME=mcc-main-100k-p10-112031 CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=10 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true SKIP_BUILD=true ./scripts/run-mcc-local-k8s.sh
 ```
+
+The local wrapper timed out while waiting for the Kubernetes job condition, but the Kubernetes job continued running and completed successfully. The pod exited successfully with 0 restarts, and the validator published the completed dashboard summary.
+
+## Raw artifacts
+
+- `raw-validator-output-post934-100k.txt` - validator console output from the completed post-#934 100K run.
+- `run-summary-post934-100k.json` - completed Mass Adjudication run summary returned by claims-service for the post-#934 100K run.
+- `raw-validator-output-post937-100k-p12.txt` - validator console output from the completed 100K p12 confirmation run.
+- `run-summary-post937-100k-p12.json` - completed Mass Adjudication run summary returned by claims-service for the 100K p12 confirmation run.
+- `raw-validator-output-post937-100k-p16.txt` - validator console output from the completed 100K p16 pressure run.
+- `run-summary-post937-100k-p16.json` - completed Mass Adjudication run summary returned by claims-service for the 100K p16 pressure run.
+- `raw-validator-output-post928-100k.txt` - prior post-#928 100K validator output retained as provenance.
+- `run-summary-post928-100k.json` - prior post-#928 dashboard summary retained as provenance.
 
 ## Fixture preparation
 
@@ -639,49 +653,69 @@ CLAIMS=100000 MAX_CLAIMS=100000 JOB_NAME=mcc-part8-100k PARALLELISM=10 PROGRESS_
 - Injected 2,000 excluded-provider denial scenarios.
 - Injected 2,000 uncovered-service denial scenarios.
 - Injected 2,000 TX STAR inpatient no-authorization scenarios.
-- Seeded 87,115 synthetic members; 12,476 already existed; 99,591 statuses aligned.
-- Seeded 620 COB coverage rows; 300 already existed.
-- Seeded 174,202 synthetic providers; 25,644 already existed.
-- Provider networks: 0 new; 2 already existed.
+- Provider fixture pool: 199,847 provider references reduced to 13,742 distinct NPIs.
+- Provider assignments reused: 186,258.
+- Provider-sensitive claims preserved: 2,800.
+- Seeded 10,614 synthetic members; 88,977 already existed; 99,591 statuses aligned.
+- Seeded 0 COB coverage rows; 920 already existed.
+- Seeded 0 provider networks; 2 already existed.
+- Seeded 13,383 synthetic providers; 359 already existed.
 
 ## Correctness result
 
 - Total claims: 100,000
 - Processed: 100,000
-- Paid/adjudicated: 79,164
-- Pended: 923
-- Business denials: 19,913
+- Paid/adjudicated: 78,842
+- Pended: 924
+- Business denials: 20,234
 - Platform failures: 0
 - Observation timeouts: 0
 - Expected-pend observation: 920 pended, 0 timed out
-- False-pend sweep: 10,614 scoreable non-pend claims, 0 unexpected pends
-- Workflow scoring: 11,534/13,000 matched, 0 mismatched, 1,466 unsupported, 0 observation timeouts
+- False-pend sweep: 10,934 scoreable non-pend claims, 0 unexpected pends, 2,242 terminal outcomes reconciled
+- Workflow scoring: 11,854/13,000 matched, 0 mismatched, 1,146 unsupported, 0 observation timeouts
 - Payment gate: 2,000/2,000 within $0.01, 0 mismatched
 - Average payment delta: $0.00
 - Maximum payment delta: $0.00
 
-Pend-scope note: the final persisted outcome mix includes 923 pended claims. The expected-pend observer independently verified 920 answer-key pend scenarios as pended. The false-pend sweep then checked 10,614 scoreable expected-pay and expected-deny claims and found 0 unexpected pends. Unsupported scenarios remain outside the scoreable non-pend sweep.
+Pend-scope note: the final persisted outcome mix includes 924 pended claims. The expected-pend observer independently verified 920 answer-key pend scenarios as pended. The false-pend sweep then checked 10,934 scoreable expected-pay and expected-deny claims and found 0 unexpected pends. Unsupported scenarios remain outside the scoreable non-pend sweep.
 
 ## Performance result
 
-- Timed claim-processing elapsed: 29:40.851
-- Throughput: 56.15 claims/second
-- P95 latency: 358 ms
-- P99 latency: 451 ms
-- Submit average/P95: 63 ms / 199 ms
-- Adjudicate average/P95: 75 ms / 140 ms
-- Writeback average/P95: 40 ms / 102 ms
-- Benefit calculation average/P95: 60 ms / 127 ms
-- Provider integrity average/P95: 12 ms / 39 ms
-- Kubernetes job duration: approximately 128 minutes, including corpus generation and fixture preparation
+- Timed claim-processing elapsed: 30:05.013
+- Throughput: 55.40 claims/second
+- P95 latency: 324 ms
+- P99 latency: 480 ms
+- Submit average/P95: 67 ms / 194 ms
+- Adjudicate average/P95: 70 ms / 122 ms
+- Writeback average/P95: 45 ms / 101 ms
+- Benefit calculation average/P95: 65 ms / 115 ms
+- Provider integrity average/P95: 3 ms / 2 ms
+- Preparation time: 7:53.368
+- Tracked lifecycle: 38:05.792
+
+## Lifecycle timings
+
+- Service health checks: 0:00.056
+- Reference rule seeding: 0:00.120
+- Validation plan setup: 0:00.018
+- Corpus generation: 0:01.201
+- Fixture normalization: 0:00.327
+- Authorization fixture seeding: 0:00.436
+- Member and coverage seeding: 2:47.051
+- Provider seeding: 5:04.155
+- Timed adjudication: 30:05.013
+- Expected-pend observation: 0:00.765
+- False-pend sweep: 0:06.644
 
 ## Business denials
 
 - CARC 96: 9,046
 - CARC 18: 6,000
-- PRIOR_AUTH_REQUIRED: 2,160
+- PRIOR_AUTH_REQUIRED: 2,480
 - PROVIDER_EXCLUDED: 2,000
-- NCCI_MUE_EDIT_FAILURE: 393
+- NCCI_MUE_EDIT_FAILURE: 394
+- CARC 27: 267
+- SCRUB_VALIDATION_FAILURE: 47
 
 Business denials are valid platform outcomes, not platform failures.
 
@@ -689,25 +723,211 @@ Business denials are valid platform outcomes, not platform failures.
 
 - BehavioralHealthCarveOut: 200
 - MedicaidSpendDown: 120
-- PriorAuthRequired_ExpiredAuth: 160
-- PriorAuthRequired_WrongProcedure: 160
 - PriorAuthRequired_WrongProvider: 160
 - RetroEligibilityCoverageChange: 266
 - SubrogationAccidentRelated: 134
 - SubrogationThirdPartyLiability: 133
 - SubrogationWorkersComp: 133
 
-Total unsupported: 1,466.
+Total unsupported: 1,146.
 
 Unsupported means the scenario is not currently scoreable through the implemented platform/validator path. It is not counted as matched, mismatched, or a platform failure.
 
+## Matched scenario footprint
+
+- CleanProfessionalPaid: 2,000/2,000 matched
+- ExcludedProviderDenied: 2,000/2,000 matched
+- UncoveredServiceDenied: 2,000/2,000 matched
+- TxStarInpatientNoAuth: 2,000/2,000 matched
+- COB primary, secondary, tertiary, birthday-rule, gender-rule, and Medicare-secondary: 200/200 matched each
+- Newborn auto-adjudication, first-thirty-days, and mother-claim-link: 200/200 matched each
+- Medicaid CHIP, dual-eligible, SSI, and TANF: 120/120 matched each
+- Retro eligibility add and termination: 267/267 matched each
+- Behavioral health carve-in and parity-check: 200/200 matched each
+- Prior-auth required auth-on-file, expired-auth, no-auth, and wrong-procedure variants: 160/160 matched each
+
 ## Interpretation
 
-The 100K correctness gate passed cleanly. All claims processed; the scoreable workflow set produced no mismatches; expected-pend observation produced no timeouts; the non-pend sweep found no unexpected pends; and all 2,000 comparable payments matched within one cent.
+The post-#934 100K correctness gate passed cleanly. All claims processed; the scoreable workflow set produced no mismatches; expected-pend observation produced no timeouts; the non-pend sweep found no unexpected pends; and all 2,000 comparable payments matched within one cent.
 
-The timed adjudication result and total Kubernetes job duration must remain separate. Timed processing completed in 29:40.851 at 56.15 claims/second. The job lifecycle lasted about 128 minutes because large run-scoped member and provider fixture preparation occurred before timed processing.
+Timed adjudication and full tracked lifecycle must remain separate. Timed processing completed in 30:05.013 at 55.40 claims/second. The tracked lifecycle completed in 38:05.792 after preparation, processing, expected-pend observation, and false-pend sweep.
 
-This is local Docker Desktop evidence, not a production-cloud capacity claim. The performance result identifies fixture preparation and increased local tail latency as the next scaling investigation.
+This is local Docker Desktop evidence, not a production-cloud capacity claim. During the run, Docker Desktop showed significant CPU and memory headroom, so the next performance investigation should focus on internal throughput limits: validator parallelism, service concurrency, HTTP client limits, MongoDB/writeback behavior, and disk I/O.
+
+## Post-#937 100K p12 parallelism confirmation
+
+After the p10 100K run, the first controlled parallelism follow-up raised validator parallelism from 10 to 12 while keeping the same seed, claim count, fixture model, payment gate, false-pend sweep, and workflow scoring rules.
+
+- Date: July 19, 2026 local time / July 19, 2026 UTC
+- Kubernetes job: `mcc-main-100k-p12-140034`
+- Dashboard run ID: `918f36d680a84a309b2e35944d5a4b6b`
+- Claims: 100,000
+- Parallelism: 12
+- Validator seed: 42
+- Line of business: Medicaid
+- Prior-authorization scenario rate: 2%
+- Pend observation: enabled, 45-second bound, 1-second polling interval
+- Wrapper timeout: `JOB_TIMEOUT=120m`
+- Dashboard summary: published
+
+```text
+JOB_NAME=mcc-main-100k-p12-140034 CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=12 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true JOB_TIMEOUT=120m SKIP_BUILD=false ./scripts/run-mcc-local-k8s.sh
+```
+
+PR #937 made `JOB_TIMEOUT` a first-class runner option after this long-run validation exposed the need for a larger wrapper wait window. The timeout setting affects local orchestration only; it does not change validator scoring or adjudication behavior.
+
+### Post-#937 100K p12 correctness result
+
+- Total claims: 100,000
+- Processed: 100,000
+- Paid/adjudicated: 78,813
+- Pended: 928
+- Business denials: 20,259
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 920 pended, 0 timed out
+- False-pend sweep: 10,934 scoreable non-pend claims, 0 unexpected pends, 2,064 terminal outcomes reconciled
+- Workflow scoring: 11,854/13,000 matched, 0 mismatched, 1,146 unsupported, 0 observation timeouts
+- Payment gate: 2,000/2,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+
+### Post-#937 100K p12 performance result
+
+- Timed claim-processing elapsed: 28:28.006
+- Throughput: 58.55 claims/second
+- P95 latency: 416 ms
+- P99 latency: 580 ms
+- Submit average/P95: 79 ms / 219 ms
+- Adjudicate average/P95: 75 ms / 183 ms
+- Writeback average/P95: 51 ms / 170 ms
+- Benefit calculation average/P95: 72 ms / 179 ms
+- Preparation time: 5:54.074
+- Tracked lifecycle: 34:29.990
+
+The p12 run preserved the correctness gates and improved throughput from 55.40 to 58.55 claims/second compared with p10. Tail latency moved the other direction: P95 increased from 324 ms to 416 ms and P99 increased from 480 ms to 580 ms. That is the useful signal from this sweep. Higher parallelism helped throughput a little, but the latency curve was already starting to push back.
+
+## Post-#937 100K p16 pressure run
+
+The second controlled follow-up raised validator parallelism from 12 to 16 while preserving the same seed, claim count, fixture model, payment gate, false-pend sweep, and workflow scoring rules.
+
+- Date: July 19, 2026 local time / July 19-20, 2026 UTC
+- Kubernetes job: `mcc-main-100k-p16-161929`
+- Dashboard run ID: `6c0223b957114911931c8472687d496b`
+- Claims: 100,000
+- Parallelism: 16
+- Validator seed: 42
+- Line of business: Medicaid
+- Prior-authorization scenario rate: 2%
+- Pend observation: enabled, 45-second bound, 1-second polling interval
+- Wrapper timeout: `JOB_TIMEOUT=120m`
+- Dashboard summary: published
+
+```text
+JOB_NAME=mcc-main-100k-p16-161929 CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=16 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true JOB_TIMEOUT=120m SKIP_BUILD=false ./scripts/run-mcc-local-k8s.sh
+```
+
+### Post-#937 100K p16 correctness result
+
+- Total claims: 100,000
+- Processed: 100,000
+- Paid/adjudicated: 78,721
+- Pended: 922
+- Business denials: 20,357
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 920 pended, 0 timed out
+- False-pend sweep: 10,934 scoreable non-pend claims, 0 unexpected pends, 2,023 terminal outcomes reconciled
+- Workflow scoring: 11,854/13,000 matched, 0 mismatched, 1,146 unsupported, 0 observation timeouts
+- Payment gate: 2,000/2,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+
+### Post-#937 100K p16 performance result
+
+- Timed claim-processing elapsed: 30:14.613
+- Throughput: 55.11 claims/second
+- P95 latency: 518 ms
+- P99 latency: 683 ms
+- Submit average/P95: 116 ms / 294 ms
+- Adjudicate average/P95: 104 ms / 206 ms
+- Writeback average/P95: 71 ms / 192 ms
+- Benefit calculation average/P95: 102 ms / 201 ms
+- Preparation time: 5:36.195
+- Tracked lifecycle: 35:58.823
+
+The p16 run preserved the correctness gates but lost the p12 throughput gain and increased tail latency. Compared with p12, throughput fell from 58.55 to 55.11 claims/second, P95 increased from 416 ms to 518 ms, and P99 increased from 580 ms to 683 ms. That makes p12 the better local setting for this fixture model, and it argues for service/writeback tuning before any 250K attempt.
+
+## Live-progress caveat
+
+During claim processing, the console can show workflow mismatches before expected-pend observation has reconciled persisted status. In the p10 run, the live console showed 920 workflow mismatches. In the p16 run, the live console showed 320 workflow mismatches mid-run. Both cleared after final scoring; the completed summaries reported 0 workflow mismatches.
+
+The live console should distinguish expected-pend checks awaiting observation from true workflow mismatches. Completed summaries are correct; the issue is in-progress presentation.
+
+## Post-#928 provider-fixture verification
+
+After PR #927 anchored validation providers as run-scoped fixtures, a follow-up 50K run still exposed 10 scoreable `TxStarInpatientNoAuth` mismatches. Those claims expected `PRIOR_AUTH_REQUIRED` but adjudicated as `PROVIDER_EXCLUDED`. Spot checks against provider-service showed the current generated rendering provider record was approved and in-network, which pointed to stale or colliding provider-integrity state around the old synthetic validation-provider NPI family.
+
+PR #928 moved MCC scoreable validation providers into wider, role-separated synthetic NPI namespaces:
+
+- `93...` billing providers
+- `94...` adjudicatable rendering providers
+- `95...` intentionally excluded rendering providers
+
+The post-#928 50K rerun was completed as `mcc-provider-namespace-50k-163946`.
+
+### Post-#928 50K correctness result
+
+- Total claims: 50,000
+- Processed: 50,000
+- Paid/adjudicated: 39,407
+- Pended: 463
+- Business denials: 10,130
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 460 pended, 0 timed out
+- False-pend sweep: 5,307 scoreable non-pend claims, 0 unexpected pends
+- Workflow scoring: 5,767/6,500 matched, 0 mismatched, 733 unsupported, 0 observation timeouts
+- Payment gate: 1,000/1,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+- `TxStarInpatientNoAuth`: 1,000/1,000 matched
+
+### Post-#928 50K performance result
+
+- Timed claim-processing elapsed: 14:13.279
+- Throughput: 58.60 claims/second
+- P95 latency: 380 ms
+- P99 latency: 515 ms
+- Preparation time: 2:54.130
+- Tracked lifecycle: 17:14.705
+- Provider fixtures created: 7,568
+- Provider fixtures already present: 491
+
+The post-#928 50K run proved the provider-fixture hardening. Later PRs made seeded prior-auth evidence scoreable and normalized provider-exclusion denial labels.
+
+## Post-#934 50K scoring verification
+
+The post-#934 50K rerun was completed as `mcc-main-50k-p10-105103` with dashboard run ID `41301477f0eb437bb6a95bf3bd8d420b`.
+
+- Total claims: 50,000
+- Processed: 50,000
+- Paid/adjudicated: 39,377
+- Pended: 461
+- Business denials: 10,162
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 460 pended, 0 timed out
+- False-pend sweep: 5,467 scoreable non-pend claims, 0 unexpected pends
+- Workflow scoring: 5,927/6,500 matched, 0 mismatched, 573 unsupported, 0 observation timeouts
+- Payment gate: 1,000/1,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+- Throughput: 59.59 claims/second
+- P95 latency: 318 ms
+- P99 latency: 415 ms
+
+The post-#934 50K run proved the prior-auth and provider-exclusion scoring fixes. The 100K run above proves the same hardened scoring model at the next scale.
 </pre></details></section>
   </main>
 </body>
