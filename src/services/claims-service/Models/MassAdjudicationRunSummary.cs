@@ -77,6 +77,8 @@ public class MassAdjudicationRunProgress
     public double RollingP95LatencyMilliseconds { get; set; }
     public double RollingP99LatencyMilliseconds { get; set; }
     public int PendingExpectedPendObservations { get; set; }
+    public int PendingTerminalStatusObservations { get; set; }
+    public int PendingWorkflowObservations { get; set; }
     public DateTimeOffset LastPublishedAtUtc { get; set; }
 }
 

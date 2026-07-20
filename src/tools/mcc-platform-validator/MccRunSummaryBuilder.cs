@@ -3,6 +3,7 @@ namespace CloudHealthOffice.Tools.MccPlatformValidator;
 internal static class MccRunSummaryBuilder
 {
     internal const decimal PaymentTolerance = 0.01m;
+    internal const string ProcessingClaimsPhase = "Processing claims";
 
     public static MassAdjudicationRunSummary Build(
         List<ClaimValidationResult> results,
@@ -294,6 +295,27 @@ internal static class MccRunSummaryBuilder
         => IsPaymentComparable(result)
             ? Math.Abs(result.ActualPlanPayment!.Value - result.ExpectedPlanPayment!.Value)
             : null;
+
+    internal static bool IsWorkflowObservationPending(ClaimValidationResult result, string phase)
+        => IsExpectedPendObservationPending(result, phase)
+            || IsTerminalStatusObservationPending(result, phase);
+
+    internal static bool IsExpectedPendObservationPending(ClaimValidationResult result, string phase)
+        => IsProcessingClaimsPhase(phase)
+            && result.ExpectedOutcome == ClaimValidationOutcome.Pended.ToString()
+            && result.ValidationStatus == MccWorkflowValidation.MismatchedStatus
+            && result.Outcome is not ClaimValidationOutcome.PlatformFailure
+            && !string.IsNullOrWhiteSpace(result.SubmittedClaimId);
+
+    internal static bool IsTerminalStatusObservationPending(ClaimValidationResult result, string phase)
+        => IsProcessingClaimsPhase(phase)
+            && result.ExpectedOutcome == ClaimValidationOutcome.BusinessDenial.ToString()
+            && result.ValidationStatus == MccWorkflowValidation.MismatchedStatus
+            && result.Outcome is not ClaimValidationOutcome.PlatformFailure
+            && !string.IsNullOrWhiteSpace(result.SubmittedClaimId);
+
+    private static bool IsProcessingClaimsPhase(string phase)
+        => phase.Equals(ProcessingClaimsPhase, StringComparison.OrdinalIgnoreCase);
 
     private static double Percentile(double[] values, double percentile)
     {

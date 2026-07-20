@@ -123,7 +123,7 @@
                                     @latestRun.WorkflowMatches.ToString("N0")/@latestRun.WorkflowScenarios.ToString("N0")
                                 </MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @latestRun.WorkflowMismatches mismatch / @latestRun.WorkflowUnsupported unsupported
+                                    @WorkflowEvidenceCaption(latestRun)
                                 </MudText>
                             </MudItem>
                             <MudItem xs="6" md="3">
@@ -152,7 +152,7 @@
                                 <MudTd DataLabel="Claims">@context.Processed.ToString("N0") / @context.TotalClaims.ToString("N0")</MudTd>
                                 <MudTd DataLabel="Validator">
                                     <MudChip T="string" Size="Size.Small" Color="@GetWorkflowQualityColor(context)" Variant="Variant.Outlined">
-                                        @context.WorkflowMismatches mismatch
+                                        @WorkflowEvidenceChip(context)
                                     </MudChip>
                                 </MudTd>
                                 <MudTd DataLabel="Latency">@context.P95LatencyMilliseconds.ToString("N0") ms P95</MudTd>
@@ -829,9 +829,43 @@
     {
         if (run.PlatformFailures > 0 || run.WorkflowMismatches > 0 || run.ObservationTimeouts > 0)
             return Color.Error;
+        if (IsRunActive(run) && PendingWorkflowObservations(run) > 0)
+            return Color.Warning;
         if (run.WorkflowUnsupported > 0 || run.WorkflowObservationTimeouts > 0)
             return Color.Warning;
         return Color.Success;
+    }
+
+    private static bool IsRunActive(MassAdjudicationRunSummary run)
+        => string.Equals(run.Status, "Running", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(run.Progress?.Phase, "Processing claims", StringComparison.OrdinalIgnoreCase);
+
+    private static int PendingWorkflowObservations(MassAdjudicationRunSummary run)
+    {
+        if (run.Progress is null)
+        {
+            return 0;
+        }
+
+        return run.Progress.PendingWorkflowObservations > 0
+            ? run.Progress.PendingWorkflowObservations
+            : run.Progress.PendingExpectedPendObservations + run.Progress.PendingTerminalStatusObservations;
+    }
+
+    private static string WorkflowEvidenceCaption(MassAdjudicationRunSummary run)
+    {
+        var pending = PendingWorkflowObservations(run);
+        return IsRunActive(run) && pending > 0
+            ? $"{run.WorkflowMismatches:N0} confirmed / {pending:N0} pending / {run.WorkflowUnsupported:N0} unsupported"
+            : $"{run.WorkflowMismatches:N0} mismatch / {run.WorkflowUnsupported:N0} unsupported";
+    }
+
+    private static string WorkflowEvidenceChip(MassAdjudicationRunSummary run)
+    {
+        var pending = PendingWorkflowObservations(run);
+        return IsRunActive(run) && pending > 0
+            ? $"{pending:N0} pending"
+            : $"{run.WorkflowMismatches:N0} mismatch";
     }
 
     private static Color GetQueueColor(string reasonCode) => reasonCode switch
