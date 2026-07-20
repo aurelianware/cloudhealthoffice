@@ -132,7 +132,7 @@ public class MccWorkflowValidationTests
             priorAuthStatus: "NotRequired",
             priorAuthNumber: null,
             renderingState: "AZ");
-        claim.EdgeCase = EdgeCaseScenario.BehavioralHealthCarveIn;
+        claim.EdgeCase = EdgeCaseScenario.RetroEligibilityAdd;
         claim.ExpectedOutcome = new ExpectedOutcome
         {
             Disposition = "Paid",
@@ -145,10 +145,43 @@ public class MccWorkflowValidationTests
             ClaimValidationOutcome.Paid,
             actualBusinessDenialCode: null);
 
-        Assert.Equal("EdgeCase:BehavioralHealthCarveIn", expected.Scenario);
+        Assert.Equal("EdgeCase:RetroEligibilityAdd", expected.Scenario);
         Assert.Equal(ClaimValidationOutcome.Paid, expected.ExpectedOutcome);
         Assert.Null(expected.ExpectedBusinessDenialCode);
         Assert.Equal("Matched", status);
+    }
+
+    [Theory]
+    [InlineData(EdgeCaseScenario.BehavioralHealthCarveIn)]
+    [InlineData(EdgeCaseScenario.BehavioralHealthParityCheck)]
+    public void ExpectedValidationFor_BehavioralHealthPaidEdgeCases_ReturnsUnsupported(
+        EdgeCaseScenario scenario)
+    {
+        var claim = CreateClaim(
+            claimType: "EdgeCase",
+            benefitPlanId: "MCC-PLAN",
+            placeOfService: "11",
+            priorAuthStatus: "NotRequired",
+            priorAuthNumber: null,
+            renderingState: "AZ");
+        claim.EdgeCase = scenario;
+        claim.ExpectedOutcome = new ExpectedOutcome
+        {
+            Disposition = "Paid",
+            ExpectedPaidAmount = 100m
+        };
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.BusinessDenial,
+            actualBusinessDenialCode: MccWorkflowValidation.UncoveredServiceCode);
+
+        Assert.Equal($"EdgeCase:{scenario}", expected.Scenario);
+        Assert.Null(expected.ExpectedOutcome);
+        Assert.Null(expected.ExpectedBusinessDenialCode);
+        Assert.True(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, status);
     }
 
     [Fact]
