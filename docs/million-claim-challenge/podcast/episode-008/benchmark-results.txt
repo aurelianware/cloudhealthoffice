@@ -28,6 +28,10 @@ The local wrapper timed out while waiting for the Kubernetes job condition, but 
 
 - `raw-validator-output-post934-100k.txt` - validator console output from the completed post-#934 100K run.
 - `run-summary-post934-100k.json` - completed Mass Adjudication run summary returned by claims-service for the post-#934 100K run.
+- `raw-validator-output-post937-100k-p12.txt` - validator console output from the completed 100K p12 confirmation run.
+- `run-summary-post937-100k-p12.json` - completed Mass Adjudication run summary returned by claims-service for the 100K p12 confirmation run.
+- `raw-validator-output-post937-100k-p16.txt` - validator console output from the completed 100K p16 pressure run.
+- `run-summary-post937-100k-p16.json` - completed Mass Adjudication run summary returned by claims-service for the 100K p16 pressure run.
 - `raw-validator-output-post928-100k.txt` - prior post-#928 100K validator output retained as provenance.
 - `run-summary-post928-100k.json` - prior post-#928 dashboard summary retained as provenance.
 
@@ -139,9 +143,113 @@ Timed adjudication and full tracked lifecycle must remain separate. Timed proces
 
 This is local Docker Desktop evidence, not a production-cloud capacity claim. During the run, Docker Desktop showed significant CPU and memory headroom, so the next performance investigation should focus on internal throughput limits: validator parallelism, service concurrency, HTTP client limits, MongoDB/writeback behavior, and disk I/O.
 
+## Post-#937 100K p12 parallelism confirmation
+
+After the p10 100K run, the first controlled parallelism follow-up raised validator parallelism from 10 to 12 while keeping the same seed, claim count, fixture model, payment gate, false-pend sweep, and workflow scoring rules.
+
+- Date: July 19, 2026 local time / July 19, 2026 UTC
+- Kubernetes job: `mcc-main-100k-p12-140034`
+- Dashboard run ID: `918f36d680a84a309b2e35944d5a4b6b`
+- Claims: 100,000
+- Parallelism: 12
+- Validator seed: 42
+- Line of business: Medicaid
+- Prior-authorization scenario rate: 2%
+- Pend observation: enabled, 45-second bound, 1-second polling interval
+- Wrapper timeout: `JOB_TIMEOUT=120m`
+- Dashboard summary: published
+
+```text
+JOB_NAME=mcc-main-100k-p12-140034 CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=12 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true JOB_TIMEOUT=120m SKIP_BUILD=false ./scripts/run-mcc-local-k8s.sh
+```
+
+PR #937 made `JOB_TIMEOUT` a first-class runner option after this long-run validation exposed the need for a larger wrapper wait window. The timeout setting affects local orchestration only; it does not change validator scoring or adjudication behavior.
+
+### Post-#937 100K p12 correctness result
+
+- Total claims: 100,000
+- Processed: 100,000
+- Paid/adjudicated: 78,813
+- Pended: 928
+- Business denials: 20,259
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 920 pended, 0 timed out
+- False-pend sweep: 10,934 scoreable non-pend claims, 0 unexpected pends, 2,064 terminal outcomes reconciled
+- Workflow scoring: 11,854/13,000 matched, 0 mismatched, 1,146 unsupported, 0 observation timeouts
+- Payment gate: 2,000/2,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+
+### Post-#937 100K p12 performance result
+
+- Timed claim-processing elapsed: 28:28.006
+- Throughput: 58.55 claims/second
+- P95 latency: 416 ms
+- P99 latency: 580 ms
+- Submit average/P95: 79 ms / 219 ms
+- Adjudicate average/P95: 75 ms / 183 ms
+- Writeback average/P95: 51 ms / 170 ms
+- Benefit calculation average/P95: 72 ms / 179 ms
+- Preparation time: 5:54.074
+- Tracked lifecycle: 34:29.990
+
+The p12 run preserved the correctness gates and improved throughput from 55.40 to 58.55 claims/second compared with p10. Tail latency moved the other direction: P95 increased from 324 ms to 416 ms and P99 increased from 480 ms to 580 ms. That is the useful signal from this sweep. Higher parallelism helped throughput a little, but the latency curve was already starting to push back.
+
+## Post-#937 100K p16 pressure run
+
+The second controlled follow-up raised validator parallelism from 12 to 16 while preserving the same seed, claim count, fixture model, payment gate, false-pend sweep, and workflow scoring rules.
+
+- Date: July 19, 2026 local time / July 19-20, 2026 UTC
+- Kubernetes job: `mcc-main-100k-p16-161929`
+- Dashboard run ID: `6c0223b957114911931c8472687d496b`
+- Claims: 100,000
+- Parallelism: 16
+- Validator seed: 42
+- Line of business: Medicaid
+- Prior-authorization scenario rate: 2%
+- Pend observation: enabled, 45-second bound, 1-second polling interval
+- Wrapper timeout: `JOB_TIMEOUT=120m`
+- Dashboard summary: published
+
+```text
+JOB_NAME=mcc-main-100k-p16-161929 CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=16 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true JOB_TIMEOUT=120m SKIP_BUILD=false ./scripts/run-mcc-local-k8s.sh
+```
+
+### Post-#937 100K p16 correctness result
+
+- Total claims: 100,000
+- Processed: 100,000
+- Paid/adjudicated: 78,721
+- Pended: 922
+- Business denials: 20,357
+- Platform failures: 0
+- Observation timeouts: 0
+- Expected-pend observation: 920 pended, 0 timed out
+- False-pend sweep: 10,934 scoreable non-pend claims, 0 unexpected pends, 2,023 terminal outcomes reconciled
+- Workflow scoring: 11,854/13,000 matched, 0 mismatched, 1,146 unsupported, 0 observation timeouts
+- Payment gate: 2,000/2,000 within $0.01, 0 mismatched
+- Average payment delta: $0.00
+- Maximum payment delta: $0.00
+
+### Post-#937 100K p16 performance result
+
+- Timed claim-processing elapsed: 30:14.613
+- Throughput: 55.11 claims/second
+- P95 latency: 518 ms
+- P99 latency: 683 ms
+- Submit average/P95: 116 ms / 294 ms
+- Adjudicate average/P95: 104 ms / 206 ms
+- Writeback average/P95: 71 ms / 192 ms
+- Benefit calculation average/P95: 102 ms / 201 ms
+- Preparation time: 5:36.195
+- Tracked lifecycle: 35:58.823
+
+The p16 run preserved the correctness gates but lost the p12 throughput gain and increased tail latency. Compared with p12, throughput fell from 58.55 to 55.11 claims/second, P95 increased from 416 ms to 518 ms, and P99 increased from 580 ms to 683 ms. That makes p12 the better local setting for this fixture model, and it argues for service/writeback tuning before any 250K attempt.
+
 ## Live-progress caveat
 
-During claim processing, the console showed 920 workflow mismatches. That count matched the number of expected-pend scenarios and cleared after the expected-pend observation phase completed. The final run summary reported 0 workflow mismatches.
+During claim processing, the console can show workflow mismatches before expected-pend observation has reconciled persisted status. In the p10 run, the live console showed 920 workflow mismatches. In the p16 run, the live console showed 320 workflow mismatches mid-run. Both cleared after final scoring; the completed summaries reported 0 workflow mismatches.
 
 The live console should distinguish expected-pend checks awaiting observation from true workflow mismatches. Completed summaries are correct; the issue is in-progress presentation.
 
