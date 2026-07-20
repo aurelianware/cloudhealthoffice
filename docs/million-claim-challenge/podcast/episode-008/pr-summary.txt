@@ -77,6 +77,14 @@ The completed summary was published to the Mass Adjudication console. During pro
 
 The final 100K run reduced 199,847 provider references to 13,742 distinct NPIs, reused 186,258 provider assignments, preserved 2,800 provider-sensitive claims, and created 13,383 providers. Preparation took 7:53.368 and the tracked lifecycle took 38:05.792.
 
+## PR #937 - local runner timeout support and p12 confirmation
+
+PR #937 made the local Kubernetes wrapper wait timeout configurable with `JOB_TIMEOUT`, preserving the 30-minute default while allowing longer 100K+ local runs to wait for the Kubernetes job condition.
+
+The p12 100K confirmation run completed cleanly with `JOB_TIMEOUT=120m`: 100,000 processed, 0 platform failures, 11,854/13,000 workflow checks matched, 0 workflow mismatches, 1,146 unsupported, 920/920 expected pends observed, 0 unexpected pends across 10,934 scoreable non-pend claims, and 2,000/2,000 comparable payments within $0.01. Throughput improved to 58.55 claims/second, while tail latency increased to 416 ms P95 and 580 ms P99.
+
+The p16 100K pressure run also completed cleanly with the same correctness gates: 100,000 processed, 0 platform failures, 11,854/13,000 workflow checks matched, 0 workflow mismatches, 1,146 unsupported, 920/920 expected pends observed, 0 unexpected pends across 10,934 scoreable non-pend claims, and 2,000/2,000 comparable payments within $0.01. Throughput fell to 55.11 claims/second, with 518 ms P95 and 683 ms P99 latency. That makes p16 useful negative evidence: more validator parallelism crossed the local efficiency point instead of moving the system toward 250K readiness.
+
 ## Claim-detail projection correction discovered during evidence review
 
 - The refreshed console correctly linked an unsupported MCC row to its persisted claim, but the portal displayed zero financial values because its DTO expected flat fields while claims-service returned nested `adjudicationResult` projections.
