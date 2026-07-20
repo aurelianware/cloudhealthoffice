@@ -80,8 +80,8 @@ outputs created by validation commands.
 | TypeScript build | Pass | `npm run build` completed. |
 | Jest tests | Pass | 24 suites passed, 525 tests passed. Coverage: 88.36% statements, 76.44% branches, 93.37% functions, 88.71% lines. |
 | npm lint | Fail locally | ESLint 9.39.5 crashed under Node 26 with an AJV/eslintrc `defaultMeta` error. |
-| Root site build script | Fail | `npm run build:site` points at missing `site/js/markdown-converter.js`; current site files live under `src/site`. |
-| Root site accessibility script | Fail | `npm run validate:site` points at missing `site/js/validate-accessibility.js`; current site files live under `src/site`. |
+| Root site build script | Remediated after baseline | The root `build:site` script now delegates to the current `src/site` package. |
+| Root site accessibility script | Remediated after baseline | The root `validate:site` script now runs the current `src/site` accessibility validator. |
 | Root template validation script | Fail | `npm run validate` expects missing `dist/scripts/utils/validate-all-templates.js`. |
 | Current static site build path | Pass | Running `node build.mjs` from a copied `src/site` tree produced a deployable artifact. |
 | Current site accessibility validator | Pass with reported issues | `node src/site/js/validate-accessibility.js` exited 0 and reported 36 potential accessibility issues. |
@@ -153,9 +153,7 @@ The current static site path was also validated directly because the root npm
 site scripts point at stale paths:
 
 ```bash
-TMP_SITE=$(mktemp -d)
-rsync -a --exclude node_modules src/site/ "$TMP_SITE/site/"
-(cd "$TMP_SITE/site" && node build.mjs)
+npm --prefix src/site run build
 node src/site/js/validate-accessibility.js
 ```
 
@@ -192,7 +190,8 @@ actionlint .github/workflows/*.yml
 docker compose -f docker-compose.yml config --quiet
 docker compose --profile core -f docker-compose.yml config --quiet
 docker compose -f docker-compose.development.yml config --quiet
-docker compose -f docker-compose.observability.yml config --quiet
+docker compose --profile core --profile finance \
+  -f docker-compose.yml -f docker-compose.observability.yml config --quiet
 
 kubectl version --client
 kubectl apply --dry-run=client --validate=false -f infrastructure/k8s --recursive
