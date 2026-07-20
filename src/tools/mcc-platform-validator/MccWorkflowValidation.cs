@@ -14,7 +14,9 @@ public sealed record ExpectedValidation(
         => new(scenario, null, expectedBusinessDenialCode, IsUnsupported: true);
 }
 
-public sealed record MccWorkflowValidationCapabilities(bool ScorePriorAuthValidationEvidence = false)
+public sealed record MccWorkflowValidationCapabilities(
+    bool ScorePriorAuthValidationEvidence = false,
+    bool ScorePriorAuthProviderValidationEvidence = false)
 {
     public static MccWorkflowValidationCapabilities Default { get; } = new();
 }
@@ -209,9 +211,13 @@ public static class MccWorkflowValidation
         EdgeCaseScenario scenario,
         MccWorkflowValidationCapabilities capabilities)
     {
+        if (scenario is EdgeCaseScenario.PriorAuthRequired_WrongProvider)
+        {
+            return !capabilities.ScorePriorAuthProviderValidationEvidence;
+        }
+
         if (scenario is
             EdgeCaseScenario.PriorAuthRequired_ExpiredAuth or
-            EdgeCaseScenario.PriorAuthRequired_WrongProvider or
             EdgeCaseScenario.PriorAuthRequired_WrongProcedure)
         {
             return !capabilities.ScorePriorAuthValidationEvidence;
