@@ -223,10 +223,10 @@
                     <MudItem xs="6" md="4">@Metric("Claims/sec", $"{_selectedRun.ThroughputClaimsPerSecond:N2}/s", "#7dd3fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("P95 / P99", $"{_selectedRun.P95LatencyMilliseconds:N0} / {_selectedRun.P99LatencyMilliseconds:N0} ms", "#c084fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Checks", $"{_selectedRun.WorkflowMatches:N0} / {_selectedRun.WorkflowScenarios:N0}", "#00ff88")</MudItem>
-                    <MudItem xs="6" md="4">@Metric("Workflow Mismatches", $"{_selectedRun.WorkflowMismatches:N0}", _selectedRun.WorkflowMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
-                    @if (IsRunActive(_selectedRun) && PendingExpectedPendObservations(_selectedRun) > 0)
+                    <MudItem xs="6" md="4">@Metric(WorkflowMismatchLabel(_selectedRun), $"{_selectedRun.WorkflowMismatches:N0}", _selectedRun.WorkflowMismatches == 0 ? "#00ff88" : "#ff0055")</MudItem>
+                    @if (IsRunActive(_selectedRun) && PendingWorkflowObservations(_selectedRun) > 0)
                     {
-                        <MudItem xs="6" md="4">@Metric("Pend Checks Pending", $"{PendingExpectedPendObservations(_selectedRun):N0}", "#ffca28")</MudItem>
+                        <MudItem xs="6" md="4">@Metric("Checks Pending", $"{PendingWorkflowObservations(_selectedRun):N0}", "#ffca28")</MudItem>
                     }
                     <MudItem xs="6" md="4">@Metric("Unsupported", $"{_selectedRun.WorkflowUnsupported:N0}", "#cbd5e1")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Timeouts", $"{_selectedRun.WorkflowObservationTimeouts:N0}", _selectedRun.WorkflowObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
@@ -760,15 +760,58 @@
     {
         var completedClaims = run.Progress?.CompletedClaims ?? run.Processed;
         var text = $"{RunStatusLabel(run)}: {completedClaims:N0} of {run.TotalClaims:N0} claims observed";
-        var pending = PendingExpectedPendObservations(run);
+        var pending = PendingWorkflowObservations(run);
 
-        return pending <= 0
-            ? text
-            : $"{text} · {pending:N0} expected pends awaiting observation";
+        if (pending <= 0)
+        {
+            return text;
+        }
+
+        var pendingDetails = PendingWorkflowObservationDetails(run);
+        return string.IsNullOrWhiteSpace(pendingDetails)
+            ? $"{text} · {pending:N0} workflow checks awaiting observation"
+            : $"{text} · {pending:N0} workflow checks awaiting observation ({pendingDetails})";
     }
+
+    private static string WorkflowMismatchLabel(MassAdjudicationRunSummary run)
+        => IsRunActive(run) ? "Confirmed Mismatches" : "Workflow Mismatches";
 
     private static int PendingExpectedPendObservations(MassAdjudicationRunSummary run)
         => run.Progress?.PendingExpectedPendObservations ?? 0;
+
+    private static int PendingTerminalStatusObservations(MassAdjudicationRunSummary run)
+        => run.Progress?.PendingTerminalStatusObservations ?? 0;
+
+    private static int PendingWorkflowObservations(MassAdjudicationRunSummary run)
+    {
+        if (run.Progress is null)
+        {
+            return 0;
+        }
+
+        return run.Progress.PendingWorkflowObservations > 0
+            ? run.Progress.PendingWorkflowObservations
+            : PendingExpectedPendObservations(run) + PendingTerminalStatusObservations(run);
+    }
+
+    private static string PendingWorkflowObservationDetails(MassAdjudicationRunSummary run)
+    {
+        var pending = new List<string>();
+        var expectedPends = PendingExpectedPendObservations(run);
+        var terminalStatus = PendingTerminalStatusObservations(run);
+
+        if (expectedPends > 0)
+        {
+            pending.Add($"{expectedPends:N0} pend");
+        }
+
+        if (terminalStatus > 0)
+        {
+            pending.Add($"{terminalStatus:N0} terminal");
+        }
+
+        return string.Join(", ", pending);
+    }
 
     private static string LastProgressText(MassAdjudicationRunSummary run)
     {

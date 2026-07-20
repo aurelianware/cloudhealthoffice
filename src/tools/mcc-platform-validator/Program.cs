@@ -2526,7 +2526,7 @@ static MassAdjudicationRunSummary BuildProgressSummary(
     var workflowMatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus);
     var workflowMismatches = results.Count(r =>
         r.ValidationStatus == MccWorkflowValidation.MismatchedStatus
-        && !IsAwaitingExpectedPendObservation(r, phase));
+        && !MccRunSummaryBuilder.IsWorkflowObservationPending(r, phase));
     var workflowUnsupported = results.Count(r => r.ValidationStatus == MccWorkflowValidation.UnsupportedStatus);
     var workflowObservationTimeouts = results.Count(r => r.ValidationStatus == MccWorkflowValidation.ObservationTimeoutStatus);
     var progress = CreateProgress(results, elapsed, options, phase);
@@ -2588,11 +2588,6 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         progress);
 }
 
-static bool IsAwaitingExpectedPendObservation(ClaimValidationResult result, string phase)
-    => phase.Equals("Processing claims", StringComparison.OrdinalIgnoreCase)
-        && result.ExpectedOutcome == ClaimValidationOutcome.Pended.ToString()
-        && result.ValidationStatus == MccWorkflowValidation.MismatchedStatus;
-
 static MassAdjudicationRunProgress CreateProgress(
     IReadOnlyCollection<ClaimValidationResult> results,
     TimeSpan elapsed,
@@ -2607,7 +2602,9 @@ static MassAdjudicationRunProgress CreateProgress(
     var completedClaims = results.Count;
     var processedClaims = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
     var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
-    var pendingExpectedPendObservations = results.Count(r => IsAwaitingExpectedPendObservation(r, phase));
+    var pendingExpectedPendObservations = results.Count(r => MccRunSummaryBuilder.IsExpectedPendObservationPending(r, phase));
+    var pendingTerminalStatusObservations = results.Count(r => MccRunSummaryBuilder.IsTerminalStatusObservationPending(r, phase));
+    var pendingWorkflowObservations = pendingExpectedPendObservations + pendingTerminalStatusObservations;
     var throughput = completedClaims / Math.Max(0.001, elapsed.TotalSeconds);
 
     return new MassAdjudicationRunProgress(
@@ -2621,6 +2618,8 @@ static MassAdjudicationRunProgress CreateProgress(
         Percentile(orderedDurations, 0.95),
         Percentile(orderedDurations, 0.99),
         pendingExpectedPendObservations,
+        pendingTerminalStatusObservations,
+        pendingWorkflowObservations,
         DateTimeOffset.UtcNow);
 }
 
@@ -2876,6 +2875,8 @@ internal sealed record MassAdjudicationRunProgress(
     double RollingP95LatencyMilliseconds,
     double RollingP99LatencyMilliseconds,
     int PendingExpectedPendObservations,
+    int PendingTerminalStatusObservations,
+    int PendingWorkflowObservations,
     DateTimeOffset LastPublishedAtUtc);
 
 internal sealed record MassAdjudicationStageTiming(
