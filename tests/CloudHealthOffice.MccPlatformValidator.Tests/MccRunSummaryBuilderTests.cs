@@ -252,6 +252,62 @@ public class MccRunSummaryBuilderTests
         Assert.Equal(19, summary.FixturePreparation.ProvidersExisting);
     }
 
+    [Fact]
+    public void IsWorkflowObservationPending_SeparatesReconciliableProgressMismatches()
+    {
+        var expectedPend = Result(
+            "EXPECTED-PEND",
+            "EdgeCase:CobSecondaryPayer",
+            MccWorkflowValidation.MismatchedStatus,
+            ClaimValidationOutcome.Paid) with
+        {
+            ExpectedOutcome = ClaimValidationOutcome.Pended.ToString()
+        };
+        var expectedBusinessDenial = Result(
+            "EXPECTED-DENIAL",
+            MccWorkflowValidation.TexasStarInpatientNoAuthScenario,
+            MccWorkflowValidation.MismatchedStatus,
+            ClaimValidationOutcome.Paid) with
+        {
+            ExpectedOutcome = ClaimValidationOutcome.BusinessDenial.ToString(),
+            ExpectedBusinessDenialCode = MccWorkflowValidation.PriorAuthRequiredCode
+        };
+        var confirmedMismatch = Result(
+            "CONFIRMED-MISMATCH",
+            MccWorkflowValidation.CleanProfessionalPaidScenario,
+            MccWorkflowValidation.MismatchedStatus,
+            ClaimValidationOutcome.BusinessDenial) with
+        {
+            ExpectedOutcome = ClaimValidationOutcome.Paid.ToString()
+        };
+        var platformFailure = expectedPend with
+        {
+            Outcome = ClaimValidationOutcome.PlatformFailure,
+            SubmittedClaimId = null
+        };
+
+        Assert.True(MccRunSummaryBuilder.IsExpectedPendObservationPending(
+            expectedPend,
+            MccRunSummaryBuilder.ProcessingClaimsPhase));
+        Assert.True(MccRunSummaryBuilder.IsTerminalStatusObservationPending(
+            expectedBusinessDenial,
+            MccRunSummaryBuilder.ProcessingClaimsPhase));
+        Assert.True(MccRunSummaryBuilder.IsWorkflowObservationPending(
+            expectedPend,
+            MccRunSummaryBuilder.ProcessingClaimsPhase));
+        Assert.True(MccRunSummaryBuilder.IsWorkflowObservationPending(
+            expectedBusinessDenial,
+            MccRunSummaryBuilder.ProcessingClaimsPhase));
+
+        Assert.False(MccRunSummaryBuilder.IsWorkflowObservationPending(
+            confirmedMismatch,
+            MccRunSummaryBuilder.ProcessingClaimsPhase));
+        Assert.False(MccRunSummaryBuilder.IsWorkflowObservationPending(expectedPend, "Completed"));
+        Assert.False(MccRunSummaryBuilder.IsWorkflowObservationPending(
+            platformFailure,
+            MccRunSummaryBuilder.ProcessingClaimsPhase));
+    }
+
     private static void AssertPaymentBucket(MassAdjudicationRunSummary summary, string label, int count)
     {
         var bucket = Assert.Single(summary.PaymentDeltaDistribution, b => b.Label == label);

@@ -71,6 +71,8 @@ public class MassAdjudicationRunRepositoryTests
             RollingP95LatencyMilliseconds = 250,
             RollingP99LatencyMilliseconds = 320,
             PendingExpectedPendObservations = 46,
+            PendingTerminalStatusObservations = 12,
+            PendingWorkflowObservations = 58,
             LastPublishedAtUtc = DateTimeOffset.Parse("2026-07-09T19:00:00Z")
         };
         summary.Run.MemberUrl = "https://member";
@@ -108,6 +110,8 @@ public class MassAdjudicationRunRepositoryTests
         reread.Progress!.CompletedClaims.Should().Be(2500);
         reread.Progress.CurrentThroughputClaimsPerSecond.Should().Be(75.5);
         reread.Progress.PendingExpectedPendObservations.Should().Be(46);
+        reread.Progress.PendingTerminalStatusObservations.Should().Be(12);
+        reread.Progress.PendingWorkflowObservations.Should().Be(58);
         reread.Run.MemberUrl.Should().Be("https://member");
         reread.Run.CoverageUrl.Should().Be("https://coverage");
         reread.Run.SeedMembers.Should().BeTrue();
