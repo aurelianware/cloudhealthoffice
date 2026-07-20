@@ -202,13 +202,9 @@ public static class MccWorkflowValidation
         EdgeCaseScenario scenario,
         MccWorkflowValidationCapabilities capabilities)
     {
-        if (scenario is EdgeCaseScenario.PriorAuthRequired_WrongProvider)
-        {
-            return true;
-        }
-
         if (scenario is
             EdgeCaseScenario.PriorAuthRequired_ExpiredAuth or
+            EdgeCaseScenario.PriorAuthRequired_WrongProvider or
             EdgeCaseScenario.PriorAuthRequired_WrongProcedure)
         {
             return !capabilities.ScorePriorAuthValidationEvidence;

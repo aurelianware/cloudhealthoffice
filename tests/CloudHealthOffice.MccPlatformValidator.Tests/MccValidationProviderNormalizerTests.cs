@@ -9,6 +9,7 @@ public class MccValidationProviderNormalizerTests
 
     [Theory]
     [InlineData(EdgeCaseScenario.PriorAuthRequired_ExpiredAuth)]
+    [InlineData(EdgeCaseScenario.PriorAuthRequired_WrongProvider)]
     [InlineData(EdgeCaseScenario.PriorAuthRequired_WrongProcedure)]
     public void Normalize_IsolatesPriorAuthValidationEvidenceWhenScoringIsEnabled(EdgeCaseScenario scenario)
     {
@@ -36,22 +37,6 @@ public class MccValidationProviderNormalizerTests
             new[] { claim },
             seed: 42,
             runId: RunId);
-
-        Assert.Equal(0, normalized);
-        Assert.Equal("1111111111", claim.BillingProvider.Npi);
-        Assert.Equal("2222222222", claim.RenderingProvider.Npi);
-    }
-
-    [Fact]
-    public void Normalize_LeavesWrongProviderPriorAuthUnsupportedEvenWhenScoringIsEnabled()
-    {
-        var claim = PriorAuthClaim(EdgeCaseScenario.PriorAuthRequired_WrongProvider);
-
-        var normalized = MccValidationProviderNormalizer.Normalize(
-            new[] { claim },
-            seed: 42,
-            runId: RunId,
-            new MccWorkflowValidationCapabilities(ScorePriorAuthValidationEvidence: true));
 
         Assert.Equal(0, normalized);
         Assert.Equal("1111111111", claim.BillingProvider.Npi);
