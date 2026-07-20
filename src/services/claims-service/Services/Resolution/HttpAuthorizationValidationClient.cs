@@ -34,6 +34,7 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
         string authorizationNumber,
         string? procedureCode,
         DateTime serviceDate,
+        string? providerNpi,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(authorizationNumber))
@@ -53,6 +54,11 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
             if (!string.IsNullOrWhiteSpace(procedureCode))
             {
                 url += $"&procedureCode={Uri.EscapeDataString(procedureCode.Trim())}";
+            }
+
+            if (!string.IsNullOrWhiteSpace(providerNpi))
+            {
+                url += $"&providerNpi={Uri.EscapeDataString(providerNpi.Trim())}";
             }
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);

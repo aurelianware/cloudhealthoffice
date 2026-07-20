@@ -1384,6 +1384,7 @@ static bool IsPriorAuthAuthorizationFixtureScenario(SyntheticClaim claim)
     return claim.EdgeCase is
         EdgeCaseScenario.PriorAuthRequired_AuthOnFile or
         EdgeCaseScenario.PriorAuthRequired_ExpiredAuth or
+        EdgeCaseScenario.PriorAuthRequired_WrongProvider or
         EdgeCaseScenario.PriorAuthRequired_WrongProcedure;
 }
 
@@ -1396,6 +1397,10 @@ static object BuildPriorAuthAuthorizationFixture(SyntheticClaim claim, Validator
     var expirationDate = expired ? serviceDate.AddDays(-1) : serviceDate.AddDays(30);
     var firstLine = claim.Lines.OrderBy(line => line.LineNumber).FirstOrDefault();
     var units = claim.Lines.Sum(line => line.Units <= 0 ? 1 : line.Units);
+    var providerNpi = PriorAuthFixtureProviderNpiForClaim(claim);
+    var providerName = claim.EdgeCase is EdgeCaseScenario.PriorAuthRequired_WrongProvider
+        ? "MCC Alternate Prior Authorization Provider"
+        : NullIfWhiteSpace(claim.RenderingProvider.FullName) ?? "MCC Provider";
 
     return new
     {
@@ -1408,10 +1413,10 @@ static object BuildPriorAuthAuthorizationFixture(SyntheticClaim claim, Validator
             claim.Member.DateOfBirth == default ? serviceDate.AddYears(-30) : claim.Member.DateOfBirth.Date,
             DateTimeKind.Utc),
         lineOfBusiness = "Medicaid",
-        requestingProviderNPI = claim.RenderingProvider.Npi,
-        requestingProviderName = NullIfWhiteSpace(claim.RenderingProvider.FullName) ?? "MCC Provider",
-        servicingProviderNPI = claim.RenderingProvider.Npi,
-        servicingProviderName = NullIfWhiteSpace(claim.RenderingProvider.FullName) ?? "MCC Provider",
+        requestingProviderNPI = providerNpi,
+        requestingProviderName = providerName,
+        servicingProviderNPI = providerNpi,
+        servicingProviderName = providerName,
         authorizationType = "PreAuthorization",
         certificationType = "I",
         serviceTypeCode = "48",
@@ -1446,6 +1451,22 @@ static object BuildPriorAuthAuthorizationFixture(SyntheticClaim claim, Validator
         lastUpdatedBy = "mcc-platform-validator",
         notes = $"MCC fixture for {claim.ClaimId}/{claim.EdgeCase}"
     };
+}
+
+static string PriorAuthFixtureProviderNpiForClaim(SyntheticClaim claim)
+{
+    if (claim.EdgeCase is not EdgeCaseScenario.PriorAuthRequired_WrongProvider)
+    {
+        return claim.RenderingProvider.Npi;
+    }
+
+    const string alternateProviderNpi = "1234567893";
+    return string.Equals(
+            claim.RenderingProvider.Npi,
+            alternateProviderNpi,
+            StringComparison.OrdinalIgnoreCase)
+        ? "1497758544"
+        : alternateProviderNpi;
 }
 
 static List<object> BuildAuthorizationDiagnosisCodes(SyntheticClaim claim)

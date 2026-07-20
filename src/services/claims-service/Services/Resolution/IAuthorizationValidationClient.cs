@@ -7,6 +7,7 @@ public interface IAuthorizationValidationClient
         string authorizationNumber,
         string? procedureCode,
         DateTime serviceDate,
+        string? providerNpi,
         CancellationToken ct = default);
 }
 

@@ -40,7 +40,8 @@ public sealed class HttpAuthorizationValidationClientTests
             "tenant-1",
             "AUTH-EXPIRED",
             "99213",
-            new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc));
+            new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc),
+            "1234567890");
 
         Assert.NotNull(result);
         Assert.False(result!.IsValid);
@@ -51,6 +52,7 @@ public sealed class HttpAuthorizationValidationClientTests
         Assert.Equal("tenant-1", captured!.Headers.GetValues("X-Tenant-ID").Single());
         Assert.Contains("/api/authorizations/AUTH-EXPIRED/validate", captured.RequestUri!.PathAndQuery);
         Assert.Contains("procedureCode=99213", captured.RequestUri.PathAndQuery);
+        Assert.Contains("providerNpi=1234567890", captured.RequestUri.PathAndQuery);
         Assert.Contains("serviceDate=", captured.RequestUri.PathAndQuery);
     }
 
@@ -64,7 +66,8 @@ public sealed class HttpAuthorizationValidationClientTests
             "tenant-1",
             "AUTH-UNKNOWN",
             "99213",
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            "1234567890");
 
         Assert.Null(result);
     }
