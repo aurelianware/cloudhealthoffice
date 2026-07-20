@@ -292,7 +292,7 @@ public class BenefitCalculationStageTests
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredReason, ctx.AdjudicationResult.DenialReason);
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
         await _authorizationValidationClient.DidNotReceiveWithAnyArgs()
-            .ValidateAsync(default!, default!, default, default, default);
+            .ValidateAsync(default!, default!, default, default, default, default);
     }
 
     [Fact]
@@ -329,6 +329,7 @@ public class BenefitCalculationStageTests
         claim.ClaimType = ClaimType.Institutional;
         claim.PlaceOfServiceCode = "21";
         claim.PriorAuthorizationNumber = "AUTH-123";
+        claim.RenderingProviderNPI = "9876543210";
 
         var ctx = new ClaimAdjudicationContext
         {
@@ -349,6 +350,7 @@ public class BenefitCalculationStageTests
             "AUTH-123",
             "99213",
             claim.ServiceDateFrom,
+            "9876543210",
             Arg.Any<CancellationToken>());
         await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
     }
@@ -375,6 +377,7 @@ public class BenefitCalculationStageTests
                 "AUTH-EXPIRED",
                 "99213",
                 claim.ServiceDateFrom,
+                "1234567890",
                 Arg.Any<CancellationToken>())
             .Returns(new AuthorizationValidationResult(
                 "AUTH-EXPIRED",
@@ -417,6 +420,7 @@ public class BenefitCalculationStageTests
                 "AUTH-UNKNOWN",
                 "99213",
                 claim.ServiceDateFrom,
+                "1234567890",
                 Arg.Any<CancellationToken>())
             .Returns((AuthorizationValidationResult?)null);
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())

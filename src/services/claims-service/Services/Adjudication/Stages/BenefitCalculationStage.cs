@@ -210,12 +210,16 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             .OrderBy(line => line.LineNumber)
             .Select(line => line.ProcedureCode)
             .FirstOrDefault(code => !string.IsNullOrWhiteSpace(code));
+        var providerNpi = string.IsNullOrWhiteSpace(claim.RenderingProviderNPI)
+            ? claim.BillingProviderNPI
+            : claim.RenderingProviderNPI;
 
         var validation = await _authorizationValidationClient.ValidateAsync(
                 tenantId,
                 claim.PriorAuthorizationNumber,
                 procedureCode,
                 claim.ServiceDateFrom,
+                providerNpi,
                 ct)
             .ConfigureAwait(false);
 

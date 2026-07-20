@@ -107,7 +107,8 @@ public class AuthorizationsController : ControllerBase
     public async Task<ActionResult<AuthorizationValidationResponse>> ValidateAuthorization(
         string authNumber,
         [FromQuery] string? procedureCode = null,
-        [FromQuery] DateTime? serviceDate = null)
+        [FromQuery] DateTime? serviceDate = null,
+        [FromQuery] string? providerNpi = null)
     {
         if (!AllowsAnonymousLocalValidation() && HttpContext?.User.Identity?.IsAuthenticated != true)
         {
@@ -152,10 +153,12 @@ public class AuthorizationsController : ControllerBase
             }
         }
 
+        var providerApproved = IsProviderApprovedForAuthorization(authorization, providerNpi);
+
         var response = new AuthorizationValidationResponse
         {
             AuthorizationNumber = authorization.AuthorizationNumber,
-            IsValid = isValid && isActive && procedureApproved,
+            IsValid = isValid && isActive && procedureApproved && providerApproved,
             Status = authorization.Status,
             ApprovedServiceDateFrom = authorization.ApprovedServiceDateFrom,
             ApprovedServiceDateTo = authorization.ApprovedServiceDateTo,
@@ -164,10 +167,34 @@ public class AuthorizationsController : ControllerBase
             ValidationMessage = !isValid ? "Authorization not approved" :
                                !isActive ? "Authorization expired or not yet active" :
                                !procedureApproved ? $"Procedure {procedureCode} not approved" :
+                               !providerApproved ? $"Provider {providerNpi} not approved for authorization" :
                                "Authorization valid"
         };
 
         return Ok(response);
+    }
+
+    private static bool IsProviderApprovedForAuthorization(Authorization authorization, string? providerNpi)
+    {
+        if (string.IsNullOrWhiteSpace(providerNpi))
+        {
+            return true;
+        }
+
+        var approvedProviderNpis = new[]
+            {
+                authorization.ServicingProviderNPI,
+                authorization.RequestingProviderNPI
+            }
+            .Where(npi => !string.IsNullOrWhiteSpace(npi))
+            .Select(npi => npi!.Trim())
+            .ToArray();
+
+        return approvedProviderNpis.Length == 0
+            || approvedProviderNpis.Any(npi => string.Equals(
+                npi,
+                providerNpi.Trim(),
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private bool AllowsAnonymousLocalValidation() =>
