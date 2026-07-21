@@ -45,17 +45,38 @@
 - Fixed both by seeding plan-specific `ServiceCategoryMapping` overrides scoped to the validation plan (plan-specific mappings win over tenant defaults in the resolver), and by tagging the carve-out claim with a synthetic modifier so a second, deliberately uncovered plan override intercepts only that claim.
 - Also required: rebuilding `claims-service`, `benefit-plan-service`, and `authorization-service` from current `main` before either confirmation attempt - the long-lived local cluster predated #946's authorization-service provider-enforcement check.
 
-## Post-#950/#954 confirmation run
+## PR #956 - self-healing provider network-participation writes (found chasing the #954 follow-up)
+
+- The 32 mismatches recorded as follow-up debt after the post-#950/#954 confirmation run (below) were not a COB bug. `EnsureProviderNetworkParticipationAsync` treated any `409` from `POST {id}/network-participations` as "already participates" and moved on.
+- Provider-service actually rejects that write whenever the target provider is Active - mutations require an amend-to-Draft-then-activate flow - and no endpoint existed to populate an amended Draft's contents before activating it. Providers that went Active before #949 introduced tenant-scoped network IDs could never receive the new network-scoped participation.
+- `NetworkCredentialingStage`'s `FailClosed` default then correctly denied claims against a network those providers were never actually registered under, and COB claims lost their otherwise-correct Pend outcome to that unrelated Deny (Deny outranks Pend in adjudication precedence).
+- Fixed by making `AddNetworkParticipation` self-healing: an Active provider is auto-amended into a Draft, edited, and activated within the same call. Also fixed an incidental repo-wide `Microsoft.Azure.Cosmos` version split (3.61.0/3.62.0 across 28 projects) discovered while rebuilding services to test this.
+
+## PR #958 - self-healing provider integrity-field correction (found in the #956 re-confirmation)
+
+- The #956 re-confirmation run came back with COB fully clean but a new, unrelated regression: `ExcludedProviderDenied` 1,936/2,000. Same shape of bug, different surface.
+- `MccProviderFixturePool.BuildRunScopedNpi` mints run-scoped provider NPIs from a value space that isn't infinite; this long-lived local cluster had accumulated enough providers across many prior runs that a fresh NPI collided with a provider created weeks earlier for an unrelated purpose. Seeding saw "already exists" and never verified the existing record's exclusion fields.
+- The adjudication-path integrity gate reads `Provider.IntegrityScore`/`IntegrityRating` directly from provider-service as its source of truth, not `CredentialingStatus` - so the collided provider's stale "Clear" rating meant a claim that should have denied on exclusion paid instead.
+- Fixed by adding `EnsureProviderExclusionAsync`, which verifies and corrects the existing record's integrity fields on every excluded-provider fixture claim, extending #956's self-healing amend pattern to provider-service's general `UpdateProvider` endpoint.
+
+## Post-#950/#954 confirmation run (Round 2 of 4 - see benchmark-results.txt "Fix history")
 
 Job `mcc-part9-100k-p12-203753`, 100,000 claims, seed 42, parallelism 12, executed 2026-07-20/21 local.
 
 - Workflow: 12,182/13,000 matched, 32 mismatched, 786 unsupported (unsupported count matches projection exactly).
 - The three converted scenarios hit their targets clean: `PriorAuthRequired_WrongProvider` 160/160, `BehavioralHealthCarveIn` 200/200, `BehavioralHealthCarveOut` 200/200, `BehavioralHealthParityCheck` 200/200. Prior-auth enforcement probe: enforced.
-- All 32 residual mismatches are in COB/Medicaid/Newborn/RetroEligibilityAdd scenarios this episode did not touch, and matched cleanly in a smaller smoke test - a scale-dependent gap, not a service-category regression. Not investigated further; tracked as follow-up.
-- Payment gate: 2,000/2,000 within $0.01, exact. Platform failures: 5, all transient 10s HTTP timeouts under load, not adjudication defects.
-- Expected-pend observation: 890/920 (30 short of target), same out-of-scope category as the residual mismatches.
-- Throughput 57.26 claims/sec, P95 404 ms, P99 503 ms - at or better than the Part 8 p12 baseline (58.55 claims/sec, 416 ms, 580 ms).
-- Full numbers, denial breakdown, and raw artifacts: `benchmark-results.txt`, `raw-validator-output-post950-100k-p12.txt`, `run-summary-post950-100k-p12.json`.
+- All 32 residual mismatches, initially recorded as follow-up debt, turned out to be PR #956's bug - see above.
+
+## Post-#950/#954/#956/#958 confirmation run (Round 4 of 4 - final, clean)
+
+Job `mcc-part9-final2-100k-090601`, 100,000 claims, seed 42, parallelism 12, executed 2026-07-21 local.
+
+- Workflow: **12,214/13,000 matched, 0 mismatched**, 786 unsupported - the original target, met exactly, with zero mismatches for the first time in this episode's confirmation history.
+- All four scenarios this episode and its follow-up fixes touched hit clean: `PriorAuthRequired_WrongProvider` 160/160, `BehavioralHealthCarveIn` 200/200, `BehavioralHealthCarveOut` 200/200, `BehavioralHealthParityCheck` 200/200, `ExcludedProviderDenied` 2,000/2,000. Prior-auth enforcement probe: enforced.
+- Payment gate: 2,000/2,000 within $0.01, exact. Platform failures: 0. Expected-pend observation: 920/920, 0 timed out. False-pend sweep: 0 unexpected pends.
+- Every criterion in the original Part 9 acceptance bar is met exactly.
+- Throughput dropped to 26.27 claims/sec (P95 895 ms, P99 1,096 ms) against the Part 8 p12 baseline of 58.55 claims/sec (416 ms, 580 ms) - understood as a one-time cost from #956's and #958's self-healing amend paths correcting thousands of accumulated legacy providers simultaneously, not a standing regression. Unconfirmed until a repeat run checks it.
+- Full numbers, denial breakdown, and raw artifacts: `benchmark-results.txt`, `raw-validator-output-post950-100k-p12.txt`, `run-summary-post950-100k-p12.json` (filenames retained from the original evidence slot; these now hold the final Round 4 data).
 
 ## Remaining unsupported scenario families after this episode
 

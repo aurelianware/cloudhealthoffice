@@ -1,5 +1,5 @@
 {
-    "id": "582bd5703a494f4fb46f8a7e19ae90ba",
+    "id": "d114ff66f4924e2094dd9bf34362b7f0",
     "status": "Completed",
     "run": {
         "tenantId": "demo",
@@ -15,199 +15,199 @@
         "seedProviders": true,
         "skipClaimUpdate": false,
         "lineOfBusiness": 3,
-        "startedAtUtc": "2026-07-21T03:37:56.6697061+00:00",
-        "completedAtUtc": "2026-07-21T04:12:57.864893+00:00"
+        "startedAtUtc": "2026-07-21T16:06:04.0509386+00:00",
+        "completedAtUtc": "2026-07-21T17:15:28.4107103+00:00"
     },
     "totalClaims": 100000,
-    "processed": 99995,
-    "paid": 81908,
-    "pended": 891,
-    "businessDenials": 17196,
+    "processed": 100000,
+    "paid": 82070,
+    "pended": 920,
+    "businessDenials": 17010,
     "observationTimeouts": 0,
-    "platformFailures": 5,
+    "platformFailures": 0,
     "workflowScenarios": 13000,
-    "workflowMatches": 12182,
-    "workflowMismatches": 32,
+    "workflowMatches": 12214,
+    "workflowMismatches": 0,
     "workflowUnsupported": 786,
     "workflowObservationTimeouts": 0,
-    "elapsed": "00:29:06.4265621",
-    "throughputClaimsPerSecond": 57.25977958085708,
-    "p95LatencyMilliseconds": 404.4752,
-    "p99LatencyMilliseconds": 503.3657,
+    "elapsed": "01:03:26.0369439",
+    "throughputClaimsPerSecond": 26.274048695263374,
+    "p95LatencyMilliseconds": 895.3462,
+    "p99LatencyMilliseconds": 1095.9035,
     "submitTiming": {
         "label": "Submit",
-        "averageMilliseconds": 83.65905989800004,
-        "p95Milliseconds": 208.992
+        "averageMilliseconds": 233.1343789769992,
+        "p95Milliseconds": 500.0621
     },
     "adjudicateTiming": {
         "label": "Adjudicate",
-        "averageMilliseconds": 72.8712980459032,
-        "p95Milliseconds": 167.2324
+        "averageMilliseconds": 114.09708121099986,
+        "p95Milliseconds": 297.8128
     },
     "writebackTiming": {
         "label": "Writeback",
-        "averageMilliseconds": 52.6094434220802,
-        "p95Milliseconds": 154.2656
+        "averageMilliseconds": 110.96357972718124,
+        "p95Milliseconds": 279.6054
     },
     "adjudicationStepTimings": [
         {
             "label": "Adjudicate.benefitCalculation",
-            "averageMilliseconds": 70.94239625242245,
-            "p95Milliseconds": 163.53
+            "averageMilliseconds": 113.38227013088077,
+            "p95Milliseconds": 292.582
         },
         {
             "label": "Adjudicate.benefitCalculation.accumulatorRead",
-            "averageMilliseconds": 70.1823249052309,
-            "p95Milliseconds": 162.7489
+            "averageMilliseconds": 112.59452359316619,
+            "p95Milliseconds": 291.6533
         },
         {
             "label": "Adjudicate.providerIntegrity",
-            "averageMilliseconds": 0.8049728252571505,
-            "p95Milliseconds": 1.8364
+            "averageMilliseconds": 0.8244890987072742,
+            "p95Milliseconds": 1.8514
         },
         {
             "label": "Adjudicate.benefitCalculation.accumulatorWrite",
-            "averageMilliseconds": 0.6544436916946886,
-            "p95Milliseconds": 1.5873
-        },
-        {
-            "label": "Adjudicate.rateResolution",
-            "averageMilliseconds": 0.4580398239406953,
-            "p95Milliseconds": 0.8759
+            "averageMilliseconds": 0.6617238490907311,
+            "p95Milliseconds": 1.8897
         },
         {
             "label": "Adjudicate.ncci",
-            "averageMilliseconds": 0.4144708618481605,
-            "p95Milliseconds": 1.9343
+            "averageMilliseconds": 0.5432700449211142,
+            "p95Milliseconds": 2.6162
+        },
+        {
+            "label": "Adjudicate.rateResolution",
+            "averageMilliseconds": 0.5256218354796326,
+            "p95Milliseconds": 1.1115
         },
         {
             "label": "Adjudicate.benefitCalculation.lineProcessing",
-            "averageMilliseconds": 0.05329811620756509,
-            "p95Milliseconds": 0.1149
-        },
-        {
-            "label": "Adjudicate.scrub",
-            "averageMilliseconds": 0.044201770088507245,
-            "p95Milliseconds": 0.0745
+            "averageMilliseconds": 0.06151755269382402,
+            "p95Milliseconds": 0.1291
         },
         {
             "label": "Adjudicate.priorAuth",
-            "averageMilliseconds": 0.044167333827528237,
-            "p95Milliseconds": 0.0694
+            "averageMilliseconds": 0.06067964434393826,
+            "p95Milliseconds": 0.0862
+        },
+        {
+            "label": "Adjudicate.scrub",
+            "averageMilliseconds": 0.05358058499999757,
+            "p95Milliseconds": 0.0888
         },
         {
             "label": "Adjudicate.terminology",
-            "averageMilliseconds": 0.013401730056440452,
-            "p95Milliseconds": 0.0111
+            "averageMilliseconds": 0.016310966622864752,
+            "p95Milliseconds": 0.0139
         },
         {
             "label": "Adjudicate.benefitCalculation.workingSet",
-            "averageMilliseconds": 0.007557201373093832,
-            "p95Milliseconds": 0.0143
-        },
-        {
-            "label": "Adjudicate.benefitCalculation.snapshot",
-            "averageMilliseconds": 0.004045884929660893,
-            "p95Milliseconds": 0.0058
+            "averageMilliseconds": 0.00902157266754225,
+            "p95Milliseconds": 0.0178
         },
         {
             "label": "Adjudicate.routing",
-            "averageMilliseconds": 0.003788257412868657,
-            "p95Milliseconds": 0.0045
+            "averageMilliseconds": 0.008479953000000704,
+            "p95Milliseconds": 0.006
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.snapshot",
+            "averageMilliseconds": 0.00459794375821265,
+            "p95Milliseconds": 0.0065
         },
         {
             "label": "Adjudicate.benefitCalculation.planLookup",
-            "averageMilliseconds": 0.0027306629601553827,
-            "p95Milliseconds": 0.005
+            "averageMilliseconds": 0.004273067017082919,
+            "p95Milliseconds": 0.006
         },
         {
             "label": "Adjudicate.benefitCalculation.totals",
-            "averageMilliseconds": 0.0020500821329291867,
-            "p95Milliseconds": 0.0027
+            "averageMilliseconds": 0.0027674134034164958,
+            "p95Milliseconds": 0.004
         },
         {
             "label": "Adjudicate.benefitCalculation.outcome",
-            "averageMilliseconds": 0.0016013926197475086,
-            "p95Milliseconds": 0.0029
+            "averageMilliseconds": 0.0020767827668496026,
+            "p95Milliseconds": 0.0035
         }
     ],
     "lifecycleTimings": [
         {
             "label": "Service health checks",
             "category": "Preparation",
-            "durationMilliseconds": 34.6839,
-            "startedAtUtc": "2026-07-21T03:37:56.681502+00:00",
-            "completedAtUtc": "2026-07-21T03:37:56.7161883+00:00"
+            "durationMilliseconds": 43.9021,
+            "startedAtUtc": "2026-07-21T16:06:04.0624999+00:00",
+            "completedAtUtc": "2026-07-21T16:06:04.1064055+00:00"
         },
         {
             "label": "Reference rule seeding",
             "category": "Preparation",
-            "durationMilliseconds": 37.8332,
-            "startedAtUtc": "2026-07-21T03:37:56.7163723+00:00",
-            "completedAtUtc": "2026-07-21T03:37:56.7542063+00:00"
+            "durationMilliseconds": 47.2627,
+            "startedAtUtc": "2026-07-21T16:06:04.1066194+00:00",
+            "completedAtUtc": "2026-07-21T16:06:04.1538832+00:00"
         },
         {
             "label": "Validation plan setup",
             "category": "Preparation",
-            "durationMilliseconds": 70.3183,
-            "startedAtUtc": "2026-07-21T03:37:56.7542151+00:00",
-            "completedAtUtc": "2026-07-21T03:37:56.8245342+00:00"
+            "durationMilliseconds": 16.2941,
+            "startedAtUtc": "2026-07-21T16:06:04.1538947+00:00",
+            "completedAtUtc": "2026-07-21T16:06:04.1701898+00:00"
         },
         {
             "label": "Corpus generation",
             "category": "Preparation",
-            "durationMilliseconds": 866.0116,
-            "startedAtUtc": "2026-07-21T03:37:56.824844+00:00",
-            "completedAtUtc": "2026-07-21T03:37:57.690857+00:00"
+            "durationMilliseconds": 850.8226,
+            "startedAtUtc": "2026-07-21T16:06:04.1705549+00:00",
+            "completedAtUtc": "2026-07-21T16:06:05.0213795+00:00"
         },
         {
             "label": "Fixture normalization",
             "category": "Preparation",
-            "durationMilliseconds": 383.15,
-            "startedAtUtc": "2026-07-21T03:37:57.6908769+00:00",
-            "completedAtUtc": "2026-07-21T03:37:58.0740288+00:00"
+            "durationMilliseconds": 377.261,
+            "startedAtUtc": "2026-07-21T16:06:05.0214029+00:00",
+            "completedAtUtc": "2026-07-21T16:06:05.3986656+00:00"
         },
         {
             "label": "Authorization fixture seeding",
             "category": "Preparation",
-            "durationMilliseconds": 570.184,
-            "startedAtUtc": "2026-07-21T03:37:58.0741207+00:00",
-            "completedAtUtc": "2026-07-21T03:37:58.6443057+00:00"
+            "durationMilliseconds": 542.433,
+            "startedAtUtc": "2026-07-21T16:06:05.3987725+00:00",
+            "completedAtUtc": "2026-07-21T16:06:05.9412068+00:00"
         },
         {
             "label": "Member and coverage seeding",
             "category": "Preparation",
-            "durationMilliseconds": 145563.4406,
-            "startedAtUtc": "2026-07-21T03:37:58.6694695+00:00",
-            "completedAtUtc": "2026-07-21T03:40:24.234301+00:00"
+            "durationMilliseconds": 152540.1939,
+            "startedAtUtc": "2026-07-21T16:06:05.9671902+00:00",
+            "completedAtUtc": "2026-07-21T16:08:38.5083366+00:00"
         },
         {
             "label": "Provider seeding",
             "category": "Preparation",
-            "durationMilliseconds": 179822.7558,
-            "startedAtUtc": "2026-07-21T03:40:24.2343478+00:00",
-            "completedAtUtc": "2026-07-21T03:43:24.0585128+00:00"
+            "durationMilliseconds": 196784.1079,
+            "startedAtUtc": "2026-07-21T16:08:38.5083845+00:00",
+            "completedAtUtc": "2026-07-21T16:11:55.2931592+00:00"
         },
         {
             "label": "Timed adjudication",
             "category": "Processing",
-            "durationMilliseconds": 1746426.5621,
-            "startedAtUtc": "2026-07-21T03:43:24.0869984+00:00",
-            "completedAtUtc": "2026-07-21T04:12:50.8088677+00:00"
+            "durationMilliseconds": 3806036.9439,
+            "startedAtUtc": "2026-07-21T16:11:55.3104455+00:00",
+            "completedAtUtc": "2026-07-21T17:15:21.300929+00:00"
         },
         {
             "label": "Expected-pend observation",
             "category": "Observation",
-            "durationMilliseconds": 439.705,
-            "startedAtUtc": "2026-07-21T04:12:50.8976431+00:00",
-            "completedAtUtc": "2026-07-21T04:12:51.3373501+00:00"
+            "durationMilliseconds": 660.462,
+            "startedAtUtc": "2026-07-21T17:15:21.5549344+00:00",
+            "completedAtUtc": "2026-07-21T17:15:22.2154109+00:00"
         },
         {
             "label": "False-pend sweep",
             "category": "Observation",
-            "durationMilliseconds": 6527.5274,
-            "startedAtUtc": "2026-07-21T04:12:51.3373568+00:00",
-            "completedAtUtc": "2026-07-21T04:12:57.8648857+00:00"
+            "durationMilliseconds": 6195.2839,
+            "startedAtUtc": "2026-07-21T17:15:22.2154174+00:00",
+            "completedAtUtc": "2026-07-21T17:15:28.410703+00:00"
         }
     ],
     "fixturePreparation": {
@@ -267,7 +267,7 @@
     "businessDenialBreakdown": [
         {
             "code": "CARC_96",
-            "count": 9369
+            "count": 9380
         },
         {
             "code": "PRIOR_AUTH_REQUIRED",
@@ -275,11 +275,11 @@
         },
         {
             "code": "CARC_18",
-            "count": 2275
+            "count": 2280
         },
         {
             "code": "PROVIDER_EXCLUDED",
-            "count": 2157
+            "count": 2000
         },
         {
             "code": "NCCI_MUE_EDIT_FAILURE",
@@ -292,14 +292,6 @@
         {
             "code": "SCRUB_VALIDATION_FAILURE",
             "count": 47
-        },
-        {
-            "code": "UNKNOWN",
-            "count": 28
-        },
-        {
-            "code": "ADJUDICATION_DENIAL",
-            "count": 17
         }
     ],
     "workflowScenarioBreakdown": [
@@ -342,8 +334,8 @@
         {
             "scenario": "EdgeCase:CobBirthdayRule",
             "total": 200,
-            "matches": 190,
-            "mismatches": 10,
+            "matches": 200,
+            "mismatches": 0,
             "unsupported": 0,
             "observationTimeouts": 0,
             "unspecified": 0
@@ -351,8 +343,8 @@
         {
             "scenario": "EdgeCase:CobGenderRule",
             "total": 200,
-            "matches": 195,
-            "mismatches": 5,
+            "matches": 200,
+            "mismatches": 0,
             "unsupported": 0,
             "observationTimeouts": 0,
             "unspecified": 0
@@ -378,8 +370,8 @@
         {
             "scenario": "EdgeCase:CobSecondaryPayer",
             "total": 200,
-            "matches": 197,
-            "mismatches": 3,
+            "matches": 200,
+            "mismatches": 0,
             "unsupported": 0,
             "observationTimeouts": 0,
             "unspecified": 0
@@ -387,8 +379,8 @@
         {
             "scenario": "EdgeCase:CobTertiaryPayer",
             "total": 200,
-            "matches": 191,
-            "mismatches": 9,
+            "matches": 200,
+            "mismatches": 0,
             "unsupported": 0,
             "observationTimeouts": 0,
             "unspecified": 0
@@ -405,8 +397,8 @@
         {
             "scenario": "EdgeCase:MedicaidDualEligible",
             "total": 120,
-            "matches": 117,
-            "mismatches": 3,
+            "matches": 120,
+            "mismatches": 0,
             "unsupported": 0,
             "observationTimeouts": 0,
             "unspecified": 0
@@ -450,8 +442,8 @@
         {
             "scenario": "EdgeCase:NewbornFirstThirtyDays",
             "total": 200,
-            "matches": 199,
-            "mismatches": 1,
+            "matches": 200,
+            "mismatches": 0,
             "unsupported": 0,
             "observationTimeouts": 0,
             "unspecified": 0
@@ -513,8 +505,8 @@
         {
             "scenario": "EdgeCase:RetroEligibilityAdd",
             "total": 267,
-            "matches": 266,
-            "mismatches": 1,
+            "matches": 267,
+            "mismatches": 0,
             "unsupported": 0,
             "observationTimeouts": 0,
             "unspecified": 0
@@ -592,49 +584,23 @@
             "unspecified": 0
         }
     ],
-    "sampleFailures": [
-        {
-            "generatedClaimId": "MCC-P-0035359",
-            "stage": "adjudicate",
-            "error": "adjudication failed (MCC-P-0035359): 500 {\"code\":\"INTERNAL_ERROR\",\"message\":\"The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\",\"details\":\"System.Threading.Tasks.TaskCanceledException: The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\\n ---\\u003E System.TimeoutException: The operation was canceled.\\n ---\\u003E System.Threading.Tasks.TaskCanceledException: The operation was canceled.\\n ---\\u003E System.IO.IOException: Unable to read data from the transport connection: Operation canceled.\\n ---\\u003E System.Net.Sockets.SocketException (125): Operation canceled\\n   --- End of inner exception stack trace ---\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource\\u003CSystem.Int32\\u003E.GetResult(Int16 token)\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)\\n   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.Metrics.MetricsHandler.SendAsyncWithMetrics(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   --- End of inner exception stack trace ---\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   at BenefitPlanService.Services.ClaimsServiceAccumulatorSource.CalculateAccumulatorsAsync(String tenantId, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/services/benefit-plan-service/Services/ClaimsServiceAccumulatorSource.cs:line 63\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetOrRebuildAsync(IDatabase db, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 307\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetAccumulatorsAsync(String memberId, String subscriberId, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 134\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.\\u003C\\u003Ec__DisplayClass7_0.\\u003C\\u003CCalculateAsync\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateAsync(BenefitResolutionRequest request, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 154\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateWithModeAsync(BenefitResolutionRequest request, IOperatingMode operatingMode, String tenantId, BenefitResolutionResult legacyResult, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 246\\n   at BenefitPlanService.Controllers.AdjudicationController.\\u003C\\u003Ec__DisplayClass15_0.\\u003C\\u003CAdjudicate\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at BenefitPlanService.Controllers.AdjudicationController.Adjudicate(AdjudicationRequest request, CancellationToken ct) in /repo/src/services/benefit-plan-service/Controllers/AdjudicationController.cs:line 538\\n   at lambda_method38(Closure, Object)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.AwaitableObjectResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeActionMethodAsync\\u003Eg__Logged|12_1(ControllerActionInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeNextActionFilterAsync\\u003Eg__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State\\u0026 next, Scope\\u0026 scope, Object\\u0026 state, Boolean\\u0026 isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeInnerFilterAsync\\u003Eg__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeFilterPipelineAsync\\u003Eg__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Routing.EndpointMiddleware.\\u003CInvoke\\u003Eg__AwaitRequestTask|7_0(Endpoint endpoint, Task requestTask, ILogger logger)\\n   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)\\n   at BenefitPlanService.Middleware.TenantMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/benefit-plan-service/Middleware/TenantMiddleware.cs:line 41\\n   at CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/shared/CloudHealthOffice.Infrastructure/Middleware/ExceptionHandlingMiddleware.cs:line 36\",\"traceId\":\"00-6e48cb3562a450cf212ae39cded4bd93-aeb57790c8074ff7-01\"}"
-        },
-        {
-            "generatedClaimId": "MCC-P-0035361",
-            "stage": "adjudicate",
-            "error": "adjudication failed (MCC-P-0035361): 500 {\"code\":\"INTERNAL_ERROR\",\"message\":\"The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\",\"details\":\"System.Threading.Tasks.TaskCanceledException: The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\\n ---\\u003E System.TimeoutException: The operation was canceled.\\n ---\\u003E System.Threading.Tasks.TaskCanceledException: The operation was canceled.\\n ---\\u003E System.IO.IOException: Unable to read data from the transport connection: Operation canceled.\\n ---\\u003E System.Net.Sockets.SocketException (125): Operation canceled\\n   --- End of inner exception stack trace ---\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource\\u003CSystem.Int32\\u003E.GetResult(Int16 token)\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)\\n   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.Metrics.MetricsHandler.SendAsyncWithMetrics(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   --- End of inner exception stack trace ---\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   at BenefitPlanService.Services.ClaimsServiceAccumulatorSource.CalculateAccumulatorsAsync(String tenantId, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/services/benefit-plan-service/Services/ClaimsServiceAccumulatorSource.cs:line 63\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetOrRebuildAsync(IDatabase db, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 307\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetAccumulatorsAsync(String memberId, String subscriberId, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 134\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.\\u003C\\u003Ec__DisplayClass7_0.\\u003C\\u003CCalculateAsync\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateAsync(BenefitResolutionRequest request, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 154\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateWithModeAsync(BenefitResolutionRequest request, IOperatingMode operatingMode, String tenantId, BenefitResolutionResult legacyResult, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 246\\n   at BenefitPlanService.Controllers.AdjudicationController.\\u003C\\u003Ec__DisplayClass15_0.\\u003C\\u003CAdjudicate\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at BenefitPlanService.Controllers.AdjudicationController.Adjudicate(AdjudicationRequest request, CancellationToken ct) in /repo/src/services/benefit-plan-service/Controllers/AdjudicationController.cs:line 538\\n   at lambda_method38(Closure, Object)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.AwaitableObjectResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeActionMethodAsync\\u003Eg__Logged|12_1(ControllerActionInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeNextActionFilterAsync\\u003Eg__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State\\u0026 next, Scope\\u0026 scope, Object\\u0026 state, Boolean\\u0026 isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeInnerFilterAsync\\u003Eg__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeFilterPipelineAsync\\u003Eg__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Routing.EndpointMiddleware.\\u003CInvoke\\u003Eg__AwaitRequestTask|7_0(Endpoint endpoint, Task requestTask, ILogger logger)\\n   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)\\n   at BenefitPlanService.Middleware.TenantMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/benefit-plan-service/Middleware/TenantMiddleware.cs:line 41\\n   at CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/shared/CloudHealthOffice.Infrastructure/Middleware/ExceptionHandlingMiddleware.cs:line 36\",\"traceId\":\"00-be1d7cacdeedbb991ce2d97a6dd6c619-c8a64131a373337b-01\"}"
-        },
-        {
-            "generatedClaimId": "MCC-P-0035371",
-            "stage": "adjudicate",
-            "error": "adjudication failed (MCC-P-0035371): 500 {\"code\":\"INTERNAL_ERROR\",\"message\":\"The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\",\"details\":\"System.Threading.Tasks.TaskCanceledException: The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\\n ---\\u003E System.TimeoutException: The operation was canceled.\\n ---\\u003E System.Threading.Tasks.TaskCanceledException: The operation was canceled.\\n ---\\u003E System.IO.IOException: Unable to read data from the transport connection: Operation canceled.\\n ---\\u003E System.Net.Sockets.SocketException (125): Operation canceled\\n   --- End of inner exception stack trace ---\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource\\u003CSystem.Int32\\u003E.GetResult(Int16 token)\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)\\n   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.Metrics.MetricsHandler.SendAsyncWithMetrics(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   --- End of inner exception stack trace ---\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   at BenefitPlanService.Services.ClaimsServiceAccumulatorSource.CalculateAccumulatorsAsync(String tenantId, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/services/benefit-plan-service/Services/ClaimsServiceAccumulatorSource.cs:line 63\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetOrRebuildAsync(IDatabase db, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 307\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetAccumulatorsAsync(String memberId, String subscriberId, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 134\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.\\u003C\\u003Ec__DisplayClass7_0.\\u003C\\u003CCalculateAsync\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateAsync(BenefitResolutionRequest request, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 154\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateWithModeAsync(BenefitResolutionRequest request, IOperatingMode operatingMode, String tenantId, BenefitResolutionResult legacyResult, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 246\\n   at BenefitPlanService.Controllers.AdjudicationController.\\u003C\\u003Ec__DisplayClass15_0.\\u003C\\u003CAdjudicate\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at BenefitPlanService.Controllers.AdjudicationController.Adjudicate(AdjudicationRequest request, CancellationToken ct) in /repo/src/services/benefit-plan-service/Controllers/AdjudicationController.cs:line 538\\n   at lambda_method273(Closure, Object)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.AwaitableObjectResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeActionMethodAsync\\u003Eg__Logged|12_1(ControllerActionInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeNextActionFilterAsync\\u003Eg__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State\\u0026 next, Scope\\u0026 scope, Object\\u0026 state, Boolean\\u0026 isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeInnerFilterAsync\\u003Eg__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeFilterPipelineAsync\\u003Eg__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Routing.EndpointMiddleware.\\u003CInvoke\\u003Eg__AwaitRequestTask|7_0(Endpoint endpoint, Task requestTask, ILogger logger)\\n   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)\\n   at BenefitPlanService.Middleware.TenantMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/benefit-plan-service/Middleware/TenantMiddleware.cs:line 41\\n   at CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/shared/CloudHealthOffice.Infrastructure/Middleware/ExceptionHandlingMiddleware.cs:line 36\",\"traceId\":\"00-330c615453cf3e622594cc52999a860a-1c05759a471e9f69-01\"}"
-        },
-        {
-            "generatedClaimId": "MCC-P-0035372",
-            "stage": "adjudicate",
-            "error": "adjudication failed (MCC-P-0035372): 500 {\"code\":\"INTERNAL_ERROR\",\"message\":\"The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\",\"details\":\"System.Threading.Tasks.TaskCanceledException: The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\\n ---\\u003E System.TimeoutException: The operation was canceled.\\n ---\\u003E System.Threading.Tasks.TaskCanceledException: The operation was canceled.\\n ---\\u003E System.IO.IOException: Unable to read data from the transport connection: Operation canceled.\\n ---\\u003E System.Net.Sockets.SocketException (125): Operation canceled\\n   --- End of inner exception stack trace ---\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource\\u003CSystem.Int32\\u003E.GetResult(Int16 token)\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)\\n   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.Metrics.MetricsHandler.SendAsyncWithMetrics(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   --- End of inner exception stack trace ---\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   at BenefitPlanService.Services.ClaimsServiceAccumulatorSource.CalculateAccumulatorsAsync(String tenantId, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/services/benefit-plan-service/Services/ClaimsServiceAccumulatorSource.cs:line 63\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetOrRebuildAsync(IDatabase db, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 307\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetAccumulatorsAsync(String memberId, String subscriberId, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 134\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.\\u003C\\u003Ec__DisplayClass7_0.\\u003C\\u003CCalculateAsync\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateAsync(BenefitResolutionRequest request, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 154\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateWithModeAsync(BenefitResolutionRequest request, IOperatingMode operatingMode, String tenantId, BenefitResolutionResult legacyResult, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 246\\n   at BenefitPlanService.Controllers.AdjudicationController.\\u003C\\u003Ec__DisplayClass15_0.\\u003C\\u003CAdjudicate\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at BenefitPlanService.Controllers.AdjudicationController.Adjudicate(AdjudicationRequest request, CancellationToken ct) in /repo/src/services/benefit-plan-service/Controllers/AdjudicationController.cs:line 538\\n   at lambda_method273(Closure, Object)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.AwaitableObjectResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeActionMethodAsync\\u003Eg__Logged|12_1(ControllerActionInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeNextActionFilterAsync\\u003Eg__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State\\u0026 next, Scope\\u0026 scope, Object\\u0026 state, Boolean\\u0026 isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeInnerFilterAsync\\u003Eg__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeFilterPipelineAsync\\u003Eg__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Routing.EndpointMiddleware.\\u003CInvoke\\u003Eg__AwaitRequestTask|7_0(Endpoint endpoint, Task requestTask, ILogger logger)\\n   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)\\n   at BenefitPlanService.Middleware.TenantMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/benefit-plan-service/Middleware/TenantMiddleware.cs:line 41\\n   at CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/shared/CloudHealthOffice.Infrastructure/Middleware/ExceptionHandlingMiddleware.cs:line 36\",\"traceId\":\"00-4c229a5ca84cbd63249e087bf387a028-c296e841ac89bd81-01\"}"
-        },
-        {
-            "generatedClaimId": "MCC-P-0035373",
-            "stage": "adjudicate",
-            "error": "adjudication failed (MCC-P-0035373): 500 {\"code\":\"INTERNAL_ERROR\",\"message\":\"The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\",\"details\":\"System.Threading.Tasks.TaskCanceledException: The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.\\n ---\\u003E System.TimeoutException: The operation was canceled.\\n ---\\u003E System.Threading.Tasks.TaskCanceledException: The operation was canceled.\\n ---\\u003E System.IO.IOException: Unable to read data from the transport connection: Operation canceled.\\n ---\\u003E System.Net.Sockets.SocketException (125): Operation canceled\\n   --- End of inner exception stack trace ---\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource\\u003CSystem.Int32\\u003E.GetResult(Int16 token)\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)\\n   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.Metrics.MetricsHandler.SendAsyncWithMetrics(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.\\u003CSendCoreAsync\\u003Eg__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   --- End of inner exception stack trace ---\\n   --- End of inner exception stack trace ---\\n   at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)\\n   at System.Net.Http.HttpClient.\\u003CSendAsync\\u003Eg__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)\\n   at BenefitPlanService.Services.ClaimsServiceAccumulatorSource.CalculateAccumulatorsAsync(String tenantId, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/services/benefit-plan-service/Services/ClaimsServiceAccumulatorSource.cs:line 63\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetOrRebuildAsync(IDatabase db, String ownerId, AccumulatorScope scope, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 307\\n   at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetAccumulatorsAsync(String memberId, String subscriberId, Guid benefitPlanId, String planYear, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs:line 134\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.\\u003C\\u003Ec__DisplayClass7_0.\\u003C\\u003CCalculateAsync\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateAsync(BenefitResolutionRequest request, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 154\\n   at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateWithModeAsync(BenefitResolutionRequest request, IOperatingMode operatingMode, String tenantId, BenefitResolutionResult legacyResult, CancellationToken ct) in /repo/src/engines/CloudHealthOffice.BenefitEngine/Services/BenefitCalculationEngine.cs:line 246\\n   at BenefitPlanService.Controllers.AdjudicationController.\\u003C\\u003Ec__DisplayClass15_0.\\u003C\\u003CAdjudicate\\u003Eg__MeasureStageAsync|0\\u003Ed\\u00601.MoveNext()\\n--- End of stack trace from previous location ---\\n   at BenefitPlanService.Controllers.AdjudicationController.Adjudicate(AdjudicationRequest request, CancellationToken ct) in /repo/src/services/benefit-plan-service/Controllers/AdjudicationController.cs:line 538\\n   at lambda_method273(Closure, Object)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.AwaitableObjectResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeActionMethodAsync\\u003Eg__Logged|12_1(ControllerActionInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeNextActionFilterAsync\\u003Eg__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State\\u0026 next, Scope\\u0026 scope, Object\\u0026 state, Boolean\\u0026 isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.\\u003CInvokeInnerFilterAsync\\u003Eg__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeFilterPipelineAsync\\u003Eg__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.\\u003CInvokeAsync\\u003Eg__Logged|17_1(ResourceInvoker invoker)\\n   at Microsoft.AspNetCore.Routing.EndpointMiddleware.\\u003CInvoke\\u003Eg__AwaitRequestTask|7_0(Endpoint endpoint, Task requestTask, ILogger logger)\\n   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)\\n   at BenefitPlanService.Middleware.TenantMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/benefit-plan-service/Middleware/TenantMiddleware.cs:line 41\\n   at CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware.InvokeAsync(HttpContext context) in /repo/src/services/shared/CloudHealthOffice.Infrastructure/Middleware/ExceptionHandlingMiddleware.cs:line 36\",\"traceId\":\"00-f4ff267b8d23c4ffed7f4a5b0a41dc3f-1fa0e177bb144e1c-01\"}"
-        }
-    ],
+    "sampleFailures": [],
     "claimResults": [],
-    "createdAtUtc": "2026-07-21T03:37:56.669Z",
-    "lastUpdatedAtUtc": "2026-07-21T04:12:58.271Z",
+    "createdAtUtc": "2026-07-21T16:06:04.05Z",
+    "lastUpdatedAtUtc": "2026-07-21T17:15:28.815Z",
     "progress": {
         "phase": "Completed",
         "requestedClaims": 100000,
         "completedClaims": 100000,
-        "processedClaims": 99995,
-        "platformFailures": 5,
+        "processedClaims": 100000,
+        "platformFailures": 0,
         "percentComplete": 100,
-        "currentThroughputClaimsPerSecond": 57.25977958085708,
-        "rollingP95LatencyMilliseconds": 300.4272,
-        "rollingP99LatencyMilliseconds": 491.8,
+        "currentThroughputClaimsPerSecond": 26.274048695263374,
+        "rollingP95LatencyMilliseconds": 389.4546,
+        "rollingP99LatencyMilliseconds": 516.9173,
         "pendingExpectedPendObservations": 0,
         "pendingTerminalStatusObservations": 0,
         "pendingWorkflowObservations": 0,
-        "lastPublishedAtUtc": "2026-07-21T04:12:57.8702488+00:00"
+        "lastPublishedAtUtc": "2026-07-21T17:15:28.4155984+00:00"
     }
 }

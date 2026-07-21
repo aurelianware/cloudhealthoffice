@@ -1,22 +1,32 @@
 # Episode 009 benchmark results
 
-STATUS: EVIDENCE RECORDED. The post-#950 100K p12 confirmation run is complete. A first attempt at this run (job `mcc-part9-100k-p12-185131`, not otherwise recorded here) surfaced two problems that PR #950 alone did not cover — see "Fix history" below. PR #954 fixed both. The run recorded in this file is post-#954, executed against a checkout that includes #950 and #954 together. Raw artifacts are committed alongside this file.
+STATUS: EVIDENCE RECORDED — CLEAN. The final 100K p12 confirmation run is complete and matches the Part 8 bar exactly: zero platform failures, zero scoreable workflow mismatches, zero unexpected pends, every comparable payment within one cent. Getting here took four PRs, not one — see "Fix history" below for the full hunt. Raw artifacts are committed alongside this file.
 
 ## Fix history
 
-The first 100K attempt against #950 alone produced 7,178/13,000 matched (5,036 mismatched) — worse than the Part 8 baseline (11,854/13,000), not better. Root-caused to two issues, both fixed by PR #954 (`mcc-plan-specific-service-category-overrides`):
+Four confirmation attempts, three real defects found and fixed. None were COB logic bugs, despite three of the four rounds surfacing as COB-scenario mismatches.
 
-1. **Pre-existing tenant-data conflict, unrelated to #950's own logic.** The `demo` tenant already had BP 5.6 system-default service-category mappings applied (descriptive string categories like `"Office Visit"`), seeded at some earlier point outside any MCC PR. These shadowed the validation plan's numeric benefit categories (`"98"`/`"73"`/`"48"`) in the resolver's tenant-default lookup, misrouting most claims — including simple `CleanProfessionalPaid` — to CARC 96 "no benefit configured" denials. Fixed by seeding plan-specific `ServiceCategoryMapping` overrides scoped to the validation plan itself; plan-specific mappings take precedence over tenant defaults in the resolver (`docs/architecture/service-category-mapping.md`), so the validator is now immune to whatever else is seeded on the tenant.
-2. **Regression introduced by #950 itself.** Adding a covered Behavioral Health benefit to the validation plan (to fix `BehavioralHealthCarveIn`/`ParityCheck`) broke `BehavioralHealthCarveOut`, since it draws from the same CPT code family and started resolving to the same now-covered category instead of denying. Fixed by tagging the forced carve-out claim line with a synthetic modifier and adding a second, more-specific, deliberately-uncovered plan override that intercepts only that claim.
+**Round 1 — #950 alone.** 7,178/13,000 matched (5,036 mismatched), worse than the Part 8 baseline (11,854/13,000). Root-caused to two issues, both fixed by PR #954 (`mcc-plan-specific-service-category-overrides`):
 
-Also required for this run: `claims-service`, `benefit-plan-service`, and `authorization-service` were rebuilt from current `main` before either attempt — the cluster's long-lived images predated #946's authorization-service provider-enforcement check and claims-service's pend-observation telemetry (#936, #941), which would have produced false "not enforced" / incomplete pend results otherwise.
+1. A pre-existing, unrelated tenant-data conflict: the `demo` tenant already had BP 5.6 system-default service-category mappings applied (descriptive string categories like `"Office Visit"`), seeded at some earlier point outside any MCC PR. These shadowed the validation plan's numeric benefit categories (`"98"`/`"73"`/`"48"`) in the resolver's tenant-default lookup, misrouting most claims — including simple `CleanProfessionalPaid` — to CARC 96 "no benefit configured" denials.
+2. A regression #950 introduced itself: adding a covered Behavioral Health benefit to the validation plan (to fix `BehavioralHealthCarveIn`/`ParityCheck`) broke `BehavioralHealthCarveOut`, which draws from the same CPT code family and started resolving to the same now-covered category instead of denying.
+
+Fixed by seeding plan-specific `ServiceCategoryMapping` overrides scoped to the validation plan (plan-specific mappings win over tenant defaults in the resolver), and by tagging the forced carve-out claim with a synthetic modifier so a second, deliberately-uncovered plan override intercepts only that claim.
+
+**Round 2 — post-#950/#954.** 12,182/13,000 matched, 32 mismatched — short of the 12,214 target, all in `CobBirthdayRule` / `CobGenderRule` / `CobSecondaryPayer` / `CobTertiaryPayer` / `MedicaidDualEligible` / a couple of unrelated scenarios. Recorded at the time as "out of scope, follow-up" (see the git history of this file). It wasn't a COB bug: `EnsureProviderNetworkParticipationAsync` in the validator treated any `409` from `POST {id}/network-participations` as "already participates" and moved on. Provider-service actually rejects that write with `409` whenever the provider is Active — mutations require an amend-to-Draft flow — and no endpoint existed to populate an amended Draft's contents before activating it. Providers that went Active before #949 introduced tenant-scoped network IDs could never receive the new network-scoped participation, so `NetworkCredentialingStage`'s `FailClosed` default correctly denied claims against a network those providers were never actually registered under. COB claims lost their otherwise-correct `Pend` outcome to that unrelated `Deny` under normal Deny-beats-Pend precedence. Fixed by PR #956: `AddNetworkParticipation` is now self-healing (amend Active providers into a Draft, edit, activate, in one call).
+
+**Round 3 — post-#950/#954/#956.** 12,150/13,000 matched, 64 mismatched — COB fully clean this time (every COB/Medicaid/behavioral-health/prior-auth scenario 100%), but a *new*, unrelated scenario broke: `ExcludedProviderDenied`, 1,936/2,000. Same shape of bug, different surface: `MccProviderFixturePool.BuildRunScopedNpi` mints run-scoped provider NPIs from a value space that isn't infinite, and this cluster accumulates providers across many runs over time. A run-scoped NPI collided with a provider created weeks earlier by an unrelated run; `SeedProvidersAsync` treated it as "already exists" and never verified the existing record's exclusion fields. The adjudication-path integrity gate (`HttpProviderIntegrityGate`) reads `Provider.IntegrityScore`/`IntegrityRating` directly as its source of truth — not `CredentialingStatus` — so the collided provider's stale "Clear"/96 rating meant claims that should have denied were paying instead. Fixed by PR #958: `EnsureProviderExclusionAsync` verifies and corrects the existing record's integrity fields on every excluded-provider fixture claim, using the same self-healing amend pattern extended to the general `UpdateProvider` endpoint.
+
+**Round 4 — post-#950/#954/#956/#958.** Clean. See below.
+
+Also required before any of these runs: `claims-service`, `benefit-plan-service`, `authorization-service`, and `provider-service` were rebuilt from current `main` — the cluster's long-lived images predated several of the capabilities each round depended on (#946's authorization-service provider-enforcement check, #936/#941's pend-observation telemetry, and eventually #956/#958's provider-service self-healing itself).
 
 ## Run identity
 
-- Date: 2026-07-20 20:37:56 PDT / 2026-07-21T03:37:56Z through 2026-07-21T04:12:57Z
-- Kubernetes job: `mcc-part9-100k-p12-203753`
-- Dashboard run ID: `582bd5703a494f4fb46f8a7e19ae90ba`
-- Validation benefit plan: `e9e00e2f-1b05-4c7f-81b6-cba4709dfe6f`
+- Date: 2026-07-21 09:06:04 PDT / 2026-07-21T16:06:04Z through 2026-07-21T17:15:28Z
+- Kubernetes job: `mcc-part9-final2-100k-090601`
+- Dashboard run ID: `d114ff66f4924e2094dd9bf34362b7f0`
+- Validation benefit plan: `c98dcf94-5090-4e3e-86a8-56a81f2fbd43`
 - Environment: local Docker Desktop Kubernetes (`kind` cluster `docker-desktop`)
 - Tenant: `demo`
 - Validator seed: 42
@@ -26,21 +36,23 @@ Also required for this run: `claims-service`, `benefit-plan-service`, and `autho
 - Prior-authorization scenario rate: 2%
 - Pend observation: enabled, 45-second bound, 1-second polling interval
 - Service-category admin write gate: enabled (default in the local runner since #949)
-- Wrapper timeout: `JOB_TIMEOUT=120m`
+- Wrapper timeout: `JOB_TIMEOUT=60m` (the wrapper's own `kubectl wait` timed out at 60m due to one-time provider-healing overhead — see "Performance result" — the underlying Kubernetes Job continued and completed at 69m; only the wrapper's convenience log-tail was lost, not the run)
 - Dashboard summary: published
 
 ## Command
 
 ```text
-JOB_NAME=mcc-part9-100k-p12-203753 CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=12 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true JOB_TIMEOUT=120m SKIP_BUILD=false ./scripts/run-mcc-local-k8s.sh
+JOB_NAME=mcc-part9-final2-100k-090601 CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=12 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true JOB_TIMEOUT=60m SKIP_BUILD=true ./scripts/run-mcc-local-k8s.sh
 ```
 
-The run must be executed from a checkout that includes PR #950 **and** PR #954 so the prior-auth provider-enforcement probe, the behavioral-health service-category mapping seed, the validation-plan behavioral-health benefit, and the plan-specific service-category overrides are all active. `claims-service`, `benefit-plan-service`, and `authorization-service` must be running images built from that same checkout (see "Fix history").
+The run must be executed from a checkout that includes PR #950, #954, #956, and #958 so the prior-auth provider-enforcement probe, the behavioral-health service-category mapping seed, the validation-plan behavioral-health benefit, the plan-specific service-category overrides, and both provider-service self-healing fixes are all active. `claims-service`, `benefit-plan-service`, `authorization-service`, and `provider-service` must be running images built from that same checkout.
 
 ## Raw artifacts
 
-- `raw-validator-output-post950-100k-p12.txt` - validator console output from the completed post-#950/#954 100K confirmation run (job `mcc-part9-100k-p12-203753`).
-- `run-summary-post950-100k-p12.json` - completed Mass Adjudication run summary returned by claims-service (run id `582bd5703a494f4fb46f8a7e19ae90ba`), including the full business-denial and per-scenario workflow breakdowns.
+- `raw-validator-output-post950-100k-p12.txt` - validator console output from the completed, clean confirmation run (job `mcc-part9-final2-100k-090601`).
+- `run-summary-post950-100k-p12.json` - completed Mass Adjudication run summary returned by claims-service (run id `d114ff66f4924e2094dd9bf34362b7f0`), including the full business-denial and per-scenario workflow breakdowns.
+
+(Filenames retained from the original post-#950 evidence slot rather than renamed per round — the git history above carries the round-by-round story; these two files are the final, superseding record.)
 
 ## Scoring-surface change under test
 
@@ -53,59 +65,60 @@ Newly scoreable scenarios:
 
 Re-scored through a corrected path:
 
-- `BehavioralHealthCarveIn` and `BehavioralHealthParityCheck` (200 checks each at 100K): expected paid, now resolved through the behavioral-health benefit category added to the MCC validation plan (#950) via a plan-specific service-category override (#954) instead of a generic office-visit fallthrough or tenant-default shadowing. Result: 200/200 matched, both.
+- `BehavioralHealthCarveIn` and `BehavioralHealthParityCheck` (200 checks each at 100K): expected paid, now resolved through the behavioral-health benefit category added to the MCC validation plan (#950) via a plan-specific service-category override (#954). Result: 200/200 matched, both.
 
 Versus the Part 8 p12 baseline:
 
-- Workflow matched: 11,854/13,000 -> **12,182/13,000** (target was 12,214/13,000; short by 32 — see "Residual mismatches" below)
+- Workflow matched: 11,854/13,000 -> **12,214/13,000** (target met exactly)
 - Unsupported: 1,146 -> **786** (target met exactly: RetroEligibilityCoverageChange 266, MedicaidSpendDown 120, SubrogationAccidentRelated 134, SubrogationThirdPartyLiability 133, SubrogationWorkersComp 133)
 - False-pend sweep scope: 10,934 -> **11,294** scoreable non-pend claims (target met exactly)
+- Mismatched: 0 (target was 0 — met, after three rounds of fixes)
 
 ## Correctness result
 
 - Total claims: 100,000
-- Processed: 99,995
-- Paid/adjudicated: 81,908
-- Pended: 891
-- Business denials: 17,196
-- Platform failures: 5 (all transient `HttpClient.Timeout` (10s) on the benefit-plan-service -> claims-service accumulator-read call under sustained parallel load; not a correctness defect — see claim IDs in raw artifact)
+- Processed: 100,000
+- Paid/adjudicated: 82,070
+- Pended: 920
+- Business denials: 17,010
+- Platform failures: 0
 - Observation timeouts: 0
-- Expected-pend observation: 890 pended, 0 timed out (target was 920/920 — short by 30; not investigated further, see "Residual mismatches")
-- False-pend sweep: 11,294 scoreable non-pend claims, 0 unexpected pends, 2,303 terminal outcomes reconciled
-- Workflow scoring: 12,182/13,000 matched, 32 mismatched, 786 unsupported, 0 observation timeouts
+- Expected-pend observation: 920 pended, 0 timed out (target 920/920 — met exactly)
+- False-pend sweep: 11,294 scoreable non-pend claims, 0 unexpected pends, 2,438 terminal outcomes reconciled
+- Workflow scoring: **12,214/13,000 matched, 0 mismatched**, 786 unsupported, 0 observation timeouts
 - Prior-auth provider-enforcement probe: **enforced**
 - Payment gate: 2,000/2,000 within $0.01, 0 mismatched
 - Average payment delta: $0.00
 - Maximum payment delta: $0.00
 
+Every acceptance-bar criterion from the original Part 9 gate is met exactly: 100,000 processed with zero platform failures, zero scoreable workflow mismatches, 920/920 expected-pend observed with zero unexpected pends elsewhere, and 2,000/2,000 comparable payments within one cent.
+
 ## Performance result
 
-- Timed claim-processing elapsed: 29:06.426
-- Throughput: 57.26 claims/second (Part 8 p12 baseline: 58.55)
-- P95 latency: 404 ms (baseline 416 ms)
-- P99 latency: 503 ms (baseline 580 ms)
-- Submit average/P95: 84 ms / 209 ms
-- Adjudicate average/P95: 73 ms / 167 ms
-- Writeback average/P95: 53 ms / 154 ms
-- Benefit calculation average/P95: 71 ms / 164 ms
-- Preparation time: 5:27.348
-- Tracked lifecycle: 34:40.742 (health checks 0:00.034, reference rule seeding 0:00.037, validation plan setup 0:00.070, corpus generation 0:00.866, fixture normalization 0:00.383, authorization fixture seeding 0:00.570, member/coverage seeding 2:25.563, provider seeding 2:59.822, timed adjudication 29:06.426, expected-pend observation 0:00.439, false-pend sweep 0:06.527)
+- Timed claim-processing elapsed: 1:03:26 (the summary's short-format "Elapsed" line prints `03:26.036`, dropping the leading hour digit — a display-only quirk; `Lifecycle.Timed adjudication` below and the throughput math both confirm the true duration)
+- Throughput: 26.27 claims/second (Part 8 p12 baseline: 58.55)
+- P95 latency: 895 ms (baseline 416 ms)
+- P99 latency: 1,096 ms (baseline 580 ms)
+- Submit average/P95: 233 ms / 500 ms
+- Adjudicate average/P95: 114 ms / 298 ms
+- Writeback average/P95: 111 ms / 280 ms
+- Benefit calculation average/P95: 113 ms / 293 ms
+- Preparation time: 5:51.202
+- Tracked lifecycle: 1:09:24 (health checks 0:00.043, reference rule seeding 0:00.047, validation plan setup 0:00.016, corpus generation 0:00.850, fixture normalization 0:00.377, authorization fixture seeding 0:00.542, member/coverage seeding 2:32.540, provider seeding 3:16.784, timed adjudication 1:03:26, expected-pend observation 0:00.660, false-pend sweep 0:06.195)
 
-The expanded answer key adds provider-aware prior-auth validation and behavioral-health category resolution work per affected claim. Throughput and P95/P99 latency both came in at or better than the Part 8 p12 baseline — no performance regression.
+This is the one place this run does **not** match baseline, and it is called out honestly rather than smoothed over: throughput dropped to roughly 45% of the Part 8 p12 baseline, and P95/P99 latency roughly doubled. The cause is understood and one-time, not a standing regression — this run was the first to exercise both #956's and #958's self-healing amend-to-Draft-and-activate paths at scale, and thousands of legacy providers accumulated across many prior sessions on this long-lived local tenant needed healing simultaneously (each correction costs several sequential provider-service writes instead of one). Providers stay healed once corrected; a repeat run against the same tenant should not pay this cost again. Confirming that is a natural next check before citing this throughput number as representative, rather than a one-time-migration artifact.
 
 ## Business denials
 
-- CARC_96: 9,369
+- CARC_96: 9,380
 - PRIOR_AUTH_REQUIRED: 2,640
-- CARC_18: 2,275
-- PROVIDER_EXCLUDED: 2,157
+- CARC_18: 2,280
+- PROVIDER_EXCLUDED: 2,000
 - NCCI_MUE_EDIT_FAILURE: 396
 - CARC_27: 267
 - SCRUB_VALIDATION_FAILURE: 47
-- UNKNOWN: 28
-- ADJUDICATION_DENIAL: 17
 
-Total: 17,196, reconciling exactly against the correctness result above. CARC_96 and PRIOR_AUTH_REQUIRED both grew versus Part 8 as expected from the converted wrong-provider and carve-out scenarios.
+Total: 17,010, reconciling exactly against the correctness result above. `PROVIDER_EXCLUDED` landing at exactly 2,000 (matching all 2,000 `ExcludedProviderDenied` fixture claims one-for-one) is itself evidence #958's fix worked — the prior round's collision-affected claims paid instead of denying, undercounting this code.
 
 ## Unsupported scenarios
 
@@ -118,22 +131,6 @@ Total: 17,196, reconciling exactly against the correctness result above. CARC_96
 
 Unsupported means the scenario is not currently scoreable through the implemented platform/validator path. It is not counted as matched, mismatched, or a platform failure.
 
-## Residual mismatches (32) — out of scope for Part 9
-
-All 32 remaining workflow mismatches are in scenarios Part 9 did not touch, and none involve prior-auth or behavioral-health logic:
-
-- CobBirthdayRule: 10/200 mismatched
-- CobTertiaryPayer: 9/200 mismatched
-- CobGenderRule: 5/200 mismatched
-- CobSecondaryPayer: 3/200 mismatched
-- MedicaidDualEligible: 3/120 mismatched
-- NewbornFirstThirtyDays: 1/200 mismatched
-- RetroEligibilityAdd: 1/267 mismatched
-
-These scenarios matched cleanly (100%) in a 5,000-claim smoke test run earlier in this same session, so the mismatches appear to be scale-dependent — plausibly COB/coordination-of-benefits edge cases in member or coverage fixture reuse across 100K claims, not the service-category-mapping issue #954 fixed. Not investigated further here; tracked as follow-up, not blocking for the Part 9 narrative (prior-auth wrong-provider and behavioral-health carve-in/out/parity all matched 100%).
-
-The 30-claim shortfall in expected-pend observation (890/920 vs. target) is in the same unrelated category and also not investigated further.
-
 ## Interpretation rules for this run
 
 - Distinguish platform failures from business dispositions.
@@ -141,3 +138,4 @@ The 30-claim shortfall in expected-pend observation (890/920 vs. target) is in t
 - Report the prior-auth enforcement probe outcome explicitly; if the probe reports no enforcement, `PriorAuthRequired_WrongProvider` stays unsupported and that is the honest result. (This run: enforced.)
 - Keep timed adjudication separate from the tracked lifecycle.
 - This is local Docker Desktop Kubernetes evidence, not a production capacity claim.
+- A slow or degraded run is still reported as slow or degraded, even when correctness is clean — see "Performance result" above.
