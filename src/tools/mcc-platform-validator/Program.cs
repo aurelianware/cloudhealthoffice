@@ -1307,35 +1307,48 @@ static async Task<MemberFixturePreparation> SeedMembersAsync(
     var created = 0;
     var existing = 0;
     var statusAligned = 0;
+    var processed = 0;
+    var progressInterval = SeedingProgressInterval(members.Count);
+    var progressLock = new object();
 
-    foreach (var member in members)
-    {
-        if (await MemberExistsAsync(http, options, member.MemberId))
+    await Parallel.ForEachAsync(
+        members,
+        new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
+        async (member, _) =>
         {
-            existing++;
-            if (await UpdateMemberSeedStatusAsync(http, options, member, json))
+            if (await MemberExistsAsync(http, options, member.MemberId))
             {
-                statusAligned++;
+                Interlocked.Increment(ref existing);
+                if (await UpdateMemberSeedStatusAsync(http, options, member, json))
+                {
+                    Interlocked.Increment(ref statusAligned);
+                }
             }
-            continue;
-        }
+            else
+            {
+                var didCreate = await CreateMemberAsync(http, options, member, json);
+                if (didCreate)
+                {
+                    Interlocked.Increment(ref created);
+                }
+                else
+                {
+                    Interlocked.Increment(ref existing);
+                }
 
-        var didCreate = await CreateMemberAsync(http, options, member, json);
-        if (didCreate)
-        {
-            created++;
-        }
-        else
-        {
-            existing++;
-        }
+                if (await UpdateMemberSeedStatusAsync(http, options, member, json))
+                {
+                    Interlocked.Increment(ref statusAligned);
+                }
+            }
 
-        if (await UpdateMemberSeedStatusAsync(http, options, member, json))
-        {
-            statusAligned++;
-        }
+            WriteSeedingProgress("members", Interlocked.Increment(ref processed), members.Count, progressInterval, progressLock);
+        });
+
+    if (members.Count > 0)
+    {
+        Console.WriteLine();
     }
-
     Console.WriteLine($"seeded: {created:N0} synthetic members ({existing:N0} already present, {statusAligned:N0} status-aligned)");
     return new MemberFixturePreparation(created, existing, statusAligned);
 }
@@ -1920,6 +1933,22 @@ static bool TryGetInt32Property(JsonElement element, string propertyName, out in
     return false;
 }
 
+static int SeedingProgressInterval(int total) =>
+    total <= 0 ? 1 : Math.Max(1, Math.Min(2_000, total / 20));
+
+static void WriteSeedingProgress(string label, int done, int total, int interval, object progressLock)
+{
+    if (total <= 0 || (done % interval != 0 && done != total))
+    {
+        return;
+    }
+
+    lock (progressLock)
+    {
+        Console.Write($"\r  Seeding {label}: {done:N0}/{total:N0}");
+    }
+}
+
 static async Task<FixtureCount> SeedProvidersAsync(
     HttpClient http,
     ValidatorOptions options,
@@ -1937,41 +1966,53 @@ static async Task<FixtureCount> SeedProvidersAsync(
 
     var created = 0;
     var existing = 0;
+    var processed = 0;
+    var progressInterval = SeedingProgressInterval(providers.Count);
+    var progressLock = new object();
 
-    foreach (var provider in providers)
+    await Parallel.ForEachAsync(
+        providers,
+        new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
+        async (provider, _) =>
+        {
+            var providerId = await GetProviderIdByNpiAsync(http, options, provider.Npi);
+            if (providerId is not null)
+            {
+                Interlocked.Increment(ref existing);
+            }
+            else
+            {
+                providerId = await CreateProviderAsync(http, options, provider, validationPlanId, json);
+                Interlocked.Increment(ref created);
+            }
+
+            if (!IsProviderExcluded(provider))
+            {
+                await EnsureProviderCredentialingAsync(
+                    http,
+                    options,
+                    providerId,
+                    EffectiveDateForProvider(provider),
+                    json);
+                await EnsureProviderNetworkParticipationAsync(
+                    http,
+                    options,
+                    providerId,
+                    provider,
+                    json);
+            }
+            else
+            {
+                await EnsureProviderExclusionAsync(http, options, providerId, json);
+            }
+
+            WriteSeedingProgress("providers", Interlocked.Increment(ref processed), providers.Count, progressInterval, progressLock);
+        });
+
+    if (providers.Count > 0)
     {
-        var providerId = await GetProviderIdByNpiAsync(http, options, provider.Npi);
-        if (providerId is not null)
-        {
-            existing++;
-        }
-        else
-        {
-            providerId = await CreateProviderAsync(http, options, provider, validationPlanId, json);
-            created++;
-        }
-
-        if (!IsProviderExcluded(provider))
-        {
-            await EnsureProviderCredentialingAsync(
-                http,
-                options,
-                providerId,
-                EffectiveDateForProvider(provider),
-                json);
-            await EnsureProviderNetworkParticipationAsync(
-                http,
-                options,
-                providerId,
-                provider,
-                json);
-        }
-        else
-        {
-            await EnsureProviderExclusionAsync(http, options, providerId, json);
-        }
+        Console.WriteLine();
     }
-
     Console.WriteLine($"seeded: {created:N0} synthetic providers ({existing:N0} already present)");
     return new FixtureCount(created, existing);
 }
