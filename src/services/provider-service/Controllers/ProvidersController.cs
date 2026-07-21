@@ -660,7 +660,13 @@ public class ProvidersController : ControllerBase
     }
 
     /// <summary>
-    /// Add network participation to provider
+    /// Add network participation to provider. Self-healing: an Active
+    /// (read-only) provider is auto-amended into a Draft, edited, and
+    /// activated in the same call — the amend → activate cycle has no
+    /// other endpoint that can populate a Draft's contents, so without
+    /// this, adding a participation to any already-Active provider was
+    /// silently impossible (the write always 409'd, and callers that
+    /// treat 409 as "already present" masked the gap indefinitely).
     /// </summary>
     [HttpPost("{id}/network-participations")]
     [ProducesResponseType(typeof(Provider), StatusCodes.Status200OK)]
@@ -680,6 +686,21 @@ public class ProvidersController : ControllerBase
             return NotFound($"Provider {id} not found");
         }
 
+        var actor = ResolveActorId();
+        var needsActivation = false;
+        if (provider.VersionState != ProviderVersionState.Draft)
+        {
+            try
+            {
+                provider = await _versioning.AmendActiveProviderAsync(provider.ProviderId, actor);
+                needsActivation = true;
+            }
+            catch (ProviderVersionStateException ex) when (ex.IsNotFound)
+            {
+                return NotFound(new { message = ex.Message, providerId = ex.ProviderId });
+            }
+        }
+
         provider.NetworkParticipations.Add(participation);
         provider.LastUpdatedDate = DateTime.UtcNow;
 
@@ -692,6 +713,11 @@ public class ProvidersController : ControllerBase
         try
         {
             var updated = await _providerRepository.UpdateAsync(provider);
+            if (needsActivation)
+            {
+                updated = await _versioning.ActivateVersionAsync(updated.ProviderId, updated.VersionId, actor);
+            }
+
             return Ok(updated);
         }
         catch (ProviderVersionStateException ex)
