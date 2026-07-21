@@ -1,0 +1,104 @@
+# Episode 009 benchmark results
+
+STATUS: EVIDENCE PENDING. The scoring-surface expansion (#946, #947, #949, #950) is merged, but the post-#950 100K confirmation run has not been recorded yet. Fields marked [pending] below are reserved for the completed run. Do not publish Part 9 until this file carries real numbers and the raw artifacts are committed alongside it.
+
+## Run identity
+
+- Date: [pending] local time / [pending] UTC
+- Kubernetes job: [pending, e.g. `mcc-part9-100k-p12-HHMMSS`]
+- Dashboard run ID: [pending]
+- Environment: local Docker Desktop Kubernetes
+- Tenant: `demo`
+- Validator seed: 42
+- Claims: 100,000
+- Parallelism: 12
+- Line of business: Medicaid
+- Prior-authorization scenario rate: 2%
+- Pend observation: enabled, 45-second bound, 1-second polling interval
+- Service-category admin write gate: enabled (default in the local runner since #949)
+- Wrapper timeout: `JOB_TIMEOUT=120m`
+- Dashboard summary: [pending]
+
+## Command
+
+```text
+JOB_NAME=mcc-part9-100k-p12-HHMMSS CLAIMS=100000 MAX_CLAIMS=100000 PARALLELISM=12 PROGRESS_EVERY=10000 SEED_AUTHORIZATIONS=true JOB_TIMEOUT=120m SKIP_BUILD=false ./scripts/run-mcc-local-k8s.sh
+```
+
+The run must be executed from a main checkout that includes PR #950 so the prior-auth provider-enforcement probe, the behavioral-health service-category mapping seed, and the validation-plan behavioral-health benefit are all active.
+
+## Raw artifacts
+
+- `raw-validator-output-post950-100k-p12.txt` - [pending] validator console output from the completed post-#950 100K confirmation run.
+- `run-summary-post950-100k-p12.json` - [pending] completed Mass Adjudication run summary returned by claims-service.
+
+## Scoring-surface change under test
+
+The answer key expanded between the Part 8 runs and this run. The corpus mix, seed, and claim count are unchanged.
+
+Newly scoreable scenarios:
+
+- `PriorAuthRequired_WrongProvider` (160 checks at 100K): expected business denial, scored only when the validator's runtime probe confirms authorization-service rejects wrong-provider authorization use (#946, #950). If the probe finds enforcement absent, the scenario remains unsupported and the run output records why.
+- `BehavioralHealthCarveOut` (200 checks at 100K): expected CARC 96 non-covered-service denial via deterministic psychotherapy claim normalization and the tenant-scoped behavioral-health service-category mapping (#947, #949).
+
+Re-scored through a corrected path:
+
+- `BehavioralHealthCarveIn` and `BehavioralHealthParityCheck` (200 checks each at 100K): expected paid, now resolved through the behavioral-health benefit category added to the MCC validation plan (#950) instead of a generic office-visit fallthrough.
+
+Expected movement versus the Part 8 p12 baseline, if conversions hold at scale:
+
+- Workflow matched: 11,854/13,000 -> 12,214/13,000 target
+- Unsupported: 1,146 -> 786 target (RetroEligibilityCoverageChange 266, MedicaidSpendDown 120, SubrogationAccidentRelated 134, SubrogationThirdPartyLiability 133, SubrogationWorkersComp 133)
+- False-pend sweep scope: 10,934 -> 11,294 scoreable non-pend claims target
+
+These are projections, not results, until the run below is recorded.
+
+## Correctness result
+
+- Total claims: 100,000
+- Processed: [pending]
+- Paid/adjudicated: [pending]
+- Pended: [pending]
+- Business denials: [pending]
+- Platform failures: [pending]
+- Observation timeouts: [pending]
+- Expected-pend observation: [pending] pended, [pending] timed out
+- False-pend sweep: [pending] scoreable non-pend claims, [pending] unexpected pends, [pending] terminal outcomes reconciled
+- Workflow scoring: [pending]/13,000 matched, [pending] mismatched, [pending] unsupported, [pending] observation timeouts
+- Prior-auth provider-enforcement probe: [pending: enforced/not enforced]
+- Payment gate: [pending]/2,000 within $0.01, [pending] mismatched
+- Average payment delta: [pending]
+- Maximum payment delta: [pending]
+
+## Performance result
+
+- Timed claim-processing elapsed: [pending]
+- Throughput: [pending] claims/second (Part 8 p12 baseline: 58.55)
+- P95 latency: [pending] ms (baseline 416 ms)
+- P99 latency: [pending] ms (baseline 580 ms)
+- Submit average/P95: [pending]
+- Adjudicate average/P95: [pending]
+- Writeback average/P95: [pending]
+- Benefit calculation average/P95: [pending]
+- Preparation time: [pending]
+- Tracked lifecycle: [pending]
+
+The expanded answer key adds provider-aware prior-auth validation and behavioral-health category resolution work per affected claim, so a modest throughput/latency cost against the p12 baseline is acceptable. A correctness regression is not.
+
+## Business denials
+
+[pending - record the full denial-code distribution; PRIOR_AUTH_REQUIRED and CARC 96 counts are expected to grow versus Part 8 by the converted wrong-provider and carve-out scenarios]
+
+## Unsupported scenarios
+
+[pending - expected residue if conversions hold: RetroEligibilityCoverageChange 266, MedicaidSpendDown 120, SubrogationAccidentRelated 134, SubrogationThirdPartyLiability 133, SubrogationWorkersComp 133, total 786]
+
+Unsupported means the scenario is not currently scoreable through the implemented platform/validator path. It is not counted as matched, mismatched, or a platform failure.
+
+## Interpretation rules for this run
+
+- Distinguish platform failures from business dispositions.
+- Do not count unsupported scenarios as passes.
+- Report the prior-auth enforcement probe outcome explicitly; if the probe reports no enforcement, `PriorAuthRequired_WrongProvider` stays unsupported and that is the honest result.
+- Keep timed adjudication separate from the tracked lifecycle.
+- This is local Docker Desktop Kubernetes evidence, not a production capacity claim.

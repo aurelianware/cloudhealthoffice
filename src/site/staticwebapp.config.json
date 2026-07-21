@@ -358,6 +358,14 @@
       "rewrite": "/insights/million-claim-challenge/part-7-operator-console.html"
     },
     {
+      "route": "/insights/million-claim-challenge/part-8-clean-100k",
+      "rewrite": "/insights/million-claim-challenge/part-8-clean-100k.html"
+    },
+    {
+      "route": "/insights/million-claim-challenge/part-9-from-unsupported-to-scored",
+      "rewrite": "/insights/million-claim-challenge/part-9-from-unsupported-to-scored.html"
+    },
+    {
       "route": "/docs/prior-auth-guide.html",
       "redirect": "/docs/prior-auth-guide",
       "statusCode": 301

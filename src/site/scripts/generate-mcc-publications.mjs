@@ -32,6 +32,12 @@ const publications = [
     part: 'Part 8',
     slug: 'part-8-clean-100k',
     summary: 'How stronger correctness gates reached a clean 100,000-claim run and exposed the next local scaling bottleneck.'
+  },
+  {
+    episode: '009',
+    part: 'Part 9',
+    slug: 'part-9-from-unsupported-to-scored',
+    summary: 'How prior-auth wrong-provider and behavioral-health scenarios moved from unsupported to deliberately scored platform behavior.'
   }
 ];
 
