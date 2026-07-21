@@ -569,9 +569,12 @@ public class ProvidersController : ControllerBase
     }
 
     /// <summary>
-    /// Update provider. Active versions are read-only — the repository
-    /// throws <see cref="ProviderVersionStateException"/> which surfaces as 409.
-    /// Use <c>POST /amend</c> to create an editable Draft from the current Active version.
+    /// Update provider. Self-healing: an Active (read-only) provider is
+    /// auto-amended into a Draft, updated with the caller's field values,
+    /// and activated within the same call — see the identical rationale
+    /// on <see cref="AddNetworkParticipation"/>. Existing consumers PUT
+    /// against `Id` (the chain key for legacy single-row chains); on a
+    /// multi-version chain the same `Id` resolves to the head.
     /// </summary>
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(Provider), StatusCodes.Status200OK)]
@@ -587,27 +590,36 @@ public class ProvidersController : ControllerBase
             return NotFound($"Provider {id} not found");
         }
 
-        // Existing consumers PUT against `Id` (the chain key for legacy
-        // single-row chains); on a multi-version chain the same `Id`
-        // resolves to the head, which is read-only. Surface 409 with the
-        // amend instructions so callers know the new flow.
         try
         {
-            provider.Id = existing.Id;
-            provider.ProviderId = existing.ProviderId;
-            provider.VersionId = existing.VersionId;
-            provider.VersionNumber = existing.VersionNumber;
-            provider.VersionState = existing.VersionState;
-            provider.CreatedDate = existing.CreatedDate;
+            var actor = ResolveActorId();
+            var target = existing;
+            var needsActivation = false;
+            if (existing.VersionState != ProviderVersionState.Draft)
+            {
+                target = await _versioning.AmendActiveProviderAsync(existing.ProviderId, actor);
+                needsActivation = true;
+            }
+
+            provider.Id = target.Id;
+            provider.ProviderId = target.ProviderId;
+            provider.VersionId = target.VersionId;
+            provider.VersionNumber = target.VersionNumber;
+            provider.VersionState = target.VersionState;
+            provider.PredecessorVersionId = target.PredecessorVersionId;
+            provider.CreatedDate = target.CreatedDate;
             provider.LastUpdatedDate = DateTime.UtcNow;
 
             // Soft validation (5.5): warn + count any participation that
-            // arrives without panel-gating fields. Fires before the
-            // repository call so even a 409 conflict on a non-Draft row
-            // surfaces the elision.
+            // arrives without panel-gating fields.
             _panelGatingValidator.Inspect("UpdateProvider", TenantId, provider);
 
             var updated = await _providerRepository.UpdateAsync(provider);
+            if (needsActivation)
+            {
+                updated = await _versioning.ActivateVersionAsync(updated.ProviderId, updated.VersionId, actor);
+            }
+
             return Ok(updated);
         }
         catch (ProviderVersionStateException ex) when (ex.IsNotFound)

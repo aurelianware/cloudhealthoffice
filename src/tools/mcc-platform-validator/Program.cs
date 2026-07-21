@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.BenchmarkClaimGenerator;
 using CloudHealthOffice.BenchmarkClaimGenerator.Configuration;
@@ -1965,6 +1966,10 @@ static async Task<FixtureCount> SeedProvidersAsync(
                 provider,
                 json);
         }
+        else
+        {
+            await EnsureProviderExclusionAsync(http, options, providerId, json);
+        }
     }
 
     Console.WriteLine($"seeded: {created:N0} synthetic providers ({existing:N0} already present)");
@@ -2207,6 +2212,60 @@ static async Task EnsureProviderCredentialingAsync(
     {
         throw new InvalidOperationException(
             $"provider credentialing seed failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+    }
+}
+
+// The provider-fixture pool's run-scoped NPI generation (see
+// MccProviderFixturePool.BuildRunScopedNpi) can collide with a provider
+// created by an earlier run on this shared, long-lived tenant -- the
+// value space is wide but not infinite, and this cluster accumulates
+// providers across many runs. When that happens, GetProviderIdByNpiAsync
+// finds an "existing" provider whose profile has nothing to do with this
+// run's ExcludedProviderDenied fixture. The adjudication-path integrity
+// gate (BenefitPlanService.HttpProviderIntegrityGate) reads
+// Provider.IntegrityScore / IntegrityRating directly from provider-service
+// as the source of truth (falling back to a live verification-service
+// call only when that cached value is null or stale) -- CredentialingStatus
+// set at creation time is not what the gate actually checks. Verify the
+// existing record's integrity fields actually reflect exclusion, and
+// correct them in place if a collision left them clean.
+static async Task EnsureProviderExclusionAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    string providerId,
+    JsonSerializerOptions json)
+{
+    using var response = await http.GetAsync(
+        $"{options.ProviderUrl}/api/v1/providers/{Uri.EscapeDataString(providerId)}");
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException(
+            $"provider fetch failed for exclusion check ({providerId}): {(int)response.StatusCode} {body}");
+    }
+
+    var node = JsonNode.Parse(body)
+        ?? throw new InvalidOperationException($"provider fetch returned no body ({providerId})");
+
+    var currentRating = node["integrityRating"]?.GetValue<string>();
+    if (string.Equals(currentRating, "Blocked", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    node["integrityScore"] = 0;
+    node["integrityRating"] = "Blocked";
+    node["credentialingStatus"] = "Denied";
+
+    using var update = await http.PutAsJsonAsync(
+        $"{options.ProviderUrl}/api/v1/providers/{Uri.EscapeDataString(providerId)}",
+        node,
+        json);
+    var updateBody = await update.Content.ReadAsStringAsync();
+    if (!update.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException(
+            $"provider exclusion correction failed ({providerId}): {(int)update.StatusCode} {updateBody}");
     }
 }
 
