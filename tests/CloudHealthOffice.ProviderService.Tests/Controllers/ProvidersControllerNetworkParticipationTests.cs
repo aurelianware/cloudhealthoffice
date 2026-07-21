@@ -104,6 +104,81 @@ public class ProvidersControllerNetworkParticipationTests
         result.Result.Should().BeOfType<NotFoundObjectResult>();
     }
 
+    /// <summary>
+    /// Regression coverage for the ExcludedProviderDenied fixture collision:
+    /// when the MCC validator's run-scoped NPI generation collides with an
+    /// existing provider, correcting that provider's integrity fields (the
+    /// actual source the adjudication-path integrity gate reads) requires
+    /// the same self-healing amend behavior as AddNetworkParticipation.
+    /// </summary>
+    [Fact]
+    public async Task UpdateProvider_against_active_provider_returns_200_not_409()
+    {
+        var toUpdate = BuildUpdatePayload(integrityScore: 0, integrityRating: "Blocked", credentialingStatus: CredentialingStatus.Denied);
+
+        var result = await _controller.UpdateProvider(ProviderId, toUpdate);
+
+        var ok = result.Result as OkObjectResult;
+        ok.Should().NotBeNull();
+        var provider = ok!.Value as Provider;
+        provider.Should().NotBeNull();
+        provider!.VersionState.Should().Be(ProviderVersionState.Active);
+        provider.IntegrityScore.Should().Be(0);
+        provider.IntegrityRating.Should().Be("Blocked");
+        provider.CredentialingStatus.Should().Be(CredentialingStatus.Denied);
+    }
+
+    [Fact]
+    public async Task UpdateProvider_against_active_provider_amends_and_activates_a_new_version()
+    {
+        var toUpdate = BuildUpdatePayload(integrityScore: 0, integrityRating: "Blocked", credentialingStatus: CredentialingStatus.Denied);
+
+        var result = await _controller.UpdateProvider(ProviderId, toUpdate);
+
+        var provider = ((OkObjectResult)result.Result!).Value as Provider;
+        provider!.VersionNumber.Should().Be(2);
+        provider.PredecessorVersionId.Should().NotBeNullOrEmpty();
+
+        _transitions.Items.Should().Contain(t => t.TransitionType == ProviderTransitionType.Amend);
+        _events.Events.Should().Contain(e => e.EventType == ProviderVersionEventType.ProviderVersionActivated);
+    }
+
+    [Fact]
+    public async Task UpdateProvider_against_unknown_provider_returns_404()
+    {
+        var toUpdate = BuildUpdatePayload(integrityScore: 0, integrityRating: "Blocked", credentialingStatus: CredentialingStatus.Denied);
+
+        var result = await _controller.UpdateProvider("does-not-exist", toUpdate);
+
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    private static Provider BuildUpdatePayload(int integrityScore, string integrityRating, CredentialingStatus credentialingStatus) => new()
+    {
+        TenantId = TenantId,
+        NPI = "1234567890",
+        ProviderType = ProviderType.Individual,
+        FirstName = "Test",
+        LastName = "Provider",
+        PrimarySpecialty = "Internal Medicine",
+        TaxonomyCode = "207R00000X",
+        IntegrityScore = integrityScore,
+        IntegrityRating = integrityRating,
+        CredentialingStatus = credentialingStatus,
+        NetworkParticipations = new List<NetworkParticipation>
+        {
+            new()
+            {
+                PlanId = null,
+                NetworkId = "mcc-local-network",
+                LineOfBusiness = LineOfBusiness.Medicaid,
+                NetworkTier = "InNetwork",
+                EffectiveDate = DateTime.UtcNow.AddYears(-2),
+                AcceptingNewPatients = true,
+            }
+        },
+    };
+
     private static NetworkParticipation NewParticipation(string networkId) => new()
     {
         PlanId = null,
