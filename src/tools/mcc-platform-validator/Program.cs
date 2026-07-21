@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -94,7 +95,9 @@ var providerPool = await MeasureLifecycleValuePhaseAsync(lifecycleTimings, "Fixt
         claims,
         options.Seed,
         validationPlanId,
-        new MccWorkflowValidationCapabilities(ScorePriorAuthValidationEvidence: options.SeedAuthorizations));
+        new MccWorkflowValidationCapabilities(
+            ScorePriorAuthValidationEvidence: options.SeedAuthorizations,
+            ScorePriorAuthProviderValidationEvidence: options.SeedAuthorizations));
     MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
     MccCleanPaidFixture.NormalizeClaims(claims);
     return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId));
@@ -104,14 +107,23 @@ Console.WriteLine(
     $"Provider fixture pool: {providerPool.ProvidersBefore:N0} -> {providerPool.ProvidersAfter:N0} distinct NPIs " +
     $"({providerPool.ReusedAssignments:N0} assignments reused, {providerPool.ProtectedClaims:N0} provider-sensitive claims preserved)");
 
-var scorePriorAuthValidationEvidence = false;
+var priorAuthValidationCapabilities = MccWorkflowValidationCapabilities.Default;
 if (options.SeedAuthorizations)
 {
-    scorePriorAuthValidationEvidence = await MeasureLifecycleValuePhaseAsync(
+    priorAuthValidationCapabilities = await MeasureLifecycleValuePhaseAsync(
         lifecycleTimings,
         "Authorization fixture seeding",
         "Preparation",
-        () => SeedPriorAuthAuthorizationFixturesAsync(http, options, claims, json));
+        async () =>
+        {
+            var seeded = await SeedPriorAuthAuthorizationFixturesAsync(http, options, claims, json);
+            var providerValidationSupported = seeded
+                && await ProbePriorAuthProviderValidationEvidenceAsync(http, options, claims, json);
+
+            return new MccWorkflowValidationCapabilities(
+                ScorePriorAuthValidationEvidence: seeded,
+                ScorePriorAuthProviderValidationEvidence: providerValidationSupported);
+        });
 }
 else
 {
@@ -120,8 +132,7 @@ else
 
 var answerKey = MccAnswerKey.FromClaims(
     claims,
-    new MccWorkflowValidationCapabilities(
-        ScorePriorAuthValidationEvidence: scorePriorAuthValidationEvidence));
+    priorAuthValidationCapabilities);
 
 var memberFixtures = MemberFixturePreparation.Empty;
 var cobCoverageFixtures = FixtureCount.Empty;
@@ -529,6 +540,8 @@ static async Task SeedPriorAuthRulesAsync(HttpClient http, ValidatorOptions opti
     Console.WriteLine($"seeded: prior-auth platform rules ({seeded:N0} new)");
 }
 
+const string BehavioralHealthServiceTypeCode = "Behavioral Health";
+
 static async Task SeedServiceCategoryMappingsAsync(HttpClient http, ValidatorOptions options, JsonSerializerOptions json)
 {
     using var existingResponse = await http.GetAsync($"{options.BenefitUrl}/api/v1/service-category-mappings");
@@ -552,7 +565,7 @@ static async Task SeedServiceCategoryMappingsAsync(HttpClient http, ValidatorOpt
 
     var payload = new
     {
-        serviceTypeCode = "Behavioral Health",
+        serviceTypeCode = BehavioralHealthServiceTypeCode,
         serviceTypeDescription = "MCC behavioral-health carve-out validation category",
         rules = new[]
         {
@@ -590,7 +603,7 @@ static bool IsMccBehavioralHealthMappingPresent(ServiceCategoryMappingSeedView m
 {
     return mapping.PlanId is null
         && mapping.IsActive
-        && string.Equals(mapping.ServiceTypeCode, "Behavioral Health", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(mapping.ServiceTypeCode, BehavioralHealthServiceTypeCode, StringComparison.OrdinalIgnoreCase)
         && mapping.Rules.Any(rule =>
             string.Equals(rule.CodeType, "CPT", StringComparison.OrdinalIgnoreCase)
             && string.Equals(rule.CodePattern, "90785", StringComparison.OrdinalIgnoreCase)
@@ -660,6 +673,17 @@ static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions op
                 deductibleApplies = true,
                 oopApplies = true,
                 priorAuthRequired = true
+            },
+            new
+            {
+                benefitType = "medical",
+                serviceCategory = BehavioralHealthServiceTypeCode,
+                description = "Behavioral Health",
+                cptCodes = new[] { "90791", "90834", "90837", "90847", "90853", "96127" },
+                inNetworkCopay = 25.00m,
+                deductibleApplies = false,
+                oopApplies = true,
+                priorAuthRequired = false
             }
         }
     };
@@ -1526,6 +1550,84 @@ static async Task<bool> SeedPriorAuthAuthorizationFixturesAsync(
     catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
     {
         Console.WriteLine($"Authorization fixtures: skipped ({ex.Message})");
+        return false;
+    }
+}
+
+static async Task<bool> ProbePriorAuthProviderValidationEvidenceAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    IEnumerable<SyntheticClaim> claims,
+    JsonSerializerOptions json)
+{
+    var probeClaim = claims
+        .Where(claim => claim.EdgeCase is EdgeCaseScenario.PriorAuthRequired_WrongProvider)
+        .Where(claim => !string.IsNullOrWhiteSpace(claim.PriorAuthNumber))
+        .OrderBy(claim => claim.ClaimId, StringComparer.Ordinal)
+        .FirstOrDefault();
+
+    if (probeClaim is null)
+    {
+        Console.WriteLine("Authorization provider validation evidence: skipped (no wrong-provider fixture claim)");
+        return false;
+    }
+
+    var authNumber = Uri.EscapeDataString(probeClaim.PriorAuthNumber!.Trim());
+    var serviceDate = DateTime.SpecifyKind(probeClaim.DateOfService.Date, DateTimeKind.Utc)
+        .ToString("o", CultureInfo.InvariantCulture);
+    var procedureCode = Uri.EscapeDataString(AuthorizationProcedureCodeForClaim(probeClaim));
+    var providerNpi = Uri.EscapeDataString(probeClaim.RenderingProvider.Npi);
+    var url = $"{options.AuthorizationUrl}/api/authorizations/{authNumber}/validate" +
+              $"?serviceDate={Uri.EscapeDataString(serviceDate)}" +
+              $"&procedureCode={procedureCode}" +
+              $"&providerNpi={providerNpi}";
+
+    try
+    {
+        using var response = await http.GetAsync(url);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound
+            or System.Net.HttpStatusCode.Unauthorized
+            or System.Net.HttpStatusCode.Forbidden)
+        {
+            Console.WriteLine(
+                $"Authorization provider validation evidence: unsupported ({(int)response.StatusCode} from authorization-service)");
+            return false;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine(
+                $"Authorization provider validation evidence: unsupported ({(int)response.StatusCode} from authorization-service)");
+            return false;
+        }
+
+        var validation = JsonSerializer.Deserialize<AuthorizationValidationProbeResponse>(body, json);
+        if (validation is { IsValid: false })
+        {
+            Console.WriteLine("Authorization provider validation evidence: supported");
+            return true;
+        }
+
+        Console.WriteLine(
+            "Authorization provider validation evidence: unsupported " +
+            "(wrong-provider probe validated successfully; wrong-provider scenarios will remain unsupported)");
+        return false;
+    }
+    catch (HttpRequestException ex)
+    {
+        Console.WriteLine($"Authorization provider validation evidence: unsupported ({ex.Message})");
+        return false;
+    }
+    catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+    {
+        Console.WriteLine($"Authorization provider validation evidence: unsupported ({ex.Message})");
+        return false;
+    }
+    catch (JsonException ex)
+    {
+        Console.WriteLine($"Authorization provider validation evidence: unsupported ({ex.Message})");
         return false;
     }
 }
@@ -3191,6 +3293,11 @@ internal sealed record AdjudicationResponseDto(
 internal sealed record AdjudicationSummaryWriteResponseDto(
     bool StatusPreserved,
     int PersistedStatus);
+
+internal sealed record AuthorizationValidationProbeResponse(
+    string AuthorizationNumber,
+    bool IsValid,
+    string? ValidationMessage);
 
 internal sealed record MemberStatusUpdateDto(
     string Status,
