@@ -80,6 +80,7 @@ var validationPlanId = Guid.NewGuid();
 await MeasureLifecyclePhaseAsync(lifecycleTimings, "Validation plan setup", "Preparation", async () =>
 {
     await CreateValidationPlanAsync(http, options, validationPlanId, json);
+    await SeedValidationPlanServiceCategoryOverridesAsync(http, options, validationPlanId, json);
 });
 
 var claims = await MeasureLifecycleValuePhaseAsync(
@@ -541,6 +542,8 @@ static async Task SeedPriorAuthRulesAsync(HttpClient http, ValidatorOptions opti
 }
 
 const string BehavioralHealthServiceTypeCode = "Behavioral Health";
+const string BehavioralHealthCarveOutServiceTypeCode = "Behavioral Health - Carved Out";
+const string CarveOutModifier = "ZZ";
 
 static async Task SeedServiceCategoryMappingsAsync(HttpClient http, ValidatorOptions options, JsonSerializerOptions json)
 {
@@ -696,6 +699,111 @@ static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions op
     }
 
     Console.WriteLine($"created: validation benefit plan {planGuid}");
+}
+
+// Plan-specific ServiceCategoryMapping overrides for the validation plan. The
+// resolver checks plan-specific mappings before tenant-level defaults (see
+// docs/architecture/service-category-mapping.md), so these pin the exact
+// procedure-code -> service-type routing the validation plan's own benefits
+// expect, regardless of whatever tenant-default mappings exist on the tenant.
+// Without this, a tenant that already has curated system-default categories
+// (e.g. a descriptive "Office Visit" mapping seeded via BP 5.6) can shadow
+// the validation plan's numeric categories and misroute claims to CARC 96
+// "no benefit configured" denials.
+static async Task SeedValidationPlanServiceCategoryOverridesAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    await CreateServiceCategoryMappingAsync(
+        http,
+        options,
+        json,
+        planId: validationPlanId,
+        serviceTypeCode: "98",
+        serviceTypeDescription: "MCC validation plan-specific Office Visit override",
+        rules: new[]
+        {
+            new { priority = 10, codeType = "CPT", codePattern = "99201", codeRangeEnd = "99215" }
+        });
+
+    // Created before the carve-out exclusion below so the exclusion sorts
+    // newer (resolver iterates plan-specific mappings newest-first) and wins
+    // for the modifier-tagged carve-out claim.
+    await CreateServiceCategoryMappingAsync(
+        http,
+        options,
+        json,
+        planId: validationPlanId,
+        serviceTypeCode: BehavioralHealthServiceTypeCode,
+        serviceTypeDescription: "MCC validation plan-specific Behavioral Health override",
+        rules: new[]
+        {
+            new { priority = 10, codeType = "CPT", codePattern = "90785", codeRangeEnd = "90899" },
+            new { priority = 20, codeType = "CPT", codePattern = "96101", codeRangeEnd = "96155" }
+        });
+
+    // BehavioralHealthCarveOut and BehavioralHealthCarveIn/ParityCheck draw from
+    // the same CPT code family, so a plain code-range split can't tell them
+    // apart. ForceBehavioralHealthCarveOutScenario tags its line with
+    // CarveOutModifier; only that claim matches this rule. Everything else
+    // (untagged carve-in/parity-check draws) falls through to the covered
+    // Behavioral Health mapping above. The service type here intentionally
+    // has no matching plan benefit, so it denies with "no benefit configured".
+    await CreateServiceCategoryMappingAsync(
+        http,
+        options,
+        json,
+        planId: validationPlanId,
+        serviceTypeCode: BehavioralHealthCarveOutServiceTypeCode,
+        serviceTypeDescription: "MCC validation carve-out exclusion (deliberately uncovered)",
+        rules: new[]
+        {
+            new
+            {
+                priority = 5,
+                codeType = "CPT",
+                codePattern = "90785",
+                codeRangeEnd = "90899",
+                requiredModifier = CarveOutModifier
+            }
+        });
+
+    Console.WriteLine(
+        "seeded: MCC validation plan-specific service-category overrides " +
+        "(Office Visit, Behavioral Health, Behavioral Health carve-out exclusion)");
+}
+
+static async Task CreateServiceCategoryMappingAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    JsonSerializerOptions json,
+    Guid planId,
+    string serviceTypeCode,
+    string serviceTypeDescription,
+    object[] rules)
+{
+    var payload = new
+    {
+        planId = planId.ToString(),
+        serviceTypeCode,
+        serviceTypeDescription,
+        rules,
+        isActive = true
+    };
+
+    using var response = await http.PostAsJsonAsync(
+        $"{options.BenefitUrl}/api/v1/service-category-mappings",
+        payload,
+        json);
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        throw new InvalidOperationException(
+            $"plan-specific service-category mapping seed failed for '{serviceTypeCode}': " +
+            $"{(int)response.StatusCode} {body}");
+    }
 }
 
 static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions options)
@@ -1086,7 +1194,7 @@ static void ForceBehavioralHealthCarveOutScenario(SyntheticClaim claim)
             LineNumber = 1,
             ProcedureCode = "90834",
             Description = "Psychotherapy, 45 minutes",
-            Modifiers = new List<string>(),
+            Modifiers = new List<string> { CarveOutModifier },
             RevenueCode = null,
             DiagnosisPointers = new List<int> { 1 },
             Units = 1,
