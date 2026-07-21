@@ -38,9 +38,24 @@
 - Gated `PriorAuthRequired_WrongProvider` scoring behind a runtime probe that confirms the deployed authorization-service actually rejects wrong-provider authorization use, instead of assuming support from repository code.
 - Added the missing behavioral-health benefit category to the MCC validation plan so `BehavioralHealthCarveIn` and `BehavioralHealthParityCheck` pay deterministically through a real behavioral-health benefit, and removed their temporary unsupported gate.
 
-## Post-#950 confirmation run
+## PR #954 - plan-specific service-category overrides (found during confirmation)
 
-[pending - record the post-#950 100K p12 confirmation outcome here once the run in benchmark-results.txt is complete]
+- A first 100K confirmation attempt on #950 alone regressed to 7,178/13,000 matched (vs. 11,854/13,000 at Part 8), caused by a pre-existing, unrelated tenant-default service-category mapping bundle on the `demo` tenant shadowing the validation plan's numeric categories in the resolver's tenant-default lookup.
+- Also surfaced a #950 self-collision: adding a covered behavioral-health benefit made `BehavioralHealthCarveOut` pay instead of deny, since it shares a CPT code family with carve-in/parity-check.
+- Fixed both by seeding plan-specific `ServiceCategoryMapping` overrides scoped to the validation plan (plan-specific mappings win over tenant defaults in the resolver), and by tagging the carve-out claim with a synthetic modifier so a second, deliberately uncovered plan override intercepts only that claim.
+- Also required: rebuilding `claims-service`, `benefit-plan-service`, and `authorization-service` from current `main` before either confirmation attempt - the long-lived local cluster predated #946's authorization-service provider-enforcement check.
+
+## Post-#950/#954 confirmation run
+
+Job `mcc-part9-100k-p12-203753`, 100,000 claims, seed 42, parallelism 12, executed 2026-07-20/21 local.
+
+- Workflow: 12,182/13,000 matched, 32 mismatched, 786 unsupported (unsupported count matches projection exactly).
+- The three converted scenarios hit their targets clean: `PriorAuthRequired_WrongProvider` 160/160, `BehavioralHealthCarveIn` 200/200, `BehavioralHealthCarveOut` 200/200, `BehavioralHealthParityCheck` 200/200. Prior-auth enforcement probe: enforced.
+- All 32 residual mismatches are in COB/Medicaid/Newborn/RetroEligibilityAdd scenarios this episode did not touch, and matched cleanly in a smaller smoke test - a scale-dependent gap, not a service-category regression. Not investigated further; tracked as follow-up.
+- Payment gate: 2,000/2,000 within $0.01, exact. Platform failures: 5, all transient 10s HTTP timeouts under load, not adjudication defects.
+- Expected-pend observation: 890/920 (30 short of target), same out-of-scope category as the residual mismatches.
+- Throughput 57.26 claims/sec, P95 404 ms, P99 503 ms - at or better than the Part 8 p12 baseline (58.55 claims/sec, 416 ms, 580 ms).
+- Full numbers, denial breakdown, and raw artifacts: `benchmark-results.txt`, `raw-validator-output-post950-100k-p12.txt`, `run-summary-post950-100k-p12.json`.
 
 ## Remaining unsupported scenario families after this episode
 
