@@ -1,0 +1,100 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 9: From Unsupported to Scored
+
+Part 8 ended with a clean 100,000-claim run and a promise.
+
+The run reported 11,854 of 13,000 workflow checks matched, zero mismatches, and 1,146 unsupported scenarios. Those 1,146 claims were named product gaps: behavioral-health carve-out, Medicaid spend-down, the prior-authorization wrong-provider variant, retroactive coverage change, and subrogation. Part 8 said unsupported scenarios should become their own product-evidence track, converted into scoreable behavior deliberately rather than swept into a benchmark evidence update.
+
+Part 9 is the first delivery on that promise.
+
+Since the Part 8 runs, the platform gained provider-aware prior-authorization validation, a deterministic behavioral-health carve-out denial path, a tenant-scoped behavioral-health service-category mapping, and a runtime capability probe that refuses to score a scenario the platform cannot actually enforce. The live console also learned to stop reporting expected pends as mismatches while a run is still in flight.
+
+The result is that two scenario families - prior-auth wrong-provider and behavioral-health carve-out - moved from the unsupported bucket into the scored set, and the behavioral-health carve-in and parity-check scenarios now pay through a real behavioral-health benefit category instead of a generic office-visit fallthrough.
+
+None of that counts until a full run proves it. The Part 9 gate is a fresh 100,000-claim run at the p12 sweet spot with the expanded answer key, and the bar is unchanged: zero platform failures, zero scoreable mismatches, zero unexpected pends, and every comparable payment within one cent - now with a larger scored surface.
+
+## Fixing the live view before expanding the score
+
+Part 8 recorded a console lesson: during processing, 920 expected-pend checks appeared as live workflow mismatches and only resolved to zero after the post-processing observation pass. The completed summaries were always correct; the in-progress presentation was not.
+
+That was fixed before any new scenario became scoreable.
+
+PR #936 exposed pending pend-observation telemetry so the Mass Adjudication console could distinguish checks that were still awaiting observation from checks that had actually failed. PR #941 finished the job: the validator now publishes pending terminal-status workflow observations alongside expected-pend observations, and the console and dashboard show pending checks as pending instead of as alarming temporary mismatches.
+
+That ordering matters. Expanding the scored surface while the live view still cried wolf would have made every new scenario harder to trust.
+
+## Scoring the wrong-provider prior-auth variant honestly
+
+Part 8 left the prior-authorization family four-fifths scored. Auth-on-file, no-auth, expired-auth, and wrong-procedure variants were matched 160 for 160 each. The wrong-provider variant stayed unsupported because the validation path never compared the claim provider against the authorization provider - an authorization for any provider satisfied the check.
+
+PR #946 closed that gap. The claims-service now passes the claim provider NPI through prior-authorization validation, and authorization-service rejects authorizations when the claim provider is not the provider approved on the authorization. The MCC corpus seeds a distinct authorized-provider fixture for the wrong-provider scenario, so the expected outcome is a deterministic business denial.
+
+PR #950 added the honesty mechanism. Instead of assuming the platform enforces provider validation, the validator now sends a runtime probe to authorization-service before the run: a wrong-provider authorization check that should be rejected. Only if the service actually rejects it does the wrong-provider scenario become scoreable. If the probe passes validation - meaning the deployed service does not enforce provider matching - the scenario stays unsupported and the run says why.
+
+That is the same principle Part 6 established for scoring in general, applied to capability detection: the answer key must describe what the platform being tested actually does, not what the newest code in the repository could do.
+
+## The behavioral-health detour that proved the gates work
+
+The behavioral-health work took three pull requests, and the middle one is the most instructive.
+
+PR #947 made the carve-out scenario scoreable. Generated carve-out claims were normalized into a deterministic psychotherapy claim against the validation plan, expected to deny as CARC 96 - a non-covered service under a plan whose behavioral-health benefit is carved out to a separate vendor. That scenario had been pended-by-assumption since the corpus was designed; now it is a scored business denial.
+
+Then the fixture reality arrived. Carve-out claims need CPT codes in the 90785-90899 range to resolve to a behavioral-health service category. The first attempt seeded a broad service-category mapping, which fixed carve-out - and polluted the tenant-default service categories, regressing unrelated scoring. The honest gates caught the regression immediately.
+
+PR #949 replaced the broad seed with a deliberately narrow, tenant-scoped behavioral-health mapping, seeded during validator reference setup behind an explicit service-category admin write gate that the local Kubernetes runner now enables. It also hardened the persistence path - procedure-code rule IDs are stored as BSON-safe strings with a round-trip regression test - and scoped MCC provider network IDs by tenant so fresh tenants cannot collide on shared identifiers.
+
+The narrow mapping had a side effect that proved the gates again: behavioral-health carve-in and parity-check claims, which had been passing through a generic office-visit path, now resolved to the behavioral-health category - where the MCC validation plan had no benefit configured. They fell through to CARC 96 instead of paying. Rather than hide that, PR #949 marked them unsupported, honestly, until the plan context was modeled.
+
+PR #950 completed the loop by adding the missing behavioral-health benefit to the validation plan. Carve-in and parity-check now pay deterministically through a real behavioral-health benefit category, and the unsupported gate came off.
+
+That is what deliberate conversion looks like: three PRs, one temporary honest regression to unsupported, and no step where a scenario was quietly counted as passing while the platform could not actually adjudicate it.
+
+## What the scored surface should look like now
+
+At the Part 8 corpus mix, 100,000 claims produced 13,000 workflow checks: 11,854 matched, 1,146 unsupported.
+
+If the conversions hold at scale, the expected movement is:
+
+- BehavioralHealthCarveOut: 200 checks from unsupported to scored business denials
+- PriorAuthRequired_WrongProvider: 160 checks from unsupported to scored business denials, gated on the runtime enforcement probe
+- BehavioralHealthCarveIn and BehavioralHealthParityCheck: 400 checks still scored as paid, now through the behavioral-health benefit category
+
+That would move the matched target to 12,214 of 13,000, shrink unsupported to 786, and grow the scoreable non-pend sweep from 10,934 to 11,294 claims. The remaining unsupported set would be exactly the scenarios still awaiting deliberate conversion: retroactive coverage change (266), Medicaid spend-down (120), and the three subrogation variants (400).
+
+Those numbers are targets, not results. The confirmation run decides.
+
+## The Part 9 confirmation run
+
+[EVIDENCE PENDING - this section is reserved for the completed post-#950 100K p12 confirmation run. Fill from the raw validator output and dashboard run summary, then remove this marker.]
+
+The planned run holds everything constant except the expanded answer key: 100,000 claims, seed 42, parallelism 12, the same fixture model, payment gate, false-pend sweep, and workflow scoring rules as the Part 8 p12 run.
+
+The acceptance bar:
+
+- 100,000 processed, zero platform failures
+- zero scoreable workflow mismatches
+- 920 of 920 expected-pend claims observed
+- zero unexpected pends across the enlarged scoreable non-pend set
+- 2,000 of 2,000 comparable payments within one cent
+- unsupported reduced only by the deliberately converted scenarios
+
+Throughput and tail latency will be compared against the Part 8 p12 baseline of 58.55 claims per second, 416 ms P95, and 580 ms P99. The expanded scored surface adds validation work per claim, so a modest cost is acceptable; a correctness regression is not.
+
+## The road to one million
+
+The series direction is now explicit.
+
+The local Kubernetes series continues until one of two things happens: the limiting local resource becomes reproducible and explained, or the full one-million-claim corpus completes cleanly on local hardware. Whichever arrives first ends the local story.
+
+The ladder from here follows the pattern every part has followed: increase the run size, work through the mismatches and service pressure the new scale exposes, and only then climb again. The immediate rung is the 100K confirmation run with the behavioral-health and prior-auth conversions in the scored path. Once that run is clean, the next jump is 250,000 claims - the first run past the scale where p12 was established as the local sweet spot, and the first real test of the service, persistence, and writeback pressure that the p16 sweep hinted at. After 250K, the climb continues through 500K toward one million, as long as the correctness gates hold and the machine allows. Every rung keeps the same deterministic corpus, the same answer key, and the same refusal to trade correctness for throughput.
+
+When the local story ends - at a ceiling or at a million - a new series begins: scaling Cloud Health Office in the cloud, running the same corpus and the same gates across managed Kubernetes on Azure, AWS, and Google Cloud, and asking not just which environment is fastest but what infrastructure, time, and cost each one needs to preserve zero platform failures, zero scoreable mismatches, and inspectable evidence.
+
+Part 5 made the benchmark repeatable.
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+Part 8 proved a clean 100,000-claim run and found the next bottleneck.
+
+Part 9 grows the scored surface without lowering the bar.
