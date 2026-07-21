@@ -157,18 +157,21 @@
         <div class="callout callout-info">
           <div class="callout-title">Current evidence to compare against</div>
           <p>
-            The latest published Cloud Health Office proof is a clean <strong>100,000-claim local Docker Desktop Kubernetes run</strong>:
-            100,000 claims processed, zero platform failures, zero scoreable workflow mismatches, zero unexpected pends,
-            and 2,000/2,000 comparable payments within one cent. The timed adjudication phase ran at 56.15 claims/sec with 358 ms P95 latency.
+            The latest published Cloud Health Office proof is a clean <strong>100,000-claim local Docker Desktop Kubernetes run</strong>
+            with an expanded scored surface: 12,214/13,000 workflow checks matched, zero scoreable mismatches, zero platform failures,
+            zero unexpected pends, and 2,000/2,000 comparable payments within one cent.
           </p>
           <p>
             Scope matters. This is local engineering evidence, not a production cloud capacity claim and not the full million yet.
-            Fixture preparation dominated the total Kubernetes job duration, so large-run tuning should focus on preparation visibility and bounded seeding before climbing to 250K, 500K, and the full million.
+            This run's timed adjudication phase slowed to 26.27 claims/sec with 895 ms P95 latency, down from the prior run's 58.55 claims/sec &mdash;
+            a one-time cost from two self-healing fixes correcting thousands of accumulated legacy provider records simultaneously, not yet confirmed
+            as one-time by a repeat run. Fixture preparation and this migration cost are the next local scaling bottlenecks to watch before climbing
+            to 250K, 500K, and the full million.
           </p>
           <p>
-            <a href="/docs/million-claim-challenge/evidence#episode-008"><strong>Inspect the 100K evidence archive</strong></a>
+            <a href="/docs/million-claim-challenge/evidence#episode-009"><strong>Inspect the 100K evidence archive</strong></a>
             or read
-            <a href="/insights/million-claim-challenge/part-8-clean-100k"><strong>Part 8: The Clean 100,000-Claim Run</strong></a>.
+            <a href="/insights/million-claim-challenge/part-9-from-unsupported-to-scored"><strong>Part 9: From Unsupported to Scored</strong></a>.
           </p>
         </div>
 
@@ -184,6 +187,7 @@
             <li><a href="https://medium.com/@markus_31/running-a-healthcare-claims-platform-locally-in-kubernetes-part-6-from-fast-runs-to-honest-4b58288da8da" target="_blank" rel="noopener noreferrer">Part 6: From Fast Runs to Honest Edge-Case Scoring</a></li>
             <li><a href="/insights/million-claim-challenge/part-7-operator-console">Part 7: From Benchmark Logs to an Operator Console</a></li>
             <li><a href="/insights/million-claim-challenge/part-8-clean-100k">Part 8: The Clean 100,000-Claim Run</a></li>
+            <li><a href="/insights/million-claim-challenge/part-9-from-unsupported-to-scored">Part 9: From Unsupported to Scored</a></li>
           </ul>
         </div>
 
@@ -388,7 +392,7 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
             <p>Understand the deterministic corpus, answer key, workflow scoring, supported gaps, and published evidence.</p>
             <span class="card-arrow">Challenge guide &rarr;</span>
           </a>
-          <a href="/docs/million-claim-challenge/evidence#episode-008" class="docs-hub-card">
+          <a href="/docs/million-claim-challenge/evidence#episode-009" class="docs-hub-card">
             <h3>100K Evidence Archive</h3>
             <p>Review the clean 100K local Kubernetes result, run settings, correctness gates, and known scaling bottleneck.</p>
             <span class="card-arrow">Inspect evidence &rarr;</span>
