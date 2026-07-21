@@ -6,21 +6,21 @@ Episode 009 covers the first deliberate conversion of unsupported Million Claim 
 
 It also records the fix for the Part 8 live-progress lesson: the validator now publishes pending pend-observation and pending terminal-status telemetry, and the console shows pending checks instead of temporary mismatches during active runs.
 
-The episode's evidence gate is a post-#950 100,000-claim p12 confirmation run with the expanded answer key. Expected movement if conversions hold: workflow matched 11,854/13,000 -> 12,214/13,000, unsupported 1,146 -> 786, false-pend sweep scope 10,934 -> 11,294 scoreable non-pend claims. Those are targets until the run is recorded.
+The episode's evidence gate was a post-#950 100,000-claim p12 confirmation run with the expanded answer key. A first attempt on #950 alone regressed (7,178/13,000 matched, worse than the Part 8 baseline), caused by a pre-existing tenant-data conflict and a #950 self-collision between BehavioralHealthCarveOut and CarveIn/ParityCheck. PR #954 fixed both. The repeat run recorded 12,182/13,000 matched (target 12,214/13,000, short by 32 in scenarios this episode did not touch), unsupported at exactly 786, and 11,294 scoreable non-pend claims - all recorded in `benchmark-results.txt`.
 
 Series direction: the local Kubernetes series continues until the limiting local resource is reproducible and explained or the full one-million-claim corpus completes cleanly on local hardware. Then a new series begins: scaling Cloud Health Office in the cloud (AKS/EKS/GKE) with the same corpus and gates.
 
-Next rung: once the post-#950 100K confirmation run is clean, the next jump is 250,000 claims (the Part 10 candidate), following the series pattern of scaling the run and working through whatever mismatches and service pressure the new size exposes.
+Next rung: the post-#950/#954 100K confirmation run is recorded. The next jump is 250,000 claims (the Part 10 candidate), following the series pattern of scaling the run and working through whatever mismatches and service pressure the new size exposes.
 
 ## Episode metadata
 
 - Episode title: From Unsupported to Scored
 - Source article: Running a Healthcare Claims Platform Locally in Kubernetes, Part 9: From Unsupported to Scored
-- Published article: not yet published
+- Published article: live at /insights/million-claim-challenge/part-9-from-unsupported-to-scored
 - Target length: 10-12 minutes
 - Preferred format: two-host engineering conversation
 - Primary hosts: Alex and Jordan
-- Status: draft - awaiting post-#950 100K confirmation evidence
+- Status: evidence recorded - podcast production pending
 
 ## Core message
 
@@ -36,12 +36,12 @@ The episode must distinguish:
 
 ## Packet files
 
-- `article.txt` - Part 9 article source (contains an EVIDENCE PENDING marker in the confirmation-run section).
-- `benchmark-results.txt` - planned run identity, command, scoring-surface change under test, and [pending] evidence slots for the post-#950 100K p12 confirmation run.
-- `pr-summary.txt` - implementation work covered by this episode (#936, #941, #946, #947, #949, #950).
+- `article.txt` - Part 9 article source, including the recorded confirmation-run section and the #954 fix history.
+- `benchmark-results.txt` - run identity, command, scoring-surface change under test, and recorded results for the post-#950/#954 100K p12 confirmation run.
+- `pr-summary.txt` - implementation work covered by this episode (#936, #941, #946, #947, #949, #950, #954).
 - `podcast-prompt.txt` - episode-specific generation prompt.
-- `raw-validator-output-post950-100k-p12.txt` - [to be added] raw validator console output from the completed confirmation run.
-- `run-summary-post950-100k-p12.json` - [to be added] completed dashboard summary returned by claims-service.
+- `raw-validator-output-post950-100k-p12.txt` - raw validator console output from the completed confirmation run.
+- `run-summary-post950-100k-p12.json` - completed dashboard summary returned by claims-service.
 - `screenshots/.gitkeep` - placeholder for console evidence screenshots (pending-check progress view, expanded scenario scoring, behavioral-health claim drilldown).
 
 ## Acceptance checklist
@@ -50,9 +50,9 @@ The episode must distinguish:
 - [x] Live-progress pending-check fix (#936, #941) is recorded.
 - [x] Expected scoring-surface movement is stated as targets, not results.
 - [x] Remaining unsupported families are named as visible product gaps.
-- [ ] Post-#950 100K p12 confirmation run is recorded (raw validator output + dashboard summary).
-- [ ] Prior-auth enforcement probe outcome is recorded explicitly.
-- [ ] Article EVIDENCE PENDING marker is replaced with real numbers.
-- [ ] benchmark-results.txt [pending] slots are filled and projections reconciled.
+- [x] Post-#950/#954 100K p12 confirmation run is recorded (raw validator output + dashboard summary).
+- [x] Prior-auth enforcement probe outcome is recorded explicitly (enforced).
+- [x] Article EVIDENCE PENDING marker is replaced with real numbers, including the #954 fix history.
+- [x] benchmark-results.txt [pending] slots are filled and projections reconciled (720/720 converted-scenario checks matched; 32 residual mismatches outside episode scope, documented).
 - [ ] Console screenshots captured (pending-check live view, scenario scoring, behavioral-health payment drilldown).
-- [ ] Published article URL is recorded.
+- [x] Published article URL is recorded (/insights/million-claim-challenge/part-9-from-unsupported-to-scored).
