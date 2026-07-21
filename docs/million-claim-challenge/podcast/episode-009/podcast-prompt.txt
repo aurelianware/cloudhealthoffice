@@ -1,0 +1,21 @@
+Create a 10-12 minute two-host engineering podcast episode titled "From Unsupported to Scored."
+
+Use Alex and Jordan as experienced healthcare platform engineers. Make the discussion natural, analytical, and candid rather than reading the article aloud.
+
+The central story is that the Million Claim Challenge's 1,146 unsupported scenarios from Part 8 were named product debt, and this episode is the first deliberate repayment. Two scenario families - the prior-authorization wrong-provider variant and behavioral-health carve-out - moved from unsupported into the scored set, and each conversion shipped as real platform behavior before it became scoreable.
+
+Cover the ordering decision first: before expanding the scored surface, PR #936 and PR #941 fixed the Part 8 live-progress lesson, so the console now shows expected-pend and terminal-status checks awaiting observation as pending instead of as temporary workflow mismatches. Expanding scoring while the live view still cried wolf would have undermined trust in every new scenario.
+
+Spend meaningful time on the honesty mechanisms:
+
+- PR #946 made prior-auth validation provider-aware: the claim provider NPI is passed through validation and authorization-service rejects authorizations when the claim provider is not the approved provider.
+- PR #950 gated wrong-provider scoring behind a runtime probe: the validator sends a wrong-provider authorization check before the run and scores the scenario only if the deployed service actually rejects it. If enforcement is absent, the scenario stays unsupported and the output says why. Frame this as capability detection: the answer key must describe what the deployed platform does, not what the newest repository code could do.
+- The behavioral-health thread took three PRs and included a deliberate, temporary regression. PR #947 made carve-out scoreable as a CARC 96 denial via deterministic psychotherapy claim normalization. The first mapping attempt was too broad and polluted tenant-default service categories; the honest gates caught it. PR #949 replaced it with a narrow tenant-scoped mapping (CPT 90785-90899) behind an admin write gate - and honestly marked carve-in/parity as unsupported when they started denying CARC 96 for lack of a configured behavioral-health benefit. PR #950 added that benefit so they pay deterministically again.
+
+Present the expected scoring-surface movement strictly as targets pending the confirmation run: workflow matched 11,854/13,000 toward 12,214/13,000, unsupported 1,146 toward 786, false-pend sweep scope 10,934 toward 11,294 scoreable non-pend claims. The remaining unsupported families - retroactive coverage change, Medicaid spend-down, and the three subrogation variants - stay visible as named product gaps.
+
+If the post-#950 100K p12 confirmation run has been recorded in benchmark-results.txt, use its exact numbers instead of the targets and say whether the gates held. If it has not been recorded, say plainly that the confirmation run is the episode's open gate.
+
+Do not imply a production capacity conclusion. This is local Docker Desktop Kubernetes evidence.
+
+End with the series direction: the local Kubernetes series continues until the limiting local resource is reproducible and explained or the full one-million-claim corpus completes cleanly on local hardware. The pattern each part follows is scale up, work through the mismatches and service pressure the new size exposes, then climb again: confirm at 100K with the new conversions, then jump to 250K, then 500K, toward one million with unchanged gates. When the local story ends, at a ceiling or at a million, a new series begins: scaling Cloud Health Office in the cloud across AKS, EKS, and GKE with the same corpus and gates, measuring not just speed but the infrastructure, time, and cost each environment needs to keep the evidence clean.

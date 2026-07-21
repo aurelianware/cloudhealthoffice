@@ -1,0 +1,51 @@
+# Episode 009 implementation summary
+
+## PR #936 - pending pend-observation telemetry
+
+- Exposed pending pend-observation counts from the validator so the Mass Adjudication console could show checks awaiting observation instead of only completed summaries.
+- First step toward fixing the Part 8 live-progress lesson, where 920 expected-pend checks appeared as live workflow mismatches mid-run.
+
+## PR #941 - live progress evidence clarification
+
+- Distinguished confirmed live-progress workflow mismatches from checks still awaiting persisted-state observation.
+- Published pending terminal-status workflow observations alongside expected-pend observations.
+- Updated the Mass Adjudication console and dashboard wording so active runs show pending checks instead of alarming temporary mismatches.
+- Added validator and repository regression coverage for the new progress counters.
+
+## PR #946 - provider-aware prior-authorization validation
+
+- Passed the claim provider NPI through claims-service prior-authorization validation.
+- Authorization-service now rejects authorizations when the claim provider is not the provider approved on the authorization.
+- Moved `PriorAuthRequired_WrongProvider` into scoreable MCC prior-auth evidence and seeded a distinct authorized-provider fixture for that scenario.
+- Updated MCC, claims-service, and authorization-service tests for the provider-aware validation path.
+
+## PR #947 - behavioral-health carve-out scoring
+
+- Made the behavioral-health carve-out scenario scoreable as a CARC 96 non-covered-service denial.
+- Normalized generated carve-out claims into a deterministic psychotherapy claim against the validation plan.
+- Updated generator and validator tests so the scenario is no longer treated as unsupported.
+
+## PR #949 - tenant-scoped behavioral-health service-category mapping
+
+- Seeded a deliberately narrow, tenant-scoped MCC behavioral-health service-category mapping (CPT 90785-90899) during validator reference seeding, after a broad mapping attempt polluted tenant-default service categories and regressed unrelated scoring.
+- Enabled the local Kubernetes run script to pass a deterministic seed and turn on the service-category admin write gate.
+- Persisted service-category procedure-code rule IDs as BSON-safe strings in Mongo with a round-trip regression test.
+- Temporarily marked behavioral-health carve-in/parity paid edge cases as unsupported - honestly - because the new mapping routed them to a behavioral-health category with no configured benefit, so they denied CARC 96 instead of paying.
+- Scoped MCC provider network IDs by tenant so fresh tenants do not collide on shared Mongo IDs.
+
+## PR #950 - enforcement-probed wrong-provider scoring and behavioral-health benefit completion
+
+- Gated `PriorAuthRequired_WrongProvider` scoring behind a runtime probe that confirms the deployed authorization-service actually rejects wrong-provider authorization use, instead of assuming support from repository code.
+- Added the missing behavioral-health benefit category to the MCC validation plan so `BehavioralHealthCarveIn` and `BehavioralHealthParityCheck` pay deterministically through a real behavioral-health benefit, and removed their temporary unsupported gate.
+
+## Post-#950 confirmation run
+
+[pending - record the post-#950 100K p12 confirmation outcome here once the run in benchmark-results.txt is complete]
+
+## Remaining unsupported scenario families after this episode
+
+- RetroEligibilityCoverageChange
+- MedicaidSpendDown
+- SubrogationAccidentRelated, SubrogationThirdPartyLiability, SubrogationWorkersComp
+
+These remain visible product gaps awaiting their own deliberate conversion work.
