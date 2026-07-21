@@ -10,6 +10,8 @@ The episode's evidence gate is a post-#950 100,000-claim p12 confirmation run wi
 
 Series direction: the local Kubernetes series continues until the limiting local resource is reproducible and explained or the full one-million-claim corpus completes cleanly on local hardware. Then a new series begins: scaling Cloud Health Office in the cloud (AKS/EKS/GKE) with the same corpus and gates.
 
+Next rung: once the post-#950 100K confirmation run is clean, the next jump is 250,000 claims (the Part 10 candidate), following the series pattern of scaling the run and working through whatever mismatches and service pressure the new size exposes.
+
 ## Episode metadata
 
 - Episode title: From Unsupported to Scored
