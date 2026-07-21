@@ -154,7 +154,7 @@ public class MccWorkflowValidationTests
     [Theory]
     [InlineData(EdgeCaseScenario.BehavioralHealthCarveIn)]
     [InlineData(EdgeCaseScenario.BehavioralHealthParityCheck)]
-    public void ExpectedValidationFor_BehavioralHealthPaidEdgeCases_ReturnsUnsupported(
+    public void ExpectedValidationFor_BehavioralHealthPaidEdgeCases_ReturnsScoreablePaid(
         EdgeCaseScenario scenario)
     {
         var claim = CreateClaim(
@@ -174,14 +174,14 @@ public class MccWorkflowValidationTests
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
         var status = MccWorkflowValidation.ValidationStatus(
             expected,
-            ClaimValidationOutcome.BusinessDenial,
-            actualBusinessDenialCode: MccWorkflowValidation.UncoveredServiceCode);
+            ClaimValidationOutcome.Paid,
+            actualBusinessDenialCode: null);
 
         Assert.Equal($"EdgeCase:{scenario}", expected.Scenario);
-        Assert.Null(expected.ExpectedOutcome);
+        Assert.Equal(ClaimValidationOutcome.Paid, expected.ExpectedOutcome);
         Assert.Null(expected.ExpectedBusinessDenialCode);
-        Assert.True(expected.IsUnsupported);
-        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, status);
+        Assert.False(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, status);
     }
 
     [Fact]
@@ -279,7 +279,6 @@ public class MccWorkflowValidationTests
 
     [Theory]
     [InlineData(EdgeCaseScenario.PriorAuthRequired_ExpiredAuth)]
-    [InlineData(EdgeCaseScenario.PriorAuthRequired_WrongProvider)]
     [InlineData(EdgeCaseScenario.PriorAuthRequired_WrongProcedure)]
     public void ExpectedValidationFor_PriorAuthValidationEvidenceCapability_ReturnsScoreableDenial(
         EdgeCaseScenario scenario)
@@ -307,6 +306,72 @@ public class MccWorkflowValidationTests
             actualBusinessDenialCode: MccWorkflowValidation.PriorAuthRequiredCode);
 
         Assert.Equal($"EdgeCase:{scenario}", expected.Scenario);
+        Assert.Equal(ClaimValidationOutcome.BusinessDenial, expected.ExpectedOutcome);
+        Assert.Equal(MccWorkflowValidation.PriorAuthRequiredCode, expected.ExpectedBusinessDenialCode);
+        Assert.False(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, status);
+    }
+
+    [Fact]
+    public void ExpectedValidationFor_WrongProviderWithoutProviderEvidence_ReturnsUnsupported()
+    {
+        var claim = CreateClaim(
+            claimType: "Institutional",
+            benefitPlanId: "MCC-PLAN",
+            placeOfService: "21",
+            priorAuthStatus: "OnFile",
+            priorAuthNumber: "AUTH-TEST",
+            renderingState: "TX");
+        claim.EdgeCase = EdgeCaseScenario.PriorAuthRequired_WrongProvider;
+        claim.ExpectedOutcome = new ExpectedOutcome
+        {
+            Disposition = "Denied",
+            DenialReasonCode = "197"
+        };
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(
+            claim,
+            new MccWorkflowValidationCapabilities(ScorePriorAuthValidationEvidence: true));
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.Paid,
+            actualBusinessDenialCode: null);
+
+        Assert.Equal("EdgeCase:PriorAuthRequired_WrongProvider", expected.Scenario);
+        Assert.Null(expected.ExpectedOutcome);
+        Assert.Equal(MccWorkflowValidation.PriorAuthRequiredCode, expected.ExpectedBusinessDenialCode);
+        Assert.True(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, status);
+    }
+
+    [Fact]
+    public void ExpectedValidationFor_WrongProviderWithProviderEvidence_ReturnsScoreableDenial()
+    {
+        var claim = CreateClaim(
+            claimType: "Institutional",
+            benefitPlanId: "MCC-PLAN",
+            placeOfService: "21",
+            priorAuthStatus: "OnFile",
+            priorAuthNumber: "AUTH-TEST",
+            renderingState: "TX");
+        claim.EdgeCase = EdgeCaseScenario.PriorAuthRequired_WrongProvider;
+        claim.ExpectedOutcome = new ExpectedOutcome
+        {
+            Disposition = "Denied",
+            DenialReasonCode = "197"
+        };
+
+        var expected = MccWorkflowValidation.ExpectedValidationFor(
+            claim,
+            new MccWorkflowValidationCapabilities(
+                ScorePriorAuthValidationEvidence: true,
+                ScorePriorAuthProviderValidationEvidence: true));
+        var status = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.BusinessDenial,
+            actualBusinessDenialCode: MccWorkflowValidation.PriorAuthRequiredCode);
+
+        Assert.Equal("EdgeCase:PriorAuthRequired_WrongProvider", expected.Scenario);
         Assert.Equal(ClaimValidationOutcome.BusinessDenial, expected.ExpectedOutcome);
         Assert.Equal(MccWorkflowValidation.PriorAuthRequiredCode, expected.ExpectedBusinessDenialCode);
         Assert.False(expected.IsUnsupported);

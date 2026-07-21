@@ -19,7 +19,9 @@ public class MccValidationProviderNormalizerTests
             new[] { claim },
             seed: 42,
             runId: RunId,
-            new MccWorkflowValidationCapabilities(ScorePriorAuthValidationEvidence: true));
+            new MccWorkflowValidationCapabilities(
+                ScorePriorAuthValidationEvidence: true,
+                ScorePriorAuthProviderValidationEvidence: true));
 
         Assert.Equal(1, normalized);
         Assert.Equal(MccValidationProviderIdentity.BuildNpi(42, RunId, 0, role: 0), claim.BillingProvider.Npi);
