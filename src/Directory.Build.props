@@ -8,8 +8,11 @@
   <ItemGroup>
     <!-- Fix CVE-2024-43485: System.Formats.Asn1 Remote Code Execution vulnerability -->
     <!-- Severity: High | Advisory: GHSA-447r-wph3-92pm -->
-    <!-- Minimum safe version: 8.0.1 (fixes RCE in certificate parsing) -->
-    <PackageReference Include="System.Formats.Asn1" Version="8.0.1" />
+    <!-- Minimum safe version: 8.0.1 (fixes RCE in certificate parsing). Pinned to 9.0.18
+         here to match the floor System.Security.Cryptography.Xml 9.0.18 (Portal, PR 953)
+         already requires transitively; both satisfy the CVE fix, and NuGet treated the
+         8.0.1 floor as a downgrade against that transitive requirement otherwise. -->
+    <PackageReference Include="System.Formats.Asn1" Version="9.0.18" />
     
     <!-- Fix CVE-2024-21907: Newtonsoft.Json Improper Handling vulnerability -->
     <!-- Severity: High | Advisory: GHSA-5crp-9r3c-p9vr -->
