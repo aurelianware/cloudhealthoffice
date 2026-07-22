@@ -267,22 +267,39 @@ await Parallel.ForEachAsync(
 
 total.Stop();
 AddLifecycleTiming(lifecycleTimings, "Timed adjudication", "Processing", processingStartedAtUtc, DateTimeOffset.UtcNow, total.Elapsed);
+
+// Everything from here to the final dashboard publish happens after the
+// timed benchmark stops, so none of it counts against throughput -- but it
+// still costs real wall time, and none of it was previously measured. A
+// 250K run once showed ~45 minutes of total wall time unaccounted for by
+// any tracked phase; this block exists so that gap is never invisible
+// again, whether or not it reproduces on any given run.
+var postProcessingTimings = new List<(string Label, TimeSpan Duration)>();
+var postProcessingStopwatch = new Stopwatch();
+
 Task? pendingProgressPublish;
 lock (latestProgressPublishLock)
 {
     pendingProgressPublish = latestProgressPublishTask;
 }
 
+postProcessingStopwatch.Restart();
 if (pendingProgressPublish is not null)
 {
     await pendingProgressPublish;
 }
+postProcessingStopwatch.Stop();
+postProcessingTimings.Add(("Pending progress publish", postProcessingStopwatch.Elapsed));
+
 Console.WriteLine();
 Console.WriteLine();
 
+postProcessingStopwatch.Restart();
 var orderedResults = results
     .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
     .ToList();
+postProcessingStopwatch.Stop();
+postProcessingTimings.Add(("Result ordering", postProcessingStopwatch.Elapsed));
 
 if (options.PendObservationEnabled)
 {
@@ -306,6 +323,7 @@ if (!string.IsNullOrWhiteSpace(options.PendDiagnosticsPath))
     });
 }
 
+postProcessingStopwatch.Restart();
 var summary = MccRunSummaryBuilder.Build(
     orderedResults,
     total.Elapsed,
@@ -319,17 +337,28 @@ var summary = MccRunSummaryBuilder.Build(
     publishClaimResults: true,
     lifecycleTimings: lifecycleTimings,
     fixturePreparation: fixturePreparation);
+postProcessingStopwatch.Stop();
+postProcessingTimings.Add(("Summary build", postProcessingStopwatch.Elapsed));
+
 WriteSummary(summary);
 
 if (!string.IsNullOrWhiteSpace(options.SummaryJsonPath))
 {
+    postProcessingStopwatch.Restart();
     await WriteSummaryJsonAsync(options.SummaryJsonPath, summary, json);
+    postProcessingStopwatch.Stop();
+    postProcessingTimings.Add(("Summary JSON write", postProcessingStopwatch.Elapsed));
 }
 
 if (!options.NoPublishSummary)
 {
+    postProcessingStopwatch.Restart();
     await PublishSummaryAsync(http, options, summary, json);
+    postProcessingStopwatch.Stop();
+    postProcessingTimings.Add(("Dashboard publish", postProcessingStopwatch.Elapsed));
 }
+
+WritePostProcessingTimings(postProcessingTimings, lifecycleTimings);
 
 if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure))
 {
@@ -3114,6 +3143,36 @@ static string FormatDuration(TimeSpan duration)
     => duration.TotalHours >= 1
         ? duration.ToString("h\\:mm\\:ss")
         : duration.ToString("m\\:ss\\.fff");
+
+/// <summary>
+/// Everything measured here happens after <c>total.Stop()</c> and so never
+/// counts against throughput -- but it still costs real wall time, and
+/// before this it was invisible: a 250K run once showed the sum of every
+/// tracked lifecycle phase falling roughly 45 minutes short of the run's
+/// actual start-to-finish wall time, with no way to tell where the
+/// difference went. This prints exactly where post-processing time goes on
+/// every run, and a grand total that should now reconcile against the
+/// dashboard's own start/completion timestamps.
+/// </summary>
+static void WritePostProcessingTimings(
+    List<(string Label, TimeSpan Duration)> postProcessingTimings,
+    IReadOnlyCollection<MassAdjudicationLifecycleTiming> lifecycleTimings)
+{
+    if (postProcessingTimings.Count == 0)
+    {
+        return;
+    }
+
+    var postProcessingTotal = TimeSpan.FromTicks(postProcessingTimings.Sum(t => t.Duration.Ticks));
+    Console.WriteLine($"  Post-processing:    {FormatDuration(postProcessingTotal)}");
+    foreach (var (label, duration) in postProcessingTimings)
+    {
+        Console.WriteLine($"  PostProcessing.{label,-20} {FormatDuration(duration)}");
+    }
+
+    var lifecycleTotal = TimeSpan.FromMilliseconds(lifecycleTimings.Sum(t => t.DurationMilliseconds));
+    Console.WriteLine($"  Grand total (tracked lifecycle + post-processing): {FormatDuration(lifecycleTotal + postProcessingTotal)}");
+}
 
 static async Task WriteSummaryJsonAsync(string path, MassAdjudicationRunSummary summary, JsonSerializerOptions json)
 {
