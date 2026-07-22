@@ -1,0 +1,53 @@
+{
+  "_comment": "GET /api/claims/d3409ca9-6ae1-4da0-bdb1-456344bd57cc, captured after the mcc-pi-smoke run. Trimmed to the fields that matter for this episode's evidence; full claim record includes additional versioning and audit fields not shown here.",
+  "tenantId": "demo",
+  "id": "d3409ca9-6ae1-4da0-bdb1-456344bd57cc",
+  "claimNumber": "MCC-P-0000015",
+  "memberId": "MCCV0F924404P0000015",
+  "billingProviderNPI": "9247912899",
+  "billingProviderName": "Matthew Anderson",
+  "renderingProviderNPI": "9247890053",
+  "renderingProviderName": "Excluded Provider05",
+  "claimType": 1,
+  "totalChargeAmount": 180.0,
+  "serviceDateFrom": "2026-06-08T00:00:00Z",
+  "serviceDateTo": "2026-06-08T00:00:00Z",
+  "diagnosisCodes": [
+    {
+      "code": "Z00.00",
+      "codeQualifier": "ABK",
+      "pointerNumber": 1,
+      "description": "Encounter for general adult medical examination without abnormal findings"
+    }
+  ],
+  "claimLines": [
+    {
+      "lineNumber": 1,
+      "procedureCode": "99213",
+      "procedureDescription": "Office/outpatient established patient visit",
+      "units": 1,
+      "chargeAmount": 180.0
+    }
+  ],
+  "status": 6,
+  "_statusNote": "6 = Denied",
+  "submittedDate": "2026-06-17T00:00:00Z",
+  "adjudicatedDate": "2026-07-22T20:23:36.892Z",
+  "paidDate": null,
+  "adjudicationResult": {
+    "networkTier": null,
+    "allowedAmount": 0,
+    "deductibleAmount": 0,
+    "coinsuranceAmount": 0,
+    "copayAmount": 0,
+    "patientResponsibility": 0,
+    "payerPayment": 0,
+    "denialReasonCode": "B7",
+    "denialReason": "Provider is excluded from federal healthcare programs",
+    "adjustmentReasons": [],
+    "remarkCodes": [],
+    "checkNumber": null,
+    "paymentDate": null
+  },
+  "pendDetails": null
+}
