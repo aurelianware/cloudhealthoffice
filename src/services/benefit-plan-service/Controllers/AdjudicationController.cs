@@ -682,6 +682,33 @@ public class AdjudicationController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // GET /api/v1/adjudication/provider-integrity/{npi}
+    //
+    // Standalone provider-integrity check, side-effect-free. Exposes
+    // IProviderIntegrityGate.CheckAsync over HTTP so claims-service's
+    // ProviderIntegrityStage can run the same federal-exclusion check
+    // AdjudicationController.Adjudicate already runs internally, without
+    // going through calculate-benefits (which stays exclusion-check-free
+    // by design -- it's also called by portal/preview features that must
+    // not be blocked by a live exclusion check on a hypothetical
+    // calculation). See docs/architecture/integrity-score-consumption.md.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Check a provider's federal-exclusion integrity status.
+    /// Read-only; does not affect any claim or provider record.
+    /// </summary>
+    [HttpGet("provider-integrity/{npi}")]
+    [ProducesResponseType(typeof(ProviderIntegrityResult), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ProviderIntegrityResult>> CheckProviderIntegrity(
+        string npi,
+        CancellationToken ct)
+    {
+        var result = await _providerIntegrityGate.CheckAsync(npi, TenantId, ct: ct);
+        return Ok(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // POST /api/v1/adjudication/reverse-claim
     //
     // Capability 5.12a — exposes the existing

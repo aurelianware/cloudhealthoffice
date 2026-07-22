@@ -15,6 +15,24 @@
 > [`claim-remittance-generation.md`](./claim-remittance-generation.md)
 > doc covers capability 5.10's operator-initiated finalization
 > handoff (Adjudicated → Paid via batched 835 emission).
+>
+> **Addendum, July 2026 — ProviderIntegrityStage added.** Capability
+> 5.10 (see
+> [`integrity-score-consumption.md`](./integrity-score-consumption.md))
+> built `HttpProviderIntegrityGate` — the federal OIG/LEIE/SAM.gov
+> exclusion check — into benefit-plan-service, but it was only ever
+> wired into the standalone `AdjudicationController.Adjudicate` HTTP
+> endpoint, never into this orchestrator. The original 6-stage scope
+> above never included a provider-integrity stage at all, so claims
+> processed through this pipeline (`BenefitCalculationStage` →
+> `calculate-benefits`, which stays exclusion-check-free by design —
+> see D14) were never checked against federal exclusion lists. Found
+> during a Million Claim Challenge scale confirmation; fixed by adding
+> `ProviderIntegrityStage` (Order=150) as a 7th stage, reached via a
+> new side-effect-free endpoint
+> (`GET /api/v1/adjudication/provider-integrity/{npi}`) rather than
+> folding the check into `calculate-benefits` itself. See "Provider
+> integrity stage (added July 2026)" below.
 
 ## Why this exists
 
@@ -48,6 +66,7 @@ POST /api/v1/claims                                     (capability 5.3)
    │   └── iterate stages by Order ascending:                     │
    │                                                              │
    │       100  ScrubbingStage               ★ real (5.4)         │
+   │       150  ProviderIntegrityStage       ★ real (added 7/26)  │
    │       200  NetworkCredentialingStage    ★ real (5.6)         │
    │       300  BenefitCalculationStage      ★ real (5.5)         │
    │       400  NcciEditsStage               ★ real (5.7)         │
@@ -308,6 +327,38 @@ throw `NotImplementedException` because the pipeline doesn't use them.
 Adding those surfaces is a follow-up driven by capability 5.12 (adjustment
 workflow).
 
+## Provider integrity stage (added July 2026)
+
+`ProviderIntegrityStage`, `Order=150`, runs the same federal-exclusion
+(OIG/LEIE/SAM.gov) check `HttpProviderIntegrityGate` has always run for
+`AdjudicationController.Adjudicate` callers — reached here through a new,
+side-effect-free endpoint rather than through `calculate-benefits`
+(D14's shim target), which stays exclusion-check-free by design since
+portal/preview features also call it and must not be blocked by a live
+exclusion check on a hypothetical calculation.
+
+- Checks both `BillingProviderNPI` and `RenderingProviderNPI` (when
+  distinct) — mirrors `NetworkCredentialingStage`'s dual-provider check.
+- A confirmed exclusion (`ProviderIntegrityResult.IsExcluded`) is a
+  `Deny`; `AdjudicationResult.DenialReasonCode`/`DenialReason` are set
+  from the gate's response before the stage returns.
+- Anything the gate could not confidently resolve either way
+  (`RequiresManualReview`, or the HTTP call to benefit-plan-service
+  itself failing) is a `Pend` with `PendCode="MEDREVIEW"` — an
+  already-recognized `PendDetails.PendCode` value with an existing
+  work-queue bucket (`ClaimsController`'s "Medical Review" category).
+  No new pend vocabulary introduced.
+- Unlike `NetworkCredentialingStage`, this stage has no tenant-configurable
+  fail-open mode — a federal exclusion check has no legitimate advisory-only
+  posture. It can be disabled entirely via `EnabledStages` (same contract
+  every stage has), but while enabled it always enforces.
+- `HttpProviderIntegrityGate` itself never fails open: total unavailability
+  (both provider-service and provider-verification-service unreachable) or
+  a live `Failed`/`ManualReviewRequired` verification status both resolve
+  to `Passed=false` + `RequiresManualReview=true`, distinct from a
+  confirmed `IsExcluded` finding. See
+  [`integrity-score-consumption.md`](./integrity-score-consumption.md).
+
 ## Configuration
 
 ```json
@@ -320,6 +371,7 @@ workflow).
     "Pipeline": {
       "EnabledStages": {
         "Scrubbing": true,
+        "ProviderIntegrity": true,
         "NetworkCredentialing": true,
         "BenefitCalculation": true,
         "NcciEdits": true,

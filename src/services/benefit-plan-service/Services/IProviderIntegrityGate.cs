@@ -56,6 +56,20 @@ public record ProviderIntegrityResult
     /// <summary>True when the provider appears on OIG/LEIE or SAM.gov exclusion lists.</summary>
     public bool IsExcluded { get; init; }
 
+    /// <summary>
+    /// True when the gate could not reach a confident pass/exclude
+    /// determination -- either because no data source was reachable, or
+    /// because the live verification service itself reported a
+    /// <c>Failed</c> or <c>ManualReviewRequired</c> status. Distinct from
+    /// <see cref="IsExcluded"/>: an excluded provider is a confirmed
+    /// finding; a claim for a provider with this flag set could not be
+    /// verified either way and should be held for human review rather than
+    /// silently denied as excluded or silently paid. <see cref="Passed"/>
+    /// is <c>false</c> whenever this is <c>true</c> -- adjudication never
+    /// pays a claim it could not verify.
+    /// </summary>
+    public bool RequiresManualReview { get; init; }
+
     /// <summary>CARC code when denied (e.g., "B7" for provider excluded from federal programs).</summary>
     public string? DenialCode { get; init; }
 

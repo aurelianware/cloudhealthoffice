@@ -183,7 +183,7 @@ public sealed class HttpProviderIntegrityGateTests
     }
 
     [Fact]
-    public async Task CheckAsync_BothEndpointsFail_ReturnsPassthrough()
+    public async Task CheckAsync_BothEndpointsFail_ReturnsUnavailableForReview()
     {
         var providerHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
         var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
@@ -191,17 +191,20 @@ public sealed class HttpProviderIntegrityGateTests
 
         var result = await gate.CheckAsync(Npi);
 
-        result.Passed.Should().BeTrue("adjudication is never blocked by infrastructure flakes");
+        result.Passed.Should().BeFalse("adjudication must never silently pay a claim it could not verify");
+        result.IsExcluded.Should().BeFalse("unavailable is not the same as a confirmed exclusion finding");
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
         result.Rating.Should().Be("Unknown");
     }
 
     [Fact]
-    public async Task CheckAsync_PassthroughResult_IsNotCached()
+    public async Task CheckAsync_UnavailableResult_IsNotCached()
     {
-        // Both endpoints fail → passthrough. The gate must NOT cache that
+        // Both endpoints fail → unavailable. The gate must NOT cache that
         // result for the full 1-hour TTL, so a subsequent call after
-        // upstream recovers picks up the real exclusion signal instead
-        // of an hour of stale "passed".
+        // upstream recovers picks up the real signal instead of an hour of
+        // every claim for that NPI being held for review.
         var providerHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
         var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
         var gate = BuildGate(providerHandler, verificationHandler);
@@ -210,9 +213,41 @@ public sealed class HttpProviderIntegrityGateTests
         await gate.CheckAsync(Npi);
 
         providerHandler.RequestCount.Should().Be(2,
-            "passthrough is not cached, so the second call retries provider-service");
+            "an unavailable result is not cached, so the second call retries provider-service");
         verificationHandler.RequestCount.Should().Be(2,
-            "passthrough is not cached, so the second call retries verification-service");
+            "an unavailable result is not cached, so the second call retries verification-service");
+    }
+
+    [Fact]
+    public async Task CheckAsync_VerificationServiceReportsFailed_ReturnsUnavailableForReview()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJson(compositeScore: 40, rating: "Caution", status: "Failed"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi);
+
+        result.Passed.Should().BeFalse();
+        result.IsExcluded.Should().BeFalse("a Failed verification status is not a confirmed exclusion finding");
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
+    }
+
+    [Fact]
+    public async Task CheckAsync_VerificationServiceReportsManualReviewRequired_ReturnsUnavailableForReview()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJson(compositeScore: 55, rating: "Caution", status: "ManualReviewRequired"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi);
+
+        result.Passed.Should().BeFalse();
+        result.IsExcluded.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
     }
 
     [Fact]

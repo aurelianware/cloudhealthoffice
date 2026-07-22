@@ -387,6 +387,40 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.NotEmpty(result.Accumulators);
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // GET /api/v1/adjudication/provider-integrity/{npi} — standalone,
+    // side-effect-free integrity check exposed for claims-service's
+    // ProviderIntegrityStage (closes the gap where calculate-benefits
+    // never checked federal exclusion at all).
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task CheckProviderIntegrity_DelegatesToGate_ReturnsResultVerbatim()
+    {
+        _factory.ProviderIntegrityGate
+            .CheckAsync("1234567890", TenantId, forceRefresh: false, Arg.Any<CancellationToken>())
+            .Returns(new ProviderIntegrityResult
+            {
+                Passed = false,
+                IsExcluded = true,
+                Rating = "Blocked",
+                IntegrityScore = 0,
+                DenialCode = "B7",
+                DenialReason = "Provider is excluded from federal healthcare programs",
+            });
+
+        using var client = CreateClientWithTenant();
+
+        var response = await client.GetAsync("/api/v1/adjudication/provider-integrity/1234567890");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<ProviderIntegrityResult>(Json);
+        Assert.NotNull(result);
+        Assert.False(result!.Passed);
+        Assert.True(result.IsExcluded);
+        Assert.Equal("B7", result.DenialCode);
+    }
+
     [Fact]
     public async Task Adjudicate_ServiceDateAfterMemberTermination_ReturnsCarc27WithoutPricing()
     {
