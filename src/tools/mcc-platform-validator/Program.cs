@@ -2044,6 +2044,7 @@ static async Task<FixtureCount> SeedProvidersAsync(
                     providerId,
                     provider,
                     json);
+                await EnsureProviderVerificationFreshnessAsync(http, options, providerId, json);
             }
             else
             {
@@ -2333,7 +2334,8 @@ static async Task EnsureProviderExclusionAsync(
         ?? throw new InvalidOperationException($"provider fetch returned no body ({providerId})");
 
     var currentRating = node["integrityRating"]?.GetValue<string>();
-    if (string.Equals(currentRating, "Blocked", StringComparison.OrdinalIgnoreCase))
+    var ratingIsBlocked = string.Equals(currentRating, "Blocked", StringComparison.OrdinalIgnoreCase);
+    if (ratingIsBlocked && IsProviderVerificationFresh(node))
     {
         return;
     }
@@ -2341,6 +2343,7 @@ static async Task EnsureProviderExclusionAsync(
     node["integrityScore"] = 0;
     node["integrityRating"] = "Blocked";
     node["credentialingStatus"] = "Denied";
+    SetFreshProviderVerificationTimestamps(node);
 
     using var update = await http.PutAsJsonAsync(
         $"{options.ProviderUrl}/api/v1/providers/{Uri.EscapeDataString(providerId)}",
@@ -2352,6 +2355,70 @@ static async Task EnsureProviderExclusionAsync(
         throw new InvalidOperationException(
             $"provider exclusion correction failed ({providerId}): {(int)update.StatusCode} {updateBody}");
     }
+}
+
+// benefit-plan-service's HttpProviderIntegrityGate falls back to a live
+// NPPES-registry check (provider-verification-service) whenever a
+// provider's lastVerifiedAt ages past its 7-day StalenessFallbackThreshold.
+// MCC's synthetic NPIs were never real NPPES-registered numbers, so that
+// live check always answers "excluded/not found" -- wrongly denying
+// claims for providers this run needs to be Clear. lastVerifiedAt is only
+// ever set at provider creation; on this long-lived, heavily reused
+// tenant, most seeding passes find the provider already correct and skip
+// writing entirely, letting the timestamp age past the threshold across
+// days of repeated runs. Refresh it well inside that window on every
+// seeding pass, independent of whether credentialing/exclusion fields
+// need correcting.
+static async Task EnsureProviderVerificationFreshnessAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    string providerId,
+    JsonSerializerOptions json)
+{
+    using var response = await http.GetAsync(
+        $"{options.ProviderUrl}/api/v1/providers/{Uri.EscapeDataString(providerId)}");
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException(
+            $"provider fetch failed for verification freshness check ({providerId}): {(int)response.StatusCode} {body}");
+    }
+
+    var node = JsonNode.Parse(body)
+        ?? throw new InvalidOperationException($"provider fetch returned no body ({providerId})");
+
+    if (IsProviderVerificationFresh(node))
+    {
+        return;
+    }
+
+    SetFreshProviderVerificationTimestamps(node);
+
+    using var update = await http.PutAsJsonAsync(
+        $"{options.ProviderUrl}/api/v1/providers/{Uri.EscapeDataString(providerId)}",
+        node,
+        json);
+    var updateBody = await update.Content.ReadAsStringAsync();
+    if (!update.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException(
+            $"provider verification freshness refresh failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+    }
+}
+
+static bool IsProviderVerificationFresh(JsonNode node)
+{
+    var raw = node["lastVerifiedAt"]?.GetValue<string>();
+    return !string.IsNullOrWhiteSpace(raw)
+        && DateTimeOffset.TryParse(raw, out var lastVerifiedAt)
+        && DateTimeOffset.UtcNow - lastVerifiedAt < TimeSpan.FromDays(3);
+}
+
+static void SetFreshProviderVerificationTimestamps(JsonNode node)
+{
+    var now = DateTimeOffset.UtcNow;
+    node["lastVerifiedAt"] = JsonValue.Create(now);
+    node["nextVerificationDue"] = JsonValue.Create(now.AddDays(30));
 }
 
 static async Task<string> CreateProviderAsync(
