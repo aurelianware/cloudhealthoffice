@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Security.Cryptography.Xml" Version="8.0.3" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="8.0.4" />
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
