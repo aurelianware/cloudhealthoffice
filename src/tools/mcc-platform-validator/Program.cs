@@ -146,7 +146,7 @@ if (options.SeedMembers)
         "Preparation",
         async () =>
     {
-        var members = await SeedMembersAsync(http, options, claims, json);
+        var members = await SeedMembersAsync(http, options, claims, validationPlanId, json);
         var coverage = await SeedCoverageAsync(http, options, claims, validationPlanId, json);
         return (members, coverage);
     });
@@ -1294,6 +1294,7 @@ static async Task<MemberFixturePreparation> SeedMembersAsync(
     HttpClient http,
     ValidatorOptions options,
     IReadOnlyCollection<SyntheticClaim> claims,
+    Guid validationPlanId,
     JsonSerializerOptions json)
 {
     var members = claims
@@ -1342,6 +1343,8 @@ static async Task<MemberFixturePreparation> SeedMembersAsync(
                 }
             }
 
+            await WarmAccumulatorCacheAsync(http, options, member, validationPlanId, json);
+
             WriteSeedingProgress("members", Interlocked.Increment(ref processed), members.Count, progressInterval, progressLock);
         });
 
@@ -1351,6 +1354,47 @@ static async Task<MemberFixturePreparation> SeedMembersAsync(
     }
     Console.WriteLine($"seeded: {created:N0} synthetic members ({existing:N0} already present, {statusAligned:N0} status-aligned)");
     return new MemberFixturePreparation(created, existing, statusAligned);
+}
+
+// Best-effort: forces a benefit-plan-service accumulator read (individual and
+// family scope) so the Redis cache is populated before timed adjudication
+// starts, instead of every claim's first accumulatorRead paying a cache-miss
+// round trip to claims-service. An empty Lines array makes this the cheapest
+// call that still reaches Step 2 (accumulator load) before the "no lines"
+// guard short-circuits pricing. Failure here doesn't affect correctness --
+// adjudication falls back to the same cache-miss path it always has -- so
+// errors are swallowed rather than treated as a seeding failure.
+static async Task WarmAccumulatorCacheAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    SyntheticMember member,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    try
+    {
+        var payload = new
+        {
+            memberId = member.MemberId,
+            subscriberId = string.IsNullOrWhiteSpace(member.SubscriberId) ? member.MemberId : member.SubscriberId,
+            benefitPlanId = validationPlanId,
+            serviceDate = new DateOnly(2024, 6, 15),
+            networkTier = "InNetwork",
+            lines = Array.Empty<object>(),
+            allowedAmounts = new Dictionary<int, decimal>(),
+            claimId = $"mcc-warmup-{member.MemberId}"
+        };
+
+        using var response = await http.PostAsJsonAsync(
+            $"{options.BenefitUrl}/api/v1/adjudication/calculate-benefits",
+            payload,
+            json);
+        _ = await response.Content.ReadAsStringAsync();
+    }
+    catch
+    {
+        // best-effort cache warm-up; adjudication's own fallback path covers this member either way
+    }
 }
 
 static async Task<bool> MemberExistsAsync(HttpClient http, ValidatorOptions options, string memberId)
