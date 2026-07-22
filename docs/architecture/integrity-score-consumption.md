@@ -4,6 +4,23 @@ Status: 5.10 — verification integrity score surface (Phase 1 closer)
 Services: `src/services/provider-service`, `src/services/benefit-plan-service`, `src/portal`
 Depends on: 5.4.5 (verification write-back), 5.4 (network roster), 5.7 (FHIR Practitioner)
 
+> **Addendum, July 2026.** Until this month, "Adjudication critical
+> path" below was aspirational for real traffic: `HttpProviderIntegrityGate`
+> was only ever reached through the standalone `AdjudicationController.Adjudicate`
+> endpoint (used by the MCC benchmark validator), never through
+> claims-service's actual orchestrated pipeline — `BenefitCalculationStage`
+> called `calculate-benefits`, which by design (D14 in
+> `claim-adjudication-pipeline.md`) never touches provider integrity. Real
+> claims were never checked against federal exclusion lists. Fixed by adding
+> claims-service's `ProviderIntegrityStage` (Order=150), reached through a
+> new side-effect-free `GET /api/v1/adjudication/provider-integrity/{npi}`
+> endpoint rather than folding the check into `calculate-benefits` itself.
+> The gate was also hardened at the same time: total verification
+> unavailability and a live `Failed`/`ManualReviewRequired` status now both
+> resolve to `Passed=false` with a new `RequiresManualReview` flag, rather
+> than the old fail-open `Passthrough()` default. See "Provider integrity
+> stage (added July 2026)" in `claim-adjudication-pipeline.md`.
+
 ## Why a canonical decision tree
 
 Integrity-score data has three consumers patterns that look similar
@@ -61,7 +78,8 @@ Need an integrity score?
 | FHIR Organization projection | `FhirOrganizationProjector` (provider-service) | Cached projection (only when score is on the Provider with `ProviderType.Organization`) |
 | Provider list grid | `Pages/Providers.razor` (portal) | Cached projection (via portal `ProviderService` HTTP client) |
 | Provider detail card | `Pages/ProviderDetailsDialog.razor` (portal) | Cached projection; "Refresh now" button calls live |
-| Adjudication critical path | `HttpProviderIntegrityGate` (benefit-plan-service) | Cached-or-live (default) |
+| Adjudication critical path (standalone endpoint) | `HttpProviderIntegrityGate` via `AdjudicationController.Adjudicate` (benefit-plan-service) | Cached-or-live (default) |
+| Adjudication critical path (real pipeline) | `ProviderIntegrityStage` (claims-service) → `GET /api/v1/adjudication/provider-integrity/{npi}` → `HttpProviderIntegrityGate` (benefit-plan-service) | Cached-or-live (default); added July 2026 — see addendum above |
 | Admin tenant backfill | `IntegrityProjectionAdminController` (provider-service) | Live (per-provider in a loop) |
 | Scheduled re-verification | `IntegrityProjectionWorker` (provider-service) | Live (worker → verification-service) |
 | Per-provider on-demand refresh | `ProvidersController.Refresh` (provider-service) | Live |
@@ -207,8 +225,10 @@ block alongside the rest of the Sentinel palette.
   handled here.
 - **Adjudication-time re-adjudicate-with-fresh.** The
   `IProviderIntegrityGate.CheckAsync` interface gained a
-  `forceRefresh` parameter in 5.10; the only current caller
-  (`AdjudicationController`) passes the default. A future capability
+  `forceRefresh` parameter in 5.10; the only current direct caller
+  (`AdjudicationController`, including the new July 2026
+  `provider-integrity/{npi}` endpoint claims-service's
+  `ProviderIntegrityStage` calls) passes the default. A future capability
   could add an admin-triggered "re-adjudicate against this claim with a
   fresh score" affordance.
 
