@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650">
+  <defs>
+    <filter id="piGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="piArrowCyan" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6" fill="#00ffff" opacity="0.8"/>
+    </marker>
+    <marker id="piArrowGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6" fill="#00ff88" opacity="0.8"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="650" fill="#000000"/>
+
+  <!-- Title -->
+  <text x="600" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="900"
+        fill="#ffffff" text-anchor="middle">Claim Adjudication Pipeline</text>
+  <text x="600" y="66" font-family="Segoe UI, system-ui, sans-serif" font-size="13" fill="#00ffff"
+        text-anchor="middle" opacity="0.8">ClaimAdjudicationOrchestrator &#x2014; 8 stages, real production traffic &#x2022; Episode 011</text>
+
+  <!-- Entry path A: production -->
+  <rect x="190" y="92" width="420" height="32" rx="6" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1.5"/>
+  <text x="400" y="106" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="700"
+        fill="#00ffff" text-anchor="middle">PATH A &#x2022; PRODUCTION</text>
+  <text x="400" y="119" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" fill="#c9d1d9"
+        text-anchor="middle">POST /api/v1/claims &#x2192; real orchestrator, below</text>
+
+  <!-- Entry path B: benchmark only -->
+  <rect x="630" y="92" width="420" height="32" rx="6" fill="rgba(255,255,255,0.03)" stroke="#808080" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="840" y="106" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="700"
+        fill="#b0b0b0" text-anchor="middle">PATH B &#x2022; BENCHMARK ONLY</text>
+  <text x="840" y="119" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" fill="#8b949e"
+        text-anchor="middle">POST /adjudicate &#x2014; sync, MCC validator only</text>
+
+  <!-- Connector: Path A into orchestrator -->
+  <line x1="400" y1="124" x2="400" y2="154" stroke="#00ffff" stroke-width="1.5" opacity="0.7" marker-end="url(#piArrowCyan)"/>
+
+  <!-- Orchestrator box -->
+  <rect x="60" y="158" width="1080" height="230" rx="12" fill="rgba(8,8,8,0.5)" stroke="rgba(0,255,255,0.25)" stroke-width="1"/>
+  <text x="600" y="185" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
+        fill="#ffffff" text-anchor="middle">ClaimAdjudicationOrchestrator</text>
+
+  <!-- Stage 150 revision tag -->
+  <text x="403" y="230" font-family="Segoe UI, system-ui, sans-serif" font-size="8.5" font-weight="700"
+        fill="#00ff88" text-anchor="middle" letter-spacing="0.3">&#x2605; ADDED &#x2014; REV, JUL 2026</text>
+
+  <!-- Timeline -->
+  <line x1="140" y1="298" x2="1060" y2="298" stroke="#00ffff" stroke-width="2" opacity="0.45" marker-end="url(#piArrowCyan)"/>
+
+  <!-- Stop: 100 Scrubbing -->
+  <g>
+    <text x="140" y="264" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Scrubbing</text>
+    <circle cx="140" cy="298" r="15" fill="#00ffff" opacity="0.9"/>
+    <text x="140" y="302" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#000000" text-anchor="middle">100</text>
+  </g>
+
+  <!-- Stop: 150 ProviderIntegrity (highlighted) -->
+  <g filter="url(#piGlow)">
+    <text x="403" y="250" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Provider</text>
+    <text x="403" y="264" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Integrity</text>
+    <circle cx="403" cy="298" r="17" fill="#00ff88" opacity="0.95"/>
+    <text x="403" y="302" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#000000" text-anchor="middle">150</text>
+  </g>
+
+  <!-- Stop: 200 NetworkCredentialing -->
+  <g>
+    <text x="534" y="250" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Network</text>
+    <text x="534" y="264" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Credentialing</text>
+    <circle cx="534" cy="298" r="15" fill="#00ffff" opacity="0.9"/>
+    <text x="534" y="302" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#000000" text-anchor="middle">200</text>
+  </g>
+
+  <!-- Stop: 300 BenefitCalculation -->
+  <g>
+    <text x="666" y="250" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Benefit</text>
+    <text x="666" y="264" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Calculation</text>
+    <circle cx="666" cy="298" r="15" fill="#00ffff" opacity="0.9"/>
+    <text x="666" y="302" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#000000" text-anchor="middle">300</text>
+  </g>
+
+  <!-- Stop: 400 NcciEdits -->
+  <g>
+    <text x="797" y="264" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">NCCI Edits</text>
+    <circle cx="797" cy="298" r="15" fill="#00ffff" opacity="0.9"/>
+    <text x="797" y="302" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#000000" text-anchor="middle">400</text>
+  </g>
+
+  <!-- Stop: 500 CoordinationOfBenefits -->
+  <g>
+    <text x="929" y="250" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Coordination</text>
+    <text x="929" y="264" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">of Benefits</text>
+    <circle cx="929" cy="298" r="15" fill="#00ffff" opacity="0.9"/>
+    <text x="929" y="302" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#000000" text-anchor="middle">500</text>
+  </g>
+
+  <!-- Stop: 600 AiExamination -->
+  <g>
+    <text x="1060" y="250" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">AI</text>
+    <text x="1060" y="264" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">Examination</text>
+    <circle cx="1060" cy="298" r="15" fill="#00ffff" opacity="0.9"/>
+    <text x="1060" y="302" font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#000000" text-anchor="middle">600</text>
+  </g>
+
+  <!-- Note: 999 Persistence, terminal, always runs -->
+  <g transform="translate(600, 360)">
+    <circle cx="0" cy="0" r="19" fill="none" stroke="#00ffff" stroke-width="1.5" opacity="0.6"/>
+    <circle cx="0" cy="0" r="13" fill="#00ffff" opacity="0.9"/>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="8.5" font-weight="700" fill="#000000" text-anchor="middle">999</text>
+    <text x="30" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700" fill="#ffffff" text-anchor="start">PersistenceStage</text>
+    <text x="30" y="8" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#8b949e" text-anchor="start">writes final claim state &#x2014; always runs, whatever stopped the pipeline above</text>
+  </g>
+
+  <!-- Leader from Stage 150 to gate detail inset -->
+  <polyline points="403,315 403,401 600,401 600,412" fill="none" stroke="#00ff88" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.8" marker-end="url(#piArrowGreen)"/>
+
+  <!-- Gate detail inset -->
+  <rect x="190" y="414" width="820" height="130" rx="10" fill="rgba(8,8,8,0.55)" stroke="rgba(0,255,136,0.35)" stroke-width="1"/>
+  <text x="600" y="438" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+        fill="#ffffff" text-anchor="middle">ProviderIntegrityStage &#x2014; gate detail</text>
+
+  <!-- Branch: Clear -> Pass -->
+  <rect x="280" y="456" width="200" height="58" rx="6" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1"/>
+  <text x="380" y="478" font-family="Segoe UI, system-ui, sans-serif" font-size="11.5" font-weight="700" fill="#00ffff" text-anchor="middle">Clear &#x2192; Pass</text>
+  <text x="380" y="496" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#c9d1d9" text-anchor="middle">No exclusion match found</text>
+
+  <!-- Branch: Excluded -> Deny -->
+  <rect x="500" y="456" width="200" height="58" rx="6" fill="rgba(255,140,0,0.07)" stroke="#ff8c00" stroke-width="1"/>
+  <text x="600" y="478" font-family="Segoe UI, system-ui, sans-serif" font-size="11.5" font-weight="700" fill="#ff8c00" text-anchor="middle">Excluded &#x2192; Deny</text>
+  <text x="600" y="496" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#c9d1d9" text-anchor="middle">OIG/LEIE/SAM.gov match &#x2022; CARC B7</text>
+
+  <!-- Branch: Unavailable -> Pend -->
+  <rect x="720" y="456" width="200" height="58" rx="6" fill="rgba(255,176,32,0.08)" stroke="#ffb020" stroke-width="1"/>
+  <text x="820" y="478" font-family="Segoe UI, system-ui, sans-serif" font-size="11.5" font-weight="700" fill="#ffb020" text-anchor="middle">Unavailable &#x2192; Pend</text>
+  <text x="820" y="496" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#c9d1d9" text-anchor="middle">Unreachable &#x2022; held as MEDREVIEW</text>
+
+  <text x="600" y="534" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700" fill="#00ff88" text-anchor="middle">The gate never fails open.</text>
+
+  <!-- Outcome precedence legend -->
+  <text x="600" y="572" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700" text-anchor="middle">
+    <tspan fill="#ff4444">Reject</tspan><tspan fill="#8b949e">  &gt;  </tspan><tspan fill="#ff8c00">Deny</tspan><tspan fill="#8b949e">  &gt;  </tspan><tspan fill="#ffb020">Pend</tspan><tspan fill="#8b949e">  &gt;  </tspan><tspan fill="#00ffff">Pass</tspan>
+  </text>
+
+  <!-- Bottom caption -->
+  <rect x="0" y="592" width="1200" height="40" fill="rgba(0,255,255,0.03)"/>
+  <text x="600" y="616" font-family="Segoe UI, system-ui, sans-serif" font-size="11.5" fill="rgba(176,176,176,0.75)"
+        text-anchor="middle">Verified live, Jul 2026 &#x2014; 500-claim smoke test: 10/10 excluded-provider fixtures denied by Stage 150, zero unintended pends &#x2022; gate never fails open</text>
+</svg>

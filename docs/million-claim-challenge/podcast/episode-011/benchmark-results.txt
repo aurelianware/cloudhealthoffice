@@ -1,0 +1,73 @@
+# Episode 011 benchmark results
+
+STATUS: EVIDENCE RECORDED — CLEAN, NOT A SCALE RUN. This episode fixes an adjudication-safety gap disclosed in Part 10 and closes a materially larger gap found while investigating it. There is no 250,000-claim confirmation run here — the evidence is a targeted 500-claim smoke test through claims-service's real, async orchestrated pipeline (not the standalone benchmark endpoint every prior episode's numbers were measured against), confirming the new stage fires correctly with zero unintended side effects. Raw artifacts are committed alongside this file.
+
+## Fix history
+
+Part 10 disclosed, but explicitly did not fix, a defect in `HttpProviderIntegrityGate`'s handling of a live verification `"Failed"` status. Part 11 opened that investigation and found the disclosed theory didn't hold: `AdjudicationController.Adjudicate` branches on the gate's `Passed` field, not `IsExcluded`, and `Passed` already came back `false` for a `"Failed"` status through that caller. The specific mapping Part 10 named wasn't producing a wrong-payment bug through the code path Part 10 was looking at.
+
+**Bug 1 — the gate's real fail-open path.** `HttpProviderIntegrityGate.Passthrough()` (the result returned when both `provider-service` and the live `provider-verification-service` are unreachable) defaulted to `Passed = true`. Total unavailability was being treated as a confirmed clean result. Fixed by replacing every passthrough return with either a confirmed answer or a new `RequiresManualReview = true` result, distinct from a confirmed exclusion. A live `"Failed"` or `"ManualReviewRequired"` verification status now also resolves to `RequiresManualReview`, not a silent pass.
+
+**Bug 2 — the check was never reachable from a real claim.** Tracing every caller of `IProviderIntegrityGate` found exactly one: `AdjudicationController.Adjudicate`, the standalone synchronous endpoint this series' own MCC validator calls directly. Claims-service's real production pipeline, `ClaimAdjudicationOrchestrator` — the pipeline every throughput and correctness number in this series has been measured against — never called it. `BenefitCalculationStage` calls `calculate-benefits`, which by design has never touched provider integrity, since that endpoint is also used by side-effect-free portal/preview features. Every `ExcludedProviderDenied` result this series has reported, including Part 10's clean 5,000/5,000, was scored against the benchmark's own synchronous call — not against what the orchestrator actually decided, because the orchestrator was never asked. Fixed by adding a new side-effect-free `GET /api/v1/adjudication/provider-integrity/{npi}` endpoint on benefit-plan-service and a new `ProviderIntegrityStage` (`Order=150`) in claims-service's orchestrator that calls it — Deny on a confirmed exclusion, Pend (`MEDREVIEW`, an existing pend code) on anything unresolved, including a transport failure reaching benefit-plan-service itself.
+
+**Bug 3 — found by code review, fixed before merge.** Once the gate started returning `Passed = false` for both a confirmed exclusion and an unresolved review case, `AdjudicationController.Adjudicate` was still reporting every `!Passed` result as `PROVIDER_EXCLUDED` — an outage or an inconclusive verification would have been denied as if the provider had actually appeared on a federal exclusion list, the opposite of this episode's intent. Fixed by checking `IsExcluded` explicitly before falling through to the general not-passed case. Four new controller tests cover confirmed exclusion, review-required, unavailable, and a defensive all-false result.
+
+PR #974 shipped all three fixes, plus the new stage, client, and endpoint, plus updated architecture docs (`claim-adjudication-pipeline.md`, `integrity-score-consumption.md`).
+
+## Run identity — verification smoke test
+
+- Kubernetes job: `mcc-pi-smoke`
+- Environment: local Docker Desktop Kubernetes (`kind` cluster `docker-desktop`)
+- Images: `cloudhealthoffice-claims-service:pi-09976edb`, `cloudhealthoffice-benefit-plan-service:pi-09976edb` — both built from `main` at commit `09976edb`, the PR #974 merge commit
+- Tenant: `demo`
+- Validator seed: 100
+- Claims: 500
+- Parallelism: 10
+- Purpose: confirm `ProviderIntegrityStage` fires correctly inside the real, async `ClaimAdjudicationOrchestrator` — not a scale or throughput measurement
+
+## Command
+
+```text
+NAMESPACE=cloudhealthoffice JOB_NAME=mcc-pi-smoke CLAIMS=500 SEED=100 PARALLELISM=10 JOB_TIMEOUT=15m ./scripts/run-mcc-local-k8s.sh
+```
+
+## What this run actually exercises
+
+`POST /api/v1/claims` — the call that triggers `ClaimAdjudicationOrchestrator` — is the same call this series' own MCC validator already makes before it separately calls the standalone benchmark endpoint. A normal validator run exercises both paths in the same pass. This run's 500 claims included the validator's ten seeded `ExcludedProviderDenied` fixture claims (rendering provider `CredentialingStatus: Excluded`).
+
+## Result — synchronous benchmark side (unchanged from Part 10's bar)
+
+- Total claims: 500
+- Processed: 500
+- Paid/adjudicated: 410
+- Pended: 4
+- Business denials: 86
+- Platform failures: 0
+- Workflow scoring: **62/65 matched, 0 mismatched**, 3 unsupported, 0 observation timeouts
+- Payment gate: 10/10 within $0.01, exact
+- `ExcludedProviderDenied`: **10/10 matched** — confirms the Bug 3 controller fix did not regress the standalone endpoint
+- Business denial `PROVIDER_EXCLUDED`: 10 — one-to-one against the ten seeded fixture claims
+
+## Result — real orchestrated pipeline (the thing this episode actually needed to prove)
+
+Read directly from the running claims-service pods, not from the validator's own scoring (which only observes the synchronous endpoint):
+
+- `ProviderIntegrityStage` fired **10 `Deny` outcomes**, each logged with reason `Provider is excluded from federal healthcare programs` — a one-to-one match against the ten seeded `ExcludedProviderDenied` fixtures, split 4 and 6 across the two claims-service pods. Zero false positives, zero false negatives.
+- `GET /api/claims/{id}` on one denied claim (`d3409ca9-6ae1-4da0-bdb1-456344bd57cc`, rendering provider "Excluded Provider05") confirmed the persisted result: `denialReasonCode: B7`, `denialReason: "Provider is excluded from federal healthcare programs"`, claim status `Denied`, `pendDetails: null`. Full response in `sample-denied-claim.json`.
+- Zero errors or exceptions logged anywhere in the provider-integrity path across the run.
+- Zero unintended `MEDREVIEW` pends — no clean provider was ever held for review.
+- The run's own false-pend sweep (already part of every MCC job, unrelated to this episode) reported **0 unexpected pends, 2 terminal outcomes reconciled** — the new stage introduced no side effect anywhere else in the pipeline.
+- All other short-circuited stage outcomes recorded in the same run: 73 `BenefitCalculation` denies (uncovered service / CARC denials, unrelated to this episode), 1 `Scrubbing` reject. No stage outcome is unaccounted for.
+
+Full claims-service log excerpt: `claims-service-provider-integrity-log-excerpt.txt`. Full validator console output: `raw-validator-output-500-smoke.txt`.
+
+## Environment limitation, disclosed
+
+This local cluster has no Service Bus emulator provisioned. Claims-service's messaging configuration auto-resolves to an in-process, in-memory bus, so the publish-to-subscribe hop that triggers `ClaimAdjudicationOrchestrator` happens inside the same pod that handled the HTTP request, not across a real broker. This is sufficient to prove the pipeline wiring and the new stage's logic are correct. It is not evidence about broker behavior, delivery guarantees, or timing under a real Service Bus connection string, which production configuration provides and this environment does not.
+
+## Interpretation rules for this run
+
+- This is a correctness and wiring verification, not a throughput or scale result. Do not compare its numbers to Part 8/9/10's claims-per-second figures.
+- Distinguish the synchronous benchmark endpoint's result (unchanged, still the validator's scoring surface) from the real orchestrator's result (new evidence this episode adds).
+- The in-memory message bus is a local-environment artifact, disclosed above — not a production behavior claim.
+- This is local Docker Desktop Kubernetes evidence, not a production capacity claim.

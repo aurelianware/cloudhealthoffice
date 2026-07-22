@@ -44,6 +44,12 @@ const publications = [
     part: 'Part 10',
     slug: 'part-10-the-migration-cost-that-wasnt',
     summary: 'Testing Part 9\'s unconfirmed migration-cost theory at 250,000 claims, finding the real causes through profiling, and confirming a 3.5x throughput gain.'
+  },
+  {
+    episode: '011',
+    part: 'Part 11',
+    slug: 'part-11-the-check-that-only-ran-in-the-benchmark',
+    summary: 'Re-investigating a bug Part 10 disclosed but didn\'t fix, and finding federal provider-exclusion screening had never been wired into the real adjudication pipeline at all.'
   }
 ];
 
@@ -89,6 +95,15 @@ function renderArticle(source) {
     } else if (line.startsWith('- ')) {
       flushParagraph();
       list.push(line.slice(2));
+    } else if (line.startsWith('![')) {
+      flushParagraph();
+      flushList();
+      const match = line.match(/^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/);
+      if (match) {
+        const [, alt, src, caption] = match;
+        const figcaption = caption ? `<figcaption>${inlineMarkdown(caption)}</figcaption>` : '';
+        body.push(`<figure class="article-figure"><img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy">${figcaption}</figure>`);
+      }
     } else if (line.startsWith('Published article: ')) {
       flushParagraph();
       body.push(`<p class="source-note">Originally published externally: ${inlineMarkdown(line.slice(19))}</p>`);
@@ -135,6 +150,9 @@ const pageShell = ({ title, description, canonical, content, type = 'article' })
     .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
     .evidence-block summary { cursor: pointer; padding: 18px 20px; color: #00ffff; font-weight: 700; background: #0d1117; }
     .evidence-block pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 22px; background: #080c10; color: #c9d1d9; font-size: .84rem; line-height: 1.55; }
+    .article-figure { margin: 40px 0; }
+    .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
+    .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
   </style>
 </head>
 <body>

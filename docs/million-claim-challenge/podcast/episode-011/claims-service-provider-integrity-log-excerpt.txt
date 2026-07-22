@@ -1,0 +1,51 @@
+# Episode 011 — claims-service pod log excerpt, mcc-pi-smoke run
+#
+# Captured directly from both claims-service pod logs (claims-service-69644cc665-mg8kp,
+# claims-service-69644cc665-r6g7z) during the 500-claim smoke test. This is what the real
+# ClaimAdjudicationOrchestrator actually decided, independent of the MCC validator's own
+# scoring of the synchronous benchmark endpoint (see raw-validator-output-500-smoke.txt).
+
+## ProviderIntegrityStage outcomes — grep -i "providerintegrity" across both pods
+
+Pod claims-service-69644cc665-mg8kp (4 matches):
+      Stage ProviderIntegrity short-circuited pipeline for claim d3409ca9-6ae1-4da0-bdb1-456344bd57cc (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+      Stage ProviderIntegrity short-circuited pipeline for claim e707d1c9-8d90-4e23-b1a8-d7a6ee18a560 (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+      Stage ProviderIntegrity short-circuited pipeline for claim 2b825d5a-7f9e-4b24-bded-693b7a71a4c6 (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+      Stage ProviderIntegrity short-circuited pipeline for claim 2681fb8c-971e-4680-ba8c-895485bd57eb (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+
+Pod claims-service-69644cc665-r6g7z (6 matches):
+      Stage ProviderIntegrity short-circuited pipeline for claim 92607d1a-f48c-4ae1-af38-521f279eca51 (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+      Stage ProviderIntegrity short-circuited pipeline for claim 97edbec7-59b4-41ab-8703-394ac293193d (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+      Stage ProviderIntegrity short-circuited pipeline for claim b8d86284-3d7b-424b-a3c9-95827d1c9e12 (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+      Stage ProviderIntegrity short-circuited pipeline for claim f34c0e0c-e966-4bbf-bba3-67fec5401489 (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+      Stage ProviderIntegrity short-circuited pipeline for claim 40f803c0-2bf9-44f4-b386-7a142f4f9471 (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+      Stage ProviderIntegrity short-circuited pipeline for claim 8baf5933-583c-4e19-83c1-0a6ae4eda5d1 (outcome=Deny, reason=Provider is excluded from federal healthcare programs)
+
+Total: 10 Deny outcomes, both pods combined — matches the 10 seeded ExcludedProviderDenied
+fixture claims (rendering provider CredentialingStatus: Excluded) one-for-one. Zero false
+positives (no clean provider denied), zero false negatives (no excluded provider missed).
+
+## All short-circuited stage outcomes across the run, tabulated
+
+  73 Stage BenefitCalculation short-circuited pipeline (outcome=Deny   [unrelated to this episode — CARC_96/CARC_18/PRIOR_AUTH_REQUIRED business denials]
+  10 Stage ProviderIntegrity short-circuited pipeline (outcome=Deny    [this episode's new stage]
+   1 Stage Scrubbing short-circuited pipeline (outcome=Reject          [unrelated structural reject]
+
+No MEDREVIEW pends were logged by ProviderIntegrityStage in this run — every seeded provider
+in the fixture pool resolved to a confident status (Clear or Excluded) from the cache-or-live
+gate, so the "unresolved, held for review" path was not exercised by this particular run's
+fixture mix. Unit and integration tests (ProviderIntegrityStageTests, seven cases) cover that
+path directly, including a simulated transport failure reaching benefit-plan-service.
+
+## Errors / exceptions
+
+grep -i "error|exception" across both pod logs, filtered to the provider-integrity path:
+zero matches.
+
+## Note on this environment
+
+Both pods are independent — this local cluster's messaging configuration auto-resolves to
+InMemoryMessageBus (no Service Bus connection string configured), so each pod's
+SubscriptionHostedService only ever processes claims submitted to that same pod. The 4/6
+split above reflects the load balancer's distribution across the two claims-service replicas
+during the run, not any correctness property of the stage itself.

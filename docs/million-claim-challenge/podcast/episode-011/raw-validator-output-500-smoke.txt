@@ -1,0 +1,100 @@
+Provider fixture pool: 1,000 -> 751 distinct NPIs (249 assignments reused, 14 provider-sensitive claims preserved)
+Authorization fixtures: seeded 3 prior authorization fixtures (3 new, 0 updated)
+Authorization provider validation evidence: supported
+  Seeding members: 25/500  Seeding members: 50/500  Seeding members: 75/500  Seeding members: 100/500  Seeding members: 125/500  Seeding members: 150/500  Seeding members: 175/500  Seeding members: 200/500  Seeding members: 225/500  Seeding members: 250/500  Seeding members: 275/500  Seeding members: 300/500  Seeding members: 325/500  Seeding members: 350/500  Seeding members: 375/500  Seeding members: 400/500  Seeding members: 425/500  Seeding members: 450/500  Seeding members: 475/500  Seeding members: 500/500
+seeded: 481 synthetic members (19 already present, 500 status-aligned)
+seeded: 4 COB coverage rows (0 already present)
+seeded: 0 provider networks (2 already present)
+  Seeding providers: 37/751  Seeding providers: 74/751  Seeding providers: 111/751  Seeding providers: 148/751  Seeding providers: 185/751  Seeding providers: 222/751  Seeding providers: 259/751  Seeding providers: 296/751  Seeding providers: 333/751  Seeding providers: 370/751  Seeding providers: 407/751  Seeding providers: 444/751  Seeding providers: 481/751  Seeding providers: 518/751  Seeding providers: 555/751  Seeding providers: 592/751  Seeding providers: 629/751  Seeding providers: 666/751  Seeding providers: 703/751  Seeding providers: 740/751  Seeding providers: 751/751
+seeded: 736 synthetic providers (15 already present)
+  Processed: 500/500  processed=500  platformFailures=0
+
+Observing 4 expected-pend claims for up to 45s; benchmark timing excludes this polling window.
+  Pend observation:  4 pended, 0 timed out
+
+Sweeping 58 non-pend claims for unexpected persisted pends.
+  False-pend sweep: 0 unexpected pends, 2 terminal outcomes reconciled
+
+Validation summary
+  Total claims:       500
+  Processed:          500
+  Paid/adjudicated:   410
+  Pended:             4
+  Business denials:   86
+  Platform failures:  0
+  Observation timeout: 0
+  Workflow checks:    62/65 matched (0 mismatched, 3 unsupported, 0 observation timeouts)
+  Elapsed:            00:06.383
+  Throughput:         78.32 claims/sec
+  P95 latency:        244 ms
+  P99 latency:        315 ms
+  Preparation time:   0:08.990
+  Tracked lifecycle:  0:15.398
+  Lifecycle.Service health checks        0:00.043
+  Lifecycle.Reference rule seeding       0:00.115
+  Lifecycle.Validation plan setup        0:00.070
+  Lifecycle.Corpus generation            0:00.024
+  Lifecycle.Fixture normalization        0:00.003
+  Lifecycle.Authorization fixture seeding 0:00.029
+  Lifecycle.Member and coverage seeding  0:03.886
+  Lifecycle.Provider seeding             0:04.816
+  Lifecycle.Timed adjudication           0:06.383
+  Lifecycle.Expected-pend observation    0:00.010
+  Lifecycle.False-pend sweep             0:00.013
+  Submit       avg/p95: 34 ms / 63 ms
+  Adjudicate   avg/p95: 72 ms / 166 ms
+  Writeback    avg/p95: 21 ms / 44 ms
+  Adjudicate.ncci avg/p95: 25 ms / 103 ms
+  Adjudicate.providerIntegrity avg/p95: 9 ms / 40 ms
+  Adjudicate.terminology avg/p95: 8 ms / 43 ms
+  Adjudicate.priorAuth avg/p95: 5 ms / 36 ms
+  Adjudicate.rateResolution avg/p95: 5 ms / 32 ms
+  Adjudicate.benefitCalculation avg/p95: 4 ms / 14 ms
+  Adjudicate.benefitCalculation.accumulatorRead avg/p95: 2 ms / 6 ms
+  Adjudicate.benefitCalculation.accumulatorWrite avg/p95: 2 ms / 6 ms
+  Adjudicate.scrub avg/p95: 0 ms / 1 ms
+  Adjudicate.benefitCalculation.lineProcessing avg/p95: 0 ms / 0 ms
+  Adjudicate.routing avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.workingSet avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.snapshot avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.totals avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.outcome avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.planLookup avg/p95: 0 ms / 0 ms
+  Avg payment delta:  $0.00
+  Payment gate:       10/10 within $0.01 (0 mismatched, max $0.00)
+  Payment delta:      Exact (10)
+  Business denial: CARC_96 (46)
+  Business denial: PRIOR_AUTH_REQUIRED (13)
+  Business denial: CARC_18 (12)
+  Business denial: PROVIDER_EXCLUDED (10)
+  Business denial: NCCI_MUE_EDIT_FAILURE (3)
+  Scenario: CleanProfessionalPaid 10/10 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:BehavioralHealthCarveIn 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:BehavioralHealthCarveOut 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:BehavioralHealthParityCheck 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobBirthdayRule 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobGenderRule 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobMedicareSecondary 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobPrimaryPayer 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobSecondaryPayer 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobTertiaryPayer 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:MedicaidCHIP 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:MedicaidSSI 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:MedicaidTANF 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:NewbornAutoAdjudication 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:NewbornFirstThirtyDays 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:NewbornMotherClaimLink 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_AuthOnFile 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_ExpiredAuth 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_NoAuth 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_WrongProvider 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:RetroEligibilityAdd 2/2 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:RetroEligibilityCoverageChange 0/1 matched (0 mismatched, 1 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:RetroEligibilityTermination 1/1 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:SubrogationAccidentRelated 0/1 matched (0 mismatched, 1 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:SubrogationWorkersComp 0/1 matched (0 mismatched, 1 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: ExcludedProviderDenied 10/10 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: TxStarInpatientNoAuth 10/10 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: UncoveredServiceDenied 10/10 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Summary JSON:       /tmp/mcc-summary.json
+  Dashboard summary: published

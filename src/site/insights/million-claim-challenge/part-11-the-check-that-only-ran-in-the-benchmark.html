@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Running a Healthcare Claims Platform Locally in Kubernetes, Part 11: The Check That Only Ran in the Benchmark | Cloud Health Office</title>
+  <meta name="description" content="Re-investigating a bug Part 10 disclosed but didn't fix, and finding federal provider-exclusion screening had never been wired into the real adjudication pipeline at all.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Running a Healthcare Claims Platform Locally in Kubernetes, Part 11: The Check That Only Ran in the Benchmark">
+  <meta property="og:description" content="Re-investigating a bug Part 10 disclosed but didn't fix, and finding federal provider-exclusion screening had never been wired into the real adjudication pipeline at all.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .source-note { font-size: .9rem !important; color: #8b949e !important; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+    .evidence-block summary { cursor: pointer; padding: 18px 20px; color: #00ffff; font-weight: 700; background: #0d1117; }
+    .evidence-block pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 22px; background: #080c10; color: #c9d1d9; font-size: .84rem; line-height: 1.55; }
+    .article-figure { margin: 40px 0; }
+    .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
+    .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/docs/million-claim-challenge">Million Claim Challenge</a></nav>
+    <div class="eyebrow">Million Claim Challenge · Part 11</div>
+    <h1>Running a Healthcare Claims Platform Locally in Kubernetes, Part 11: The Check That Only Ran in the Benchmark</h1>
+    <div class="disclosure"><strong>Evidence scope:</strong> This engineering field note describes local Kubernetes development and validation. It is not a production-cloud capacity claim or evidence that the full one-million-claim corpus has been completed.</div>
+    <div class="article-links">
+      <a href="/docs/million-claim-challenge/evidence#episode-011">View evidence</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-011/article.txt" target="_blank" rel="noopener noreferrer">View article source</a>
+    </div>
+    <p>Part 10 disclosed a bug and moved on. Part 11 went back to fix it, and found a bigger one underneath.</p>
+<p>Part 10's Round 2 traced 80 workflow mismatches to provider-service dropping connections under real concurrency — an infrastructure fix, PR #971. But that investigation also turned up something else: <code>HttpProviderIntegrityGate</code>'s handling of a live verification &quot;Failed&quot; status looked like it silently mapped to &quot;not excluded.&quot; That wasn't fixed in Part 10. It was disclosed as open, adjudication-safety logic that deserved its own review rather than a fix bundled into an infrastructure PR. Part 11 is that review.</p>
+<h2 id="the-disclosed-theory-didn-t-survive-a-closer-reading">The disclosed theory didn't survive a closer reading</h2>
+<p>The plan going in was narrow: read <code>HttpProviderIntegrityGate</code> and <code>AdjudicationController.Adjudicate</code> carefully, confirm the status-mapping defect Part 10 described, fix it, ship it. The first step alone changed the plan.</p>
+<p><code>AdjudicationController.Adjudicate</code> doesn't branch on the gate's <code>IsExcluded</code> field. It branches on <code>!providerIntegrity.Passed</code> — and <code>Passed</code> already came back <code>false</code> for a <code>&quot;Failed&quot;</code> verification status. The specific mapping Part 10 flagged wasn't producing a wrong-payment bug through that caller. That doesn't mean nothing was wrong; it means the disclosed theory, honestly stated as unconfirmed in Part 10's own words, didn't hold up against a second reading. Recording that correction here is the same discipline Part 9 and Part 10 both applied to their own guesses: a theory that sounds right stays a theory until it's checked.</p>
+<p>The real fail-open path was one level up: <code>Passthrough()</code>, the gate's behavior when both provider-service and the live verification service are unreachable, defaulted to <code>Passed = true</code>. Total unavailability — no data at all — was being treated the same as a confirmed clean result. That is a real bug, just not the one originally named.</p>
+<h2 id="tracing-the-gate-s-callers-found-something-worse">Tracing the gate's callers found something worse</h2>
+<p>Fixing <code>Passthrough()</code> meant finding everywhere it could fire, which meant finding everywhere <code>IProviderIntegrityGate</code> gets called at all. That search turned up one caller: <code>AdjudicationController.Adjudicate</code>.</p>
+<p>That endpoint is the standalone, synchronous benchmark surface this series' validator calls directly. It is not claims-service's production adjudication path. Real claims move through <code>ClaimAdjudicationOrchestrator</code> — a fixed, ordered pipeline of stages, triggered asynchronously off a <code>ClaimVersionSubmitted</code> event, the same pipeline every prior episode's throughput and correctness numbers were measured against. Its <code>BenefitCalculationStage</code> calls benefit-plan-service's <code>calculate-benefits</code> endpoint, which by design has never touched provider integrity — that endpoint is deliberately side-effect-free because portal and preview features call it too, and a live federal-exclusion check has no business running against a hypothetical calculation.</p>
+<p>Put together: the federal OIG/LEIE/SAM.gov exclusion check has existed, and been correctly tested, since capability 5.10. It has simply never been reachable from a real submitted claim. Every <code>ExcludedProviderDenied</code> result this series has ever reported — including the clean 5,000/5,000 in Part 10's Round 3 — was scored against the benchmark's own synchronous call to <code>/adjudicate</code>, not against what claims-service's orchestrator actually decided. The orchestrator was never asked the question.</p>
+<h2 id="the-fix-a-gate-that-can-t-fail-open-and-a-stage-that-finally-asks-it">The fix: a gate that can't fail open, and a stage that finally asks it</h2>
+<p>Two changes, not one.</p>
+<p><code>HttpProviderIntegrityGate</code> no longer has a passthrough state at all. Every code path that used to return a default &quot;clear&quot; result now returns one of two things: a confirmed answer, or a new <code>RequiresManualReview</code> flag. Total unavailability, and a live <code>&quot;Failed&quot;</code> or <code>&quot;ManualReviewRequired&quot;</code> status, both now resolve to <code>Passed = false, RequiresManualReview = true</code> — distinct from <code>IsExcluded</code>, and distinct from a pass. The gate cannot silently clear a provider it never actually checked.</p>
+<p>Getting that answer to a real claim needed a new door. Benefit-plan-service now exposes <code>GET /api/v1/adjudication/provider-integrity/{npi}</code>, a side-effect-free read that runs the exact same gate <code>Adjudicate</code> always has, without touching <code>calculate-benefits</code>. Claims-service calls it from a new pipeline stage, <code>ProviderIntegrityStage</code>, <code>Order=150</code> — right after scrubbing, before network credentialing. A confirmed exclusion is a <code>Deny</code>. Anything the gate can't confidently resolve, including the HTTP call to benefit-plan-service itself failing, is a <code>Pend</code> using <code>MEDREVIEW</code> — a pend code and work-queue bucket that already existed for this exact purpose. No new pend vocabulary, no tenant-configurable fail-open mode. A federal exclusion check doesn't get an advisory-only setting.</p>
+<figure class="article-figure"><img src="/graphics/provider-integrity-pipeline.svg" alt="Claim Adjudication Pipeline — ClaimAdjudicationOrchestrator's 8 stages, with ProviderIntegrityStage highlighted as this episode's addition, plus the standalone benchmark path and the gate's three-way outcome" loading="lazy"><figcaption>Path A is the real, async production pipeline this episode wires the check into. Path B is the standalone benchmark endpoint every prior episode's ExcludedProviderDenied result was actually scored against.</figcaption></figure>
+<p>Code review on the pull request caught a third bug before merge, in the same family as the first two: once the gate started returning <code>Passed = false</code> for both a confirmed exclusion and an unresolved review case, <code>AdjudicationController.Adjudicate</code> was still reporting both as <code>PROVIDER_EXCLUDED</code> — an outage or an inconclusive verification would have been denied as if the provider had actually appeared on a federal exclusion list. Fixed by checking <code>IsExcluded</code> explicitly before falling through to the general not-passed case, with four new tests covering exclusion, review-required, unavailable, and a defensive all-false result. The same discipline this series applies to its own benchmark claims — a reviewer's finding is a fact to check, not a fact to argue with.</p>
+<h2 id="verified-live-not-just-in-the-test-suite">Verified live, not just in the test suite</h2>
+<p>This episode is not a scale confirmation. There is no 250,000-claim run here, and nothing above claims about production capacity. What there is: proof, taken from the running system, that a claim submitted the way real claims are submitted now actually reaches this check.</p>
+<p><code>POST /api/v1/claims</code> is the entry point that triggers <code>ClaimAdjudicationOrchestrator</code> — and it happens to be the same call this series' own MCC validator already makes before it separately exercises the benchmark endpoint, so a normal validator run exercises both paths at once. A 500-claim run, including the validator's ten seeded <code>ExcludedProviderDenied</code> fixture claims, went through claims-service's real, async pipeline with the new stage active. Read directly from the running pods: <code>ProviderIntegrityStage</code> fired exactly ten <code>Deny</code> outcomes, each reading <code>Provider is excluded from federal healthcare programs</code> — a one-to-one match against the ten seeded fixtures, zero false positives, zero false negatives. <code>GET /api/claims/{id}</code> on one of them confirmed the persisted result: <code>denialReasonCode: B7</code>, the correct denial reason, claim status <code>Denied</code>. Zero errors in the provider-integrity path across the run. The false-pend sweep that already runs at the end of every MCC job reported zero unexpected pends — the new stage didn't introduce a single unintended side effect anywhere else in the run. The synchronous benchmark side stayed exactly as clean as Part 10 left it: 62 of 65 workflow checks matched, zero mismatched, <code>ExcludedProviderDenied</code> 10/10.</p>
+<p>One environment detail belongs in this record rather than left implicit: this local Kubernetes environment has no Service Bus emulator provisioned. Claims-service's messaging auto-resolves to an in-process, in-memory bus, so the publish-to-subscribe hop that triggers the orchestrator happens inside the same pod that handled the HTTP request, not across a real broker. That's sufficient to prove the pipeline wiring and the stage's logic are correct — it is not evidence about broker behavior, delivery guarantees, or timing under a real Service Bus connection, which production configuration provides and this environment does not.</p>
+<h2 id="what-this-actually-answers-and-what-it-doesn-t">What this actually answers, and what it doesn't</h2>
+<p>Part 10's disclosed bug is closed, but not with the fix Part 10's own wording anticipated. The specific status-mapping path named in that disclosure wasn't reachable through the caller Part 10 was looking at. What was reachable, and worse, was a total-unavailability fail-open path in the same gate, and a complete absence of the check from claims-service's real pipeline. Both are fixed now. Neither would have been found by patching only the line Part 10 pointed at.</p>
+<p>This does not change any throughput number this series has published. It does not add or remove a scale rung. What it changes is which of this series' own past correctness claims were actually being tested against production logic versus a benchmark-only stand-in — and going forward, <code>ExcludedProviderDenied</code> results are decided by the same orchestrator that decides every other claim in this series, not a parallel code path that happened to agree with it.</p>
+<h2 id="the-road-to-one-million">The road to one million</h2>
+<p>Part 6 made the scoring honest.</p>
+<p>Part 7 made the evidence visible.</p>
+<p>Part 8 proved a clean 100,000-claim run and found the next bottleneck.</p>
+<p>Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.</p>
+<p>Part 10 confirmed it, found the real cause wasn't the guessed one, and disclosed a bug it chose not to fix.</p>
+<p>Part 11 went back for that bug, found it wasn't the whole story, and closed the gap it was hiding.</p>
+<p>The next rung is still 500,000 claims, unchanged from where Part 10 left it — the first scale where the still-open <code>Submit</code> chain gets a harder test than 250K gave it. It now runs against a pipeline that actually checks every claim against federal exclusion lists, not one that happened to score correctly because a benchmark endpoint quietly did the checking on its behalf.</p>
+    <div class="article-links"><a href="/insights/million-claim-challenge">All MCC articles</a><a href="/docs/million-claim-challenge/evidence">Evidence archive</a></div>
+  </main>
+</body>
+</html>
