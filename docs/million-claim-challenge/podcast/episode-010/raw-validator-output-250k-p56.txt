@@ -1,0 +1,137 @@
+Million Claim Challenge - Platform Validator
+  Tenant:      demo
+  Claims URL:  http://claims-service
+  Benefit URL: http://benefit-plan-service
+  Member URL:  http://member-service
+  Coverage URL:http://coverage-service
+  Provider URL:http://provider-service
+  Auth URL:    http://authorization-service
+  Claims:      250,000
+  Seed:        42
+  Parallelism: 56
+  LOB:         Medicaid (3)
+  PA scenarios: enabled (2 %)
+  Auth fixtures: enabled
+  Pend observe: enabled (45s/1000ms)
+  Pend diag:   disabled
+
+healthy: claims-service
+healthy: benefit-plan-service
+healthy: member-service
+healthy: coverage-service
+healthy: provider-service
+seeded: NCCI baseline
+seeded: prior-auth platform rules (0 new)
+seeded: MCC behavioral-health service-category mapping already present
+created: validation benefit plan 21455019-4a1e-4886-b7b9-3cef973ed62f
+seeded: MCC validation plan-specific service-category overrides (Office Visit, Behavioral Health, Behavioral Health carve-out exclusion)
+Clean paid scenarios: injected 5,000 professional claims expected to pay
+Excluded provider scenarios: injected 5,000 professional claims expected to deny
+Uncovered service scenarios: injected 5,000 professional claims expected to deny
+PA scenarios: injected 5,000 TX STAR inpatient claims without auth
+Behavioral health carve-out scenarios: normalized 500 claims expected to deny
+Generated 250,000 MCC claims in memory
+Provider fixture pool: 499,082 -> 30,087 distinct NPIs (469,913 assignments reused, 7,000 provider-sensitive claims preserved)
+Authorization fixtures: seeded 1,598 prior authorization fixtures (0 new, 1,598 updated)
+Authorization provider validation evidence: supported
+  Seeding members: 2,000/247,585  Seeding members: 4,000/247,585  Seeding members: 6,000/247,585  Seeding members: 8,000/247,585  Seeding members: 10,000/247,585  Seeding members: 12,000/247,585  Seeding members: 14,000/247,585  Seeding members: 16,000/247,585  Seeding members: 18,000/247,585  Seeding members: 20,000/247,585  Seeding members: 22,000/247,585  Seeding members: 24,000/247,585  Seeding members: 26,000/247,585  Seeding members: 28,000/247,585  Seeding members: 30,000/247,585  Seeding members: 32,000/247,585  Seeding members: 34,000/247,585  Seeding members: 36,000/247,585  Seeding members: 38,000/247,585  Seeding members: 40,000/247,585  Seeding members: 42,000/247,585  Seeding members: 44,000/247,585  Seeding members: 46,000/247,585  Seeding members: 48,000/247,585  Seeding members: 50,000/247,585  Seeding members: 52,000/247,585  Seeding members: 54,000/247,585  Seeding members: 56,000/247,585  Seeding members: 58,000/247,585  Seeding members: 60,000/247,585  Seeding members: 62,000/247,585  Seeding members: 64,000/247,585  Seeding members: 66,000/247,585  Seeding members: 68,000/247,585  Seeding members: 70,000/247,585  Seeding members: 72,000/247,585  Seeding members: 74,000/247,585  Seeding members: 76,000/247,585  Seeding members: 78,000/247,585  Seeding members: 80,000/247,585  Seeding members: 82,000/247,585  Seeding members: 84,000/247,585  Seeding members: 86,000/247,585  Seeding members: 88,000/247,585  Seeding members: 90,000/247,585  Seeding members: 92,000/247,585  Seeding members: 94,000/247,585  Seeding members: 96,000/247,585  Seeding members: 98,000/247,585  Seeding members: 100,000/247,585  Seeding members: 102,000/247,585  Seeding members: 104,000/247,585  Seeding members: 106,000/247,585  Seeding members: 108,000/247,585  Seeding members: 110,000/247,585  Seeding members: 112,000/247,585  Seeding members: 114,000/247,585  Seeding members: 116,000/247,585  Seeding members: 118,000/247,585  Seeding members: 120,000/247,585  Seeding members: 122,000/247,585  Seeding members: 124,000/247,585  Seeding members: 126,000/247,585  Seeding members: 128,000/247,585  Seeding members: 130,000/247,585  Seeding members: 132,000/247,585  Seeding members: 134,000/247,585  Seeding members: 136,000/247,585  Seeding members: 138,000/247,585  Seeding members: 140,000/247,585  Seeding members: 142,000/247,585  Seeding members: 144,000/247,585  Seeding members: 146,000/247,585  Seeding members: 148,000/247,585  Seeding members: 150,000/247,585  Seeding members: 152,000/247,585  Seeding members: 154,000/247,585  Seeding members: 156,000/247,585  Seeding members: 158,000/247,585  Seeding members: 160,000/247,585  Seeding members: 162,000/247,585  Seeding members: 164,000/247,585  Seeding members: 166,000/247,585  Seeding members: 168,000/247,585  Seeding members: 170,000/247,585  Seeding members: 172,000/247,585  Seeding members: 174,000/247,585  Seeding members: 176,000/247,585  Seeding members: 178,000/247,585  Seeding members: 180,000/247,585  Seeding members: 182,000/247,585  Seeding members: 184,000/247,585  Seeding members: 186,000/247,585  Seeding members: 188,000/247,585  Seeding members: 190,000/247,585  Seeding members: 192,000/247,585  Seeding members: 194,000/247,585  Seeding members: 196,000/247,585  Seeding members: 198,000/247,585  Seeding members: 200,000/247,585  Seeding members: 202,000/247,585  Seeding members: 204,000/247,585  Seeding members: 206,000/247,585  Seeding members: 208,000/247,585  Seeding members: 210,000/247,585  Seeding members: 212,000/247,585  Seeding members: 214,000/247,585  Seeding members: 216,000/247,585  Seeding members: 218,000/247,585  Seeding members: 220,000/247,585  Seeding members: 222,000/247,585  Seeding members: 224,000/247,585  Seeding members: 226,000/247,585  Seeding members: 228,000/247,585  Seeding members: 230,000/247,585  Seeding members: 232,000/247,585  Seeding members: 234,000/247,585  Seeding members: 236,000/247,585  Seeding members: 238,000/247,585  Seeding members: 240,000/247,585  Seeding members: 242,000/247,585  Seeding members: 244,000/247,585  Seeding members: 246,000/247,585  Seeding members: 247,585/247,585
+seeded: 27,034 synthetic members (220,551 already present, 247,585 status-aligned)
+seeded: 0 COB coverage rows (2,300 already present)
+seeded: 0 provider networks (2 already present)
+  Seeding providers: 1,504/30,087  Seeding providers: 3,008/30,087  Seeding providers: 4,512/30,087  Seeding providers: 6,016/30,087  Seeding providers: 7,520/30,087  Seeding providers: 9,024/30,087  Seeding providers: 10,528/30,087  Seeding providers: 12,032/30,087  Seeding providers: 13,536/30,087  Seeding providers: 15,040/30,087  Seeding providers: 16,544/30,087  Seeding providers: 18,048/30,087  Seeding providers: 19,552/30,087  Seeding providers: 21,056/30,087  Seeding providers: 22,560/30,087  Seeding providers: 24,064/30,087  Seeding providers: 25,568/30,087  Seeding providers: 27,072/30,087  Seeding providers: 28,576/30,087  Seeding providers: 30,080/30,087  Seeding providers: 30,087/30,087
+seeded: 29,733 synthetic providers (354 already present)
+  Processed: 10,000/250,000  processed=10,000  platformFailures=0  Processed: 20,000/250,000  processed=20,000  platformFailures=0  Processed: 30,000/250,000  processed=30,000  platformFailures=0  Processed: 40,000/250,000  processed=40,000  platformFailures=0  Processed: 50,000/250,000  processed=50,000  platformFailures=0  Processed: 60,000/250,000  processed=60,000  platformFailures=0  Processed: 70,000/250,000  processed=70,000  platformFailures=0  Processed: 80,000/250,000  processed=80,000  platformFailures=0  Processed: 90,000/250,000  processed=90,000  platformFailures=0  Processed: 100,000/250,000  processed=100,000  platformFailures=0  Processed: 110,000/250,000  processed=110,000  platformFailures=0  Processed: 120,000/250,000  processed=120,000  platformFailures=0  Processed: 130,000/250,000  processed=130,000  platformFailures=0  Processed: 140,000/250,000  processed=140,000  platformFailures=0  Processed: 150,000/250,000  processed=150,000  platformFailures=0  Processed: 160,000/250,000  processed=160,000  platformFailures=0  Processed: 170,000/250,000  processed=170,000  platformFailures=0  Processed: 180,000/250,000  processed=180,000  platformFailures=0  Processed: 190,000/250,000  processed=190,000  platformFailures=0  Processed: 200,000/250,000  processed=200,000  platformFailures=0  Processed: 210,000/250,000  processed=210,000  platformFailures=0  Processed: 220,000/250,000  processed=220,000  platformFailures=0  Processed: 230,000/250,000  processed=230,000  platformFailures=0  Processed: 240,000/250,000  processed=240,000  platformFailures=0  Processed: 250,000/250,000  processed=250,000  platformFailures=0
+
+Observing 2,300 expected-pend claims for up to 45s; benchmark timing excludes this polling window.
+  Pend observation:  2,300 pended, 0 timed out
+
+Sweeping 28,234 non-pend claims for unexpected persisted pends.
+  False-pend sweep: 0 unexpected pends, 4,711 terminal outcomes reconciled
+
+Validation summary
+  Total claims:       250,000
+  Processed:          250,000
+  Paid/adjudicated:   205,291
+  Pended:             2,304
+  Business denials:   42,405
+  Platform failures:  0
+  Observation timeout: 0
+  Workflow checks:    30,534/32,500 matched (0 mismatched, 1,966 unsupported, 0 observation timeouts)
+  Elapsed:            28:43.639
+  Throughput:         145.04 claims/sec
+  P95 latency:        605 ms
+  P99 latency:        832 ms
+  Preparation time:   9:47.689
+  Tracked lifecycle:  38:40.005
+  Lifecycle.Service health checks        0:00.057
+  Lifecycle.Reference rule seeding       0:00.124
+  Lifecycle.Validation plan setup        0:00.088
+  Lifecycle.Corpus generation            0:02.372
+  Lifecycle.Fixture normalization        0:00.816
+  Lifecycle.Authorization fixture seeding 0:01.705
+  Lifecycle.Member and coverage seeding  6:23.493
+  Lifecycle.Provider seeding             3:19.030
+  Lifecycle.Timed adjudication           28:43.639
+  Lifecycle.Expected-pend observation    0:00.749
+  Lifecycle.False-pend sweep             0:07.927
+  Submit       avg/p95: 168 ms / 307 ms
+  Adjudicate   avg/p95: 131 ms / 289 ms
+  Writeback    avg/p95: 88 ms / 191 ms
+  Adjudicate.rateResolution avg/p95: 20 ms / 85 ms
+  Adjudicate.ncci avg/p95: 9 ms / 57 ms
+  Adjudicate.benefitCalculation avg/p95: 5 ms / 12 ms
+  Adjudicate.providerIntegrity avg/p95: 4 ms / 15 ms
+  Adjudicate.benefitCalculation.accumulatorRead avg/p95: 3 ms / 6 ms
+  Adjudicate.priorAuth avg/p95: 2 ms / 0 ms
+  Adjudicate.benefitCalculation.accumulatorWrite avg/p95: 2 ms / 6 ms
+  Adjudicate.routing avg/p95: 1 ms / 0 ms
+  Adjudicate.terminology avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.lineProcessing avg/p95: 0 ms / 0 ms
+  Adjudicate.scrub avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.planLookup avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.workingSet avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.snapshot avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.totals avg/p95: 0 ms / 0 ms
+  Adjudicate.benefitCalculation.outcome avg/p95: 0 ms / 0 ms
+  Avg payment delta:  $0.00
+  Payment gate:       5,000/5,000 within $0.01 (0 mismatched, max $0.00)
+  Payment delta:      Exact (5,000)
+  Business denial: CARC_96 (23,469)
+  Business denial: PRIOR_AUTH_REQUIRED (6,600)
+  Business denial: CARC_18 (5,592)
+  Business denial: PROVIDER_EXCLUDED (5,000)
+  Business denial: NCCI_MUE_EDIT_FAILURE (960)
+  Scenario: CleanProfessionalPaid 5,000/5,000 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:BehavioralHealthCarveIn 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:BehavioralHealthCarveOut 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:BehavioralHealthParityCheck 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobBirthdayRule 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobGenderRule 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobMedicareSecondary 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobPrimaryPayer 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobSecondaryPayer 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:CobTertiaryPayer 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:MedicaidCHIP 300/300 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:MedicaidDualEligible 300/300 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:MedicaidSSI 300/300 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:MedicaidSpendDown 0/300 matched (0 mismatched, 300 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:MedicaidTANF 300/300 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:NewbornAutoAdjudication 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:NewbornFirstThirtyDays 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:NewbornMotherClaimLink 500/500 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_AuthOnFile 400/400 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_ExpiredAuth 400/400 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_NoAuth 400/400 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_WrongProcedure 400/400 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:PriorAuthRequired_WrongProvider 400/400 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:RetroEligibilityAdd 667/667 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:RetroEligibilityCoverageChange 0/666 matched (0 mismatched, 666 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:RetroEligibilityTermination 667/667 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:SubrogationAccidentRelated 0/334 matched (0 mismatched, 334 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:SubrogationThirdPartyLiability 0/333 matched (0 mismatched, 333 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:SubrogationWorkersComp 0/333 matched (0 mismatched, 333 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: ExcludedProviderDenied 5,000/5,000 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: TxStarInpatientNoAuth 5,000/5,000 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: UncoveredServiceDenied 5,000/5,000 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Summary JSON:       /tmp/mcc-summary.json
+  Dashboard summary: published

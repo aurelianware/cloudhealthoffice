@@ -38,6 +38,12 @@ const publications = [
     part: 'Part 9',
     slug: 'part-9-from-unsupported-to-scored',
     summary: 'How prior-auth wrong-provider and behavioral-health scenarios moved from unsupported to deliberately scored platform behavior.'
+  },
+  {
+    episode: '010',
+    part: 'Part 10',
+    slug: 'part-10-the-migration-cost-that-wasnt',
+    summary: 'Testing Part 9\'s unconfirmed migration-cost theory at 250,000 claims, finding the real causes through profiling, and confirming a 3.5x throughput gain.'
   }
 ];
 

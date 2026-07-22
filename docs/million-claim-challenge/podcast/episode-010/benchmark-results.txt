@@ -1,0 +1,113 @@
+# Episode 010 benchmark results
+
+STATUS: EVIDENCE RECORDED — CLEAN. The 250,000-claim p56 confirmation run is complete: zero platform failures, zero scoreable workflow mismatches, zero unexpected pends, every comparable payment within one cent — the same bar Part 8 and Part 9 set, now at 2.5x Part 9's scale. Getting a clean run took three attempts, not one, and the performance story required a full profiling pass before any of them ran — see "Fix history" below for the full hunt. Raw artifacts are committed alongside this file.
+
+## Fix history
+
+Part 9 closed with an open question: was the 26.27 claims/sec throughput its confirmation run recorded — against a 58.55 claims/sec baseline — a one-time provider-healing migration cost, or a standing tax? The honest answer is neither. It was masking three real, fixable bottlenecks that a repeat run at the same parallelism would have paid again, indefinitely, and profiling found none of them where the "migration cost" theory pointed.
+
+**Baseline run — p28, no tuning.** Job `mcc-p28-250k-122915`, 250,000 claims, unmodified `main`. Correctness was clean on the first attempt — 30,534/32,500 matched, 0 mismatched, 1,966 unsupported, every original acceptance-bar criterion met. Throughput was 41.43 claims/sec, P95 1,091 ms, P99 1,327 ms. No self-healing migration was needed this time (provider seeding took 6:56, member seeding 15:07, both on the unparallelized code path) — meaning the slowdown wasn't the one-time cost Part 9 suspected. It was something else, and profiling was the only way to find out what.
+
+**Profiling, not guessing.** Per-stage timing from the baseline run pointed at two adjudication substeps: `accumulatorRead` at 192 ms avg / 378 ms P95 — essentially all of the adjudicate phase's cost, against 1-2 ms for `accumulatorWrite` and ~0 ms for every other substep — and `Submit` itself, at 329 ms avg, the single largest per-claim cost of all. Root cause for `accumulatorRead`: the runtime accumulator path is Redis-backed and normally sub-millisecond, but every MCC claim is for a member seen for the first time in a synthetic corpus, so the cache is always cold — every claim's first read fell back to a synchronous cross-pod HTTP call to claims-service plus a Mongo aggregation. Separately, checking `cgroup cpu.stat` inside the live pods found real, severe CPU throttling: claims-service at 81.3% of scheduling periods throttled (62,127s of cumulative throttled time against 6,327s of actual usage), provider-service at 9.5%, benefit-plan-service climbing to 14.5-23% under active load — all three capped at the same `500m` limit regardless of how much load each actually carried, on an 18-core node that was never more than ~25% utilized at the node level. A third bottleneck surfaced once the first two were fixed and could no longer hide it: `ncci`'s lookup cache carried a 10-minute TTL, far shorter than a real run's duration, forcing needless re-fetches of the same (code-pair, service-date) combinations throughout a long run.
+
+Four fixes shipped from this profiling pass, each validated on live 5,000-claim smoke tests before being trusted at scale:
+
+- **PR #961** — parallelized `SeedProvidersAsync` and `SeedMembersAsync` (previously sequential `foreach` loops making one HTTP round-trip chain per record) and added periodic in-place progress output, since seeding had been a silent, unbounded-duration phase on large runs.
+- **PR #967** — added `WarmAccumulatorCacheAsync`, called once per member during seeding: a `POST` to benefit-plan-service's `calculate-benefits` endpoint with an empty `Lines` array, reaching the accumulator-read step (which populates Redis on cache miss, including an explicit "empty" marker for members with no claim history) before the "no lines" guard short-circuits pricing — the cheapest call that still warms the cache.
+- **PR #968** — raised CPU limits on the three throttled services (`claims-service` 500m→2000m, `provider-service` 500m→1000m, `benefit-plan-service` 500m→1500m), matched to the throttling evidence.
+- **PR #969** — extended `NcciLookupCache`'s TTL from 10 minutes to 6 hours. NCCI/MUE reference data is quarterly (CMS cadence) and explicit updates already bypass the TTL via `ImportQuarterlyUpdateAsync` → `InvalidateTenant`, so a long TTL only removes needless re-fetches, not real staleness protection.
+
+Combined, a 5,000-claim/p28 smoke test went from 92.73 to 203.80 claims/sec — before the confirmation run had even started.
+
+**Round 1 — first p56/250K confirmation, post-perf-fixes.** Job `mcc-p56-250k-final-194533`, run id `46ebca58922344608e4d7e8ae81e626c`. Throughput: 147.12 claims/sec, 3.55x the baseline. But 5 of 32,500 workflow checks failed (2 mismatched, 3 observation timeouts), scattered across scenarios with no shared business logic — `BehavioralHealthCarveIn`, `BehavioralHealthCarveOut`, `RetroEligibilityAdd`, `RetroEligibilityTermination` — yet all five shared the same `businessDenialCode` (`PROVIDER_EXCLUDED`) and elevated `providerIntegrity` latency (216-344 ms vs. the typical <50 ms). Root cause: benefit-plan-service's `HttpProviderIntegrityGate` falls back to a live NPPES-registry check (`provider-verification-service`) whenever a provider's `lastVerifiedAt` ages past its 7-day `StalenessFallbackThreshold`. MCC's synthetic provider NPIs were never real NPPES-registered numbers, so that live check always answers `NPI_NOT_FOUND` — wrongly denying claims for providers that needed to stay Clear. `lastVerifiedAt` is only ever set once, at provider creation; on this long-lived, heavily reused tenant, most seeding passes found the provider already correct and skipped writing entirely, letting the timestamp age past the threshold across days of testing. Fixed by PR #970: refresh `lastVerifiedAt`/`nextVerificationDue` on every seeding pass, independent of whether credentialing/exclusion fields need correcting, well inside the staleness window.
+
+**Round 2 — second p56/250K confirmation, post-#970.** Job `mcc-p56-250k-clean-204655`, run id `2b89e4b881ba4da187ba84bada4e93aa`. Throughput: 141.54 claims/sec. But 80 of 32,500 workflow checks mismatched — 79 in `ExcludedProviderDenied` alone (4,921/5,000), 1 in `MedicaidSSI` — and P99 latency spiked to 3,806 ms against a P95 of only 594 ms, a tail-latency signature distinct from Round 1's scattered pattern. Every sampled mismatch showed the correct, freshly-refreshed provider data in provider-service (`lastVerifiedAt` set moments before adjudication, `integrityRating: Blocked` as expected) — ruling out staleness. The real cause: benefit-plan-service logged 30 "Provider service unreachable" warnings across its three pods during the run's 29-minute sustained load window — `provider-service`, still a single replica even after its CPU limit was raised, was dropping connections under real p56 concurrency. Each dropped connection forces the same live NPPES fallback Round 1 hit, this time via a different trigger. That fallback also has a genuine, separate bug: the live verification service's `"Failed"` status (returned for any not-found NPI) silently maps to *not excluded* in `HttpProviderIntegrityGate`'s status mapping, rather than being treated as a denial/review case — so a bare connection hiccup could turn into a wrongly-paid claim. Fixed the trigger only: PR #971 scaled `provider-service` to 2 replicas, matching `claims-service`'s existing pattern. The status-mapping bug itself is disclosed here, not fixed — it's adjudication-safety logic that deserves its own review, not a reflexive patch alongside an infrastructure fix.
+
+**Round 3 — third p56/250K confirmation, post-#971.** Clean. See below.
+
+## Run identity
+
+- Kubernetes job: `mcc-p56-250k-final3-072830`
+- Dashboard run ID: `7da97a69ef424de4b895d39dd4752835`
+- Started: 2026-07-22T14:28:33Z, completed: 2026-07-22T15:52:11Z (1h23m38s total wall time)
+- Environment: local Docker Desktop Kubernetes (`kind` cluster `docker-desktop`)
+- Tenant: `demo`
+- Validator seed: 42
+- Claims: 250,000
+- Parallelism: 56
+- Line of business: Medicaid
+- Prior-authorization scenario rate: 2%
+- Pend observation: enabled, 45-second bound, 1-second polling interval
+- Dashboard summary: published
+
+## Command
+
+```text
+JOB_NAME=mcc-p56-250k-final3-072830 CLAIMS=250000 MAX_CLAIMS=250000 PARALLELISM=56 PROGRESS_EVERY=10000 JOB_TIMEOUT=300m SKIP_BUILD=true ./scripts/run-mcc-local-k8s.sh
+```
+
+The run must be executed from a checkout that includes PR #961, #967, #968, #969, #970, and #971 so seeding parallelism, accumulator cache warming, the corrected CPU limits, the extended NCCI TTL, provider verification freshness, and the provider-service replica count are all active. `claims-service`, `benefit-plan-service`, `provider-service`, and `authorization-service` must be running images/configuration built from that same checkout, and `benefit-plan-service` should be freshly restarted before the run to clear any per-pod integrity-cache state accumulated by prior sessions.
+
+## Raw artifacts
+
+- `raw-validator-output-250k-p56.txt` - validator console output from the completed, clean confirmation run (job `mcc-p56-250k-final3-072830`).
+- `run-summary-250k-p56.json` - completed Mass Adjudication run summary returned by claims-service (run id `7da97a69ef424de4b895d39dd4752835`), including the full business-denial and per-scenario workflow breakdowns.
+
+## Scoring-surface change under test
+
+None. The answer key, corpus mix, seed, and claim-count ratio are unchanged from Part 9 — this episode is a pure scale-and-performance rung, not a scoring-surface expansion. The workflow-matched target carries forward unchanged at 2.5x volume: 12,214/13,000 at 100K scales to 30,534/32,500 at 250K (98.11 checks per 100 claims, exactly Part 9's ratio), and unsupported scales from 786 to 1,966 the same way.
+
+## Correctness result
+
+- Total claims: 250,000
+- Processed: 250,000
+- Paid/adjudicated: 205,291
+- Pended: 2,304
+- Business denials: 42,405
+- Platform failures: 0
+- Observation timeouts: 0
+- Workflow scoring: **30,534/32,500 matched, 0 mismatched**, 1,966 unsupported, 0 observation timeouts
+- Payment gate: 5,000/5,000 within $0.01, 0 mismatched, $0.00 average delta, $0.00 maximum delta
+
+Every acceptance-bar criterion from the original gate is met exactly, at 2.5x the scale Part 9 confirmed: 250,000 processed with zero platform failures, zero scoreable workflow mismatches, and 5,000/5,000 comparable payments within one cent.
+
+## Performance result
+
+- Timed claim-processing elapsed: 28:43.639
+- Throughput: 145.04 claims/second (baseline before this episode's fixes: 41.43 — a **3.5x** improvement)
+- P95 latency: 604.53 ms
+- P99 latency: 831.68 ms
+- Submit average/P95: 168.48 ms / 306.58 ms
+- Adjudicate average/P95: 130.90 ms / 289.20 ms
+- Writeback average/P95: 87.70 ms / 191.30 ms
+- Preparation time: 9:47.689
+- Tracked lifecycle: health checks 0:00.058, reference rule seeding 0:00.125, validation plan setup 0:00.089, corpus generation 0:02.373, fixture normalization 0:00.817, authorization fixture seeding 0:01.705, member/coverage seeding 6:23.493, provider seeding 3:19.030, timed adjudication 28:43.639, expected-pend observation 0:00.750, false-pend sweep 0:07.927
+- Fixture pool: 30,087 distinct providers (29,733 created this run, 354 already present), 247,585 members status-aligned (27,034 created, 220,551 already present)
+
+Unlike Part 9, this run's performance result is a clean win, not an open question. The 3.5x throughput gain came entirely from the profiling-driven fixes above (accumulator cache warming, CPU limit correction, NCCI TTL extension, seeding parallelism) — none of it depended on providers being "already healed" from a prior run, and none of it is expected to regress on a repeat run against a cold tenant. Preparation time itself dropped from 22:08 (baseline) to 9:47.
+
+## Business denials
+
+- CARC_96: 23,469
+- PRIOR_AUTH_REQUIRED: 6,600
+- CARC_18: 5,592
+- PROVIDER_EXCLUDED: 5,000
+- NCCI_MUE_EDIT_FAILURE: 960
+- CARC_27: 667
+- SCRUB_VALIDATION_FAILURE: 116
+- ADJUDICATION_DENIAL: 1
+
+Total: 42,405, reconciling exactly against the correctness result above. `PROVIDER_EXCLUDED` landing at exactly 5,000 (matching all 5,000 `ExcludedProviderDenied` fixture claims one-for-one) is itself evidence #970's and #971's fixes held at scale — Round 2's collision-affected claims paid instead of denying, undercounting this code by 79.
+
+## Unsupported scenarios
+
+Unchanged from Part 9's proportions, scaled to 250K: 1,966 total, matching the projection exactly (RetroEligibilityCoverageChange, MedicaidSpendDown, and the three Subrogation variants). These remain visible product gaps awaiting their own deliberate conversion work — this episode did not touch the scored surface.
+
+## Interpretation rules for this run
+
+- Distinguish platform failures from business dispositions.
+- Do not count unsupported scenarios as passes.
+- Keep timed adjudication separate from the tracked lifecycle.
+- This is local Docker Desktop Kubernetes evidence, not a production capacity claim.
+- A slow or degraded run is still reported as slow or degraded, even when correctness is clean — Rounds 1 and 2 above are not smoothed over into the final clean number.
+- A known, unfixed bug found along the way is disclosed rather than silently deferred: `HttpProviderIntegrityGate`'s live-fallback status mapping treats `"Failed"` as *not excluded* rather than as a denial/review case. This episode fixed the trigger (provider-service capacity) that made it visible, not the mapping logic itself.

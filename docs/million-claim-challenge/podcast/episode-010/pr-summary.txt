@@ -1,0 +1,88 @@
+# Episode 010 implementation summary
+
+## PR #961 - parallel provider/member fixture seeding, surface progress
+
+- `SeedProvidersAsync` and `SeedMembersAsync` were sequential `foreach` loops, each record making a chain of HTTP round-trips (lookup, create-if-missing, then credentialing/network-participation or member-status alignment). On large runs this was the invisible long pole — on a 250K-claim run, provider seeding (30K+ records) and member seeding (200K+ records) produced zero console output for the entire phase.
+- Both loops are independent per-record (grouped by distinct NPI/member ID before the loop starts, no shared mutable state beyond simple counters), so both now run through `Parallel.ForEachAsync` at `--parallelism`, the same pattern already used for the timed claim-processing loop.
+- Added a shared `WriteSeedingProgress` helper that prints a periodic in-place `Seeding providers/members: X/Y` line so these phases are no longer silent on large runs.
+
+## PR #962 - bump fast-uri to clear a high-severity npm audit finding
+
+- Unrelated dependency-hygiene fix found while working in this area: `fast-uri` 3.1.2 (transitive via `ajv`) was vulnerable to GHSA-4c8g-83qw-93j6. Bumped to 3.1.4 within `ajv`'s existing version constraint.
+
+## PR #967 - warm the benefit-plan accumulator cache during member seeding
+
+- Profiled the baseline 250K/p28 run's per-stage timings and found `Adjudicate.benefitCalculation.accumulatorRead` dominating the entire adjudicate phase (192 ms avg / 378 ms P95, vs. 1-2 ms for `accumulatorWrite` and ~0 ms for every other substep).
+- Root cause: the runtime accumulator path is Redis-backed and normally sub-millisecond, but every MCC claim is for a member seen for the first time, so the cache is always cold — every claim's accumulator read fell back to a synchronous cross-pod HTTP call to claims-service plus a Mongo aggregation.
+- Added `WarmAccumulatorCacheAsync`, called once per member during seeding: a `POST` to benefit-plan-service's `calculate-benefits` endpoint with an empty `Lines` array, reaching the accumulator-read step (which populates Redis on cache miss) before the "no lines" guard short-circuits pricing.
+- Validated on a 5,000-claim/p28 run: `accumulatorRead` dropped from 192 ms/378 ms (avg/P95) to 4 ms/9 ms, throughput rose to 92.73 claims/sec.
+
+## PR #968 - raise CPU limits for the adjudication-path services
+
+- Checked `cgroup cpu.stat` inside the live pods during an MCC benchmark run and found real, severe throttling: `claims-service` at 81.3% of scheduling periods throttled (62,127s cumulative throttled time against 6,327s of actual usage), `provider-service` at 9.5%, `benefit-plan-service` at 1-2.3% idle but 14.5-23% during an active run.
+- All three shared the same `500m` CPU limit / `100m` request regardless of load, on an 18-core node that was never more than ~25% utilized at the node level — the ceiling was the per-pod cgroup limit, not real capacity.
+- Raised limits (requests scaled proportionally): `claims-service` 500m→2000m, `provider-service` 500m→1000m, `benefit-plan-service` 500m→1500m.
+- Validated live: `claims-service` throttling dropped to ~0.13% of periods, `benefit-plan-service` dropped from 14.5-23% to 2.5-5.9% during an active run. A 5,000-claim/p28 run before vs. after: throughput rose from 92.73 to 106-114 claims/sec.
+
+## PR #969 - extend NCCI lookup cache TTL from 10 minutes to 6 hours
+
+- After the CPU-throttling fix, `ncci` became the second-largest remaining per-claim adjudication cost (45-50 ms avg, ~200 ms P95) — a 10-minute cache TTL meant entries for the same (code-pair, service-date) combination kept expiring and re-fetching within a single long benchmark run.
+- NCCI/MUE reference data is quarterly (CMS cadence), and explicit updates already go through `ImportQuarterlyUpdateAsync` → `InvalidateTenant`, which bypasses this TTL entirely — the TTL only bounds staleness for edits made outside that path, so it can safely be long.
+- Bumped `NcciLookupCache.DefaultTtl` from 10 minutes to 6 hours. No new warm-up logic needed — this just lets naturally-computed entries survive for the length of a real run.
+- Validated live on a 5,000-claim/p28 run (on top of the earlier fixes): throughput rose from 106.89 to 203.80 claims/sec, `ncci` avg/P95 dropped from 50ms/206ms to 22ms/101ms.
+
+## PR #966 - bump js-yaml (dev dependency, unrelated)
+
+- Dependabot dependency bump encountered while working in this area; verified all CI checks green and merged.
+
+## PR #970 - refresh provider lastVerifiedAt on every seeding pass
+
+- Found via the first post-perf-fixes 250K/p56 confirmation run: 5 of 32,500 workflow checks failed (2 mismatched, 3 observation timeouts), scattered across unrelated scenarios (`BehavioralHealthCarveIn`, `BehavioralHealthCarveOut`, `RetroEligibilityAdd`, `RetroEligibilityTermination`) with no shared business logic — but all five shared the same `businessDenialCode` (`PROVIDER_EXCLUDED`) and elevated `providerIntegrity` latency (216-344ms vs. the typical <50ms).
+- Root cause: benefit-plan-service's `HttpProviderIntegrityGate` falls back to a live NPPES-registry check (`provider-verification-service`) whenever a provider's `lastVerifiedAt` ages past its 7-day `StalenessFallbackThreshold`. MCC's synthetic provider NPIs were never real NPPES-registered numbers, so that live check always answers `NPI_NOT_FOUND` — wrongly denying claims for providers this run needs to be Clear.
+- `lastVerifiedAt` is only ever set once, at provider creation; both `EnsureProviderCredentialingAsync` and the prior `EnsureProviderExclusionAsync` early-return without touching it whenever the provider is already in the correct state — the common case on this long-lived, heavily reused tenant. As the tenant's fixture data aged across multiple days of testing, a growing slice of the pool crossed the 7-day line.
+- Fixed by refreshing `lastVerifiedAt`/`nextVerificationDue` on every seeding pass, independent of whether credentialing/exclusion fields need correcting: added `EnsureProviderVerificationFreshnessAsync` for the non-excluded path, extended `EnsureProviderExclusionAsync`'s existing GET-then-conditional-PUT to also refresh the timestamp (no extra round trip for that path).
+
+## PR #971 - scale provider-service to 2 replicas
+
+- Found via a second 250K/p56 confirmation run: 80 of 32,500 workflow checks mismatched (79 in `ExcludedProviderDenied`, 1 in `MedicaidSSI`), and P99 latency spiked to 3,806 ms against a P95 of only 594 ms.
+- Every sampled mismatch showed correct, freshly-refreshed provider data in provider-service — ruling out the staleness bug #970 had just fixed. The real cause: `benefit-plan-service` logged 30 "Provider service unreachable" warnings during the run's 29-minute sustained-load window — `provider-service`, still a single replica even after its CPU limit was raised, was dropping connections under real p56 concurrency, forcing the same live NPPES fallback via a different trigger.
+- That fallback path has its own bug, tracked separately and **not fixed in this episode**: the live verification service's `"Failed"` status silently maps to "not excluded" in `HttpProviderIntegrityGate.cs`, rather than being treated as a denial/review case — so a provider-service connection hiccup can turn into a wrongly-paid claim. Removing the trigger (capacity) is the low-risk fix; the status-mapping gap is adjudication-safety logic that needs its own review.
+- Scaled `provider-service` to 2 replicas, matching `claims-service`'s existing pattern.
+
+## First p56/250K confirmation run (Round 1 of 3 - see benchmark-results.txt "Fix history")
+
+Job `mcc-p56-250k-final-194533`, 250,000 claims, seed 42, parallelism 56, executed 2026-07-22 local.
+
+- Workflow: 30,529/32,500 matched, 2 mismatched, 1,966 unsupported, 3 observation timeouts.
+- Throughput: 147.12 claims/sec (3.55x the 41.43 baseline).
+- All 5 anomalies traced to the same root cause: PR #970's bug, above.
+
+## Second p56/250K confirmation run (Round 2 of 3)
+
+Job `mcc-p56-250k-clean-204655`, 250,000 claims, seed 42, parallelism 56, executed 2026-07-22 local.
+
+- Workflow: 30,454/32,500 matched, 80 mismatched, 1,966 unsupported, 0 observation timeouts.
+- Throughput: 141.54 claims/sec. P99 latency spiked to 3,806 ms (P95 stayed at 594 ms) — a tail-latency signature, not a general slowdown.
+- All 80 mismatches traced to PR #971's bug, above.
+
+## Third p56/250K confirmation run (Round 3 of 3 - final, clean)
+
+Job `mcc-p56-250k-final3-072830`, run id `7da97a69ef424de4b895d39dd4752835`, 250,000 claims, seed 42, parallelism 56, executed 2026-07-22 local.
+
+- Workflow: **30,534/32,500 matched, 0 mismatched**, 1,966 unsupported, 0 observation timeouts — the same target Part 9 hit at 100K, now met exactly at 2.5x the scale.
+- Payment gate: 5,000/5,000 within $0.01, exact. Platform failures: 0.
+- Throughput: 145.04 claims/sec — a **3.5x** improvement over the 41.43 claims/sec baseline this episode started from, with P99 latency back to normal (831.68 ms, vs. the 3,806 ms Round 2 spike).
+- Every criterion in the original acceptance bar is met exactly, and unlike Part 9, the performance result is a clean win rather than an open question — none of the throughput gain depended on providers being "already healed" from a prior run.
+- Full numbers, denial breakdown, and raw artifacts: `benchmark-results.txt`, `raw-validator-output-250k-p56.txt`, `run-summary-250k-p56.json`.
+
+## Known, disclosed, unfixed issue
+
+`HttpProviderIntegrityGate`'s `NormalizeStatus`/`IsExcluded` mapping in `src/services/benefit-plan-service/Services/HttpProviderIntegrityGate.cs` treats a live verification-service response of `"Failed"` as *not excluded*, even though the same result's `Passed` field correctly comes back `false`. Any real provider whose live verification comes back `"Failed"` for any reason — not just an NPI that fails NPPES lookup — could be silently paid instead of denied or held for review. PR #971 removed this episode's trigger (provider-service capacity) but deliberately did not touch this mapping logic, since it's adjudication-safety code that deserves its own focused review rather than a fix bundled into an infrastructure PR.
+
+## Remaining unsupported scenario families after this episode
+
+- RetroEligibilityCoverageChange
+- MedicaidSpendDown
+- SubrogationAccidentRelated, SubrogationThirdPartyLiability, SubrogationWorkersComp
+
+Unchanged from Part 9 — this episode was a scale-and-performance rung, not a scoring-surface expansion. These remain visible product gaps awaiting their own deliberate conversion work.

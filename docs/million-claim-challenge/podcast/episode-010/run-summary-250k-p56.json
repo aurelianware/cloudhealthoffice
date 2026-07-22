@@ -1,0 +1,610 @@
+{
+    "id": "7da97a69ef424de4b895d39dd4752835",
+    "status": "Completed",
+    "run": {
+        "tenantId": "demo",
+        "requestedClaims": 250000,
+        "seed": 42,
+        "parallelism": 56,
+        "claimsUrl": "http://claims-service",
+        "benefitUrl": "http://benefit-plan-service",
+        "memberUrl": "http://member-service",
+        "coverageUrl": "http://coverage-service",
+        "providerUrl": "http://provider-service",
+        "seedMembers": true,
+        "seedProviders": true,
+        "skipClaimUpdate": false,
+        "lineOfBusiness": 3,
+        "startedAtUtc": "2026-07-22T14:28:33.4321028+00:00",
+        "completedAtUtc": "2026-07-22T15:52:11.154301+00:00"
+    },
+    "totalClaims": 250000,
+    "processed": 250000,
+    "paid": 205291,
+    "pended": 2304,
+    "businessDenials": 42405,
+    "observationTimeouts": 0,
+    "platformFailures": 0,
+    "workflowScenarios": 32500,
+    "workflowMatches": 30534,
+    "workflowMismatches": 0,
+    "workflowUnsupported": 1966,
+    "workflowObservationTimeouts": 0,
+    "elapsed": "00:28:43.6390976",
+    "throughputClaimsPerSecond": 145.04196403301637,
+    "p95LatencyMilliseconds": 604.5349,
+    "p99LatencyMilliseconds": 831.6837,
+    "submitTiming": {
+        "label": "Submit",
+        "averageMilliseconds": 168.4798594148017,
+        "p95Milliseconds": 306.5776
+    },
+    "adjudicateTiming": {
+        "label": "Adjudicate",
+        "averageMilliseconds": 130.89569005399997,
+        "p95Milliseconds": 289.1988
+    },
+    "writebackTiming": {
+        "label": "Writeback",
+        "averageMilliseconds": 87.69823014401656,
+        "p95Milliseconds": 191.2975
+    },
+    "adjudicationStepTimings": [
+        {
+            "label": "Adjudicate.rateResolution",
+            "averageMilliseconds": 20.063660105443653,
+            "p95Milliseconds": 85.3222
+        },
+        {
+            "label": "Adjudicate.ncci",
+            "averageMilliseconds": 8.864715047782175,
+            "p95Milliseconds": 56.9921
+        },
+        {
+            "label": "Adjudicate.benefitCalculation",
+            "averageMilliseconds": 5.033439219346483,
+            "p95Milliseconds": 12.1122
+        },
+        {
+            "label": "Adjudicate.providerIntegrity",
+            "averageMilliseconds": 3.861308082516457,
+            "p95Milliseconds": 14.9582
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.accumulatorRead",
+            "averageMilliseconds": 2.5078315683702543,
+            "p95Milliseconds": 6.2016
+        },
+        {
+            "label": "Adjudicate.priorAuth",
+            "averageMilliseconds": 2.4702033397464347,
+            "p95Milliseconds": 0.316
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.accumulatorWrite",
+            "averageMilliseconds": 2.258619271449294,
+            "p95Milliseconds": 6.4187
+        },
+        {
+            "label": "Adjudicate.routing",
+            "averageMilliseconds": 0.5329560367999983,
+            "p95Milliseconds": 0.0069
+        },
+        {
+            "label": "Adjudicate.terminology",
+            "averageMilliseconds": 0.42774192859425114,
+            "p95Milliseconds": 0.0203
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.lineProcessing",
+            "averageMilliseconds": 0.11166757983956613,
+            "p95Milliseconds": 0.1721
+        },
+        {
+            "label": "Adjudicate.scrub",
+            "averageMilliseconds": 0.09904254279999558,
+            "p95Milliseconds": 0.204
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.planLookup",
+            "averageMilliseconds": 0.013235058355614485,
+            "p95Milliseconds": 0.0095
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.workingSet",
+            "averageMilliseconds": 0.011762400147989828,
+            "p95Milliseconds": 0.0129
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.snapshot",
+            "averageMilliseconds": 0.00494985537224608,
+            "p95Milliseconds": 0.0062
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.totals",
+            "averageMilliseconds": 0.004172471116491001,
+            "p95Milliseconds": 0.0043
+        },
+        {
+            "label": "Adjudicate.benefitCalculation.outcome",
+            "averageMilliseconds": 0.0021840315832885792,
+            "p95Milliseconds": 0.003
+        }
+    ],
+    "lifecycleTimings": [
+        {
+            "label": "Service health checks",
+            "category": "Preparation",
+            "durationMilliseconds": 57.528,
+            "startedAtUtc": "2026-07-22T14:28:33.4444041+00:00",
+            "completedAtUtc": "2026-07-22T14:28:33.5019363+00:00"
+        },
+        {
+            "label": "Reference rule seeding",
+            "category": "Preparation",
+            "durationMilliseconds": 124.9045,
+            "startedAtUtc": "2026-07-22T14:28:33.5021599+00:00",
+            "completedAtUtc": "2026-07-22T14:28:33.6270653+00:00"
+        },
+        {
+            "label": "Validation plan setup",
+            "category": "Preparation",
+            "durationMilliseconds": 88.7962,
+            "startedAtUtc": "2026-07-22T14:28:33.6270748+00:00",
+            "completedAtUtc": "2026-07-22T14:28:33.715872+00:00"
+        },
+        {
+            "label": "Corpus generation",
+            "category": "Preparation",
+            "durationMilliseconds": 2372.7756,
+            "startedAtUtc": "2026-07-22T14:28:33.7161525+00:00",
+            "completedAtUtc": "2026-07-22T14:28:36.0889303+00:00"
+        },
+        {
+            "label": "Fixture normalization",
+            "category": "Preparation",
+            "durationMilliseconds": 816.5472,
+            "startedAtUtc": "2026-07-22T14:28:36.0889691+00:00",
+            "completedAtUtc": "2026-07-22T14:28:36.9055194+00:00"
+        },
+        {
+            "label": "Authorization fixture seeding",
+            "category": "Preparation",
+            "durationMilliseconds": 1705.364,
+            "startedAtUtc": "2026-07-22T14:28:36.9056875+00:00",
+            "completedAtUtc": "2026-07-22T14:28:38.611053+00:00"
+        },
+        {
+            "label": "Member and coverage seeding",
+            "category": "Preparation",
+            "durationMilliseconds": 383493.3835,
+            "startedAtUtc": "2026-07-22T14:28:38.6692958+00:00",
+            "completedAtUtc": "2026-07-22T14:50:53.5535958+00:00"
+        },
+        {
+            "label": "Provider seeding",
+            "category": "Preparation",
+            "durationMilliseconds": 199030.3844,
+            "startedAtUtc": "2026-07-22T14:50:53.5537483+00:00",
+            "completedAtUtc": "2026-07-22T14:54:12.5828997+00:00"
+        },
+        {
+            "label": "Timed adjudication",
+            "category": "Processing",
+            "durationMilliseconds": 1723639.0976,
+            "startedAtUtc": "2026-07-22T14:54:12.608754+00:00",
+            "completedAtUtc": "2026-07-22T15:52:02.3705842+00:00"
+        },
+        {
+            "label": "Expected-pend observation",
+            "category": "Observation",
+            "durationMilliseconds": 749.5052,
+            "startedAtUtc": "2026-07-22T15:52:02.4775753+00:00",
+            "completedAtUtc": "2026-07-22T15:52:03.2270847+00:00"
+        },
+        {
+            "label": "False-pend sweep",
+            "category": "Observation",
+            "durationMilliseconds": 7927.1591,
+            "startedAtUtc": "2026-07-22T15:52:03.2270925+00:00",
+            "completedAtUtc": "2026-07-22T15:52:11.1542529+00:00"
+        }
+    ],
+    "fixturePreparation": {
+        "generatedClaims": 250000,
+        "providerPoolDistinctBefore": 499082,
+        "providerPoolDistinctAfter": 30087,
+        "providerPoolReusedAssignments": 469913,
+        "providerPoolProtectedClaims": 7000,
+        "membersCreated": 27034,
+        "membersExisting": 220551,
+        "memberStatusesAligned": 247585,
+        "cobCoverageCreated": 0,
+        "cobCoverageExisting": 2300,
+        "providerNetworksCreated": 0,
+        "providerNetworksExisting": 2,
+        "providersCreated": 29733,
+        "providersExisting": 354
+    },
+    "averagePaymentDelta": 0.0,
+    "paymentTolerance": 0.01,
+    "paymentComparisons": 5000,
+    "paymentMatches": 5000,
+    "paymentMismatches": 0,
+    "maximumPaymentDelta": 0.0,
+    "paymentDeltaDistribution": [
+        {
+            "label": "Exact",
+            "lowerBoundExclusive": null,
+            "upperBoundInclusive": 0,
+            "count": 5000
+        },
+        {
+            "label": "Within tolerance",
+            "lowerBoundExclusive": 0,
+            "upperBoundInclusive": 0.01,
+            "count": 0
+        },
+        {
+            "label": "<= $1",
+            "lowerBoundExclusive": 0.01,
+            "upperBoundInclusive": 1,
+            "count": 0
+        },
+        {
+            "label": "<= $10",
+            "lowerBoundExclusive": 1,
+            "upperBoundInclusive": 10,
+            "count": 0
+        },
+        {
+            "label": "> $10",
+            "lowerBoundExclusive": 10,
+            "upperBoundInclusive": null,
+            "count": 0
+        }
+    ],
+    "businessDenialBreakdown": [
+        {
+            "code": "CARC_96",
+            "count": 23469
+        },
+        {
+            "code": "PRIOR_AUTH_REQUIRED",
+            "count": 6600
+        },
+        {
+            "code": "CARC_18",
+            "count": 5592
+        },
+        {
+            "code": "PROVIDER_EXCLUDED",
+            "count": 5000
+        },
+        {
+            "code": "NCCI_MUE_EDIT_FAILURE",
+            "count": 960
+        },
+        {
+            "code": "CARC_27",
+            "count": 667
+        },
+        {
+            "code": "SCRUB_VALIDATION_FAILURE",
+            "count": 116
+        },
+        {
+            "code": "ADJUDICATION_DENIAL",
+            "count": 1
+        }
+    ],
+    "workflowScenarioBreakdown": [
+        {
+            "scenario": "CleanProfessionalPaid",
+            "total": 5000,
+            "matches": 5000,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:BehavioralHealthCarveIn",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:BehavioralHealthCarveOut",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:BehavioralHealthParityCheck",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:CobBirthdayRule",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:CobGenderRule",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:CobMedicareSecondary",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:CobPrimaryPayer",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:CobSecondaryPayer",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:CobTertiaryPayer",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:MedicaidCHIP",
+            "total": 300,
+            "matches": 300,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:MedicaidDualEligible",
+            "total": 300,
+            "matches": 300,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:MedicaidSSI",
+            "total": 300,
+            "matches": 300,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:MedicaidSpendDown",
+            "total": 300,
+            "matches": 0,
+            "mismatches": 0,
+            "unsupported": 300,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:MedicaidTANF",
+            "total": 300,
+            "matches": 300,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:NewbornAutoAdjudication",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:NewbornFirstThirtyDays",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:NewbornMotherClaimLink",
+            "total": 500,
+            "matches": 500,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:PriorAuthRequired_AuthOnFile",
+            "total": 400,
+            "matches": 400,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:PriorAuthRequired_ExpiredAuth",
+            "total": 400,
+            "matches": 400,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:PriorAuthRequired_NoAuth",
+            "total": 400,
+            "matches": 400,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:PriorAuthRequired_WrongProcedure",
+            "total": 400,
+            "matches": 400,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:PriorAuthRequired_WrongProvider",
+            "total": 400,
+            "matches": 400,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:RetroEligibilityAdd",
+            "total": 667,
+            "matches": 667,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:RetroEligibilityCoverageChange",
+            "total": 666,
+            "matches": 0,
+            "mismatches": 0,
+            "unsupported": 666,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:RetroEligibilityTermination",
+            "total": 667,
+            "matches": 667,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:SubrogationAccidentRelated",
+            "total": 334,
+            "matches": 0,
+            "mismatches": 0,
+            "unsupported": 334,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:SubrogationThirdPartyLiability",
+            "total": 333,
+            "matches": 0,
+            "mismatches": 0,
+            "unsupported": 333,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "EdgeCase:SubrogationWorkersComp",
+            "total": 333,
+            "matches": 0,
+            "mismatches": 0,
+            "unsupported": 333,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "ExcludedProviderDenied",
+            "total": 5000,
+            "matches": 5000,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "TxStarInpatientNoAuth",
+            "total": 5000,
+            "matches": 5000,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        },
+        {
+            "scenario": "UncoveredServiceDenied",
+            "total": 5000,
+            "matches": 5000,
+            "mismatches": 0,
+            "unsupported": 0,
+            "observationTimeouts": 0,
+            "unspecified": 0
+        }
+    ],
+    "sampleFailures": [],
+    "claimResults": [],
+    "createdAtUtc": "2026-07-22T14:28:33.432Z",
+    "lastUpdatedAtUtc": "2026-07-22T15:52:12.264Z",
+    "progress": {
+        "phase": "Completed",
+        "requestedClaims": 250000,
+        "completedClaims": 250000,
+        "processedClaims": 250000,
+        "platformFailures": 0,
+        "percentComplete": 100,
+        "currentThroughputClaimsPerSecond": 145.04196403301637,
+        "rollingP95LatencyMilliseconds": 967.6226,
+        "rollingP99LatencyMilliseconds": 1110.543,
+        "pendingExpectedPendObservations": 0,
+        "pendingTerminalStatusObservations": 0,
+        "pendingWorkflowObservations": 0,
+        "lastPublishedAtUtc": "2026-07-22T15:52:11.1662039+00:00"
+    }
+}
