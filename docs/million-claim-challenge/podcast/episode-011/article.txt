@@ -1,0 +1,63 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 11: The Check That Only Ran in the Benchmark
+
+Part 10 disclosed a bug and moved on. Part 11 went back to fix it, and found a bigger one underneath.
+
+Part 10's Round 2 traced 80 workflow mismatches to provider-service dropping connections under real concurrency — an infrastructure fix, PR #971. But that investigation also turned up something else: `HttpProviderIntegrityGate`'s handling of a live verification "Failed" status looked like it silently mapped to "not excluded." That wasn't fixed in Part 10. It was disclosed as open, adjudication-safety logic that deserved its own review rather than a fix bundled into an infrastructure PR. Part 11 is that review.
+
+## The disclosed theory didn't survive a closer reading
+
+The plan going in was narrow: read `HttpProviderIntegrityGate` and `AdjudicationController.Adjudicate` carefully, confirm the status-mapping defect Part 10 described, fix it, ship it. The first step alone changed the plan.
+
+`AdjudicationController.Adjudicate` doesn't branch on the gate's `IsExcluded` field. It branches on `!providerIntegrity.Passed` — and `Passed` already came back `false` for a `"Failed"` verification status. The specific mapping Part 10 flagged wasn't producing a wrong-payment bug through that caller. That doesn't mean nothing was wrong; it means the disclosed theory, honestly stated as unconfirmed in Part 10's own words, didn't hold up against a second reading. Recording that correction here is the same discipline Part 9 and Part 10 both applied to their own guesses: a theory that sounds right stays a theory until it's checked.
+
+The real fail-open path was one level up: `Passthrough()`, the gate's behavior when both provider-service and the live verification service are unreachable, defaulted to `Passed = true`. Total unavailability — no data at all — was being treated the same as a confirmed clean result. That is a real bug, just not the one originally named.
+
+## Tracing the gate's callers found something worse
+
+Fixing `Passthrough()` meant finding everywhere it could fire, which meant finding everywhere `IProviderIntegrityGate` gets called at all. That search turned up one caller: `AdjudicationController.Adjudicate`.
+
+That endpoint is the standalone, synchronous benchmark surface this series' validator calls directly. It is not claims-service's production adjudication path. Real claims move through `ClaimAdjudicationOrchestrator` — a fixed, ordered pipeline of stages, triggered asynchronously off a `ClaimVersionSubmitted` event, the same pipeline every prior episode's throughput and correctness numbers were measured against. Its `BenefitCalculationStage` calls benefit-plan-service's `calculate-benefits` endpoint, which by design has never touched provider integrity — that endpoint is deliberately side-effect-free because portal and preview features call it too, and a live federal-exclusion check has no business running against a hypothetical calculation.
+
+Put together: the federal OIG/LEIE/SAM.gov exclusion check has existed, and been correctly tested, since capability 5.10. It has simply never been reachable from a real submitted claim. Every `ExcludedProviderDenied` result this series has ever reported — including the clean 5,000/5,000 in Part 10's Round 3 — was scored against the benchmark's own synchronous call to `/adjudicate`, not against what claims-service's orchestrator actually decided. The orchestrator was never asked the question.
+
+## The fix: a gate that can't fail open, and a stage that finally asks it
+
+Two changes, not one.
+
+`HttpProviderIntegrityGate` no longer has a passthrough state at all. Every code path that used to return a default "clear" result now returns one of two things: a confirmed answer, or a new `RequiresManualReview` flag. Total unavailability, and a live `"Failed"` or `"ManualReviewRequired"` status, both now resolve to `Passed = false, RequiresManualReview = true` — distinct from `IsExcluded`, and distinct from a pass. The gate cannot silently clear a provider it never actually checked.
+
+Getting that answer to a real claim needed a new door. Benefit-plan-service now exposes `GET /api/v1/adjudication/provider-integrity/{npi}`, a side-effect-free read that runs the exact same gate `Adjudicate` always has, without touching `calculate-benefits`. Claims-service calls it from a new pipeline stage, `ProviderIntegrityStage`, `Order=150` — right after scrubbing, before network credentialing. A confirmed exclusion is a `Deny`. Anything the gate can't confidently resolve, including the HTTP call to benefit-plan-service itself failing, is a `Pend` using `MEDREVIEW` — a pend code and work-queue bucket that already existed for this exact purpose. No new pend vocabulary, no tenant-configurable fail-open mode. A federal exclusion check doesn't get an advisory-only setting.
+
+![Claim Adjudication Pipeline — ClaimAdjudicationOrchestrator's 8 stages, with ProviderIntegrityStage highlighted as this episode's addition, plus the standalone benchmark path and the gate's three-way outcome](/graphics/provider-integrity-pipeline.svg "Path A is the real, async production pipeline this episode wires the check into. Path B is the standalone benchmark endpoint every prior episode's ExcludedProviderDenied result was actually scored against.")
+
+Code review on the pull request caught a third bug before merge, in the same family as the first two: once the gate started returning `Passed = false` for both a confirmed exclusion and an unresolved review case, `AdjudicationController.Adjudicate` was still reporting both as `PROVIDER_EXCLUDED` — an outage or an inconclusive verification would have been denied as if the provider had actually appeared on a federal exclusion list. Fixed by checking `IsExcluded` explicitly before falling through to the general not-passed case, with four new tests covering exclusion, review-required, unavailable, and a defensive all-false result. The same discipline this series applies to its own benchmark claims — a reviewer's finding is a fact to check, not a fact to argue with.
+
+## Verified live, not just in the test suite
+
+This episode is not a scale confirmation. There is no 250,000-claim run here, and nothing above claims about production capacity. What there is: proof, taken from the running system, that a claim submitted the way real claims are submitted now actually reaches this check.
+
+`POST /api/v1/claims` is the entry point that triggers `ClaimAdjudicationOrchestrator` — and it happens to be the same call this series' own MCC validator already makes before it separately exercises the benchmark endpoint, so a normal validator run exercises both paths at once. A 500-claim run, including the validator's ten seeded `ExcludedProviderDenied` fixture claims, went through claims-service's real, async pipeline with the new stage active. Read directly from the running pods: `ProviderIntegrityStage` fired exactly ten `Deny` outcomes, each reading `Provider is excluded from federal healthcare programs` — a one-to-one match against the ten seeded fixtures, zero false positives, zero false negatives. `GET /api/claims/{id}` on one of them confirmed the persisted result: `denialReasonCode: B7`, the correct denial reason, claim status `Denied`. Zero errors in the provider-integrity path across the run. The false-pend sweep that already runs at the end of every MCC job reported zero unexpected pends — the new stage didn't introduce a single unintended side effect anywhere else in the run. The synchronous benchmark side stayed exactly as clean as Part 10 left it: 62 of 65 workflow checks matched, zero mismatched, `ExcludedProviderDenied` 10/10.
+
+One environment detail belongs in this record rather than left implicit: this local Kubernetes environment has no Service Bus emulator provisioned. Claims-service's messaging auto-resolves to an in-process, in-memory bus, so the publish-to-subscribe hop that triggers the orchestrator happens inside the same pod that handled the HTTP request, not across a real broker. That's sufficient to prove the pipeline wiring and the stage's logic are correct — it is not evidence about broker behavior, delivery guarantees, or timing under a real Service Bus connection, which production configuration provides and this environment does not.
+
+## What this actually answers, and what it doesn't
+
+Part 10's disclosed bug is closed, but not with the fix Part 10's own wording anticipated. The specific status-mapping path named in that disclosure wasn't reachable through the caller Part 10 was looking at. What was reachable, and worse, was a total-unavailability fail-open path in the same gate, and a complete absence of the check from claims-service's real pipeline. Both are fixed now. Neither would have been found by patching only the line Part 10 pointed at.
+
+This does not change any throughput number this series has published. It does not add or remove a scale rung. What it changes is which of this series' own past correctness claims were actually being tested against production logic versus a benchmark-only stand-in — and going forward, `ExcludedProviderDenied` results are decided by the same orchestrator that decides every other claim in this series, not a parallel code path that happened to agree with it.
+
+## The road to one million
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+Part 8 proved a clean 100,000-claim run and found the next bottleneck.
+
+Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.
+
+Part 10 confirmed it, found the real cause wasn't the guessed one, and disclosed a bug it chose not to fix.
+
+Part 11 went back for that bug, found it wasn't the whole story, and closed the gap it was hiding.
+
+The next rung is still 500,000 claims, unchanged from where Part 10 left it — the first scale where the still-open `Submit` chain gets a harder test than 250K gave it. It now runs against a pipeline that actually checks every claim against federal exclusion lists, not one that happened to score correctly because a benchmark endpoint quietly did the checking on its behalf.

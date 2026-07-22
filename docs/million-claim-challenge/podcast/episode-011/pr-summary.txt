@@ -1,0 +1,38 @@
+# Episode 011 implementation summary
+
+## PR #974 - Wire federal provider-exclusion check into the real adjudication pipeline
+
+Part 10 disclosed, but did not fix, a defect in `HttpProviderIntegrityGate`'s handling of a live verification `"Failed"` status. This PR opened that investigation.
+
+**Re-reading the disclosed bug.** `AdjudicationController.Adjudicate` branches on `providerIntegrity.Passed`, not `IsExcluded`. `Passed` was already correctly `false` for a `"Failed"` status through that caller — the specific mapping Part 10 named wasn't producing a wrong-payment bug through the code path Part 10 was looking at. Recorded as a correction to Part 10's own disclosure before any code changed, the same self-checking discipline Part 9 and Part 10 both applied to their own hypotheses.
+
+**Bug found instead: `Passthrough()` failed open on total unavailability.** When both `provider-service` and the live `provider-verification-service` are unreachable, the gate defaulted to `Passed = true`. Fixed:
+
+- `IProviderIntegrityGate.cs` — added `ProviderIntegrityResult.RequiresManualReview`, distinct from `IsExcluded`. A claim held here needs human review; it was never confirmed excluded, and it was never confirmed clear either.
+- `HttpProviderIntegrityGate.cs` — `Passthrough()` renamed `Unavailable()`, returns `Passed = false, RequiresManualReview = true`. Every fallback branch that previously defaulted to a pass-through now returns `Unavailable()`, except the one branch with real (if aged) prior data — a stale-but-real cached projection still resolves via that data rather than being discarded, a deliberate distinction kept after an initial pass over-corrected it. `CallVerificationServiceAsync` now maps a live `"Failed"` or `"ManualReviewRequired"` status to `RequiresManualReview = true` rather than silently `IsExcluded = false`.
+- 14/14 gate tests passing, including new cases for both `RequiresManualReview` paths.
+
+**Bug found instead: the check was never reachable from a real claim.** Tracing every caller of `IProviderIntegrityGate` found exactly one: `AdjudicationController.Adjudicate` — the standalone endpoint this series' own MCC validator calls directly. Claims-service's real orchestrator, `ClaimAdjudicationOrchestrator`, never called it; `BenefitCalculationStage` calls `calculate-benefits`, deliberately exclusion-check-free by design since portal/preview features share that endpoint. Fixed:
+
+- `AdjudicationController.cs` (benefit-plan-service) — new `GET /api/v1/adjudication/provider-integrity/{npi}`, side-effect-free, delegates to the existing gate verbatim.
+- `IProviderIntegrityClient.cs` / `HttpProviderIntegrityClient.cs` (new, claims-service) — HTTP client calling the new endpoint, mirroring `HttpCredentialingStatusClient`'s shape. Returns `null` on any failure to obtain a result (blank NPI, non-success status, transport failure, JSON error) — callers must treat `null` the same as any other inconclusive result.
+- `ProviderIntegrityStage.cs` (new, claims-service) — `Order=150`, between Scrubbing and NetworkCredentialing. Checks billing and distinct rendering NPI. `IsExcluded` → `Deny`. Anything else not passed (`RequiresManualReview`, or a `null` client result) → `Pend` using the existing `MEDREVIEW` pend code and work-queue bucket. Not tenant-configurable to fail open — no equivalent of `NetworkCredentialingStage`'s soft-validation mode.
+- `Program.cs` (claims-service) — registers the client and inserts the stage into the pipeline.
+- 7/7 new stage tests: pass, deny, pend-on-review-required, pend-on-null-client-result (not a silent pass), dual-provider, duplicate-NPI dedup, no-NPI-on-claim.
+
+**Bug found instead: the disclosure fix broke the standalone endpoint's classification.** Once the gate started returning `Passed = false` for both a confirmed exclusion and an unresolved review case, `AdjudicationController.Adjudicate` was still reporting every `!Passed` result as `PROVIDER_EXCLUDED`. Caught by code review (two independent reviewers, same finding) before merge. Fixed:
+
+- `AdjudicationController.cs` — checks `IsExcluded` explicitly for the `PROVIDER_EXCLUDED` denial; a separate branch handles any other `!Passed` result with a distinct error (`providerIntegrity.DenialCode`, defaulting to `PROVIDER_VERIFICATION_UNAVAILABLE`), never reported as a confirmed exclusion.
+- 4 new controller integration tests: confirmed exclusion, `RequiresManualReview`, verification-unavailable, and a defensive `Passed = false` result with neither flag set.
+
+**Docs.** `docs/architecture/claim-adjudication-pipeline.md` and `docs/architecture/integrity-score-consumption.md` updated with the new stage, the endpoint, the hardened gate contract, and an explicit addendum on the historical gap this PR closes.
+
+**Full suite, before merge:** benefit-plan-service 319/319, claims-service 563/563, AdjudicationController integration 28/28 (was 24, +4). All green.
+
+## Verification (post-merge, this episode)
+
+PR #974 merged at commit `09976edb`. Live verification against that exact commit is recorded in `benchmark-results.txt` — a 500-claim smoke test through claims-service's real orchestrated pipeline (not just the standalone endpoint the merge-time test suite already covered), confirming `ProviderIntegrityStage` fires 10/10 correctly against the seeded `ExcludedProviderDenied` fixtures with zero unintended side effects elsewhere in the run.
+
+## What this episode does not change
+
+No throughput number this series has published is affected. No scale rung is added or skipped — the next rung is still 500,000 claims, unchanged from where Part 10 left it. The scoring surface, corpus mix, and acceptance bar are unchanged; `ExcludedProviderDenied`'s expected disposition was already `Deny`, and still is. What changed is which code path actually decides that disposition for a real submitted claim.
