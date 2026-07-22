@@ -323,7 +323,7 @@ public class AdjudicationController : ControllerBase
             integritySpan?.SetTag("cho.integrity.excluded", providerIntegrity.IsExcluded);
         }
 
-        if (!providerIntegrity.Passed)
+        if (providerIntegrity.IsExcluded)
         {
             adjudicationSpan?.SetTag("cho.outcome", "provider_excluded");
             adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Provider excluded from federal programs");
@@ -341,6 +341,34 @@ public class AdjudicationController : ControllerBase
                 error = "PROVIDER_EXCLUDED",
                 message = providerIntegrity.DenialReason ?? "Provider excluded from federal healthcare programs",
                 carc = providerIntegrity.DenialCode,
+                integrityScore = providerIntegrity.IntegrityScore,
+                rating = providerIntegrity.Rating,
+                timings = stageTimings,
+            });
+        }
+
+        if (!providerIntegrity.Passed)
+        {
+            // Not a confirmed exclusion -- either RequiresManualReview (verification
+            // unavailable or inconclusive) or a defensive Passed=false with neither
+            // flag set. Either way this must not be reported as PROVIDER_EXCLUDED:
+            // the provider hasn't actually appeared on an exclusion list.
+            adjudicationSpan?.SetTag("cho.outcome", "provider_verification_review_required");
+            adjudicationSpan?.SetStatus(
+                ActivityStatusCode.Error, "Provider integrity could not be confidently verified");
+
+            RecordLatency(sw, claimTypeCode, "provider_verification_review_required");
+
+            _logger.LogWarning(
+                "Claim {ClaimId} pended: provider NPI {Npi} integrity could not be confidently verified",
+                SanitizeForLog(request.ClaimId), SanitizeForLog(request.ProviderNpi));
+
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = providerIntegrity.DenialCode ?? "PROVIDER_VERIFICATION_UNAVAILABLE",
+                message = providerIntegrity.DenialReason
+                    ?? "Provider integrity could not be confidently verified; manual review required",
                 integrityScore = providerIntegrity.IntegrityScore,
                 rating = providerIntegrity.Rating,
                 timings = stageTimings,

@@ -13,11 +13,18 @@ public interface IProviderIntegrityClient
 {
     /// <summary>
     /// Resolve the integrity result for <paramref name="npi"/>.
-    /// Returns <c>null</c> only on a transport failure reaching
-    /// benefit-plan-service itself -- the gate's own "never fail open"
-    /// contract already covers failures reaching its own upstreams
-    /// (provider-service / provider-verification-service), so a non-null
-    /// result here is always a confident answer, never a fail-open default.
+    /// Returns <c>null</c> whenever no result could be obtained from
+    /// benefit-plan-service -- a transport failure reaching it, a
+    /// non-success HTTP status, an empty/whitespace <paramref name="npi"/>,
+    /// or a response body that failed to deserialize. Callers must treat
+    /// <c>null</c> as "could not verify" and hold the claim for review
+    /// (see <c>ProviderIntegrityStage</c>), the same as any other
+    /// inconclusive result -- it is never safe to treat as a pass. A
+    /// non-null result, in turn, is always a confident answer: the gate's
+    /// own "never fail open" contract already covers failures reaching
+    /// its own upstreams (provider-service / provider-verification-service)
+    /// by returning <see cref="ProviderIntegritySnapshot.RequiresManualReview"/>
+    /// rather than a fail-open pass.
     /// </summary>
     Task<ProviderIntegritySnapshot?> CheckAsync(
         string tenantId,
