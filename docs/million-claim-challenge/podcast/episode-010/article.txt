@@ -1,0 +1,73 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 10: The Migration Cost That Wasn't
+
+Part 9 ended clean and left one thing unresolved.
+
+The Part 9 confirmation run hit the same zero-mismatch bar Part 8 set, at a larger scored surface, on the fourth try. But it paid a real cost to get there: throughput fell to 26.27 claims per second against a 58.55 baseline, and P95 latency roughly doubled. The explanation on offer was a one-time migration cost — that run was the first to exercise two new self-healing provider-correction paths at scale, and thousands of legacy providers accumulated across many prior sessions needed correcting simultaneously. Providers stay healed once corrected, the theory went, so a repeat run shouldn't pay it again. Part 9 said so honestly, and said it was unconfirmed.
+
+Part 10 is that confirmation. It found the theory was wrong.
+
+## The baseline run answered a different question
+
+The next rung was 250,000 claims — 2.5x Part 9's scale, the first run past the point where p12 was established as the local sweet spot. Run cold, on unmodified `main`, at parallelism 28: correctness came back clean on the first attempt, 30,534 of 32,500 workflow checks matched, zero mismatched, every criterion from the original acceptance bar met. That part of Part 9's story held up fine.
+
+Throughput did not. 41.43 claims per second — worse than Part 9's degraded 26.27-to-58.55 comparison would predict if the migration theory were the whole story, and this time there was no migration to blame. Provider seeding took 6:56 and member seeding took 15:07, both on the plain sequential code path, with no self-healing amend-and-activate corrections required. The providers from Part 9's run were already healed. Something else was slow, and the only way to find out what was to look.
+
+## Profiling instead of guessing
+
+Per-stage timing from the baseline run pointed at two places. `Adjudicate.benefitCalculation.accumulatorRead` averaged 192 milliseconds, 378 at P95 — essentially the entire adjudicate phase's cost, against 1-2 milliseconds for `accumulatorWrite` and roughly zero for every other substep. And `Submit` itself, the initial claim-creation call, averaged 329 milliseconds — the single largest per-claim cost of all, bigger than adjudication.
+
+The accumulator number resolved fast once traced: the runtime path is Redis-backed and normally sub-millisecond, but every MCC claim is for a member seen for the first time in a synthetic corpus, so the cache is always cold. Every claim's first accumulator read fell back to a synchronous cross-pod HTTP call to claims-service plus a Mongo aggregation — real production behavior for a brand-new member's first claim, but the near-universal case in a benchmark where every member is new.
+
+`Submit` turned out to be a genuinely different problem: five sequential I/O hops per call — a Mongo insert, an idempotency-check query, a version-number query, a version-event insert, and an Azure Service Bus send, none parallelized. That one is real production architecture, not a benchmark artifact, and it stayed out of scope for this episode — restructuring claim-versioning writes needs its own deliberate pass, not a fix bundled into a performance-tuning session.
+
+A third bottleneck only became visible once the first was gone: checking `cgroup cpu.stat` inside the live pods found `claims-service` throttled for 81.3 percent of its scheduling periods — 62,127 seconds of cumulative throttled time against 6,327 seconds of actual CPU usage. `provider-service` was throttled 9.5 percent of the time; `benefit-plan-service` climbed from low single digits at idle to 14.5-23 percent under active load. All three shared the identical 500-millicore CPU limit regardless of how much load each actually carried, on an 18-core node that never exceeded roughly 25 percent utilization at the node level. The ceiling was an artificially tight per-pod cgroup limit, not real capacity.
+
+And once accumulator reads and CPU throttling were both fixed, a fourth cost surfaced: `ncci`'s lookup cache carried a 10-minute TTL — shorter than most runs at real scale, forcing the same (procedure-code-pair, service-date) combinations to keep expiring and re-fetching throughout a single long run, for reference data that only actually changes on a CMS quarterly cadence.
+
+## Four fixes, validated before they were trusted
+
+Each fix shipped from evidence, and each was checked live on a 5,000-claim smoke test before being trusted at 250K scale — the same discipline Part 6 established for scoring, applied here to performance claims instead.
+
+PR #961 parallelized provider and member seeding, which had been sequential `foreach` loops making one HTTP round-trip chain per record — invisible and unbounded on a large run, since neither loop printed anything until the whole phase finished. Both are independent per-record work, so both now run through the same `Parallel.ForEachAsync` pattern already used for the timed claim-processing loop, with a shared progress helper so long seeding phases stop looking frozen.
+
+PR #967 added a per-member cache warm-up during seeding: a single `POST` to benefit-plan-service's `calculate-benefits` endpoint with an empty line-items array, which reaches the accumulator-read step — populating Redis on cache miss, including an explicit empty-history marker — before the engine's own "no lines" guard short-circuits pricing. Cheapest call that still does the job. Validated: `accumulatorRead` dropped from 192/378 milliseconds to 4/9, and a 5,000-claim run rose from a starting point to 92.73 claims per second.
+
+PR #968 raised the three services' CPU limits to match the throttling evidence — claims-service to 2000 millicores, provider-service to 1000, benefit-plan-service to 1500. Live confirmation: claims-service's throttled-period rate fell to roughly 0.13 percent, essentially eliminated. The same 5,000-claim smoke test climbed to 106-114 claims per second.
+
+PR #969 extended the NCCI lookup cache's TTL from 10 minutes to 6 hours. NCCI and MUE edit tables update quarterly in production, and explicit updates already bypass this TTL entirely through an existing invalidation call — so the short TTL was buying nothing except needless re-fetches inside a single run. No new logic needed, just a longer number. The same smoke test very nearly doubled again: 203.80 claims per second.
+
+From 92.73 to 203.80 claims per second at 5,000-claim scale, across three narrowly-targeted fixes plus the seeding-parallelism change, before the 250K confirmation run had even started.
+
+## The confirmation run took three tries
+
+The pattern should be familiar by now. Every part in this series that has run a real confirmation has found something the confirmation wasn't looking for. Part 10 held that pattern exactly — twice.
+
+**Round 1** ran all four fixes together at 250,000 claims, parallelism 56. Throughput: 147.12 claims per second, 3.55x the baseline — the tuning had worked. But 5 of 32,500 workflow checks failed: 2 mismatched, 3 observation timeouts, scattered across `BehavioralHealthCarveIn`, `BehavioralHealthCarveOut`, `RetroEligibilityAdd`, and `RetroEligibilityTermination` — four scenarios with no shared business logic. What they did share was the exact same `businessDenialCode`, `PROVIDER_EXCLUDED`, and an elevated `providerIntegrity` check latency of 216 to 344 milliseconds, well above the typical sub-50-millisecond range. Benefit-plan-service's integrity gate falls back to a live NPPES-registry check whenever a provider's verification timestamp ages past a 7-day threshold — and MCC's synthetic provider NPIs were never real, NPPES-registered numbers, so that live check always answers not-found, wrongly denying claims that needed to stay clear. The timestamp is only ever set once, at provider creation, and both the credentialing path and the exclusion-correction path added in Part 9 skip writing anything once a provider is already correct — the common case on a tenant this long-lived and heavily reused. Across enough days of repeated testing, a growing slice of the fixture pool simply aged past the line. PR #970 fixed it by refreshing that timestamp on every seeding pass, independent of whether anything else needed correcting.
+
+**Round 2** re-ran the same 250K/p56 confirmation with that fix in place. Throughput: 141.54 claims per second — but 80 of 32,500 workflow checks mismatched, 79 of them concentrated in a single scenario, `ExcludedProviderDenied`, and P99 latency spiked to 3,806 milliseconds against a P95 of only 594 — a tail-latency signature, not a general slowdown. Every sampled mismatch showed the correct, freshly-refreshed provider data sitting right there in provider-service, ruling out the staleness bug Round 1 had just fixed. The real cause was infrastructure: benefit-plan-service logged 30 "provider service unreachable" warnings across its three pods during the run's 29-minute sustained-load window. Provider-service, still running as a single replica even after its CPU limit had been raised, was dropping connections under real p56 concurrency — and every dropped connection forced the same live NPPES fallback Round 1 had hit, just through a different door. That fallback path turned out to have a second, genuinely separate defect: the live verification service's "Failed" status — returned for any NPI it can't find — silently maps to *not excluded* in the gate's status logic, even though the same result correctly reports its underlying pass/fail flag as false. A bare connection hiccup could turn into a wrongly-paid claim, for reasons that have nothing to do with MCC's synthetic data. PR #971 fixed the trigger only: scaled provider-service to two replicas, matching claims-service's existing pattern. The status-mapping defect itself was not patched here — it's adjudication-safety logic, and it deserves a deliberate review, not a fix squeezed alongside an infrastructure change. It's disclosed in this episode's evidence rather than quietly deferred.
+
+**Round 3**, job `mcc-p56-250k-final3-072830`: clean. 250,000 processed, 30,534 of 32,500 matched, **zero mismatched**, 1,966 unsupported — the same target Part 9 hit at 100K, now met exactly at 2.5 times the scale. Zero platform failures. Payment gate 5,000 of 5,000 within one cent, exact. Throughput: 145.04 claims per second — a 3.5x improvement over where this episode started, with P99 latency back to a normal 831.68 milliseconds.
+
+Two rounds, two real defects, neither one anywhere near where the story started. The performance-tuning work — accumulator caching, CPU limits, NCCI TTL, seeding parallelism — was correct from Round 1 onward. Every defect the confirmation run caught was in the provider-integrity path underneath it, exposed only once the real bottlenecks stopped hiding it. That is exactly what a confirmation run at real scale is for.
+
+## What this actually answers, and what it doesn't
+
+Part 9's open question is now closed, and the answer isn't the one it guessed. The slow throughput wasn't a one-time migration cost that would quietly disappear on a repeat run. It was three specific, fixable causes — a cold cache treated as if it would always be warm, CPU limits sized without evidence, and a TTL shorter than the workload it was protecting — plus, unrelated to any of that, a provider-integrity path that fails in a way nobody had reason to notice until the rest of the system got fast enough to run into it twice in two rounds.
+
+The disclosed bug matters more than a footnote. `HttpProviderIntegrityGate`'s handling of a "Failed" verification result is real production logic, and it currently behaves as if failure means clearance. That's not a benchmark artifact and it's not fixed in this episode. It's recorded in `benchmark-results.txt` and `pr-summary.txt` as open, exactly as Part 9 recorded a throughput number as unconfirmed rather than quietly assuming the best case.
+
+## The road to one million
+
+The pattern holds: scale up, work through whatever the new size exposes, climb again. Part 9 confirmed 100,000 claims with an expanded scored surface. Part 10 confirms 250,000 claims with the same scored surface, at 3.5x the throughput Part 9 recorded, and closes out the question Part 9 left open rather than repeating its guess.
+
+The next jump is 500,000 — the first run at a scale where the still-open `Submit` chain (five sequential I/O hops per claim, untouched in this episode) and the disclosed provider-integrity mapping defect both get a harder test than 250K gave them. Whichever surfaces first becomes the next episode's actual subject, the same way this one's subject turned out not to be the one Part 9 expected.
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+Part 8 proved a clean 100,000-claim run and found the next bottleneck.
+
+Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.
+
+Part 10 confirmed it, found the real cause wasn't the guessed one, and fixed what profiling actually found.

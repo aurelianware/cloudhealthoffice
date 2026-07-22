@@ -157,21 +157,21 @@
         <div class="callout callout-info">
           <div class="callout-title">Current evidence to compare against</div>
           <p>
-            The latest published Cloud Health Office proof is a clean <strong>100,000-claim local Docker Desktop Kubernetes run</strong>
-            with an expanded scored surface: 12,214/13,000 workflow checks matched, zero scoreable mismatches, zero platform failures,
-            zero unexpected pends, and 2,000/2,000 comparable payments within one cent.
+            The latest published Cloud Health Office proof is a clean <strong>250,000-claim local Docker Desktop Kubernetes run</strong>
+            at 2.5x the prior scale: 30,534/32,500 workflow checks matched, zero scoreable mismatches, zero platform failures,
+            zero unexpected pends, and 5,000/5,000 comparable payments within one cent.
           </p>
           <p>
             Scope matters. This is local engineering evidence, not a production cloud capacity claim and not the full million yet.
-            This run's timed adjudication phase slowed to 26.27 claims/sec with 895 ms P95 latency, down from the prior run's 58.55 claims/sec &mdash;
-            a one-time cost from two self-healing fixes correcting thousands of accumulated legacy provider records simultaneously, not yet confirmed
-            as one-time by a repeat run. Fixture preparation and this migration cost are the next local scaling bottlenecks to watch before climbing
-            to 250K, 500K, and the full million.
+            The prior run's throughput drop was suspected to be a one-time provider-healing migration cost, unconfirmed at the time.
+            It wasn't. Profiling found three real, fixable causes instead &mdash; a cold accumulator cache, under-sized CPU limits, and an
+            overly short reference-data cache &mdash; and fixing them brought this run to 145.04 claims/sec, a 3.5x improvement, with
+            fixture preparation cut from 22 minutes to under 10. The next target is 500K, then the full million.
           </p>
           <p>
-            <a href="/docs/million-claim-challenge/evidence#episode-009"><strong>Inspect the 100K evidence archive</strong></a>
+            <a href="/docs/million-claim-challenge/evidence#episode-010"><strong>Inspect the 250K evidence archive</strong></a>
             or read
-            <a href="/insights/million-claim-challenge/part-9-from-unsupported-to-scored"><strong>Part 9: From Unsupported to Scored</strong></a>.
+            <a href="/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt"><strong>Part 10: The Migration Cost That Wasn't</strong></a>.
           </p>
         </div>
 
@@ -188,6 +188,7 @@
             <li><a href="/insights/million-claim-challenge/part-7-operator-console">Part 7: From Benchmark Logs to an Operator Console</a></li>
             <li><a href="/insights/million-claim-challenge/part-8-clean-100k">Part 8: The Clean 100,000-Claim Run</a></li>
             <li><a href="/insights/million-claim-challenge/part-9-from-unsupported-to-scored">Part 9: From Unsupported to Scored</a></li>
+            <li><a href="/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt">Part 10: The Migration Cost That Wasn't</a></li>
           </ul>
         </div>
 
@@ -392,7 +393,7 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
             <p>Understand the deterministic corpus, answer key, workflow scoring, supported gaps, and published evidence.</p>
             <span class="card-arrow">Challenge guide &rarr;</span>
           </a>
-          <a href="/docs/million-claim-challenge/evidence#episode-009" class="docs-hub-card">
+          <a href="/docs/million-claim-challenge/evidence#episode-010" class="docs-hub-card">
             <h3>100K Evidence Archive</h3>
             <p>Review the clean 100K local Kubernetes result, run settings, correctness gates, and known scaling bottleneck.</p>
             <span class="card-arrow">Inspect evidence &rarr;</span>
