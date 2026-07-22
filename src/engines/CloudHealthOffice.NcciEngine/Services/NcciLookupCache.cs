@@ -5,7 +5,12 @@ namespace CloudHealthOffice.NcciEngine.Services;
 
 internal sealed class NcciLookupCache
 {
-    private static readonly TimeSpan DefaultTtl = TimeSpan.FromMinutes(10);
+    // NCCI/MUE reference data is quarterly (CMS cadence); explicit updates go through
+    // ImportQuarterlyUpdateAsync -> InvalidateTenant, which bypasses this TTL entirely.
+    // The TTL only bounds staleness for edits made outside that path, so it can be long
+    // without risking masking a real update -- a short TTL just forces avoidable re-lookups
+    // on every distinct (code-pair, service-date) combination within a single long run.
+    private static readonly TimeSpan DefaultTtl = TimeSpan.FromHours(6);
 
     private readonly ConcurrentDictionary<PairCacheKey, CacheEntry<NcciEditPair>> _pairs = new();
     private readonly ConcurrentDictionary<MueCacheKey, CacheEntry<MueEntry>> _mues = new();
