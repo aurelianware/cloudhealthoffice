@@ -16,7 +16,7 @@ metadata:
     app: provider-service
     tier: backend
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: provider-service
