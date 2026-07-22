@@ -387,6 +387,156 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.NotEmpty(result.Accumulators);
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // Adjudicate provider integrity outcomes — a confirmed exclusion must
+    // be distinguished from "could not confidently verify" (manual review
+    // required, verification unavailable, or a defensive Passed=false with
+    // neither flag set). Only IsExcluded may report PROVIDER_EXCLUDED.
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Adjudicate_ProviderExcluded_Returns422WithProviderExcluded()
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        _factory.ProviderIntegrityGate
+            .CheckAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new ProviderIntegrityResult
+            {
+                Passed = false,
+                IsExcluded = true,
+                Rating = "Blocked",
+                IntegrityScore = 0,
+                DenialCode = "B7",
+                DenialReason = "Provider is excluded from federal healthcare programs",
+            });
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeAdjudicationRequest());
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = body.RootElement;
+        Assert.Equal("PROVIDER_EXCLUDED", root.GetProperty("error").GetString());
+        Assert.Equal("B7", root.GetProperty("carc").GetString());
+    }
+
+    [Fact]
+    public async Task Adjudicate_ProviderRequiresManualReview_Returns422WithoutProviderExcluded()
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        _factory.ProviderIntegrityGate
+            .CheckAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new ProviderIntegrityResult
+            {
+                Passed = false,
+                IsExcluded = false,
+                RequiresManualReview = true,
+                Rating = "Unknown",
+                DenialCode = "PROVIDER_VERIFICATION_UNAVAILABLE",
+                DenialReason = "Provider verification could not reach a confident determination; manual review required",
+            });
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeAdjudicationRequest());
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = body.RootElement;
+        Assert.NotEqual("PROVIDER_EXCLUDED", root.GetProperty("error").GetString());
+        Assert.Equal("PROVIDER_VERIFICATION_UNAVAILABLE", root.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Adjudicate_ProviderVerificationUnavailable_Returns422WithoutProviderExcluded()
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        _factory.ProviderIntegrityGate
+            .CheckAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new ProviderIntegrityResult
+            {
+                Passed = false,
+                IsExcluded = false,
+                RequiresManualReview = true,
+                Rating = "Unknown",
+                DenialCode = "PROVIDER_VERIFICATION_UNAVAILABLE",
+                DenialReason = "Provider integrity could not be verified against any data source; manual review required",
+            });
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeAdjudicationRequest());
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = body.RootElement;
+        Assert.NotEqual("PROVIDER_EXCLUDED", root.GetProperty("error").GetString());
+        Assert.Equal(
+            "Provider integrity could not be verified against any data source; manual review required",
+            root.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Adjudicate_ProviderIntegrityDefensiveFalseWithNoFlags_Returns422WithoutProviderExcluded()
+    {
+        // Belt-and-suspenders: even a gate result with Passed=false and
+        // neither IsExcluded nor RequiresManualReview set must never be
+        // reported as a confirmed exclusion.
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        _factory.ProviderIntegrityGate
+            .CheckAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new ProviderIntegrityResult { Passed = false });
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeAdjudicationRequest());
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = body.RootElement;
+        Assert.NotEqual("PROVIDER_EXCLUDED", root.GetProperty("error").GetString());
+        Assert.Equal("PROVIDER_VERIFICATION_UNAVAILABLE", root.GetProperty("error").GetString());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GET /api/v1/adjudication/provider-integrity/{npi} — standalone,
+    // side-effect-free integrity check exposed for claims-service's
+    // ProviderIntegrityStage (closes the gap where calculate-benefits
+    // never checked federal exclusion at all).
+    // ═══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task CheckProviderIntegrity_DelegatesToGate_ReturnsResultVerbatim()
+    {
+        _factory.ProviderIntegrityGate
+            .CheckAsync("1234567890", TenantId, forceRefresh: false, Arg.Any<CancellationToken>())
+            .Returns(new ProviderIntegrityResult
+            {
+                Passed = false,
+                IsExcluded = true,
+                Rating = "Blocked",
+                IntegrityScore = 0,
+                DenialCode = "B7",
+                DenialReason = "Provider is excluded from federal healthcare programs",
+            });
+
+        using var client = CreateClientWithTenant();
+
+        var response = await client.GetAsync("/api/v1/adjudication/provider-integrity/1234567890");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<ProviderIntegrityResult>(Json);
+        Assert.NotNull(result);
+        Assert.False(result!.Passed);
+        Assert.True(result.IsExcluded);
+        Assert.Equal("B7", result.DenialCode);
+    }
+
     [Fact]
     public async Task Adjudicate_ServiceDateAfterMemberTermination_ReturnsCarc27WithoutPricing()
     {

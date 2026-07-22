@@ -289,6 +289,14 @@ builder.Services.AddScoped<ICredentialingStatusClient>(sp =>
         sp.GetRequiredService<HttpCredentialingStatusClient>(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
 
+// ProviderIntegrityStage — federal exclusion check via benefit-plan-service's
+// provider-integrity endpoint. No caching decorator here: HttpProviderIntegrityGate
+// already caches on the benefit-plan-service side (1-hour IMemoryCache,
+// never-fail-open contract); a second claims-service-side cache would just
+// add staleness risk without a real latency win, since the upstream is
+// already fast on a cache hit.
+builder.Services.AddScoped<IProviderIntegrityClient, HttpProviderIntegrityClient>();
+
 // 5.4 — Claims Scrub Engine (class library). Default standard rule set;
 // per-tenant rule overrides remain a Phase 2 surface.
 builder.Services.AddClaimsScrubEngine();
@@ -353,8 +361,11 @@ builder.Services.AddScoped<IAuthorizationValidationClient, HttpAuthorizationVali
 // wraps the corresponding engine. 5.4/5.6/5.7/5.8/5.9 swap the registration
 // in place rather than going through services.RemoveAll<>() — the stub
 // never shipped to production so there's nothing to remove. 6/6 pipeline
-// stages real after 5.9.
+// stages real after 5.9. ProviderIntegrityStage (Order=150) added later,
+// closing a gap the original 5.5 stage scope never covered — see the
+// stage's own doc comment and docs/architecture/claim-adjudication-pipeline.md.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, ProviderIntegrityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
