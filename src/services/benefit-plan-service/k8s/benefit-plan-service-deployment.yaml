@@ -59,10 +59,10 @@ spec:
           value: "http://claims-service.cloudhealthoffice"
         resources:
           requests:
-            cpu: 100m
+            cpu: 300m
             memory: 128Mi
           limits:
-            cpu: 500m
+            cpu: 1500m
             memory: 512Mi
         livenessProbe:
           httpGet:
