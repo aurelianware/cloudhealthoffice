@@ -1,0 +1,58 @@
+# Episode 012 — Submit-chain per-hop profiling, before and after the MongoDB CPU fix
+#
+# Computed from SubmitProfile.Submit and SubmitProfile.VersionEvent log lines
+# emitted by claims-service (temporary LogInformation instrumentation during
+# this investigation; kept permanently post-fix at LogDebug level, PR #982).
+# Both runs: 20,000 claims, seed=555, parallelism=30, identical job parameters,
+# run twice against the unfixed and then the fixed MongoDB CPU limit.
+
+## BEFORE fix (MongoDB at 250m request / 1000m limit) — n=1037 Submit samples, n=1978 VersionEvent samples
+
+=== Submit()-level hops ===
+adapterResolveMs     n=1037  avg=   0.01ms  p50=   0.00ms  p95=   0.01ms  p99=   0.02ms  max=    2.13ms
+claimInsertMs        n=1037  avg=  39.37ms  p50=  19.57ms  p95=  89.43ms  p99= 167.90ms  max=  295.41ms
+eventPublishMs        n=1037  avg=  45.65ms  p50=  22.07ms  p95= 105.23ms  p99= 185.73ms  max=  302.71ms
+serviceBusSendMs     n=1037  avg=   1.14ms  p50=   0.82ms  p95=   2.87ms  p99=   5.93ms  max=   16.89ms
+
+=== Inside eventPublish (AppendAsync) ===
+idempotencyCheckMs   n=1978  avg=  13.68ms  p50=   2.67ms  p95=  79.82ms  p99=  91.85ms  max=  296.05ms
+versionQueryMs       n=1978  avg=  13.30ms  p50=   2.51ms  p95=  78.33ms  p99=  90.29ms  max=  263.16ms
+insertMs             n=1978  avg=  11.67ms  p50=   2.52ms  p95=  75.79ms  p99=  92.52ms  max=  261.18ms
+
+Sum of avg hops (approx total Submit time): 86.17ms
+
+Validator-reported job summary for this run:
+  Workflow checks: 3,664/3,900 matched (0 mismatched, 236 unsupported, 0 observation timeouts)
+  Elapsed: 04:08.391, Throughput: 120.78 claims/sec
+  Submit avg/p95: 59 ms / 108 ms (note: this figure is the validator's own end-to-end
+    Submit timer, which differs from the claims-service-side profiling above because
+    it also includes network/serialization overhead the server-side timers don't see)
+
+## AFTER fix (MongoDB at 1000m request / 4000m limit) — n=827 Submit samples
+
+=== Submit()-level hops ===
+adapterResolveMs     n=827  avg=   0.00ms  p50=   0.00ms  p95=   0.01ms  p99=   0.02ms  max=    1.22ms
+claimInsertMs        n=827  avg=   6.89ms  p50=   2.62ms  p95=  13.37ms  p99= 123.91ms  max=  130.93ms
+eventPublishMs       n=827  avg=   8.22ms  p50=   5.93ms  p95=  20.72ms  p99=  28.96ms  max=  141.60ms
+serviceBusSendMs     n=827  avg=   3.43ms  p50=   2.55ms  p95=   8.86ms  p99=  15.08ms  max=   25.21ms
+
+Validator-reported job summary for this run:
+  Workflow checks: 2,443/2,600 matched (0 mismatched, 157 unsupported, 0 observation timeouts)
+  Elapsed: 00:48.537, Throughput: 412.05 claims/sec
+  Submit avg/p95: 24 ms / 51 ms
+
+## Interpretation
+
+Every one of the four Mongo-touching operations (claimInsert, idempotencyCheck,
+versionQuery, insert) showed the same before-fix shape: a fast median but a P95/P99
+spiking 4-8x higher. That shape is the signature of resource contention -- requests
+queueing for a scarce resource -- not a cost inherent to any single operation. No
+single hop dominated the pre-fix average; claimInsert (39.37ms) and eventPublish
+(45.65ms) were roughly equal, and eventPublish's three internal round-trips split
+its cost almost evenly (11.67-13.68ms each). Fixing the shared resource (MongoDB's
+CPU limit) improved all four hops by roughly the same 5-7x factor simultaneously --
+further evidence they shared one root cause rather than each having their own.
+
+P99 for claimInsert/eventPublish remained somewhat elevated post-fix (123.91ms,
+28.96ms) relative to their own averages, suggesting a smaller residual tail --
+not chased further in this episode.

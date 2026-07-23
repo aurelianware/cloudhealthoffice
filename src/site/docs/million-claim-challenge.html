@@ -349,7 +349,9 @@
             and
             <a href="/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt">Part 10: The Migration Cost That Wasn't</a>,
             and
-            <a href="/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark">Part 11: The Check That Only Ran in the Benchmark</a>.
+            <a href="/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark">Part 11: The Check That Only Ran in the Benchmark</a>,
+            and
+            <a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled">Part 12: The Database Nobody Profiled</a>.
           </p>
           <p>
             <a href="/insights/million-claim-challenge"><strong>Read the complete engineering series</strong></a>
@@ -458,11 +460,11 @@
           <div class="callout-title">Current proof vs benchmark design</div>
           <p>
             The benchmark design is the full million-claim corpus with 29 named edge-case scenarios and target scoring tiers.
-            The latest published Cloud Health Office result is narrower: a 100,000-claim local Kubernetes validation with
-            pended observation, zero scoreable workflow mismatches, unsupported scenarios reported separately, zero unexpected pends, and payment accuracy gated for comparable claims. That gap is intentional and public.
+            The latest published Cloud Health Office result is narrower: a 500,000-claim local Kubernetes validation with
+            pended observation, 61,063/65,000 scoreable workflow checks matched, unsupported scenarios reported separately, zero unexpected pends, and payment accuracy gated for comparable claims. That gap is intentional and public.
           </p>
           <p>
-            Our next proof milestone is not just a larger run. It is a faster and more observable fixture-preparation path, followed by a repeat 100K validation before 250K, 500K, and full-million adjudication runs.
+            Our next proof milestone is the full million-claim run.
           </p>
         </div>
 
