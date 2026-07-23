@@ -22,6 +22,7 @@ if (options.ShowHelp)
 
 var runId = Guid.NewGuid().ToString("N");
 var runStartedAtUtc = DateTimeOffset.UtcNow;
+Console.WriteLine($"  [checkpoint] Run start :: {runStartedAtUtc:HH:mm:ss.fff}Z (runId={runId})");
 var json = new JsonSerializerOptions(JsonSerializerDefaults.Web)
 {
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -132,9 +133,16 @@ else
     Console.WriteLine("Authorization fixtures: skipped (--no-seed-authorizations)");
 }
 
-var answerKey = MccAnswerKey.FromClaims(
-    claims,
-    priorAuthValidationCapabilities);
+// Previously unmeasured: this ran between "Authorization fixture seeding" and
+// "Member and coverage seeding" with no timing wrapper at all -- any real cost
+// here would have shown up nowhere, not even as a discrepancy, since no phase
+// before or after it would look abnormally slow. Wrapped now so it can be
+// ruled in or out directly instead of by inference.
+var answerKey = await MeasureLifecycleValuePhaseAsync(
+    lifecycleTimings,
+    "Answer key build",
+    "Preparation",
+    () => Task.FromResult(MccAnswerKey.FromClaims(claims, priorAuthValidationCapabilities)));
 
 var memberFixtures = MemberFixturePreparation.Empty;
 var cobCoverageFixtures = FixtureCount.Empty;
@@ -196,16 +204,19 @@ var latestProgressPublishLock = new object();
 
 if (!options.NoPublishSummary)
 {
-    var initialProgress = BuildProgressSummary(
-        results.ToList(),
-        TimeSpan.Zero,
-        options,
-        runId,
-        runStartedAtUtc,
-        "Running",
-        "Processing claims",
-        fixturePreparation);
-    await PublishSummaryAsync(http, options, initialProgress, json, quiet: true);
+    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Initial progress publish", "Preparation", async () =>
+    {
+        var initialProgress = BuildProgressSummary(
+            results.ToList(),
+            TimeSpan.Zero,
+            options,
+            runId,
+            runStartedAtUtc,
+            "Running",
+            "Processing claims",
+            fixturePreparation);
+        await PublishSummaryAsync(http, options, initialProgress, json, quiet: true);
+    });
 }
 
 var processingStartedAtUtc = DateTimeOffset.UtcNow;
@@ -340,7 +351,10 @@ var summary = MccRunSummaryBuilder.Build(
 postProcessingStopwatch.Stop();
 postProcessingTimings.Add(("Summary build", postProcessingStopwatch.Elapsed));
 
+postProcessingStopwatch.Restart();
 WriteSummary(summary);
+postProcessingStopwatch.Stop();
+postProcessingTimings.Add(("Write summary console output", postProcessingStopwatch.Elapsed));
 
 if (!string.IsNullOrWhiteSpace(options.SummaryJsonPath))
 {
@@ -358,7 +372,7 @@ if (!options.NoPublishSummary)
     postProcessingTimings.Add(("Dashboard publish", postProcessingStopwatch.Elapsed));
 }
 
-WritePostProcessingTimings(postProcessingTimings, lifecycleTimings);
+WritePostProcessingTimings(postProcessingTimings, lifecycleTimings, runStartedAtUtc);
 
 if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure))
 {
@@ -393,7 +407,16 @@ static async Task<T> MeasureLifecycleValuePhaseAsync<T>(
     finally
     {
         sw.Stop();
-        AddLifecycleTiming(timings, label, category, startedAtUtc, DateTimeOffset.UtcNow, sw.Elapsed);
+        var completedAtUtc = DateTimeOffset.UtcNow;
+        AddLifecycleTiming(timings, label, category, startedAtUtc, completedAtUtc, sw.Elapsed);
+        // Investigating the wall-clock gap first disclosed in Part 10 (reproduced,
+        // smaller, in Part 12): print an absolute-timestamp checkpoint for every
+        // phase as it completes, immediately, not just an aggregate duration at
+        // the end. A gap between one phase's "completed" and the next phase's
+        // "started" here -- something no duration sum can reveal -- is exactly
+        // what's still unexplained.
+        Console.WriteLine(
+            $"  [checkpoint] {label} :: started {startedAtUtc:HH:mm:ss.fff}Z, completed {completedAtUtc:HH:mm:ss.fff}Z, stopwatch {sw.Elapsed}");
     }
 }
 
@@ -3172,22 +3195,29 @@ static string FormatDuration(TimeSpan duration)
 /// </summary>
 static void WritePostProcessingTimings(
     List<(string Label, TimeSpan Duration)> postProcessingTimings,
-    IReadOnlyCollection<MassAdjudicationLifecycleTiming> lifecycleTimings)
+    IReadOnlyCollection<MassAdjudicationLifecycleTiming> lifecycleTimings,
+    DateTimeOffset runStartedAtUtc)
 {
-    if (postProcessingTimings.Count == 0)
-    {
-        return;
-    }
-
-    var postProcessingTotal = TimeSpan.FromTicks(postProcessingTimings.Sum(t => t.Duration.Ticks));
-    Console.WriteLine($"  Post-processing:    {FormatDuration(postProcessingTotal)}");
-    foreach (var (label, duration) in postProcessingTimings)
-    {
-        Console.WriteLine($"  PostProcessing.{label,-20} {FormatDuration(duration)}");
-    }
-
     var lifecycleTotal = TimeSpan.FromMilliseconds(lifecycleTimings.Sum(t => t.DurationMilliseconds));
-    Console.WriteLine($"  Grand total (tracked lifecycle + post-processing): {FormatDuration(lifecycleTotal + postProcessingTotal)}");
+    var postProcessingTotal = postProcessingTimings.Count == 0
+        ? TimeSpan.Zero
+        : TimeSpan.FromTicks(postProcessingTimings.Sum(t => t.Duration.Ticks));
+
+    if (postProcessingTimings.Count > 0)
+    {
+        Console.WriteLine($"  Post-processing:    {FormatDuration(postProcessingTotal)}");
+        foreach (var (label, duration) in postProcessingTimings)
+        {
+            Console.WriteLine($"  PostProcessing.{label,-20} {FormatDuration(duration)}");
+        }
+    }
+
+    var trackedTotal = lifecycleTotal + postProcessingTotal;
+    var actualWallClock = DateTimeOffset.UtcNow - runStartedAtUtc;
+    var unaccounted = actualWallClock - trackedTotal;
+    Console.WriteLine($"  Grand total (tracked lifecycle + post-processing): {FormatDuration(trackedTotal)}");
+    Console.WriteLine($"  Actual wall clock (run start to now):              {FormatDuration(actualWallClock)}");
+    Console.WriteLine($"  Unaccounted:                                       {FormatDuration(unaccounted)}");
 }
 
 static async Task WriteSummaryJsonAsync(string path, MassAdjudicationRunSummary summary, JsonSerializerOptions json)
