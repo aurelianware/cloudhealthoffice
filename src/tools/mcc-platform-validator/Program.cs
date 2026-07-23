@@ -861,8 +861,22 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
 
 static void InjectCleanPaidScenarios(List<SyntheticClaim> claims)
 {
+    // EdgeCase-tagged claims (BehavioralHealthCarveOut, RetroEligibilityAdd,
+    // CobSecondaryPayer, etc.) are excluded from every Inject*Scenarios
+    // candidate pool below. Without this, a claim the corpus generator
+    // already tagged with a specific edge case could be silently
+    // overwritten here -- BenefitPlanId, provider identity, and
+    // ExpectedOutcome all get reassigned, but the claim keeps its original
+    // EdgeCase label, so the answer key still scores it against the
+    // original scenario's expectation while its actual data reflects a
+    // different one entirely. Confirmed at 50K scale: BehavioralHealthCarveOut
+    // and RetroEligibilityAdd claims picked up here or by
+    // InjectExcludedProviderScenarios ended up denied PROVIDER_EXCLUDED
+    // against a genuinely-excluded rendering NPI, scored as a mismatch
+    // against CARC_96 / Paid because the EdgeCase label never changed.
     var candidates = claims
-        .Where(c => c.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase))
+        .Where(c => c.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && c.EdgeCase is null)
         .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
         .ToList();
 
@@ -889,6 +903,7 @@ static void InjectExcludedProviderScenarios(List<SyntheticClaim> claims, int see
     var candidates = claims
         .Where(c =>
             c.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && c.EdgeCase is null
             && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.CleanProfessionalPaidPlanId, StringComparison.Ordinal))
         .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
         .ToList();
@@ -916,6 +931,7 @@ static void InjectUncoveredServiceScenarios(List<SyntheticClaim> claims)
     var candidates = claims
         .Where(c =>
             c.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && c.EdgeCase is null
             && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.CleanProfessionalPaidPlanId, StringComparison.Ordinal)
             && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.ExcludedProviderPlanId, StringComparison.Ordinal))
         .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
