@@ -123,5 +123,16 @@ spec:
             - /tmp/mcc-summary.json
 EOF
 
-kubectl wait -n "$NAMESPACE" --for=condition=complete "job/${JOB_NAME}" --timeout="$JOB_TIMEOUT"
+# macOS idle sleep pauses the Docker Desktop VM -- and every pod inside it --
+# for as long as the Mac is asleep. On a long unattended run that shows up
+# as unexplained wall-clock time with no matching code-side cost: the
+# validator's own Stopwatch (CLOCK_MONOTONIC) doesn't count the paused
+# interval, but timestamps do once the VM resumes. `caffeinate` keeps the
+# system awake for the duration of the wait so multi-hundred-thousand-claim
+# runs aren't silently interrupted.
+if command -v caffeinate >/dev/null 2>&1; then
+  caffeinate -dis kubectl wait -n "$NAMESPACE" --for=condition=complete "job/${JOB_NAME}" --timeout="$JOB_TIMEOUT"
+else
+  kubectl wait -n "$NAMESPACE" --for=condition=complete "job/${JOB_NAME}" --timeout="$JOB_TIMEOUT"
+fi
 kubectl logs -n "$NAMESPACE" "job/${JOB_NAME}"
