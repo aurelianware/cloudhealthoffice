@@ -49,4 +49,13 @@ public class ResolvedMember
     /// correction on file for this member.
     /// </summary>
     public DateTime? PlanChangeEffectiveDate { get; init; }
+
+    /// <summary>
+    /// Medicaid spend-down liability for the member's current budget period.
+    /// Null for members not enrolled under a spend-down eligibility category.
+    /// </summary>
+    public decimal? MedicaidSpendDownLiabilityAmount { get; init; }
+
+    /// <summary>Amount incurred so far toward <see cref="MedicaidSpendDownLiabilityAmount"/>.</summary>
+    public decimal MedicaidSpendDownAmountMet { get; init; }
 }

@@ -58,6 +58,15 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     /// </summary>
     public const string SubrogationReviewPendCode = "SUBRO";
 
+    /// <summary>
+    /// <see cref="PendDetails.PendCode"/> value for claims pended because the
+    /// member is enrolled under a Medicaid "medically needy" spend-down
+    /// eligibility category and has not yet incurred enough medical expense
+    /// in the current budget period to meet their spend-down liability --
+    /// Medicaid coverage isn't confirmed active for this period yet.
+    /// </summary>
+    public const string MedicaidSpendDownPendCode = "SPENDDOWN";
+
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
     private readonly IAuthorizationValidationClient _authorizationValidationClient;
@@ -132,6 +141,18 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             };
 
             return ClaimAdjudicationStageResult.Pend(StageName, subrogationReason);
+        }
+
+        if (HasUnmetMedicaidSpendDown(context.ResolvedMember, out var spendDownReason))
+        {
+            context.PendDetails = new PendDetails
+            {
+                PendCode = MedicaidSpendDownPendCode,
+                PendReason = spendDownReason,
+                PendedAt = DateTime.UtcNow,
+            };
+
+            return ClaimAdjudicationStageResult.Pend(StageName, spendDownReason);
         }
 
         var priorAuthorizationDenialReason = await ResolvePriorAuthorizationDenialReasonAsync(
@@ -259,6 +280,22 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             reason =
                 $"Claim carries related-causes code '{claim.RelatedCausesCode}'; potential third-party " +
                 "liability requires subrogation investigation before this claim can adjudicate.";
+            return true;
+        }
+
+        reason = string.Empty;
+        return false;
+    }
+
+    private static bool HasUnmetMedicaidSpendDown(ResolvedMember? member, out string reason)
+    {
+        if (member?.MedicaidSpendDownLiabilityAmount is decimal liability
+            && member.MedicaidSpendDownAmountMet < liability)
+        {
+            reason =
+                $"Member has a Medicaid spend-down liability of {liability:C} for the current budget " +
+                $"period and has incurred {member.MedicaidSpendDownAmountMet:C} toward it; coverage is " +
+                "not yet confirmed active for this period.";
             return true;
         }
 
