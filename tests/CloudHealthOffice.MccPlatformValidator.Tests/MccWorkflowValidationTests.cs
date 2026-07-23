@@ -419,8 +419,12 @@ public class MccWorkflowValidationTests
     }
 
     [Fact]
-    public void ExpectedValidationFor_UnsupportedPendedEdgeCase_ReturnsUnsupported()
+    public void ExpectedValidationFor_SubrogationEdgeCase_ReturnsScoreablePendedOutcome()
     {
+        // SubrogationWorkersComp was the last remaining unsupported-pended edge case
+        // before it and its siblings were converted to real scored Pends; this
+        // replaces the old unsupported-gate regression test now that the gate itself
+        // has no members left.
         var claim = CreateClaim(
             claimType: "EdgeCase",
             benefitPlanId: "MCC-PLAN",
@@ -436,16 +440,21 @@ public class MccWorkflowValidationTests
         };
 
         var expected = MccWorkflowValidation.ExpectedValidationFor(claim);
-        var status = MccWorkflowValidation.ValidationStatus(
+        var statusWhenPended = MccWorkflowValidation.ValidationStatus(
+            expected,
+            ClaimValidationOutcome.Pended,
+            actualBusinessDenialCode: null);
+        var statusWhenDenied = MccWorkflowValidation.ValidationStatus(
             expected,
             ClaimValidationOutcome.BusinessDenial,
             actualBusinessDenialCode: "CARC_96");
 
         Assert.Equal("EdgeCase:SubrogationWorkersComp", expected.Scenario);
-        Assert.Null(expected.ExpectedOutcome);
+        Assert.Equal(ClaimValidationOutcome.Pended, expected.ExpectedOutcome);
         Assert.Equal("W1", expected.ExpectedBusinessDenialCode);
-        Assert.True(expected.IsUnsupported);
-        Assert.Equal(MccWorkflowValidation.UnsupportedStatus, status);
+        Assert.False(expected.IsUnsupported);
+        Assert.Equal(MccWorkflowValidation.MatchedStatus, statusWhenPended);
+        Assert.Equal(MccWorkflowValidation.MismatchedStatus, statusWhenDenied);
     }
 
     [Fact]
