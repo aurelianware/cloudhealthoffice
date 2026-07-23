@@ -50,6 +50,12 @@ const publications = [
     part: 'Part 11',
     slug: 'part-11-the-check-that-only-ran-in-the-benchmark',
     summary: 'Re-investigating a bug Part 10 disclosed but didn\'t fix, and finding federal provider-exclusion screening had never been wired into the real adjudication pipeline at all.'
+  },
+  {
+    episode: '012',
+    part: 'Part 12',
+    slug: 'part-12-the-database-nobody-profiled',
+    summary: 'Two benchmark fixture bugs, a Submit-chain bottleneck traced to an under-provisioned shared database, and this series\' first clean 500,000-claim confirmation.'
   }
 ];
 

@@ -157,21 +157,23 @@
         <div class="callout callout-info">
           <div class="callout-title">Current evidence to compare against</div>
           <p>
-            The latest published Cloud Health Office proof is a clean <strong>250,000-claim local Docker Desktop Kubernetes run</strong>
-            at 2.5x the prior scale: 30,534/32,500 workflow checks matched, zero scoreable mismatches, zero platform failures,
-            zero unexpected pends, and 5,000/5,000 comparable payments within one cent.
+            The latest published Cloud Health Office proof is a <strong>500,000-claim local Docker Desktop Kubernetes run</strong>
+            at 2x the prior scale: 61,063/65,000 workflow checks matched, zero platform failures,
+            zero unexpected pends, and 10,000/10,000 comparable payments within one cent.
           </p>
           <p>
             Scope matters. This is local engineering evidence, not a production cloud capacity claim and not the full million yet.
-            The prior run's throughput drop was suspected to be a one-time provider-healing migration cost, unconfirmed at the time.
-            It wasn't. Profiling found three real, fixable causes instead &mdash; a cold accumulator cache, under-sized CPU limits, and an
-            overly short reference-data cache &mdash; and fixing them brought this run to 145.04 claims/sec, a 3.5x improvement, with
-            fixture preparation cut from 22 minutes to under 10. The next target is 500K, then the full million.
+            Testing the benchmark harness at scale it had never run at before turned up two fixture-generation bugs, both fixed and
+            verified before this run. Profiling the disclosed &ldquo;five sequential I/O hops&rdquo; Submit-chain cost found the real
+            bottleneck one layer underneath it: a shared MongoDB instance throttled more than it ran, on a CPU limit never touched by
+            the app-tier fixes that preceded it. Fixing it brought throughput to 186.06 claims/sec &mdash; higher than the 250K run's
+            145.04, despite double the volume. One number from that run, an unexplained wall-clock gap, reproduced smaller here (about
+            17 minutes, down from 45) and remains open. The next target is the full million.
           </p>
           <p>
-            <a href="/docs/million-claim-challenge/evidence#episode-010"><strong>Inspect the 250K evidence archive</strong></a>
+            <a href="/docs/million-claim-challenge/evidence#episode-012"><strong>Inspect the 500K evidence archive</strong></a>
             or read
-            <a href="/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt"><strong>Part 10: The Migration Cost That Wasn't</strong></a>.
+            <a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled"><strong>Part 12: The Database Nobody Profiled</strong></a>.
           </p>
         </div>
 
@@ -190,6 +192,7 @@
             <li><a href="/insights/million-claim-challenge/part-9-from-unsupported-to-scored">Part 9: From Unsupported to Scored</a></li>
             <li><a href="/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt">Part 10: The Migration Cost That Wasn't</a></li>
             <li><a href="/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark">Part 11: The Check That Only Ran in the Benchmark</a></li>
+            <li><a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled">Part 12: The Database Nobody Profiled</a></li>
           </ul>
         </div>
 
@@ -394,9 +397,9 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
             <p>Understand the deterministic corpus, answer key, workflow scoring, supported gaps, and published evidence.</p>
             <span class="card-arrow">Challenge guide &rarr;</span>
           </a>
-          <a href="/docs/million-claim-challenge/evidence#episode-010" class="docs-hub-card">
-            <h3>100K Evidence Archive</h3>
-            <p>Review the clean 100K local Kubernetes result, run settings, correctness gates, and known scaling bottleneck.</p>
+          <a href="/docs/million-claim-challenge/evidence#episode-012" class="docs-hub-card">
+            <h3>500K Evidence Archive</h3>
+            <p>Review the 500K local Kubernetes result, run settings, correctness gates, and the still-open wall-clock question.</p>
             <span class="card-arrow">Inspect evidence &rarr;</span>
           </a>
           <a href="/docs/compliance" class="docs-hub-card">

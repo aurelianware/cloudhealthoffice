@@ -1,0 +1,96 @@
+# Episode 012 — MongoDB cgroup evidence, before and after the CPU limit fix
+#
+# Captured directly from mongodb-0's /sys/fs/cgroup/cpu.stat, the same technique
+# Part 10 used to diagnose claims-service/provider-service/benefit-plan-service
+# throttling. See benchmark-results.txt "Bug 4" for the narrative.
+
+## Resource spec, before fix (infrastructure/k8s/mongodb-deployment.yaml, as committed prior to PR #982)
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "1Gi"
+
+## cgroup cpu.stat, before fix (accumulated since mongodb-0's prior pod start —
+## this is cumulative lifetime data for that pod instance, not a single-run window)
+
+usage_usec 22994190530
+user_usec 17958517913
+system_usec 5035672616
+nice_usec 0
+nr_periods 928143
+nr_throttled 120381
+throttled_usec 61950174085
+nr_bursts 0
+burst_usec 0
+
+Derived:
+- Throttled period rate: 120,381 / 928,143 = 12.97%
+- Cumulative throttled time: 61,950,174,085us ≈ 61,950s ≈ 17.2 hours
+- Cumulative actual usage: 22,994,190,530us ≈ 22,994s ≈ 6.4 hours
+- MongoDB spent more cumulative time throttled than it spent actually running.
+
+## Resource spec, after fix
+
+resources:
+  requests:
+    cpu: "1000m"
+    memory: "512Mi"
+  limits:
+    cpu: "4000m"
+    memory: "1Gi"
+
+## cgroup cpu.stat, immediately after rollout (fresh pod, clean baseline)
+
+usage_usec 801403
+user_usec 505647
+system_usec 295756
+nice_usec 0
+nr_periods 165
+nr_throttled 0
+throttled_usec 0
+nr_bursts 0
+burst_usec 0
+
+## cgroup cpu.stat, after a 20,000-claim/seed=555/parallelism=30 load test against the new limit
+
+usage_usec 206140669
+user_usec 159864192
+system_usec 46276476
+nice_usec 0
+nr_periods 1397
+nr_throttled 3
+throttled_usec 742692
+nr_bursts 0
+burst_usec 0
+
+Derived:
+- Throttled period rate under load, post-fix: 3 / 1,397 = 0.21% (down from 12.97%, a ~62x reduction)
+- Cumulative throttled time under load, post-fix: 742,692us ≈ 0.74s (vs. tens of thousands of seconds pre-fix)
+
+## Quick audit of other shared dependencies, same technique, post-fix
+
+Redis (redis-dataprotection — also backs the accumulator cache Part 10 profiled):
+  usage_usec 3617460282, nr_periods 3680476, nr_throttled 205 (0.0056%), throttled_usec 9264243 (~9.3s)
+  Healthy. Not a hidden bottleneck.
+
+provider-service (2 replicas):
+  Pod 1: nr_periods 83012, nr_throttled 1242 (1.50%), throttled_usec 141889004 (~142s), usage_usec 1738361856 (~1738s)
+  Pod 2: nr_periods 115833, nr_throttled 1927 (1.66%), throttled_usec 307426563 (~307s), usage_usec 1839129173 (~1839s)
+  Minor, non-urgent. An order of magnitude below MongoDB's pre-fix severity. Usage exceeds throttled time by 6-12x, a healthy ratio.
+
+claims-service (2 replicas):
+  Pod 1: nr_periods 6501, nr_throttled 177 (2.72%)
+  Pod 2: nr_periods 7611, nr_throttled 144 (1.89%)
+  Healthy.
+
+benefit-plan-service (3 replicas):
+  Pod 1: nr_periods 70969, nr_throttled 97 (0.14%)
+  Pod 2: nr_periods 69889, nr_throttled 74 (0.11%)
+  Pod 3: nr_periods 69745, nr_throttled 108 (0.15%)
+  Healthy.
+
+Conclusion: MongoDB was a genuine outlier, not a symptom of a stack-wide pattern. Nothing else in the adjudication critical path warranted a similar fix at the time of this audit.
