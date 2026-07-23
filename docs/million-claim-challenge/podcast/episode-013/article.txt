@@ -1,0 +1,78 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 13: The Gap Was the Laptop
+
+Part 12 disclosed a smaller version of the same wall-clock gap Part 10 first found, and left it open: a contradiction between claims-service's own log timestamp and the validator's client-side timer that neither side of the evidence could resolve. Part 13 goes back for it one more time — not with a bigger run, but with finer instrumentation and one hypothesis nobody had checked yet.
+
+## Closing the last blind spots
+
+Part 12's post-processing instrumentation (PR #976) had already timed everything between the end of the adjudication loop and the final dashboard publish. Reading it again against the actual gap left two windows still dark. First, every lifecycle phase was timed as a duration but never printed as an absolute start/complete timestamp — so a gap opening between two phases, rather than inside one, had nowhere to show itself. Second, one call had never been wrapped at all: the "Running" progress publish sent right before the timed adjudication loop starts, sitting between provider seeding and the loop's own clock.
+
+Both got fixed directly. Every phase now prints `[checkpoint] {label} :: started {ts}, completed {ts}, stopwatch {elapsed}` — an absolute wall-clock pair alongside the duration that was already being recorded. The leading progress publish became a tracked "Initial progress publish" phase like every other step. And the post-processing summary gained a line it never had: `Actual wall clock (run start to now)`, computed directly from the run's own start timestamp, next to a new `Unaccounted` line that's just that number minus everything tracked. No more inferring the gap from two totals computed differently — it's printed directly, every run.
+
+## Two live runs, two exact matches
+
+A 150,000-claim run (seed 777, parallelism 56 — the same job re-run twice for a clean comparison) surfaced the gap immediately, and the new checkpoints made it exact instead of approximate.
+
+First run: every phase's checkpoint-measured wall-clock duration matched its internal Stopwatch to the millisecond — except one. "Member and coverage seeding" reported `11:40.249` on its own Stopwatch, but its checkpoint timestamps (`17:14:19.737Z` to `17:26:36.094Z`) span `12:16.357` — a 36.1-second gap between what the process's own clock measured and what actually elapsed. `Unaccounted: 1:19.043` for the full run; the leftover ~43 seconds turned out to be exactly the untracked initial progress publish, closed by the fix above before the next run.
+
+Second run, same seed, now with that fix applied: "Initial progress publish" completed at `17:47:16.137Z`. The next checkpoint, "Expected-pend observation," started at `18:11:09.277Z` — 23 minutes 53 seconds later. In between sits "Timed adjudication," whose own Stopwatch reported only `13:14.346`. The difference — `10:38.734` — landed within 19 milliseconds of the run's own reported `Unaccounted: 10:38.753`.
+
+Both runs show the identical signature: a Stopwatch that runs slower than the wall clock, by a specific, large, single-event amount, always contained inside one phase rather than spread across many. That's not a slow operation. That's a clock that stopped counting for a while and then kept going.
+
+## What actually causes a Stopwatch to fall behind wall time
+
+.NET's `Stopwatch` on Linux is backed by `CLOCK_MONOTONIC` — a clock tied to time since boot, immune to calendar adjustments, and normally identical to wall-clock elapsed time for any two points measured on a running system. It does not fall behind under CPU throttling: a thread that's descheduled and later resumed still sees the correct elapsed time once it finally runs, because the clock itself never stopped ticking.
+
+There's exactly one thing that makes `CLOCK_MONOTONIC` diverge from wall time: the whole machine being suspended. A VM that's paused loses `CLOCK_MONOTONIC` continuity for the paused interval — it simply doesn't tick while the VM isn't running — while `CLOCK_REALTIME`, once the VM resumes and resyncs, reflects the full elapsed real time including the pause. That's precisely the shape of both gaps above: normal everywhere, one large discrete jump in exactly one place.
+
+This cluster runs on `kind` inside Docker Desktop's Linux VM, on a MacBook. Checked `pmset -g log` for the exact windows in question:
+
+- `10:19:49 -0700 Sleep — Entering Sleep state due to 'Idle Sleep'`, waking at `10:20:27 -0700`. Duration: 38 seconds. Converted to UTC (`17:19:49`–`17:20:27`), that's squarely inside the first run's "Member and coverage seeding" window (`17:14:19`–`17:26:36`), which showed a 36.1-second divergence.
+- `10:55:02 -0700 Sleep — Entering Sleep state due to 'Idle Sleep'`, waking at `11:05:43 -0700`. Duration: 641 seconds, logged by macOS itself. Converted to UTC (`17:55:02`–`18:05:43`), that's squarely inside the second run's "Timed adjudication" window — which showed a 638.75-second divergence.
+
+Both matches land within about two seconds, close enough to be the same event measured two different ways rather than a coincidence. The Mac went to sleep mid-run. Docker Desktop's VM — and every pod inside it, including claims-service and benefit-plan-service actively processing claims — paused with it. The validator's own Stopwatch, tied to a clock that doesn't count suspended time, had no way to see it. The wall clock did.
+
+## Why this also explains Part 10 and Part 12
+
+Neither of those episodes' original gaps can be re-verified against `pmset`'s log directly — it doesn't retain history that far back, and there's no way to pull a macOS sleep event from months ago after the fact. But the mechanism fits both disclosed symptoms precisely, in ways an application-level bug never could:
+
+Part 10's 250,000-claim run showed a ~45-minute gap. Part 12's 500,000-claim run — twice the volume — showed a smaller one, ~17 minutes. A real per-claim or per-batch cost scales with claim count. A host going idle-to-sleep during an unattended multi-hour run doesn't scale with anything except how long the machine happened to sit unattended that particular time. That non-relationship between gap size and claim volume was flagged as an unexplained coincidence at the end of the Part 12 investigation. It stops being a coincidence once the cause is "how long the laptop was left alone," which has nothing to do with claim count at all.
+
+Part 12's specific contradiction — claims-service's own server-side log timestamp for the final dashboard save placing it at the true end of the run, while the validator's client-side timer for that identical call reported 541 milliseconds — also resolves under this mechanism instead of remaining a mystery. If the VM paused for the bulk of the gap and the validator's own process (whose Stopwatch also runs on the same paused clock) resumed with its Stopwatch believing far less time had passed than actually had, a client-side call that appears to take 541ms by the process's own paused-and-resumed clock while the server watched real wall time pass around it is exactly what a mid-call VM suspension produces. Both measurements were correct. They were measuring different clocks.
+
+## The fix
+
+Not a code fix — an environment fix. `scripts/run-mcc-local-k8s.sh` now wraps the blocking `kubectl wait` with `caffeinate -dis`, macOS's own built-in utility for holding the system awake for the duration of a command, falling back to a plain `kubectl wait` if `caffeinate` isn't present. PR #984.
+
+Verified on the same 150,000-claim job, same seed, a third time — this time under `caffeinate`:
+
+| | Run 1 (no fix) | Run 2 (checkpoint fix only) | Run 3 (+ caffeinate) |
+|---|---|---|---|
+| Grand total (tracked) | 22:41.059 | 18:06.218 | 22:27.845 |
+| Actual wall clock | 24:00.102 | 28:44.971 | 22:27.905 |
+| Unaccounted | 1:19.043 | 10:38.753 | 0:00.060 |
+
+Sixty milliseconds, on a 22-minute run. Not "smaller." Closed.
+
+## What this episode actually resolves
+
+Every wall-clock gap this series has disclosed since Part 10 — 45 minutes, then 17, now effectively zero — was the same thing at different magnitudes: this development machine going to sleep during a long unattended benchmark run, pausing the Kubernetes cluster along with it. Not a claims-adjudication defect. Not a Kubernetes scheduling problem. Not MongoDB, which had a real and separately-fixed CPU-throttling issue in Part 12 but was never the source of this particular number. An artifact of running multi-hour correctness and performance evidence on a laptop with its own power-management opinions, invisible until the validator was instrumented precisely enough to catch the clock disagreeing with itself.
+
+The lesson generalizes past this one benchmark: any tool measuring elapsed time with a monotonic clock, run unattended on hardware that can suspend itself, is exposed to this exact failure mode. The fix — hold the machine awake for the duration of anything that shouldn't be silently paused — is a five-minute change once the actual cause is known, and completely invisible until someone checks whether the Stopwatch and the wall clock agree with each other inside every single phase, not just across the whole run.
+
+## The road to one million
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+Part 8 proved a clean 100,000-claim run and found the next bottleneck.
+
+Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.
+
+Part 10 confirmed it, found the real cause wasn't the guessed one, and disclosed a bug it chose not to fix.
+
+Part 11 went back for that bug, found it wasn't the whole story, and closed the gap it was hiding.
+
+Part 12 found two bugs on the way to the one it was looking for, fixed all three, and confirmed 500,000 claims clean — with a smaller, still-open mystery to hand to whatever comes next.
+
+Part 13 went back for that mystery one more time, and found it wasn't in the platform at all.
