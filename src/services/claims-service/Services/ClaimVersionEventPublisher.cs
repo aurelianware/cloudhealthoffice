@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 using ClaimsService.Models;
 using MongoDB.Driver;
@@ -264,7 +265,16 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
         evt.Id = $"{evt.PartitionKey}:{evt.EventId}";
         if (evt.OccurredAt == default) evt.OccurredAt = DateTime.UtcNow;
 
+        // Per-hop timing for the three Mongo round-trips in this method.
+        // Part 10/11 disclosed the Submit chain's five sequential I/O hops as
+        // a known, unfixed bottleneck without ever measuring which one
+        // dominated. It turned out to be none of them individually -- all
+        // three showed the same low-median, huge-P95 shape, tracing back to
+        // MongoDB's own CPU limit being undersized for the number of
+        // services sharing it, not a cost inherent to any single hop.
+        var profileSw = Stopwatch.StartNew();
         var existing = await GetByEventIdAsync(evt.TenantId, evt.ClaimVersionId, evt.EventId, ct);
+        var idempotencyCheckMs = profileSw.Elapsed.TotalMilliseconds;
         if (existing != null)
         {
             _logger.LogDebug(
@@ -275,10 +285,17 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
 
         for (var attempt = 0; attempt < MaxRetries; attempt++)
         {
+            profileSw.Restart();
             evt.Version = await GetNextVersionAsync(evt.TenantId, evt.ClaimVersionId, ct);
+            var versionQueryMs = profileSw.Elapsed.TotalMilliseconds;
             try
             {
+                profileSw.Restart();
                 await _collection.InsertOneAsync(evt, cancellationToken: ct);
+                var insertMs = profileSw.Elapsed.TotalMilliseconds;
+                _logger.LogDebug(
+                    "SubmitProfile.VersionEvent idempotencyCheckMs={IdempotencyCheckMs} versionQueryMs={VersionQueryMs} insertMs={InsertMs}",
+                    idempotencyCheckMs, versionQueryMs, insertMs);
                 return evt;
             }
             catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
