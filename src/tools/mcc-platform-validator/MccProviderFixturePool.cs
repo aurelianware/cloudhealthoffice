@@ -10,8 +10,9 @@ public sealed record MccProviderFixturePoolResult(
 
 /// <summary>
 /// Reuses provider fixtures when every adjudication-relevant profile field is
-/// equivalent. Provider-sensitive prior-authorization scenarios retain their
-/// original identities.
+/// equivalent. Provider-sensitive prior-authorization scenarios, and claims
+/// whose provider identity was deliberately forced (e.g. the excluded-provider
+/// scenario), retain their original identities.
 /// </summary>
 public static class MccProviderFixturePool
 {
@@ -114,7 +115,21 @@ public static class MccProviderFixturePool
                or EdgeCaseScenario.PriorAuthRequired_NoAuth
                or EdgeCaseScenario.PriorAuthRequired_ExpiredAuth
                or EdgeCaseScenario.PriorAuthRequired_WrongProvider
-               or EdgeCaseScenario.PriorAuthRequired_WrongProcedure;
+               or EdgeCaseScenario.PriorAuthRequired_WrongProcedure
+           // InjectExcludedProviderScenarios (Program.cs) forces this claim's
+           // rendering provider to a deliberately-excluded identity before
+           // this pool runs. Without isolation, pooling can hand that same
+           // excluded provider object to an unrelated claim whose profile
+           // happens to match post-force (credentialing/network status are
+           // both forced to "Excluded" and aren't otherwise distinctive at
+           // scale) -- silently turning an unrelated scenario into a
+           // provider-exclusion denial. Only shows up once claim volume is
+           // large enough to pressure the pool into reusing this identity;
+           // confirmed via a 50K run where two unrelated edge-case claims
+           // (BehavioralHealthCarveOut, RetroEligibilityAdd) were denied
+           // PROVIDER_EXCLUDED against a rendering NPI that resolved to a
+           // seeded "Excluded ProviderNN" fixture.
+           || string.Equals(claim.BenefitPlanId, MccWorkflowValidation.ExcludedProviderPlanId, StringComparison.Ordinal);
 
     private static int DistinctProviderCount(IEnumerable<SyntheticClaim> claims)
         => claims
