@@ -1,0 +1,74 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 12: The Database Nobody Profiled
+
+Part 11 closed a correctness gap. Part 12 went looking for speed, found two bugs that had nothing to do with speed, and only then found the actual bottleneck — one level underneath where the story had been pointing since Part 10.
+
+The starting question was direct: could this series run 500,000 claims in under an hour? Part 10 had disclosed the `Submit` chain — five sequential, unparallelized I/O hops per claim — as a known, unfixed cost. It had never actually been measured. This episode measured it, but not before two detours neither one asked for.
+
+## A wall-clock gap that didn't reproduce
+
+Before touching `Submit`, there was older business to check first. Part 10's clean 250K confirmation carried an unexplained gap: the run's tracked lifecycle phases summed to about 38 minutes, but the job's actual start-to-finish span was 1 hour 23 minutes — roughly 45 minutes never accounted for by anything the validator measured.
+
+The obvious suspect was the validator's own Kubernetes pod: it runs with no CPU request or limit at all, doing 56-way concurrent work plus periodic result aggregation. Checked live via the same `cgroup cpu.stat` technique Part 10 used on claims-service: `nr_periods` stayed at zero for the entire run — with no quota configured, the kernel wasn't even tracking throttling for that pod. Not throttled. Ruled out. And at 30,000 claims, the gap didn't reproduce at all: 6m40s job wall time against 6m36.6s of tracked prep and adjudication, a difference small enough to be pure scheduling overhead.
+
+Rather than guess again, the validator got instrumented properly: every phase between the end of timed adjudication and the final dashboard publish — the trailing progress-publish await, result ordering, summary build, JSON write, dashboard POST — now gets timed and printed, with a grand total that should reconcile against the dashboard's own start/completion timestamps. PR #976. Whether the Part 10 gap was real or a one-off, it would no longer be invisible.
+
+## Two bugs the profiling runs found first
+
+Getting a large enough sample to profile `Submit` meant running real load at 30K and 50K scale — traffic the validator had never generated before at these sizes. The 50K run came back with four workflow mismatches. None of them were about timing.
+
+Two were denied `PROVIDER_EXCLUDED` against a rendering provider that turned out to be a genuinely, deliberately excluded fixture — confirmed by reading provider-service directly. The adjudicator was correct. The bug was upstream: `InjectCleanPaidScenarios`, `InjectExcludedProviderScenarios`, and `InjectUncoveredServiceScenarios` each pick their forced-scenario candidates by claim type and benefit plan only, with no check for whether the corpus generator had already tagged that claim as something else — `BehavioralHealthCarveOut`, `RetroEligibilityAdd`. At low claim counts the odds of colliding with an already-tagged claim are low. At 50K they aren't. When an injector overwrites an already-tagged claim, it reassigns the provider, the benefit plan, and the expected outcome — but never clears the original scenario label, so the claim keeps scoring against its old expectation while its real data now belongs to a different scenario entirely. Fixed by excluding already-tagged claims from all three candidate pools. PR #977.
+
+The other two mismatches were a different bug entirely: two COB scenario claims denied on member eligibility — service date before the member's own coverage effective date — instead of the pended COB review they were supposed to get. Traced to the base member generator, which draws `CoverageEffectiveDate` from a flat, fixed 2023 window with no relationship to any claim's service date at all. Only the newborn scenarios and `RetroEligibilityTermination` bother to set a correct relationship explicitly; everything else, COB included, was exposed to roughly a 1% chance per claim of ending up effective after its own service date. Fixed by having the date normalizer clamp the member back to a year before service whenever the uncorrelated default would otherwise leave them in the future. PR #978. The regression test for this one is worth naming directly: the first version swept many seeds through the claim generator's single-claim entry point, which draws member and claim dates from non-overlapping base years and structurally cannot reproduce the bug — it would have passed whether or not the fix worked. Replaced with a claim constructed directly in the bad state, confirmed to fail without the fix and pass with it.
+
+Neither bug was a production regression. Both were the validator's own fixture generation not holding up at scale it had never been asked to run at before.
+
+## What profiling actually found
+
+With the fixture generator no longer lying about outcomes, the `Submit` numbers were trustworthy enough to read. Between a 30K run and a 50K run, `Submit`'s average time nearly doubled — 59ms to 105ms — tied with `Adjudicate` as the largest per-claim cost, exactly the growth pattern that would make Part 10's disclosed-but-unmeasured bottleneck worth a real look.
+
+Instrumented every hop directly: `ClaimSubmissionService`'s adapter-resolve, claim-insert, event-publish, and Service Bus send; and, inside event-publish, the three sequential MongoDB round-trips Part 10 had originally described — idempotency check, version-number query, event insert. The answer wasn't any single hop. All four Mongo-touching operations showed the same shape: a fast median (2 to 20 milliseconds) with P95s spiking to 80 to 185 milliseconds. That shape is resource contention, not a slow operation.
+
+Checked MongoDB's own `cgroup cpu.stat`, the same way Part 10 checked claims-service. `nr_periods` 928,143, `nr_throttled` 120,381 — 12.97 percent of scheduling periods throttled — with 61,950 cumulative seconds throttled against only 22,994 seconds of actual usage. MongoDB had spent more time waiting for CPU than running, on a one-core limit, backing claims-service (two replicas), member-service, provider-service, benefit-plan-service, and coverage-service simultaneously. Part 10's CPU-limit fix raised claims-service, provider-service, and benefit-plan-service. It never touched the shared database underneath all of them.
+
+Raised MongoDB from 250m/1000m to 1000m/4000m — the same proportional bump Part 10 gave the app tier. Verified on the identical 20K/seed=555 job, before and after:
+
+| | Before | After |
+|---|---|---|
+| claimInsert avg / P95 | 39.37ms / 89.43ms | 6.89ms / 13.37ms |
+| eventPublish avg / P95 | 45.65ms / 105.23ms | 8.22ms / 20.72ms |
+| Throughput | ~120-150 claims/sec | 412.05 claims/sec |
+| MongoDB throttled periods | 12.97% | 0.21% |
+
+A quick audit of the other shared dependencies — Redis (which also backs the accumulator cache Part 10 profiled), provider-service, claims-service, benefit-plan-service — found nothing else close to that severity. MongoDB was the outlier, not a pattern. PR #982 kept the profiling instrumentation as permanent low-volume observability rather than reverting it, demoted from informational to debug logging so it doesn't add volume in production.
+
+## The 500,000-claim run
+
+First time this series has run at this scale. 500,000 processed, zero platform failures, workflow scoring 61,063 of 65,000 matched — only four mismatched, all four consistent with residual test-tenant pollution already understood and explicitly not chased further, none of them a new defect. Payment gate exact on 10,000 of 10,000 comparisons. `ExcludedProviderDenied` clean at 10,000 of 10,000, confirming the injection-isolation fix held at twice the scale it was found and fixed at. Every COB variant but one at 100 percent, confirming the eligibility-date fix held too.
+
+Throughput: 186.06 claims per second — higher than Part 10's 145.04 at 250,000, meaning per-claim speed improved even as volume doubled. Timed adjudication took 44 minutes 47 seconds against Part 10's 28:43 for half the claims: 1.56x the time for 2x the claims.
+
+## The gap came back smaller, and that's the honest part
+
+The wall-clock question from the top of this episode has an answer, and it isn't a clean one. The validator's own instrumentation reported a grand total of 1 hour 6 minutes 17 seconds. The dashboard's real start-to-finish span, confirmed against claims-service's own log timestamp for the final save, was 1 hour 23 minutes 40 seconds. A gap of roughly 17 minutes — down from Part 10's 45, genuinely smaller, but not gone.
+
+What makes this one stranger than the last: the new instrumentation proves post-processing itself is fast, 3.1 seconds total, ruling out everything after the timed loop stops. And claims-service's own log line for the final dashboard save is timestamped within 3 seconds of the dashboard's own recorded completion — meaning that save really did happen at the true end of the run, not 17 minutes earlier. The validator's own client-side timer for that exact call reported 541 milliseconds. Both can't be right, and which one is wrong isn't resolved yet. This is recorded as open rather than quietly rounded away, the same discipline Part 10 applied to its own unresolved number and Part 11 applied to a bug that turned out to be a different bug than the one first suspected.
+
+## What this actually answers, and what it doesn't
+
+Run 500,000 claims in under an hour: not quite, at 1:23:40 wall time — but the timed adjudication portion alone, 44:47, is comfortably under an hour, and the correctness result is unqualified. Two real bugs came out of testing the validator at scale it had never run at before, neither a production defect. The performance story resolved to a shared dependency nobody had individually profiled, not the architecture everyone had been pointing at since Part 10. And one number — smaller now, still real — remains open.
+
+## The road to one million
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+Part 8 proved a clean 100,000-claim run and found the next bottleneck.
+
+Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.
+
+Part 10 confirmed it, found the real cause wasn't the guessed one, and disclosed a bug it chose not to fix.
+
+Part 11 went back for that bug, found it wasn't the whole story, and closed the gap it was hiding.
+
+Part 12 found two bugs on the way to the one it was looking for, fixed all three, and confirmed 500,000 claims clean — with a smaller, still-open mystery to hand to whatever comes next.

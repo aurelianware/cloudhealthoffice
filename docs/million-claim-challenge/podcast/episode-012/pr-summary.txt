@@ -1,0 +1,58 @@
+# Episode 012 implementation summary
+
+## PR #976 - Instrument MCC validator post-processing phases
+
+- Investigating "run 500K in under an hour," Part 10's 250K/p56 confirmation run showed ~45 minutes of total wall time unaccounted for by any tracked lifecycle phase.
+- Checked the leading hypothesis live: the validator's own Kubernetes Job pod has no CPU request/limit set. Sampled `cgroup cpu.stat` from the validator pod every 5s through a full 30K-claim run: `nr_periods` stayed at 0 the entire time — quota accounting wasn't even active — and the gap didn't reproduce at that scale. Hypothesis ruled out.
+- Added direct instrumentation around every previously-untracked window between the end of timed adjudication and the final dashboard publish: the trailing progress-publish await, result ordering, summary build, summary JSON write, and the dashboard publish call itself.
+- Every run now prints a `Post-processing:` breakdown and a `Grand total (tracked lifecycle + post-processing):` line.
+
+## PR #977 - Isolate EdgeCase-tagged claims from scenario injection and provider pooling
+
+- A 50K-claim run (generating Submit-chain profiling samples) surfaced 4 workflow mismatches, two of which were denied `PROVIDER_EXCLUDED` against a rendering NPI confirmed via direct provider-service lookup to be a genuinely-excluded fixture.
+- Root cause: `InjectCleanPaidScenarios`, `InjectExcludedProviderScenarios`, and `InjectUncoveredServiceScenarios` select their candidates by `ClaimType`/`BenefitPlanId` only — none check whether the corpus generator already tagged a claim with a specific `EdgeCase`. At low claim counts the odds of picking an already-tagged claim are low; at 50K they aren't. Overwriting an already-tagged claim reassigns `BenefitPlanId`, provider identity, and `ExpectedOutcome` but never clears the original `EdgeCase` label, so the claim keeps scoring against its original expectation while its data reflects a different scenario.
+- Fixed by adding `c.EdgeCase is null` to all three candidate filters.
+- Also hardened `MccProviderFixturePool.Apply` to isolate `ExcludedProviderDenied`-scenario claims the same way prior-auth-sensitive claims already are, as defense in depth.
+- Verified live on the exact 50K/seed=400 job that surfaced the bug: `BehavioralHealthCarveOut` and `RetroEligibilityAdd` both went from mismatched to 100% matched.
+
+## PR #978 - Correct member coverage effective dates that land after service date
+
+- The other 2 of the same 4 mismatches: COB scenario claims denied `CARC_27` (service date before member coverage effective date) instead of the expected `Pended`/`CARC_22`.
+- Traced to `InMemoryReferenceDataProvider.GenerateMember`: `CoverageEffectiveDate` is drawn from a fixed 2023 window, uncorrelated with any claim's service date. Only `RetroEligibilityTermination` and the three newborn scenarios explicitly establish a correct relationship during generation; everything else, COB included, carries roughly a 1% per-claim chance of landing effective after its own service date.
+- Fixed by having `ShiftMemberCoverageDates` clamp `CoverageEffectiveDate` back to one year before the claim's service date whenever the shift would otherwise leave it in the future.
+- Replaced the original regression test, which swept many seeds through `EdgeCaseClaimGenerator.Generate` — an entry point that draws member and claim dates from non-overlapping base years and structurally cannot reproduce the bug, so the sweep passed regardless of whether the fix worked. The replacement constructs a claim directly in the bad state and confirms `NormalizeClaimDates` corrects it; confirmed to fail without the fix and pass with it.
+- Verified live on the same 50K/seed=400 job: 5 of 6 previously-affected COB scenarios reached 100% matched. The residual mismatches traced to member records created by earlier runs before this fix existed, permanently reused since seeding never refreshes `CoverageEffectiveDate` for existing members — a production member-service API gap, out of scope here.
+
+## PR #982 - Raise MongoDB's CPU limit; keep the Submit-chain profiling that found it
+
+- With both fixture bugs fixed, Submit-chain timing was trustworthy. Average time nearly doubled between a 30K run (59ms) and a 50K run (105ms), tied with Adjudicate as the largest per-claim cost — the same "five sequential I/O hops" bottleneck Part 10/11 disclosed but never measured.
+- Added per-hop timing across `ClaimSubmissionService` and `ClaimVersionEventPublisher`. All four Mongo-touching hops (claim insert, idempotency check, version-number query, event insert) showed the same shape: low median (2-20ms), P95/P99 spiking to 80-185ms — resource contention, not per-operation cost.
+- Checked MongoDB's own `cgroup cpu.stat`: `nr_periods=928,143`, `nr_throttled=120,381` (12.97% of periods), `throttled_usec=61,950,174,085` against `usage_usec=22,994,190,530` — MongoDB had spent more cumulative time throttled than actually running, on a 1-core limit shared by claims-service (x2), member-service, provider-service, benefit-plan-service, and coverage-service. Never touched by Part 10's app-tier CPU-limit fixes.
+- Raised MongoDB from `250m`/`1000m` (request/limit) to `1000m`/`4000m`.
+- Verified live, same 20K/seed=555 job before and after: claimInsert avg 39.37ms→6.89ms, eventPublish avg 45.65ms→8.22ms, throughput ~120-150→412.05 claims/sec, MongoDB throttled periods 12.97%→0.21%.
+- A follow-up audit of Redis, provider-service, claims-service, and benefit-plan-service found nothing else close to MongoDB's severity.
+- Kept the profiling as permanent low-volume observability rather than reverting it, demoted from `LogInformation` to `LogDebug`.
+
+## 500,000-claim confirmation run (this episode, post-#982)
+
+Job `mcc-500k-confirmation`, 500,000 claims, seed 42, parallelism 56 (matching Part 10's 250K confirmation exactly), executed 2026-07-23 local, on claims-service/benefit-plan-service images built from commit `25feafac` (the PR #982 merge).
+
+- Workflow: 61,063/65,000 matched, 4 mismatched, 3,933 unsupported, 0 observation timeouts.
+- Payment gate: 10,000/10,000 exact. Platform failures: 0.
+- Throughput: 186.06 claims/sec — higher than Part 10's 145.04 at 250K, meaning per-claim speed improved even as scale doubled.
+- The 4 residual mismatches attributed to accumulated test-tenant pollution from this episode's own earlier test runs, not to a defect in #977/#978.
+- The wall-clock gap first disclosed in Part 10 reproduced, smaller: ~17 minutes vs. Part 10's ~45, despite this episode's own post-processing instrumentation (PR #976) proving post-processing itself takes only 3.1 seconds. Confirmed via claims-service's own timestamped log line that the final dashboard save genuinely completed at the true end of the run — contradicting the validator's own 541ms client-side timing for that call. Unresolved; disclosed as open.
+
+## Known, disclosed, unfixed issues carried forward
+
+- The residual ~17-minute wall-clock gap (this episode).
+- Refreshing member `CoverageEffectiveDate` on seeding reuse would require extending member-service's production `UpdateMemberRequest` API (no date fields today) — flagged in Episode 011/012, not implemented.
+- A rare provider-NPI collision between the two independent NPI-generation schemes (`BuildRunScopedNpi` vs. `BuildSyntheticExcludedProviderNpi`) observed once during this episode's investigation, not confirmed or fixed.
+
+## Remaining unsupported scenario families after this episode
+
+- RetroEligibilityCoverageChange
+- MedicaidSpendDown
+- SubrogationAccidentRelated, SubrogationThirdPartyLiability, SubrogationWorkersComp
+
+Unchanged from Part 9 onward — this episode was a performance-and-scale rung, not a scoring-surface expansion. These remain visible product gaps awaiting their own deliberate conversion work.

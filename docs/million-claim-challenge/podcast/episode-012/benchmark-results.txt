@@ -1,0 +1,122 @@
+# Episode 012 benchmark results
+
+STATUS: EVIDENCE RECORDED — CLEAN AT 500,000 CLAIMS, ONE NUMBER STILL OPEN. This episode fixes two validator fixture-generation bugs found while testing at scale, finds and fixes a real MongoDB CPU bottleneck underneath the Submit chain Part 10 disclosed but never measured, and runs this series' first 500,000-claim confirmation — clean on correctness, with the Part 10 wall-clock gap reproducing smaller (17 minutes, down from 45) but not resolved. Raw artifacts are committed alongside this file.
+
+## Fix history
+
+**Bug 1 — validator instrumentation gap.** Part 10's 250K confirmation left ~45 minutes of wall-clock time unaccounted for by any tracked lifecycle phase. Checked the leading hypothesis (the validator's own Job pod has no CPU request/limit and might be throttled) live via `cgroup cpu.stat` sampling through a full 30K-claim run: `nr_periods` stayed at 0 throughout — quota accounting wasn't even active — and the gap didn't reproduce at that scale (job wall time 6m40s vs. 6m36.599s of tracked prep + adjudication). Hypothesis ruled out. Instrumented every previously-untracked window between the end of timed adjudication and the final dashboard publish instead: the trailing progress-publish await, result ordering, summary build, summary JSON write, and the dashboard publish call itself. PR #976.
+
+**Bug 2 — scenario injection can silently overwrite already-tagged claims.** A 50K-claim run (needed to gather Submit-chain profiling samples) surfaced 4 workflow mismatches. Two were denied `PROVIDER_EXCLUDED` against a rendering NPI confirmed, via direct provider-service lookup, to be a genuinely-excluded fixture — the adjudicator was correct. Root cause: `InjectCleanPaidScenarios`, `InjectExcludedProviderScenarios`, and `InjectUncoveredServiceScenarios` select candidates by claim type and benefit plan only, with no check for an already-assigned `EdgeCase` tag (`BehavioralHealthCarveOut`, `RetroEligibilityAdd`). At 50K scale, candidate pools are large enough that these injectors can pick an already-tagged claim, overwrite its provider/benefit-plan/expected-outcome, and leave the original scenario label untouched — so the claim keeps scoring against its old expectation. Fixed by adding `EdgeCase is null` to all three candidate filters. Also hardened `MccProviderFixturePool.Apply` to isolate `ExcludedProviderDenied`-scenario claims the same way prior-auth-sensitive claims already are, as defense in depth. PR #977.
+
+**Bug 3 — member CoverageEffectiveDate uncorrelated with claim service date.** The other 2 of the same 4 mismatches: COB scenario claims (`CobBirthdayRule`, `CobSecondaryPayer`, `CobTertiaryPayer`) denied `CARC_27` (service date before member coverage effective date) instead of the expected `Pended`/`CARC_22`. Traced to `InMemoryReferenceDataProvider.GenerateMember`: `CoverageEffectiveDate` is drawn from a fixed 2023 window, uncorrelated with any claim's service date. Only `RetroEligibilityTermination` and the three newborn scenarios explicitly establish a correct effective/service relationship during generation — everything else, COB included, carries roughly a 1% per-claim chance of landing effective after its own service date. Fixed by having `MccClaimDateNormalizer.ShiftMemberCoverageDates` clamp the member's effective date back to one year before service whenever the uncorrelated default would otherwise leave it in the future. PR #978.
+
+**Bug 4 — MongoDB CPU limit, the real Submit-chain bottleneck.** With both fixture bugs fixed, Submit-chain timing was trustworthy: average time nearly doubled between a 30K run (59ms) and a 50K run (105ms), tied with Adjudicate as the largest per-claim cost. Instrumented every hop directly (adapter resolve, claim insert, event publish, Service Bus send; and inside event publish, the idempotency check, version-number query, and event insert Part 10 originally described as the chain's five sequential hops). All four Mongo-touching hops showed the same signature: low median (2-20ms), P95/P99 spiking to 80-185ms — resource contention, not per-operation cost. Checked MongoDB's own `cgroup cpu.stat`: `nr_periods=928,143`, `nr_throttled=120,381` (12.97% of periods), `throttled_usec=61,950,174,085` against `usage_usec=22,994,190,530` — MongoDB had spent more cumulative time throttled than actually running, on a 1-core limit shared by claims-service (x2), member-service, provider-service, benefit-plan-service, and coverage-service. Never touched by the app-tier CPU-limit fixes from Part 10. Raised MongoDB from 250m/1000m to 1000m/4000m. Kept the profiling instrumentation as permanent low-volume observability (demoted from informational to debug logging). PR #982.
+
+## Verification — Submit-chain profiling, before/after MongoDB fix
+
+Identical 20,000-claim/seed=555/parallelism=30 job, run twice: once against the unfixed 1-core MongoDB limit, once against the fixed 4-core limit.
+
+| Metric | Before | After |
+|---|---|---|
+| claimInsert avg/P95 | 39.37ms / 89.43ms | 6.89ms / 13.37ms |
+| eventPublish avg/P95 | 45.65ms / 105.23ms | 8.22ms / 20.72ms |
+| serviceBusSend avg | 1.14ms | 3.43ms |
+| Submit avg (validator-reported) | ~86ms | 24ms |
+| Throughput | ~120-150 claims/sec | 412.05 claims/sec |
+| MongoDB throttled periods | 12.97% (928,143 periods sampled) | 0.21% (1,397 periods sampled) |
+| Workflow scoring | — | 2,443/2,600 matched, 0 mismatched |
+
+A follow-up audit of the other shared dependencies in the adjudication critical path found nothing else close to MongoDB's severity: Redis (which also backs the accumulator cache Part 10 profiled) at 0.0056% throttled periods, provider-service at 1.5-1.7%, claims-service at 1.9-2.7%, benefit-plan-service at 0.11-0.15%. MongoDB was the outlier, not a pattern across the stack.
+
+## Run identity — 500,000-claim confirmation
+
+- Kubernetes job: `mcc-500k-confirmation`
+- Environment: local Docker Desktop Kubernetes (`kind` cluster `docker-desktop`)
+- Images: `cloudhealthoffice-claims-service:pi-25feafac`, `cloudhealthoffice-benefit-plan-service:pi-25feafac` — both built from `main` at commit `25feafac` (the PR #982 merge commit)
+- MongoDB: `1000m`/`4000m` request/limit (the fix verified above), StatefulSet `mongodb`, single replica
+- Tenant: `demo`
+- Validator seed: 42 (fresh — not reused from any earlier test run this series)
+- Claims: 500,000
+- Parallelism: 56 (matching Part 10's 250K confirmation exactly, isolating scale as the only variable)
+- Line of business: Medicaid
+- Prior-authorization scenario rate: 2%
+- Pend observation: enabled, 45-second bound, 1-second polling interval
+
+## Command
+
+```text
+NAMESPACE=cloudhealthoffice JOB_NAME=mcc-500k-confirmation CLAIMS=500000 MAX_CLAIMS=500000 SEED=42 PARALLELISM=56 PROGRESS_EVERY=25000 JOB_TIMEOUT=150m ./scripts/run-mcc-local-k8s.sh
+```
+
+The run must be executed from a checkout that includes PR #976, #977, #978, and #982, with `claims-service` and `benefit-plan-service` rebuilt from that checkout and MongoDB running the raised CPU limit.
+
+## Raw artifacts
+
+- `raw-validator-output-500k.txt` — validator console output from the completed 500K confirmation run.
+- `mongodb-cgroup-before-after.txt` — MongoDB's `cgroup cpu.stat` and resource spec, before the fix (accumulated since a prior pod start) and immediately after rollout with the new limit (fresh baseline, 0 throttled periods).
+- `submit-profile-before-after.txt` — aggregated per-hop Submit-chain timing statistics (avg/P50/P95/P99/max) computed from `SubmitProfile` log lines across both 20K profiling runs.
+
+## Correctness result
+
+- Total claims: 500,000
+- Processed: 500,000
+- Paid/adjudicated: 410,514
+- Pended: 4,598
+- Business denials: 84,888
+- Platform failures: 0
+- Observation timeouts: 0
+- Workflow scoring: **61,063/65,000 matched, 4 mismatched**, 3,933 unsupported, 0 observation timeouts
+- Payment gate: 10,000/10,000 within $0.01, exact
+- `ExcludedProviderDenied`: 10,000/10,000 matched — confirms PR #977 holds at 2x the scale it was found and fixed at
+- COB scenarios: `CobPrimaryPayer`, `CobSecondaryPayer`, `CobTertiaryPayer`, `CobGenderRule`, `CobMedicareSecondary` all 1,000/1,000 matched; `CobBirthdayRule` 998/1,000 (2 mismatched) — confirms PR #978 holds for 5 of 6 previously-affected variants at scale
+- The 4 mismatches (`CobBirthdayRule` x2, `NewbornFirstThirtyDays` x1, `NewbornMotherClaimLink` x1) are consistent with the already-disclosed residual noise sources (pre-existing polluted tenant records from earlier test runs; the unconfirmed provider-NPI-collision path) — not a new defect. This tenant (`demo`) has accumulated state across every test run in this episode and Episode 011; a fresh tenant would be expected to score cleaner still.
+
+## Performance result
+
+- Timed claim-processing elapsed: 44:47.334
+- Throughput: 186.06 claims/second (Part 10's 250K baseline: 145.04 — per-claim speed improved even as scale doubled)
+- P95 latency: 571 ms
+- P99 latency: 695 ms
+- Submit avg/P95: 193 ms / 400 ms
+- Adjudicate avg/P95: 16 ms / 57 ms
+- Writeback avg/P95: 93 ms / 209 ms
+- Preparation time: 21:20.052 (member seeding 17:06.849, provider seeding 4:03.108)
+- Tracked lifecycle: 1:06:14
+- Post-processing: 0:03.126 (pending progress publish 0.000s, result ordering 0.181s, summary build 2.387s, summary JSON write 0.014s, dashboard publish 0.541s)
+- Grand total (tracked lifecycle + post-processing): 1:06:17
+- Fixture pool: 73,365 distinct providers (72,603 created this run, 762 already present), 490,227 members status-aligned (415,914 created, 74,313 already present)
+
+`Submit` avg (193ms) at 500K/p56 is higher than the 20K/p30 post-fix profiling test (24ms) — expected, given both a much larger scale and roughly double the sustained concurrency and duration. It is still far healthier than a naive extrapolation of the pre-fix 30K-to-50K growth trend (59ms to 105ms) would have predicted. MongoDB's own `cgroup cpu.stat` was not re-checked specifically during this 500K run; the fix's effect here is inferred from the isolated 20K before/after comparison and this run's clean scoring and competitive throughput, not measured directly at this scale.
+
+## The unresolved wall-clock gap
+
+- Validator's own reported "Grand total": 1:06:17
+- Dashboard record `createdAtUtc`: 2026-07-23T03:16:40.516Z
+- Dashboard record `lastUpdatedAtUtc`: 2026-07-23T04:40:20.521Z
+- Real wall time (createdAtUtc to lastUpdatedAtUtc): **1:23:40**
+- Gap: approximately **17 minutes 23 seconds** — down from Part 10's ~45 minutes, not resolved
+
+Confirmed via claims-service's own timestamped log line (`04:40:21.037473628Z`, "Saved mass adjudication run 500000/500000 processed") that the final dashboard save genuinely completed at the true end of the real wall-clock span — not 17 minutes earlier, as the validator's own "Grand total" and its 541ms client-side timing for that specific call would otherwise imply. Post-processing itself is proven fast (3.1 seconds total) by this episode's own instrumentation, ruling out everything after the timed loop stops. The remaining discrepancy is unresolved and disclosed as open rather than rounded away.
+
+## Business denials
+
+- CARC_96: 46,935
+- PRIOR_AUTH_REQUIRED: 13,200
+- CARC_18: 11,216
+- PROVIDER_EXCLUDED: 10,004
+- NCCI_MUE_EDIT_FAILURE: 1,935
+
+Total: 84,888, reconciling exactly against the correctness result above.
+
+## Unsupported scenarios
+
+Unchanged from Part 9/10/11's proportions, scaled to 500K: 3,933 total (`RetroEligibilityCoverageChange`, `MedicaidSpendDown`, and the three Subrogation variants). These remain visible product gaps awaiting their own deliberate conversion work — this episode did not touch the scored surface.
+
+## Interpretation rules for this run
+
+- Distinguish platform failures from business dispositions.
+- Do not count unsupported scenarios as passes.
+- Keep timed adjudication separate from the tracked lifecycle.
+- This is local Docker Desktop Kubernetes evidence, not a production capacity claim.
+- The four residual mismatches are attributed to accumulated test-tenant state from prior episodes and this episode's own earlier test runs, not to a defect in the fixes verified here — recorded as an attribution, not proven with certainty.
+- The ~17-minute wall-clock gap is disclosed as open and unresolved, the same as Part 10 disclosed its own unconfirmed number rather than assuming the best case.
