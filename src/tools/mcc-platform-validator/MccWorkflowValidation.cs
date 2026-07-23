@@ -186,11 +186,7 @@ public static class MccWorkflowValidation
 
     private static bool IsUnsupportedPendedEdgeCase(EdgeCaseScenario scenario)
     {
-        return scenario is
-            EdgeCaseScenario.SubrogationAccidentRelated or
-            EdgeCaseScenario.SubrogationWorkersComp or
-            EdgeCaseScenario.SubrogationThirdPartyLiability or
-            EdgeCaseScenario.MedicaidSpendDown;
+        return scenario is EdgeCaseScenario.MedicaidSpendDown;
     }
 
     private static bool IsUnsupportedPriorAuthValidationEdgeCase(
