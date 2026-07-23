@@ -61,6 +61,11 @@ internal static class MccClaimDateNormalizer
             member.CoverageTermDate = member.CoverageTermDate.Value.Date.Add(dateShift);
         }
 
+        if (member.PlanChangeEffectiveDate.HasValue)
+        {
+            member.PlanChangeEffectiveDate = member.PlanChangeEffectiveDate.Value.Date.Add(dateShift);
+        }
+
         foreach (var coverage in member.Coverages)
         {
             if (coverage.EffectiveDate != default)

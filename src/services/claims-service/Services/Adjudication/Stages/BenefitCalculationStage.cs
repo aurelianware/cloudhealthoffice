@@ -41,6 +41,15 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     public const string PriorAuthorizationRequiredReason = "Prior authorization required but not provided";
     public const string PriorAuthorizationInvalidReason = "Prior authorization is not valid for this claim";
 
+    /// <summary>
+    /// <see cref="PendDetails.PendCode"/> value for claims pended because a
+    /// retroactive benefit-plan/coverage change (X12 834 maintenance type
+    /// code 001) was recorded with an effective date on or before the
+    /// claim's own service date -- the plan in force on the service date
+    /// can't be trusted without reconciliation.
+    /// </summary>
+    public const string RetroactivePlanChangePendCode = "RETROELIG";
+
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
     private readonly IAuthorizationValidationClient _authorizationValidationClient;
@@ -91,6 +100,18 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Deny(
                 StageName,
                 eligibilityReason);
+        }
+
+        if (HasUnreconciledRetroactivePlanChange(context.ResolvedMember, claim.ServiceDateFrom, out var pendReason))
+        {
+            context.PendDetails = new PendDetails
+            {
+                PendCode = RetroactivePlanChangePendCode,
+                PendReason = pendReason,
+                PendedAt = DateTime.UtcNow,
+            };
+
+            return ClaimAdjudicationStageResult.Pend(StageName, pendReason);
         }
 
         var priorAuthorizationDenialReason = await ResolvePriorAuthorizationDenialReasonAsync(
@@ -183,6 +204,24 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         reason = "Active coverage";
         return true;
+    }
+
+    private static bool HasUnreconciledRetroactivePlanChange(
+        ResolvedMember? member,
+        DateTime serviceDate,
+        out string reason)
+    {
+        if (member?.PlanChangeEffectiveDate is DateTime planChangeEffectiveDate
+            && serviceDate.Date >= planChangeEffectiveDate.Date)
+        {
+            reason =
+                $"Member has a retroactive benefit-plan change effective {planChangeEffectiveDate.Date:yyyy-MM-dd}; " +
+                "the plan in force on the service date requires reconciliation before this claim can adjudicate.";
+            return true;
+        }
+
+        reason = string.Empty;
+        return false;
     }
 
     internal static bool RequiresPriorAuthorizationDenial(AdapterClaim claim)
