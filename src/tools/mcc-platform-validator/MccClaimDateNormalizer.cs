@@ -16,7 +16,7 @@ internal static class MccClaimDateNormalizer
             var dateShift = normalizedServiceDate - originalServiceDate;
 
             claim.DateOfService = claim.DateOfService.Date.Add(dateShift);
-            ShiftMemberCoverageDates(claim.Member, dateShift);
+            ShiftMemberCoverageDates(claim.Member, dateShift, claim.DateOfService);
             ShiftNewbornDateOfBirth(claim, dateShift);
 
             foreach (var line in claim.Lines)
@@ -49,7 +49,7 @@ internal static class MccClaimDateNormalizer
         claim.Member.DateOfBirth = claim.Member.DateOfBirth.Date.Add(dateShift);
     }
 
-    private static void ShiftMemberCoverageDates(SyntheticMember member, TimeSpan dateShift)
+    private static void ShiftMemberCoverageDates(SyntheticMember member, TimeSpan dateShift, DateTime serviceDate)
     {
         if (member.CoverageEffectiveDate != default)
         {
@@ -71,6 +71,33 @@ internal static class MccClaimDateNormalizer
             if (coverage.TermDate.HasValue)
             {
                 coverage.TermDate = coverage.TermDate.Value.Date.Add(dateShift);
+            }
+        }
+
+        // The base member generator (InMemoryReferenceDataProvider.GenerateMember)
+        // draws CoverageEffectiveDate from a fixed 2023 window, uncorrelated with
+        // any claim's service date. Shifting it by the claim's own date delta
+        // preserves whatever relative ordering happened to exist -- good or bad --
+        // rather than fixing it, so roughly 1% of claims end up with a member
+        // whose coverage becomes effective after their own service date, denying
+        // CARC_27 against scenarios that never intended to test that boundary.
+        // Scenarios that need a specific effective/service relationship
+        // (RetroEligibilityTermination, the newborn scenarios) already establish
+        // one explicitly, earlier in generation, before this normalizer runs --
+        // this only corrects claims that would otherwise be left with an
+        // unintentionally invalid eligibility window.
+        if (member.CoverageEffectiveDate.Date > serviceDate.Date)
+        {
+            var correctedEffectiveDate = serviceDate.Date.AddYears(-1);
+            var correctionShift = correctedEffectiveDate - member.CoverageEffectiveDate.Date;
+            member.CoverageEffectiveDate = correctedEffectiveDate;
+
+            foreach (var coverage in member.Coverages)
+            {
+                if (coverage.EffectiveDate != default)
+                {
+                    coverage.EffectiveDate = coverage.EffectiveDate.Date.Add(correctionShift);
+                }
             }
         }
     }
