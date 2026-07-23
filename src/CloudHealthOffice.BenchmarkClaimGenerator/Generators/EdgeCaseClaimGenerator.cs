@@ -196,8 +196,18 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
                 break;
 
             case EdgeCaseScenario.MedicaidDualEligible:
+                member.DateOfBirth = new DateTime(1940 + random.Next(30), 1 + random.Next(12), 1 + random.Next(28));
+                break;
+
             case EdgeCaseScenario.MedicaidSpendDown:
                 member.DateOfBirth = new DateTime(1940 + random.Next(30), 1 + random.Next(12), 1 + random.Next(28));
+                // "Medically needy" spend-down: the member must incur this much
+                // in medical expense before Medicaid activates for the budget
+                // period. Amount met is deliberately short of the liability so
+                // the scenario always lands in the still-pending window.
+                member.MedicaidSpendDownLiabilityAmount = 500m + random.Next(0, 1000);
+                member.MedicaidSpendDownAmountMet =
+                    member.MedicaidSpendDownLiabilityAmount.Value * (0.3m + (decimal)random.NextDouble() * 0.4m);
                 break;
         }
 
