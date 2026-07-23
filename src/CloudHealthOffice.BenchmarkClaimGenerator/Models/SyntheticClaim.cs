@@ -71,6 +71,17 @@ public class SyntheticClaim
     /// <summary>Whether this claim is ready for payer-to-payer data exchange.</summary>
     public bool PayerToPayerReady { get; set; }
 
+    /// <summary>
+    /// X12 837 CLM11-1 related-causes code (AA=Auto Accident, EM=Employment,
+    /// OA=Other Accident). Null when the service is unrelated to any
+    /// accident/injury liability. Signals potential third-party/subrogation
+    /// liability requiring investigation before payment.
+    /// </summary>
+    public string? RelatedCausesCode { get; set; }
+
+    /// <summary>X12 837 DTP*439 accident date. Set only when <see cref="RelatedCausesCode"/> is set.</summary>
+    public DateTime? AccidentDate { get; set; }
+
     /// <summary>Pre-computed expected adjudication outcome for benchmarking.</summary>
     public ExpectedOutcome ExpectedOutcome { get; set; } = null!;
 }
