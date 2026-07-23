@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Running a Healthcare Claims Platform Locally in Kubernetes, Part 13: The Gap Was the Laptop | Cloud Health Office</title>
+  <meta name="description" content="Closing the wall-clock gap disclosed in Part 10 and Part 12 by proving, with matching host sleep-log evidence, that it was macOS suspending the local Kubernetes cluster mid-run.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/million-claim-challenge/part-13-the-gap-was-the-laptop">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Running a Healthcare Claims Platform Locally in Kubernetes, Part 13: The Gap Was the Laptop">
+  <meta property="og:description" content="Closing the wall-clock gap disclosed in Part 10 and Part 12 by proving, with matching host sleep-log evidence, that it was macOS suspending the local Kubernetes cluster mid-run.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/million-claim-challenge/part-13-the-gap-was-the-laptop">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .source-note { font-size: .9rem !important; color: #8b949e !important; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+    .evidence-block summary { cursor: pointer; padding: 18px 20px; color: #00ffff; font-weight: 700; background: #0d1117; }
+    .evidence-block pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 22px; background: #080c10; color: #c9d1d9; font-size: .84rem; line-height: 1.55; }
+    .article-figure { margin: 40px 0; }
+    .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
+    .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
+    .table-wrap { margin: 28px 0; overflow-x: auto; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; }
+    .table-wrap table { width: 100%; border-collapse: collapse; font-size: .95rem; font-variant-numeric: tabular-nums; }
+    .table-wrap th, .table-wrap td { padding: 10px 16px; text-align: left; border-bottom: 1px solid rgba(139,148,158,.2); white-space: nowrap; }
+    .table-wrap th { color: #00ffff; font-weight: 700; background: #0d1117; }
+    .table-wrap td { color: #c9d1d9; }
+    .table-wrap tr:last-child td { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/docs/million-claim-challenge">Million Claim Challenge</a></nav>
+    <div class="eyebrow">Million Claim Challenge · Part 13</div>
+    <h1>Running a Healthcare Claims Platform Locally in Kubernetes, Part 13: The Gap Was the Laptop</h1>
+    <div class="disclosure"><strong>Evidence scope:</strong> This engineering field note describes local Kubernetes development and validation. It is not a production-cloud capacity claim or evidence that the full one-million-claim corpus has been completed.</div>
+    <div class="article-links">
+      <a href="/docs/million-claim-challenge/evidence#episode-013">View evidence</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-013/article.txt" target="_blank" rel="noopener noreferrer">View article source</a>
+    </div>
+    <p>Part 12 disclosed a smaller version of the same wall-clock gap Part 10 first found, and left it open: a contradiction between claims-service's own log timestamp and the validator's client-side timer that neither side of the evidence could resolve. Part 13 goes back for it one more time — not with a bigger run, but with finer instrumentation and one hypothesis nobody had checked yet.</p>
+<h2 id="closing-the-last-blind-spots">Closing the last blind spots</h2>
+<p>Part 12's post-processing instrumentation (PR #976) had already timed everything between the end of the adjudication loop and the final dashboard publish. Reading it again against the actual gap left two windows still dark. First, every lifecycle phase was timed as a duration but never printed as an absolute start/complete timestamp — so a gap opening between two phases, rather than inside one, had nowhere to show itself. Second, one call had never been wrapped at all: the &quot;Running&quot; progress publish sent right before the timed adjudication loop starts, sitting between provider seeding and the loop's own clock.</p>
+<p>Both got fixed directly. Every phase now prints <code>[checkpoint] {label} :: started {ts}, completed {ts}, stopwatch {elapsed}</code> — an absolute wall-clock pair alongside the duration that was already being recorded. The leading progress publish became a tracked &quot;Initial progress publish&quot; phase like every other step. And the post-processing summary gained a line it never had: <code>Actual wall clock (run start to now)</code>, computed directly from the run's own start timestamp, next to a new <code>Unaccounted</code> line that's just that number minus everything tracked. No more inferring the gap from two totals computed differently — it's printed directly, every run.</p>
+<h2 id="two-live-runs-two-exact-matches">Two live runs, two exact matches</h2>
+<p>A 150,000-claim run (seed 777, parallelism 56 — the same job re-run twice for a clean comparison) surfaced the gap immediately, and the new checkpoints made it exact instead of approximate.</p>
+<p>First run: every phase's checkpoint-measured wall-clock duration matched its internal Stopwatch to the millisecond — except one. &quot;Member and coverage seeding&quot; reported <code>11:40.249</code> on its own Stopwatch, but its checkpoint timestamps (<code>17:14:19.737Z</code> to <code>17:26:36.094Z</code>) span <code>12:16.357</code> — a 36.1-second gap between what the process's own clock measured and what actually elapsed. <code>Unaccounted: 1:19.043</code> for the full run; the leftover ~43 seconds turned out to be exactly the untracked initial progress publish, closed by the fix above before the next run.</p>
+<p>Second run, same seed, now with that fix applied: &quot;Initial progress publish&quot; completed at <code>17:47:16.137Z</code>. The next checkpoint, &quot;Expected-pend observation,&quot; started at <code>18:11:09.277Z</code> — 23 minutes 53 seconds later. In between sits &quot;Timed adjudication,&quot; whose own Stopwatch reported only <code>13:14.346</code>. The difference — <code>10:38.734</code> — landed within 19 milliseconds of the run's own reported <code>Unaccounted: 10:38.753</code>.</p>
+<p>Both runs show the identical signature: a Stopwatch that runs slower than the wall clock, by a specific, large, single-event amount, always contained inside one phase rather than spread across many. That's not a slow operation. That's a clock that stopped counting for a while and then kept going.</p>
+<h2 id="what-actually-causes-a-stopwatch-to-fall-behind-wall-time">What actually causes a Stopwatch to fall behind wall time</h2>
+<p>.NET's <code>Stopwatch</code> on Linux is backed by <code>CLOCK_MONOTONIC</code> — a clock tied to time since boot, immune to calendar adjustments, and normally identical to wall-clock elapsed time for any two points measured on a running system. It does not fall behind under CPU throttling: a thread that's descheduled and later resumed still sees the correct elapsed time once it finally runs, because the clock itself never stopped ticking.</p>
+<p>There's exactly one thing that makes <code>CLOCK_MONOTONIC</code> diverge from wall time: the whole machine being suspended. A VM that's paused loses <code>CLOCK_MONOTONIC</code> continuity for the paused interval — it simply doesn't tick while the VM isn't running — while <code>CLOCK_REALTIME</code>, once the VM resumes and resyncs, reflects the full elapsed real time including the pause. That's precisely the shape of both gaps above: normal everywhere, one large discrete jump in exactly one place.</p>
+<p>This cluster runs on <code>kind</code> inside Docker Desktop's Linux VM, on a MacBook. Checked <code>pmset -g log</code> for the exact windows in question:</p>
+<ul><li><code>10:19:49 -0700 Sleep — Entering Sleep state due to 'Idle Sleep'</code>, waking at <code>10:20:27 -0700</code>. Duration: 38 seconds. Converted to UTC (<code>17:19:49</code>–<code>17:20:27</code>), that's squarely inside the first run's &quot;Member and coverage seeding&quot; window (<code>17:14:19</code>–<code>17:26:36</code>), which showed a 36.1-second divergence.</li><li><code>10:55:02 -0700 Sleep — Entering Sleep state due to 'Idle Sleep'</code>, waking at <code>11:05:43 -0700</code>. Duration: 641 seconds, logged by macOS itself. Converted to UTC (<code>17:55:02</code>–<code>18:05:43</code>), that's squarely inside the second run's &quot;Timed adjudication&quot; window — which showed a 638.75-second divergence.</li></ul>
+<p>Both matches land within about two seconds, close enough to be the same event measured two different ways rather than a coincidence. The Mac went to sleep mid-run. Docker Desktop's VM — and every pod inside it, including claims-service and benefit-plan-service actively processing claims — paused with it. The validator's own Stopwatch, tied to a clock that doesn't count suspended time, had no way to see it. The wall clock did.</p>
+<h2 id="why-this-also-explains-part-10-and-part-12">Why this also explains Part 10 and Part 12</h2>
+<p>Neither of those episodes' original gaps can be re-verified against <code>pmset</code>'s log directly — it doesn't retain history that far back, and there's no way to pull a macOS sleep event from months ago after the fact. But the mechanism fits both disclosed symptoms precisely, in ways an application-level bug never could:</p>
+<p>Part 10's 250,000-claim run showed a ~45-minute gap. Part 12's 500,000-claim run — twice the volume — showed a smaller one, ~17 minutes. A real per-claim or per-batch cost scales with claim count. A host going idle-to-sleep during an unattended multi-hour run doesn't scale with anything except how long the machine happened to sit unattended that particular time. That non-relationship between gap size and claim volume was flagged as an unexplained coincidence at the end of the Part 12 investigation. It stops being a coincidence once the cause is &quot;how long the laptop was left alone,&quot; which has nothing to do with claim count at all.</p>
+<p>Part 12's specific contradiction — claims-service's own server-side log timestamp for the final dashboard save placing it at the true end of the run, while the validator's client-side timer for that identical call reported 541 milliseconds — also resolves under this mechanism instead of remaining a mystery. If the VM paused for the bulk of the gap and the validator's own process (whose Stopwatch also runs on the same paused clock) resumed with its Stopwatch believing far less time had passed than actually had, a client-side call that appears to take 541ms by the process's own paused-and-resumed clock while the server watched real wall time pass around it is exactly what a mid-call VM suspension produces. Both measurements were correct. They were measuring different clocks.</p>
+<h2 id="the-fix">The fix</h2>
+<p>Not a code fix — an environment fix. <code>scripts/run-mcc-local-k8s.sh</code> now wraps the blocking <code>kubectl wait</code> with <code>caffeinate -dis</code>, macOS's own built-in utility for holding the system awake for the duration of a command, falling back to a plain <code>kubectl wait</code> if <code>caffeinate</code> isn't present. PR #984.</p>
+<p>Verified on the same 150,000-claim job, same seed, a third time — this time under <code>caffeinate</code>:</p>
+<div class="table-wrap"><table><thead><tr><th></th><th>Run 1 (no fix)</th><th>Run 2 (checkpoint fix only)</th><th>Run 3 (+ caffeinate)</th></tr></thead><tbody><tr><td>Grand total (tracked)</td><td>22:41.059</td><td>18:06.218</td><td>22:27.845</td></tr><tr><td>Actual wall clock</td><td>24:00.102</td><td>28:44.971</td><td>22:27.905</td></tr><tr><td>Unaccounted</td><td>1:19.043</td><td>10:38.753</td><td>0:00.060</td></tr></tbody></table></div>
+<p>Sixty milliseconds, on a 22-minute run. Not &quot;smaller.&quot; Closed.</p>
+<h2 id="what-this-episode-actually-resolves">What this episode actually resolves</h2>
+<p>Every wall-clock gap this series has disclosed since Part 10 — 45 minutes, then 17, now effectively zero — was the same thing at different magnitudes: this development machine going to sleep during a long unattended benchmark run, pausing the Kubernetes cluster along with it. Not a claims-adjudication defect. Not a Kubernetes scheduling problem. Not MongoDB, which had a real and separately-fixed CPU-throttling issue in Part 12 but was never the source of this particular number. An artifact of running multi-hour correctness and performance evidence on a laptop with its own power-management opinions, invisible until the validator was instrumented precisely enough to catch the clock disagreeing with itself.</p>
+<p>The lesson generalizes past this one benchmark: any tool measuring elapsed time with a monotonic clock, run unattended on hardware that can suspend itself, is exposed to this exact failure mode. The fix — hold the machine awake for the duration of anything that shouldn't be silently paused — is a five-minute change once the actual cause is known, and completely invisible until someone checks whether the Stopwatch and the wall clock agree with each other inside every single phase, not just across the whole run.</p>
+<h2 id="the-road-to-one-million">The road to one million</h2>
+<p>Part 6 made the scoring honest.</p>
+<p>Part 7 made the evidence visible.</p>
+<p>Part 8 proved a clean 100,000-claim run and found the next bottleneck.</p>
+<p>Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.</p>
+<p>Part 10 confirmed it, found the real cause wasn't the guessed one, and disclosed a bug it chose not to fix.</p>
+<p>Part 11 went back for that bug, found it wasn't the whole story, and closed the gap it was hiding.</p>
+<p>Part 12 found two bugs on the way to the one it was looking for, fixed all three, and confirmed 500,000 claims clean — with a smaller, still-open mystery to hand to whatever comes next.</p>
+<p>Part 13 went back for that mystery one more time, and found it wasn't in the platform at all.</p>
+    <div class="article-links"><a href="/insights/million-claim-challenge">All MCC articles</a><a href="/docs/million-claim-challenge/evidence">Evidence archive</a></div>
+  </main>
+</body>
+</html>

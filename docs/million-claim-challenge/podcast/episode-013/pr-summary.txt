@@ -1,0 +1,60 @@
+# Episode 013 implementation summary
+
+## PR #984 - Instrument checkpoint timestamps; fix wall-clock gap via caffeinate
+
+- Continues the wall-clock-gap investigation Part 12 left open, following the user-confirmed plan:
+  add finer checkpoint logging and test at 100-250K scale.
+- `src/tools/mcc-platform-validator/Program.cs`:
+  - `MeasureLifecycleValuePhaseAsync<T>` now prints an absolute-timestamp checkpoint line
+    (`started`/`completed` in `HH:mm:ss.fff`Z, plus the internal Stopwatch elapsed) after every
+    lifecycle phase, so a gap opening between phases -- not just inside one -- would be visible.
+  - The previously-untracked leading "Running" progress publish, sent immediately before the timed
+    adjudication loop starts, is now wrapped as a proper tracked phase ("Initial progress publish",
+    category Preparation) instead of a bare untracked `await`.
+  - `WritePostProcessingTimings` gained a `runStartedAtUtc` parameter and two new printed lines:
+    `Actual wall clock (run start to now)` and `Unaccounted`, computed directly rather than inferred
+    by comparing two independently-built totals.
+- Two live 150,000-claim runs (same job, seed 777, parallelism 56) against the new checkpoints
+  isolated the residual gap to a Stopwatch-vs-wall-clock mismatch inside a single lifecycle phase
+  each time -- the specific signature of a paused process clock, not a slow operation anywhere in
+  the code.
+- Cross-referenced against this machine's own `pmset -g log`: two real macOS Idle Sleep events, with
+  logged durations of 38s and 641s, matched the two runs' unaccounted gaps (36.1s and 638.75s) to
+  within about 2 seconds each, and both sleep windows fell entirely inside the phase that showed the
+  matching divergence. Root cause: `kind` on Docker Desktop runs inside a Linux VM that macOS can
+  suspend on idle sleep, pausing every pod in the cluster -- including claims-service and
+  benefit-plan-service mid-adjudication -- for the duration for the sleep. `.NET`'s `Stopwatch`,
+  backed by `CLOCK_MONOTONIC`, doesn't count the suspended interval; wall-clock timestamps do once
+  the VM resumes.
+- `scripts/run-mcc-local-k8s.sh` now wraps the blocking `kubectl wait` with `caffeinate -dis`
+  (falling back to a plain `kubectl wait` if `caffeinate` isn't present) so unattended
+  multi-hundred-thousand-claim runs on this machine can no longer be interrupted by idle sleep.
+- Verified live a third time on the identical 150K/seed=777 job under the fix: `Unaccounted` dropped
+  from 10:38.753 to 0:00.060 -- effectively zero, on a 22.5-minute run.
+- Not a code, Kubernetes, or MongoDB defect. Resolves the wall-clock gap disclosed in Part 10 and
+  reproduced smaller in Part 12; both are best explained by the identical mechanism, though neither
+  can be re-verified directly since `pmset`'s log does not retain history that far back.
+
+## Platform failure observed during this investigation (not fixed, noted for the record)
+
+- One claim, out of 150,000 in the pre-fix run, failed with a 10-second `HttpClient` timeout inside
+  `benefit-plan-service`'s `ClaimsServiceAccumulatorSource.CalculateAccumulatorsAsync`, on the Redis
+  accumulator-rebuild path that calls out to claims-service. A genuine, isolated transient timeout,
+  unrelated to the wall-clock investigation. Not reproduced on the two subsequent runs. Left
+  unaddressed here; flagged for anyone touching accumulator-rebuild resiliency next.
+
+## Known, disclosed, unfixed issues carried forward from Episode 012 (unchanged by this episode)
+
+- Refreshing member `CoverageEffectiveDate` on seeding reuse would require extending member-service's
+  production `UpdateMemberRequest` API (no date fields today).
+- A rare provider-NPI collision between the two independent NPI-generation schemes observed once,
+  not confirmed or fixed.
+
+## Remaining unsupported scenario families (unchanged)
+
+- RetroEligibilityCoverageChange
+- MedicaidSpendDown
+- SubrogationAccidentRelated, SubrogationThirdPartyLiability, SubrogationWorkersComp
+
+This episode was a diagnostics-and-tooling rung, not a scoring-surface expansion. These remain
+visible product gaps awaiting their own deliberate conversion work.

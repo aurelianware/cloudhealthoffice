@@ -167,13 +167,15 @@
             verified before this run. Profiling the disclosed &ldquo;five sequential I/O hops&rdquo; Submit-chain cost found the real
             bottleneck one layer underneath it: a shared MongoDB instance throttled more than it ran, on a CPU limit never touched by
             the app-tier fixes that preceded it. Fixing it brought throughput to 186.06 claims/sec &mdash; higher than the 250K run's
-            145.04, despite double the volume. One number from that run, an unexplained wall-clock gap, reproduced smaller here (about
-            17 minutes, down from 45) and remains open. The next target is the full million.
+            145.04, despite double the volume. That run also reproduced a smaller version of an unexplained wall-clock gap first
+            disclosed at 250K &mdash; since resolved: checkpoint instrumentation traced it to macOS suspending the local Kubernetes
+            cluster mid-run, confirmed against the host's own sleep log and fixed by keeping the machine awake for the duration of a
+            run. The next target is the full million.
           </p>
           <p>
             <a href="/docs/million-claim-challenge/evidence#episode-012"><strong>Inspect the 500K evidence archive</strong></a>
             or read
-            <a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled"><strong>Part 12: The Database Nobody Profiled</strong></a>.
+            <a href="/insights/million-claim-challenge/part-13-the-gap-was-the-laptop"><strong>Part 13: The Gap Was the Laptop</strong></a>.
           </p>
         </div>
 
@@ -193,6 +195,7 @@
             <li><a href="/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt">Part 10: The Migration Cost That Wasn't</a></li>
             <li><a href="/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark">Part 11: The Check That Only Ran in the Benchmark</a></li>
             <li><a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled">Part 12: The Database Nobody Profiled</a></li>
+            <li><a href="/insights/million-claim-challenge/part-13-the-gap-was-the-laptop">Part 13: The Gap Was the Laptop</a></li>
           </ul>
         </div>
 

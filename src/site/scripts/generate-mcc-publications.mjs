@@ -56,6 +56,12 @@ const publications = [
     part: 'Part 12',
     slug: 'part-12-the-database-nobody-profiled',
     summary: 'Two benchmark fixture bugs, a Submit-chain bottleneck traced to an under-provisioned shared database, and this series\' first clean 500,000-claim confirmation.'
+  },
+  {
+    episode: '013',
+    part: 'Part 13',
+    slug: 'part-13-the-gap-was-the-laptop',
+    summary: 'Closing the wall-clock gap disclosed in Part 10 and Part 12 by proving, with matching host sleep-log evidence, that it was macOS suspending the local Kubernetes cluster mid-run.'
   }
 ];
 
@@ -78,6 +84,7 @@ function renderArticle(source) {
   const body = [];
   let paragraph = [];
   let list = [];
+  let table = [];
 
   const flushParagraph = () => {
     if (paragraph.length) body.push(`<p>${inlineMarkdown(paragraph.join(' '))}</p>`);
@@ -87,23 +94,46 @@ function renderArticle(source) {
     if (list.length) body.push(`<ul>${list.map((item) => `<li>${inlineMarkdown(item)}</li>`).join('')}</ul>`);
     list = [];
   };
+  const splitTableRow = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+  const isTableSeparatorRow = (cells) => cells.length > 0 && cells.every((cell) => cell === '' || /^:?-{2,}:?$/.test(cell));
+  const flushTable = () => {
+    if (!table.length) return;
+    const rows = table.map(splitTableRow);
+    const hasHeader = rows.length > 1 && isTableSeparatorRow(rows[1]);
+    const headerRow = hasHeader ? rows[0] : null;
+    const bodyRows = hasHeader ? rows.slice(2) : rows;
+    const thead = headerRow
+      ? `<thead><tr>${headerRow.map((cell) => `<th>${inlineMarkdown(cell)}</th>`).join('')}</tr></thead>`
+      : '';
+    const tbody = `<tbody>${bodyRows.map((row) => `<tr>${row.map((cell) => `<td>${inlineMarkdown(cell)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+    body.push(`<div class="table-wrap"><table>${thead}${tbody}</table></div>`);
+    table = [];
+  };
 
   for (const line of lines.slice(lines.indexOf(`# ${title}`) + 1)) {
     if (!line.trim()) {
       flushParagraph();
       flushList();
+      flushTable();
     } else if (line.startsWith('## ')) {
       flushParagraph();
       flushList();
+      flushTable();
       const heading = line.slice(3).trim();
       const id = heading.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       body.push(`<h2 id="${id}">${inlineMarkdown(heading)}</h2>`);
     } else if (line.startsWith('- ')) {
       flushParagraph();
+      flushTable();
       list.push(line.slice(2));
+    } else if (line.trim().startsWith('|')) {
+      flushParagraph();
+      flushList();
+      table.push(line);
     } else if (line.startsWith('![')) {
       flushParagraph();
       flushList();
+      flushTable();
       const match = line.match(/^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/);
       if (match) {
         const [, alt, src, caption] = match;
@@ -112,14 +142,17 @@ function renderArticle(source) {
       }
     } else if (line.startsWith('Published article: ')) {
       flushParagraph();
+      flushTable();
       body.push(`<p class="source-note">Originally published externally: ${inlineMarkdown(line.slice(19))}</p>`);
     } else {
       flushList();
+      flushTable();
       paragraph.push(line.trim());
     }
   }
   flushParagraph();
   flushList();
+  flushTable();
   return { title, body: body.join('\n') };
 }
 
@@ -159,6 +192,12 @@ const pageShell = ({ title, description, canonical, content, type = 'article' })
     .article-figure { margin: 40px 0; }
     .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
     .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
+    .table-wrap { margin: 28px 0; overflow-x: auto; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; }
+    .table-wrap table { width: 100%; border-collapse: collapse; font-size: .95rem; font-variant-numeric: tabular-nums; }
+    .table-wrap th, .table-wrap td { padding: 10px 16px; text-align: left; border-bottom: 1px solid rgba(139,148,158,.2); white-space: nowrap; }
+    .table-wrap th { color: #00ffff; font-weight: 700; background: #0d1117; }
+    .table-wrap td { color: #c9d1d9; }
+    .table-wrap tr:last-child td { border-bottom: none; }
   </style>
 </head>
 <body>
