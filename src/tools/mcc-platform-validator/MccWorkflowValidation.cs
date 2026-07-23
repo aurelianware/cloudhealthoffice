@@ -54,12 +54,6 @@ public static class MccWorkflowValidation
                     ? PriorAuthRequiredCode
                     : NormalizeExpectedCode(claim.ExpectedOutcome.DenialReasonCode);
 
-            if (expectedOutcome is ClaimValidationOutcome.Pended
-                && IsUnsupportedPendedEdgeCase(claim.EdgeCase.Value))
-            {
-                return ExpectedValidation.Unsupported(scenario, expectedCode);
-            }
-
             if (expectedOutcome is ClaimValidationOutcome.BusinessDenial
                 && IsUnsupportedPriorAuthValidationEdgeCase(claim.EdgeCase.Value, effectiveCapabilities))
             {
@@ -182,11 +176,6 @@ public static class MccWorkflowValidation
             { } value when value.Equals("Pended", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Pended,
             _ => null
         };
-    }
-
-    private static bool IsUnsupportedPendedEdgeCase(EdgeCaseScenario scenario)
-    {
-        return scenario is EdgeCaseScenario.MedicaidSpendDown;
     }
 
     private static bool IsUnsupportedPriorAuthValidationEdgeCase(

@@ -1515,6 +1515,8 @@ static async Task<bool> CreateMemberAsync(
         terminationDate = member.CoverageTermDate,
         maintenanceTypeCode = NullIfWhiteSpace(member.MaintenanceTypeCode) ?? "021",
         planChangeEffectiveDate = member.PlanChangeEffectiveDate,
+        medicaidSpendDownLiabilityAmount = member.MedicaidSpendDownLiabilityAmount,
+        medicaidSpendDownAmountMet = member.MedicaidSpendDownAmountMet,
         eventId = $"mcc-validator-member-created:{options.Seed}:{member.MemberId}"
     };
 

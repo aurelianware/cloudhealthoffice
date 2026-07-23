@@ -60,6 +60,17 @@ public class SyntheticMember
     /// </summary>
     public DateTime? PlanChangeEffectiveDate { get; set; }
 
+    /// <summary>
+    /// Medicaid "medically needy" spend-down liability for the member's
+    /// current budget period: incurred medical expense required before
+    /// Medicaid activates. Null for members not enrolled under a spend-down
+    /// eligibility category.
+    /// </summary>
+    public decimal? MedicaidSpendDownLiabilityAmount { get; set; }
+
+    /// <summary>Amount incurred so far toward <see cref="MedicaidSpendDownLiabilityAmount"/>.</summary>
+    public decimal MedicaidSpendDownAmountMet { get; set; }
+
     /// <summary>Line of business (STAR, CHIP, STAR+PLUS, STAR Kids, STAR Health, Commercial, Medicare).</summary>
     public string LineOfBusiness { get; set; } = "STAR";
 
