@@ -1,0 +1,36 @@
+Raw `pmset -g log` output for this development machine, filtered to the local time windows (-0700)
+corresponding to the three checkpoint runs in Episode 013. Unedited except for the grep filter
+itself (Sleep/Wake/Assertions lines only, restricted to the relevant hour). This is the evidence
+tying the checkpoint gaps directly to real macOS Idle Sleep events, not an inference.
+
+2026-07-23 10:15:06 -0700 Assertions           PID 266(powerd) Created InternalPreventSleep "com.apple.powermanagement.darkwakelinger" 00:00:00  id:0x0xd0000a3a2 [System: PrevIdle DeclUser SRPrevSleep NetAcc kCPU kDisp]
+2026-07-23 10:15:11 -0700 Assertions           PID 266(powerd) TimedOut InternalPreventSleep "com.apple.powermanagement.darkwakelinger" 00:00:05  id:0x0xd0000a3a2 [System: PrevIdle DeclUser SRPrevSleep kCPU kDisp]
+2026-07-23 10:19:44 -0700 Assertions           PID 266(powerd) Created InternalPreventSleep "com.apple.powermanagement.darkwakelinger" 00:00:00  id:0x0xd0000a3b6 [System: SRPrevSleep kCPU]
+2026-07-23 10:19:49 -0700 Assertions           PID 266(powerd) TimedOut InternalPreventSleep "com.apple.powermanagement.darkwakelinger" 00:00:05  id:0x0xd0000a3b6 [System: SRPrevSleep kCPU]
+2026-07-23 10:19:49 -0700 Sleep                Entering Sleep state due to 'Idle Sleep':TCPKeepAlive=active Using Batt (Charge:25%) 38 secs
+2026-07-23 10:20:27 -0700 Wake                 Wake from Deep Idle [CDNVA] : due to MTP.DOCK.CHANNELS.AP0.IRQ RTP.multi-touch/HID Activity Using BATT (Charge:25%) 571 secs
+2026-07-23 10:25:35 -0700 Assertions           PID 266(powerd) Created InternalPreventSleep "com.apple.powermanagement.darkwakelinger" 00:00:00  id:0x0xd0000a3cf [System: SRPrevSleep kCPU]
+2026-07-23 10:25:40 -0700 Assertions           PID 266(powerd) TimedOut InternalPreventSleep "com.apple.powermanagement.darkwakelinger" 00:00:05  id:0x0xd0000a3cf [System: PrevIdle DeclUser SRPrevSleep NetAcc kCPU kDisp]
+2026-07-23 10:54:57 -0700 Assertions           PID 266(powerd) Created InternalPreventSleep "com.apple.powermanagement.darkwakelinger" 00:00:00  id:0x0xd0000a452 [System: SRPrevSleep kCPU]
+2026-07-23 10:55:02 -0700 Assertions           PID 266(powerd) TimedOut InternalPreventSleep "com.apple.powermanagement.darkwakelinger" 00:00:05  id:0x0xd0000a452 [System: SRPrevSleep kCPU]
+2026-07-23 10:55:02 -0700 Sleep                Entering Sleep state due to 'Idle Sleep':TCPKeepAlive=active Using AC (Charge:6%) 641 secs
+2026-07-23 11:05:43 -0700 Wake                 Wake from Deep Idle [CDNVA] : due to MTP.DOCK.CHANNELS.AP0.IRQ RTP.keyboard/UserActivity Assertion Using AC (Charge:6%)
+
+--- Correlation ---
+
+Sleep event 1: 10:19:49 -0700 -> 10:20:27 -0700 (logged duration: 38 secs)
+  UTC:     17:19:49Z -> 17:20:27Z
+  Falls inside Run 1's "Member and coverage seeding" checkpoint window (17:14:19.737Z -> 17:26:36.094Z),
+  the only phase in that run whose checkpoint-measured wall-clock span (12:16.357) diverged from its
+  internal Stopwatch (11:40.249) -- by 36.108 seconds.
+
+Sleep event 2: 10:55:02 -0700 -> 11:05:43 -0700 (logged duration: 641 secs)
+  UTC:     17:55:02Z -> 18:05:43Z
+  Falls inside Run 2's "Timed adjudication" window, which ran from the "Initial progress publish"
+  checkpoint (completed 17:47:16.137Z) to the "Expected-pend observation" checkpoint (started
+  18:11:09.277Z) -- the only phase-to-phase span in that run showing a comparable divergence: a
+  10:38.753 gap between the run's actual wall clock and everything the validator tracked.
+
+Both matches land within about two seconds of the checkpoint-derived divergence, and in both cases
+the sleep window falls entirely inside the one phase that showed the mismatch -- not spread across
+the run, not overlapping the phases that matched cleanly.

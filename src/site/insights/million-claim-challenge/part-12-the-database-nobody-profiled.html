@@ -34,6 +34,12 @@
     .article-figure { margin: 40px 0; }
     .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
     .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
+    .table-wrap { margin: 28px 0; overflow-x: auto; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; }
+    .table-wrap table { width: 100%; border-collapse: collapse; font-size: .95rem; font-variant-numeric: tabular-nums; }
+    .table-wrap th, .table-wrap td { padding: 10px 16px; text-align: left; border-bottom: 1px solid rgba(139,148,158,.2); white-space: nowrap; }
+    .table-wrap th { color: #00ffff; font-weight: 700; background: #0d1117; }
+    .table-wrap td { color: #c9d1d9; }
+    .table-wrap tr:last-child td { border-bottom: none; }
   </style>
 </head>
 <body>
@@ -62,7 +68,7 @@
 <p>Instrumented every hop directly: <code>ClaimSubmissionService</code>'s adapter-resolve, claim-insert, event-publish, and Service Bus send; and, inside event-publish, the three sequential MongoDB round-trips Part 10 had originally described — idempotency check, version-number query, event insert. The answer wasn't any single hop. All four Mongo-touching operations showed the same shape: a fast median (2 to 20 milliseconds) with P95s spiking to 80 to 185 milliseconds. That shape is resource contention, not a slow operation.</p>
 <p>Checked MongoDB's own <code>cgroup cpu.stat</code>, the same way Part 10 checked claims-service. <code>nr_periods</code> 928,143, <code>nr_throttled</code> 120,381 — 12.97 percent of scheduling periods throttled — with 61,950 cumulative seconds throttled against only 22,994 seconds of actual usage. MongoDB had spent more time waiting for CPU than running, on a one-core limit, backing claims-service (two replicas), member-service, provider-service, benefit-plan-service, and coverage-service simultaneously. Part 10's CPU-limit fix raised claims-service, provider-service, and benefit-plan-service. It never touched the shared database underneath all of them.</p>
 <p>Raised MongoDB from 250m/1000m to 1000m/4000m — the same proportional bump Part 10 gave the app tier. Verified on the identical 20K/seed=555 job, before and after:</p>
-<p>| | Before | After | |---|---|---| | claimInsert avg / P95 | 39.37ms / 89.43ms | 6.89ms / 13.37ms | | eventPublish avg / P95 | 45.65ms / 105.23ms | 8.22ms / 20.72ms | | Throughput | ~120-150 claims/sec | 412.05 claims/sec | | MongoDB throttled periods | 12.97% | 0.21% |</p>
+<div class="table-wrap"><table><thead><tr><th></th><th>Before</th><th>After</th></tr></thead><tbody><tr><td>claimInsert avg / P95</td><td>39.37ms / 89.43ms</td><td>6.89ms / 13.37ms</td></tr><tr><td>eventPublish avg / P95</td><td>45.65ms / 105.23ms</td><td>8.22ms / 20.72ms</td></tr><tr><td>Throughput</td><td>~120-150 claims/sec</td><td>412.05 claims/sec</td></tr><tr><td>MongoDB throttled periods</td><td>12.97%</td><td>0.21%</td></tr></tbody></table></div>
 <p>A quick audit of the other shared dependencies — Redis (which also backs the accumulator cache Part 10 profiled), provider-service, claims-service, benefit-plan-service — found nothing else close to that severity. MongoDB was the outlier, not a pattern. PR #982 kept the profiling instrumentation as permanent low-volume observability rather than reverting it, demoted from informational to debug logging so it doesn't add volume in production.</p>
 <h2 id="the-500-000-claim-run">The 500,000-claim run</h2>
 <p>First time this series has run at this scale. 500,000 processed, zero platform failures, workflow scoring 61,063 of 65,000 matched — only four mismatched, all four consistent with residual test-tenant pollution already understood and explicitly not chased further, none of them a new defect. Payment gate exact on 10,000 of 10,000 comparisons. <code>ExcludedProviderDenied</code> clean at 10,000 of 10,000, confirming the injection-isolation fix held at twice the scale it was found and fixed at. Every COB variant but one at 100 percent, confirming the eligibility-date fix held too.</p>

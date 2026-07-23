@@ -34,6 +34,12 @@
     .article-figure { margin: 40px 0; }
     .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
     .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
+    .table-wrap { margin: 28px 0; overflow-x: auto; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; }
+    .table-wrap table { width: 100%; border-collapse: collapse; font-size: .95rem; font-variant-numeric: tabular-nums; }
+    .table-wrap th, .table-wrap td { padding: 10px 16px; text-align: left; border-bottom: 1px solid rgba(139,148,158,.2); white-space: nowrap; }
+    .table-wrap th { color: #00ffff; font-weight: 700; background: #0d1117; }
+    .table-wrap td { color: #c9d1d9; }
+    .table-wrap tr:last-child td { border-bottom: none; }
   </style>
 </head>
 <body>
@@ -47,6 +53,7 @@
 <article class="evidence-block" style="padding:22px"><div class="eyebrow">Part 10</div><h2 style="margin-top:8px">Running a Healthcare Claims Platform Locally in Kubernetes, Part 10: The Migration Cost That Wasn't</h2><p>Testing Part 9's unconfirmed migration-cost theory at 250,000 claims, finding the real causes through profiling, and confirming a 3.5x throughput gain.</p><div class="article-links"><a href="/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt">Read article</a><a href="/docs/million-claim-challenge/evidence#episode-010">Inspect evidence</a></div></article>
 <article class="evidence-block" style="padding:22px"><div class="eyebrow">Part 11</div><h2 style="margin-top:8px">Running a Healthcare Claims Platform Locally in Kubernetes, Part 11: The Check That Only Ran in the Benchmark</h2><p>Re-investigating a bug Part 10 disclosed but didn't fix, and finding federal provider-exclusion screening had never been wired into the real adjudication pipeline at all.</p><div class="article-links"><a href="/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark">Read article</a><a href="/docs/million-claim-challenge/evidence#episode-011">Inspect evidence</a></div></article>
 <article class="evidence-block" style="padding:22px"><div class="eyebrow">Part 12</div><h2 style="margin-top:8px">Running a Healthcare Claims Platform Locally in Kubernetes, Part 12: The Database Nobody Profiled</h2><p>Two benchmark fixture bugs, a Submit-chain bottleneck traced to an under-provisioned shared database, and this series' first clean 500,000-claim confirmation.</p><div class="article-links"><a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled">Read article</a><a href="/docs/million-claim-challenge/evidence#episode-012">Inspect evidence</a></div></article>
+<article class="evidence-block" style="padding:22px"><div class="eyebrow">Part 13</div><h2 style="margin-top:8px">Running a Healthcare Claims Platform Locally in Kubernetes, Part 13: The Gap Was the Laptop</h2><p>Closing the wall-clock gap disclosed in Part 10 and Part 12 by proving, with matching host sleep-log evidence, that it was macOS suspending the local Kubernetes cluster mid-run.</p><div class="article-links"><a href="/insights/million-claim-challenge/part-13-the-gap-was-the-laptop">Read article</a><a href="/docs/million-claim-challenge/evidence#episode-013">Inspect evidence</a></div></article>
   </main>
 </body>
 </html>

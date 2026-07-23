@@ -1,0 +1,138 @@
+Raw checkpoint and summary output from the three 150,000-claim validator runs used in Episode 013,
+job mcc-wallclock-checkpoint-150k / -v2 / caffeinate-check, seed 777, parallelism 56, captured via
+`kubectl logs` against the local kind cluster. Full scenario-breakdown lines omitted for length; the
+stack trace for the one platform failure in Run 1 is truncated to its header line. Nothing else
+edited -- these are the literal `[checkpoint]`, `Lifecycle.`, `Post-processing:`, and summary lines
+as printed by the validator.
+
+================================================================================
+RUN 1 -- pre-fix (no checkpoint timestamps beyond phase-level, no Initial progress publish
+tracking, no caffeinate). Job: mcc-wallclock-checkpoint-150k
+================================================================================
+
+  [checkpoint] Run start :: 17:14:15.935Z (runId=32cc5232203e49069557cc9362f4b528)
+  [checkpoint] Service health checks :: started 17:14:15.950Z, completed 17:14:15.990Z, stopwatch 00:00:00.0404321
+  [checkpoint] Reference rule seeding :: started 17:14:15.991Z, completed 17:14:16.073Z, stopwatch 00:00:00.0823752
+  [checkpoint] Validation plan setup :: started 17:14:16.073Z, completed 17:14:16.089Z, stopwatch 00:00:00.0158083
+  [checkpoint] Corpus generation :: started 17:14:16.089Z, completed 17:14:17.556Z, stopwatch 00:00:01.4664210
+  [checkpoint] Fixture normalization :: started 17:14:17.556Z, completed 17:14:18.151Z, stopwatch 00:00:00.5955822
+  [checkpoint] Authorization fixture seeding :: started 17:14:18.152Z, completed 17:14:19.696Z, stopwatch 00:00:01.5447443
+  [checkpoint] Answer key build :: started 17:14:19.696Z, completed 17:14:19.736Z, stopwatch 00:00:00.0399063
+  [checkpoint] Member and coverage seeding :: started 17:14:19.737Z, completed 17:26:36.094Z, stopwatch 00:11:40.2494256
+  [checkpoint] Provider seeding :: started 17:26:36.094Z, completed 17:27:49.892Z, stopwatch 00:01:13.7973875
+  [checkpoint] Expected-pend observation :: started 17:38:12.805Z, completed 17:38:13.059Z, stopwatch 00:00:00.2539579
+  [checkpoint] False-pend sweep :: started 17:38:13.059Z, completed 17:38:15.090Z, stopwatch 00:00:02.0310306
+
+  Lifecycle.Service health checks        0:00.040
+  Lifecycle.Reference rule seeding       0:00.082
+  Lifecycle.Validation plan setup        0:00.015
+  Lifecycle.Corpus generation            0:01.466
+  Lifecycle.Fixture normalization        0:00.595
+  Lifecycle.Authorization fixture seeding 0:01.544
+  Lifecycle.Answer key build             0:00.039
+  Lifecycle.Member and coverage seeding  11:40.249
+  Lifecycle.Provider seeding             1:13.797
+  Lifecycle.Timed adjudication           9:39.742
+  Lifecycle.Expected-pend observation    0:00.253
+  Lifecycle.False-pend sweep             0:02.031
+
+  Failure: MCC-I-0027801 [adjudicate] adjudication failed (MCC-I-0027801): 500 {"code":"INTERNAL_ERROR","message":"The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.", ...} [truncated -- single transient timeout in benefit-plan-service's ClaimsServiceAccumulatorSource, unrelated to this investigation]
+
+  Post-processing:    0:01.199
+  PostProcessing.Pending progress publish 0:00.002
+  PostProcessing.Result ordering      0:00.250
+  PostProcessing.Summary build        0:00.649
+  PostProcessing.Write summary console output 0:00.003
+  PostProcessing.Summary JSON write   0:00.008
+  PostProcessing.Dashboard publish    0:00.285
+  Grand total (tracked lifecycle + post-processing): 22:41.059
+  Actual wall clock (run start to now):              24:00.102
+  Unaccounted:                                       1:19.043
+
+================================================================================
+RUN 2 -- checkpoint fix applied (Initial progress publish now tracked), no caffeinate.
+Job: mcc-wallclock-checkpoint-150k-v2
+================================================================================
+
+  [checkpoint] Run start :: 17:42:27.082Z (runId=c060dddc26584f979cc272b3b98e71e1)
+  [checkpoint] Service health checks :: started 17:42:27.098Z, completed 17:42:27.151Z, stopwatch 00:00:00.0524362
+  [checkpoint] Reference rule seeding :: started 17:42:27.152Z, completed 17:42:27.289Z, stopwatch 00:00:00.1377877
+  [checkpoint] Validation plan setup :: started 17:42:27.289Z, completed 17:42:27.356Z, stopwatch 00:00:00.0669552
+  [checkpoint] Corpus generation :: started 17:42:27.357Z, completed 17:42:28.858Z, stopwatch 00:00:01.5005086
+  [checkpoint] Fixture normalization :: started 17:42:28.858Z, completed 17:42:29.538Z, stopwatch 00:00:00.6800568
+  [checkpoint] Authorization fixture seeding :: started 17:42:29.538Z, completed 17:42:31.256Z, stopwatch 00:00:01.7180379
+  [checkpoint] Answer key build :: started 17:42:31.256Z, completed 17:42:31.291Z, stopwatch 00:00:00.0352812
+  [checkpoint] Member and coverage seeding :: started 17:42:31.292Z, completed 17:45:45.208Z, stopwatch 00:03:13.9186785
+  [checkpoint] Provider seeding :: started 17:45:45.209Z, completed 17:47:16.114Z, stopwatch 00:01:30.9050484
+  [checkpoint] Initial progress publish :: started 17:47:16.115Z, completed 17:47:16.137Z, stopwatch 00:00:00.0217330
+  [checkpoint] Expected-pend observation :: started 18:11:09.277Z, completed 18:11:09.480Z, stopwatch 00:00:00.2031675
+  [checkpoint] False-pend sweep :: started 18:11:09.480Z, completed 18:11:11.340Z, stopwatch 00:00:01.8597517
+
+  Lifecycle.Service health checks        0:00.052
+  Lifecycle.Reference rule seeding       0:00.137
+  Lifecycle.Validation plan setup        0:00.066
+  Lifecycle.Corpus generation            0:01.500
+  Lifecycle.Fixture normalization        0:00.680
+  Lifecycle.Authorization fixture seeding 0:01.718
+  Lifecycle.Answer key build             0:00.035
+  Lifecycle.Member and coverage seeding  3:13.918
+  Lifecycle.Provider seeding             1:30.905
+  Lifecycle.Initial progress publish     0:00.021
+  Lifecycle.Timed adjudication           13:14.346
+  Lifecycle.Expected-pend observation    0:00.203
+  Lifecycle.False-pend sweep             0:01.859
+
+  Post-processing:    0:00.772
+  PostProcessing.Pending progress publish 0:00.016
+  PostProcessing.Result ordering      0:00.043
+  PostProcessing.Summary build        0:00.537
+  PostProcessing.Write summary console output 0:00.002
+  PostProcessing.Summary JSON write   0:00.006
+  PostProcessing.Dashboard publish    0:00.165
+  Grand total (tracked lifecycle + post-processing): 18:06.218
+  Actual wall clock (run start to now):              28:44.971
+  Unaccounted:                                       10:38.753
+
+================================================================================
+RUN 3 -- same fix, `kubectl wait` now wrapped with `caffeinate -dis`.
+Job: mcc-wallclock-caffeinate-check
+================================================================================
+
+  [checkpoint] Run start :: 18:14:38.269Z (runId=6849b859db544007b0fc350b5e89aa60)
+  [checkpoint] Service health checks :: started 18:14:38.295Z, completed 18:14:38.342Z, stopwatch 00:00:00.0472424
+  [checkpoint] Reference rule seeding :: started 18:14:38.343Z, completed 18:14:38.436Z, stopwatch 00:00:00.0933940
+  [checkpoint] Validation plan setup :: started 18:14:38.436Z, completed 18:14:38.454Z, stopwatch 00:00:00.0179284
+  [checkpoint] Corpus generation :: started 18:14:38.455Z, completed 18:14:40.176Z, stopwatch 00:00:01.7210296
+  [checkpoint] Fixture normalization :: started 18:14:40.176Z, completed 18:14:40.836Z, stopwatch 00:00:00.6601988
+  [checkpoint] Authorization fixture seeding :: started 18:14:40.836Z, completed 18:14:42.637Z, stopwatch 00:00:01.8002938
+  [checkpoint] Answer key build :: started 18:14:42.637Z, completed 18:14:42.669Z, stopwatch 00:00:00.0320477
+  [checkpoint] Member and coverage seeding :: started 18:14:42.669Z, completed 18:17:52.038Z, stopwatch 00:03:09.3687953
+  [checkpoint] Provider seeding :: started 18:17:52.038Z, completed 18:19:03.469Z, stopwatch 00:01:11.4307489
+  [checkpoint] Initial progress publish :: started 18:19:03.470Z, completed 18:19:03.495Z, stopwatch 00:00:00.0248343
+  [checkpoint] Expected-pend observation :: started 18:37:03.057Z, completed 18:37:03.287Z, stopwatch 00:00:00.2297711
+  [checkpoint] False-pend sweep :: started 18:37:03.287Z, completed 18:37:05.343Z, stopwatch 00:00:02.0552450
+
+  Lifecycle.Service health checks        0:00.047
+  Lifecycle.Reference rule seeding       0:00.093
+  Lifecycle.Validation plan setup        0:00.017
+  Lifecycle.Corpus generation            0:01.721
+  Lifecycle.Fixture normalization        0:00.660
+  Lifecycle.Authorization fixture seeding 0:01.800
+  Lifecycle.Answer key build             0:00.032
+  Lifecycle.Member and coverage seeding  3:09.368
+  Lifecycle.Provider seeding             1:11.430
+  Lifecycle.Initial progress publish     0:00.024
+  Lifecycle.Timed adjudication           17:59.231
+  Lifecycle.Expected-pend observation    0:00.229
+  Lifecycle.False-pend sweep             0:02.055
+
+  Post-processing:    0:01.132
+  PostProcessing.Pending progress publish 0:00.008
+  PostProcessing.Result ordering      0:00.293
+  PostProcessing.Summary build        0:00.606
+  PostProcessing.Write summary console output 0:00.002
+  PostProcessing.Summary JSON write   0:00.007
+  PostProcessing.Dashboard publish    0:00.213
+  Grand total (tracked lifecycle + post-processing): 22:27.845
+  Actual wall clock (run start to now):              22:27.905
+  Unaccounted:                                       0:00.060

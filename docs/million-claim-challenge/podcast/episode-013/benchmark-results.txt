@@ -1,0 +1,98 @@
+# Episode 013 benchmark results
+
+## PR #984 - Checkpoint instrumentation + caffeinate fix
+
+### Instrumentation added
+
+- Every lifecycle phase (via `MeasureLifecycleValuePhaseAsync`) now prints an absolute-timestamp
+  checkpoint on completion: `[checkpoint] {label} :: started {HH:mm:ss.fff}Z, completed
+  {HH:mm:ss.fff}Z, stopwatch {elapsed}`.
+- The previously-untracked "Running" progress publish sent immediately before the timed
+  adjudication loop starts is now a tracked lifecycle phase, "Initial progress publish"
+  (category: Preparation).
+- `WritePostProcessingTimings` now also prints `Actual wall clock (run start to now)` (computed
+  directly from `runStartedAtUtc`) and `Unaccounted` (actual wall clock minus tracked total),
+  replacing indirect inference with a direct measurement on every run.
+
+### Three live 150,000-claim runs, same job (seed 777, parallelism 56), progressively instrumented
+
+| | Run 1 (pre-fix) | Run 2 (checkpoints only) | Run 3 (+ caffeinate) |
+|---|---|---|---|
+| Grand total (tracked lifecycle + post-processing) | 22:41.059 | 18:06.218 | 22:27.845 |
+| Actual wall clock | 24:00.102 | 28:44.971 | 22:27.905 |
+| Unaccounted | 1:19.043 | 10:38.753 | 0:00.060 |
+| Platform failures | 1 (unrelated Redis/accumulator HTTP timeout) | 0 | 0 |
+
+### Run 1 checkpoint detail (the phase-internal mismatch)
+
+```
+Member and coverage seeding :: started 17:14:19.737Z, completed 17:26:36.094Z, stopwatch 00:11:40.2494256
+```
+
+Checkpoint wall-clock span: 17:26:36.094 - 17:14:19.737 = 12:16.357
+Internal Stopwatch span:    11:40.249
+Divergence:                 0:36.108
+
+Every other phase in this run matched its own checkpoint span to its Stopwatch value within a few
+milliseconds (e.g. Provider seeding: checkpoint span 1:13.798 vs. Stopwatch 1:13.797). Only this one
+phase diverged, by a large, single, contiguous amount.
+
+### Run 2 checkpoint detail (the phase-internal mismatch, isolated further)
+
+```
+Initial progress publish :: started 17:47:16.115Z, completed 17:47:16.137Z, stopwatch 00:00:00.0217330
+Expected-pend observation :: started 18:11:09.277Z, completed 18:11:09.480Z, stopwatch 00:00:00.2031675
+Lifecycle.Timed adjudication           13:14.346
+```
+
+Wall-clock span from end of "Initial progress publish" to start of "Expected-pend observation":
+18:11:09.277 - 17:47:16.137 = 23:53.140
+Minus the two small tracked steps in between (Pending progress publish 0.016s + Result ordering 0.043s = 0.059s):
+23:53.081
+Timed adjudication's own Stopwatch: 13:14.346
+Divergence: 23:53.081 - 13:14.346 = 10:38.735 (reported Unaccounted: 10:38.753, within 18ms)
+
+### Host sleep-log correlation (`pmset -g log`)
+
+```
+2026-07-23 10:19:49 -0700 Sleep   Entering Sleep state due to 'Idle Sleep':TCPKeepAlive=active Using Batt (Charge:25%) 38 secs
+2026-07-23 10:20:27 -0700 Wake    Wake from Deep Idle [CDNVA] : due to MTP.DOCK.CHANNELS.AP0.IRQ RTP.multi-touch/HID Activity Using BATT (Charge:25%) 571 secs
+
+2026-07-23 10:54:57 -0700 Assertions   PID 266(powerd) Created InternalPreventSleep "com.apple.powermanagement.darkwakelinger" ...
+2026-07-23 10:55:02 -0700 Sleep   Entering Sleep state due to 'Idle Sleep':TCPKeepAlive=active Using AC (Charge:6%) 641 secs
+2026-07-23 11:05:43 -0700 Wake    Wake from Deep Idle [CDNVA] : due to MTP.DOCK.CHANNELS.AP0.IRQ RTP.keyboard/UserActivity Assertion Using AC (Charge:6%)
+```
+
+| Sleep event (local -0700) | UTC window | Logged duration | Matching phase | Phase divergence |
+|---|---|---|---|---|
+| 10:19:49 -> 10:20:27 | 17:19:49 -> 17:20:27 | 38s | Run 1: Member and coverage seeding (17:14:19-17:26:36) | 36.1s |
+| 10:55:02 -> 11:05:43 | 17:55:02 -> 18:05:43 | 641s | Run 2: Timed adjudication (17:47:16-18:11:09) | 638.75s |
+
+Both sleep events fall entirely inside the phase that showed the matching divergence, and both
+durations match to within about 2 seconds. `caffeinate -dis` wrapping the run's `kubectl wait`
+prevents idle sleep for the duration of the job; Run 3, under that wrapper, closed to 60ms
+unaccounted on the same job.
+
+## Resolution of Part 10 and Part 12's disclosed gaps
+
+Neither historical gap can be re-verified directly against `pmset`'s log, which does not retain
+history back to those runs. But the mechanism found here fits both disclosed symptoms in ways an
+application-level bug does not:
+
+- Part 10 (250K claims): ~45 minutes unaccounted.
+- Part 12 (500K claims, 2x the volume): ~17 minutes unaccounted, smaller despite more claims.
+
+A cost that scaled with claim count or batch size would grow with volume, not shrink. A host going
+idle mid-run has no relationship to claim count at all -- only to how long the machine happened to
+sit unattended during that specific run. That non-relationship was flagged as an open coincidence at
+the end of the Part 12 investigation; it stops being a coincidence once "how long the laptop was left
+alone" is the actual variable.
+
+Part 12 also disclosed a specific contradiction: claims-service's own server-side log timestamp for
+the final dashboard save placed it at the true end of the 1:23:40 run, while the validator's own
+client-side timer for that identical HTTP call reported 541 milliseconds. Under this mechanism that
+resolves rather than remains open: if the validator process's own Stopwatch (backed by the same
+paused `CLOCK_MONOTONIC`) was mid-call when the VM suspended, it would report an artificially short
+elapsed time on resume while the server, watching real wall time, correctly recorded the call
+finishing near the true end of the run. Both measurements were accurate; they were reading different
+clocks.
