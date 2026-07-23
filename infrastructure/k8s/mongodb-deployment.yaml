@@ -23,10 +23,10 @@ spec:
         - containerPort: 27017
         resources:
           requests:
-            cpu: "250m"
+            cpu: "1000m"
             memory: "512Mi"
           limits:
-            cpu: "1000m"
+            cpu: "4000m"
             memory: "1Gi"
         env:
         - name: MONGO_INITDB_ROOT_USERNAME

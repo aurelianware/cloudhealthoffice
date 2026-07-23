@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ClaimsService.Adapters;
 using ClaimsService.Models;
 using ClaimsService.Models.Messaging;
@@ -176,11 +177,21 @@ public class ClaimSubmissionService : IClaimSubmissionService
             return ClaimSubmissionResult.ValidationFailed(validationErrors);
         }
 
+        // Per-hop timing for the Submit chain -- see ClaimVersionEventPublisher
+        // for the matching breakdown of the three hops inside PublishVersionSubmittedAsync.
+        // This is what found MongoDB's CPU limit as the real bottleneck behind
+        // the "five sequential I/O hops" cost Part 10/11 disclosed but never
+        // measured: claimInsert/eventPublish showed the same low-median,
+        // huge-P95 shape as MongoDB's own cgroup throttling stats, not a cost
+        // inherent to any single hop.
+        var profileSw = Stopwatch.StartNew();
         var adapter = await _adapterFactory.GetAdapterAsync(tenantId, ct);
+        var adapterResolveMs = profileSw.Elapsed.TotalMilliseconds;
 
         ClaimAdapterResponse adapterResponse;
         try
         {
+            profileSw.Restart();
             adapterResponse = await adapter.SubmitClaimAsync(
                 new ClaimSubmissionAdapterRequest
                 {
@@ -202,6 +213,8 @@ public class ClaimSubmissionService : IClaimSubmissionService
             return ClaimSubmissionResult.AdapterNotImplemented(ex.Message);
         }
 
+        var claimInsertMs = profileSw.Elapsed.TotalMilliseconds;
+
         var created = adapterResponse.Claim
             ?? throw new InvalidOperationException(
                 $"Adapter '{adapterResponse.Platform}' returned a null claim from SubmitClaimAsync.");
@@ -216,6 +229,7 @@ public class ClaimSubmissionService : IClaimSubmissionService
         // we log loudly but DO NOT fail the submission — same posture as
         // the Kafka IClaimEventPublisher. The audit chain may have a gap
         // for the affected claim that operators can backfill from logs.
+        profileSw.Restart();
         try
         {
             var domainClaim = created.ToClaim();
@@ -228,6 +242,7 @@ public class ClaimSubmissionService : IClaimSubmissionService
                 "submission persisted, audit chain has a gap",
                 SanitizeForLog(created.Id), SanitizeForLog(created.ClaimVersionId));
         }
+        var eventPublishMs = profileSw.Elapsed.TotalMilliseconds;
 
         // 5.5 dual-emit — Service Bus topic notification triggers the
         // adjudication orchestrator. Mongo append-only above is the
@@ -235,6 +250,7 @@ public class ClaimSubmissionService : IClaimSubmissionService
         // Same degraded-mode posture: failure here logs but does not
         // fail the submission. Operators replay missed messages from
         // the audit chain.
+        profileSw.Restart();
         try
         {
             var sbMessage = new ClaimVersionSubmittedMessage
@@ -264,6 +280,11 @@ public class ClaimSubmissionService : IClaimSubmissionService
                 "submission persisted, adjudication will not auto-trigger",
                 SanitizeForLog(created.Id), SanitizeForLog(created.ClaimVersionId));
         }
+        var sbSendMs = profileSw.Elapsed.TotalMilliseconds;
+
+        _logger.LogDebug(
+            "SubmitProfile.Submit adapterResolveMs={AdapterResolveMs} claimInsertMs={ClaimInsertMs} eventPublishMs={EventPublishMs} serviceBusSendMs={ServiceBusSendMs}",
+            adapterResolveMs, claimInsertMs, eventPublishMs, sbSendMs);
 
         _logger.LogInformation(
             "Claim {ClaimId} submitted via adapter {Platform} (chain {ClaimVersionId} v{VersionNumber}) for tenant {TenantId}",
