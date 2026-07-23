@@ -19,6 +19,11 @@ internal static class MccClaimDateNormalizer
             ShiftMemberCoverageDates(claim.Member, dateShift, claim.DateOfService);
             ShiftNewbornDateOfBirth(claim, dateShift);
 
+            if (claim.AccidentDate.HasValue)
+            {
+                claim.AccidentDate = claim.AccidentDate.Value.Date.Add(dateShift);
+            }
+
             foreach (var line in claim.Lines)
             {
                 line.ServiceDate = line.ServiceDate.Date.Add(dateShift);

@@ -125,6 +125,8 @@ public class AdapterClaim
 
     public string? PriorAuthorizationNumber { get; set; }
     public string? ReferralNumber { get; set; }
+    public string? RelatedCausesCode { get; set; }
+    public DateTime? AccidentDate { get; set; }
     public string? ClaimNotes { get; set; }
     public string? EDI837ControlNumber { get; set; }
     public string? EDI835ControlNumber { get; set; }
@@ -185,6 +187,8 @@ public class AdapterClaim
         AiExamination = src.AiExamination,
         PriorAuthorizationNumber = src.PriorAuthorizationNumber,
         ReferralNumber = src.ReferralNumber,
+        RelatedCausesCode = src.RelatedCausesCode,
+        AccidentDate = src.AccidentDate,
         ClaimNotes = src.ClaimNotes,
         EDI837ControlNumber = src.EDI837ControlNumber,
         EDI835ControlNumber = src.EDI835ControlNumber,
@@ -241,6 +245,8 @@ public class AdapterClaim
         AiExamination = AiExamination,
         PriorAuthorizationNumber = PriorAuthorizationNumber,
         ReferralNumber = ReferralNumber,
+        RelatedCausesCode = RelatedCausesCode,
+        AccidentDate = AccidentDate,
         ClaimNotes = ClaimNotes,
         EDI837ControlNumber = EDI837ControlNumber,
         EDI835ControlNumber = EDI835ControlNumber,

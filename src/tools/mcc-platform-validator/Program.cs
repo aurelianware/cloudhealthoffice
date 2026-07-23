@@ -2627,7 +2627,9 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
         status = 1,
         submittedDate = claim.DateReceived,
         receivedDate = claim.DateReceived,
-        priorAuthorizationNumber = claim.PriorAuthNumber
+        priorAuthorizationNumber = claim.PriorAuthNumber,
+        relatedCausesCode = claim.RelatedCausesCode,
+        accidentDate = claim.AccidentDate
     };
 
     using var response = await http.PostAsJsonAsync($"{options.ClaimsUrl}/api/v1/claims", payload, json);

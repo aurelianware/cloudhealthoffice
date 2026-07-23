@@ -50,6 +50,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     /// </summary>
     public const string RetroactivePlanChangePendCode = "RETROELIG";
 
+    /// <summary>
+    /// <see cref="PendDetails.PendCode"/> value for claims pended because the
+    /// claim carries an X12 837 CLM11 related-causes code (auto accident,
+    /// employment, or other accident) -- potential third-party liability
+    /// requires subrogation investigation before the claim can pay.
+    /// </summary>
+    public const string SubrogationReviewPendCode = "SUBRO";
+
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
     private readonly IAuthorizationValidationClient _authorizationValidationClient;
@@ -112,6 +120,18 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             };
 
             return ClaimAdjudicationStageResult.Pend(StageName, pendReason);
+        }
+
+        if (HasUnreviewedSubrogationIndicator(claim, out var subrogationReason))
+        {
+            context.PendDetails = new PendDetails
+            {
+                PendCode = SubrogationReviewPendCode,
+                PendReason = subrogationReason,
+                PendedAt = DateTime.UtcNow,
+            };
+
+            return ClaimAdjudicationStageResult.Pend(StageName, subrogationReason);
         }
 
         var priorAuthorizationDenialReason = await ResolvePriorAuthorizationDenialReasonAsync(
@@ -217,6 +237,28 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             reason =
                 $"Member has a retroactive benefit-plan change effective {planChangeEffectiveDate.Date:yyyy-MM-dd}; " +
                 "the plan in force on the service date requires reconciliation before this claim can adjudicate.";
+            return true;
+        }
+
+        reason = string.Empty;
+        return false;
+    }
+
+    private static readonly HashSet<string> RecognizedRelatedCausesCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AA", // Auto Accident
+        "EM", // Employment
+        "OA", // Other Accident
+    };
+
+    private static bool HasUnreviewedSubrogationIndicator(AdapterClaim claim, out string reason)
+    {
+        if (!string.IsNullOrWhiteSpace(claim.RelatedCausesCode)
+            && RecognizedRelatedCausesCodes.Contains(claim.RelatedCausesCode))
+        {
+            reason =
+                $"Claim carries related-causes code '{claim.RelatedCausesCode}'; potential third-party " +
+                "liability requires subrogation investigation before this claim can adjudicate.";
             return true;
         }
 

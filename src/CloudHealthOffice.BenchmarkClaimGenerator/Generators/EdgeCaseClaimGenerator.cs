@@ -94,8 +94,28 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
 
         ApplyScenarioMemberContext(claim, scenario);
         ApplyScenarioCoverageWindow(claim, scenario);
+        ApplyScenarioRelatedCauses(claim, scenario, random);
         claim.ExpectedOutcome = ComputeExpectedOutcome(claim, scenario, random);
         return claim;
+    }
+
+    private static void ApplyScenarioRelatedCauses(SyntheticClaim claim, EdgeCaseScenario scenario, Random random)
+    {
+        // X12 837 CLM11-1: AA=Auto Accident, EM=Employment, OA=Other Accident.
+        // Any related-causes code signals potential third-party liability that
+        // requires subrogation investigation before the claim can pay.
+        claim.RelatedCausesCode = scenario switch
+        {
+            EdgeCaseScenario.SubrogationAccidentRelated => "AA",
+            EdgeCaseScenario.SubrogationThirdPartyLiability => "OA",
+            EdgeCaseScenario.SubrogationWorkersComp => "EM",
+            _ => null
+        };
+
+        if (claim.RelatedCausesCode is not null)
+        {
+            claim.AccidentDate = claim.DateOfService.Date.AddDays(-random.Next(1, 30));
+        }
     }
 
     private static void ApplyScenarioMemberContext(SyntheticClaim claim, EdgeCaseScenario scenario)
