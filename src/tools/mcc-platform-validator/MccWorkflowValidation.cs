@@ -187,7 +187,6 @@ public static class MccWorkflowValidation
     private static bool IsUnsupportedPendedEdgeCase(EdgeCaseScenario scenario)
     {
         return scenario is
-            EdgeCaseScenario.RetroEligibilityCoverageChange or
             EdgeCaseScenario.SubrogationAccidentRelated or
             EdgeCaseScenario.SubrogationWorkersComp or
             EdgeCaseScenario.SubrogationThirdPartyLiability or

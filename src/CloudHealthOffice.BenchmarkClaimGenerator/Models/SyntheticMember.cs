@@ -51,6 +51,15 @@ public class SyntheticMember
     /// <summary>X12 834 maintenance type code (021=Addition, 024=Cancel, 001=Change).</summary>
     public string MaintenanceTypeCode { get; set; } = "021";
 
+    /// <summary>
+    /// Retroactive effective date of a benefit-plan/coverage change (X12 834
+    /// maintenance type code 001), when this member record represents a
+    /// correction recorded after claims with earlier service dates may have
+    /// already been submitted. Null for members with no pending retroactive
+    /// change.
+    /// </summary>
+    public DateTime? PlanChangeEffectiveDate { get; set; }
+
     /// <summary>Line of business (STAR, CHIP, STAR+PLUS, STAR Kids, STAR Health, Commercial, Medicare).</summary>
     public string LineOfBusiness { get; set; } = "STAR";
 
