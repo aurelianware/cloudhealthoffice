@@ -42,4 +42,11 @@ public class ResolvedMember
 
     public DateTime? EffectiveDate { get; init; }
     public DateTime? TerminationDate { get; init; }
+
+    /// <summary>
+    /// Retroactive effective date of a benefit-plan/coverage change recorded
+    /// after the fact. Null unless member-service has a pending retroactive
+    /// correction on file for this member.
+    /// </summary>
+    public DateTime? PlanChangeEffectiveDate { get; init; }
 }

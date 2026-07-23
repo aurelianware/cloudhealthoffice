@@ -124,23 +124,35 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
 
     private static void ApplyScenarioCoverageWindow(SyntheticClaim claim, EdgeCaseScenario scenario)
     {
-        if (scenario is not EdgeCaseScenario.RetroEligibilityTermination)
+        var serviceDate = claim.DateOfService.Date;
+
+        if (scenario is EdgeCaseScenario.RetroEligibilityTermination)
         {
+            claim.Member.CoverageEffectiveDate = serviceDate.AddYears(-1);
+            claim.Member.CoverageTermDate = serviceDate.AddDays(-30);
+            claim.Member.EnrollmentStatus = "Terminated";
+            claim.Member.MaintenanceTypeCode = "024";
+
+            foreach (var coverage in claim.Member.Coverages)
+            {
+                coverage.EffectiveDate = claim.Member.CoverageEffectiveDate;
+                coverage.TermDate = claim.Member.CoverageTermDate;
+                coverage.Status = "Terminated";
+                coverage.MaintenanceTypeCode = "024";
+            }
+
             return;
         }
 
-        var serviceDate = claim.DateOfService.Date;
-        claim.Member.CoverageEffectiveDate = serviceDate.AddYears(-1);
-        claim.Member.CoverageTermDate = serviceDate.AddDays(-30);
-        claim.Member.EnrollmentStatus = "Terminated";
-        claim.Member.MaintenanceTypeCode = "024";
-
-        foreach (var coverage in claim.Member.Coverages)
+        if (scenario is EdgeCaseScenario.RetroEligibilityCoverageChange)
         {
-            coverage.EffectiveDate = claim.Member.CoverageEffectiveDate;
-            coverage.TermDate = claim.Member.CoverageTermDate;
-            coverage.Status = "Terminated";
-            coverage.MaintenanceTypeCode = "024";
+            // A benefit-plan correction recorded today, effective two weeks ago:
+            // the claim's own service date falls inside the retroactive window,
+            // so the plan in force on the date of service can't be trusted
+            // without reconciliation. X12 834 maintenance type code 001 = Change.
+            claim.Member.CoverageEffectiveDate = serviceDate.AddYears(-1);
+            claim.Member.PlanChangeEffectiveDate = serviceDate.AddDays(-14);
+            claim.Member.MaintenanceTypeCode = "001";
         }
     }
 

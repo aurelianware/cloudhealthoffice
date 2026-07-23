@@ -180,6 +180,16 @@ public class Member
     public string? MaintenanceReasonCode { get; set; }
 
     /// <summary>
+    /// Retroactive effective date of a benefit-plan/coverage change
+    /// (<see cref="MaintenanceTypeCode"/> 001) recorded after the fact. Null
+    /// unless this member record reflects a correction whose effective date
+    /// precedes when it was processed; claims with a service date on or
+    /// after this date were adjudicated before the correct plan assignment
+    /// was known and require reconciliation.
+    /// </summary>
+    public DateTime? PlanChangeEffectiveDate { get; set; }
+
+    /// <summary>
     /// Employment status from 834 EMP segment
     /// </summary>
     public EmploymentStatus? EmploymentStatus { get; set; }

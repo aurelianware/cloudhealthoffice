@@ -231,6 +231,7 @@ public class MembersController : ControllerBase
             Status = EnrollmentStatus.Pending,
             MaintenanceTypeCode = request.MaintenanceTypeCode,
             MaintenanceReasonCode = request.MaintenanceReasonCode,
+            PlanChangeEffectiveDate = request.PlanChangeEffectiveDate,
             EmploymentStatus = request.EmploymentStatus,
             TobaccoUser = request.TobaccoUser,
             IsStudent = request.IsStudent,
@@ -840,6 +841,7 @@ public class CreateMemberRequest
     public DateTime? TerminationDate { get; set; }
     public string? MaintenanceTypeCode { get; set; }
     public string? MaintenanceReasonCode { get; set; }
+    public DateTime? PlanChangeEffectiveDate { get; set; }
     public EmploymentStatus? EmploymentStatus { get; set; }
     public bool? TobaccoUser { get; set; }
     public bool? IsStudent { get; set; }

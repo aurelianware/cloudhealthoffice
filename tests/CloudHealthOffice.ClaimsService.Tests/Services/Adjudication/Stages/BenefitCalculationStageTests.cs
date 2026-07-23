@@ -268,6 +268,60 @@ public class BenefitCalculationStageTests
     }
 
     [Fact]
+    public async Task Execute_ServiceDateOnOrAfterRetroactivePlanChange_PendsWithoutEngineCall()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember
+            {
+                MemberId = "MEM-1",
+                IsSubscriber = true,
+                PlanChangeEffectiveDate = claim.ServiceDateFrom.AddDays(-14),
+            },
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.True(result.Continue);
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal(BenefitCalculationStage.RetroactivePlanChangePendCode, ctx.PendDetails!.PendCode);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Execute_RetroactivePlanChangeEffectiveAfterServiceDate_ContinuesToBenefitEngine()
+    {
+        var planGuid = Guid.NewGuid();
+        var claim = BuildClaim(planGuid.ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember
+            {
+                MemberId = "MEM-1",
+                IsSubscriber = true,
+                PlanChangeEffectiveDate = claim.ServiceDateFrom.AddDays(14),
+            },
+        };
+
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Null(ctx.PendDetails);
+        await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Execute_MedicaidInstitutionalInpatientWithoutPriorAuth_DeniesWithoutEngineCall()
     {
         var claim = BuildClaim(Guid.NewGuid().ToString());
