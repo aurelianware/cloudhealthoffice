@@ -253,15 +253,15 @@
         
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-number">500K</div>
+            <div class="stat-number">1M</div>
             <div class="stat-label">Local Kubernetes<br>Benchmark</div>
           </div>
           <div class="stat-card">
-            <div class="stat-number">61,063/65,000</div>
+            <div class="stat-number">129,981/130,000</div>
             <div class="stat-label">Workflow Checks<br>Matched</div>
           </div>
           <div class="stat-card">
-            <div class="stat-number">10,000</div>
+            <div class="stat-number">20,000</div>
             <div class="stat-label">Payments Within<br>One Cent</div>
           </div>
           <div class="stat-card">
@@ -293,29 +293,31 @@
         <p>
           The Million Claim Challenge validates the platform under pressure by reporting throughput, tail latency,
           platform reliability, and deterministic healthcare workflow correctness together. The latest published Cloud Health Office run
-          is a 500,000-claim local Kubernetes validation, not a production cloud benchmark or full-million adjudication run.
+          is a 1,000,000-claim local Kubernetes validation -- the full target this benchmark series was built around -- not a production
+          cloud benchmark.
         </p>
         <div class="mcc-proof-grid" aria-label="Latest local Million Claim Challenge validation metrics">
           <div class="mcc-proof-metric">
-            <strong>500,000</strong>
+            <strong>1,000,000</strong>
             <span>claims processed in local Kubernetes</span>
           </div>
           <div class="mcc-proof-metric">
-            <strong>186.06 claims/sec</strong>
-            <span>timed throughput with the stronger scoring gates enabled</span>
+            <strong>123.81 claims/sec</strong>
+            <span>sustained throughput at full million-claim scale</span>
           </div>
           <div class="mcc-proof-metric">
-            <strong>571 ms / 695 ms</strong>
+            <strong>957 ms / 1,290 ms</strong>
             <span>P95 and P99 latency</span>
           </div>
           <div class="mcc-proof-metric">
             <strong>0 platform failures</strong>
-            <span>61,063/65,000 workflow checks matched; payment gate exact on 10,000/10,000</span>
+            <span>129,981/130,000 workflow checks matched, 0 unsupported; payment gate exact on 20,000/20,000</span>
           </div>
         </div>
         <p style="font-size:0.95rem; color:#888;">
-          The full MCC design covers one million claims and 29 edge-case scenarios; the next local work is to close the remaining unsupported scenario families before increasing volume again.
-          <a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled" style="color:#00ffff;">Read the 500K writeup</a>
+          Sustained throughput at this scale is lower than the 186.06 claims/sec measured on the prior 500,000-claim run, confirmed not
+          caused by the Redis eviction bug this run found and fixed, and remains open local work.
+          <a href="/insights/million-claim-challenge/part-15-one-million-claims" style="color:#00ffff;">Read the 1M writeup</a>
           &middot;
           <a href="/docs/million-claim-challenge" style="color:#00ffff;">See the benchmark methodology &rarr;</a>
         </p>
@@ -952,11 +954,11 @@
               <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">CLASS LIBRARIES</div>
             </div>
             <div style="text-align: center;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #34d399;">10,000</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #34d399;">20,000</div>
               <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">PAYMENT CHECKS</div>
             </div>
             <div style="text-align: center;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #e5e7eb;">500K</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #e5e7eb;">1M</div>
               <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">LOCAL BENCHMARK</div>
             </div>
           </div>
