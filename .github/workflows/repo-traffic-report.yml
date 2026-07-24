@@ -1,0 +1,93 @@
+name: Weekly Repository Traffic Report
+
+# Posts GitHub "Insights → Traffic" numbers (clones, unique cloners, views,
+# unique visitors, top referrers and paths) into a single rolling issue each
+# week. This is our best web-side signal that people are evaluating the
+# source-available platform — GitHub only retains 14 days of this data and it
+# is not exposed through GA, so we snapshot it here.
+#
+# One-time setup (see PR notes): create a token that can read traffic and add
+# it as the repository secret TRAFFIC_TOKEN. The default GITHUB_TOKEN cannot
+# read the traffic API.
+
+on:
+  schedule:
+    # Mondays at 13:00 UTC
+    - cron: '0 13 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  traffic-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect traffic and post rolling issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.TRAFFIC_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const ISSUE_TITLE = '📈 Weekly repository traffic';
+
+            // --- Pull traffic data (requires push access / TRAFFIC_TOKEN) ---
+            const clones = (await github.rest.repos.getClones({ owner, repo })).data;
+            const views = (await github.rest.repos.getViews({ owner, repo })).data;
+            const referrers = (await github.rest.repos.getTopReferrers({ owner, repo })).data;
+            const paths = (await github.rest.repos.getTopPaths({ owner, repo })).data;
+
+            const today = new Date().toISOString().slice(0, 10);
+
+            const referrerRows = referrers.length
+              ? referrers.slice(0, 10).map(r => `| ${r.referrer} | ${r.count} | ${r.uniques} |`).join('\n')
+              : '| _none_ | – | – |';
+
+            const pathRows = paths.length
+              ? paths.slice(0, 10).map(p => `| \`${p.path}\` | ${p.count} | ${p.uniques} |`).join('\n')
+              : '| _none_ | – | – |';
+
+            const body = [
+              `### Traffic snapshot — ${today}`,
+              '',
+              `GitHub retains only the trailing **14 days**, so this is a rolling window.`,
+              '',
+              '| Metric | Total (14d) | Unique (14d) |',
+              '| --- | --- | --- |',
+              `| **Clones** (evaluating 👀) | ${clones.count} | ${clones.uniques} |`,
+              `| **Views** | ${views.count} | ${views.uniques} |`,
+              '',
+              '**Top referrers**',
+              '',
+              '| Source | Views | Unique |',
+              '| --- | --- | --- |',
+              referrerRows,
+              '',
+              '**Top paths**',
+              '',
+              '| Path | Views | Unique |',
+              '| --- | --- | --- |',
+              pathRows,
+              '',
+              '> Clones are the strongest "someone is evaluating the platform" signal — a clone means someone pulled the repo to run it.',
+            ].join('\n');
+
+            // --- Find the rolling issue, comment on it, or create it ---
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const issue = existing.find(i => !i.pull_request && i.title === ISSUE_TITLE);
+
+            if (issue) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number, body,
+              });
+              core.info(`Commented weekly traffic on issue #${issue.number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner, repo, title: ISSUE_TITLE,
+                body: `This issue collects a weekly snapshot of repository traffic.\n\n${body}`,
+              });
+              core.info(`Created rolling traffic issue #${created.data.number}`);
+            }
