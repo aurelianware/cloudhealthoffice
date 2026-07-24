@@ -33,14 +33,24 @@ spec:
       containers:
       - name: redis
         image: redis:7-alpine
+        args:
+          - redis-server
+          - --save
+          - ""
+          - --appendonly
+          - "no"
+          - --maxmemory
+          - "3072mb"
+          - --maxmemory-policy
+          - volatile-lru
         ports:
         - containerPort: 6379
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "100m"
           limits:
-            memory: "1Gi"
+            memory: "4096Mi"
             cpu: "500m"
         volumeMounts:
         - name: redis-data
