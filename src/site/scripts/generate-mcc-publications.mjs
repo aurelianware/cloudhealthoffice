@@ -68,6 +68,12 @@ const publications = [
     part: 'Part 14',
     slug: 'part-14-zero-unsupported-parallelism',
     summary: 'Closing the scoring gap carried since Part 9 with a first-ever zero-unsupported run, then finding and fixing why parallelism 56 had quietly underperformed lower concurrency this whole series.'
+  },
+  {
+    episode: '015',
+    part: 'Part 15',
+    slug: 'part-15-one-million-claims',
+    summary: 'Running this series\' first full 1,000,000-claim confirmation, finding a Redis memory ceiling that only that scale could expose, and fixing it live.'
   }
 ];
 
