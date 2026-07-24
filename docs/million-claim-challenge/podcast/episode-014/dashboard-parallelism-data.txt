@@ -1,0 +1,108 @@
+Raw data pulled directly from the mass-adjudication dashboard API (GET /api/mass-adjudication/runs)
+during Episode 014's parallelism investigation. Unedited except for column formatting.
+
+================================================================================
+Last 25 runs, sorted by parallelism -- the observation that started the investigation
+================================================================================
+
+Parallelism Claims    Throughput/s   P95 ms    P99 ms
+10          500       78.3           243.5     315.5
+15          3000      108.2          245.0     358.0
+20          10000     498.4          116.8     213.0
+20          10000     349.8          110.8     167.9
+20          10000     699.2          70.2      191.2
+20          30000     120.8          292.4     381.6
+28          5000      83.3           610.0     991.8
+28          5000      88.9           518.8     799.1
+30          20000     412.1          119.8     157.6
+30          20000     132.6          391.7     505.4
+40          50000     58.2           1170.2    1598.4
+40          50000     61.5           1142.5    1673.6
+40          50000     145.7          428.2     544.7
+40          50000     150.4          413.5     541.0
+44          5000      118.2          691.7     995.7
+56          150000    139.0          531.4     601.5
+56          150000    188.8          413.3     479.3
+56          150000    258.7          355.2     663.9
+56          500000    186.1          571.1     694.7
+56          250000    145.0          604.5     831.7
+56          250000    141.5          594.2     3805.7
+56          250000    147.1          602.2     754.7
+56          5000      152.0          609.1     770.4
+56          5000      135.9          703.3     893.9
+56          5000      145.4          620.2     1460.2
+
+================================================================================
+Before the fix: cgroup cpu.stat delta across a controlled 20,000-claim P56 job
+================================================================================
+
+pod                                       periods   throttled pct     throttled_ms  usage_ms
+member-service (single pod, pre-fix)      1019      490       48.09   26025.6       36408.1
+coverage-service (single pod, pre-fix)    600       135       22.50   3786.2        20362.0
+claims-service (pod 1)                    1045      134       12.82   3112.9        109206.0
+claims-service (pod 2)                    1074      44        4.10    1435.3        112361.1
+benefit-plan-service (pod 1)              1044      12        1.15    228.7         69262.2
+benefit-plan-service (pod 2)              1061      33        3.11    257.2         71871.7
+benefit-plan-service (pod 3)              1056      79        7.48    1208.7        80494.5
+redis-dataprotection                      1229      0         0.00    0.0           7640.9
+
+================================================================================
+Fix 1 verification (member-service/coverage-service CPU 250m/500m -> 500m/2000m):
+same job, same seed range, live cgroup cpu.stat delta
+================================================================================
+
+pod                                       periods   throttled pct     throttled_ms  usage_ms
+member-service (pod 1)                    944       13        1.38    471.7         46877.7
+member-service (pod 2)                    961       47        4.89    1787.0        49940.3
+coverage-service (pod 1)                  756       1         0.13    0.9           24410.6
+coverage-service (pod 2)                  722       1         0.14    19.0          14301.7
+benefit-plan-service (pod 1)              1005      43        4.28    855.2         95764.2
+benefit-plan-service (pod 2)              995       14        1.41    314.5         89591.6
+benefit-plan-service (pod 3)              1013      12        1.18    606.8         85819.2
+redis-dataprotection                      1234      3         0.24    75.5          11112.0
+
+(claims-service delta omitted here -- both pods restarted mid-window from the OOM kill this run
+triggered, resetting their cgroup counters; see the dashboard result below instead.)
+
+================================================================================
+Dashboard results across all three states
+================================================================================
+
+State                    Throughput/s   P95 ms    P99 ms    platformFailures  workflowMismatches
+Baseline P56 (best)      258.7          355.2     663.9     0                 --
++ CPU fix                306.7          316.7     549.4     0                 0 (before OOM run)
++ CPU fix (OOM run)      306.7          316.7     549.4     0                 77 (see note)
++ CPU + memory fix       362.8          269.3     395.9     0                 77 (see note)
+
+Note: the 77 workflowMismatches were identical in both the OOM-affected run and the final
+clean-restart run -- confirmed via GET /api/mass-adjudication/runs/{id}/claims?validationStatus=Mismatched
+to be 77/77 EdgeCase:RetroEligibilityCoverageChange claims, expectedOutcome=Pended, actual
+outcome=Paid. Traced to member-seeding reuse against an already-polluted tenant from this
+investigation's own overlapping-seed jobs, not to either the OOM kill or a defect in PR #987.
+See pr-summary.txt for the full explanation.
+
+================================================================================
+claims-service OOM kill evidence
+================================================================================
+
+kubectl describe pod claims-service-dbf64bbdb-7zfdc:
+
+  Last State:     Terminated
+    Reason:       OOMKilled
+    Exit Code:    137
+    Started:      Thu, 23 Jul 2026 15:18:01 -0700
+    Finished:     Thu, 23 Jul 2026 17:31:05 -0700
+  Restart Count:  1
+  Limits:
+    cpu:     2
+    memory:  512Mi
+
+After the memory fix (128Mi/512Mi -> 256Mi/2048Mi), the same pod's next restart during
+verification showed a clean shutdown instead:
+
+  Last State:     Terminated
+    Reason:       Completed
+    Exit Code:    0
+  Limits:
+    cpu:     2
+    memory:  2Gi

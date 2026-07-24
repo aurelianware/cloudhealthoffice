@@ -115,19 +115,19 @@
   </url>
   <url>
     <loc>https://cloudhealthoffice.com/docs/million-claim-challenge</loc>
-    <lastmod>2026-07-23</lastmod>
+    <lastmod>2026-07-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://cloudhealthoffice.com/docs/million-claim-challenge/evidence</loc>
-    <lastmod>2026-07-23</lastmod>
+    <lastmod>2026-07-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://cloudhealthoffice.com/insights/million-claim-challenge</loc>
-    <lastmod>2026-07-23</lastmod>
+    <lastmod>2026-07-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -182,6 +182,12 @@
   <url>
     <loc>https://cloudhealthoffice.com/insights/million-claim-challenge/part-13-the-gap-was-the-laptop</loc>
     <lastmod>2026-07-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cloudhealthoffice.com/insights/million-claim-challenge/part-14-zero-unsupported-parallelism</loc>
+    <lastmod>2026-07-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
