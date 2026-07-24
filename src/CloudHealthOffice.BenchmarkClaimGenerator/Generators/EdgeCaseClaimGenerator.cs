@@ -94,8 +94,28 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
 
         ApplyScenarioMemberContext(claim, scenario);
         ApplyScenarioCoverageWindow(claim, scenario);
+        ApplyScenarioRelatedCauses(claim, scenario, random);
         claim.ExpectedOutcome = ComputeExpectedOutcome(claim, scenario, random);
         return claim;
+    }
+
+    private static void ApplyScenarioRelatedCauses(SyntheticClaim claim, EdgeCaseScenario scenario, Random random)
+    {
+        // X12 837 CLM11-1: AA=Auto Accident, EM=Employment, OA=Other Accident.
+        // Any related-causes code signals potential third-party liability that
+        // requires subrogation investigation before the claim can pay.
+        claim.RelatedCausesCode = scenario switch
+        {
+            EdgeCaseScenario.SubrogationAccidentRelated => "AA",
+            EdgeCaseScenario.SubrogationThirdPartyLiability => "OA",
+            EdgeCaseScenario.SubrogationWorkersComp => "EM",
+            _ => null
+        };
+
+        if (claim.RelatedCausesCode is not null)
+        {
+            claim.AccidentDate = claim.DateOfService.Date.AddDays(-random.Next(1, 30));
+        }
     }
 
     private static void ApplyScenarioMemberContext(SyntheticClaim claim, EdgeCaseScenario scenario)
@@ -176,8 +196,18 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
                 break;
 
             case EdgeCaseScenario.MedicaidDualEligible:
+                member.DateOfBirth = new DateTime(1940 + random.Next(30), 1 + random.Next(12), 1 + random.Next(28));
+                break;
+
             case EdgeCaseScenario.MedicaidSpendDown:
                 member.DateOfBirth = new DateTime(1940 + random.Next(30), 1 + random.Next(12), 1 + random.Next(28));
+                // "Medically needy" spend-down: the member must incur this much
+                // in medical expense before Medicaid activates for the budget
+                // period. Amount met is deliberately short of the liability so
+                // the scenario always lands in the still-pending window.
+                member.MedicaidSpendDownLiabilityAmount = 500m + random.Next(0, 1000);
+                member.MedicaidSpendDownAmountMet =
+                    member.MedicaidSpendDownLiabilityAmount.Value * (0.3m + (decimal)random.NextDouble() * 0.4m);
                 break;
         }
 

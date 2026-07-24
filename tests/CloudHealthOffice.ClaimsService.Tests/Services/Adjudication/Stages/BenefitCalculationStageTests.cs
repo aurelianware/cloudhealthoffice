@@ -321,6 +321,111 @@ public class BenefitCalculationStageTests
         await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("AA")]
+    [InlineData("EM")]
+    [InlineData("OA")]
+    public async Task Execute_ClaimHasRelatedCausesCode_PendsWithoutEngineCall(string relatedCausesCode)
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.RelatedCausesCode = relatedCausesCode;
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.True(result.Continue);
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal(BenefitCalculationStage.SubrogationReviewPendCode, ctx.PendDetails!.PendCode);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Execute_ClaimHasNoRelatedCausesCode_ContinuesToBenefitEngine()
+    {
+        var planGuid = Guid.NewGuid();
+        var claim = BuildClaim(planGuid.ToString());
+        claim.RelatedCausesCode = null;
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Null(ctx.PendDetails);
+        await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_MedicaidSpendDownLiabilityNotYetMet_PendsWithoutEngineCall()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember
+            {
+                MemberId = "MEM-1",
+                IsSubscriber = true,
+                MedicaidSpendDownLiabilityAmount = 800m,
+                MedicaidSpendDownAmountMet = 300m,
+            },
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.True(result.Continue);
+        Assert.NotNull(ctx.PendDetails);
+        Assert.Equal(BenefitCalculationStage.MedicaidSpendDownPendCode, ctx.PendDetails!.PendCode);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Execute_MedicaidSpendDownLiabilityMet_ContinuesToBenefitEngine()
+    {
+        var planGuid = Guid.NewGuid();
+        var claim = BuildClaim(planGuid.ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember
+            {
+                MemberId = "MEM-1",
+                IsSubscriber = true,
+                MedicaidSpendDownLiabilityAmount = 800m,
+                MedicaidSpendDownAmountMet = 800m,
+            },
+        };
+
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Null(ctx.PendDetails);
+        await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Execute_MedicaidInstitutionalInpatientWithoutPriorAuth_DeniesWithoutEngineCall()
     {

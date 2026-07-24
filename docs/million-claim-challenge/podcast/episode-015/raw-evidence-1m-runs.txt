@@ -1,0 +1,166 @@
+Raw evidence from Episode 015's two 1,000,000-claim confirmation runs, captured via `kubectl logs`
+and `redis-cli` against the local kind cluster. Unedited except for trimming the repeated
+"Processed: N/1,000,000" progress-line noise to its informative transitions.
+
+================================================================================
+RUN 1 (pre-fix) -- job mcc-1m-confirmation, seed 20260724
+================================================================================
+
+Progress line transition (platformFailures appearing):
+  Processed: 950,000/1,000,000  processed=950,000  platformFailures=0
+  Processed: 960,000/1,000,000  processed=959,977  platformFailures=23
+  Processed: 970,000/1,000,000  processed=969,977  platformFailures=23
+  Processed: 1,000,000/1,000,000  processed=999,977  platformFailures=23
+
+Final summary:
+
+  Validation summary
+  Total claims:       1,000,000
+  Processed:          999,977
+  Paid/adjudicated:   814,658
+  Pended:             17,074
+  Business denials:   168,245
+  Platform failures:  23
+
+  Workflow checks:    129,989/130,000 matched (11 mismatched, 0 unsupported, 0 observation timeouts)
+
+  Throughput:         107.91 claims/sec
+  P95 latency:        1,008 ms
+  P99 latency:        1,302 ms
+
+  Payment gate:       20,000/20,000 within $0.01 (0 mismatched, max $0.00)
+  Payment delta:      Exact (20,000)
+
+  Grand total (tracked lifecycle + post-processing): 3:00:08
+  Actual wall clock (run start to now):              3:00:34
+  Unaccounted:                                       0:25.349
+
+Sample platform failures (of 23):
+
+  Failure: MCC-P-0551320 [adjudicate] adjudication failed (MCC-P-0551320): 504
+  {"code":"TIMEOUT","message":"Timeout awaiting response (outbound=0KiB, inbound=0KiB,
+  22689ms elapsed, timeout is 5000ms), command=HGETALL, next: HGETALL
+  accum:demo:IND:MBR-0173638:128b44ee-f5ab-4b7f-8f82-d3e3f570a7f3:2025, ...
+  serverEndpoint: redis-dataprotection.cloudhealthoffice.svc.cluster.local:6379, ...}
+  StackExchange.Redis.RedisTimeoutException ...
+    at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetOrRebuildAsync(...)
+    at CloudHealthOffice.BenefitEngine.Services.RedisAccumulatorService.GetAccumulatorsAsync(...)
+    at CloudHealthOffice.BenefitEngine.Services.BenefitCalculationEngine.CalculateAsync(...)
+
+  Failure: MCC-P-0551321 [submit] The request was canceled due to the configured
+  HttpClient.Timeout of 60 seconds elapsing.
+  Failure: MCC-P-0551324 [submit] The request was canceled due to the configured
+  HttpClient.Timeout of 60 seconds elapsing.
+  Failure: MCC-P-0551326 [writeback] The request was canceled due to the configured
+  HttpClient.Timeout of 60 seconds elapsing.
+  Failure: MCC-P-0551327 [submit] The request was canceled due to the configured
+  HttpClient.Timeout of 60 seconds elapsing.
+
+Redis state (captured shortly after Run 1):
+
+  $ redis-cli INFO memory
+  used_memory:805224344
+  used_memory_human:767.92M
+  maxmemory:805306368
+  maxmemory_human:768.00M
+  maxmemory_policy:volatile-lru
+  mem_fragmentation_ratio:1.13
+
+  $ redis-cli INFO stats
+  total_commands_processed:102981845
+  evicted_keys:6168569
+  expired_keys:0
+  keyspace_hits:12914336
+  keyspace_misses:10835685
+
+  $ redis-cli INFO keyspace
+  db0:keys=3833565,expires=3833565,avg_ttl=36681803230,subexpiry=0
+
+  $ redis-cli DBSIZE
+  3833565
+
+  $ redis-cli SLOWLOG GET 5
+  (sample entries, microsecond durations)
+  EXPIRE accum:demo:IND:MBR-0100030:...:2025 36720000 NX -- 11008 usec
+  HINCRBYFLOAT accum:demo:IND:MBR-1660761:...:2025 IndividualOutOfPocketMax:InNetwork 30 -- 12352 usec
+  EXPIRE accum:demo:FAM:SUB-9136936:...:2025 36720000 NX -- 13264 usec
+  HGETALL accum:demo:FAM:SUB-0161518:...:2025 -- 22834 usec
+  HINCRBYFLOAT accum:demo:IND:MBR-0991555:...:2025 IndividualOutOfPocketMax:InNetwork 30 -- 14266 usec
+
+================================================================================
+Live deployment config check (revealing the undocumented drift)
+================================================================================
+
+  $ kubectl get deployment redis-dataprotection -o jsonpath='{.spec.template.spec.containers[0].resources}'
+  {"limits":{"cpu":"500m","memory":"1Gi"},"requests":{"cpu":"100m","memory":"256Mi"}}
+
+  $ kubectl get deployment redis-dataprotection -o jsonpath='{.spec.template.spec.containers[0].args}'
+  ["redis-server","--save","","--appendonly","no","--maxmemory","768mb","--maxmemory-policy","volatile-lru"]
+
+  $ grep -n "maxmemory\|args:" infrastructure/k8s/redis-dataprotection.yaml
+  (no matches -- the committed file specified no args and no maxmemory at all before this episode)
+
+================================================================================
+THE FIX
+================================================================================
+
+  $ kubectl patch deployment redis-dataprotection --type='json' -p='[
+    {"op": "replace", "path": "/spec/template/spec/containers/0/args",
+     "value": ["redis-server", "--save", "", "--appendonly", "no",
+                "--maxmemory", "3072mb", "--maxmemory-policy", "volatile-lru"]}]'
+  deployment.apps/redis-dataprotection patched
+
+  $ kubectl set resources deployment/redis-dataprotection --containers=redis \
+      --limits=cpu=500m,memory=4096Mi --requests=cpu=100m,memory=512Mi
+  deployment.apps/redis-dataprotection resource requirements updated
+
+  $ redis-cli CONFIG GET maxmemory
+  maxmemory
+  3221225472
+  $ redis-cli CONFIG GET maxmemory-policy
+  maxmemory-policy
+  volatile-lru
+
+================================================================================
+RUN 2 (post-fix) -- job mcc-1m-confirmation-v2, seed 20260725
+================================================================================
+
+Progress line transition (no platform failures anywhere):
+  Processed: 950,000/1,000,000  processed=950,000  platformFailures=0
+  Processed: 960,000/1,000,000  processed=960,000  platformFailures=0
+  Processed: 1,000,000/1,000,000  processed=1,000,000  platformFailures=0
+
+Final summary:
+
+  Validation summary
+  Total claims:       1,000,000
+  Processed:          1,000,000
+  Paid/adjudicated:   814,518
+  Pended:             17,058
+  Platform failures:  0
+
+  Workflow checks:    129,981/130,000 matched (19 mismatched, 0 unsupported, 0 observation timeouts)
+
+  Throughput:         123.81 claims/sec
+  P95 latency:        957 ms
+  P99 latency:        1,290 ms
+
+  Payment gate:       20,000/20,000 within $0.01 (0 mismatched, max $0.00)
+  Payment delta:      Exact (20,000)
+
+  Grand total (tracked lifecycle + post-processing): 2:36:42
+  Actual wall clock (run start to now):              2:36:42
+  Unaccounted:                                       0:00.007
+
+Redis state after Run 2 (clean):
+
+  $ redis-cli INFO memory
+  used_memory:405962088
+  used_memory_human:387.16M
+  maxmemory_human:3.00G
+
+  $ redis-cli INFO stats
+  evicted_keys:0
+
+  $ redis-cli DBSIZE
+  1925060

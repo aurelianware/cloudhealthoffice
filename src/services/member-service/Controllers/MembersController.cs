@@ -232,6 +232,8 @@ public class MembersController : ControllerBase
             MaintenanceTypeCode = request.MaintenanceTypeCode,
             MaintenanceReasonCode = request.MaintenanceReasonCode,
             PlanChangeEffectiveDate = request.PlanChangeEffectiveDate,
+            MedicaidSpendDownLiabilityAmount = request.MedicaidSpendDownLiabilityAmount,
+            MedicaidSpendDownAmountMet = request.MedicaidSpendDownAmountMet,
             EmploymentStatus = request.EmploymentStatus,
             TobaccoUser = request.TobaccoUser,
             IsStudent = request.IsStudent,
@@ -842,6 +844,8 @@ public class CreateMemberRequest
     public string? MaintenanceTypeCode { get; set; }
     public string? MaintenanceReasonCode { get; set; }
     public DateTime? PlanChangeEffectiveDate { get; set; }
+    public decimal? MedicaidSpendDownLiabilityAmount { get; set; }
+    public decimal MedicaidSpendDownAmountMet { get; set; }
     public EmploymentStatus? EmploymentStatus { get; set; }
     public bool? TobaccoUser { get; set; }
     public bool? IsStudent { get; set; }

@@ -1490,6 +1490,313 @@ elapsed time on resume while the server, watching real wall time, correctly reco
 finishing near the true end of the run. Both measurements were accurate; they were reading different
 clocks.
 </pre></details></section>
+<section id="episode-014"><div class="eyebrow">Part 14 · recorded artifact</div><h2>Closing the scoring gap carried since Part 9 with a first-ever zero-unsupported run, then finding and fixing why parallelism 56 had quietly underperformed lower concurrency this whole series.</h2><div class="article-links"><a href="/insights/million-claim-challenge/part-14-zero-unsupported-parallelism">Read article</a><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-014/benchmark-results.txt" target="_blank" rel="noopener noreferrer">Source artifact</a></div><details class="evidence-block" open><summary>Benchmark results recorded with Episode 014</summary><pre># Episode 014 benchmark results
+
+## PR #987 - RetroEligibilityCoverageChange: unsupported to scored
+
+- Added `Member.PlanChangeEffectiveDate` to member-service's real `Member` model (X12 834
+  maintenance type code 001 = Change), threaded through `CreateMemberRequest` and the
+  `GET /api/v1/members/{id}` response.
+- New check in `BenefitCalculationStage`: pends (`PendCode RETROELIG`) any claim whose service
+  date is on or after the member's on-file retroactive plan-change date.
+- Live 10,000-claim run: `RetroEligibilityCoverageChange` 26/26 matched (0 mismatched,
+  0 unsupported). False-pend sweep: 0 unexpected pends among 1,130 non-pend claims.
+
+## PR #988 - All three Subrogation scenarios: unsupported to scored
+
+- Added `SyntheticClaim.RelatedCausesCode`/`AccidentDate` and the matching pair on claims-service's
+  `Claim`/`AdapterClaim` (X12 837 CLM11 related-causes code: AA=Auto Accident, EM=Employment,
+  OA=Other Accident).
+- One check in `BenefitCalculationStage` covers all three: pends (`PendCode SUBRO`) on any
+  recognized related-causes code. Generator maps `SubrogationAccidentRelated`-&gt;AA,
+  `SubrogationThirdPartyLiability`-&gt;OA, `SubrogationWorkersComp`-&gt;EM.
+- Live 10,000-claim run: `SubrogationAccidentRelated` 14/14, `SubrogationThirdPartyLiability` 13/13,
+  `SubrogationWorkersComp` 13/13 matched (0 mismatched, 0 unsupported for all three).
+  `RetroEligibilityCoverageChange` still 26/26 (no regression from #987). False-pend sweep:
+  0 unexpected pends among 1,130 non-pend claims.
+
+## PR #989 - MedicaidSpendDown: unsupported to scored, sweep complete
+
+- Added `Member.MedicaidSpendDownLiabilityAmount`/`MedicaidSpendDownAmountMet` to member-service's
+  `Member` model. Modeled as a member-level eligibility fact (mirrors `PlanChangeEffectiveDate`),
+  not routed through the production deductible/accumulator engine.
+- New check in `BenefitCalculationStage`: pends (`PendCode SPENDDOWN`) when the member's
+  accumulated amount hasn't yet met their spend-down liability.
+- `MccWorkflowValidation.IsUnsupportedPendedEdgeCase` removed entirely -- no scenarios left to gate.
+- Live 10,000-claim run: `MedicaidSpendDown` 12/12 matched (0 mismatched, 0 unsupported).
+
+  **Workflow checks: 1,300/1,300 matched (0 mismatched, 0 unsupported, 0 observation timeouts).**
+
+  First time this series has run with zero unsupported claims. `RetroEligibilityCoverageChange`
+  (26/26) and all three Subrogation scenarios (14/14, 13/13, 13/13) held with no regression.
+  False-pend sweep: 0 unexpected pends among 1,130 non-pend claims.
+
+- CI (not local verification) caught two `CloudHealthOffice.MccPlatformValidator.Tests` tests that
+  had used `SubrogationWorkersComp` as their working example of &quot;unsupported&quot; -- a premise this PR
+  chain made false. Local test runs during #987-#989 covered `ClaimsService.Tests` and
+  `BenchmarkClaimGenerator.Tests` but not `MccPlatformValidator.Tests`. Both tests rewritten to
+  assert the new correct behavior and verified locally (110/110 passing) before merge.
+
+## PR #990 - P56 parallelism contention: member-service, coverage-service CPU; claims-service memory
+
+### The observation, verified against the dashboard
+
+Last 25 runs pulled directly from the mass-adjudication dashboard API:
+
+| Parallelism | Best P95 | Best throughput |
+|---|---|---|
+| 10 | 243.5ms | 78.3/s |
+| 15 | 245.0ms | 108.2/s |
+| 20 | 70.2ms | 699.2/s |
+| 28 | 518.8ms | 88.9/s |
+| 30 | 119.8ms | 412.1/s |
+| 40 | 413.5ms | 150.4/s |
+| 44 | 691.7ms | 118.2/s |
+| 56 | 355.2ms | 258.7/s |
+
+P56's best throughput run (258.7/s) was worse than P20's best (699.2/s) on both latency and
+throughput at once -- the signature of contention, not a normal latency-for-throughput tradeoff.
+
+### Root cause: live cgroup cpu.stat, before/after a controlled 20K-claim P56 job
+
+| Service | % periods throttled |
+|---|---|
+| member-service | 48.09% |
+| coverage-service | 22.50% |
+| claims-service (pod 1) | 12.82% |
+| claims-service (pod 2) | 4.10% |
+| benefit-plan-service (×3) | 1.15% / 3.11% / 7.48% |
+| redis-dataprotection | 0.00% |
+
+member-service and coverage-service were each a single replica on 250m/500m (request/limit) CPU,
+serving a member lookup for every claim in the pipeline and a coverage lookup for every COB
+scenario respectively -- never touched by any of this series' three prior CPU-limit rounds
+(Part 10 app tier, Part 12 MongoDB) because neither had been the bottleneck before.
+
+### Fix 1: member-service and coverage-service CPU, 250m/500m -&gt; 500m/2000m
+
+Same 20K/P56 job, before and after:
+
+| | Before | After |
+|---|---|---|
+| member-service throttled | 48.09% | 1.38% / 4.89% (2 pods) |
+| coverage-service throttled | 22.50% | 0.13% / 0.14% (2 pods) |
+| Throughput | 258.7/s (best prior) | 306.7/s |
+| P95 latency | 355.2ms (best prior) | 316.7ms |
+| P99 latency | 663.9ms (best prior) | 549.4ms |
+
+### Fix 1 exposed Fix 2: claims-service OOMKilled
+
+Once member-service/coverage-service stopped queuing requests, claims-service sustained enough
+real concurrent load to exceed its 512Mi memory limit (2 CPU limit was never the constraint).
+`kubectl describe pod` confirmed `Last State: Terminated, Reason: OOMKilled, Exit Code: 137`
+during the Fix-1-verification run. Produced 0 platform failures (validator retried transparently)
+but 77 workflow mismatches, all `RetroEligibilityCoverageChange` claims caught mid-flight --
+addressed by Fix 2, though see the separate note below on the actual root cause of those 77.
+
+Raised claims-service memory 128Mi/512Mi -&gt; 256Mi/2048Mi. Same job again:
+
+| | Fix 1 only | Fix 1 + Fix 2 |
+|---|---|---|
+| claims-service OOM kill | Yes | No (clean restart only, exit code 0) |
+| Throughput | 306.7/s | 362.8/s |
+| P95 latency | 316.7ms | 269.3ms |
+| P99 latency | 549.4ms | 395.9ms |
+| workflowMismatches | 77 | 77 (see below -- unrelated to the OOM) |
+
+### Fix 3: imagePullPolicy Always -&gt; IfNotPresent
+
+Applying `member-service-deployment.yaml`/`coverage-service-deployment.yaml` directly (required to
+test the CPU change) revealed both use `imagePullPolicy: Always`, which forces a registry pull
+even when a locally `kind`-loaded image is already present -- breaking local development the
+moment either manifest is applied. `claims-service`'s own (separately-located, not previously
+applied wholesale) deployment file already used `IfNotPresent`. Fixed on all three deployments.
+
+### Two things surfaced along the way, disclosed rather than smoothed over
+
+1. **Live cluster configuration drift.** Applying the full member-service/coverage-service
+   manifests for the first time in this cluster's ~3-week local history reset `ASPNETCORE_ENVIRONMENT`
+   from a hand-patched `Development` back to the committed `Production`, and reset the MongoDB
+   connection secret to a placeholder password that didn't match the cluster's actual credentials.
+   Both services crash-looped until the live (correct) values were restored by hand via
+   `kubectl set env` / `kubectl patch secret`. Not a code defect -- confirmation that a manifest
+   nobody re-applies for weeks isn't validated just by existing in the repository.
+
+2. **The 77 `RetroEligibilityCoverageChange` mismatches were not caused by the OOM kill.** All 77
+   showed `expectedOutcome: Pended, outcome: Paid` -- the pend never fired. Root cause: member
+   seeding (`SeedMembersAsync`) is create-only, skipping silently on a 409 Conflict rather than
+   updating the existing record. Running several overlapping-seed P56 investigation jobs
+   back-to-back against the same `demo` tenant meant some `RetroEligibilityCoverageChange` claims
+   collided with member records an earlier job had already created -- before
+   `PlanChangeEffectiveDate` existed on them, or with a different value. This is the same gap
+   Part 12 disclosed and deliberately deferred (&quot;refreshing member CoverageEffectiveDate on
+   seeding reuse would require extending member-service's production UpdateMemberRequest API&quot;),
+   now surfacing a second time against a different field. The scenario's own dedicated
+   verification, on a clean seed with no reuse, scored 26/26 (see PR #987 above). Confirmed via
+   `GET /api/mass-adjudication/runs/{id}/claims?validationStatus=Mismatched`: all 77 mismatches
+   were the identical scenario and identical outcome pattern, none attributable to the pod
+   restart. Still open.
+
+## Known, disclosed, unfixed issues carried forward
+
+- Member-seeding reuse never refreshes existing member records on conflict (surfaced in Part 12,
+  and again in this episode's PR #990 verification run).
+- A rare provider-NPI collision between the two independent NPI-generation schemes, observed once
+  in Part 12, not confirmed or fixed.
+- The ~2.7x throughput gap between a fresh-post-rollout P20 run (699 claims/sec) and later P20 runs
+  on the same long-lived pods (349-498 claims/sec), most likely explained by cold-start advantages
+  (no accumulated CPU-throttling debt, connection-pool pressure, or GC-heap fragmentation) --
+  flagged, not investigated further; doesn't affect the validity of the P56 before/after comparisons,
+  which were always taken on the same pods within a single test window.
+</pre></details></section>
+<section id="episode-015"><div class="eyebrow">Part 15 · recorded artifact</div><h2>Running this series' first full 1,000,000-claim confirmation, finding a Redis memory ceiling that only that scale could expose, and fixing it live.</h2><div class="article-links"><a href="/insights/million-claim-challenge/part-15-one-million-claims">Read article</a><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-015/benchmark-results.txt" target="_blank" rel="noopener noreferrer">Source artifact</a></div><details class="evidence-block" open><summary>Benchmark results recorded with Episode 015</summary><pre># Episode 015 benchmark results
+
+## Pre-run: fresh rebuild and deploy
+
+All four services touched by PRs #987-#990 (claims-service, benefit-plan-service, member-service,
+coverage-service) rebuilt fresh from the merged main commit (20cfe1e4) and redeployed before
+either 1M run -- not reused ad-hoc images from earlier verification passes. A 2,000-claim smoke
+test confirmed all healthy before committing to the full run: 260/260 workflow checks matched,
+0 mismatched, 0 unsupported, 0 platform failures, payment gate 40/40 exact.
+
+## Run 1 (pre-fix): mcc-1m-confirmation, seed 20260724, parallelism 56
+
+  Total claims:       1,000,000
+  Processed:          999,977
+  Paid/adjudicated:   814,658
+  Pended:             17,074
+  Business denials:   168,245
+  Platform failures:  23
+  Workflow checks:    129,989/130,000 matched (11 mismatched, 0 unsupported, 0 observation timeouts)
+  Throughput:         107.91 claims/sec
+  P95 latency:        1,008 ms
+  P99 latency:        1,302 ms
+  Payment gate:       20,000/20,000 within $0.01 (0 mismatched, max $0.00)
+  Payment delta:      Exact (20,000)
+  Grand total (tracked lifecycle + post-processing): 3:00:08
+  Actual wall clock (run start to now):              3:00:34
+  Unaccounted:                                       0:25.349
+
+Member and coverage seeding: 962,763 members targeted, 17:26.535 elapsed.
+
+### The 23 platform failures
+
+All 23 appeared in a single tight window between the 950,000 and 960,000-claim mark (the
+progress log showed platformFailures=0 through 950,000, then =23 by 960,000, unchanged
+thereafter). Two distinct symptoms, same root cause:
+
+  Failure: MCC-P-0551320 [adjudicate] adjudication failed: 504
+    RedisTimeoutException: Timeout awaiting response (22689ms elapsed, timeout is 5000ms),
+    command=HGETALL, next: HGETALL accum:demo:IND:MBR-0173638:...:2025
+    serverEndpoint: redis-dataprotection.cloudhealthoffice.svc.cluster.local:6379
+
+  Failure: MCC-P-0551321 [submit] The request was canceled due to the configured
+    HttpClient.Timeout of 60 seconds elapsing.
+  (repeated for MCC-P-0551324, MCC-P-0551326, MCC-P-0551327, and others)
+
+### Root cause: Redis maxmemory ceiling
+
+  redis-cli INFO memory (during/shortly after Run 1):
+    used_memory:805224344
+    used_memory_human:767.92M
+    maxmemory:805306368
+    maxmemory_human:768.00M
+    maxmemory_policy:volatile-lru
+
+  redis-cli INFO stats:
+    evicted_keys:6168569
+    total_commands_processed:102981845
+
+  redis-cli DBSIZE: 3833565
+  redis-cli INFO keyspace: db0:keys=3833565,expires=3833565
+
+used_memory was pinned exactly at the 768MB maxmemory ceiling. evicted_keys (6,168,569) exceeded
+the actual key count (3,833,565) -- more evictions had occurred than keys currently held. All keys
+carried an expiry (expires=keys), so volatile-lru was technically eligible to evict them, but the
+eviction-scan overhead itself, sustained under real P56 concurrent load once the store stayed full,
+is what collapsed a normally sub-millisecond HGETALL into a 22-second wait.
+
+The `768mb`/`volatile-lru` configuration existed nowhere in the repository.
+`infrastructure/k8s/redis-dataprotection.yaml` specified no `maxmemory` at all before this episode
+-- vanilla `redis:7-alpine`, unconfigured. The live cluster had been hand-patched with these args
+at some point in its history and never synced back to the committed manifest -- the same
+undocumented-drift pattern found on member-service and coverage-service during Part 14's P56
+investigation, now surfacing on a third service.
+
+## Fix: raise Redis maxmemory 768mb -&gt; 3072mb
+
+Applied live via targeted `kubectl patch`/`kubectl set resources` (not a full manifest apply,
+learning directly from the config-drift incident during Part 14's investigation), then checked the
+working configuration into `infrastructure/k8s/redis-dataprotection.yaml` for the first time:
+
+  args: redis-server --save &quot;&quot; --appendonly no --maxmemory 3072mb --maxmemory-policy volatile-lru
+  resources: requests 512Mi/100m, limits 4096Mi/500m (was 256Mi/100m request, 1Gi/500m limit)
+
+## Run 2 (post-fix): mcc-1m-confirmation-v2, seed 20260725, parallelism 56
+
+  Total claims:       1,000,000
+  Processed:          1,000,000
+  Paid/adjudicated:   814,518
+  Pended:             17,058
+  Platform failures:  0
+  Workflow checks:    129,981/130,000 matched (19 mismatched, 0 unsupported, 0 observation timeouts)
+  Throughput:         123.81 claims/sec
+  P95 latency:        957 ms
+  P99 latency:        1,290 ms
+  Payment gate:       20,000/20,000 within $0.01 (0 mismatched, max $0.00)
+  Payment delta:      Exact (20,000)
+  Grand total (tracked lifecycle + post-processing): 2:36:42
+  Actual wall clock (run start to now):              2:36:42
+  Unaccounted:                                       0:00.007
+
+Member and coverage seeding: 962,530 members targeted, 13:15.177 elapsed (faster than Run 1
+despite comparable volume -- consistent with the member-service/coverage-service CPU fix from
+Part 14 holding under this episode's load too).
+
+### Redis state after Run 2 (clean)
+
+  redis-cli INFO memory:
+    used_memory:405962088
+    used_memory_human:387.16M
+    maxmemory_human:3.00G
+
+  redis-cli INFO stats:
+    evicted_keys:0
+
+  redis-cli DBSIZE: 1925060
+
+Redis used 13% of its new ceiling. Zero evictions the entire run.
+
+## Comparison
+
+| | Run 1 (pre-fix) | Run 2 (post-fix) |
+|---|---|---|
+| Processed | 999,977 / 1,000,000 | 1,000,000 / 1,000,000 |
+| Platform failures | 23 | 0 |
+| Redis evicted_keys | 6,168,569 | 0 |
+| Redis used_memory | 768MB (pinned at ceiling) | 387MB (13% of 3GB ceiling) |
+| Workflow checks | 129,989/130,000 matched | 129,981/130,000 matched |
+| Payment gate | 20,000/20,000 exact | 20,000/20,000 exact |
+| Throughput | 107.91 claims/sec | 123.81 claims/sec |
+| P95 / P99 latency | 1,008ms / 1,302ms | 957ms / 1,290ms |
+| Wall-clock unaccounted | 0:25.349 | 0:00.007 |
+
+## What remains open
+
+Throughput at sustained 1,000,000-claim scale (107.91-123.81 claims/sec across both runs) remains
+well below the 363 claims/sec verified in Part 14 at 20,000-claim scale. Confirmed not Redis on
+both runs (0% and 13% memory used, 0 evictions in the clean run). Not investigated further in this
+episode -- reproducing the conditions requires another multi-hour live run, for a gap that does not
+affect correctness (0 platform failures, 0 unsupported, exact payment gate held in both runs).
+Candidates for a future investigation: MongoDB under genuinely sustained multi-hour load,
+connection-pool/GC accumulation a short burst test never has time to build up, or the possibility
+that short-burst P95/P99 numbers were never a valid predictor of multi-hour steady-state behavior.
+
+The 19 workflow mismatches in Run 2 (11 in Run 1) are scattered across 9 different scenario types
+with no dominant pattern (0.015% and 0.008% of scoreable checks respectively) -- consistent with
+statistical noise at genuine scale rather than a systemic defect, not investigated claim-by-claim
+in this episode.
+</pre></details></section>
   </main>
 </body>
 </html>

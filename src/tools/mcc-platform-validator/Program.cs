@@ -1515,6 +1515,8 @@ static async Task<bool> CreateMemberAsync(
         terminationDate = member.CoverageTermDate,
         maintenanceTypeCode = NullIfWhiteSpace(member.MaintenanceTypeCode) ?? "021",
         planChangeEffectiveDate = member.PlanChangeEffectiveDate,
+        medicaidSpendDownLiabilityAmount = member.MedicaidSpendDownLiabilityAmount,
+        medicaidSpendDownAmountMet = member.MedicaidSpendDownAmountMet,
         eventId = $"mcc-validator-member-created:{options.Seed}:{member.MemberId}"
     };
 
@@ -2627,7 +2629,9 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
         status = 1,
         submittedDate = claim.DateReceived,
         receivedDate = claim.DateReceived,
-        priorAuthorizationNumber = claim.PriorAuthNumber
+        priorAuthorizationNumber = claim.PriorAuthNumber,
+        relatedCausesCode = claim.RelatedCausesCode,
+        accidentDate = claim.AccidentDate
     };
 
     using var response = await http.PostAsJsonAsync($"{options.ClaimsUrl}/api/v1/claims", payload, json);

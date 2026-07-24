@@ -144,17 +144,20 @@ public class MccFixtureIsolationTests
     }
 
     [Fact]
-    public void IsolateValidationMembers_LeavesUnsupportedScenariosUnchanged()
+    public void IsolateValidationMembers_IsolatesFormerlyUnsupportedSubrogationScenario()
     {
+        // SubrogationWorkersComp was unsupported (and thus skipped by isolation,
+        // since ExpectedOutcome was null) before it was converted to a real scored
+        // Pend. Now that it's scoreable, it must be isolated like any other scored
+        // edge case -- confirms the isolation pass keys off ExpectedOutcome, not a
+        // scenario allowlist that would otherwise need updating by hand.
         var generator = new EdgeCaseClaimGenerator(new InMemoryReferenceDataProvider());
         var subrogation = generator.Generate(2, nameof(EdgeCaseScenario.SubrogationWorkersComp), new Random(43));
-        var originalMemberId = subrogation.Member.MemberId;
+        var runId = Guid.Parse("906f49d1-18cc-4d19-9c77-69822ad6d88b");
 
-        MccFixtureIsolation.IsolateValidationMembers(
-            [subrogation],
-            seed: 42,
-            runId: Guid.Parse("906f49d1-18cc-4d19-9c77-69822ad6d88b"));
+        MccFixtureIsolation.IsolateValidationMembers([subrogation], seed: 42, runId);
 
-        Assert.Equal(originalMemberId, subrogation.Member.MemberId);
+        Assert.Equal("MCCV906F49D1E0000002", subrogation.Member.MemberId);
+        Assert.Equal(subrogation.Member.MemberId, subrogation.Member.SubscriberId);
     }
 }
