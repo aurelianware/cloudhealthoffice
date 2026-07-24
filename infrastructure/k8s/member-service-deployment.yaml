@@ -37,7 +37,7 @@ spec:
       containers:
       - name: member-service
         image: ghcr.io/aurelianware/cloudhealthoffice-member-service:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: http
@@ -56,10 +56,10 @@ spec:
         resources:
           requests:
             memory: "256Mi"
-            cpu: "250m"
+            cpu: "500m"
           limits:
             memory: "512Mi"
-            cpu: "500m"
+            cpu: "2000m"
         livenessProbe:
           httpGet:
             path: /health

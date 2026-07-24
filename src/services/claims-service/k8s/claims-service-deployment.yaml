@@ -36,7 +36,7 @@ spec:
       containers:
       - name: claims-service
         image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-claims-service:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: http
@@ -100,10 +100,10 @@ spec:
         resources:
           requests:
             cpu: 500m
-            memory: 128Mi
+            memory: 256Mi
           limits:
             cpu: 2000m
-            memory: 512Mi
+            memory: 2048Mi
         livenessProbe:
           httpGet:
             path: /health/live
