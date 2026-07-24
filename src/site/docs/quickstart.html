@@ -181,9 +181,20 @@
             actually rose. Fixed, verified, and now the best-performing configuration tested at any concurrency level.
           </p>
           <p>
+            With every one of those fixes in place, this series ran its first full <strong>1,000,000-claim confirmation</strong>:
+            zero unsupported scenarios held at full scale, 129,981/130,000 workflow checks matched, an exact payment gate on
+            20,000/20,000 comparisons, and the wall-clock-gap fix held to 7 milliseconds unaccounted out of two and a half hours.
+            The run also found a bug no smaller run ever could: Redis, backing the benefit-calculation accumulator cache, hit a
+            768MB memory ceiling once true million-claim scale built a working set of ~962,000 distinct member accumulators,
+            forcing eviction churn that produced 23 platform failures late in the run. Fixed live and verified on an identical
+            re-run (0 platform failures). Stated honestly: sustained throughput at this scale (123.81 claims/sec) is still well
+            below the 363 claims/sec verified at 20,000-claim scale, confirmed not caused by Redis, and remains an open question
+            for whoever picks this up next.
+          </p>
+          <p>
             <a href="/docs/million-claim-challenge/evidence#episode-012"><strong>Inspect the 500K evidence archive</strong></a>
             or read
-            <a href="/insights/million-claim-challenge/part-14-zero-unsupported-parallelism"><strong>Part 14: Zero Unsupported, Then the Parallelism Nobody Profiled</strong></a>.
+            <a href="/insights/million-claim-challenge/part-15-one-million-claims"><strong>Part 15: One Million Claims, and the Bug Only That Scale Could Find</strong></a>.
           </p>
         </div>
 
@@ -205,6 +216,7 @@
             <li><a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled">Part 12: The Database Nobody Profiled</a></li>
             <li><a href="/insights/million-claim-challenge/part-13-the-gap-was-the-laptop">Part 13: The Gap Was the Laptop</a></li>
             <li><a href="/insights/million-claim-challenge/part-14-zero-unsupported-parallelism">Part 14: Zero Unsupported, Then the Parallelism Nobody Profiled</a></li>
+            <li><a href="/insights/million-claim-challenge/part-15-one-million-claims">Part 15: One Million Claims, and the Bug Only That Scale Could Find</a></li>
           </ul>
         </div>
 

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Running a Healthcare Claims Platform Locally in Kubernetes, Part 15: One Million Claims, and the Bug Only That Scale Could Find | Cloud Health Office</title>
+  <meta name="description" content="Running this series' first full 1,000,000-claim confirmation, finding a Redis memory ceiling that only that scale could expose, and fixing it live.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/million-claim-challenge/part-15-one-million-claims">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Running a Healthcare Claims Platform Locally in Kubernetes, Part 15: One Million Claims, and the Bug Only That Scale Could Find">
+  <meta property="og:description" content="Running this series' first full 1,000,000-claim confirmation, finding a Redis memory ceiling that only that scale could expose, and fixing it live.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/million-claim-challenge/part-15-one-million-claims">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .source-note { font-size: .9rem !important; color: #8b949e !important; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+    .evidence-block summary { cursor: pointer; padding: 18px 20px; color: #00ffff; font-weight: 700; background: #0d1117; }
+    .evidence-block pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 22px; background: #080c10; color: #c9d1d9; font-size: .84rem; line-height: 1.55; }
+    .article-figure { margin: 40px 0; }
+    .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
+    .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
+    .table-wrap { margin: 28px 0; overflow-x: auto; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; }
+    .table-wrap table { width: 100%; border-collapse: collapse; font-size: .95rem; font-variant-numeric: tabular-nums; }
+    .table-wrap th, .table-wrap td { padding: 10px 16px; text-align: left; border-bottom: 1px solid rgba(139,148,158,.2); white-space: nowrap; }
+    .table-wrap th { color: #00ffff; font-weight: 700; background: #0d1117; }
+    .table-wrap td { color: #c9d1d9; }
+    .table-wrap tr:last-child td { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/docs/million-claim-challenge">Million Claim Challenge</a></nav>
+    <div class="eyebrow">Million Claim Challenge · Part 15</div>
+    <h1>Running a Healthcare Claims Platform Locally in Kubernetes, Part 15: One Million Claims, and the Bug Only That Scale Could Find</h1>
+    <div class="disclosure"><strong>Evidence scope:</strong> This engineering field note describes local Kubernetes development and validation. It is not a production-cloud capacity claim or evidence that the full one-million-claim corpus has been completed.</div>
+    <div class="article-links">
+      <a href="/docs/million-claim-challenge/evidence#episode-015">View evidence</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/million-claim-challenge/podcast/episode-015/article.txt" target="_blank" rel="noopener noreferrer">View article source</a>
+    </div>
+    <p>Every episode since Part 6 has closed with the same six words: &quot;the road to one million.&quot; Part 15 is the episode where that stops being a refrain and becomes a number that actually ran. It didn't run cleanly the first time — and the reason it didn't is the actual story here.</p>
+<h2 id="why-now">Why now</h2>
+<p>Part 14 closed the last scoring gap this series ever carried (five unsupported scenarios, all converted, zero unsupported for the first time) and fixed the one performance ceiling nobody had profiled (parallelism 56, throttled by two under-provisioned single-replica services). Both fixes were verified at 20,000-claim scale. Nothing left disclosed as open at that point pointed at a reason not to try the actual target this series has named in every episode's closing section since Part 6.</p>
+<p>Every service touched by four consecutive PRs got rebuilt fresh from the merged commit and redeployed before this run — not reused ad-hoc images from earlier verification passes. The seed was chosen deliberately fresh rather than reused from any prior large run: reusing Part 10 or Part 12's seed would have collided the first several hundred thousand claims against member records those earlier runs already created, before this episode's new fields (<code>PlanChangeEffectiveDate</code>, <code>RelatedCausesCode</code>, the spend-down liability fields) existed on them — precisely the pollution mechanism Part 14 had just finished diagnosing in its own investigation.</p>
+<h2 id="the-first-attempt">The first attempt</h2>
+<p>1,000,000 claims requested. 999,977 processed. Zero unsupported. 129,989 of 130,000 scoreable workflow checks matched. Payment gate exact on all 20,000 comparable claims. The wall-clock-gap fix from Part 13 held at fifty times the scale it was ever verified at: 25 seconds unaccounted out of a 3-hour run.</p>
+<p>And 23 platform failures — the first this series has seen since the discipline of chasing every single one began. All 23 clustered in one tight window, appearing between the 950,000 and 960,000-claim mark and nowhere else. Before that point: zero. The shape of the failure was as informative as its presence — a <code>RedisTimeoutException</code> on a plain <code>HGETALL</code> accumulator read, 22.6 seconds elapsed against a 5-second timeout, immediately followed by a run of ordinary submit and writeback calls blowing their own 60-second HTTP timeouts. Something had gone from fine to badly wrong, abruptly, late in a very long run.</p>
+<h2 id="finding-it">Finding it</h2>
+<p>The instinct to blame concurrency — another P56-shaped contention problem — didn't survive first contact with the data. <code>redis-dataprotection</code> had shown zero CPU throttling in every test this series has ever run against it, including Part 14's own investigation. This wasn't a CPU story.</p>
+<p><code>redis-cli INFO memory</code> on the live pod told it directly: <code>used_memory</code> sitting pinned at exactly 768 megabytes — the configured <code>maxmemory</code> ceiling, not a coincidence. <code>INFO stats</code> confirmed it wasn't just full once: <code>evicted_keys</code> read 6,168,569, against roughly 3.8 million keys actually present in the store at that moment. Redis had evicted more entries than it currently held. Under <code>volatile-lru</code>, hitting the memory ceiling doesn't fail a write — it forces an eviction scan to free room first, on every write, for as long as the store stays full. A full 1,000,000-claim corpus touches roughly 962,763 distinct member accumulators — a working set order of magnitude larger than anything the 20K, 150K, or 500K verification runs before it had ever built. Sustained eviction churn on a single-threaded command loop, under real P56 concurrent load, is exactly what turns a normal sub-millisecond <code>HGETALL</code> into a 22-second wait.</p>
+<p>The <code>768mb</code> limit itself turned out not to exist anywhere in the repository. <code>infrastructure/k8s/redis-dataprotection.yaml</code> specified no <code>maxmemory</code> at all — vanilla <code>redis:7-alpine</code>, unconfigured. The live cluster had been running <code>--maxmemory 768mb --maxmemory-policy volatile-lru</code> as a hand-applied patch at some point in its three-week history, never synced back to the file that was supposed to describe it. The same undocumented-drift pattern Part 14 found on member-service and coverage-service days earlier, now on a third service — a reminder that a manifest nobody re-applies isn't validated by existing correctly in a repository; it's validated by matching what's actually running.</p>
+<h2 id="the-fix-and-what-it-didn-t-fix">The fix, and what it didn't fix</h2>
+<p>Raised <code>maxmemory</code> from 768 megabytes to 3 gigabytes — roughly four times the working set actually measured at true million-claim scale — and, for the first time, checked the real configuration into the manifest instead of leaving it as tribal knowledge on a live pod. Re-ran the identical 1,000,000-claim job to verify, not a smaller stand-in.</p>
+<p>Redis used 387 megabytes of the new 3-gigabyte ceiling. Zero evictions, the entire run. Platform failures: 23 → 0. Payment gate still exact. The wall-clock gap held again — 7 milliseconds unaccounted out of two hours thirty-six minutes, arguably the cleanest number this series has ever produced for it.</p>
+<p>Throughput did not recover to the 363 claims per second Part 14 verified at 20,000-claim scale. This run: 123.81 claims per second, P95 957 milliseconds, P99 1,290 milliseconds — better than the failure-afflicted first attempt (107.91/sec), but nowhere near the short-burst number. Checked directly rather than assumed: Redis in the clean run used 13 percent of its new ceiling and evicted nothing, so it is confirmed innocent of this specific gap, a second time, on two different runs. Something else — most plausibly MongoDB under genuinely sustained multi-hour load, or connection-pool and GC pressure that a 20-minute burst test never has time to accumulate, or simply the fact that short-burst P95/P99 numbers were never a valid stand-in for multi-hour steady-state behavior — remains the open question. Disclosed rather than chased: closing it would mean another multi-hour live run just to reproduce the conditions, for a number that doesn't touch correctness and doesn't block anything currently running.</p>
+<h2 id="what-one-million-claims-actually-says">What one million claims actually says</h2>
+<p>Every fix this series has shipped since Part 9 held simultaneously, at the scale the series was always aiming for: zero unsupported scenarios, an exact payment gate, a wall-clock accounting so tight it's now measured in milliseconds instead of minutes. And the run found one more real bug nobody had seen before — not despite reaching a million claims, but specifically <em>because</em> of it. Every scale increase this series has ever attempted has found something the previous scale couldn't see: Part 8 found the next bottleneck at 100K, Part 10 found MongoDB's real cost at 250K underneath a guessed one, Part 12 found the actual database limit at 500K after two fixture bugs got out of the way. One million found a memory ceiling nobody had sized for a working set that only exists at that scale. The pattern isn't new. Reaching the number the series named from the start is what finally tested it.</p>
+<h2 id="the-road-to-one-million">The road to one million</h2>
+<p>Part 6 made the scoring honest.</p>
+<p>Part 7 made the evidence visible.</p>
+<p>Part 8 proved a clean 100,000-claim run and found the next bottleneck.</p>
+<p>Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.</p>
+<p>Part 10 confirmed it, found the real cause wasn't the guessed one, and disclosed a bug it chose not to fix.</p>
+<p>Part 11 went back for that bug, found it wasn't the whole story, and closed the gap it was hiding.</p>
+<p>Part 12 found two bugs on the way to the one it was looking for, fixed all three, and confirmed 500,000 claims clean — with a smaller, still-open mystery to hand to whatever comes next.</p>
+<p>Part 13 went back for that mystery one more time, and found it wasn't in the platform at all.</p>
+<p>Part 14 closed the scoring surface this series has carried since Part 9, then found — by reading a dashboard, not chasing a theory — that this series' highest concurrency setting had been quietly underperforming for its entire run.</p>
+<p>Part 15 ran the number the series named from the beginning, found a bug that only existed at that scale, fixed it, and is handing the next one — a sustained-throughput gap short bursts can't reproduce — to whatever comes after.</p>
+    <div class="article-links"><a href="/insights/million-claim-challenge">All MCC articles</a><a href="/docs/million-claim-challenge/evidence">Evidence archive</a></div>
+  </main>
+</body>
+</html>

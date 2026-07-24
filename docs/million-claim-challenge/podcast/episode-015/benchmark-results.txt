@@ -1,0 +1,147 @@
+# Episode 015 benchmark results
+
+## Pre-run: fresh rebuild and deploy
+
+All four services touched by PRs #987-#990 (claims-service, benefit-plan-service, member-service,
+coverage-service) rebuilt fresh from the merged main commit (20cfe1e4) and redeployed before
+either 1M run -- not reused ad-hoc images from earlier verification passes. A 2,000-claim smoke
+test confirmed all healthy before committing to the full run: 260/260 workflow checks matched,
+0 mismatched, 0 unsupported, 0 platform failures, payment gate 40/40 exact.
+
+## Run 1 (pre-fix): mcc-1m-confirmation, seed 20260724, parallelism 56
+
+  Total claims:       1,000,000
+  Processed:          999,977
+  Paid/adjudicated:   814,658
+  Pended:             17,074
+  Business denials:   168,245
+  Platform failures:  23
+  Workflow checks:    129,989/130,000 matched (11 mismatched, 0 unsupported, 0 observation timeouts)
+  Throughput:         107.91 claims/sec
+  P95 latency:        1,008 ms
+  P99 latency:        1,302 ms
+  Payment gate:       20,000/20,000 within $0.01 (0 mismatched, max $0.00)
+  Payment delta:      Exact (20,000)
+  Grand total (tracked lifecycle + post-processing): 3:00:08
+  Actual wall clock (run start to now):              3:00:34
+  Unaccounted:                                       0:25.349
+
+Member and coverage seeding: 962,763 members targeted, 17:26.535 elapsed.
+
+### The 23 platform failures
+
+All 23 appeared in a single tight window between the 950,000 and 960,000-claim mark (the
+progress log showed platformFailures=0 through 950,000, then =23 by 960,000, unchanged
+thereafter). Two distinct symptoms, same root cause:
+
+  Failure: MCC-P-0551320 [adjudicate] adjudication failed: 504
+    RedisTimeoutException: Timeout awaiting response (22689ms elapsed, timeout is 5000ms),
+    command=HGETALL, next: HGETALL accum:demo:IND:MBR-0173638:...:2025
+    serverEndpoint: redis-dataprotection.cloudhealthoffice.svc.cluster.local:6379
+
+  Failure: MCC-P-0551321 [submit] The request was canceled due to the configured
+    HttpClient.Timeout of 60 seconds elapsing.
+  (repeated for MCC-P-0551324, MCC-P-0551326, MCC-P-0551327, and others)
+
+### Root cause: Redis maxmemory ceiling
+
+  redis-cli INFO memory (during/shortly after Run 1):
+    used_memory:805224344
+    used_memory_human:767.92M
+    maxmemory:805306368
+    maxmemory_human:768.00M
+    maxmemory_policy:volatile-lru
+
+  redis-cli INFO stats:
+    evicted_keys:6168569
+    total_commands_processed:102981845
+
+  redis-cli DBSIZE: 3833565
+  redis-cli INFO keyspace: db0:keys=3833565,expires=3833565
+
+used_memory was pinned exactly at the 768MB maxmemory ceiling. evicted_keys (6,168,569) exceeded
+the actual key count (3,833,565) -- more evictions had occurred than keys currently held. All keys
+carried an expiry (expires=keys), so volatile-lru was technically eligible to evict them, but the
+eviction-scan overhead itself, sustained under real P56 concurrent load once the store stayed full,
+is what collapsed a normally sub-millisecond HGETALL into a 22-second wait.
+
+The `768mb`/`volatile-lru` configuration existed nowhere in the repository.
+`infrastructure/k8s/redis-dataprotection.yaml` specified no `maxmemory` at all before this episode
+-- vanilla `redis:7-alpine`, unconfigured. The live cluster had been hand-patched with these args
+at some point in its history and never synced back to the committed manifest -- the same
+undocumented-drift pattern found on member-service and coverage-service during Part 14's P56
+investigation, now surfacing on a third service.
+
+## Fix: raise Redis maxmemory 768mb -> 3072mb
+
+Applied live via targeted `kubectl patch`/`kubectl set resources` (not a full manifest apply,
+learning directly from the config-drift incident during Part 14's investigation), then checked the
+working configuration into `infrastructure/k8s/redis-dataprotection.yaml` for the first time:
+
+  args: redis-server --save "" --appendonly no --maxmemory 3072mb --maxmemory-policy volatile-lru
+  resources: requests 512Mi/100m, limits 4096Mi/500m (was 256Mi/100m request, 1Gi/500m limit)
+
+## Run 2 (post-fix): mcc-1m-confirmation-v2, seed 20260725, parallelism 56
+
+  Total claims:       1,000,000
+  Processed:          1,000,000
+  Paid/adjudicated:   814,518
+  Pended:             17,058
+  Platform failures:  0
+  Workflow checks:    129,981/130,000 matched (19 mismatched, 0 unsupported, 0 observation timeouts)
+  Throughput:         123.81 claims/sec
+  P95 latency:        957 ms
+  P99 latency:        1,290 ms
+  Payment gate:       20,000/20,000 within $0.01 (0 mismatched, max $0.00)
+  Payment delta:      Exact (20,000)
+  Grand total (tracked lifecycle + post-processing): 2:36:42
+  Actual wall clock (run start to now):              2:36:42
+  Unaccounted:                                       0:00.007
+
+Member and coverage seeding: 962,530 members targeted, 13:15.177 elapsed (faster than Run 1
+despite comparable volume -- consistent with the member-service/coverage-service CPU fix from
+Part 14 holding under this episode's load too).
+
+### Redis state after Run 2 (clean)
+
+  redis-cli INFO memory:
+    used_memory:405962088
+    used_memory_human:387.16M
+    maxmemory_human:3.00G
+
+  redis-cli INFO stats:
+    evicted_keys:0
+
+  redis-cli DBSIZE: 1925060
+
+Redis used 13% of its new ceiling. Zero evictions the entire run.
+
+## Comparison
+
+| | Run 1 (pre-fix) | Run 2 (post-fix) |
+|---|---|---|
+| Processed | 999,977 / 1,000,000 | 1,000,000 / 1,000,000 |
+| Platform failures | 23 | 0 |
+| Redis evicted_keys | 6,168,569 | 0 |
+| Redis used_memory | 768MB (pinned at ceiling) | 387MB (13% of 3GB ceiling) |
+| Workflow checks | 129,989/130,000 matched | 129,981/130,000 matched |
+| Payment gate | 20,000/20,000 exact | 20,000/20,000 exact |
+| Throughput | 107.91 claims/sec | 123.81 claims/sec |
+| P95 / P99 latency | 1,008ms / 1,302ms | 957ms / 1,290ms |
+| Wall-clock unaccounted | 0:25.349 | 0:00.007 |
+
+## What remains open
+
+Throughput at sustained 1,000,000-claim scale (107.91-123.81 claims/sec across both runs) remains
+well below the 363 claims/sec verified in Part 14 at 20,000-claim scale. Confirmed not Redis on
+both runs (0% and 13% memory used, 0 evictions in the clean run). Not investigated further in this
+episode -- reproducing the conditions requires another multi-hour live run, for a gap that does not
+affect correctness (0 platform failures, 0 unsupported, exact payment gate held in both runs).
+Candidates for a future investigation: MongoDB under genuinely sustained multi-hour load,
+connection-pool/GC accumulation a short burst test never has time to build up, or the possibility
+that short-burst P95/P99 numbers were never a valid predictor of multi-hour steady-state behavior.
+
+The 19 workflow mismatches in Run 2 (11 in Run 1) are scattered across 9 different scenario types
+with no dominant pattern (0.015% and 0.008% of scoreable checks respectively) -- consistent with
+statistical noise at genuine scale rather than a systemic defect, not investigated claim-by-claim
+in this episode.

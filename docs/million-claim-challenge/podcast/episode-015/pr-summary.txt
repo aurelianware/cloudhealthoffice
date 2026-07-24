@@ -1,0 +1,55 @@
+# Episode 015 implementation summary
+
+## PR #992 - Fix Redis accumulator cache eviction thrash at million-claim scale
+
+- This series' first full 1,000,000-claim confirmation run surfaced 23 platform failures,
+  clustered tightly in a single window between the 950,000 and 960,000-claim mark, and a
+  throughput collapse to 107.91 claims/sec.
+- Root cause: `redis-dataprotection` (shared between ASP.NET Data Protection and the
+  benefit-calculation accumulator cache) was capped at `768mb` maxmemory -- a limit that existed
+  only as an undocumented live-cluster patch, never checked into
+  `infrastructure/k8s/redis-dataprotection.yaml`. The committed file specified no `maxmemory` at
+  all (vanilla `redis:7-alpine`). Same undocumented-drift pattern found on member-service and
+  coverage-service during Part 14's PR #990 investigation, now on a third service.
+- Confirmed live: `used_memory` pinned exactly at the 768MB ceiling; `evicted_keys` at 6,168,569,
+  exceeding the 3,833,565 keys actually held. A full 1,000,000-claim run touches ~962,763 distinct
+  member accumulators, a working set none of the prior 20K/150K/500K verification runs approached.
+  Sustained LRU eviction-scan overhead under real P56 concurrent load turned sub-millisecond
+  `HGETALL`/`EXPIRE` calls into 22+ second waits, cascading into 60-second HTTP client timeouts on
+  submit/writeback.
+- Raised `maxmemory` 768mb -> 3072mb (pod limit 1Gi -> 4096Mi, request 256Mi -> 512Mi) -- ~4x the
+  measured working set. Checked the real configuration into the manifest for the first time.
+- Verified live: re-ran the identical 1,000,000-claim job (fresh seed, to avoid the member-seeding-
+  reuse pollution Part 14 diagnosed). Redis used 387MB of the new 3GB ceiling with zero evictions.
+  Platform failures 23 -> 0. Payment gate still exact. Wall-clock gap held at 7ms unaccounted out
+  of 2h36m.
+- Disclosed, not fixed in this PR: throughput at sustained 1M scale (107.91-123.81 claims/sec)
+  remains well below the 363 claims/sec verified at 20K scale in Part 14. Confirmed not Redis on
+  both runs. Root cause unknown -- candidates include MongoDB under sustained load, connection-pool/
+  GC accumulation over a multi-hour run, or short-burst P95/P99 numbers never having been a valid
+  predictor of steady-state behavior. Not chased further: doesn't affect correctness, and
+  reproducing it requires another multi-hour live run.
+
+## The 1,000,000-claim confirmation runs themselves (no code changes beyond PR #992)
+
+- Both runs used all four PRs from Part 14 (#987-990) plus this episode's Redis fix, on images
+  rebuilt fresh from the merged main commit (20cfe1e4) -- not reused ad-hoc verification images.
+- Run 1 (pre-fix, seed 20260724): 999,977/1,000,000 processed, 23 platform failures, 129,989/130,000
+  workflow checks matched (0 unsupported), payment gate exact, 25s wall-clock unaccounted.
+- Run 2 (post-fix, seed 20260725): 1,000,000/1,000,000 processed, 0 platform failures, 129,981/130,000
+  workflow checks matched (0 unsupported), payment gate exact, 7ms wall-clock unaccounted.
+- Every fix shipped since Part 9 (scoring surface, P56 parallelism, wall-clock accounting) held
+  simultaneously at the scale this series named as its target from the start.
+
+## Known, disclosed, unfixed issues carried forward
+
+- Sustained-throughput gap at true million-claim scale vs. short-burst verification numbers
+  (this episode's own open finding).
+- Member-seeding reuse never refreshes existing member records on conflict (Part 12, Part 14).
+- A rare provider-NPI collision observed once in Part 12, not confirmed or fixed.
+- 19 (Run 2) / 11 (Run 1) scattered workflow mismatches across 9+ scenario types with no dominant
+  pattern, consistent with statistical noise at genuine scale, not investigated claim-by-claim.
+
+## Remaining unsupported scenario families
+
+None. Confirmed to hold at full 1,000,000-claim scale in both runs.

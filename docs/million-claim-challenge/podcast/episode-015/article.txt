@@ -1,0 +1,57 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 15: One Million Claims, and the Bug Only That Scale Could Find
+
+Every episode since Part 6 has closed with the same six words: "the road to one million." Part 15 is the episode where that stops being a refrain and becomes a number that actually ran. It didn't run cleanly the first time — and the reason it didn't is the actual story here.
+
+## Why now
+
+Part 14 closed the last scoring gap this series ever carried (five unsupported scenarios, all converted, zero unsupported for the first time) and fixed the one performance ceiling nobody had profiled (parallelism 56, throttled by two under-provisioned single-replica services). Both fixes were verified at 20,000-claim scale. Nothing left disclosed as open at that point pointed at a reason not to try the actual target this series has named in every episode's closing section since Part 6.
+
+Every service touched by four consecutive PRs got rebuilt fresh from the merged commit and redeployed before this run — not reused ad-hoc images from earlier verification passes. The seed was chosen deliberately fresh rather than reused from any prior large run: reusing Part 10 or Part 12's seed would have collided the first several hundred thousand claims against member records those earlier runs already created, before this episode's new fields (`PlanChangeEffectiveDate`, `RelatedCausesCode`, the spend-down liability fields) existed on them — precisely the pollution mechanism Part 14 had just finished diagnosing in its own investigation.
+
+## The first attempt
+
+1,000,000 claims requested. 999,977 processed. Zero unsupported. 129,989 of 130,000 scoreable workflow checks matched. Payment gate exact on all 20,000 comparable claims. The wall-clock-gap fix from Part 13 held at fifty times the scale it was ever verified at: 25 seconds unaccounted out of a 3-hour run.
+
+And 23 platform failures — the first this series has seen since the discipline of chasing every single one began. All 23 clustered in one tight window, appearing between the 950,000 and 960,000-claim mark and nowhere else. Before that point: zero. The shape of the failure was as informative as its presence — a `RedisTimeoutException` on a plain `HGETALL` accumulator read, 22.6 seconds elapsed against a 5-second timeout, immediately followed by a run of ordinary submit and writeback calls blowing their own 60-second HTTP timeouts. Something had gone from fine to badly wrong, abruptly, late in a very long run.
+
+## Finding it
+
+The instinct to blame concurrency — another P56-shaped contention problem — didn't survive first contact with the data. `redis-dataprotection` had shown zero CPU throttling in every test this series has ever run against it, including Part 14's own investigation. This wasn't a CPU story.
+
+`redis-cli INFO memory` on the live pod told it directly: `used_memory` sitting pinned at exactly 768 megabytes — the configured `maxmemory` ceiling, not a coincidence. `INFO stats` confirmed it wasn't just full once: `evicted_keys` read 6,168,569, against roughly 3.8 million keys actually present in the store at that moment. Redis had evicted more entries than it currently held. Under `volatile-lru`, hitting the memory ceiling doesn't fail a write — it forces an eviction scan to free room first, on every write, for as long as the store stays full. A full 1,000,000-claim corpus touches roughly 962,763 distinct member accumulators — a working set order of magnitude larger than anything the 20K, 150K, or 500K verification runs before it had ever built. Sustained eviction churn on a single-threaded command loop, under real P56 concurrent load, is exactly what turns a normal sub-millisecond `HGETALL` into a 22-second wait.
+
+The `768mb` limit itself turned out not to exist anywhere in the repository. `infrastructure/k8s/redis-dataprotection.yaml` specified no `maxmemory` at all — vanilla `redis:7-alpine`, unconfigured. The live cluster had been running `--maxmemory 768mb --maxmemory-policy volatile-lru` as a hand-applied patch at some point in its three-week history, never synced back to the file that was supposed to describe it. The same undocumented-drift pattern Part 14 found on member-service and coverage-service days earlier, now on a third service — a reminder that a manifest nobody re-applies isn't validated by existing correctly in a repository; it's validated by matching what's actually running.
+
+## The fix, and what it didn't fix
+
+Raised `maxmemory` from 768 megabytes to 3 gigabytes — roughly four times the working set actually measured at true million-claim scale — and, for the first time, checked the real configuration into the manifest instead of leaving it as tribal knowledge on a live pod. Re-ran the identical 1,000,000-claim job to verify, not a smaller stand-in.
+
+Redis used 387 megabytes of the new 3-gigabyte ceiling. Zero evictions, the entire run. Platform failures: 23 → 0. Payment gate still exact. The wall-clock gap held again — 7 milliseconds unaccounted out of two hours thirty-six minutes, arguably the cleanest number this series has ever produced for it.
+
+Throughput did not recover to the 363 claims per second Part 14 verified at 20,000-claim scale. This run: 123.81 claims per second, P95 957 milliseconds, P99 1,290 milliseconds — better than the failure-afflicted first attempt (107.91/sec), but nowhere near the short-burst number. Checked directly rather than assumed: Redis in the clean run used 13 percent of its new ceiling and evicted nothing, so it is confirmed innocent of this specific gap, a second time, on two different runs. Something else — most plausibly MongoDB under genuinely sustained multi-hour load, or connection-pool and GC pressure that a 20-minute burst test never has time to accumulate, or simply the fact that short-burst P95/P99 numbers were never a valid stand-in for multi-hour steady-state behavior — remains the open question. Disclosed rather than chased: closing it would mean another multi-hour live run just to reproduce the conditions, for a number that doesn't touch correctness and doesn't block anything currently running.
+
+## What one million claims actually says
+
+Every fix this series has shipped since Part 9 held simultaneously, at the scale the series was always aiming for: zero unsupported scenarios, an exact payment gate, a wall-clock accounting so tight it's now measured in milliseconds instead of minutes. And the run found one more real bug nobody had seen before — not despite reaching a million claims, but specifically *because* of it. Every scale increase this series has ever attempted has found something the previous scale couldn't see: Part 8 found the next bottleneck at 100K, Part 10 found MongoDB's real cost at 250K underneath a guessed one, Part 12 found the actual database limit at 500K after two fixture bugs got out of the way. One million found a memory ceiling nobody had sized for a working set that only exists at that scale. The pattern isn't new. Reaching the number the series named from the start is what finally tested it.
+
+## The road to one million
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+Part 8 proved a clean 100,000-claim run and found the next bottleneck.
+
+Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.
+
+Part 10 confirmed it, found the real cause wasn't the guessed one, and disclosed a bug it chose not to fix.
+
+Part 11 went back for that bug, found it wasn't the whole story, and closed the gap it was hiding.
+
+Part 12 found two bugs on the way to the one it was looking for, fixed all three, and confirmed 500,000 claims clean — with a smaller, still-open mystery to hand to whatever comes next.
+
+Part 13 went back for that mystery one more time, and found it wasn't in the platform at all.
+
+Part 14 closed the scoring surface this series has carried since Part 9, then found — by reading a dashboard, not chasing a theory — that this series' highest concurrency setting had been quietly underperforming for its entire run.
+
+Part 15 ran the number the series named from the beginning, found a bug that only existed at that scale, fixed it, and is handing the next one — a sustained-throughput gap short bursts can't reproduce — to whatever comes after.
