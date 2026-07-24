@@ -78,7 +78,9 @@ const analyticsInjection = googleAnalyticsId
       '  function gtag(){dataLayer.push(arguments);}',
       "  gtag('js', new Date());",
       `  gtag('config', '${googleAnalyticsId}');`,
-      '</script>'
+      '</script>',
+      '<!-- Conversion / engagement event tracking -->',
+      '<script defer src="/js/analytics-events.js"></script>'
     ].join('\n')
   : '';
 
