@@ -293,20 +293,23 @@
         <div class="callout callout-success">
           <div class="callout-title">Latest local Kubernetes validation</div>
           <p>
-            Cloud Health Office processed <strong>100,000 synthetic claims</strong> in local Docker Desktop Kubernetes.
-            The clean run completed its timed phase at <strong>56.15 claims/sec</strong> with <strong>358 ms P95</strong>, <strong>451 ms P99</strong>,
+            Cloud Health Office processed <strong>1,000,000 synthetic claims</strong> in local Docker Desktop Kubernetes &mdash;
+            the full corpus scale this benchmark was designed around. The clean run completed its timed phase at
+            <strong>123.81 claims/sec</strong> with <strong>957 ms P95</strong>, <strong>1,290 ms P99</strong>,
             <strong>zero platform failures</strong>, <strong>zero unexpected pends</strong>,
-            <strong>11,534/13,000 workflow checks matched</strong>, and <strong>zero scoreable workflow mismatches</strong>.
+            <strong>129,981/130,000 workflow checks matched</strong>, and <strong>zero unsupported scenarios</strong>.
           </p>
           <p>
-            The run also reported <strong>1,466 unsupported scenarios</strong> separately instead of counting them as wins or failures, and <strong>2,000/2,000 comparable payments</strong> were within one cent.
-            This is a local validation benchmark, not a production cloud benchmark. Its value is honesty:
-            throughput, tail latency, platform reliability, pended observation, workflow correctness, unsupported gaps, and payment delta visible together.
+            <strong>20,000/20,000 comparable payments</strong> were within one cent. This is a local validation benchmark,
+            not a production cloud benchmark. Its value is honesty: throughput, tail latency, platform reliability, pended
+            observation, workflow correctness, and payment delta visible together.
           </p>
           <p>
-            Scope matters: the MCC corpus is designed for one million claims and 29 named edge-case scenarios.
-            This published Cloud Health Office run proves a 100K local slice, not the full million or production-cloud capacity.
-            The payment and false-pend gates are now active; fixture preparation and higher local tail latency are the next scaling investigation.
+            Scope matters: this run reached the full one-million-claim, 29-named-edge-case-scenario design this corpus was
+            built around, not a production-cloud capacity claim. It also found and fixed a real bug that only became visible
+            at that scale &mdash; Redis hit an undocumented memory ceiling once a true million-claim working set built up,
+            causing platform failures late in the run, fixed and reverified live. Sustained throughput at this scale remains
+            lower than shorter verification runs and is the next open scaling investigation.
           </p>
         </div>
 
@@ -466,11 +469,11 @@
           <div class="callout-title">Current proof vs benchmark design</div>
           <p>
             The benchmark design is the full million-claim corpus with 29 named edge-case scenarios and target scoring tiers.
-            The latest published Cloud Health Office result is narrower: a 500,000-claim local Kubernetes validation with
-            pended observation, 61,063/65,000 scoreable workflow checks matched, unsupported scenarios reported separately, zero unexpected pends, and payment accuracy gated for comparable claims. That gap is intentional and public.
+            The latest published Cloud Health Office result reached that full target: a 1,000,000-claim local Kubernetes validation with
+            pended observation, 129,981/130,000 scoreable workflow checks matched, zero unsupported scenarios, zero unexpected pends, and payment accuracy gated for comparable claims. That run also found and fixed a Redis memory-eviction bug that only became visible at true million-claim scale.
           </p>
           <p>
-            Our next proof milestone is the full million-claim run.
+            Sustained throughput at this scale is lower than the prior 500,000-claim run's rate, confirmed unrelated to the Redis fix, and remains open, disclosed local work.
           </p>
         </div>
 

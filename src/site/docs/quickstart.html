@@ -157,33 +157,13 @@
         <div class="callout callout-info">
           <div class="callout-title">Current evidence to compare against</div>
           <p>
-            The latest published Cloud Health Office proof is a <strong>500,000-claim local Docker Desktop Kubernetes run</strong>
-            at 2x the prior scale: 61,063/65,000 workflow checks matched, zero platform failures,
-            zero unexpected pends, and 10,000/10,000 comparable payments within one cent.
+            The latest published Cloud Health Office proof is this series' first full
+            <strong>1,000,000-claim local Docker Desktop Kubernetes run</strong> &mdash; the target this benchmark was built
+            around from the start: zero unsupported scenarios held at full scale, 129,981/130,000 workflow checks matched, an
+            exact payment gate on 20,000/20,000 comparisons, and the wall-clock-gap fix held to 7 milliseconds unaccounted out of
+            two and a half hours. Scope matters: this is local engineering evidence, not a production cloud capacity claim.
           </p>
           <p>
-            Scope matters. This is local engineering evidence, not a production cloud capacity claim and not the full million yet.
-            Testing the benchmark harness at scale it had never run at before turned up two fixture-generation bugs, both fixed and
-            verified before this run. Profiling the disclosed &ldquo;five sequential I/O hops&rdquo; Submit-chain cost found the real
-            bottleneck one layer underneath it: a shared MongoDB instance throttled more than it ran, on a CPU limit never touched by
-            the app-tier fixes that preceded it. Fixing it brought throughput to 186.06 claims/sec &mdash; higher than the 250K run's
-            145.04, despite double the volume. That run also reproduced a smaller version of an unexplained wall-clock gap first
-            disclosed at 250K &mdash; since resolved: checkpoint instrumentation traced it to macOS suspending the local Kubernetes
-            cluster mid-run, confirmed against the host's own sleep log and fixed by keeping the machine awake for the duration of a
-            run. The next target is the full million.
-          </p>
-          <p>
-            Since that run, every scenario this series ever disclosed as unsupported has been converted to a real, scored outcome
-            &mdash; a 10,000-claim verification run now scores 1,300/1,300 workflow checks matched with zero unsupported claims,
-            a first for this series. A separate investigation found and fixed why the benchmark's highest concurrency setting
-            (parallelism 56) had quietly underperformed lower concurrency for its entire run: two single-replica services throttled
-            under CPU limits nobody had profiled at that load, and a memory ceiling the fix immediately exposed once throughput
-            actually rose. Fixed, verified, and now the best-performing configuration tested at any concurrency level.
-          </p>
-          <p>
-            With every one of those fixes in place, this series ran its first full <strong>1,000,000-claim confirmation</strong>:
-            zero unsupported scenarios held at full scale, 129,981/130,000 workflow checks matched, an exact payment gate on
-            20,000/20,000 comparisons, and the wall-clock-gap fix held to 7 milliseconds unaccounted out of two and a half hours.
             The run also found a bug no smaller run ever could: Redis, backing the benefit-calculation accumulator cache, hit a
             768MB memory ceiling once true million-claim scale built a working set of ~962,000 distinct member accumulators,
             forcing eviction churn that produced 23 platform failures late in the run. Fixed live and verified on an identical
@@ -192,7 +172,19 @@
             for whoever picks this up next.
           </p>
           <p>
-            <a href="/docs/million-claim-challenge/evidence#episode-012"><strong>Inspect the 500K evidence archive</strong></a>
+            Getting there took several rounds of prior work. A 500,000-claim run at 2x the prior scale (61,063/65,000 workflow
+            checks matched, zero platform failures) turned up two fixture-generation bugs and found the real Submit-chain
+            bottleneck one layer underneath the guessed one: a shared MongoDB instance throttled more than it ran, on a CPU
+            limit never touched by earlier app-tier fixes. Fixing it brought throughput to 186.06 claims/sec at the time. That
+            run also reproduced a smaller version of an unexplained wall-clock gap, later traced to macOS suspending the local
+            Kubernetes cluster mid-run and fixed by keeping the machine awake for the duration of a run. Every scenario this
+            series ever disclosed as unsupported was then converted to a real, scored outcome, and a separate investigation
+            found and fixed why the benchmark's highest concurrency setting (parallelism 56) had quietly underperformed lower
+            concurrency for its entire run &mdash; two single-replica services throttled under CPU limits nobody had profiled at
+            that load, and a memory ceiling the fix immediately exposed once throughput actually rose.
+          </p>
+          <p>
+            <a href="/docs/million-claim-challenge/evidence#episode-015"><strong>Inspect the 1M evidence archive</strong></a>
             or read
             <a href="/insights/million-claim-challenge/part-15-one-million-claims"><strong>Part 15: One Million Claims, and the Bug Only That Scale Could Find</strong></a>.
           </p>
@@ -421,9 +413,9 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
             <p>Understand the deterministic corpus, answer key, workflow scoring, supported gaps, and published evidence.</p>
             <span class="card-arrow">Challenge guide &rarr;</span>
           </a>
-          <a href="/docs/million-claim-challenge/evidence#episode-012" class="docs-hub-card">
-            <h3>500K Evidence Archive</h3>
-            <p>Review the 500K local Kubernetes result, run settings, correctness gates, and the still-open wall-clock question.</p>
+          <a href="/docs/million-claim-challenge/evidence#episode-015" class="docs-hub-card">
+            <h3>1M Evidence Archive</h3>
+            <p>Review the full 1,000,000-claim local Kubernetes result, run settings, correctness gates, and the open sustained-throughput question.</p>
             <span class="card-arrow">Inspect evidence &rarr;</span>
           </a>
           <a href="/docs/compliance" class="docs-hub-card">
