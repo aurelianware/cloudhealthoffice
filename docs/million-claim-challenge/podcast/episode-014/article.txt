@@ -1,0 +1,98 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 14: Zero Unsupported, Then the Parallelism Nobody Profiled
+
+Part 13 closed a measurement mystery. Part 14 closes a scoring gap this series has carried since Part 9, then finds a second, completely unrelated bottleneck by doing nothing more than reading a dashboard carefully.
+
+## The last five
+
+Since Part 9, five synthetic scenario families in the Million Claim Challenge corpus had never been scoreable: the validator generated them, the platform adjudicated them, but nobody had built the logic to check whether the result was *right* — so they were excluded from correctness scoring entirely and reported as "unsupported." `RetroEligibilityCoverageChange`. `SubrogationAccidentRelated`, `SubrogationThirdPartyLiability`, `SubrogationWorkersComp`. `MedicaidSpendDown`. Each one a real business scenario with no real detection logic behind it.
+
+Before touching code, the question was which to build first. A quick investigation read the actual pipeline: `RetroEligibilityCoverageChange` could lean on infrastructure already built for `RetroEligibilityTermination` in Part 9 — member coverage-window fields, the validator's plumbing of member dates into the adjudication request. The three subrogation variants had no real signal to key off at all — no accident indicator anywhere in the claim model — but shared one gap, not three. `MedicaidSpendDown` needed something genuinely new: no accumulator, no eligibility concept, nothing to extend.
+
+**RetroEligibilityCoverageChange** (PR #987) models a real Medicaid/commercial administrative event: a benefit-plan correction recorded today, effective retroactively two weeks ago. `Member.PlanChangeEffectiveDate` was added to member-service's actual `Member` model — not a benchmark-only fixture — and a new check in `BenefitCalculationStage` pends (`PendCode RETROELIG`) any claim whose service date falls on or after that date, before the benefit engine runs. Verified live: 26 of 26 matched, zero mismatches, zero regressions on the eligibility logic Part 9 already built.
+
+**The three subrogation scenarios** (PR #988) turned out to be one fix, not three. Real claims carry an X12 837 CLM11 related-causes code — `AA` for auto accident, `EM` for employment, `OA` for other accident — signaling a third party might owe money before the health plan does. The platform had never modeled this field at all. Adding `RelatedCausesCode` to the claim, and one check that pends (`PendCode SUBRO`) on any recognized code, converted `SubrogationAccidentRelated`, `SubrogationThirdPartyLiability`, and `SubrogationWorkersComp` together. Converting all three for the cost of one was the right call once the shared mechanism was clear — leaving two nearly-free conversions unsupported after building the capability would have been arbitrary. 14/14, 13/13, 13/13 matched.
+
+**MedicaidSpendDown** (PR #989) was the one that actually needed something new: a "medically needy" spend-down category, where a member whose income exceeds the standard Medicaid threshold can still qualify by incurring enough medical expense in a budget period to spend down to the limit. Until that liability is met, coverage for the period isn't confirmed. `Member.MedicaidSpendDownLiabilityAmount` and `AmountMet` model it as a member-level eligibility fact — deliberately not routed through the production deductible/accumulator engine, since spend-down gates *whether coverage applies at all*, not *how much of it remains*. 12 of 12 matched.
+
+With that, `MccWorkflowValidation`'s unsupported-pended-edge-case gate had no members left. Removed entirely rather than kept as dead code with an empty scenario list.
+
+**Workflow checks: 1,300 of 1,300 matched.** Zero unsupported. First time this series has run with no unsupported claims at all.
+
+## What local verification missed, and what caught it
+
+Every conversion was checked the same way this series always checks things: build clean, run the relevant unit tests, run a live claims batch against the local cluster, read the actual dashboard numbers. All green, every time — until the PR chain hit CI.
+
+Two tests in `CloudHealthOffice.MccPlatformValidator.Tests` failed on GitHub Actions. Not because the code was wrong — because those two tests had been written using `SubrogationWorkersComp` as their working example of "an unsupported scenario," and this PR chain had just made it a supported one. Their premise, not their target, had gone stale. The real gap: that test project had never been in the local test run rotation during this work — only `ClaimsService.Tests` and `BenchmarkClaimGenerator.Tests` had been. CI caught what local discipline missed. Both tests were rewritten to assert the new, correct behavior — one confirming `SubrogationWorkersComp` now returns a real scoreable `Pended` outcome, the other confirming the fixture-isolation pass now assigns it a genuine run-scoped member ID instead of skipping it — and both were verified failing without the fix and passing with it, the same discipline this series has applied to every regression test since Part 9's useless-seed-sweep lesson.
+
+## Then a dashboard got read carefully
+
+With the scoring surface complete, the next question was informal: watching the Mass Adjudication console across a run of unrelated verification jobs, the P20 runs looked faster than the P56 runs. Not a hypothesis — an observation from reading a screen. Worth checking before trusting it.
+
+Pulled the last 25 runs directly from the dashboard's own API rather than eyeballing it:
+
+| Parallelism | Best P95 | Best throughput |
+|---|---|---|
+| 20 | 70ms | 699 claims/sec |
+| 30 | 120ms | 412 claims/sec |
+| 40 | 413ms | 150 claims/sec |
+| 56 | 355ms | 259 claims/sec |
+
+Real, and stranger than a simple latency-for-throughput tradeoff: P56's *best* throughput run was worse than P20's *best* throughput run, on both axes at once. That shape — latency and throughput degrading together as concurrency rises — isn't healthy scaling hitting a ceiling. It's contention: something shared is saturated well below 56 concurrent workers, and the extra concurrency is queuing behind it instead of doing work.
+
+## Finding the actual bottleneck
+
+Same technique Part 10 and Part 12 used on claims-service and MongoDB: live `cgroup cpu.stat`, before and after an identical controlled job, on every candidate service. Prime suspects going in: Redis (backs the accumulator cache) and the two services with only a single replica each, member-service and coverage-service.
+
+A 20,000-claim job at parallelism 56 settled it:
+
+| Service | Periods throttled |
+|---|---|
+| **member-service** | **48.1%** |
+| **coverage-service** | **22.5%** |
+| claims-service (×2 pods) | 4–13% |
+| benefit-plan-service (×3 pods) | 1–7% |
+| redis-dataprotection | 0% |
+
+Redis, the leading suspect, wasn't a factor at all. The real answer: `member-service`, a single replica on 500 millicores, doing a member lookup for *every claim in the pipeline*, throttled nearly half the time it ran. `coverage-service` — every COB scenario — showed the identical shape at a smaller scale. Neither had been touched by any of this series' three prior CPU-limit rounds, because neither had ever been the bottleneck before; they'd simply never been tested at this concurrency.
+
+Raised both from 250m/500m to 500m/2000m — the same ratio claims-service already runs at. Same job, same seed, live: member-service throttling fell to 1–5%, coverage-service to 0.1%. Throughput rose from a best-case 259 to 307 claims/sec; P95 from 355–604ms down to 317ms.
+
+## The fix exposed the next problem, immediately
+
+Unthrottling member-service and coverage-service let the pipeline actually sustain higher load — and claims-service, which had never been memory-constrained before because it never got the chance to be, got OOMKilled mid-run. 512Mi of memory, 2 full CPUs: plenty of compute, not enough headroom for connection pools and buffers once 56-way concurrency was genuinely flowing instead of queued behind member-service.
+
+Raised claims-service from 128Mi/512Mi to 256Mi/2048Mi. Verified a third time on the identical job: no OOM kill, throughput up again to 363 claims/sec, P95 down to 269ms, P99 down to 396ms — the best-observed result at *any* parallelism level tested this session, P10 through P56.
+
+A fourth, smaller fix rode along: applying the actual committed YAML for member-service and coverage-service (needed to test the CPU change) surfaced `imagePullPolicy: Always` on both — a setting that forces a registry pull even when a locally built image is already loaded, breaking local `kind` development the instant either manifest is applied for real. claims-service's own deployment file had used `IfNotPresent` from the start, which is exactly why it had never hit this. Fixed on all three.
+
+## Two things worth naming honestly
+
+Applying those two manifests directly for the first time in this cluster's three-week local history also surfaced real configuration drift: the live pods had been hand-patched at some point to run in Development mode with working MongoDB credentials, while the checked-in YAML still specified Production mode and a placeholder password. Applying the file as committed reset both, breaking both services until the live credentials were restored by hand. Not a code defect — a reminder that a manifest nobody re-applies for weeks isn't actually validated by sitting in the repository, however correct it looks.
+
+And the fix's own verification run produced 77 workflow mismatches, all `RetroEligibilityCoverageChange`, expected `Pended` and actually `Paid`. Not the OOM kill's fault — the same gap Part 12 disclosed and deliberately deferred: member seeding is create-only, skipping silently on a conflict rather than updating an existing record. Running several overlapping-seed jobs back-to-back against the same tenant during this investigation meant some `RetroEligibilityCoverageChange` claims collided with member records an earlier job had already created — before `PlanChangeEffectiveDate` existed on them. The scenario's own dedicated verification, on a clean seed, scored 26 of 26. This was an artifact of how the investigation was run, not a defect in what PR #987 built — but it's the second time this exact gap has produced a visible number, and it remains open.
+
+## What Part 14 actually closes, and what it doesn't
+
+The scoring surface flagged since Part 9 is complete: every unsupported scenario this series ever disclosed is now a real, verified, scored outcome. And parallelism 56 — quietly worse than lower concurrency levels for this entire series, never explained, never investigated — turned out not to be inherently worse at all. It was running against two single-replica dependencies nobody had profiled at that load before, plus a memory ceiling that only became visible once the real bottleneck was removed. Fixed, and now the best-performing configuration tested at any concurrency.
+
+Still open: the member-seeding-reuse gap, now surfaced twice. A rare provider-NPI collision flagged once in Part 12, still unconfirmed. Neither blocks anything currently running — both are named here rather than left implicit.
+
+## The road to one million
+
+Part 6 made the scoring honest.
+
+Part 7 made the evidence visible.
+
+Part 8 proved a clean 100,000-claim run and found the next bottleneck.
+
+Part 9 grew the scored surface without lowering the bar, and left a number unconfirmed.
+
+Part 10 confirmed it, found the real cause wasn't the guessed one, and disclosed a bug it chose not to fix.
+
+Part 11 went back for that bug, found it wasn't the whole story, and closed the gap it was hiding.
+
+Part 12 found two bugs on the way to the one it was looking for, fixed all three, and confirmed 500,000 claims clean — with a smaller, still-open mystery to hand to whatever comes next.
+
+Part 13 went back for that mystery one more time, and found it wasn't in the platform at all.
+
+Part 14 closed the scoring surface this series has carried since Part 9, then found — by reading a dashboard, not chasing a theory — that this series' highest concurrency setting had been quietly underperforming for its entire run, for reasons nobody had looked for until now.

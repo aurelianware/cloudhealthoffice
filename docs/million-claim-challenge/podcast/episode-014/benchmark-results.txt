@@ -1,0 +1,158 @@
+# Episode 014 benchmark results
+
+## PR #987 - RetroEligibilityCoverageChange: unsupported to scored
+
+- Added `Member.PlanChangeEffectiveDate` to member-service's real `Member` model (X12 834
+  maintenance type code 001 = Change), threaded through `CreateMemberRequest` and the
+  `GET /api/v1/members/{id}` response.
+- New check in `BenefitCalculationStage`: pends (`PendCode RETROELIG`) any claim whose service
+  date is on or after the member's on-file retroactive plan-change date.
+- Live 10,000-claim run: `RetroEligibilityCoverageChange` 26/26 matched (0 mismatched,
+  0 unsupported). False-pend sweep: 0 unexpected pends among 1,130 non-pend claims.
+
+## PR #988 - All three Subrogation scenarios: unsupported to scored
+
+- Added `SyntheticClaim.RelatedCausesCode`/`AccidentDate` and the matching pair on claims-service's
+  `Claim`/`AdapterClaim` (X12 837 CLM11 related-causes code: AA=Auto Accident, EM=Employment,
+  OA=Other Accident).
+- One check in `BenefitCalculationStage` covers all three: pends (`PendCode SUBRO`) on any
+  recognized related-causes code. Generator maps `SubrogationAccidentRelated`->AA,
+  `SubrogationThirdPartyLiability`->OA, `SubrogationWorkersComp`->EM.
+- Live 10,000-claim run: `SubrogationAccidentRelated` 14/14, `SubrogationThirdPartyLiability` 13/13,
+  `SubrogationWorkersComp` 13/13 matched (0 mismatched, 0 unsupported for all three).
+  `RetroEligibilityCoverageChange` still 26/26 (no regression from #987). False-pend sweep:
+  0 unexpected pends among 1,130 non-pend claims.
+
+## PR #989 - MedicaidSpendDown: unsupported to scored, sweep complete
+
+- Added `Member.MedicaidSpendDownLiabilityAmount`/`MedicaidSpendDownAmountMet` to member-service's
+  `Member` model. Modeled as a member-level eligibility fact (mirrors `PlanChangeEffectiveDate`),
+  not routed through the production deductible/accumulator engine.
+- New check in `BenefitCalculationStage`: pends (`PendCode SPENDDOWN`) when the member's
+  accumulated amount hasn't yet met their spend-down liability.
+- `MccWorkflowValidation.IsUnsupportedPendedEdgeCase` removed entirely -- no scenarios left to gate.
+- Live 10,000-claim run: `MedicaidSpendDown` 12/12 matched (0 mismatched, 0 unsupported).
+
+  **Workflow checks: 1,300/1,300 matched (0 mismatched, 0 unsupported, 0 observation timeouts).**
+
+  First time this series has run with zero unsupported claims. `RetroEligibilityCoverageChange`
+  (26/26) and all three Subrogation scenarios (14/14, 13/13, 13/13) held with no regression.
+  False-pend sweep: 0 unexpected pends among 1,130 non-pend claims.
+
+- CI (not local verification) caught two `CloudHealthOffice.MccPlatformValidator.Tests` tests that
+  had used `SubrogationWorkersComp` as their working example of "unsupported" -- a premise this PR
+  chain made false. Local test runs during #987-#989 covered `ClaimsService.Tests` and
+  `BenchmarkClaimGenerator.Tests` but not `MccPlatformValidator.Tests`. Both tests rewritten to
+  assert the new correct behavior and verified locally (110/110 passing) before merge.
+
+## PR #990 - P56 parallelism contention: member-service, coverage-service CPU; claims-service memory
+
+### The observation, verified against the dashboard
+
+Last 25 runs pulled directly from the mass-adjudication dashboard API:
+
+| Parallelism | Best P95 | Best throughput |
+|---|---|---|
+| 10 | 243.5ms | 78.3/s |
+| 15 | 245.0ms | 108.2/s |
+| 20 | 70.2ms | 699.2/s |
+| 28 | 518.8ms | 88.9/s |
+| 30 | 119.8ms | 412.1/s |
+| 40 | 413.5ms | 150.4/s |
+| 44 | 691.7ms | 118.2/s |
+| 56 | 355.2ms | 258.7/s |
+
+P56's best throughput run (258.7/s) was worse than P20's best (699.2/s) on both latency and
+throughput at once -- the signature of contention, not a normal latency-for-throughput tradeoff.
+
+### Root cause: live cgroup cpu.stat, before/after a controlled 20K-claim P56 job
+
+| Service | % periods throttled |
+|---|---|
+| member-service | 48.09% |
+| coverage-service | 22.50% |
+| claims-service (pod 1) | 12.82% |
+| claims-service (pod 2) | 4.10% |
+| benefit-plan-service (×3) | 1.15% / 3.11% / 7.48% |
+| redis-dataprotection | 0.00% |
+
+member-service and coverage-service were each a single replica on 250m/500m (request/limit) CPU,
+serving a member lookup for every claim in the pipeline and a coverage lookup for every COB
+scenario respectively -- never touched by any of this series' three prior CPU-limit rounds
+(Part 10 app tier, Part 12 MongoDB) because neither had been the bottleneck before.
+
+### Fix 1: member-service and coverage-service CPU, 250m/500m -> 500m/2000m
+
+Same 20K/P56 job, before and after:
+
+| | Before | After |
+|---|---|---|
+| member-service throttled | 48.09% | 1.38% / 4.89% (2 pods) |
+| coverage-service throttled | 22.50% | 0.13% / 0.14% (2 pods) |
+| Throughput | 258.7/s (best prior) | 306.7/s |
+| P95 latency | 355.2ms (best prior) | 316.7ms |
+| P99 latency | 663.9ms (best prior) | 549.4ms |
+
+### Fix 1 exposed Fix 2: claims-service OOMKilled
+
+Once member-service/coverage-service stopped queuing requests, claims-service sustained enough
+real concurrent load to exceed its 512Mi memory limit (2 CPU limit was never the constraint).
+`kubectl describe pod` confirmed `Last State: Terminated, Reason: OOMKilled, Exit Code: 137`
+during the Fix-1-verification run. Produced 0 platform failures (validator retried transparently)
+but 77 workflow mismatches, all `RetroEligibilityCoverageChange` claims caught mid-flight --
+addressed by Fix 2, though see the separate note below on the actual root cause of those 77.
+
+Raised claims-service memory 128Mi/512Mi -> 256Mi/2048Mi. Same job again:
+
+| | Fix 1 only | Fix 1 + Fix 2 |
+|---|---|---|
+| claims-service OOM kill | Yes | No (clean restart only, exit code 0) |
+| Throughput | 306.7/s | 362.8/s |
+| P95 latency | 316.7ms | 269.3ms |
+| P99 latency | 549.4ms | 395.9ms |
+| workflowMismatches | 77 | 77 (see below -- unrelated to the OOM) |
+
+### Fix 3: imagePullPolicy Always -> IfNotPresent
+
+Applying `member-service-deployment.yaml`/`coverage-service-deployment.yaml` directly (required to
+test the CPU change) revealed both use `imagePullPolicy: Always`, which forces a registry pull
+even when a locally `kind`-loaded image is already present -- breaking local development the
+moment either manifest is applied. `claims-service`'s own (separately-located, not previously
+applied wholesale) deployment file already used `IfNotPresent`. Fixed on all three deployments.
+
+### Two things surfaced along the way, disclosed rather than smoothed over
+
+1. **Live cluster configuration drift.** Applying the full member-service/coverage-service
+   manifests for the first time in this cluster's ~3-week local history reset `ASPNETCORE_ENVIRONMENT`
+   from a hand-patched `Development` back to the committed `Production`, and reset the MongoDB
+   connection secret to a placeholder password that didn't match the cluster's actual credentials.
+   Both services crash-looped until the live (correct) values were restored by hand via
+   `kubectl set env` / `kubectl patch secret`. Not a code defect -- confirmation that a manifest
+   nobody re-applies for weeks isn't validated just by existing in the repository.
+
+2. **The 77 `RetroEligibilityCoverageChange` mismatches were not caused by the OOM kill.** All 77
+   showed `expectedOutcome: Pended, outcome: Paid` -- the pend never fired. Root cause: member
+   seeding (`SeedMembersAsync`) is create-only, skipping silently on a 409 Conflict rather than
+   updating the existing record. Running several overlapping-seed P56 investigation jobs
+   back-to-back against the same `demo` tenant meant some `RetroEligibilityCoverageChange` claims
+   collided with member records an earlier job had already created -- before
+   `PlanChangeEffectiveDate` existed on them, or with a different value. This is the same gap
+   Part 12 disclosed and deliberately deferred ("refreshing member CoverageEffectiveDate on
+   seeding reuse would require extending member-service's production UpdateMemberRequest API"),
+   now surfacing a second time against a different field. The scenario's own dedicated
+   verification, on a clean seed with no reuse, scored 26/26 (see PR #987 above). Confirmed via
+   `GET /api/mass-adjudication/runs/{id}/claims?validationStatus=Mismatched`: all 77 mismatches
+   were the identical scenario and identical outcome pattern, none attributable to the pod
+   restart. Still open.
+
+## Known, disclosed, unfixed issues carried forward
+
+- Member-seeding reuse never refreshes existing member records on conflict (surfaced in Part 12,
+  and again in this episode's PR #990 verification run).
+- A rare provider-NPI collision between the two independent NPI-generation schemes, observed once
+  in Part 12, not confirmed or fixed.
+- The ~2.7x throughput gap between a fresh-post-rollout P20 run (699 claims/sec) and later P20 runs
+  on the same long-lived pods (349-498 claims/sec), most likely explained by cold-start advantages
+  (no accumulated CPU-throttling debt, connection-pool pressure, or GC-heap fragmentation) --
+  flagged, not investigated further; doesn't affect the validity of the P56 before/after comparisons,
+  which were always taken on the same pods within a single test window.
