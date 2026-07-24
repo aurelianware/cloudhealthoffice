@@ -874,6 +874,9 @@
 
           form.style.display = 'none';
           successEl.style.display = 'block';
+          if (typeof window.choTrack === 'function') {
+            window.choTrack('founding_client_submit', { org_type: orgType, page_path: '/' });
+          }
         } catch (err) {
           showError(err.message || 'Something went wrong. Please email clients@cloudhealthoffice.com directly.');
           submitBtn.disabled = false;

@@ -389,6 +389,9 @@
 
         form.style.display = 'none';
         successEl.style.display = 'block';
+        if (typeof window.choTrack === 'function') {
+          window.choTrack('contact_form_submit', { form_topic: topic, page_path: '/contact' });
+        }
       } catch (err) {
         showError(err.message || 'Something went wrong. Please email sales@cloudhealthoffice.com directly.');
         submitBtn.disabled = false;
