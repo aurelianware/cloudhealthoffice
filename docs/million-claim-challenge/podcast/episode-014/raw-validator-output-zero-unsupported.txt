@@ -1,0 +1,39 @@
+Raw excerpt from the mcc-spenddown-verify job (10,000 claims, PR #989's live verification run) --
+the first zero-unsupported run in series history. Captured via `kubectl logs` against the local
+kind cluster. Scenario breakdown trimmed to the scenarios directly relevant to this episode's
+sweep; full per-scenario output available via the standard validator console log.
+
+  Sweeping 1,130 non-pend claims for unexpected persisted pends.
+  False-pend sweep: 0 unexpected pends, 48 terminal outcomes reconciled
+
+  Platform failures:  0
+  Workflow checks:    1,300/1,300 matched (0 mismatched, 0 unsupported, 0 observation timeouts)
+
+  Scenario: EdgeCase:MedicaidSpendDown 12/12 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:RetroEligibilityCoverageChange 26/26 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:SubrogationAccidentRelated 14/14 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:SubrogationThirdPartyLiability 13/13 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+  Scenario: EdgeCase:SubrogationWorkersComp 13/13 matched (0 mismatched, 0 unsupported, 0 observation timeouts, 0 unspecified)
+
+---
+
+Raw excerpt confirming the 77 RetroEligibilityCoverageChange mismatches during the P56 memory-fix
+verification run were a single, consistent pattern -- not scattered failures consistent with an
+OOM kill corrupting arbitrary in-flight claims. Pulled via:
+
+  GET /api/mass-adjudication/runs/{runId}/claims?validationStatus=Mismatched
+
+  total mismatched: 77
+  scenario breakdown: EdgeCase:RetroEligibilityCoverageChange x77 (100%)
+
+  sample claim:
+  {
+    "generatedClaimId": "MCC-E-0000374",
+    "validationScenario": "EdgeCase:RetroEligibilityCoverageChange",
+    "expectedOutcome": "Pended",
+    "expectedBusinessDenialCode": "N527",
+    "validationStatus": "Mismatched",
+    "outcome": "Paid",
+    "adjudicationSuccess": true,
+    "actualPlanPayment": 77.0
+  }

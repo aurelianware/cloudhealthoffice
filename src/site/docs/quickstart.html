@@ -173,9 +173,17 @@
             run. The next target is the full million.
           </p>
           <p>
+            Since that run, every scenario this series ever disclosed as unsupported has been converted to a real, scored outcome
+            &mdash; a 10,000-claim verification run now scores 1,300/1,300 workflow checks matched with zero unsupported claims,
+            a first for this series. A separate investigation found and fixed why the benchmark's highest concurrency setting
+            (parallelism 56) had quietly underperformed lower concurrency for its entire run: two single-replica services throttled
+            under CPU limits nobody had profiled at that load, and a memory ceiling the fix immediately exposed once throughput
+            actually rose. Fixed, verified, and now the best-performing configuration tested at any concurrency level.
+          </p>
+          <p>
             <a href="/docs/million-claim-challenge/evidence#episode-012"><strong>Inspect the 500K evidence archive</strong></a>
             or read
-            <a href="/insights/million-claim-challenge/part-13-the-gap-was-the-laptop"><strong>Part 13: The Gap Was the Laptop</strong></a>.
+            <a href="/insights/million-claim-challenge/part-14-zero-unsupported-parallelism"><strong>Part 14: Zero Unsupported, Then the Parallelism Nobody Profiled</strong></a>.
           </p>
         </div>
 
@@ -196,6 +204,7 @@
             <li><a href="/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark">Part 11: The Check That Only Ran in the Benchmark</a></li>
             <li><a href="/insights/million-claim-challenge/part-12-the-database-nobody-profiled">Part 12: The Database Nobody Profiled</a></li>
             <li><a href="/insights/million-claim-challenge/part-13-the-gap-was-the-laptop">Part 13: The Gap Was the Laptop</a></li>
+            <li><a href="/insights/million-claim-challenge/part-14-zero-unsupported-parallelism">Part 14: Zero Unsupported, Then the Parallelism Nobody Profiled</a></li>
           </ul>
         </div>
 

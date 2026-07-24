@@ -1,0 +1,90 @@
+# Episode 014 implementation summary
+
+## PR #987 - Convert RetroEligibilityCoverageChange from unsupported to scored
+
+- Added `Member.PlanChangeEffectiveDate` to member-service's real `Member` model (X12 834
+  maintenance type code 001), `CreateMemberRequest`, and the create-mapping.
+- Added the same field to claims-service's `ResolvedMember`/`HttpMemberResolver`.
+- New `HasUnreconciledRetroactivePlanChange` check in `BenefitCalculationStage`, pending
+  (`PendCode RETROELIG`) when the member's on-file retroactive plan-change date is on or before
+  the claim's service date.
+- Corpus generator (`EdgeCaseClaimGenerator`) sets up the scenario the same way it already does
+  for `RetroEligibilityTermination`: a deterministic coverage window plus the real X12 834
+  maintenance code. `MccClaimDateNormalizer` shifts the new date field alongside the others it
+  already normalizes.
+- Removed `RetroEligibilityCoverageChange` from `MccWorkflowValidation`'s unsupported gate.
+- Two new `BenefitCalculationStageTests` cases; confirmed via `git stash` that removing
+  `ResolvedMember.PlanChangeEffectiveDate` breaks the build entirely (a compile-time guarantee,
+  not just a runtime assertion).
+- Verified live: 26/26 matched, 0 mismatched, 0 unsupported.
+
+## PR #988 - Convert all three Subrogation scenarios from unsupported to scored
+
+- Added `SyntheticClaim.RelatedCausesCode`/`AccidentDate` (X12 837 CLM11) and the matching pair on
+  claims-service's `Claim`/`AdapterClaim`, including their lossless `From()`/`ToClaim()` round-trip
+  mappers.
+- New `HasUnreviewedSubrogationIndicator` check in `BenefitCalculationStage`, pending
+  (`PendCode SUBRO`) on any recognized related-causes code (AA/EM/OA).
+- Generator maps `SubrogationAccidentRelated`->AA, `SubrogationThirdPartyLiability`->OA,
+  `SubrogationWorkersComp`->EM -- one field and one check covering all three scenarios.
+- Removed all three from `MccWorkflowValidation`'s unsupported gate.
+- Four new `BenefitCalculationStageTests` cases (all three codes pend; absence continues to the
+  benefit engine).
+- Verified live: 14/14, 13/13, 13/13 matched; `RetroEligibilityCoverageChange` still 26/26 (no
+  regression from #987).
+
+## PR #989 - Convert MedicaidSpendDown from unsupported to scored -- closes the sweep
+
+- Added `Member.MedicaidSpendDownLiabilityAmount`/`MedicaidSpendDownAmountMet` to member-service's
+  `Member` model, `CreateMemberRequest`, and the mapping.
+- New `HasUnmetMedicaidSpendDown` check in `BenefitCalculationStage`, pending
+  (`PendCode SPENDDOWN`) when the accumulated amount hasn't met the liability.
+- Modeled as a member-level eligibility fact rather than routed through the production
+  deductible/accumulator engine, since spend-down gates coverage eligibility, not benefit
+  remaining.
+- `MccWorkflowValidation.IsUnsupportedPendedEdgeCase` removed entirely -- no scenarios left.
+- Two new `BenefitCalculationStageTests` cases.
+- Verified live: 12/12 matched. **Workflow checks: 1,300/1,300 matched, 0 unsupported** -- first
+  zero-unsupported run in series history.
+- CI caught two `CloudHealthOffice.MccPlatformValidator.Tests` failures that local verification
+  missed (that test project wasn't in the local run rotation during #987-#989): both tests had
+  used `SubrogationWorkersComp` as their working example of an unsupported scenario. Rewrote both
+  to assert the new correct behavior
+  (`ExpectedValidationFor_SubrogationEdgeCase_ReturnsScoreablePendedOutcome`,
+  `IsolateValidationMembers_IsolatesFormerlyUnsupportedSubrogationScenario`); all 110 tests in
+  that project verified passing locally before the fix was pushed.
+
+## PR #990 - Fix P56 parallelism contention: member-service, coverage-service CPU; claims-service memory
+
+- Investigated an observation from the mass-adjudication dashboard: P56 runs consistently worse
+  than P20 on both latency and throughput (contention signature, not a normal tradeoff).
+- Live `cgroup cpu.stat` before/after an identical 20K-claim P56 job isolated it to member-service
+  (48.1% throttled) and coverage-service (22.5%), both single-replica on 250m/500m CPU.
+- Raised both to 500m/2000m (matching claims-service's existing ratio). Verified: throttling to
+  1-5% and 0.1%; throughput 258.7 -> 306.7/s; P95 355.2ms -> 316.7ms.
+- That fix exposed claims-service getting OOMKilled (512Mi memory, 2 CPU -- CPU was never the
+  constraint). Raised memory 128Mi/512Mi -> 256Mi/2048Mi. Verified: no OOM kill, throughput
+  306.7 -> 362.8/s, P95 316.7ms -> 269.3ms, P99 549.4ms -> 395.9ms -- best result at any
+  parallelism level tested this session.
+- Fixed `imagePullPolicy: Always` -> `IfNotPresent` on all three deployments (member-service,
+  coverage-service, claims-service), discovered when applying the first two manifests directly
+  broke local `kind` image loading.
+- Along the way: applying those manifests for the first time in ~3 weeks also reset live-patched
+  `ASPNETCORE_ENVIRONMENT` and MongoDB credentials that had drifted from the committed YAML,
+  crash-looping both services until restored by hand -- disclosed as a real, if non-code, finding.
+- The fix's own verification run surfaced 77 `RetroEligibilityCoverageChange` mismatches, traced
+  to the member-seeding-reuse gap disclosed in Part 12 (create-only seeding, skip-on-conflict) --
+  not a defect in PR #987, an artifact of running several overlapping-seed jobs against the same
+  tenant during this investigation. Confirmed via the dashboard's per-claim mismatch endpoint.
+
+## Known, disclosed, unfixed issues carried forward
+
+- Member-seeding reuse never refreshes existing member records on conflict -- surfaced twice now
+  (Part 12, and this episode).
+- A rare provider-NPI collision observed once in Part 12, not confirmed or fixed.
+- A ~2.7x throughput gap between a fresh-post-rollout P20 run and later P20 runs on the same
+  long-lived pods, most likely a cold-start effect -- flagged, not investigated further.
+
+## Remaining unsupported scenario families
+
+None. This episode closes the sweep started in Part 9.
