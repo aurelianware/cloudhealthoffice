@@ -5,6 +5,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <!--
+      This project no longer uses Microsoft.Azure.Cosmos directly (migrated
+      to MongoDB — see EnrollmentRepository/EnrollmentTransactionRepository/
+      EnrollmentEventRepository), but CloudHealthOffice.Infrastructure still
+      references it transitively for its generic Cosmos health-check option,
+      which is enough to trigger the SDK's build-time Newtonsoft.Json check.
+      Safe to suppress: this project never constructs a CosmosClient, so the
+      runtime FileNotFoundException that check exists to warn about can't
+      happen here regardless.
+    -->
     <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
@@ -17,7 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.0" />
+    <PackageReference Include="MongoDB.Driver" Version="3.6.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
     <PackageReference Include="Confluent.Kafka" Version="2.3.0" />

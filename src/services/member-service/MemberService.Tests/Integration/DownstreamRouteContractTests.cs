@@ -53,11 +53,13 @@ public class DownstreamRouteContractTests
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Enrollment-import only speaks Cosmos; emulator defaults
-                    // keep the CosmosClient constructor happy. Repositories are
-                    // replaced below so no actual I/O happens.
-                    ["CosmosDb:Endpoint"] = "https://localhost:8081",
-                    ["CosmosDb:Key"] = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+                    // Enrollment-import now speaks MongoDB (migrated off Cosmos —
+                    // see PR #1005). Force the Mongo branch with a fake host so
+                    // the MongoClient constructor succeeds; no I/O runs because
+                    // we replace the repositories below. Same pattern as
+                    // CoverageFactory above.
+                    ["MongoDb:ConnectionString"] = "mongodb://fake-contract-host:27017",
+                    ["MongoDb:DatabaseName"] = "contract"
                 });
             });
             builder.ConfigureServices(services =>
@@ -71,12 +73,21 @@ public class DownstreamRouteContractTests
                     new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>().Object);
                 services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>(
                     new Mock<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>().Object);
+
+                // Remove the Mongo index initializer that would try to connect to
+                // the fake MongoDB host at startup. Don't use RemoveAll<IHostedService>()
+                // — that would also remove the Kestrel host service and prevent the
+                // test server from starting. RemoveAll checks both ServiceType and
+                // ImplementationType so it catches the AddHostedService<T>
+                // registration (same pattern as MemberFhirSmokeTests.Factory).
+                RemoveAll<EnrollmentSvc::EnrollmentImportService.HostedServices.EnrollmentIndexInitializer>(services);
             });
         }
 
         private static void RemoveAll<T>(IServiceCollection services)
         {
-            var toRemove = services.Where(d => d.ServiceType == typeof(T)).ToList();
+            var toRemove = services.Where(d =>
+                d.ServiceType == typeof(T) || d.ImplementationType == typeof(T)).ToList();
             foreach (var d in toRemove) services.Remove(d);
         }
     }

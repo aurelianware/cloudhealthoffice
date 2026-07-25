@@ -1,39 +1,37 @@
-using System.Net;
 using EnrollmentImportService.Models;
-using Microsoft.Azure.Cosmos;
+using MongoDB.Driver;
 
 namespace EnrollmentImportService.Repositories;
 
 /// <summary>
-/// Cosmos DB repository for <see cref="EnrollmentEvent"/>.
+/// MongoDB repository for <see cref="EnrollmentEvent"/>. Idempotency and
+/// ordering are enforced by unique compound indexes created at startup by
+/// <c>EnrollmentIndexInitializer</c> (not here — keeping construction
+/// side-effect free so the repository can be registered as a singleton),
+/// same approach as member-service's MemberEventRepositoryMongo:
+///   - unique (tenantId, memberId, eventId) — EventId collisions no-op.
+///   - unique (tenantId, memberId, version) — concurrent writers collide on
+///     the version slot instead of silently overlapping.
 ///
-/// Container provisioning:
-///   - Partition key path: <c>/partitionKey</c> (format <c>{tenantId}:{memberId}</c>).
-///   - Unique-key policy: <c>/version</c> — concurrent writers collide at the index
-///     instead of silently overlapping.
+/// A single duplicate-key catch handles both: on any collision, looking up
+/// by (tenantId, memberId, eventId) returns the winning document for a real
+/// EventId collision, or null for a version collision (no document exists
+/// under *this* eventId), in which case the caller gets back its own
+/// in-memory envelope — matching the interface's documented contract
+/// without needing to inspect which index actually fired.
 /// </summary>
 public class EnrollmentEventRepository : IEnrollmentEventRepository
 {
-    /// <summary>Cosmos sub-status for a unique-key constraint violation.</summary>
-    public const int UniqueKeyViolationSubStatus = 1009;
-
-    private readonly CosmosClient _cosmosClient;
-    private readonly IConfiguration _config;
+    private readonly IMongoCollection<EnrollmentEvent> _collection;
     private readonly ILogger<EnrollmentEventRepository>? _logger;
 
     public EnrollmentEventRepository(
-        CosmosClient cosmosClient,
-        IConfiguration config,
+        IMongoDatabase database,
         ILogger<EnrollmentEventRepository>? logger = null)
     {
-        _cosmosClient = cosmosClient;
-        _config = config;
+        _collection = database.GetCollection<EnrollmentEvent>("enrollment-events");
         _logger = logger;
     }
-
-    private Container Container => _cosmosClient.GetContainer(
-        _config["CosmosDb:DatabaseName"] ?? "CloudHealthOffice",
-        _config["CosmosDb:EnrollmentEventsContainerName"] ?? "enrollment-events");
 
     public async Task<EnrollmentEventAppendResult> AppendAsync(EnrollmentEvent evt, CancellationToken ct = default)
     {
@@ -41,27 +39,18 @@ public class EnrollmentEventRepository : IEnrollmentEventRepository
 
         try
         {
-            var response = await Container.CreateItemAsync(
-                evt,
-                new PartitionKey(evt.PartitionKey),
-                cancellationToken: ct);
-            return new EnrollmentEventAppendResult(response.Resource, Appended: true);
+            await _collection.InsertOneAsync(evt, cancellationToken: ct);
+            return new EnrollmentEventAppendResult(evt, Appended: true);
         }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
-            if (ex.SubStatusCode == UniqueKeyViolationSubStatus)
-            {
-                return new EnrollmentEventAppendResult(evt, Appended: false);
-            }
-
-            if (ex.SubStatusCode != 0)
-            {
-                _logger?.LogWarning(ex,
-                    "Unexpected Cosmos 409 SubStatus {SubStatus} on enrollment-events append for {PartitionKey} v{Version}. Treating as idempotent no-op.",
-                    ex.SubStatusCode, SanitizeForLog(evt.PartitionKey), evt.Version);
-            }
-
             var existing = await GetByIdAsync(evt.TenantId, evt.MemberId, evt.EventId, ct);
+            if (existing is null)
+            {
+                _logger?.LogWarning(
+                    "Version collision on enrollment-events append for {PartitionKey} v{Version}; caller should retry with a fresh version.",
+                    SanitizeForLog(evt.PartitionKey), evt.Version);
+            }
             return new EnrollmentEventAppendResult(existing ?? evt, Appended: false);
         }
     }
@@ -69,70 +58,54 @@ public class EnrollmentEventRepository : IEnrollmentEventRepository
     public async Task<EnrollmentEventPage> ListByMemberAsync(
         string tenantId, string memberId, EnrollmentEventQuery query, CancellationToken ct = default)
     {
-        var partitionKey = EnrollmentEvent.BuildPartitionKey(tenantId, memberId);
+        var builder = Builders<EnrollmentEvent>.Filter;
+        var filter = builder.Eq(x => x.TenantId, tenantId) & builder.Eq(x => x.MemberId, memberId);
 
-        var sql = "SELECT * FROM c WHERE c.partitionKey = @pk";
-        if (query.EventType.HasValue) sql += " AND c.eventType = @type";
-        if (query.FromUtc.HasValue) sql += " AND c.occurredAt >= @from";
-        if (query.ToUtc.HasValue) sql += " AND c.occurredAt <= @to";
-        sql += " ORDER BY c.version DESC";
+        if (query.EventType.HasValue)
+            filter &= builder.Eq(x => x.EventType, query.EventType.Value);
+        if (query.FromUtc.HasValue)
+            filter &= builder.Gte(x => x.OccurredAt, query.FromUtc.Value);
+        if (query.ToUtc.HasValue)
+            filter &= builder.Lte(x => x.OccurredAt, query.ToUtc.Value);
 
-        var def = new QueryDefinition(sql).WithParameter("@pk", partitionKey);
-        if (query.EventType.HasValue) def = def.WithParameter("@type", (int)query.EventType.Value);
-        if (query.FromUtc.HasValue) def = def.WithParameter("@from", query.FromUtc.Value);
-        if (query.ToUtc.HasValue) def = def.WithParameter("@to", query.ToUtc.Value);
+        var limit = Math.Clamp(query.Limit, 1, 500);
+        var skip = 0;
+        if (!string.IsNullOrEmpty(query.ContinuationToken) && int.TryParse(query.ContinuationToken, out var parsedSkip))
+        {
+            skip = parsedSkip;
+        }
 
-        var iterator = Container.GetItemQueryIterator<EnrollmentEvent>(
-            def,
-            continuationToken: query.ContinuationToken,
-            requestOptions: new QueryRequestOptions
-            {
-                PartitionKey = new PartitionKey(partitionKey),
-                MaxItemCount = Math.Clamp(query.Limit, 1, 500)
-            });
+        var items = await _collection.Find(filter)
+            .SortByDescending(x => x.Version)
+            .Skip(skip)
+            .Limit(limit)
+            .ToListAsync(ct);
 
-        if (!iterator.HasMoreResults)
-            return new EnrollmentEventPage(Array.Empty<EnrollmentEvent>(), null);
-
-        var page = await iterator.ReadNextAsync(ct);
-        return new EnrollmentEventPage(page.ToList(), page.ContinuationToken);
+        var nextToken = items.Count == limit ? (skip + limit).ToString() : null;
+        return new EnrollmentEventPage(items, nextToken);
     }
 
     public async Task<EnrollmentEvent?> GetByIdAsync(
         string tenantId, string memberId, string eventId, CancellationToken ct = default)
     {
-        try
-        {
-            var response = await Container.ReadItemAsync<EnrollmentEvent>(
-                eventId,
-                new PartitionKey(EnrollmentEvent.BuildPartitionKey(tenantId, memberId)),
-                cancellationToken: ct);
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
+        var builder = Builders<EnrollmentEvent>.Filter;
+        var filter = builder.Eq(x => x.TenantId, tenantId) &
+                     builder.Eq(x => x.MemberId, memberId) &
+                     builder.Eq(x => x.EventId, eventId);
+        return await _collection.Find(filter).FirstOrDefaultAsync(ct);
     }
 
     public async Task<int> GetNextVersionAsync(string tenantId, string memberId, CancellationToken ct = default)
     {
-        var partitionKey = EnrollmentEvent.BuildPartitionKey(tenantId, memberId);
-        var query = new QueryDefinition(
-            "SELECT VALUE MAX(c.version) FROM c WHERE c.partitionKey = @pk")
-            .WithParameter("@pk", partitionKey);
+        var builder = Builders<EnrollmentEvent>.Filter;
+        var filter = builder.Eq(x => x.TenantId, tenantId) & builder.Eq(x => x.MemberId, memberId);
 
-        var iterator = Container.GetItemQueryIterator<int?>(
-            query,
-            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(partitionKey) });
+        var last = await _collection.Find(filter)
+            .SortByDescending(x => x.Version)
+            .Limit(1)
+            .FirstOrDefaultAsync(ct);
 
-        if (iterator.HasMoreResults)
-        {
-            var page = await iterator.ReadNextAsync(ct);
-            var max = page.FirstOrDefault();
-            return (max ?? 0) + 1;
-        }
-        return 1;
+        return (last?.Version ?? 0) + 1;
     }
 
     private static void Normalize(EnrollmentEvent evt)

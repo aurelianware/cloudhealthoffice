@@ -29,7 +29,7 @@ spec:
       containers:
       - name: enrollment-import-service
         image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-enrollment-import-service:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: http
