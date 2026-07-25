@@ -160,6 +160,7 @@ public static class ClaimToX12837Mapper
 
         return new EngineModels.ClaimPatient
         {
+            MemberId = claim.MemberId,
             FirstName = claim.PatientFirstName ?? string.Empty,
             LastName = claim.PatientLastName ?? string.Empty,
             DateOfBirth = FormatDob(member?.DateOfBirth),
