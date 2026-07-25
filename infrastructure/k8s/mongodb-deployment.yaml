@@ -19,15 +19,18 @@ spec:
       containers:
       - name: mongodb
         image: mongo:6.0
+        args:
+          - --wiredTigerCacheSizeGB
+          - "3.5"
         ports:
         - containerPort: 27017
         resources:
           requests:
             cpu: "1000m"
-            memory: "512Mi"
+            memory: "2Gi"
           limits:
             cpu: "4000m"
-            memory: "1Gi"
+            memory: "8Gi"
         env:
         - name: MONGO_INITDB_ROOT_USERNAME
           valueFrom:
