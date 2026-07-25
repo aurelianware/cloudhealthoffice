@@ -15,13 +15,15 @@ public class EnrollmentImportServiceTests
 {
     private static (ImportSvc svc,
         InMemoryEnrollmentEventRepository events,
-        Mock<IEnrollmentRepository> repo,
+        Mock<ICoverageServiceClient> coverageClient,
         Mock<IMemberServiceClient> memberClient,
-        Mock<ISponsorServiceClient> sponsorClient)
+        Mock<ISponsorServiceClient> sponsorClient,
+        Mock<IBenefitPlanServiceClient> benefitPlanClient)
         Build()
     {
-        var repo = new Mock<IEnrollmentRepository>();
-        repo.Setup(r => r.CreateCoverageAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+        var coverageClient = new Mock<ICoverageServiceClient>();
+        coverageClient.Setup(c => c.CreateAsync(It.IsAny<string>(), It.IsAny<CreateCoverageRequestDto>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var memberClient = new Mock<IMemberServiceClient>();
         // No pre-existing member, so imports take the "create new" path.
@@ -40,6 +42,13 @@ public class EnrollmentImportServiceTests
         sponsorClient.Setup(s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CreateSponsorRequestDto>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        var benefitPlanClient = new Mock<IBenefitPlanServiceClient>();
+        // Default: every plan code resolves, so tests that don't care about
+        // coverage-mapping behavior see coverage created same as before.
+        benefitPlanClient.Setup(b => b.ResolvePlanIdAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("resolved-plan-id");
+
         var txns = new Mock<IEnrollmentTransactionRepository>();
         txns.Setup(t => t.CreateAsync(It.IsAny<EnrollmentTransaction>()))
             .ReturnsAsync((EnrollmentTransaction t) => t);
@@ -49,9 +58,9 @@ public class EnrollmentImportServiceTests
         var validator = new EnrollmentValidator();
 
         var svc = new ImportSvc(
-            repo.Object, memberClient.Object, sponsorClient.Object, txns.Object, publisher, validator,
+            memberClient.Object, sponsorClient.Object, benefitPlanClient.Object, coverageClient.Object, txns.Object, publisher, validator,
             NullLogger<ImportSvc>.Instance);
-        return (svc, events, repo, memberClient, sponsorClient);
+        return (svc, events, coverageClient, memberClient, sponsorClient, benefitPlanClient);
     }
 
     private static MemberEnrollment NewSubscriber(string subscriberId) => new()
@@ -67,7 +76,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_EmitsOneEvent_PerAcceptedTransaction()
     {
-        var (svc, events, _, _, _) = Build();
+        var (svc, events, _, _, _, _) = Build();
 
         var batch = new Enrollment834
         {
@@ -89,7 +98,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_RejectedValidation_DoesNotEmitEvent()
     {
-        var (svc, events, _, _, _) = Build();
+        var (svc, events, _, _, _, _) = Build();
 
         var bad = new MemberEnrollment(); // no required fields
         var batch = new Enrollment834
@@ -107,7 +116,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_ReplayingSameBatch_ProducesNoDuplicateEvents()
     {
-        var (svc, events, _, _, _) = Build();
+        var (svc, events, _, _, _, _) = Build();
 
         var batch = new Enrollment834
         {
@@ -126,7 +135,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_ManualSource_UsesManualPrefix_AndDoesNotAccidentallyDedupe()
     {
-        var (svc, events, _, _, _) = Build();
+        var (svc, events, _, _, _, _) = Build();
 
         // Two manual enrollments for the same subscriber but with distinct EventIds —
         // each should produce a separate event even if the synthesized batch ids
@@ -164,7 +173,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_ManualSource_SameRequestEventId_IsIdempotent()
     {
-        var (svc, events, _, _, _) = Build();
+        var (svc, events, _, _, _, _) = Build();
 
         var e1 = NewSubscriber("M-idem");
         e1.EventId = "stable-key";
@@ -197,7 +206,7 @@ public class EnrollmentImportServiceTests
         // separators, e.g. "19780922"), which DateTime.TryParse silently fails
         // to recognize as a date at all (confirmed empirically: it returns
         // false, not an exception) rather than a differently-formatted date.
-        var (svc, _, _, memberClient, _) = Build();
+        var (svc, _, _, memberClient, _, _) = Build();
 
         CreateMemberRequestDto? created = null;
         memberClient.Setup(m => m.CreateAsync(It.IsAny<string>(), It.IsAny<CreateMemberRequestDto>(), It.IsAny<CancellationToken>()))
@@ -224,10 +233,10 @@ public class EnrollmentImportServiceTests
     public async Task Import_DelegatesMemberCreation_ToMemberService_NotMongo()
     {
         // Regression guard for the architectural fix itself: member creation
-        // must go through IMemberServiceClient, never IEnrollmentRepository —
-        // that repository only handles Coverage now (see its own doc comment
-        // for why Member/Sponsor moved to their owning services).
-        var (svc, _, _, memberClient, _) = Build();
+        // must go through IMemberServiceClient rather than writing directly
+        // to Mongo — see IMemberServiceClient's doc comment for why
+        // Member/Sponsor/Coverage all moved to their owning services.
+        var (svc, _, _, memberClient, _, _) = Build();
 
         var batch = new Enrollment834
         {
@@ -246,7 +255,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_Termination_CallsMemberServiceTerminate()
     {
-        var (svc, _, _, memberClient, _) = Build();
+        var (svc, _, _, memberClient, _, _) = Build();
 
         // First: create the member (existence check defaults to false via Build()).
         var create = NewSubscriber("M-term");
@@ -285,7 +294,7 @@ public class EnrollmentImportServiceTests
         // type") and get silently skipped — real 834 fixtures use "025" for
         // subscribers being brought back after a prior termination, and they
         // were never actually landing in member-service.
-        var (svc, _, _, memberClient, _) = Build();
+        var (svc, _, _, memberClient, _, _) = Build();
 
         memberClient.Setup(m => m.ExistsAsync("t1", "M-reinstate", It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -316,7 +325,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_Reinstatement_OfUnknownMember_CreatesRatherThanSkips()
     {
-        var (svc, _, _, memberClient, _) = Build();
+        var (svc, _, _, memberClient, _, _) = Build();
         // Build() defaults ExistsAsync to false — member is unknown to member-service.
 
         var reinstate = NewSubscriber("M-reinstate-new");
@@ -365,5 +374,84 @@ public class EnrollmentImportServiceTests
         e.MaintenanceType = "025";
         EnrollmentEventClassifier.Classify(e)
             .Should().Be(EnrollmentEventType.ReinstatementApproved);
+    }
+
+    [Fact]
+    public async Task Import_CoverageWithMappedPlanCode_CreatesCoverageUsingResolvedPlanId()
+    {
+        var (svc, _, coverageClient, _, _, benefitPlanClient) = Build();
+        benefitPlanClient.Setup(b => b.ResolvePlanIdAsync(
+                "t1", "GRP0001", "HLT", "PPO2026", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("benefit-plan-guid-123");
+
+        var enrollment = NewSubscriber("M-cov");
+        enrollment.GroupNumber = "GRP0001";
+        enrollment.Coverage.Add(new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "PPO2026" });
+
+        var result = await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-cov",
+            Enrollments = new() { enrollment }
+        }, "t1");
+
+        result.CoverageRecordsCreated.Should().Be(1);
+        result.CoverageMappingsUnresolved.Should().Be(0);
+        coverageClient.Verify(c => c.CreateAsync(
+            "t1",
+            It.Is<CreateCoverageRequestDto>(r => r.PlanId == "benefit-plan-guid-123" && r.MemberId == "M-cov"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Import_CoverageWithUnmappedPlanCode_SkipsCoverageInsteadOfDefaulting()
+    {
+        // This is the regression guard for the original bug: an unresolved
+        // 834 plan code must NOT fall back to a literal "DEFAULT" PlanId —
+        // it should be skipped and counted so the gap is visible in ImportResult.
+        var (svc, _, coverageClient, _, _, benefitPlanClient) = Build();
+        benefitPlanClient.Setup(b => b.ResolvePlanIdAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+
+        var enrollment = NewSubscriber("M-nocov");
+        enrollment.GroupNumber = "GRP0001";
+        enrollment.Coverage.Add(new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "UNKNOWN-CODE" });
+
+        var result = await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-nocov",
+            Enrollments = new() { enrollment }
+        }, "t1");
+
+        result.CoverageRecordsCreated.Should().Be(0);
+        result.CoverageMappingsUnresolved.Should().Be(1);
+        coverageClient.Verify(c => c.CreateAsync(
+            It.IsAny<string>(), It.IsAny<CreateCoverageRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Import_CoverageMissingGroupNumber_SkipsResolution_WithoutCallingBenefitPlanClient()
+    {
+        var (svc, _, coverageClient, _, _, benefitPlanClient) = Build();
+
+        var enrollment = NewSubscriber("M-nogroup");
+        enrollment.GroupNumber = null;
+        enrollment.Coverage.Add(new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "PPO2026" });
+
+        var result = await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-nogroup",
+            Enrollments = new() { enrollment }
+        }, "t1");
+
+        result.CoverageMappingsUnresolved.Should().Be(1);
+        coverageClient.Verify(c => c.CreateAsync(
+            It.IsAny<string>(), It.IsAny<CreateCoverageRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+        benefitPlanClient.Verify(b => b.ResolvePlanIdAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }
