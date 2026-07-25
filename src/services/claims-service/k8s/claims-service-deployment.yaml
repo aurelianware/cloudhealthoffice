@@ -23,7 +23,7 @@ metadata:
     app: claims-service
     tier: backend
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: claims-service
@@ -99,10 +99,10 @@ spec:
               key: connectionString
         resources:
           requests:
-            cpu: 500m
+            cpu: 1000m
             memory: 256Mi
           limits:
-            cpu: 2000m
+            cpu: 4000m
             memory: 2048Mi
         livenessProbe:
           httpGet:
