@@ -278,6 +278,66 @@ public class EnrollmentImportServiceTests
     }
 
     [Fact]
+    public async Task Import_Reinstatement_OfKnownMember_UpdatesRatherThanSkips()
+    {
+        // Regression guard: maintenance type "025" (Reinstatement) used to fall
+        // into the switch statement's default branch ("Unknown maintenance
+        // type") and get silently skipped — real 834 fixtures use "025" for
+        // subscribers being brought back after a prior termination, and they
+        // were never actually landing in member-service.
+        var (svc, _, _, memberClient, _) = Build();
+
+        memberClient.Setup(m => m.ExistsAsync("t1", "M-reinstate", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        UpdateMemberRequestDto? updated = null;
+        memberClient.Setup(m => m.UpdateAsync("t1", "M-reinstate", It.IsAny<UpdateMemberRequestDto>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string, UpdateMemberRequestDto, CancellationToken>((_, _, req, _) => updated = req)
+            .Returns(Task.CompletedTask);
+
+        var reinstate = NewSubscriber("M-reinstate");
+        reinstate.MaintenanceType = "025";
+        reinstate.BenefitStatus = "A";
+
+        var result = await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-reinstate",
+            Enrollments = new() { reinstate }
+        }, "t1");
+
+        result.SkippedCount.Should().Be(0);
+        result.MembersUpdated.Should().Be(1);
+        updated.Should().NotBeNull();
+        updated!.Status.Should().Be("Active");
+        memberClient.Verify(m => m.CreateAsync(It.IsAny<string>(), It.IsAny<CreateMemberRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Import_Reinstatement_OfUnknownMember_CreatesRatherThanSkips()
+    {
+        var (svc, _, _, memberClient, _) = Build();
+        // Build() defaults ExistsAsync to false — member is unknown to member-service.
+
+        var reinstate = NewSubscriber("M-reinstate-new");
+        reinstate.MaintenanceType = "025";
+
+        var result = await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-reinstate-new",
+            Enrollments = new() { reinstate }
+        }, "t1");
+
+        result.SkippedCount.Should().Be(0);
+        result.MembersCreated.Should().Be(1);
+        memberClient.Verify(m => m.CreateAsync(
+            "t1",
+            It.Is<CreateMemberRequestDto>(r => r.MemberId == "M-reinstate-new"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public void ClassifyEvent_TerminationWithCobra_IsCobraTerminated()
     {
         var e = NewSubscriber("M-1");
