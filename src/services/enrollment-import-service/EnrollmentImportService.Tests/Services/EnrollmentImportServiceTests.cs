@@ -176,6 +176,39 @@ public class EnrollmentImportServiceTests
     }
 
     [Fact]
+    public async Task Import_ParsesX12D8Dates_NotJustTheDashedFormatTestFixturesHappenToUse()
+    {
+        // NewSubscriber's EnrollmentDate above is "2026-01-01" (dashed, ISO-ish) —
+        // DateTime.TryParse already handles that, so it never would have caught
+        // the real bug. Actual 834 dates are X12's D8 format (CCYYMMDD, no
+        // separators, e.g. "19780922"), which DateTime.TryParse silently fails
+        // to recognize as a date at all (confirmed empirically: it returns
+        // false, not an exception) rather than a differently-formatted date.
+        var (svc, _, repo) = Build();
+
+        Member? created = null;
+        repo.Setup(r => r.CreateMemberAsync(It.IsAny<Member>()))
+            .Callback<Member>(m => created = m)
+            .ReturnsAsync((Member m) => m);
+
+        var enrollment = NewSubscriber("M-dob");
+        enrollment.EnrollmentDate = "20260101";
+        enrollment.Demographics!.DateOfBirth = "19780922";
+
+        var batch = new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-dob",
+            Enrollments = new() { enrollment }
+        };
+        await svc.ImportEnrollmentAsync(batch, "t1");
+
+        created.Should().NotBeNull();
+        created!.DateOfBirth.Should().Be(new DateTime(1978, 9, 22));
+        created.EnrollmentDate.Should().Be(new DateTime(2026, 1, 1));
+    }
+
+    [Fact]
     public void ClassifyEvent_TerminationWithCobra_IsCobraTerminated()
     {
         var e = NewSubscriber("M-1");
