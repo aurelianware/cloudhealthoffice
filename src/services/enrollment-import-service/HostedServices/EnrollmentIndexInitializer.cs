@@ -26,16 +26,6 @@ public sealed class EnrollmentIndexInitializer : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        var members = _db.GetCollection<Member>("Members");
-        members.Indexes.CreateOne(new CreateIndexModel<Member>(
-            Builders<Member>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.MemberId),
-            new CreateIndexOptions { Name = "ix_tenant_member" }),
-            cancellationToken: cancellationToken);
-        members.Indexes.CreateOne(new CreateIndexModel<Member>(
-            Builders<Member>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.SubscriberId),
-            new CreateIndexOptions { Name = "ix_tenant_subscriber" }),
-            cancellationToken: cancellationToken);
-
         // No explicit Name here: coverage-service's CoverageRepositoryMongo
         // already creates an unnamed (auto-named) index on this exact key
         // pattern against the same shared "Coverage" collection. Naming
@@ -45,12 +35,6 @@ public sealed class EnrollmentIndexInitializer : IHostedService
         var coverage = _db.GetCollection<Coverage>("Coverage");
         coverage.Indexes.CreateOne(new CreateIndexModel<Coverage>(
             Builders<Coverage>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.MemberId)),
-            cancellationToken: cancellationToken);
-
-        var sponsors = _db.GetCollection<SponsorEntity>("Sponsors");
-        sponsors.Indexes.CreateOne(new CreateIndexModel<SponsorEntity>(
-            Builders<SponsorEntity>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.SponsorId),
-            new CreateIndexOptions { Name = "ix_tenant_sponsor" }),
             cancellationToken: cancellationToken);
 
         var transactions = _db.GetCollection<EnrollmentTransaction>("enrollment-transactions");
