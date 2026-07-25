@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using EnrollmentImportService.Models;
@@ -525,14 +526,27 @@ public class EnrollmentImportService : IEnrollmentImportService
         return $"M{lastName}{dob}{random}";
     }
     
+    /// <summary>
+    /// Parses an 834 date. The 834 always carries dates in X12's D8 format
+    /// (CCYYMMDD, e.g. "19780922") — DateTime.TryParse doesn't recognize
+    /// that as a date at all (it looks like a plain number, not any
+    /// culture's date format) and silently returns false, which is why
+    /// DateOfBirth/EnrollmentDate/TerminationDate were all coming back
+    /// null despite being present in the source segment. TryParseExact
+    /// with the explicit D8 format fixes all three; the general TryParse
+    /// fallback stays for any caller that isn't handing this raw 834 text.
+    /// </summary>
     private DateTime? ParseDate(string? dateString)
     {
         if (string.IsNullOrEmpty(dateString))
             return null;
-        
-        if (DateTime.TryParse(dateString, out var date))
+
+        if (DateTime.TryParseExact(dateString, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d8Date))
+            return d8Date;
+
+        if (DateTime.TryParse(dateString, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
             return date;
-        
+
         return null;
     }
 
