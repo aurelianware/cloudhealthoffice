@@ -1,6 +1,7 @@
 using EnrollmentImportService;
 using EnrollmentImportService.Repositories;
 using EnrollmentImportService.Services;
+using EnrollmentImportService.Services.Edi;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
@@ -40,6 +41,7 @@ builder.Services.AddScoped<IEnrollmentEventRepository, EnrollmentEventRepository
 builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>();
 builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();
 builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
+builder.Services.AddSingleton<IEnrollment834EdiParser, Enrollment834EdiParser>();
 
 // Health checks (MongoDB or Cosmos DB)
 builder.Services.AddChoHealthChecks(options =>
