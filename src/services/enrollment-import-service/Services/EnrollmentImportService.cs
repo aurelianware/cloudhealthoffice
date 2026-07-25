@@ -291,9 +291,15 @@ public class EnrollmentImportService : IEnrollmentImportService
                 break;
 
             case "001": // Change
+            case "025": // Reinstatement — same member-sync shape as a Change:
+                        // create if this is the first we've seen of them,
+                        // otherwise update. UpdateMemberFromEnrollmentAsync
+                        // derives Status from BenefitStatus, which a
+                        // reinstatement's "A" correctly flips back to Active
+                        // (or "C" to COBRA) without any special-casing here.
                 if (!memberExists)
                 {
-                    _logger.LogWarning("Member {SubscriberId} not found for change, creating new",
+                    _logger.LogWarning("Member {SubscriberId} not found for change/reinstatement, creating new",
                         SanitizeForLog(enrollment.SubscriberId));
                     await CreateMemberFromEnrollmentAsync(memberId, enrollment, tenantId);
                     result.MembersCreated++;
