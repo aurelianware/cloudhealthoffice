@@ -39,7 +39,7 @@ if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
     {
         var wrapper = sp.GetRequiredService<IMongoClient>();
         var configuration = sp.GetRequiredService<IConfiguration>();
-        return wrapper.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice");
+        return wrapper.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "cloudhealthoffice");
     });
 
     builder.Services.AddScoped<ISponsorRepository, SponsorRepositoryMongo>();
