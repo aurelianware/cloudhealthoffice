@@ -220,6 +220,19 @@ builder.Services.AddScoped<ISystemDefaultsAppliedRecordRepository>(
 
 builder.Services.AddSingleton<SystemDefaultMappingSeeder>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemDefaultMappingSeeder>());
+
+// ── 834 Plan-Code Mappings ────────────────────────────────────────────────────
+// Crosswalk from a trading partner's own 834 plan code to this platform's
+// PlanId (see Enrollment834PlanCodeMapping). Mongo-only so far — every
+// recently-added capability in this service has landed Mongo-only.
+if (useMongo)
+{
+    builder.Services.AddScoped<IEnrollment834PlanCodeMappingRepository, Enrollment834PlanCodeMappingRepositoryMongo>();
+}
+else
+{
+    builder.Services.AddScoped<IEnrollment834PlanCodeMappingRepository, NullEnrollment834PlanCodeMappingRepository>();
+}
 builder.Services.AddFeeScheduleEngine().UseRepositoriesFromConfiguration(builder.Configuration);
 builder.Services.AddClaimsScrubEngine();
 builder.Services.AddNcciEngine().UseRepositoryFromConfiguration(builder.Configuration);

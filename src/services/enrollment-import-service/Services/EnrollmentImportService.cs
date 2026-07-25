@@ -20,26 +20,29 @@ public class EnrollmentImportService : IEnrollmentImportService
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
-    private readonly IEnrollmentRepository _repository;
     private readonly IMemberServiceClient _memberClient;
     private readonly ISponsorServiceClient _sponsorClient;
+    private readonly IBenefitPlanServiceClient _benefitPlanClient;
+    private readonly ICoverageServiceClient _coverageClient;
     private readonly IEnrollmentTransactionRepository _transactions;
     private readonly IEnrollmentEventPublisher _eventPublisher;
     private readonly IEnrollmentValidator _validator;
     private readonly ILogger<EnrollmentImportService> _logger;
 
     public EnrollmentImportService(
-        IEnrollmentRepository repository,
         IMemberServiceClient memberClient,
         ISponsorServiceClient sponsorClient,
+        IBenefitPlanServiceClient benefitPlanClient,
+        ICoverageServiceClient coverageClient,
         IEnrollmentTransactionRepository transactions,
         IEnrollmentEventPublisher eventPublisher,
         IEnrollmentValidator validator,
         ILogger<EnrollmentImportService> logger)
     {
-        _repository = repository;
         _memberClient = memberClient;
         _sponsorClient = sponsorClient;
+        _benefitPlanClient = benefitPlanClient;
+        _coverageClient = coverageClient;
         _transactions = transactions;
         _eventPublisher = eventPublisher;
         _validator = validator;
@@ -337,15 +340,25 @@ public class EnrollmentImportService : IEnrollmentImportService
                 return;
         }
 
-        // 3. Process Coverage (health plans) — still enrollment-import-service's
-        // own Mongo collection; coverage-service requires a resolved PlanId
-        // the raw 834 doesn't carry, so this hasn't been delegated (yet).
+        // 3. Process Coverage (health plans) — delegated to coverage-service,
+        // same as Member/Sponsor above. PlanId is resolved via
+        // benefit-plan-service's plan-code-mapping crosswalk first, since the
+        // raw 834 only carries the trading partner's own plan code, not this
+        // platform's PlanId.
         if (enrollment.MaintenanceType != "024")
         {
             foreach (var coverageDetail in enrollment.Coverage)
             {
-                await ProcessCoverageAsync(memberId, tenantId, coverageDetail, enrollment.EnrollmentDate);
-                result.CoverageRecordsCreated++;
+                var resolved = await ProcessCoverageAsync(
+                    memberId, tenantId, coverageDetail, enrollment.EnrollmentDate, enrollment.GroupNumber);
+                if (resolved)
+                {
+                    result.CoverageRecordsCreated++;
+                }
+                else
+                {
+                    result.CoverageMappingsUnresolved++;
+                }
             }
         }
 
@@ -431,20 +444,48 @@ public class EnrollmentImportService : IEnrollmentImportService
         });
     }
 
-    private async Task ProcessCoverageAsync(string memberId, string tenantId, CoverageDetail coverageDetail, string? effectiveDate)
+    /// <summary>
+    /// Resolves the 834's own plan code (HD04) to benefit-plan-service's PlanId
+    /// via the plan-code-mapping crosswalk, then writes Coverage. Returns false
+    /// — without writing a Coverage record — when there's no group number/plan
+    /// code to resolve with, or no mapping exists yet; the caller surfaces this
+    /// as <see cref="ImportResult.CoverageMappingsUnresolved"/> rather than
+    /// silently defaulting the PlanId, which just hid the same gap downstream.
+    /// </summary>
+    private async Task<bool> ProcessCoverageAsync(
+        string memberId, string tenantId, CoverageDetail coverageDetail, string? effectiveDate, string? groupNumber)
     {
-        var coverage = new Coverage
+        var externalPlanCode = coverageDetail.PlanCoverageDescription;
+        if (string.IsNullOrWhiteSpace(externalPlanCode) || string.IsNullOrWhiteSpace(groupNumber))
         {
-            TenantId = tenantId,
+            _logger.LogWarning(
+                "Coverage for member {MemberId} is missing group number or plan code (HD04); cannot resolve PlanId",
+                SanitizeForLog(memberId));
+            return false;
+        }
+
+        var planId = await _benefitPlanClient.ResolvePlanIdAsync(
+            tenantId, groupNumber, coverageDetail.InsuranceLineCode, externalPlanCode);
+        if (planId is null)
+        {
+            _logger.LogWarning(
+                "No plan-code mapping for group {GroupNumber} line {InsuranceLineCode} code {ExternalCode}; skipping coverage for {MemberId}",
+                SanitizeForLog(groupNumber), SanitizeForLog(coverageDetail.InsuranceLineCode),
+                SanitizeForLog(externalPlanCode), SanitizeForLog(memberId));
+            return false;
+        }
+
+        await _coverageClient.CreateAsync(tenantId, new CreateCoverageRequestDto
+        {
             MemberId = memberId,
-            PlanId = coverageDetail.PlanCoverageDescription ?? "DEFAULT",
-            InsuranceType = coverageDetail.InsuranceLineCode,
+            GroupNumber = groupNumber,
+            PlanId = planId,
+            InsuranceLineCode = coverageDetail.InsuranceLineCode,
             CoverageLevel = coverageDetail.CoverageLevel ?? "EMP",
             EffectiveDate = ParseDate(effectiveDate) ?? DateTime.UtcNow,
-            Status = "Active"
-        };
-
-        await _repository.CreateCoverageAsync(coverage);
+            MaintenanceTypeCode = coverageDetail.MaintenanceType
+        });
+        return true;
     }
 
     private async Task ProcessDependentAsync(
@@ -479,7 +520,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             foreach (var coverageDetail in dependent.Coverage)
             {
-                await ProcessCoverageAsync(dependentMemberId, tenantId, coverageDetail, null);
+                await ProcessCoverageAsync(dependentMemberId, tenantId, coverageDetail, null, groupNumber);
             }
         }
     }
@@ -546,5 +587,6 @@ public class ImportResult
     public int MembersTerminated { get; set; }
     public int DependentsCreated { get; set; }
     public int CoverageRecordsCreated { get; set; }
+    public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
 }

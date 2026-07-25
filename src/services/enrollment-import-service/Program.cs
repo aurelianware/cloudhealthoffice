@@ -39,13 +39,13 @@ builder.Services.AddSingleton<IMongoDatabase>(sp =>
 // Repositories and services. Constructed without I/O side effects (index
 // creation happens in EnrollmentIndexInitializer below), so these can be
 // singletons rather than scoped — same pattern as member-service.
-builder.Services.AddSingleton<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddSingleton<IEnrollmentTransactionRepository, EnrollmentTransactionRepository>();
 builder.Services.AddSingleton<IEnrollmentEventRepository, EnrollmentEventRepository>();
 builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>();
 builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();
 builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
 builder.Services.AddSingleton<IEnrollment834EdiParser, Enrollment834EdiParser>();
+builder.Services.AddSingleton<IPlanCodeGapReportService, PlanCodeGapReportService>();
 
 builder.Services.AddHostedService<EnrollmentIndexInitializer>();
 
@@ -79,6 +79,31 @@ builder.Services.AddHttpClient(HttpSponsorServiceClient.HttpClientName, client =
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 builder.Services.AddSingleton<ISponsorServiceClient, HttpSponsorServiceClient>();
+
+// benefit-plan-service client — resolves a trading partner's 834 plan code
+// (HD04) to this platform's canonical PlanId before Coverage is written.
+builder.Services.AddHttpClient(HttpBenefitPlanServiceClient.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:BenefitPlanService"]
+        ?? "http://benefit-plan-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddSingleton<IBenefitPlanServiceClient, HttpBenefitPlanServiceClient>();
+
+// coverage-service client — Coverage used to be the one entity this service
+// still wrote directly into a Mongo collection shared with coverage-service's
+// own repository. Delegating via HTTP now that PlanId is actually resolved.
+builder.Services.AddHttpClient(HttpCoverageServiceClient.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:CoverageService"]
+        ?? "http://coverage-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddSingleton<ICoverageServiceClient, HttpCoverageServiceClient>();
 
 // Health checks
 builder.Services.AddChoHealthChecks(options =>

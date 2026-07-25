@@ -26,17 +26,11 @@ public sealed class EnrollmentIndexInitializer : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        // No explicit Name here: coverage-service's CoverageRepositoryMongo
-        // already creates an unnamed (auto-named) index on this exact key
-        // pattern against the same shared "Coverage" collection. Naming
-        // ours differently would conflict (Mongo rejects two indexes with
-        // an identical key pattern under different names) — letting Mongo
-        // auto-name it matches the existing one and no-ops correctly.
-        var coverage = _db.GetCollection<Coverage>("Coverage");
-        coverage.Indexes.CreateOne(new CreateIndexModel<Coverage>(
-            Builders<Coverage>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.MemberId)),
-            cancellationToken: cancellationToken);
-
+        // Coverage indexing used to live here too, back when this service
+        // wrote Coverage documents directly into a Mongo collection shared
+        // with coverage-service's own repository. Coverage creation is now
+        // delegated to coverage-service via ICoverageServiceClient, which
+        // owns that collection (and its indexes) exclusively.
         var transactions = _db.GetCollection<EnrollmentTransaction>("enrollment-transactions");
         transactions.Indexes.CreateOne(new CreateIndexModel<EnrollmentTransaction>(
             Builders<EnrollmentTransaction>.IndexKeys
