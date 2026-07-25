@@ -232,13 +232,17 @@ public static class X12837Parser
                         }
 
                         case "QC" when insideDependentLoop:
+                        {
+                            var (_, dependentMemberId) = TrailingIdPair(seg);
                             patient = (patient ?? new ClaimPatient { FirstName = string.Empty, LastName = string.Empty, DateOfBirth = string.Empty, RelationshipCode = string.Empty }) with
                             {
+                                MemberId = dependentMemberId,
                                 FirstName = seg.Element(3) ?? string.Empty,
                                 LastName = seg.Element(2) ?? string.Empty,
                                 MiddleName = seg.Element(4)
                             };
                             break;
+                        }
 
                         case "82":
                         {
@@ -344,6 +348,43 @@ public static class X12837Parser
                         DiagnosisPointers = pointers is { Count: > 0 } ? pointers : null
                     };
                     break;
+
+                case "SV2" when claimOpen:
+                {
+                    // Institutional service line — a genuinely different
+                    // layout from SV1, not just an index shift: revenue
+                    // code occupies index 0 (SV1 has no equivalent slot),
+                    // which pushes the procedure composite to index 1.
+                    // SV2*{revenueCode}*HC:{proc}{mods}*{charge}*UN*{units}
+                    currentLine ??= new ServiceLine { LineNumber = serviceLines.Count + 1, ProcedureCode = string.Empty, ServiceDate = string.Empty, Units = 1 };
+                    var sv2Proc = seg.Element(1) is { } c1 ? X12Tokenizer.SplitComponents(c1, componentSep) : [];
+                    decimal.TryParse(seg.Element(2), out var sv2Charge);
+                    decimal.TryParse(seg.Element(4), out var sv2Units);
+                    // Not present in every institutional file (this repo's
+                    // own FMMIS generator omits it), so no fallback chain
+                    // like SV1's — absent means absent.
+                    var sv2PointerRaw = seg.Element(6);
+                    var sv2Pointers = sv2PointerRaw is { } spr
+                        ? X12Tokenizer.SplitComponents(spr, componentSep)
+                            .Select(p => int.TryParse(p, out var n) ? n : (int?)null)
+                            .Where(n => n.HasValue)
+                            .Select(n => n!.Value)
+                            .ToList()
+                        : null;
+
+                    currentLine = currentLine with
+                    {
+                        RevenueCode = seg.Element(0),
+                        ProcedureCodeQualifier = sv2Proc.Length > 0 ? sv2Proc[0] : null,
+                        ProcedureCode = sv2Proc.Length > 1 ? sv2Proc[1] : string.Empty,
+                        Modifiers = sv2Proc.Length > 2 ? [.. sv2Proc[2..].Where(m => m.Length > 0)] : null,
+                        ChargeAmount = sv2Charge,
+                        UnitType = seg.Element(3),
+                        Units = sv2Units,
+                        DiagnosisPointers = sv2Pointers is { Count: > 0 } ? sv2Pointers : null
+                    };
+                    break;
+                }
 
                 case "DTP" when claimOpen && currentLine is not null && seg.Element(0) == "472":
                     var dateQualifier = seg.Element(1);
