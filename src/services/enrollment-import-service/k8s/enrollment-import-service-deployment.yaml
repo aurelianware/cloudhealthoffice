@@ -50,6 +50,10 @@ spec:
             configMapKeyRef:
               name: enrollment-import-service-config
               key: MongoDb__DatabaseName
+        - name: Services__MemberService
+          value: "http://member-service"
+        - name: Services__SponsorService
+          value: "http://sponsor-service"
         resources:
           requests:
             cpu: 100m
