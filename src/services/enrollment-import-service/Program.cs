@@ -1,4 +1,5 @@
 using EnrollmentImportService;
+using EnrollmentImportService.Clients;
 using EnrollmentImportService.HostedServices;
 using EnrollmentImportService.Repositories;
 using EnrollmentImportService.Services;
@@ -47,6 +48,37 @@ builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Ser
 builder.Services.AddSingleton<IEnrollment834EdiParser, Enrollment834EdiParser>();
 
 builder.Services.AddHostedService<EnrollmentIndexInitializer>();
+
+// member-service / sponsor-service clients — enrollment-import-service used
+// to write Member/Sponsor documents directly into Mongo collections that
+// collide with the ones those now-split-out services actually own (see
+// IMemberServiceClient's doc comment). Delegating via HTTP instead.
+//
+// Fallback URLs are the k8s Service's actual port (80, not the container's
+// 8080) — confirmed live: claims-service's own HttpMemberResolver has this
+// exact ":8080" mistake in its code fallback too, silently masked in every
+// environment by an explicit Services__MemberService=http://member-service
+// env var override. Not repeating that here; see the deployment yaml for
+// the belt-and-suspenders explicit env vars.
+builder.Services.AddHttpClient(HttpMemberServiceClient.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:MemberService"]
+        ?? "http://member-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddSingleton<IMemberServiceClient, HttpMemberServiceClient>();
+
+builder.Services.AddHttpClient(HttpSponsorServiceClient.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:SponsorService"]
+        ?? "http://sponsor-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddSingleton<ISponsorServiceClient, HttpSponsorServiceClient>();
 
 // Health checks
 builder.Services.AddChoHealthChecks(options =>

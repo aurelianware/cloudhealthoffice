@@ -1,3 +1,4 @@
+using EnrollmentImportService.Clients;
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,18 +15,30 @@ public class EnrollmentImportServiceTests
 {
     private static (ImportSvc svc,
         InMemoryEnrollmentEventRepository events,
-        Mock<IEnrollmentRepository> repo)
+        Mock<IEnrollmentRepository> repo,
+        Mock<IMemberServiceClient> memberClient,
+        Mock<ISponsorServiceClient> sponsorClient)
         Build()
     {
         var repo = new Mock<IEnrollmentRepository>();
-        // Subscriber-id queries return null so the import takes the "create new" path.
-        repo.Setup(r => r.GetMemberBySubscriberIdAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync((Member?)null);
-        repo.Setup(r => r.GetMemberByIdAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync((Member?)null);
-        repo.Setup(r => r.CreateMemberAsync(It.IsAny<Member>())).ReturnsAsync((Member m) => m);
-        repo.Setup(r => r.UpdateMemberAsync(It.IsAny<Member>())).ReturnsAsync((Member m) => m);
         repo.Setup(r => r.CreateCoverageAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+
+        var memberClient = new Mock<IMemberServiceClient>();
+        // No pre-existing member, so imports take the "create new" path.
+        memberClient.Setup(m => m.ExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        memberClient.Setup(m => m.CreateAsync(It.IsAny<string>(), It.IsAny<CreateMemberRequestDto>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        memberClient.Setup(m => m.UpdateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<UpdateMemberRequestDto>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        memberClient.Setup(m => m.TerminateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TerminateMemberRequestDto>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var sponsorClient = new Mock<ISponsorServiceClient>();
+        sponsorClient.Setup(s => s.ExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        sponsorClient.Setup(s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CreateSponsorRequestDto>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var txns = new Mock<IEnrollmentTransactionRepository>();
         txns.Setup(t => t.CreateAsync(It.IsAny<EnrollmentTransaction>()))
@@ -36,9 +49,9 @@ public class EnrollmentImportServiceTests
         var validator = new EnrollmentValidator();
 
         var svc = new ImportSvc(
-            repo.Object, txns.Object, publisher, validator,
+            repo.Object, memberClient.Object, sponsorClient.Object, txns.Object, publisher, validator,
             NullLogger<ImportSvc>.Instance);
-        return (svc, events, repo);
+        return (svc, events, repo, memberClient, sponsorClient);
     }
 
     private static MemberEnrollment NewSubscriber(string subscriberId) => new()
@@ -54,7 +67,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_EmitsOneEvent_PerAcceptedTransaction()
     {
-        var (svc, events, _) = Build();
+        var (svc, events, _, _, _) = Build();
 
         var batch = new Enrollment834
         {
@@ -76,7 +89,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_RejectedValidation_DoesNotEmitEvent()
     {
-        var (svc, events, _) = Build();
+        var (svc, events, _, _, _) = Build();
 
         var bad = new MemberEnrollment(); // no required fields
         var batch = new Enrollment834
@@ -94,7 +107,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_ReplayingSameBatch_ProducesNoDuplicateEvents()
     {
-        var (svc, events, _) = Build();
+        var (svc, events, _, _, _) = Build();
 
         var batch = new Enrollment834
         {
@@ -113,7 +126,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_ManualSource_UsesManualPrefix_AndDoesNotAccidentallyDedupe()
     {
-        var (svc, events, _) = Build();
+        var (svc, events, _, _, _) = Build();
 
         // Two manual enrollments for the same subscriber but with distinct EventIds —
         // each should produce a separate event even if the synthesized batch ids
@@ -151,7 +164,7 @@ public class EnrollmentImportServiceTests
     [Fact]
     public async Task Import_ManualSource_SameRequestEventId_IsIdempotent()
     {
-        var (svc, events, _) = Build();
+        var (svc, events, _, _, _) = Build();
 
         var e1 = NewSubscriber("M-idem");
         e1.EventId = "stable-key";
@@ -184,12 +197,12 @@ public class EnrollmentImportServiceTests
         // separators, e.g. "19780922"), which DateTime.TryParse silently fails
         // to recognize as a date at all (confirmed empirically: it returns
         // false, not an exception) rather than a differently-formatted date.
-        var (svc, _, repo) = Build();
+        var (svc, _, _, memberClient, _) = Build();
 
-        Member? created = null;
-        repo.Setup(r => r.CreateMemberAsync(It.IsAny<Member>()))
-            .Callback<Member>(m => created = m)
-            .ReturnsAsync((Member m) => m);
+        CreateMemberRequestDto? created = null;
+        memberClient.Setup(m => m.CreateAsync(It.IsAny<string>(), It.IsAny<CreateMemberRequestDto>(), It.IsAny<CancellationToken>()))
+            .Callback<string, CreateMemberRequestDto, CancellationToken>((_, req, _) => created = req)
+            .Returns(Task.CompletedTask);
 
         var enrollment = NewSubscriber("M-dob");
         enrollment.EnrollmentDate = "20260101";
@@ -205,7 +218,63 @@ public class EnrollmentImportServiceTests
 
         created.Should().NotBeNull();
         created!.DateOfBirth.Should().Be(new DateTime(1978, 9, 22));
-        created.EnrollmentDate.Should().Be(new DateTime(2026, 1, 1));
+    }
+
+    [Fact]
+    public async Task Import_DelegatesMemberCreation_ToMemberService_NotMongo()
+    {
+        // Regression guard for the architectural fix itself: member creation
+        // must go through IMemberServiceClient, never IEnrollmentRepository —
+        // that repository only handles Coverage now (see its own doc comment
+        // for why Member/Sponsor moved to their owning services).
+        var (svc, _, _, memberClient, _) = Build();
+
+        var batch = new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-delegate",
+            Enrollments = new() { NewSubscriber("M-delegate") }
+        };
+        await svc.ImportEnrollmentAsync(batch, "t1");
+
+        memberClient.Verify(m => m.CreateAsync(
+            "t1",
+            It.Is<CreateMemberRequestDto>(r => r.MemberId == "M-delegate" && r.IsSubscriber),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Import_Termination_CallsMemberServiceTerminate()
+    {
+        var (svc, _, _, memberClient, _) = Build();
+
+        // First: create the member (existence check defaults to false via Build()).
+        var create = NewSubscriber("M-term");
+        await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-term-1",
+            Enrollments = new() { create }
+        }, "t1");
+
+        // Now simulate the member existing for the termination pass.
+        memberClient.Setup(m => m.ExistsAsync("t1", "M-term", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var terminate = NewSubscriber("M-term");
+        terminate.MaintenanceType = "024";
+        terminate.TerminationDate = "20260601";
+        await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-term-2",
+            Enrollments = new() { terminate }
+        }, "t1");
+
+        memberClient.Verify(m => m.TerminateAsync(
+            "t1", "M-term",
+            It.Is<TerminateMemberRequestDto>(r => r.TerminationDate == new DateTime(2026, 6, 1)),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using EnrollmentImportService.Clients;
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Repositories;
 
@@ -20,6 +21,8 @@ public class EnrollmentImportService : IEnrollmentImportService
     };
 
     private readonly IEnrollmentRepository _repository;
+    private readonly IMemberServiceClient _memberClient;
+    private readonly ISponsorServiceClient _sponsorClient;
     private readonly IEnrollmentTransactionRepository _transactions;
     private readonly IEnrollmentEventPublisher _eventPublisher;
     private readonly IEnrollmentValidator _validator;
@@ -27,12 +30,16 @@ public class EnrollmentImportService : IEnrollmentImportService
 
     public EnrollmentImportService(
         IEnrollmentRepository repository,
+        IMemberServiceClient memberClient,
+        ISponsorServiceClient sponsorClient,
         IEnrollmentTransactionRepository transactions,
         IEnrollmentEventPublisher eventPublisher,
         IEnrollmentValidator validator,
         ILogger<EnrollmentImportService> logger)
     {
         _repository = repository;
+        _memberClient = memberClient;
+        _sponsorClient = sponsorClient;
         _transactions = transactions;
         _eventPublisher = eventPublisher;
         _validator = validator;
@@ -248,201 +255,176 @@ public class EnrollmentImportService : IEnrollmentImportService
                 SanitizeForLog(memberEnrollment.SubscriberId));
         }
     }
-    
+
     private async Task ProcessMemberEnrollmentAsync(MemberEnrollment enrollment, string tenantId, ImportResult result)
     {
-        // 1. Process Sponsor (employer/group)
-        SponsorEntity? sponsor = null;
+        // 1. Ensure the sponsor (employer/group) exists. Sponsor-service keys
+        // sponsors by GroupNumber (REF*1L, e.g. "GRP0001") — NOT by the N1
+        // segment's own id (typically the employer's FEIN), which is a
+        // separate concept mapped to TaxId below.
         if (enrollment.Sponsor != null && !string.IsNullOrEmpty(enrollment.Sponsor.Id))
         {
-            sponsor = await GetOrCreateSponsorAsync(enrollment.Sponsor, tenantId);
+            await EnsureSponsorExistsAsync(enrollment.Sponsor, enrollment.GroupNumber, tenantId);
         }
-        
-        // 2. Process Member (subscriber)
-        Member? member = null;
-        if (!string.IsNullOrEmpty(enrollment.SubscriberId))
-        {
-            member = await _repository.GetMemberBySubscriberIdAsync(enrollment.SubscriberId, tenantId);
-        }
-        
-        // Determine action based on maintenance type
+
+        // 2. Process Member (subscriber). MemberId == SubscriberId whenever the
+        // 834 supplies one (GenerateMemberId's primary path) — member-service
+        // is queried directly by that id rather than via a separate
+        // subscriber-id search.
+        var memberId = GenerateMemberId(enrollment);
+        var memberExists = !string.IsNullOrEmpty(enrollment.SubscriberId) &&
+            await _memberClient.ExistsAsync(tenantId, memberId);
+
         switch (enrollment.MaintenanceType)
         {
             case "021": // Addition
-                if (member != null)
+                if (memberExists)
                 {
-                    _logger.LogWarning("Member {SubscriberId} already exists, skipping addition", 
+                    _logger.LogWarning("Member {SubscriberId} already exists, skipping addition",
                         SanitizeForLog(enrollment.SubscriberId));
                     result.SkippedCount++;
                     return;
                 }
-                member = await CreateMemberFromEnrollmentAsync(enrollment, tenantId, sponsor?.SponsorId);
+                await CreateMemberFromEnrollmentAsync(memberId, enrollment, tenantId);
                 result.MembersCreated++;
                 result.SuccessCount++;
                 break;
-                
+
             case "001": // Change
-                if (member == null)
+                if (!memberExists)
                 {
-                    _logger.LogWarning("Member {SubscriberId} not found for change, creating new", 
+                    _logger.LogWarning("Member {SubscriberId} not found for change, creating new",
                         SanitizeForLog(enrollment.SubscriberId));
-                    member = await CreateMemberFromEnrollmentAsync(enrollment, tenantId, sponsor?.SponsorId);
+                    await CreateMemberFromEnrollmentAsync(memberId, enrollment, tenantId);
                     result.MembersCreated++;
                 }
                 else
                 {
-                    member = await UpdateMemberFromEnrollmentAsync(member, enrollment, sponsor?.SponsorId);
+                    await UpdateMemberFromEnrollmentAsync(memberId, enrollment, tenantId);
                     result.MembersUpdated++;
                 }
                 result.SuccessCount++;
                 break;
-                
+
             case "024": // Termination
-                if (member == null)
+                if (!memberExists)
                 {
-                    _logger.LogWarning("Member {SubscriberId} not found for termination, skipping", 
+                    _logger.LogWarning("Member {SubscriberId} not found for termination, skipping",
                         SanitizeForLog(enrollment.SubscriberId));
                     result.SkippedCount++;
                     return;
                 }
-                member.Status = "Terminated";
-                member.TerminationDate = ParseDate(enrollment.TerminationDate);
-                await _repository.UpdateMemberAsync(member);
+                await _memberClient.TerminateAsync(tenantId, memberId, new TerminateMemberRequestDto
+                {
+                    MemberId = memberId,
+                    CoverageId = string.Empty,
+                    TerminationDate = ParseDate(enrollment.TerminationDate) ?? DateTime.UtcNow,
+                    ReasonCode = "834"
+                });
                 result.MembersTerminated++;
                 result.SuccessCount++;
                 break;
-                
+
             default:
                 _logger.LogWarning("Unknown maintenance type {MaintenanceType}", SanitizeForLog(enrollment.MaintenanceType));
                 result.SkippedCount++;
                 return;
         }
-        
-        // 3. Process Coverage (health plans)
-        if (member != null && enrollment.MaintenanceType != "024")
+
+        // 3. Process Coverage (health plans) — still enrollment-import-service's
+        // own Mongo collection; coverage-service requires a resolved PlanId
+        // the raw 834 doesn't carry, so this hasn't been delegated (yet).
+        if (enrollment.MaintenanceType != "024")
         {
             foreach (var coverageDetail in enrollment.Coverage)
             {
-                await ProcessCoverageAsync(member.MemberId, tenantId, coverageDetail, enrollment.EnrollmentDate);
+                await ProcessCoverageAsync(memberId, tenantId, coverageDetail, enrollment.EnrollmentDate);
                 result.CoverageRecordsCreated++;
             }
         }
-        
+
         // 4. Process Dependents
         foreach (var dependent in enrollment.Dependents)
         {
-            await ProcessDependentAsync(dependent, tenantId, member?.MemberId, sponsor?.SponsorId, enrollment.GroupNumber);
+            await ProcessDependentAsync(dependent, tenantId, memberId, enrollment.GroupNumber);
             result.DependentsCreated++;
         }
     }
-    
-    private async Task<SponsorEntity> GetOrCreateSponsorAsync(Sponsor sponsor, string tenantId)
+
+    private async Task EnsureSponsorExistsAsync(Sponsor sponsor, string? groupNumber, string tenantId)
     {
         if (string.IsNullOrEmpty(sponsor.Id))
         {
             throw new ArgumentException("Sponsor ID is required");
         }
-        
-        var existing = await _repository.GetSponsorByIdAsync(sponsor.Id, tenantId);
-        if (existing != null)
+
+        if (string.IsNullOrEmpty(groupNumber))
         {
-            return existing;
+            // No REF*1L group number on this enrollment — sponsor-service keys
+            // sponsors by group number, so there's nothing to sync against.
+            _logger.LogWarning(
+                "Sponsor {SponsorId} has no group number (REF*1L) on this enrollment; skipping sponsor-service sync",
+                SanitizeForLog(sponsor.Id));
+            return;
         }
-        
-        var newSponsor = new SponsorEntity
+
+        if (await _sponsorClient.ExistsAsync(tenantId, groupNumber))
         {
-            TenantId = tenantId,
-            SponsorId = sponsor.Id,
-            Name = sponsor.Name,
-            FederalTaxId = sponsor.IdQualifier == "FI" ? sponsor.Id : null,
-            Status = "Active"
-        };
-        
-        return await _repository.CreateSponsorAsync(newSponsor);
+            return;
+        }
+
+        await _sponsorClient.CreateAsync(tenantId, new CreateSponsorRequestDto
+        {
+            GroupNumber = groupNumber,
+            EmployerName = sponsor.Name,
+            TaxId = sponsor.IdQualifier == "FI" ? sponsor.Id : null,
+            // The 834 sponsor (N1) loop doesn't carry its own effective date —
+            // approximate with import time rather than guess at a business date.
+            EffectiveDate = DateTime.UtcNow
+        });
     }
-    
-    private async Task<Member> CreateMemberFromEnrollmentAsync(MemberEnrollment enrollment, string tenantId, string? sponsorId)
+
+    private async Task CreateMemberFromEnrollmentAsync(string memberId, MemberEnrollment enrollment, string tenantId)
     {
-        var member = new Member
+        await _memberClient.CreateAsync(tenantId, new CreateMemberRequestDto
         {
-            TenantId = tenantId,
-            MemberId = GenerateMemberId(enrollment),
-            SubscriberId = enrollment.SubscriberId,
-            FirstName = enrollment.Demographics?.FirstName ?? "",
-            LastName = enrollment.Demographics?.LastName ?? "",
-            MiddleName = enrollment.Demographics?.MiddleName,
-            Suffix = enrollment.Demographics?.Suffix,
-            DateOfBirth = ParseDate(enrollment.Demographics?.DateOfBirth),
-            Gender = enrollment.Demographics?.Gender,
+            MemberId = memberId,
             SSN = enrollment.Demographics?.IdQualifier == "34" ? enrollment.Demographics.Id : null,
-            Address = new Address
-            {
-                Line1 = enrollment.Demographics?.Address1,
-                Line2 = enrollment.Demographics?.Address2,
-                City = enrollment.Demographics?.City,
-                State = enrollment.Demographics?.State,
-                Zip = enrollment.Demographics?.Zip
-            },
-            Status = enrollment.BenefitStatus == "A" ? "Active" : 
-                     enrollment.BenefitStatus == "C" ? "COBRA" : "Terminated",
-            EnrollmentDate = ParseDate(enrollment.EnrollmentDate),
-            TerminationDate = ParseDate(enrollment.TerminationDate),
-            SponsorId = sponsorId,
-            GroupNumber = enrollment.GroupNumber,
-            EmployeeId = enrollment.EmployeeId,
-            Relationship = enrollment.Relationship
-        };
-        
-        return await _repository.CreateMemberAsync(member);
+            GroupNumber = enrollment.GroupNumber ?? string.Empty,
+            IsSubscriber = true,
+            FirstName = enrollment.Demographics?.FirstName ?? string.Empty,
+            LastName = enrollment.Demographics?.LastName ?? string.Empty,
+            MiddleName = enrollment.Demographics?.MiddleName,
+            DateOfBirth = ParseDate(enrollment.Demographics?.DateOfBirth) ?? default,
+            Gender = enrollment.Demographics?.Gender,
+            Address = enrollment.Demographics?.Address1,
+            City = enrollment.Demographics?.City,
+            State = enrollment.Demographics?.State,
+            ZipCode = enrollment.Demographics?.Zip
+        });
     }
-    
-    private async Task<Member> UpdateMemberFromEnrollmentAsync(Member member, MemberEnrollment enrollment, string? sponsorId)
+
+    private async Task UpdateMemberFromEnrollmentAsync(string memberId, MemberEnrollment enrollment, string tenantId)
     {
-        // Update demographics if provided
-        if (enrollment.Demographics != null)
+        // member-service's PUT only supports address/contact/status fields (see
+        // UpdateMemberRequest) — it has no way to update name/DOB/gender via this
+        // endpoint. A "001 Change" 834 that corrects demographics can't fully
+        // apply through this API today; known limitation of delegating here
+        // rather than writing directly, not something this change attempts to
+        // paper over.
+        var status = enrollment.BenefitStatus == "A" ? "Active" :
+                     enrollment.BenefitStatus == "C" ? "COBRA" : "Terminated";
+
+        await _memberClient.UpdateAsync(tenantId, memberId, new UpdateMemberRequestDto
         {
-            member.FirstName = enrollment.Demographics.FirstName ?? member.FirstName;
-            member.LastName = enrollment.Demographics.LastName ?? member.LastName;
-            member.MiddleName = enrollment.Demographics.MiddleName ?? member.MiddleName;
-            member.DateOfBirth = ParseDate(enrollment.Demographics.DateOfBirth) ?? member.DateOfBirth;
-            member.Gender = enrollment.Demographics.Gender ?? member.Gender;
-            
-            if (!string.IsNullOrEmpty(enrollment.Demographics.Address1))
-            {
-                member.Address = new Address
-                {
-                    Line1 = enrollment.Demographics.Address1,
-                    Line2 = enrollment.Demographics.Address2,
-                    City = enrollment.Demographics.City,
-                    State = enrollment.Demographics.State,
-                    Zip = enrollment.Demographics.Zip
-                };
-            }
-        }
-        
-        // Update status
-        member.Status = enrollment.BenefitStatus == "A" ? "Active" :
-                       enrollment.BenefitStatus == "C" ? "COBRA" : "Terminated";
-        
-        // Update dates
-        if (!string.IsNullOrEmpty(enrollment.EnrollmentDate))
-        {
-            member.EnrollmentDate = ParseDate(enrollment.EnrollmentDate);
-        }
-        
-        if (!string.IsNullOrEmpty(enrollment.TerminationDate))
-        {
-            member.TerminationDate = ParseDate(enrollment.TerminationDate);
-        }
-        
-        // Update sponsor/group info
-        member.SponsorId = sponsorId ?? member.SponsorId;
-        member.GroupNumber = enrollment.GroupNumber ?? member.GroupNumber;
-        member.EmployeeId = enrollment.EmployeeId ?? member.EmployeeId;
-        
-        return await _repository.UpdateMemberAsync(member);
+            Address = enrollment.Demographics?.Address1,
+            City = enrollment.Demographics?.City,
+            State = enrollment.Demographics?.State,
+            ZipCode = enrollment.Demographics?.Zip,
+            Status = status
+        });
     }
-    
+
     private async Task ProcessCoverageAsync(string memberId, string tenantId, CoverageDetail coverageDetail, string? effectiveDate)
     {
         var coverage = new Coverage
@@ -455,61 +437,47 @@ public class EnrollmentImportService : IEnrollmentImportService
             EffectiveDate = ParseDate(effectiveDate) ?? DateTime.UtcNow,
             Status = "Active"
         };
-        
+
         await _repository.CreateCoverageAsync(coverage);
     }
-    
-    private async Task ProcessDependentAsync(Dependent dependent, string tenantId, string? subscriberMemberId, 
-        string? sponsorId, string? groupNumber)
+
+    private async Task ProcessDependentAsync(
+        Dependent dependent, string tenantId, string? subscriberMemberId, string? groupNumber)
     {
-        var dependentMember = new Member
+        var dependentMemberId = $"D-{Guid.NewGuid():N}".Substring(0, 20);
+
+        await _memberClient.CreateAsync(tenantId, new CreateMemberRequestDto
         {
-            TenantId = tenantId,
-            MemberId = $"D-{Guid.NewGuid():N}".Substring(0, 20),
+            MemberId = dependentMemberId,
+            SSN = dependent.IdQualifier == "34" ? dependent.Id : null,
+            GroupNumber = groupNumber ?? string.Empty,
+            IsSubscriber = false,
+            // member-service links dependent<->subscriber itself via
+            // SubscriberMemberId at create time (its own FamilyRelationship
+            // graph) — no separate fetch-subscriber/append-id/write-back
+            // needed, unlike the old direct-Mongo path.
+            SubscriberMemberId = subscriberMemberId,
+            RelationshipCode = "19",
             FirstName = dependent.FirstName,
             LastName = dependent.LastName,
             MiddleName = dependent.MiddleName,
-            Suffix = dependent.Suffix,
-            DateOfBirth = ParseDate(dependent.DateOfBirth),
+            DateOfBirth = ParseDate(dependent.DateOfBirth) ?? default,
             Gender = dependent.Gender,
-            SSN = dependent.IdQualifier == "34" ? dependent.Id : null,
-            Address = new Address
-            {
-                Line1 = dependent.Address1,
-                Line2 = dependent.Address2,
-                City = dependent.City,
-                State = dependent.State,
-                Zip = dependent.Zip
-            },
-            Status = "Active",
-            SponsorId = sponsorId,
-            GroupNumber = groupNumber,
-            Relationship = "19" // Dependent
-        };
-        
-        await _repository.CreateMemberAsync(dependentMember);
-        
-        // Link dependent to subscriber
-        if (!string.IsNullOrEmpty(subscriberMemberId))
-        {
-            var subscriber = await _repository.GetMemberByIdAsync(subscriberMemberId, tenantId);
-            if (subscriber != null)
-            {
-                subscriber.DependentIds.Add(dependentMember.MemberId);
-                await _repository.UpdateMemberAsync(subscriber);
-            }
-        }
-        
-        // Create coverage for dependent
+            Address = dependent.Address1,
+            City = dependent.City,
+            State = dependent.State,
+            ZipCode = dependent.Zip
+        });
+
         if (dependent.Coverage != null)
         {
             foreach (var coverageDetail in dependent.Coverage)
             {
-                await ProcessCoverageAsync(dependentMember.MemberId, tenantId, coverageDetail, null);
+                await ProcessCoverageAsync(dependentMemberId, tenantId, coverageDetail, null);
             }
         }
     }
-    
+
     private string GenerateMemberId(MemberEnrollment enrollment)
     {
         // Use SubscriberId if available, otherwise generate
@@ -517,15 +485,15 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             return enrollment.SubscriberId;
         }
-        
+
         // Generate from demographics
         var lastName = enrollment.Demographics?.LastName?.Substring(0, Math.Min(3, enrollment.Demographics.LastName.Length)).ToUpper() ?? "UNK";
         var dob = enrollment.Demographics?.DateOfBirth?.Replace("-", "").Substring(2, 6) ?? "000000"; // YYMMDD
         var random = Guid.NewGuid().ToString("N").Substring(0, 4).ToUpper();
-        
+
         return $"M{lastName}{dob}{random}";
     }
-    
+
     /// <summary>
     /// Parses an 834 date. The 834 always carries dates in X12's D8 format
     /// (CCYYMMDD, e.g. "19780922") — DateTime.TryParse doesn't recognize
