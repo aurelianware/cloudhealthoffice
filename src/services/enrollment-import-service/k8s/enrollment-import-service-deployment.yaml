@@ -54,6 +54,10 @@ spec:
           value: "http://member-service"
         - name: Services__SponsorService
           value: "http://sponsor-service"
+        - name: Services__BenefitPlanService
+          value: "http://benefit-plan-service"
+        - name: Services__CoverageService
+          value: "http://coverage-service"
         resources:
           requests:
             cpu: 100m
