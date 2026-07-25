@@ -5,6 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "cloudhealthoffice"
 ---
 apiVersion: v1
 kind: Secret
@@ -53,6 +54,11 @@ spec:
             secretKeyRef:
               name: sponsor-service-secrets
               key: MongoDb__ConnectionString
+        - name: MongoDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: sponsor-service-config
+              key: MongoDb__DatabaseName
         resources:
           requests:
             memory: "256Mi"
