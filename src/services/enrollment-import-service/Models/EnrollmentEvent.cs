@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace EnrollmentImportService.Models;
 
@@ -18,6 +19,7 @@ namespace EnrollmentImportService.Models;
 /// Partition: Cosmos container <c>enrollment-events</c> uses partition key
 /// <c>{tenantId}:{memberId}</c> so per-member change-feed consumers read in order.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class EnrollmentEvent
 {
     [Required]
@@ -106,9 +108,25 @@ public class EnrollmentEvent
     [JsonPropertyName("correlationId")]
     public string? CorrelationId { get; set; }
 
-    /// <summary>Event-specific payload (changed fields, plan ids, addresses, etc.).</summary>
+    /// <summary>
+    /// Event-specific payload (changed fields, plan ids, addresses, etc.).
+    /// Serialized via <see cref="PayloadJson"/> for MongoDB — the BSON driver
+    /// has no built-in serializer for <see cref="JsonObject"/> (same approach
+    /// as member-service's MemberEvent.Payload/PayloadJson).
+    /// </summary>
     [JsonPropertyName("payload")]
+    [BsonIgnore]
     public JsonObject? Payload { get; set; }
+
+    /// <summary>Mongo-facing mirror of <see cref="Payload"/>. Not emitted by System.Text.Json.</summary>
+    [JsonIgnore]
+    public string? PayloadJson
+    {
+        get => Payload?.ToJsonString();
+        set => Payload = string.IsNullOrEmpty(value)
+            ? null
+            : System.Text.Json.Nodes.JsonNode.Parse(value) as JsonObject;
+    }
 
     /// <summary>
     /// Raw 834 snippet (or JSON form of the manual request) for audit / display.
