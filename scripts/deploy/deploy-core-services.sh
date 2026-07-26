@@ -14,7 +14,7 @@
 #   ./scripts/deploy/deploy-core-services.sh --skip-seed      # skip seed data
 #
 # Environment variables:
-#   ACR_NAME        — ACR login server (default: choacrhy6h2vdulfru6.azurecr.io)
+#   ACR_NAME        — ACR login server (default: clouhealthoffice.azurecr.io)
 #   K8S_NAMESPACE   — Kubernetes namespace (default: cloudhealthoffice)
 #   IMAGE_TAG       — Image tag (default: latest)
 #   SEED_TENANT_ID  — Tenant ID for seed data (default: dev-tenant)
@@ -24,7 +24,7 @@ set -euo pipefail
 
 # ── Configuration ────────────────────────────────────────────────────────
 
-ACR_NAME="${ACR_NAME:-choacrhy6h2vdulfru6.azurecr.io}"
+ACR_NAME="${ACR_NAME:-clouhealthoffice.azurecr.io}"
 K8S_NAMESPACE="${K8S_NAMESPACE:-cloudhealthoffice}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 SEED_TENANT_ID="${SEED_TENANT_ID:-dev-tenant}"

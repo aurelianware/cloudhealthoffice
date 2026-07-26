@@ -59,7 +59,7 @@ spec:
                       - spot
       containers:
       - name: claims-examiner-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-claims-examiner-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-claims-examiner-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

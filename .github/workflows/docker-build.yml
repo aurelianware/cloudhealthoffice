@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: ${{ vars.ACR_LOGIN_SERVER || 'choacrhy6h2vdulfru6.azurecr.io' }}
+  REGISTRY: ${{ vars.ACR_LOGIN_SERVER || 'clouhealthoffice.azurecr.io' }}
   IMAGE_PREFIX: cloudhealthoffice
 
 jobs:
@@ -61,7 +61,7 @@ jobs:
 
       - name: Log in to Azure Container Registry
         if: github.event_name != 'pull_request'
-        run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
+        run: az acr login --name ${{ vars.ACR_NAME || 'clouhealthoffice' }}
 
       # PR builds cannot use OIDC (no push), but should use ACR mirrored .NET
       # base images only when Azure deploys are active. While Azure is paused,
@@ -96,7 +96,7 @@ jobs:
       - name: Fail if ACR login didn't succeed on PR
         if: github.event_name == 'pull_request' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true' && steps.acr-pr-login.outcome != 'success'
         env:
-          ACR_SHORT_NAME: ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
+          ACR_SHORT_NAME: ${{ vars.ACR_NAME || 'clouhealthoffice' }}
         run: |
           echo "::error::PR base-image pulls require the ACR_USERNAME / ACR_PASSWORD repo secrets."
           echo "::error::Without them, PR builds and main deploys exercise different container"
@@ -167,7 +167,7 @@ jobs:
 
       - name: Log in to Azure Container Registry
         if: github.event_name != 'pull_request'
-        run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
+        run: az acr login --name ${{ vars.ACR_NAME || 'clouhealthoffice' }}
 
       - name: Extract metadata
         id: meta
@@ -350,7 +350,7 @@ jobs:
 
       - name: Log in to Azure Container Registry
         if: github.event_name != 'pull_request'
-        run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
+        run: az acr login --name ${{ vars.ACR_NAME || 'clouhealthoffice' }}
 
       - name: Extract metadata
         id: meta

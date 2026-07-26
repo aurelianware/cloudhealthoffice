@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
       - name: claims-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-claims-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-claims-service:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080

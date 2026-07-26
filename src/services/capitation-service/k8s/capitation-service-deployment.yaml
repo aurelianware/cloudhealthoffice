@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
       - name: capitation-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-capitation-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-capitation-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
