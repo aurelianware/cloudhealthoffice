@@ -114,6 +114,7 @@ jobs:
             echo "::group::Importing mcr.microsoft.com/${img} → ${ACR_NAME}.azurecr.io/${img}"
             az acr import \
               --name "$ACR_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
               --source "mcr.microsoft.com/${img}" \
               --image "${img}" \
               --force
