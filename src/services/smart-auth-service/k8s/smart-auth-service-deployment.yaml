@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
         - name: smart-auth-service
-          image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-smart-auth-service:latest
+          image: clouhealthoffice.azurecr.io/cloudhealthoffice-smart-auth-service:latest
           ports:
             - containerPort: 8080
           envFrom:

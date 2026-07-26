@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  ACR_REGISTRY: choacrhy6h2vdulfru6.azurecr.io
+  ACR_REGISTRY: ${{ vars.ACR_LOGIN_SERVER || 'clouhealthoffice.azurecr.io' }}
   IMAGE_NAME: hapi-fhir-sandbox
   ACA_NAME: hapi-fhir-sandbox
   ACA_ENV: cho-aca-env

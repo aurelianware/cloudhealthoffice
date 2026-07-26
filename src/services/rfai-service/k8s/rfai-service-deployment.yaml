@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: rfai-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-rfai-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-rfai-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

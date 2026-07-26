@@ -1,4 +1,4 @@
-ARG REGISTRY=choacrhy6h2vdulfru6.azurecr.io
+ARG REGISTRY=clouhealthoffice.azurecr.io
 FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
 WORKDIR /repo
 

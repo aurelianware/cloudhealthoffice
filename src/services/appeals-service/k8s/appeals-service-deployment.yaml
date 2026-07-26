@@ -34,7 +34,7 @@ spec:
     spec:
       containers:
       - name: appeals-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-appeals-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-appeals-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

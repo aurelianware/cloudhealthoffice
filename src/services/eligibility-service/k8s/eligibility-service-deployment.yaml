@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: eligibility-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-eligibility-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-eligibility-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

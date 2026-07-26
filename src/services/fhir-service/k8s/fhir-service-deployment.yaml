@@ -47,7 +47,7 @@ spec:
     spec:
       containers:
         - name: fhir-service
-          image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-fhir-service:latest
+          image: clouhealthoffice.azurecr.io/cloudhealthoffice-fhir-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

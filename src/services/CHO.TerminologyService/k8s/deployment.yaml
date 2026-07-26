@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: terminology-service
-          image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-terminology-service:latest
+          image: clouhealthoffice.azurecr.io/cloudhealthoffice-terminology-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 5080

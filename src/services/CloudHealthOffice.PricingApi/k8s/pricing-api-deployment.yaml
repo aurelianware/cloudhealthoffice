@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: pricing-api
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-pricing-api:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-pricing-api:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
       - name: risk-adjustment-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-risk-adjustment-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-risk-adjustment-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
       - name: premium-billing-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-premium-billing-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-premium-billing-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

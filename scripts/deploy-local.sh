@@ -151,7 +151,7 @@ if [[ "$SKIP_BUILD" == false ]]; then
     fi
 
     # Tag with both ACR and GHCR names so k8s manifests find the image
-    acr_tag="choacrhy6h2vdulfru6.azurecr.io/${IMAGE_PREFIX}-${svc}:latest"
+    acr_tag="clouhealthoffice.azurecr.io/${IMAGE_PREFIX}-${svc}:latest"
     ghcr_tag="ghcr.io/aurelianware/${IMAGE_PREFIX}-${svc}:latest"
 
     docker build -t "$acr_tag" -t "$ghcr_tag" \

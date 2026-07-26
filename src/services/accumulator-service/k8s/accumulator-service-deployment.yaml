@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
       - name: accumulator-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-accumulator-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-accumulator-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
