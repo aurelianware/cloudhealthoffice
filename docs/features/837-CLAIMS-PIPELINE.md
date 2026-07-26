@@ -1,267 +1,120 @@
-# 837 Claims Ingestion End-to-End Pipeline
+# 837 Claims Ingestion Pipeline
 
-Complete pipeline for importing 837 EDI files, creating claims, and triggering adjudication.
+How a raw X12 837 file becomes an adjudicated claim.
+
+> **Note:** This doc previously described an SFTP → Argo Workflow → Kafka → Argo Events
+> pipeline with a stub `x12-parser` container. That design was never wired up end-to-end
+> and has been superseded by the in-process pipeline below, built directly into
+> `claims-service`. If you find references elsewhere (`containers/x12-parser/`,
+> `argo-workflows/x12-837-ingest.yaml`, `kafka/topics.yaml`'s `claims-adjudication` topic)
+> treat them as historical/unused rather than the current path.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                   837 Claims Import Pipeline                     │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       837 Claims Import Pipeline                        │
+└─────────────────────────────────────────────────────────────────────────┘
 
-SFTP Server (/inbound/claims/*.edi)
-        │
-        ↓
-┌───────────────────────────────────────┐
-│   Argo Workflow: x12-837-ingest      │
-│   (Runs every 5 minutes via cron)    │
-│                                       │
-│   1. Fetch from SFTP                  │
-│   2. Parse 837 EDI → JSON             │
-│   3. POST to Claims Service API       │
-│   4. Publish to Kafka topic           │
-│   5. Archive to SFTP                  │
-└───────────────┬───────────────────────┘
-                │
-                ↓
-        Kafka Topic: claims-adjudication
-                │
-                ↓
-┌───────────────────────────────────────┐
-│   Argo Events Sensor                  │
-│   (Kafka consumer)                    │
-└───────────┬───────────────────────────┘
-            │
-            ↓
-┌───────────────────────────────────────┐
-│   Argo Workflow:                      │
-│   claims-adjudication-template        │
-│   (10-step DAG)                       │
-│                                       │
-│   1. Get claim                        │
-│   2. Validate codes                   │
-│   3. Verify coverage                  │
-│   4. Validate provider                │
-│   5. Check prior auth                 │
-│   6. Get benefits                     │
-│   7. Get rates                        │
-│   8. Calculate allowed                │
-│   9. Calculate cost-sharing           │
-│   10. Update claim (APPROVED/DENIED)  │
-└───────────────────────────────────────┘
+Evaluator / integration                POST /api/v1/claims/import/raw837
+   drops a raw 837 file    ──────────▶  (ClaimsV1Controller, claims-service)
+                                                    │
+                                                    ▼
+                                   X12837Parser.Parse(ediContent)
+                                   (hand-rolled segment walker — 837P/SV1
+                                    and 837I/SV2, multi-claim batches,
+                                    2000C dependent loops)
+                                                    │
+                                                    ▼
+                                   X12837ClaimMapper.Map(parsed, tenantId)
+                                   (→ AdapterClaim; deliberately leaves
+                                    BenefitPlanId blank — see below)
+                                                    │
+                                                    ▼
+                                   IClaimSubmissionService.SubmitAsync
+                                   (validates, writes via tenant-routed
+                                    IClaimAdapter, persists a
+                                    ClaimImportTransaction row — accepted
+                                    or rejected — either way)
+                                                    │
+                                                    ▼
+                                   Service Bus: ClaimVersionSubmitted
+                                                    │
+                                                    ▼
+                              ClaimAdjudicationOrchestrator (background
+                              message consumer) runs the 8-stage pipeline
+                              in Order:
+                                100  Scrubbing
+                                150  ProviderIntegrity
+                                200  NetworkCredentialing
+                                (resolve BenefitPlanId from the member's
+                                 active coverage here if it arrived blank
+                                 — ICoverageResolver, coverage-service)
+                                300  BenefitCalculation
+                                400  NcciEdits
+                                500  CoordinationOfBenefits
+                                600  AiExamination
+                                999  Persistence
+                                                    │
+                                                    ▼
+                                   Claim.Status = Approved / Denied / Pended
 ```
 
-## Components Created
+## Why `BenefitPlanId` starts blank
 
-### 1. Kafka Topics (`kafka/topics.yaml`)
-- **claims-adjudication** - 6 partitions, 30-day retention
-- **claims-work-queue** - 3 partitions, flagged claims
-- **claims-rejected** - 3 partitions, 90-day retention
+`X12837ClaimMapper` deliberately does not try to resolve `BenefitPlanId`/`CoverageId` from
+the raw 837 — an unrecognized member should surface as a real pend during adjudication, not
+get silently papered over during mapping. `ClaimAdjudicationOrchestrator` resolves it from
+the member's active coverage (via `ICoverageResolver` → coverage-service's
+`GET /api/v1/coverage/member/{memberId}/active`) immediately before plan resolution runs, but
+only when the claim arrived without one — this is what lets a member seeded through the 834
+enrollment pipeline actually reach a priced outcome from an 837, instead of pending on
+"missing BenefitPlanId" regardless of how correctly they were enrolled.
 
-### 2. Argo Workflow: x12-837-ingest (`argo-workflows/x12-837-ingest.yaml`)
-**Purpose:** Ingest 837 files from SFTP and create claims
+## Testing end-to-end
 
-**Steps:**
-1. **fetch-from-sftp** - Download 837 files
-2. **parse-837-files** - Parse EDI to JSON
-3. **create-claims-batch** - POST to Claims Service + Kafka publish
-4. **archive-to-sftp** - Move processed files to archive
-
-**Execution:**
-- CronWorkflow runs every 5 minutes
-- Manual: `argo submit -n cloudhealthoffice --from workflowtemplate/x12-837-ingest`
-
-### 3. Argo Events EventSource (`argo-events/claims-adjudication-eventsource.yaml`)
-**Purpose:** Listen to Kafka topic and trigger adjudication
-
-**Configuration:**
-- Kafka topic: `claims-adjudication`
-- Consumer group: `argo-claims-adjudication`
-- SASL/SSL authentication
-- Triggers: `claims-adjudication-template` workflow
-
-### 4. Container Images
-
-**x12-parser** (`containers/x12-parser/`)
-- Base: `node:18-alpine`
-- Parse 837P/837I/837D EDI to JSON
-- Uses `@hahntech/x12-parser` npm package
-
-**claims-publisher** (`containers/claims-publisher/`)
-- Base: `alpine:3.18`
-- POST claims to Claims Service API
-- Publish to Kafka using `kafkacat`
-
-## Deployment
-
-### 1. Create Kafka Topics
 ```bash
-kubectl apply -f kafka/topics.yaml
+# Seeds a benefit plan + plan-code mapping, imports a sample 834 (creating
+# Sponsor/Member/Coverage), submits a matching 837, and polls until the
+# claim reaches a terminal adjudication status.
+scripts/smoke/834-to-837-e2e-smoke.sh
 ```
 
-### 2. Build Container Images
+Or manually:
+
 ```bash
-# x12-parser
-cd containers/x12-parser
-docker build -t cloudhealthoffice/x12-parser:latest .
-docker push cloudhealthoffice/x12-parser:latest
+# 1. Submit a raw 837 file
+curl -X POST http://claims-service.cloudhealthoffice/api/v1/claims/import/raw837 \
+  -H "X-Tenant-ID: <tenant>" \
+  -F "file=@my-claim.837"
 
-# claims-publisher
-cd ../claims-publisher
-docker build -t cloudhealthoffice/claims-publisher:latest .
-docker push cloudhealthoffice/claims-publisher:latest
+# 2. Check the transaction log (admin view — accepted AND rejected imports)
+curl http://claims-service.cloudhealthoffice/api/v1/claims/import-transactions \
+  -H "X-Tenant-ID: <tenant>"
+
+# 3. Poll the claim itself for adjudication status
+curl http://claims-service.cloudhealthoffice/api/claims/{claim-id} \
+  -H "X-Tenant-ID: <tenant>"
 ```
 
-### 3. Deploy Argo Workflow
-```bash
-kubectl apply -f argo-workflows/x12-837-ingest.yaml
-```
-
-### 4. Deploy Argo Events
-```bash
-kubectl apply -f argo-events/claims-adjudication-eventsource.yaml
-```
-
-## Testing End-to-End
-
-### 1. Generate Test 837 File
-```bash
-cd scripts/utils
-npm run generate-837 > test-claim-001.edi
-```
-
-### 2. Upload to SFTP
-```bash
-sftp sftp-user@sftp-server.cloudhealthoffice.svc.cluster.local
-cd /inbound/claims
-put test-claim-001.edi
-bye
-```
-
-### 3. Trigger Workflow (or wait for cron)
-```bash
-argo submit -n cloudhealthoffice --from workflowtemplate/x12-837-ingest
-```
-
-### 4. Monitor Workflow
-```bash
-# Watch workflow execution
-argo watch -n cloudhealthoffice @latest
-
-# Check logs
-argo logs -n cloudhealthoffice @latest
-
-# Verify claim created
-curl http://claims-service.cloudhealthoffice/api/claims?status=Submitted
-```
-
-### 5. Verify Adjudication Triggered
-```bash
-# Check Kafka messages
-kubectl exec -it cloudhealthoffice-kafka-0 -n kafka -- \
-  kafka-console-consumer.sh \
-  --bootstrap-server localhost:9092 \
-  --topic claims-adjudication \
-  --from-beginning
-
-# Watch adjudication workflow
-argo list -n cloudhealthoffice | grep claims-adjudication
-```
-
-### 6. Check Final Claim Status
-```bash
-# Should be APPROVED or DENIED after adjudication
-curl http://claims-service.cloudhealthoffice/api/claims/{claim-id}
-```
-
-## Flow Summary
-
-1. **Drop 837 file** → SFTP `/inbound/claims/`
-2. **Cron triggers** → `x12-837-ingest` workflow (every 5 min)
-3. **Parse EDI** → JSON claim structure
-4. **Create claim** → POST to Claims Service API
-5. **Publish event** → Kafka `claims-adjudication` topic
-6. **Argo Events** → Detects message, triggers adjudication
-7. **Adjudication** → 10-step workflow executes
-8. **Claim updated** → Status = APPROVED/DENIED
-
-## Configuration
-
-### SFTP Settings
-Edit `x12-837-ingest.yaml`:
-```yaml
-arguments:
-  parameters:
-    - name: sftp-host
-      value: "your-sftp-host"
-    - name: sftp-folder
-      value: "/inbound/claims"
-```
-
-### Kafka Settings
-Edit `claims-adjudication-eventsource.yaml`:
-```yaml
-kafka:
-  claims-adjudication:
-    url: cloudhealthoffice-kafka-bootstrap.kafka:9092
-    topic: claims-adjudication
-```
-
-## Monitoring
-
-### Workflow Metrics
-```bash
-# View workflow history
-argo list -n cloudhealthoffice
-
-# Check failed workflows
-argo list -n cloudhealthoffice --status Failed
-
-# Get workflow details
-argo get -n cloudhealthoffice <workflow-name>
-```
-
-### Kafka Consumer Lag
-```bash
-kubectl exec -it cloudhealthoffice-kafka-0 -n kafka -- \
-  kafka-consumer-groups.sh \
-  --bootstrap-server localhost:9092 \
-  --describe \
-  --group argo-claims-adjudication
-```
-
-### Claims Service Health
-```bash
-curl http://claims-service.cloudhealthoffice/health
-```
+The portal's **EDI Transactions** console (`/edi-transactions`) shows both 834 and 837
+import history — accepted/rejected status and error text — without needing raw API calls.
 
 ## Troubleshooting
 
-### No files processed
-- Check SFTP folder: `sftp sftp-user@sftp-server`
-- Verify file pattern: `*.edi`
-- Check workflow logs: `argo logs -n cloudhealthoffice @latest`
+### 837 file rejected at upload (400)
+- No `CLM` segments found → not a valid 837, or wrong transaction type.
+- Parse failure → check the error message; `X12837Parser` throws `X12FormatException` with
+  the specific segment/reason.
 
-### Parse errors
-- Check x12-parser logs
-- Verify 837 format (005010X222A1/X223A2/X224A2)
-- Test with `scripts/utils/generate-837-claims.ts`
+### Claim accepted but never prices (stuck pending/rejected on "missing BenefitPlanId")
+- The member has no active coverage in coverage-service for the claim's service date /
+  insurance line — most likely the 834 onboarding step (plan-code mapping,
+  `scripts/onboard-plan-code-mappings.sh`) wasn't completed for this employer group before
+  their 837s started arriving.
+- Check `GET /api/v1/claims/import-transactions` for the transaction's `Status`/`Errors`, and
+  `GET /api/claims/{id}` for `BenefitPlanId` and `PendDetails`.
 
-### Claims not created
-- Check Claims Service API: `curl http://claims-service.cloudhealthoffice/health`
-- Verify tenant ID matches
-- Check HTTP response codes in workflow logs
-
-### Adjudication not triggered
-- Check Kafka topic: `kafka-console-consumer.sh`
-- Verify EventSource pod running: `kubectl get pods -n cloudhealthoffice`
-- Check Sensor logs: `kubectl logs -n cloudhealthoffice -l sensor-name=claims-adjudication-trigger`
-
-## Next Steps
-
-1. **Configure actual x12-parser** - Replace stub with real 837 parser
-2. **Add validation** - Structural scrubbing runs in-process inside claims-service via the `CloudHealthOffice.ClaimsScrubEngine` class library at adjudication pipeline Order=100 (capability 5.4)
-3. **Error handling** - Route invalid claims to work queue
-4. **Monitoring** - Add Prometheus metrics
-5. **Alerting** - Configure alerts for failed workflows
-6. **Testing** - E2E test with real 837 files
+### Adjudication never completes
+- Check the Service Bus subscription is live (`ClaimAdjudicationOrchestrator`'s background
+  consumer) — this replaced the old Argo Events/Kafka trigger entirely.
