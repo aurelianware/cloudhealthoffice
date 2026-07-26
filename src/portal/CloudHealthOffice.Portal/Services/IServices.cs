@@ -45,6 +45,9 @@ public interface IEdiTransactionsService
 {
     Task<List<Enrollment834Record>> GetEnrollment834TransactionsAsync(int limit = 100);
     Task<List<ClaimImportTransactionRecord>> GetClaimImportTransactionsAsync(int limit = 100);
+
+    /// <summary>Batch-level 834 run summaries — one row per import, not per member. See <see cref="EnrollmentImportRunRecord"/>.</summary>
+    Task<List<EnrollmentImportRunRecord>> GetEnrollmentImportRunsAsync(int limit = 100);
 }
 
 /// <summary>Portal projection of claims-service's ClaimImportTransaction.</summary>
@@ -57,6 +60,26 @@ public class ClaimImportTransactionRecord
     public string? FileName { get; set; }
     public DateTime ReceivedAt { get; set; }
     public string Status { get; set; } = string.Empty;
+    public List<string> Errors { get; set; } = new();
+}
+
+/// <summary>Portal projection of enrollment-import-service's EnrollmentImportRun — one row per 834 batch.</summary>
+public class EnrollmentImportRunRecord
+{
+    public string Id { get; set; } = string.Empty;
+    public string BatchId { get; set; } = string.Empty;
+    public string? FileName { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public int SuccessCount { get; set; }
+    public int FailedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public int MembersCreated { get; set; }
+    public int MembersUpdated { get; set; }
+    public int MembersTerminated { get; set; }
+    public int DependentsCreated { get; set; }
+    public int CoverageRecordsCreated { get; set; }
+    public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
 }
 

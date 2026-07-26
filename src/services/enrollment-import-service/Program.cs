@@ -40,6 +40,7 @@ builder.Services.AddSingleton<IMongoDatabase>(sp =>
 // creation happens in EnrollmentIndexInitializer below), so these can be
 // singletons rather than scoped — same pattern as member-service.
 builder.Services.AddSingleton<IEnrollmentTransactionRepository, EnrollmentTransactionRepository>();
+builder.Services.AddSingleton<IEnrollmentImportRunRepository, EnrollmentImportRunRepository>();
 builder.Services.AddSingleton<IEnrollmentEventRepository, EnrollmentEventRepository>();
 builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>();
 builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();

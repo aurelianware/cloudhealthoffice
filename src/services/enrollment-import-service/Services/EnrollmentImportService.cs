@@ -25,6 +25,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     private readonly IBenefitPlanServiceClient _benefitPlanClient;
     private readonly ICoverageServiceClient _coverageClient;
     private readonly IEnrollmentTransactionRepository _transactions;
+    private readonly IEnrollmentImportRunRepository _importRuns;
     private readonly IEnrollmentEventPublisher _eventPublisher;
     private readonly IEnrollmentValidator _validator;
     private readonly ILogger<EnrollmentImportService> _logger;
@@ -35,6 +36,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         IBenefitPlanServiceClient benefitPlanClient,
         ICoverageServiceClient coverageClient,
         IEnrollmentTransactionRepository transactions,
+        IEnrollmentImportRunRepository importRuns,
         IEnrollmentEventPublisher eventPublisher,
         IEnrollmentValidator validator,
         ILogger<EnrollmentImportService> logger)
@@ -44,6 +46,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         _benefitPlanClient = benefitPlanClient;
         _coverageClient = coverageClient;
         _transactions = transactions;
+        _importRuns = importRuns;
         _eventPublisher = eventPublisher;
         _validator = validator;
         _logger = logger;
@@ -115,7 +118,47 @@ public class EnrollmentImportService : IEnrollmentImportService
             "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped",
             result.SuccessCount, result.FailedCount, result.SkippedCount);
 
+        await RecordRunAsync(tenantId, result);
+
         return result;
+    }
+
+    /// <summary>
+    /// Persists the batch-level summary so it can be looked up again later —
+    /// the same shape as <see cref="ImportResult"/> already returned
+    /// synchronously to the caller, which otherwise only existed for the
+    /// moment of the API call. Failure here must not fail the import itself;
+    /// same posture as <see cref="RecordTransactionAsync"/>.
+    /// </summary>
+    private async Task RecordRunAsync(string tenantId, ImportResult result)
+    {
+        try
+        {
+            await _importRuns.CreateAsync(new EnrollmentImportRun
+            {
+                TenantId = tenantId,
+                BatchId = result.BatchId,
+                FileName = result.FileName,
+                StartedAt = result.StartedAt,
+                CompletedAt = result.CompletedAt,
+                SuccessCount = result.SuccessCount,
+                FailedCount = result.FailedCount,
+                SkippedCount = result.SkippedCount,
+                MembersCreated = result.MembersCreated,
+                MembersUpdated = result.MembersUpdated,
+                MembersTerminated = result.MembersTerminated,
+                DependentsCreated = result.DependentsCreated,
+                CoverageRecordsCreated = result.CoverageRecordsCreated,
+                CoverageMappingsUnresolved = result.CoverageMappingsUnresolved,
+                Errors = result.Errors
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to persist EnrollmentImportRun for batch {BatchId}",
+                SanitizeForLog(result.BatchId));
+        }
     }
 
     private async Task PublishEnrollmentEventAsync(

@@ -71,10 +71,13 @@ public class DownstreamRouteContractTests
                 // doc comments on the Member/Sponsor/Coverage delegation.
                 RemoveAll<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>(services);
                 RemoveAll<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>(services);
+                RemoveAll<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentImportRunRepository>(services);
                 services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>(
                     new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>().Object);
                 services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>(
                     new Mock<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>().Object);
+                services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentImportRunRepository>(
+                    new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentImportRunRepository>().Object);
 
                 // Remove the Mongo index initializer that would try to connect to
                 // the fake MongoDB host at startup. Don't use RemoveAll<IHostedService>()
