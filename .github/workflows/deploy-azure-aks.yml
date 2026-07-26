@@ -84,16 +84,15 @@ jobs:
           # this matches the object id we've been granting RBAC roles to.
           az ad sp show --id "$CLIENT_ID" --query "{objectId:id, displayName:displayName}" -o json
 
-          # Boolean-only comparison: never prints the actual subscription id
-          # (which would be an exact match of a stored secret and get
-          # masked anyway), just whether it matches the known provisioning
-          # subscription.
+          # Hash-only comparison: a sha256 digest is a one-way derived value,
+          # not the secret itself, so it's safe to print and gives an
+          # unambiguous comparison point (the earlier boolean-only check
+          # said MATCH, but actual behavior suggests otherwise -- want to
+          # rule out a bug in that comparison itself).
           actual_sub=$(az account show --query id -o tsv)
-          if [ "$actual_sub" = "85bd1f0d-3a84-4070-a1d1-9358fa42c10e" ]; then
-            echo "Subscription MATCHES the subscription resources were provisioned in."
-          else
-            echo "Subscription DOES NOT MATCH the subscription resources were provisioned in."
-          fi
+          echo "Subscription id sha256: $(echo -n "$actual_sub" | sha256sum)"
+          echo "Tenant id sha256: $(az account show --query tenantId -o tsv | tr -d '\n' | sha256sum)"
+          echo "(compare against locally-computed hash of 85bd1f0d-3a84-4070-a1d1-9358fa42c10e)"
 
       - name: Debug - direct group/registry resolution (temporary)
         env:
