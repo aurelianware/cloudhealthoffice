@@ -53,6 +53,11 @@ spec:
               key: connectionString
         - name: MongoDb__DatabaseName
           value: "cloudhealthoffice"
+        - name: AzureStorage__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: azure-storage-secret
+              key: connectionString
         - name: Kafka__BootstrapServers
           valueFrom:
             secretKeyRef:
