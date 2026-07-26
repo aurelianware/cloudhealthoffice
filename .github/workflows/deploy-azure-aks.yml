@@ -84,6 +84,17 @@ jobs:
           # this matches the object id we've been granting RBAC roles to.
           az ad sp show --id "$CLIENT_ID" --query "{objectId:id, displayName:displayName}" -o json
 
+          # Boolean-only comparison: never prints the actual subscription id
+          # (which would be an exact match of a stored secret and get
+          # masked anyway), just whether it matches the known provisioning
+          # subscription.
+          actual_sub=$(az account show --query id -o tsv)
+          if [ "$actual_sub" = "85bd1f0d-3a84-4070-a1d1-9358fa42c10e" ]; then
+            echo "Subscription MATCHES the subscription resources were provisioned in."
+          else
+            echo "Subscription DOES NOT MATCH the subscription resources were provisioned in."
+          fi
+
       - name: Import .NET 8 base images from MCR
         env:
           ACR_NAME: ${{ vars.ACR_NAME }}
