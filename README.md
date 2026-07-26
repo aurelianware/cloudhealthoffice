@@ -62,9 +62,9 @@ console inspection through the Million Claim Challenge.
 | Benefit administration | Declarative benefit models, cost sharing, accumulators, service-category mapping, and plan versioning |
 | Pricing and edits | Fee schedules, NCCI/MUE checks, claims scrubbing, COB, provider network checks, and prior-auth rules |
 | Interoperability | FHIR R4 projections, X12 parsing/processing, terminology lookup, and CMS-0057-F readiness docs |
-| Operations portal | Claims search, claim detail, mass adjudication runs, dashboards, work queues, and administrative surfaces |
+| Operations portal | Claims search, claim detail, mass adjudication runs, EDI transaction history (834/837), dashboards, work queues, and administrative surfaces |
 | Deployment | Docker Compose, Kubernetes manifests, GitHub Actions, and deployment documentation |
-| Benchmarks | 5K, 10K, 50K, and 100K Million Claim Challenge evidence packets |
+| Benchmarks | 5K, 10K, 50K, 100K, and full 1,000,000-claim Million Claim Challenge evidence packets |
 
 ## Platform Architecture
 
@@ -120,7 +120,9 @@ and reports payment accuracy independently from workflow correctness.
 
 Current published local evidence includes:
 
-- 50,000-claim breadth validation with zero scoreable workflow mismatches.
+- Full 1,000,000-claim corpus run (episode 15) with zero platform failures,
+  129,981/130,000 workflow checks matched, zero unsupported scenarios, and a
+  payment-amount gate of 20,000/20,000 exact within one cent.
 - 100,000-claim local Kubernetes run with zero platform failures, zero scoreable
   workflow mismatches, zero unexpected pends across scoreable non-pend claims,
   and 2,000 of 2,000 comparable payments within one cent.
