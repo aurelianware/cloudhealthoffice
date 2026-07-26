@@ -95,6 +95,19 @@ jobs:
             echo "Subscription DOES NOT MATCH the subscription resources were provisioned in."
           fi
 
+      - name: Debug - direct group/registry resolution (temporary)
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          RESOURCE_GROUP: ${{ env.RESOURCE_GROUP }}
+        run: |
+          echo "RESOURCE_GROUP='$RESOURCE_GROUP' ACR_NAME='$ACR_NAME'"
+          echo "--- az group show ---"
+          az group show --name "$RESOURCE_GROUP" -o json || echo "GROUP SHOW FAILED (exit $?)"
+          echo "--- az group list (subscription-wide) ---"
+          az group list --query "[].name" -o tsv || echo "GROUP LIST FAILED (exit $?)"
+          echo "--- az acr show ---"
+          az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" -o json || echo "ACR SHOW FAILED (exit $?)"
+
       - name: Import .NET 8 base images from MCR
         env:
           ACR_NAME: ${{ vars.ACR_NAME }}
