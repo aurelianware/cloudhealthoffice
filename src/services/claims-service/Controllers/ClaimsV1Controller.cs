@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using ClaimsService.Adapters;
 using ClaimsService.Fhir;
 using ClaimsService.Models;
+using ClaimsService.Repositories;
 using ClaimsService.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -44,17 +45,20 @@ public class ClaimsV1Controller : ControllerBase
     private readonly ClaimAdapterFactory _adapterFactory;
     private readonly IClaimSubmissionService _submissionService;
     private readonly IExplanationOfBenefitProjector _eobProjector;
+    private readonly IClaimImportTransactionRepository _importTransactions;
     private readonly ILogger<ClaimsV1Controller> _logger;
 
     public ClaimsV1Controller(
         ClaimAdapterFactory adapterFactory,
         IClaimSubmissionService submissionService,
         IExplanationOfBenefitProjector eobProjector,
+        IClaimImportTransactionRepository importTransactions,
         ILogger<ClaimsV1Controller> logger)
     {
         _adapterFactory = adapterFactory;
         _submissionService = submissionService;
         _eobProjector = eobProjector;
+        _importTransactions = importTransactions;
         _logger = logger;
     }
 
@@ -161,15 +165,42 @@ public class ClaimsV1Controller : ControllerBase
             var adapterClaim = ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(parsed, tenantId);
             var result = await _submissionService.SubmitAsync(adapterClaim, tenantId, actorId, correlationId, ct);
 
+            var errors = result.Success
+                ? []
+                : result.Errors.Select(e => $"{e.Field}: {e.Message}").ToList();
+
             results.Add(new Raw837ClaimResult
             {
                 ClaimNumber = parsed.ClaimId,
                 Success = result.Success,
                 ClaimId = result.Claim?.Id,
-                Errors = result.Success
-                    ? []
-                    : [.. result.Errors.Select(e => $"{e.Field}: {e.Message}")]
+                Errors = errors
             });
+
+            // Persisted regardless of outcome — a rejected claim is exactly
+            // what an evaluator troubleshooting a dropped file needs to see.
+            try
+            {
+                await _importTransactions.CreateAsync(new ClaimImportTransaction
+                {
+                    TenantId = tenantId,
+                    ClaimNumber = parsed.ClaimId,
+                    ClaimId = result.Claim?.Id,
+                    MemberId = adapterClaim.MemberId,
+                    FileName = file.FileName,
+                    Status = result.Success ? "Accepted" : "Rejected",
+                    Errors = errors
+                });
+            }
+            catch (Exception ex)
+            {
+                // Transaction-log failures must not break the import — log
+                // and move on, same posture as enrollment-import-service's
+                // RecordTransactionAsync.
+                _logger.LogWarning(ex,
+                    "Failed to persist ClaimImportTransaction for claim {ClaimNumber}",
+                    SanitizeForLog(parsed.ClaimId));
+            }
         }
 
         return Ok(new Raw837ImportResult
@@ -179,6 +210,28 @@ public class ClaimsV1Controller : ControllerBase
             SucceededCount = results.Count(r => r.Success),
             Results = results
         });
+    }
+
+    /// <summary>
+    /// Most recent 837 import transactions for the tenant, newest first —
+    /// the admin-console read path (mirrors enrollment-import-service's
+    /// <c>GET /api/v1/enrollment/transactions/recent</c>). Includes
+    /// rejected imports, not just successful ones.
+    /// </summary>
+    [HttpGet("import-transactions")]
+    [ProducesResponseType(typeof(List<ClaimImportTransaction>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ListImportTransactions([FromQuery] int limit = 100)
+    {
+        var tenantId = TryGetTenantId();
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            return BadRequest(new { error = "X-Tenant-ID header is required" });
+        }
+        if (limit < 1 || limit > 500) limit = 100;
+
+        var transactions = await _importTransactions.ListRecentAsync(tenantId, limit);
+        return Ok(transactions);
     }
 
     /// <summary>

@@ -10,6 +10,9 @@ public interface IEnrollmentTransactionRepository
         string tenantId,
         string memberId,
         int limit = 100);
+
+    /// <summary>Most recent transactions for a tenant, newest first — the admin-console read path.</summary>
+    Task<IReadOnlyList<EnrollmentTransaction>> ListRecentAsync(string tenantId, int limit = 100);
 }
 
 /// <summary>
@@ -37,6 +40,16 @@ public class EnrollmentTransactionRepository : IEnrollmentTransactionRepository
     {
         var filter = Builders<EnrollmentTransaction>.Filter.Eq(x => x.TenantId, tenantId) &
                      Builders<EnrollmentTransaction>.Filter.Eq(x => x.MemberId, memberId);
+
+        return await _collection.Find(filter)
+            .SortByDescending(x => x.ReceivedAt)
+            .Limit(limit)
+            .ToListAsync();
+    }
+
+    public async Task<IReadOnlyList<EnrollmentTransaction>> ListRecentAsync(string tenantId, int limit = 100)
+    {
+        var filter = Builders<EnrollmentTransaction>.Filter.Eq(x => x.TenantId, tenantId);
 
         return await _collection.Find(filter)
             .SortByDescending(x => x.ReceivedAt)
