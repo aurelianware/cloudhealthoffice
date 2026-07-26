@@ -32,6 +32,34 @@ public interface IClaimsService
     Task<EobSearchResponse> SearchClaimsByMemberAsync(string memberId, MemberClaimsFilter filter);
 }
 
+/// <summary>
+/// Admin-console read path for raw EDI import outcomes — 834 enrollment
+/// batches (enrollment-import-service) and 837 claim imports
+/// (claims-service). Distinct from <see cref="IMemberService.GetMember834TransactionsAsync"/>,
+/// which is member-scoped and proxied through member-service; this is a
+/// tenant-wide admin view, so it calls both owning services directly, same
+/// as <see cref="IClaimsService.GetMassAdjudicationRunsAsync"/> does for
+/// claims-service.
+/// </summary>
+public interface IEdiTransactionsService
+{
+    Task<List<Enrollment834Record>> GetEnrollment834TransactionsAsync(int limit = 100);
+    Task<List<ClaimImportTransactionRecord>> GetClaimImportTransactionsAsync(int limit = 100);
+}
+
+/// <summary>Portal projection of claims-service's ClaimImportTransaction.</summary>
+public class ClaimImportTransactionRecord
+{
+    public string Id { get; set; } = string.Empty;
+    public string ClaimNumber { get; set; } = string.Empty;
+    public string? ClaimId { get; set; }
+    public string MemberId { get; set; } = string.Empty;
+    public string? FileName { get; set; }
+    public DateTime ReceivedAt { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public List<string> Errors { get; set; } = new();
+}
+
 public interface IEligibilityService
 {
     Task<EligibilityResponse> CheckEligibilityAsync(object request);
