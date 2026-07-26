@@ -256,6 +256,7 @@ builder.Services.AddScoped<IMemberNoteService, MemberNoteService>();
 builder.Services.AddScoped<IFamilyRelationshipService, FamilyRelationshipService>();
 builder.Services.AddScoped<ICoverageService, CoverageService>();
 builder.Services.AddScoped<IClaimsService, ClaimsService>();
+builder.Services.AddScoped<IEdiTransactionsService, EdiTransactionsService>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
