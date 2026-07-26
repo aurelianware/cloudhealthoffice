@@ -8,15 +8,6 @@ data:
   MongoDb__DatabaseName: "cloudhealthoffice"
   BlobStorage__ContainerName: "member-documents"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: member-document-service-secret
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  BlobStorage__ConnectionString: "UseDevelopmentStorage=true"
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -63,8 +54,8 @@ spec:
         - name: BlobStorage__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: member-document-service-secret
-              key: BlobStorage__ConnectionString
+              name: azure-storage-secret
+              key: connectionString
         - name: BlobStorage__ContainerName
           valueFrom:
             configMapKeyRef:

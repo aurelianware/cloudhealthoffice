@@ -50,6 +50,16 @@ spec:
             configMapKeyRef:
               name: eligibility-service-config
               key: MongoDb__DatabaseName
+        - name: BatchEligibility__CosmosDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: batch-eligibility-secret
+              key: cosmosConnectionString
+        - name: BatchEligibility__BlobStorage__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: azure-storage-secret
+              key: connectionString
         resources:
           requests:
             cpu: 100m

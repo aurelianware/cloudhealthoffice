@@ -425,6 +425,11 @@ jobs:
             # Azure Storage
             fetch_secret "Azure--StorageConnectionString" "KV_AZURE_STORAGE_CONNECTION_STRING"
 
+            # BatchEligibility (eligibility-service) — Cosmos DB for NoSQL
+            # (Core/SQL API), distinct from the general MongoDb__ConnectionString
+            # above which expects a Mongo-driver-compatible connection string.
+            fetch_secret "BatchEligibility--CosmosDb--ConnectionString" "KV_BATCH_ELIGIBILITY_COSMOS_CONNECTION_STRING"
+
             # Azure AD
             fetch_secret "AzureAd--TenantId"             "KV_AZURE_AD_TENANT_ID"
             fetch_secret "AzureAd--ClientId"             "KV_AZURE_AD_CLIENT_ID"
@@ -515,6 +520,13 @@ jobs:
         run: |
           kubectl create secret generic azure-storage-secret \
             --from-literal=connectionString="${KV_AZURE_STORAGE_CONNECTION_STRING:-${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create BatchEligibility Cosmos secret
+        run: |
+          kubectl create secret generic batch-eligibility-secret \
+            --from-literal=cosmosConnectionString="${KV_BATCH_ELIGIBILITY_COSMOS_CONNECTION_STRING:-${{ secrets.BATCH_ELIGIBILITY_COSMOS_CONNECTION_STRING }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
