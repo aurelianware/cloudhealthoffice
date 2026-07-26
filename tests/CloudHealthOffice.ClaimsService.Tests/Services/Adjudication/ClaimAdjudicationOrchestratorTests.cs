@@ -29,6 +29,7 @@ public class ClaimAdjudicationOrchestratorTests
     private readonly IClaimAdapter _adapter = Substitute.For<IClaimAdapter>();
     private readonly IBenefitPlanResolver _planResolver = Substitute.For<IBenefitPlanResolver>();
     private readonly IMemberResolver _memberResolver = Substitute.For<IMemberResolver>();
+    private readonly ICoverageResolver _coverageResolver = Substitute.For<ICoverageResolver>();
     private readonly IClaimVersionEventPublisher _eventPublisher = Substitute.For<IClaimVersionEventPublisher>();
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly ClaimAdapterFactory _factory;
@@ -315,6 +316,71 @@ public class ClaimAdjudicationOrchestratorTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Adjudicate_ClaimWithoutBenefitPlanId_ResolvesViaCoverage_ThenResolvesPlan()
+    {
+        // The X12 837 on-ramp submits claims with a blank BenefitPlanId
+        // (X12837ClaimMapper deliberately doesn't guess it) — the
+        // orchestrator must resolve it from the member's active coverage
+        // before plan resolution runs, so a correctly-enrolled member's
+        // claim still reaches a real plan instead of rejecting.
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage("Persistence", 999, isRequired: true, new List<string>()),
+        };
+        var claim = BuildAdapterClaim();
+        claim.BenefitPlanId = null;
+        SetupAdapterReturning(claim);
+        _coverageResolver
+            .ResolveBenefitPlanIdAsync("tenant-1", "MEM-1", claim.ServiceDateFrom, "HLT", Arg.Any<CancellationToken>())
+            .Returns("resolved-plan-guid");
+
+        var orch = BuildOrchestrator(stages);
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Equal("resolved-plan-guid", claim.BenefitPlanId);
+        await _planResolver.Received(1).GetPlanAsync("tenant-1", "resolved-plan-guid", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Adjudicate_ClaimWithoutBenefitPlanId_NoActiveCoverage_LeavesBenefitPlanIdBlank()
+    {
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage("Persistence", 999, isRequired: true, new List<string>()),
+        };
+        var claim = BuildAdapterClaim();
+        claim.BenefitPlanId = null;
+        SetupAdapterReturning(claim);
+        _coverageResolver
+            .ResolveBenefitPlanIdAsync("tenant-1", "MEM-1", claim.ServiceDateFrom, "HLT", Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        var orch = BuildOrchestrator(stages);
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Null(claim.BenefitPlanId);
+        await _planResolver.DidNotReceiveWithAnyArgs().GetPlanAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task Adjudicate_ClaimWithExistingBenefitPlanId_DoesNotCallCoverageResolver()
+    {
+        // JSON /import and MCC submissions already carry BenefitPlanId —
+        // coverage resolution must not override or even query in that case.
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage("Persistence", 999, isRequired: true, new List<string>()),
+        };
+        SetupAdapterReturningClaim();
+
+        var orch = BuildOrchestrator(stages);
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        await _coverageResolver.DidNotReceiveWithAnyArgs()
+            .ResolveBenefitPlanIdAsync(default!, default!, default, default, default);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private ClaimAdjudicationOrchestrator BuildOrchestrator(
@@ -325,6 +391,7 @@ public class ClaimAdjudicationOrchestratorTests
             _factory,
             _planResolver,
             _memberResolver,
+            _coverageResolver,
             stages,
             _eventPublisher,
             _messageBus,
