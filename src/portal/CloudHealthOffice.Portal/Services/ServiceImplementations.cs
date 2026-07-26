@@ -383,6 +383,22 @@ public class EdiTransactionsService : IEdiTransactionsService
             throw new ServiceUnavailableException("Claims Service", ex);
         }
     }
+
+    public async Task<List<EnrollmentImportRunRecord>> GetEnrollmentImportRunsAsync(int limit = 100)
+    {
+        var baseUrl = _configuration["Services:EnrollmentImportService"];
+        try
+        {
+            var records = await _httpClient.GetFromJsonAsync<List<EnrollmentImportRunRecord>>(
+                $"{baseUrl}/v1/enrollment/import-runs?limit={Math.Clamp(limit, 1, 500)}", JsonOptions);
+            return records ?? new List<EnrollmentImportRunRecord>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Enrollment Import Service");
+            throw new ServiceUnavailableException("Enrollment Import Service", ex);
+        }
+    }
 }
 
 public sealed class FlexibleClaimTypeJsonConverter : JsonConverter<string>

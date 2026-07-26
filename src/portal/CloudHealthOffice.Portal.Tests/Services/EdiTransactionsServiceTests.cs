@@ -101,4 +101,49 @@ public class EdiTransactionsServiceTests
         handler.CapturedUrls.Should().ContainSingle(u =>
             u.Contains("/v1/claims/import-transactions") && u.Contains("limit=50"));
     }
+
+    // ── GetEnrollmentImportRunsAsync ──
+
+    [Fact]
+    public async Task GetEnrollmentImportRunsAsync_WhenApiFails_ThrowsServiceUnavailableException()
+    {
+        var sut = CreateService();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetEnrollmentImportRunsAsync());
+        ex.ServiceName.Should().Be("Enrollment Import Service");
+    }
+
+    [Fact]
+    public async Task GetEnrollmentImportRunsAsync_ParsesResponse_AndHitsExpectedUrl()
+    {
+        var body = """
+            [
+              { "id": "RUN-1", "batchId": "B1", "fileName": "test.834", "successCount": 3, "failedCount": 1,
+                "membersCreated": 2, "membersUpdated": 1, "coverageRecordsCreated": 2,
+                "coverageMappingsUnresolved": 0, "errors": [] }
+            ]
+            """;
+        var handler = new FakeHandler(HttpStatusCode.OK, body);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetEnrollmentImportRunsAsync(50);
+
+        result.Should().ContainSingle();
+        result[0].BatchId.Should().Be("B1");
+        result[0].SuccessCount.Should().Be(3);
+        result[0].FailedCount.Should().Be(1);
+        handler.CapturedUrls.Should().ContainSingle(u =>
+            u.Contains("/v1/enrollment/import-runs") && u.Contains("limit=50"));
+    }
+
+    [Fact]
+    public async Task GetEnrollmentImportRunsAsync_ClampsLimitTo500()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.GetEnrollmentImportRunsAsync(99999);
+
+        handler.CapturedUrls.Should().ContainSingle(u => u.Contains("limit=500"));
+    }
 }
