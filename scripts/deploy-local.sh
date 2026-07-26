@@ -236,6 +236,19 @@ kubectl create secret generic azure-storage-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "azure-storage-secret"
 
+# eligibility-service's BatchEligibility feature. Left empty on purpose --
+# ASPNETCORE_ENVIRONMENT is patched to Development below, so an empty
+# connection string here just means it resolves to the InMemory backend
+# (see BatchEligibilityServiceCollectionExtensions) rather than crashing.
+# The secret still needs to exist, though: a missing secretKeyRef target
+# fails pod startup outright (CreateContainerConfigError), regardless of
+# what the application code would otherwise tolerate.
+kubectl create secret generic batch-eligibility-secret \
+  --namespace "$NAMESPACE" \
+  --from-literal=cosmosConnectionString="" \
+  --dry-run=client -o yaml | kubectl apply -f -
+ok "batch-eligibility-secret"
+
 # Stripe API keys
 kubectl create secret generic stripe-api-keys \
   --namespace "$NAMESPACE" \
