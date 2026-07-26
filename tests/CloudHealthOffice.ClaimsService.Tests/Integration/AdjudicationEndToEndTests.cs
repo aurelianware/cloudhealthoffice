@@ -227,6 +227,13 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                 services.AddSingleton(Substitute.For<IClaimAdjustmentRepository>());
                 services.AddSingleton(Substitute.For<IClaimAdjustmentService>());
 
+                // ClaimImportTransactionRepositoryMongo is caught by the
+                // "Mongo" substring filter above (nothing 837-related runs
+                // in this test — it only exercises POST /api/v1/claims —
+                // but ClaimsV1Controller's constructor still needs every
+                // dependency resolvable to construct the controller at all).
+                services.AddSingleton(Substitute.For<IClaimImportTransactionRepository>());
+
                 // 5.7 — NcciEngine's repository implementation gets removed
                 // by the Cosmos/Mongo filter above. INcciEditService still
                 // depends on INcciRepository — register a substitute so
