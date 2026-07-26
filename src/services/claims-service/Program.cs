@@ -343,6 +343,16 @@ builder.Services.AddScoped<ICoverageClient>(sp =>
         sp.GetRequiredService<HttpCoverageClient>(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
 
+// Coverage-to-plan resolver — lets a claim that arrives without a
+// BenefitPlanId (the X12 837 on-ramp; see X12837ClaimMapper) still find the
+// member's active plan before BenefitCalculationStage runs. Reuses the same
+// CoverageService named HttpClient as HttpCoverageClient above.
+builder.Services.AddScoped<HttpCoverageResolver>();
+builder.Services.AddScoped<ICoverageResolver>(sp =>
+    new CachingCoverageResolver(
+        sp.GetRequiredService<HttpCoverageResolver>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+
 // Prior-authorization validation. The stage treats lookup degradation as
 // "not enough evidence to deny" while honoring known invalid auth responses.
 builder.Services.AddHttpClient(UpstreamClientNames.AuthorizationService, client =>
