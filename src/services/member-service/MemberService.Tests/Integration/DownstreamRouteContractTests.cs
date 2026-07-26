@@ -64,11 +64,13 @@ public class DownstreamRouteContractTests
             });
             builder.ConfigureServices(services =>
             {
-                RemoveAll<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>(services);
+                // Coverage moved from a directly-owned Mongo repository
+                // (IEnrollmentRepository) to coverage-service via
+                // ICoverageServiceClient — nothing left here that needs a
+                // Mongo-backed mock. See EnrollmentImportService.cs's own
+                // doc comments on the Member/Sponsor/Coverage delegation.
                 RemoveAll<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>(services);
                 RemoveAll<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>(services);
-                services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>(
-                    new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentRepository>().Object);
                 services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>(
                     new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentTransactionRepository>().Object);
                 services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Repositories.IEnrollmentEventRepository>(
