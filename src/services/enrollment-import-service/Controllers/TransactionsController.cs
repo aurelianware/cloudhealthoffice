@@ -39,4 +39,24 @@ public class TransactionsController : ControllerBase
         var list = await _transactions.ListByMemberAsync(tenantId, memberId, limit);
         return Ok(list);
     }
+
+    /// <summary>
+    /// Most recent 834 transactions for the tenant, newest first — the
+    /// admin-console read path (no memberId filter, unlike
+    /// <see cref="ListTransactions"/> above).
+    /// </summary>
+    [HttpGet("transactions/recent")]
+    [ProducesResponseType(typeof(List<EnrollmentTransaction>), 200)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> ListRecentTransactions(
+        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
+        [FromQuery] int limit = 100)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            return BadRequest("X-Tenant-ID header is required");
+        if (limit < 1 || limit > 500) limit = 100;
+
+        var list = await _transactions.ListRecentAsync(tenantId, limit);
+        return Ok(list);
+    }
 }

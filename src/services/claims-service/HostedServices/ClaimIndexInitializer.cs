@@ -58,6 +58,14 @@ public sealed class ClaimIndexInitializer : IHostedService
 
         collection.Indexes.CreateMany(indexes, cancellationToken);
 
+        var txnCollection = _db.GetCollection<ClaimImportTransaction>(
+            Repositories.ClaimImportTransactionRepositoryMongo.CollectionName);
+        txnCollection.Indexes.CreateOne(new CreateIndexModel<ClaimImportTransaction>(
+            Builders<ClaimImportTransaction>.IndexKeys
+                .Ascending(t => t.TenantId)
+                .Descending(t => t.ReceivedAt)),
+            cancellationToken: cancellationToken);
+
         _logger.LogInformation("Claim indexes ensured on collection 'Claims'.");
         return Task.CompletedTask;
     }

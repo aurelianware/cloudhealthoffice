@@ -26,6 +26,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimFinalizationService FinalizationService { get; } = Substitute.For<IClaimFinalizationService>();
     public IClaimAdjustmentRepository AdjustmentRepository { get; } = Substitute.For<IClaimAdjustmentRepository>();
     public IClaimAdjustmentService AdjustmentService { get; } = Substitute.For<IClaimAdjustmentService>();
+    public IClaimImportTransactionRepository ImportTransactionRepository { get; } = Substitute.For<IClaimImportTransactionRepository>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -59,6 +60,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(IClaimFinalizationService)
                          || d.ServiceType == typeof(IClaimAdjustmentService)
                          || d.ServiceType == typeof(IClaimAdjustmentRepository)
+                         || d.ServiceType == typeof(IClaimImportTransactionRepository)
                          || d.ServiceType == typeof(IClaimAdapter)
                          || d.ServiceType == typeof(ClaimAdapterFactory)
                          || d.ServiceType == typeof(ClaimTenantConfigCache))
@@ -126,6 +128,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(FinalizationService);
             services.AddSingleton(AdjustmentRepository);
             services.AddSingleton(AdjustmentService);
+            services.AddSingleton(ImportTransactionRepository);
 
             // 5.7 — NcciEngine's repository implementation got removed by
             // the Cosmos/Mongo filter above. The engine's INcciEditService
