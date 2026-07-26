@@ -76,10 +76,13 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Debug - whoami (temporary)
+        env:
+          CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         run: |
-          appid=$(az account show --query user.name -o tsv)
-          echo "Authenticated app id ends with: ...${appid: -6}"
-          echo "Principal type: $(az account show --query user.type -o tsv)"
+          # Self-read only: prints the SP's directory *object* id, which is
+          # not itself a stored secret, so it's safe to log. Used to verify
+          # this matches the object id we've been granting RBAC roles to.
+          az ad sp show --id "$CLIENT_ID" --query "{objectId:id, displayName:displayName}" -o json
 
       - name: Import .NET 8 base images from MCR
         env:
