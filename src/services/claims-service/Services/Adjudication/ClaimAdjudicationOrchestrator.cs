@@ -21,6 +21,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     private readonly ClaimAdapterFactory _adapterFactory;
     private readonly IBenefitPlanResolver _planResolver;
     private readonly IMemberResolver _memberResolver;
+    private readonly ICoverageResolver _coverageResolver;
     private readonly IReadOnlyList<IClaimAdjudicationStage> _stages;
     private readonly IClaimVersionEventPublisher _eventPublisher;
     private readonly IMessageBus _messageBus;
@@ -33,6 +34,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         ClaimAdapterFactory adapterFactory,
         IBenefitPlanResolver planResolver,
         IMemberResolver memberResolver,
+        ICoverageResolver coverageResolver,
         IEnumerable<IClaimAdjudicationStage> stages,
         IClaimVersionEventPublisher eventPublisher,
         IMessageBus messageBus,
@@ -44,6 +46,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         _adapterFactory = adapterFactory;
         _planResolver = planResolver;
         _memberResolver = memberResolver;
+        _coverageResolver = coverageResolver;
         _stages = stages.OrderBy(s => s.Order).ToList();
         _eventPublisher = eventPublisher;
         _messageBus = messageBus;
@@ -113,6 +116,27 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             ActorId = message.ActorId,
             CorrelationId = message.CorrelationId ?? messageContext.CorrelationId,
         };
+
+        // The X12 837 on-ramp (ClaimsV1Controller.ImportRaw837 ->
+        // X12837ClaimMapper) deliberately leaves BenefitPlanId blank rather
+        // than guessing — resolve it from the member's active coverage here,
+        // before plan resolution below, so a correctly-enrolled member's
+        // claim still reaches BenefitCalculationStage with a real plan
+        // instead of rejecting on "missing BenefitPlanId". Claims that
+        // already carry a BenefitPlanId (JSON /import, MCC) are untouched.
+        if (string.IsNullOrWhiteSpace(claim.BenefitPlanId) && !string.IsNullOrWhiteSpace(claim.MemberId))
+        {
+            var resolvedPlanId = await _coverageResolver
+                .ResolveBenefitPlanIdAsync(
+                    message.TenantId, claim.MemberId, claim.ServiceDateFrom,
+                    MapInsuranceLineCode(claim.ClaimType), ct)
+                .ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(resolvedPlanId))
+            {
+                claim.BenefitPlanId = resolvedPlanId;
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(claim.BenefitPlanId))
         {
@@ -337,6 +361,20 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         if (_options.EnabledStages is null || _options.EnabledStages.Count == 0) return true;
         return !_options.EnabledStages.TryGetValue(stage.Name, out var enabled) || enabled;
     }
+
+    /// <summary>
+    /// Maps a claim's type to coverage-service's InsuranceLineCode filter
+    /// (HLT/DEN/VIS/LIF) so active-coverage resolution matches the right
+    /// line when a member carries more than one. Professional and
+    /// Institutional both mean medical (HLT) — the distinction is
+    /// place-of-care, not benefit line.
+    /// </summary>
+    private static string? MapInsuranceLineCode(ClaimType claimType) => claimType switch
+    {
+        ClaimType.Professional or ClaimType.Institutional => "HLT",
+        ClaimType.Dental => "DEN",
+        _ => null,
+    };
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
