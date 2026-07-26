@@ -96,25 +96,25 @@ All .NET microservice Dockerfiles pull base images from Azure Container Registry
 **One-time setup** — import the required .NET base images into ACR:
 
 ```bash
-az acr import --name choacrhy6h2vdulfru6 \
+az acr import --name clouhealthoffice \
   --source mcr.microsoft.com/dotnet/sdk:8.0 \
   --image dotnet/sdk:8.0
 
-az acr import --name choacrhy6h2vdulfru6 \
+az acr import --name clouhealthoffice \
   --source mcr.microsoft.com/dotnet/aspnet:8.0 \
   --image dotnet/aspnet:8.0
 
 # Alpine variants (used by CHO.TerminologyService)
-az acr import --name choacrhy6h2vdulfru6 \
+az acr import --name clouhealthoffice \
   --source mcr.microsoft.com/dotnet/sdk:8.0-alpine \
   --image dotnet/sdk:8.0-alpine
 
-az acr import --name choacrhy6h2vdulfru6 \
+az acr import --name clouhealthoffice \
   --source mcr.microsoft.com/dotnet/aspnet:8.0-alpine \
   --image dotnet/aspnet:8.0-alpine
 ```
 
-Each Dockerfile exposes an `ARG REGISTRY` (defaulting to `choacrhy6h2vdulfru6.azurecr.io`) so local builds can override:
+Each Dockerfile exposes an `ARG REGISTRY` (defaulting to `clouhealthoffice.azurecr.io`) so local builds can override:
 
 ```bash
 # Local build using MCR directly (no ACR needed)

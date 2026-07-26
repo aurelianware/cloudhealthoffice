@@ -611,7 +611,7 @@ jobs:
           for manifest in src/services/*/k8s/*.yaml; do
             echo "Applying ${manifest}..."
             sed \
-              -e "s|choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
+              -e "s|clouhealthoffice.azurecr.io/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
               -e "s|ghcr.io/aurelianware/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
               -e "s|:latest|:${SHA}|g" \
               "$manifest" \

@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: provider-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-provider-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-provider-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

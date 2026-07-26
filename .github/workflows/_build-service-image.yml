@@ -83,12 +83,12 @@ on:
         required: false
         default: false
       registry:
-        description: "ACR login server (e.g. choacrhy6h2vdulfru6.azurecr.io). Empty default falls back to vars.ACR_LOGIN_SERVER, then to the hardcoded production literal. See header comment item 1 for why default resolution lives in a step, not here."
+        description: "ACR login server (e.g. clouhealthoffice.azurecr.io). Empty default falls back to vars.ACR_LOGIN_SERVER, then to the hardcoded production literal. See header comment item 1 for why default resolution lives in a step, not here."
         type: string
         required: false
         default: ""
       registry_name:
-        description: "ACR short name used by `az acr login` (e.g. choacrhy6h2vdulfru6). Empty default falls back to vars.ACR_NAME, then to the hardcoded production literal."
+        description: "ACR short name used by `az acr login` (e.g. clouhealthoffice). Empty default falls back to vars.ACR_NAME, then to the hardcoded production literal."
         type: string
         required: false
         default: ""
@@ -233,8 +233,8 @@ jobs:
           #   1. caller's input (if non-empty)
           #   2. org/repo variable (if set)
           #   3. hardcoded production literal (last resort)
-          REGISTRY="${{ inputs.registry || vars.ACR_LOGIN_SERVER || 'choacrhy6h2vdulfru6.azurecr.io' }}"
-          REGISTRY_NAME="${{ inputs.registry_name || vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}"
+          REGISTRY="${{ inputs.registry || vars.ACR_LOGIN_SERVER || 'clouhealthoffice.azurecr.io' }}"
+          REGISTRY_NAME="${{ inputs.registry_name || vars.ACR_NAME || 'clouhealthoffice' }}"
 
           # image_name: when caller provides one, it's used VERBATIM (no
           # double-prefixing). This matches the convention deploy-azure-aks.yml

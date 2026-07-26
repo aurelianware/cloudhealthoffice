@@ -218,7 +218,7 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error
 
 ```bash
 # Rebuild just the claims service
-docker build -t choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-claims-service:latest \
+docker build -t clouhealthoffice.azurecr.io/cloudhealthoffice-claims-service:latest \
   -f src/services/claims-service/Dockerfile .
 
 # Restart the deployment to pick up the new image

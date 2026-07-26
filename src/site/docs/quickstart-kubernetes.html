@@ -357,7 +357,7 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error</co
 
         <h3>Rebuild and redeploy a single service</h3>
 <pre><code><span class="code-comment"># Rebuild just the claims service</span>
-docker build -t choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-claims-service:latest \
+docker build -t clouhealthoffice.azurecr.io/cloudhealthoffice-claims-service:latest \
   -f src/services/claims-service/Dockerfile .
 
 <span class="code-comment"># Restart the deployment to pick up the new image</span>

@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: tenant-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-tenant-service:latest
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-tenant-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
