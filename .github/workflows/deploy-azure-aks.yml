@@ -510,7 +510,13 @@ jobs:
 
       - name: Create Kafka secret
         run: |
+          # bootstrapServers isn't actually sensitive (it's the in-cluster
+          # Strimzi bootstrap address), but 5 service manifests already
+          # source Kafka__BootstrapServers from this secret via
+          # secretKeyRef, so it's added here rather than introducing a
+          # second config path just for this one key.
           kubectl create secret generic kafka-secret \
+            --from-literal=bootstrapServers="kafka.cloudhealthoffice:9092" \
             --from-literal=saslUsername="${KV_KAFKA_SASL_USERNAME:-${{ secrets.KAFKA_SASL_USERNAME }}}" \
             --from-literal=saslPassword="${KV_KAFKA_SASL_PASSWORD:-${{ secrets.KAFKA_SASL_PASSWORD }}}" \
             -n ${{ env.NAMESPACE }} \
