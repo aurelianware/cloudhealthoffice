@@ -35,6 +35,7 @@ public class AdjudicationWithCobEndToEndTests
     private readonly IClaimAdapter _adapter = Substitute.For<IClaimAdapter>();
     private readonly IBenefitPlanResolver _planResolver = Substitute.For<IBenefitPlanResolver>();
     private readonly IMemberResolver _memberResolver = Substitute.For<IMemberResolver>();
+    private readonly ICoverageResolver _coverageResolver = Substitute.For<ICoverageResolver>();
     private readonly ICoverageClient _coverageClient = Substitute.For<ICoverageClient>();
     private readonly IClaimVersionEventPublisher _eventPublisher = Substitute.For<IClaimVersionEventPublisher>();
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
@@ -223,6 +224,7 @@ public class AdjudicationWithCobEndToEndTests
             _factory,
             _planResolver,
             _memberResolver,
+            _coverageResolver,
             stages,
             _eventPublisher,
             _messageBus,

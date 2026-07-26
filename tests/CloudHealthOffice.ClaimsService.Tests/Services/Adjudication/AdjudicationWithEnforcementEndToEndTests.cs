@@ -34,6 +34,7 @@ public class AdjudicationWithEnforcementEndToEndTests
     private readonly IClaimAdapter _adapter = Substitute.For<IClaimAdapter>();
     private readonly IBenefitPlanResolver _planResolver = Substitute.For<IBenefitPlanResolver>();
     private readonly IMemberResolver _memberResolver = Substitute.For<IMemberResolver>();
+    private readonly ICoverageResolver _coverageResolver = Substitute.For<ICoverageResolver>();
     private readonly IClaimVersionEventPublisher _eventPublisher = Substitute.For<IClaimVersionEventPublisher>();
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly IProviderMembershipClient _membership = Substitute.For<IProviderMembershipClient>();
@@ -249,6 +250,7 @@ public class AdjudicationWithEnforcementEndToEndTests
             _factory,
             _planResolver,
             _memberResolver,
+            _coverageResolver,
             new IClaimAdjudicationStage[] { stage, persistence },
             _eventPublisher,
             _messageBus,
