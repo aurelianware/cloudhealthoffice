@@ -12,17 +12,20 @@ public class EnrollmentController : ControllerBase
     private readonly IEnrollmentImportService _importService;
     private readonly IEnrollment834EdiParser _ediParser;
     private readonly IPlanCodeGapReportService _gapReportService;
+    private readonly IEnrollmentImportRunRepository _importRuns;
     private readonly ILogger<EnrollmentController> _logger;
 
     public EnrollmentController(
         IEnrollmentImportService importService,
         IEnrollment834EdiParser ediParser,
         IPlanCodeGapReportService gapReportService,
+        IEnrollmentImportRunRepository importRuns,
         ILogger<EnrollmentController> logger)
     {
         _importService = importService;
         _ediParser = ediParser;
         _gapReportService = gapReportService;
+        _importRuns = importRuns;
         _logger = logger;
     }
 
@@ -151,6 +154,31 @@ public class EnrollmentController : ControllerBase
 
         var report = await _gapReportService.BuildReportAsync(enrollment, tenantId, ct);
         return Ok(report);
+    }
+
+    /// <summary>
+    /// Most recent 834 import runs for the tenant, newest first — one row
+    /// per batch (raw834 upload or structured /import call), with the same
+    /// counts <see cref="ImportResult"/> already returns synchronously. The
+    /// admin-console read path for "what happened the last time this
+    /// employer's file was dropped," without needing to have watched the
+    /// original API response.
+    /// </summary>
+    [HttpGet("import-runs")]
+    [ProducesResponseType(typeof(List<EnrollmentImportRun>), 200)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> ListImportRuns(
+        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
+        [FromQuery] int limit = 100)
+    {
+        if (string.IsNullOrEmpty(tenantId))
+        {
+            return BadRequest("X-Tenant-ID header is required");
+        }
+        if (limit < 1 || limit > 500) limit = 100;
+
+        var runs = await _importRuns.ListRecentAsync(tenantId, limit);
+        return Ok(runs);
     }
 
     [HttpGet("health")]

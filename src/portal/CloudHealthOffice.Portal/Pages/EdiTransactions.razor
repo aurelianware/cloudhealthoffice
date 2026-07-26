@@ -28,7 +28,7 @@
     <MudTabPanel Text="834 Enrollment" Icon="@Icons.Material.Filled.HowToReg">
         <div class="d-flex align-center gap-3 my-3">
             <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Refresh"
-                       OnClick="@(() => LoadEnrollmentTransactions())" Disabled="_enrollmentLoading">
+                       OnClick="@(() => LoadEnrollmentData())" Disabled="_enrollmentLoading">
                 Refresh
             </MudButton>
             <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55);">@EnrollmentStatus</MudText>
@@ -37,7 +37,70 @@
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-3" />
         }
-        <MudTable Items="_enrollmentTransactions" Dense="true" Hover="true" T="Enrollment834Record" RowsPerPage="25"
+
+        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">Runs</MudText>
+        <MudTable Items="_enrollmentRuns" Dense="true" Hover="true" T="EnrollmentImportRunRecord" RowsPerPage="10"
+                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;" Class="mb-4">
+            <HeaderContent>
+                <MudTh>Started</MudTh>
+                <MudTh>Batch / File</MudTh>
+                <MudTh>Accepted / Failed</MudTh>
+                <MudTh>Members</MudTh>
+                <MudTh>Coverage</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Started">
+                    <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.StartedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Batch / File">
+                    <MudLink Style="font-family: monospace; font-weight: 700; cursor: pointer;" OnClick="@(() => SelectRun(context))">
+                        @context.BatchId
+                    </MudLink>
+                    @if (!string.IsNullOrWhiteSpace(context.FileName))
+                    {
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); display: block;">@context.FileName</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Accepted / Failed">
+                    <MudText Typo="Typo.body2">
+                        <span style="color: #00ff88;">@context.SuccessCount</span> / <span style="color: @(context.FailedCount > 0 ? "#ff0055" : "rgba(255,255,255,0.55)")">@context.FailedCount</span>
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Members">
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65);">
+                        +@context.MembersCreated / ~@context.MembersUpdated / -@context.MembersTerminated · @context.DependentsCreated deps
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Coverage">
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65);">
+                        @context.CoverageRecordsCreated created
+                        @if (context.CoverageMappingsUnresolved > 0)
+                        {
+                            <span style="color: #ffca28;"> · @context.CoverageMappingsUnresolved unresolved</span>
+                        }
+                    </MudText>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <div class="pa-6 text-center">
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.55);">No 834 import runs found</MudText>
+                </div>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new[] { 10, 25, 50 }" />
+            </PagerContent>
+        </MudTable>
+
+        <div class="d-flex align-center gap-2 mb-2">
+            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Transactions</MudText>
+            @if (!string.IsNullOrWhiteSpace(_selectedBatchId))
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" OnClose="@(() => _selectedBatchId = null)">
+                    Batch: @_selectedBatchId
+                </MudChip>
+            }
+        </div>
+        <MudTable Items="FilteredEnrollmentTransactions" Dense="true" Hover="true" T="Enrollment834Record" RowsPerPage="25"
                   Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;">
             <HeaderContent>
                 <MudTh>Received</MudTh>
@@ -148,10 +211,12 @@
 
 @code {
     private readonly List<Enrollment834Record> _enrollmentTransactions = new();
+    private readonly List<EnrollmentImportRunRecord> _enrollmentRuns = new();
     private readonly List<ClaimImportTransactionRecord> _claimTransactions = new();
     private bool _enrollmentLoading;
     private bool _claimLoading;
     private string? _error;
+    private string? _selectedBatchId;
     private DateTimeOffset? _enrollmentLastRefreshedAt;
     private DateTimeOffset? _claimLastRefreshedAt;
 
@@ -161,27 +226,39 @@
     private string ClaimStatus
         => _claimLastRefreshedAt is null ? "Not checked yet" : $"Last checked {_claimLastRefreshedAt.Value.LocalDateTime:HH:mm:ss}";
 
+    private IEnumerable<Enrollment834Record> FilteredEnrollmentTransactions
+        => string.IsNullOrWhiteSpace(_selectedBatchId)
+            ? _enrollmentTransactions
+            : _enrollmentTransactions.Where(t => string.Equals(t.BatchId, _selectedBatchId, StringComparison.OrdinalIgnoreCase));
+
     protected override async Task OnInitializedAsync()
     {
-        await LoadEnrollmentTransactions();
+        await LoadEnrollmentData();
         await LoadClaimTransactions();
     }
 
-    private async Task LoadEnrollmentTransactions()
+    private void SelectRun(EnrollmentImportRunRecord run) => _selectedBatchId = run.BatchId;
+
+    private async Task LoadEnrollmentData()
     {
         _enrollmentLoading = true;
         _error = null;
         try
         {
+            var runs = await EdiTransactionsService.GetEnrollmentImportRunsAsync(100);
+            _enrollmentRuns.Clear();
+            _enrollmentRuns.AddRange(runs);
+
             var records = await EdiTransactionsService.GetEnrollment834TransactionsAsync(100);
             _enrollmentTransactions.Clear();
             _enrollmentTransactions.AddRange(records);
+
             _enrollmentLastRefreshedAt = DateTimeOffset.Now;
         }
         catch (Exception ex)
         {
             _error = ex.Message;
-            Snackbar.Add("Unable to load 834 transactions", Severity.Error);
+            Snackbar.Add("Unable to load 834 data", Severity.Error);
         }
         finally
         {

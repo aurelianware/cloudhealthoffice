@@ -40,6 +40,14 @@ public sealed class EnrollmentIndexInitializer : IHostedService
             new CreateIndexOptions { Name = "ix_tenant_member_received" }),
             cancellationToken: cancellationToken);
 
+        var importRuns = _db.GetCollection<EnrollmentImportRun>("enrollment-import-runs");
+        importRuns.Indexes.CreateOne(new CreateIndexModel<EnrollmentImportRun>(
+            Builders<EnrollmentImportRun>.IndexKeys
+                .Ascending(x => x.TenantId)
+                .Descending(x => x.StartedAt),
+            new CreateIndexOptions { Name = "ix_tenant_started" }),
+            cancellationToken: cancellationToken);
+
         var events = _db.GetCollection<EnrollmentEvent>("enrollment-events");
         events.Indexes.CreateOne(new CreateIndexModel<EnrollmentEvent>(
             Builders<EnrollmentEvent>.IndexKeys
