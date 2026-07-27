@@ -187,7 +187,8 @@ public interface IClaimRepository
         CancellationToken ct = default,
         PendDetails? pendDetails = null,
         bool isPend = false,
-        ClaimStatus? resolvedStatus = null);
+        ClaimStatus? resolvedStatus = null,
+        string? resolvedBenefitPlanId = null);
 
     /// <summary>
     /// Fast claim-level adjudication projection for direct local workflow
@@ -1222,7 +1223,8 @@ public class ClaimRepository : IClaimRepository
         CancellationToken ct = default,
         PendDetails? pendDetails = null,
         bool isPend = false,
-        ClaimStatus? resolvedStatus = null)
+        ClaimStatus? resolvedStatus = null,
+        string? resolvedBenefitPlanId = null)
     {
         // Resolve the head (non-terminal-but-adjudicatable) row by chain key.
         // PatchItemAsync is keyed on the per-row document Id, so we look up
@@ -1311,6 +1313,18 @@ public class ClaimRepository : IClaimRepository
         if (pendDetails is not null)
         {
             ops.Add(PatchOperation.Set("/pendDetails", pendDetails));
+        }
+
+        // The orchestrator resolves BenefitPlanId in-memory from the
+        // member's active coverage for X12 837 claims that arrive without
+        // one (see ClaimAdjudicationOrchestrator), but that in-memory claim
+        // is never otherwise persisted — this bypass write is the only path
+        // back to the row. Only patch when the row doesn't already carry a
+        // BenefitPlanId, since a claim that already had one skips the
+        // orchestrator's resolution step entirely and this stays null.
+        if (!string.IsNullOrWhiteSpace(resolvedBenefitPlanId) && string.IsNullOrWhiteSpace(head.BenefitPlanId))
+        {
+            ops.Add(PatchOperation.Set("/benefitPlanId", resolvedBenefitPlanId));
         }
 
         try

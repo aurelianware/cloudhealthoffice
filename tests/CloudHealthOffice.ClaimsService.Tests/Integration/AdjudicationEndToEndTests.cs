@@ -170,7 +170,8 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                     Arg.Any<CancellationToken>(),
                     Arg.Any<PendDetails?>(),
                     Arg.Any<bool>(),
-                    Arg.Any<ClaimStatus?>())
+                    Arg.Any<ClaimStatus?>(),
+                    Arg.Any<string?>())
                 .Returns(ci =>
                 {
                     ProjectionWrites.Add(new ProjectionWrite(

@@ -513,7 +513,8 @@ public class ClaimRepositoryMongo : IClaimRepository
         CancellationToken ct = default,
         PendDetails? pendDetails = null,
         bool isPend = false,
-        ClaimStatus? resolvedStatus = null)
+        ClaimStatus? resolvedStatus = null,
+        string? resolvedBenefitPlanId = null)
     {
         var b = Builders<Claim>.Filter;
 
@@ -568,6 +569,14 @@ public class ClaimRepositoryMongo : IClaimRepository
         if (pendDetails is not null)
         {
             update = update.Set(c => c.PendDetails, pendDetails);
+        }
+
+        // See Cosmos sibling for why this bypass write is the only path
+        // back to the row for the orchestrator's in-memory-resolved
+        // BenefitPlanId. Only patch when the row doesn't already carry one.
+        if (!string.IsNullOrWhiteSpace(resolvedBenefitPlanId) && string.IsNullOrWhiteSpace(head.BenefitPlanId))
+        {
+            update = update.Set(c => c.BenefitPlanId, resolvedBenefitPlanId);
         }
 
         var rowFilter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, head.Id));

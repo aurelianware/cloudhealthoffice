@@ -74,7 +74,8 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                     ct,
                     pendDetails: context.PendDetails,
                     isPend: isPend,
-                    resolvedStatus: resolvedStatus)
+                    resolvedStatus: resolvedStatus,
+                    resolvedBenefitPlanId: context.Claim.BenefitPlanId)
                 .ConfigureAwait(false);
 
             if (!written)
