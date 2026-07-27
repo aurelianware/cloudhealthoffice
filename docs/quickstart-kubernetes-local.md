@@ -255,6 +255,30 @@ After editing a k8s manifest (e.g. ConfigMap or deployment):
 kubectl apply -f src/services/claims-service/k8s/claims-service-deployment.yaml
 ```
 
+### Use Azure Service Bus for local claims adjudication
+
+Claims adjudication uses the in-memory message bus by default. To exercise the
+durable Azure Service Bus path from local Kubernetes, add these non-secret
+settings to `.env.local`:
+
+```bash
+LOCAL_SERVICEBUS_NAMESPACE=your-service-bus-namespace
+LOCAL_SERVICEBUS_RESOURCE_GROUP=your-resource-group
+LOCAL_SERVICEBUS_LOCATION=your-azure-region
+```
+
+Then run the normal deployment:
+
+```bash
+./scripts/deploy-local.sh --skip-build
+```
+
+The deployment uses your current Azure CLI login to provision the claims topic
+and subscription, creates a namespace authorization rule with only `Listen` and
+`Send` rights, and installs its connection string as `servicebus-secret` in the
+`cloudhealthoffice` namespace. The credential is not stored in `.env.local`.
+Remove all three settings to return to the in-memory message bus.
+
 ---
 
 ## Troubleshooting
