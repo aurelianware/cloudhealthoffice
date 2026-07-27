@@ -153,7 +153,10 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
     public async Task<bool> DeletePlanAsync(string id, string tenantId)
     {
-        var existing = await _repository.GetByIdAsync(id, tenantId);
+        // Despite the parameter name, callers pass the business-key PlanId
+        // here (see GetPlanAsync above) -- GetByIdAsync filters on the
+        // wrong field and 404s on a plan that exists.
+        var existing = await _repository.GetByPlanIdAsync(id, tenantId);
         if (existing == null)
         {
             return false;
@@ -167,7 +170,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
     public async Task<Benefit?> AddBenefitAsync(string planId, string tenantId, Benefit benefit)
     {
-        var plan = await _repository.GetByIdAsync(planId, tenantId);
+        var plan = await _repository.GetByPlanIdAsync(planId, tenantId);
         if (plan == null)
         {
             return null;
