@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>CMS-0057-F Readiness — Cloud Health Office | Vendor-Neutral FHIR R4 for Any Payer CAPS Platform</title>
   <meta name="description" content="Evaluate CMS-0057-F readiness without replacing your core admin system. Cloud Health Office is a vendor-neutral FHIR R4 readiness layer that works alongside QNXT, Facets, HealthEdge, and Amisys. Patient Access API, Provider Access API, Prior Auth API."/>
-  <meta name="keywords" content="CMS-0057-F compliance, FHIR R4 payer platform, prior authorization API, Da Vinci PAS, Da Vinci PDex, healthcare interoperability, CAPS platform, QNXT integration, Facets integration, HealthEdge integration, Amisys, health plan technology, X12 278, X12 837, X12 835, X12 270, FHIR compliance layer, vendor neutral healthcare, Kubernetes healthcare, patient access API, provider access API, payer to payer API, CMS interoperability rule, prior auth FHIR, healthcare payer compliance, USCDI, Da Vinci CRD, Da Vinci DTR, core admin processing system, health plan integration"/>
   <link rel="canonical" href="https://cloudhealthoffice.com/cms-0057f-compliance"/>
 
   <!-- Open Graph -->
@@ -72,50 +71,18 @@
     "mainEntity": [
       {
         "@type": "Question",
-        "name": "What is CMS-0057-F and when is the compliance deadline?",
+        "name": "What is CMS-0057-F?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "CMS-0057-F (Advancing Interoperability and Improving Prior Authorization Processes) is a CMS final rule requiring payers to implement FHIR R4 APIs for patient access, provider access, payer-to-payer data exchange, and prior authorization. The compliance deadline is January 1, 2027. It applies to Medicare Advantage, Medicaid managed care, CHIP, and QHP issuers."
+          "text": "The Advancing Interoperability and Improving Prior Authorization Processes final rule requires Medicare Advantage, Medicaid, CHIP, and QHP issuers to implement standardized FHIR R4 APIs — improving prior authorization, reducing provider burden, and enabling patient data access. The compliance deadline is January 1, 2027."
         }
       },
       {
         "@type": "Question",
-        "name": "Do I need to replace my core admin system (QNXT, Facets, HealthEdge) to comply with CMS-0057-F?",
+        "name": "Who must comply with CMS-0057-F?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. Cloud Health Office is a vendor-neutral compliance layer that deploys alongside your existing core admin processing system. It works with QNXT, Facets, HealthEdge, Amisys, and other CAPS platforms without requiring a replatform or core system upgrade."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What FHIR APIs does CMS-0057-F require?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "CMS-0057-F requires four FHIR R4 APIs: Patient Access API (claims, encounters, clinical data), Provider Access API (authorized patient data), Payer-to-Payer API (data exchange on enrollment with 5-year history), and Prior Authorization API (real-time auth status and decision rationale). All must support Da Vinci Implementation Guides."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What Da Vinci Implementation Guides does Cloud Health Office support?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Cloud Health Office supports PDex (Payer Data Exchange) 2.0+, PAS (Prior Authorization Support) 2.0.1+, CRD (Coverage Requirements Discovery) 2.0+, and DTR (Documentation Templates and Rules) 2.0+. All FHIR resources are validated against these profiles."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How long does it take to deploy Cloud Health Office?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Cloud Health Office deploys through Helm charts on AKS, EKS, or GKE. A focused compliance pilot can be stood up quickly, while end-to-end implementation timelines depend on the customer's core admin integration, security review, and operating model."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What X12 EDI transactions does Cloud Health Office transform to FHIR?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Cloud Health Office provides bidirectional transformation between X12 EDI and FHIR R4: X12 270/271 (Eligibility) to Patient/CoverageEligibilityRequest, X12 837 (Claims) to Claim, X12 278 (Prior Auth) to ServiceRequest, X12 835 (Remittance) to ExplanationOfBenefit, and X12 275 (Attachments) to DocumentReference."
+          "text": "CMS-0057-F applies to Medicare Advantage organizations, Medicaid managed care plans and fee-for-service programs, CHIP fee-for-service and managed care entities, and Qualified Health Plan issuers on the federal Marketplaces. Impacted payers must implement the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs by January 1, 2027."
         }
       }
     ]
@@ -320,7 +287,7 @@
 
 <header class="hero" id="top">
   <div class="hero-eyebrow">CMS-0057-F Compliance Guide</div>
-  <h1>The Only <em>Vendor-Neutral</em> CMS-0057-F Compliance Layer for Payer CAPS Platforms</h1>
+  <h1>A <em>Vendor-Neutral</em> CMS-0057-F Compliance Layer for Payer CAPS Platforms</h1>
   <p class="hero-sub">Achieve CMS Interoperability and Prior Authorization compliance without replacing your core admin system. FHIR R4 APIs, Da Vinci IGs, and X12 EDI on a Kubernetes-native compliance layer.</p>
   <div class="hero-badges">
     <span class="badge cyan">FHIR R4</span>
@@ -334,8 +301,8 @@
   </div>
   <div class="hero-actions">
     <a href="/contact" class="btn btn-primary">Contact Sales →</a>
+    <a href="/contact" class="btn btn-ghost">Book a 30-min CMS-0057-F readiness review</a>
     <a href="https://github.com/aurelianware/cloudhealthoffice" class="btn btn-ghost">View Source on GitHub</a>
-    <a href="/contact" class="btn btn-ghost">Contact Sales</a>
   </div>
 
   <div class="stats fade-up">
@@ -348,8 +315,8 @@
       <div class="stat-label">Dependency<br/>and Secret Checks</div>
     </div>
     <div class="stat">
-      <div class="stat-num cyan">250K+</div>
-      <div class="stat-label">Repository<br/>Clones</div>
+      <div class="stat-num cyan">4 / 4</div>
+      <div class="stat-label">Required APIs<br/>Implemented</div>
     </div>
     <div class="stat">
       <div class="stat-num green">&lt;1hr</div>
@@ -380,7 +347,7 @@
 
     <!-- Title -->
     <text x="480" y="36" font-family="Outfit,sans-serif" font-size="15" font-weight="800" fill="#fff" text-anchor="middle">CMS-0057-F — Four Required FHIR R4 APIs</text>
-    <text x="480" y="54" font-family="JetBrains Mono,monospace" font-size="9" fill="#606060" text-anchor="middle">ALL REQUIRED BY JANUARY 1, 2027 — CLOUD HEALTH OFFICE: ✅ PRODUCTION-READY</text>
+    <text x="480" y="54" font-family="JetBrains Mono,monospace" font-size="9" fill="#606060" text-anchor="middle">ALL REQUIRED BY JANUARY 1, 2027 — CLOUD HEALTH OFFICE: IMPLEMENTED</text>
 
     <!-- API 1: Patient Access -->
     <g transform="translate(30,80)">
@@ -397,7 +364,7 @@
       <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Coverage</text>
       <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Claim / EOB</text>
       <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Encounter</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">✅ Ready</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">Implemented</text>
     </g>
 
     <!-- API 2: Provider Access -->
@@ -415,7 +382,7 @@
       <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">DocumentReference</text>
       <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Claim / EOB</text>
       <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Condition / Procedure</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">✅ Ready</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">Implemented</text>
     </g>
 
     <!-- API 3: Payer-to-Payer -->
@@ -433,7 +400,7 @@
       <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">Enrollment Trigger</text>
       <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">Lifecycle Retention</text>
       <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">OAuth 2.0 Consent</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">✅ Ready</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">Implemented</text>
     </g>
 
     <!-- API 4: Prior Auth -->
@@ -451,7 +418,7 @@
       <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">ClaimResponse</text>
       <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">DocumentReference</text>
       <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">X12 278 ↔ FHIR</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">✅ Ready</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">Implemented</text>
     </g>
   </svg>
 </div>
@@ -544,7 +511,7 @@
 <rect x="915" y="318" width="380" height="100" rx="10" fill="rgba(0,200,160,0.08)" stroke="rgba(0,200,160,0.3)" stroke-width="1"/>
 <text class="box-title" x="1105" y="355" text-anchor="middle" fill="#00e8a0">PAS server</text>
 <text class="box-sub" x="1105" y="380" text-anchor="middle" fill="rgba(0,232,160,0.55)">Prior Authorization Support</text>
-<text class="box-sub" x="1105" y="400" text-anchor="middle" fill="rgba(0,232,160,0.55)">Claim/$submit · 15-second SLA · auto-adjudication</text>
+<text class="box-sub" x="1105" y="400" text-anchor="middle" fill="rgba(0,232,160,0.55)">Claim/$submit · 15-second SLA (validate per deployment)</text>
 
 <!-- Arrows: CRD → DTR → PAS -->
 <line x1="445" y1="368" x2="488" y2="368" stroke="#00ccaa" class="arr" marker-end="url(#ah)"/>
@@ -597,7 +564,7 @@
 <!-- Claims + Benefit -->
 <rect x="915" y="618" width="380" height="100" rx="10" fill="rgba(0,160,255,0.06)" stroke="rgba(0,160,255,0.2)" stroke-width="1"/>
 <text class="box-title" x="1105" y="655" text-anchor="middle" fill="#50b0ff">Claims + benefit engine</text>
-<text class="box-sub" x="1105" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">10-step adjudication pipeline · &lt;500ms</text>
+<text class="box-sub" x="1105" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">10-step adjudication pipeline · &lt;500ms (validate per deployment)</text>
 <text class="box-sub" x="1105" y="700" text-anchor="middle" fill="rgba(80,176,255,0.55)">9 engines · NCCI · COB · DRG · HDHP/HSA</text>
 
 <!-- ─── ICoreAdminAdapter bar ─── -->
@@ -1133,6 +1100,29 @@
 
 <div class="divider"></div>
 
+<!-- ═══════════════ MCC PROOF ═══════════════ -->
+
+<section id="mcc-proof" data-reveal>
+  <div class="container">
+    <div class="section-label">Evidence</div>
+    <h2 class="section-title">Proof: The Million Claim Challenge</h2>
+    <p class="section-desc">The Million Claim Challenge is not just a load test — it is an evidence system for claims correctness and platform behavior under volume. It exercises the same adjudication pipeline that backs the CMS-0057-F surfaces and captures run history, workflow checks, unsupported scenarios, mismatches, and payment delta, so benchmark claims can be inspected rather than merely reported. The point is verifiable behavior, not a throughput headline.</p>
+
+    <div class="api-card" style="border-color:var(--border-bright)">
+      <p style="font-size:.85rem;color:var(--text-muted);line-height:1.8;margin:0 0 1rem">
+        Read the benchmark write-up and inspect the evidence:
+        <a href="/docs/million-claim-challenge" style="color:var(--cyan);text-decoration:none">Million Claim Challenge — Open Claims Adjudication Benchmark →</a>.
+        The run-level evidence surface is the <strong>Mass Adjudication console</strong> inside the portal, which exposes run history, claims/sec, latency, workflow checks, unsupported scenarios, mismatches, payment delta, and claim-level drilldown.
+      </p>
+      <p style="font-size:.78rem;color:var(--text-dim);line-height:1.7;border-top:1px solid var(--border);padding-top:1rem;margin:0">
+        <strong style="color:var(--text-muted)">Scope &amp; caveats:</strong> Local Million Claim Challenge numbers validate repeatability and correctness — they are not production cloud-capacity claims. Payment accuracy is visible as payment delta, but a formal amount-level scoring gate is still pending. Expected-pend observation confirms expected pends persisted as pended; a full false-pend sweep is future work.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
 <!-- ═══════════════ TIMELINE ═══════════════ -->
 
 <section id="timeline" data-reveal>
@@ -1147,37 +1137,16 @@
 
   <div class="timeline-item">
     <div class="timeline-dot active"></div>
-    <div class="timeline-date">Compliance Surface</div>
-    <div class="timeline-title">FHIR API and Prior Authorization Coverage</div>
-    <div class="timeline-desc">Implement and validate the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization API surfaces against the relevant Da Vinci profiles.</div>
+    <div class="timeline-date">July 2026 — You are here · ~6 months to deadline</div>
+    <div class="timeline-title">Stand Up the Compliance Surface</div>
+    <div class="timeline-desc">Deploy CHO alongside your core admin system. Configure Azure AD OAuth 2.0, bring up the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization API surfaces, and validate them against the relevant Da Vinci profiles with the compliance checker.</div>
   </div>
 
   <div class="timeline-item">
     <div class="timeline-dot active green"></div>
-    <div class="timeline-date">Platform Engagement</div>
-    <div class="timeline-title">Tenant Isolation + Operational Workflows</div>
-    <div class="timeline-desc">Deploy the Kubernetes-native platform components needed for RBAC, work queues, appeals, enrollment, benefit configuration, and auditability.</div>
-  </div>
-
-  <div class="timeline-item">
-    <div class="timeline-dot green"></div>
-    <div class="timeline-date">July 2025 — 18 Months Before Deadline</div>
-    <div class="timeline-title">Recommended: Begin Implementation</div>
-    <div class="timeline-desc">Deploy CHO. Configure Azure AD OAuth 2.0. Test FHIR endpoints. Validate with compliance checker. If you haven't started, this is your window.</div>
-  </div>
-
-  <div class="timeline-item">
-    <div class="timeline-dot"></div>
-    <div class="timeline-date">January 2026 — 12 Months Before Deadline</div>
-    <div class="timeline-title">Integration + Provider Training</div>
-    <div class="timeline-desc">Integrate with existing auth/claims systems. Train provider partners on FHIR API access. Establish monitoring and alerting. End-to-end testing.</div>
-  </div>
-
-  <div class="timeline-item">
-    <div class="timeline-dot"></div>
-    <div class="timeline-date">July 2026 — 6 Months Before Deadline</div>
-    <div class="timeline-title">Deployment Hardening + Audit</div>
-    <div class="timeline-desc">Load testing. Performance optimization. Compliance audit documentation. Provider onboarding campaigns. Security penetration testing.</div>
+    <div class="timeline-date">Next — Integration &amp; Platform Engagement</div>
+    <div class="timeline-title">Integrate, Harden, and Operationalize</div>
+    <div class="timeline-desc">Integrate with existing auth/claims systems and clearinghouse partners. Deploy the operational workflows — RBAC, work queues, appeals, enrollment, benefit configuration, and auditability — then complete load testing, security review, and compliance audit documentation.</div>
   </div>
 
   <div class="timeline-item">
@@ -1428,7 +1397,6 @@
     <p>Medicaid MCOs, Medicare Advantage, and commercial payers. Deployment in weeks, not months.</p>
     <div class="hero-actions">
       <a href="/contact" class="btn btn-primary">Contact Sales →</a>
-      <a href="/contact" class="btn btn-ghost">Contact Sales</a>
       <a href="https://github.com/aurelianware/cloudhealthoffice" class="btn btn-ghost">View Source</a>
     </div>
   </div>
