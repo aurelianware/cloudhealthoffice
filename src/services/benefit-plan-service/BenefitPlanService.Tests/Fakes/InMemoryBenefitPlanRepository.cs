@@ -183,6 +183,23 @@ public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository
         return Task.FromResult(true);
     }
 
+    public Task<bool> TerminateVersionAsync(BenefitPlan version)
+    {
+        if (version.VersionState != PlanVersionState.Superseded)
+        {
+            throw new InvalidOperationException(
+                "TerminateVersionAsync expects version to already have VersionState=Superseded applied by the service layer.");
+        }
+
+        var existing = _docs.FirstOrDefault(d => d.Id == version.Id && d.TenantId == version.TenantId);
+        if (existing is null) return Task.FromResult(false);
+
+        _docs.Remove(existing);
+        version.ModifiedDate = DateTime.UtcNow;
+        _docs.Add(Clone(version));
+        return Task.FromResult(true);
+    }
+
     public Task<BenefitPlan> PublishAndSupersedeAsync(BenefitPlan draftToPublish, BenefitPlan? predecessor)
     {
         if (FailNextPublish)
@@ -359,6 +376,24 @@ public sealed class FakePlanVersionEventPublisher : IPlanVersionEventPublisher
             ActorId = actorId,
             CorrelationId = correlationId,
             Version = Events.Count(x => x.PlanId == from.PlanId && x.TenantId == from.TenantId) + 1,
+            OccurredAt = DateTime.UtcNow
+        };
+        Events.Add(e);
+        return Task.FromResult(e);
+    }
+
+    public Task<PlanVersionEvent> PublishVersionTerminatedAsync(BenefitPlan version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
+    {
+        var e = new PlanVersionEvent
+        {
+            EventId = $"terminated:{version.VersionId}",
+            EventType = PlanVersionEventType.PlanVersionTerminated,
+            TenantId = version.TenantId,
+            PlanId = version.PlanId,
+            VersionId = version.VersionId,
+            ActorId = actorId,
+            CorrelationId = correlationId,
+            Version = Events.Count(x => x.PlanId == version.PlanId && x.TenantId == version.TenantId) + 1,
             OccurredAt = DateTime.UtcNow
         };
         Events.Add(e);

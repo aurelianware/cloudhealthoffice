@@ -346,6 +346,22 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
         return updated != null;
     }
 
+    public async Task<bool> TerminateVersionAsync(BenefitPlan version)
+    {
+        if (version.VersionState != PlanVersionState.Superseded)
+        {
+            throw new InvalidOperationException(
+                "TerminateVersionAsync expects version to already have VersionState=Superseded applied by the service layer.");
+        }
+
+        version.ModifiedDate = DateTime.UtcNow;
+        var filter = Builders<BenefitPlan>.Filter.And(
+            Builders<BenefitPlan>.Filter.Eq(x => x.Id, version.Id),
+            Builders<BenefitPlan>.Filter.Eq(x => x.TenantId, version.TenantId));
+        var result = await _collection.ReplaceOneAsync(filter, version);
+        return result.MatchedCount > 0;
+    }
+
     private static BenefitPlan Hydrate(BenefitPlan plan)
     {
         if (string.IsNullOrEmpty(plan.VersionId))

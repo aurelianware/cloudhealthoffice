@@ -81,5 +81,6 @@ public class PlanVersionEvent
 public enum PlanVersionEventType
 {
     PlanVersionPublished = 1,
-    PlanVersionSuperseded = 2
+    PlanVersionSuperseded = 2,
+    PlanVersionTerminated = 3
 }
