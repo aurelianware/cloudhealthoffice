@@ -16,7 +16,7 @@ namespace BenefitPlanService.Models;
 public class Enrollment834PlanCodeMapping
 {
     [JsonPropertyName("id")]
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Id { get; set; } = Guid.NewGuid().ToString();
 
     [Required]
     [JsonPropertyName("tenantId")]

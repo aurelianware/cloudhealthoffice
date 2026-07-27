@@ -25,6 +25,6 @@ public sealed class NullEnrollment834PlanCodeMappingRepository : IEnrollment834P
         string tenantId, string? groupNumber, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<Enrollment834PlanCodeMapping>>(Array.Empty<Enrollment834PlanCodeMapping>());
 
-    public Task<bool> DeleteAsync(string tenantId, Guid id, CancellationToken ct = default) =>
+    public Task<bool> DeleteAsync(string tenantId, string id, CancellationToken ct = default) =>
         Task.FromResult(false);
 }

@@ -45,9 +45,9 @@ public class Enrollment834PlanCodeMappingRepositoryMongo : IEnrollment834PlanCod
     public async Task<Enrollment834PlanCodeMapping> CreateAsync(
         Enrollment834PlanCodeMapping mapping, CancellationToken ct = default)
     {
-        if (mapping.Id == Guid.Empty)
+        if (string.IsNullOrEmpty(mapping.Id))
         {
-            mapping.Id = Guid.NewGuid();
+            mapping.Id = Guid.NewGuid().ToString();
         }
 
         try
@@ -74,7 +74,7 @@ public class Enrollment834PlanCodeMappingRepositoryMongo : IEnrollment834PlanCod
         return await _collection.Find(filter).ToListAsync(ct);
     }
 
-    public async Task<bool> DeleteAsync(string tenantId, Guid id, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(string tenantId, string id, CancellationToken ct = default)
     {
         var b = Builders<Enrollment834PlanCodeMapping>.Filter;
         var filter = b.And(b.Eq(m => m.TenantId, tenantId), b.Eq(m => m.Id, id));

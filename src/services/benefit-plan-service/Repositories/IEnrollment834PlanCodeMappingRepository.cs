@@ -23,7 +23,7 @@ public interface IEnrollment834PlanCodeMappingRepository
         string tenantId, string? groupNumber, CancellationToken ct = default);
 
     /// <summary>Returns false when no matching row existed (tenant mismatch counts as not-found).</summary>
-    Task<bool> DeleteAsync(string tenantId, Guid id, CancellationToken ct = default);
+    Task<bool> DeleteAsync(string tenantId, string id, CancellationToken ct = default);
 }
 
 /// <summary>
