@@ -16,11 +16,11 @@ metadata:
   namespace: cloudhealthoffice
 spec:
   hard:
-    requests.cpu: "8"
-    requests.memory: 16Gi
-    limits.cpu: "20"
-    limits.memory: 32Gi
-    pods: "50"
+    requests.cpu: "12"
+    requests.memory: 24Gi
+    limits.cpu: "40"
+    limits.memory: 64Gi
+    pods: "80"
 ---
 # Network Policies (optional - for production security)
 apiVersion: networking.k8s.io/v1
