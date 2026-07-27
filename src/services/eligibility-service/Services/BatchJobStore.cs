@@ -9,8 +9,9 @@ using Microsoft.Azure.Cosmos;
 namespace EligibilityService.Services;
 
 /// <summary>
-/// Persistent IBatchJobStore implementation backed by Azure Cosmos DB (job
-/// documents) + Azure Blob Storage (large payloads).
+/// Persistent IBatchJobStore implementation backed by a pluggable document
+/// store (Cosmos DB or MongoDB, via IBatchJobContainer) + Azure Blob
+/// Storage (large payloads).
 ///
 /// Small payloads (&lt; <see cref="InlineMaxBytes"/>, default 1 MB) are
 /// embedded on the job doc as base64. Larger payloads are written to a blob
@@ -18,21 +19,23 @@ namespace EligibilityService.Services;
 /// doc records the blob URI and <see cref="BatchStorageMode.Blob"/>. Reads
 /// route back through this store so we never hand out SAS URIs.
 ///
-/// Cosmos container partition key: <c>/tenantId</c>. Documents carry
-/// <c>defaultTtl</c>-inherited TTL (set at container provisioning) so
-/// completed jobs expire automatically; the matching blob-lifecycle rule is
-/// provisioned in scripts/azure/provision-batch-eligibility.sh.
+/// Partitioned/scoped by tenantId regardless of backend. Cosmos mode
+/// carries a <c>defaultTtl</c>-inherited TTL (set at container
+/// provisioning) so completed jobs expire automatically; the matching
+/// blob-lifecycle rule is provisioned in
+/// scripts/azure/provision-batch-eligibility.sh. Mongo mode relies on a
+/// TTL index instead (see MongoContainerAdapter).
 /// </summary>
-public class CosmosBatchJobStore : IBatchJobStore
+public class BatchJobStore : IBatchJobStore
 {
     public const int DefaultInlineMaxBytes = 1_048_576;
 
-    private readonly ICosmosBatchJobContainer _container;
+    private readonly IBatchJobContainer _container;
     private readonly IBatchBlobContainer _blobs;
     private readonly int _inlineMaxBytes;
 
-    public CosmosBatchJobStore(
-        ICosmosBatchJobContainer container,
+    public BatchJobStore(
+        IBatchJobContainer container,
         IBatchBlobContainer blobs,
         int inlineMaxBytes = DefaultInlineMaxBytes)
     {
@@ -115,16 +118,16 @@ public class CosmosBatchJobStore : IBatchJobStore
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Thin wrappers that isolate CosmosBatchJobStore from the raw Cosmos SDK /
+// Thin wrappers that isolate BatchJobStore from the raw Cosmos SDK / MongoDB driver /
 // Blob SDK so the class is fully unit-testable without the emulator.
 // The concrete implementations below are trivial adapters; tests swap in
 // in-memory fakes.
 // ─────────────────────────────────────────────────────────────────────────
 
-/// <summary>Record type returned by <see cref="ICosmosBatchJobContainer.ReadPayloadAsync"/>.</summary>
+/// <summary>Record type returned by <see cref="IBatchJobContainer.ReadPayloadAsync"/>.</summary>
 public record BatchPayloadRecord(byte[]? Inline, string? BlobUri);
 
-public interface ICosmosBatchJobContainer
+public interface IBatchJobContainer
 {
     Task UpsertAsync(BatchEligibilityJob job, string partitionKey, CancellationToken ct);
     Task<BatchEligibilityJob?> ReadAsync(string id, string partitionKey, CancellationToken ct);
@@ -154,7 +157,7 @@ public interface IBatchBlobContainer
 /// URIs. This keeps everything in a single document and a single partition
 /// read per lookup.
 /// </summary>
-public class CosmosContainerAdapter : ICosmosBatchJobContainer
+public class CosmosContainerAdapter : IBatchJobContainer
 {
     private readonly Container _container;
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);

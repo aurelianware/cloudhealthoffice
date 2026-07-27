@@ -458,9 +458,13 @@ jobs:
             # Azure Storage
             fetch_secret "Azure--StorageConnectionString" "KV_AZURE_STORAGE_CONNECTION_STRING"
 
-            # BatchEligibility (eligibility-service) — Cosmos DB for NoSQL
-            # (Core/SQL API), distinct from the general MongoDb__ConnectionString
-            # above which expects a Mongo-driver-compatible connection string.
+            # BatchEligibility (eligibility-service) fallback: Cosmos DB for
+            # NoSQL (Core/SQL API). Only used when MongoDB isn't configured --
+            # the k8s manifest wires BatchEligibility__MongoDb__ConnectionString
+            # from the same database-secret every other Mongo-backed service
+            # uses, and that's checked first (see
+            # BatchEligibilityServiceCollectionExtensions). Kept for
+            # environments that deliberately run Cosmos DB for NoSQL instead.
             fetch_secret "BatchEligibility--CosmosDb--ConnectionString" "KV_BATCH_ELIGIBILITY_COSMOS_CONNECTION_STRING"
 
             # Azure AD
