@@ -666,7 +666,17 @@ jobs:
           # idcard-service/k8s/idcard-service-deployment.yaml is a
           # comments-only alias pointing at the authoritative copy below --
           # apply the real one instead of the placeholder the glob picks up.
-          for manifest in src/services/*/k8s/*.yaml k8s/idcard-service.yaml; do
+          #
+          # attachment-service, sponsor-service, and provider-verification-service
+          # each live outside src/services/<name>/k8s/ (deploy-local.sh has
+          # always applied them as explicit extra paths for the same reason) --
+          # the glob alone silently skipped all three, so sponsor-service in
+          # particular was never deployed to AKS at all despite being on the
+          # 834 enrollment on-ramp's critical path.
+          for manifest in src/services/*/k8s/*.yaml k8s/idcard-service.yaml \
+            infrastructure/k8s/services/attachment-service.yaml \
+            infrastructure/k8s/sponsor-service-deployment.yaml \
+            infrastructure/k8s/provider-verification-service-deployment.yaml; do
             transformed=$(sed \
               -e "s|clouhealthoffice.azurecr.io/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
               -e "s|ghcr.io/aurelianware/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
