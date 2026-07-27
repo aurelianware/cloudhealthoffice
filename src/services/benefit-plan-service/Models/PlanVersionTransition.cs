@@ -65,5 +65,7 @@ public enum PlanVersionTransitionType
     /// <summary>Draft created from an existing Published version.</summary>
     Amend = 2,
     /// <summary>Predecessor moved to <c>Superseded</c> by a new Published version.</summary>
-    Supersede = 3
+    Supersede = 3,
+    /// <summary>Published version moved to <c>Superseded</c> with no successor -- the plan ends.</summary>
+    Terminate = 4
 }

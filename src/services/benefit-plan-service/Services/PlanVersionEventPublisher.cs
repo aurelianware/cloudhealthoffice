@@ -19,6 +19,9 @@ public interface IPlanVersionEventPublisher
 {
     Task<PlanVersionEvent> PublishVersionPublishedAsync(BenefitPlan version, string? actorId, string? correlationId, CancellationToken ct = default);
     Task<PlanVersionEvent> PublishVersionSupersededAsync(BenefitPlan from, BenefitPlan to, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
+
+    /// <summary>Published version moved to Superseded with no successor -- the plan ends.</summary>
+    Task<PlanVersionEvent> PublishVersionTerminatedAsync(BenefitPlan version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
 }
 
 public sealed class MongoPlanVersionEventPublisher : IPlanVersionEventPublisher
@@ -81,6 +84,29 @@ public sealed class MongoPlanVersionEventPublisher : IPlanVersionEventPublisher
             TenantId = from.TenantId,
             PlanId = from.PlanId,
             VersionId = from.VersionId,
+            ActorId = actorId,
+            CorrelationId = correlationId,
+            Payload = payload
+        };
+        return AppendAsync(evt, ct);
+    }
+
+    public Task<PlanVersionEvent> PublishVersionTerminatedAsync(BenefitPlan version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
+    {
+        var payload = new JsonObject
+        {
+            ["versionId"] = version.VersionId,
+            ["reason"] = reason,
+            ["terminatedAt"] = version.SupersededAt
+        };
+
+        var evt = new PlanVersionEvent
+        {
+            EventId = $"terminated:{version.VersionId}",
+            EventType = PlanVersionEventType.PlanVersionTerminated,
+            TenantId = version.TenantId,
+            PlanId = version.PlanId,
+            VersionId = version.VersionId,
             ActorId = actorId,
             CorrelationId = correlationId,
             Payload = payload
@@ -188,6 +214,23 @@ public sealed class NoopPlanVersionEventPublisher : IPlanVersionEventPublisher
             TenantId = from.TenantId,
             PlanId = from.PlanId,
             VersionId = from.VersionId,
+            ActorId = actorId,
+            CorrelationId = correlationId
+        });
+    }
+
+    public Task<PlanVersionEvent> PublishVersionTerminatedAsync(BenefitPlan version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
+    {
+        _logger.LogWarning(
+            "PlanVersionEventPublisher is not configured; dropping PlanVersionTerminated for plan {PlanId} version {VersionId}",
+            version.PlanId, version.VersionId);
+        return Task.FromResult(new PlanVersionEvent
+        {
+            EventId = $"terminated:{version.VersionId}",
+            EventType = PlanVersionEventType.PlanVersionTerminated,
+            TenantId = version.TenantId,
+            PlanId = version.PlanId,
+            VersionId = version.VersionId,
             ActorId = actorId,
             CorrelationId = correlationId
         });

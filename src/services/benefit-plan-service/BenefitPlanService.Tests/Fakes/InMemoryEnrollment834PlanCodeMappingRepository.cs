@@ -29,9 +29,9 @@ public sealed class InMemoryEnrollment834PlanCodeMappingRepository : IEnrollment
                 mapping.GroupNumber, mapping.InsuranceLineCode, mapping.ExternalPlanCode);
         }
 
-        if (mapping.Id == Guid.Empty)
+        if (string.IsNullOrEmpty(mapping.Id))
         {
-            mapping.Id = Guid.NewGuid();
+            mapping.Id = Guid.NewGuid().ToString();
         }
         _mappings.Add(mapping);
         return Task.FromResult(mapping);
@@ -48,7 +48,7 @@ public sealed class InMemoryEnrollment834PlanCodeMappingRepository : IEnrollment
         return Task.FromResult<IReadOnlyList<Enrollment834PlanCodeMapping>>(query.ToList());
     }
 
-    public Task<bool> DeleteAsync(string tenantId, Guid id, CancellationToken ct = default)
+    public Task<bool> DeleteAsync(string tenantId, string id, CancellationToken ct = default)
     {
         var removed = _mappings.RemoveAll(m => m.TenantId == tenantId && m.Id == id) > 0;
         return Task.FromResult(removed);

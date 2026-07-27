@@ -14,8 +14,8 @@ public interface IBenefitPlanService
     Task<BenefitPlan?> GetPlanAsync(string id, string tenantId);
     Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId);
     Task<BenefitPlan?> UpdatePlanAsync(BenefitPlan plan, string tenantId);
-    Task<bool> DeletePlanAsync(string id, string tenantId);
-    Task<Benefit?> AddBenefitAsync(string planId, string tenantId, Benefit benefit);
+    Task<bool> DeletePlanAsync(string id, string tenantId, string actorId);
+    Task<Benefit?> AddBenefitAsync(string planId, string tenantId, string actorId, Benefit benefit);
     Task<BenefitAppliedResult?> ApplyBenefitRules(string planId, string tenantId, string serviceCategory, string? cptCode, decimal chargeAmount);
     Task<bool> CheckPriorAuthRequirement(string planId, string tenantId, string serviceCategory, string? cptCode);
     Task<MemberCostSharingResult> CalculateMemberCostSharing(string planId, string tenantId, decimal allowedAmount, decimal deductibleAccumulation, decimal oopAccumulation, string serviceCategory, bool inNetwork);
@@ -44,9 +44,11 @@ public interface IBenefitPlanService
     Task<BenefitPlan> AmendPublishedPlanAsync(string planId, string tenantId, string actorId);
 
     /// <summary>
-    /// Mark <paramref name="versionId"/> as Superseded. Today this is only
-    /// reachable via <see cref="PublishVersionAsync"/> (a successor must
-    /// exist); explicit termination without a successor is reserved.
+    /// Terminates <paramref name="versionId"/>: moves it from Published to
+    /// Superseded with no successor (<c>SupersededByVersionId</c> stays
+    /// null, distinguishing "ended" from "replaced by an amendment"). This
+    /// is the standalone counterpart to the Supersede-via-Publish path in
+    /// <see cref="PublishVersionAsync"/>.
     /// </summary>
     Task<BenefitPlan> SupersedeVersionAsync(string planId, string versionId, string tenantId, string actorId, string reason, DateTime effectiveDate);
 
@@ -151,31 +153,43 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         return await _repository.UpdateAsync(plan);
     }
 
-    public async Task<bool> DeletePlanAsync(string id, string tenantId)
+    public async Task<bool> DeletePlanAsync(string id, string tenantId, string actorId)
     {
-        var existing = await _repository.GetByIdAsync(id, tenantId);
+        // Despite the parameter name, callers pass the business-key PlanId
+        // here (see GetPlanAsync above) -- GetByPlanIdAsync resolves the
+        // current head Published version.
+        var existing = await _repository.GetByPlanIdAsync(id, tenantId);
         if (existing == null)
         {
             return false;
         }
 
-        existing.IsActive = false;
-        existing.UpdatedAt = DateTime.UtcNow;
-        await _repository.UpdateAsync(existing);
+        // Deactivating a plan ends its version chain -- it's a Terminate,
+        // not a content edit, so it goes through the same transition (and
+        // guard) as an amendment rather than a direct UpdateAsync, which
+        // 5.1 blocks outright on a Published row.
+        await SupersedeVersionAsync(id, existing.VersionId, tenantId, actorId,
+            reason: "Deleted via DeletePlanAsync", effectiveDate: DateTime.UtcNow);
         return true;
     }
 
-    public async Task<Benefit?> AddBenefitAsync(string planId, string tenantId, Benefit benefit)
+    public async Task<Benefit?> AddBenefitAsync(string planId, string tenantId, string actorId, Benefit benefit)
     {
-        var plan = await _repository.GetByIdAsync(planId, tenantId);
+        var plan = await _repository.GetByPlanIdAsync(planId, tenantId);
         if (plan == null)
         {
             return null;
         }
 
-        plan.Benefits.Add(benefit);
-        plan.UpdatedAt = DateTime.UtcNow;
-        await _repository.UpdateAsync(plan);
+        // Benefits are identity content (5.1) -- adding one to a Published
+        // plan must produce a new Draft, then a new Published version, not
+        // an in-place UpdateAsync (which 5.1 blocks). Amend + publish
+        // immediately to preserve this endpoint's original synchronous
+        // "legacy create-and-go" contract for callers.
+        var draft = await AmendPublishedPlanAsync(planId, tenantId, actorId);
+        draft.Benefits.Add(benefit);
+        await _repository.UpdateDraftAsync(draft);
+        await PublishVersionAsync(planId, draft.VersionId, tenantId, actorId);
         return benefit;
     }
 
@@ -483,13 +497,36 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
                 $"Version {versionId} is {target.VersionState}; only Published versions can be superseded.");
         }
 
-        // Standalone supersede paths (without a successor) are reserved.
-        // Today, supersession always happens via PublishVersionAsync — this
-        // method exists so callers can request an explicit transition log
-        // without the side-effect of publishing a new version.
-        throw new InvalidOperationException(
-            "Standalone supersede (without a successor Published version) is not supported in this release. " +
-            "Create an amendment and publish it to supersede the current version.");
+        var now = DateTime.UtcNow;
+        target.VersionState = PlanVersionState.Superseded;
+        target.SupersededAt = now;
+        target.SupersededByVersionId = null; // standalone termination -- no successor
+        target.IsActive = false;
+        target.TerminationDate = effectiveDate;
+
+        var written = await _repository.TerminateVersionAsync(target);
+        if (!written)
+        {
+            throw new PlanVersionStateException(planId, versionId, PlanVersionState.Published,
+                $"Version {versionId} was removed between lookup and write") { IsNotFound = true };
+        }
+
+        await _transitions.AppendAsync(new PlanVersionTransition
+        {
+            TenantId = tenantId,
+            PlanId = planId,
+            FromVersionId = target.VersionId,
+            ToVersionId = null,
+            TransitionType = PlanVersionTransitionType.Terminate,
+            Reason = reason,
+            EffectiveDate = effectiveDate,
+            OccurredAt = now,
+            ActorId = actorId
+        });
+
+        await _events.PublishVersionTerminatedAsync(target, reason, actorId, correlationId: null);
+
+        return target;
     }
 
     public Task<(IReadOnlyList<BenefitPlan> Items, string? ContinuationToken)> ListVersionsAsync(

@@ -134,7 +134,7 @@ public class BenefitPlansControllerVersionTests
     }
 
     [Fact]
-    public async Task Supersede_returns_409_today()
+    public async Task Supersede_terminates_published_version_returns_200()
     {
         var (controller, service, _) = Build();
         var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
@@ -142,7 +142,60 @@ public class BenefitPlansControllerVersionTests
 
         var result = await controller.Supersede(v1.PlanId, v1.VersionId,
             new SupersedeRequest { Reason = "test" });
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var terminated = ok.Value.Should().BeOfType<BenefitPlan>().Subject;
+        terminated.VersionState.Should().Be(PlanVersionState.Superseded);
+        terminated.SupersededByVersionId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Supersede_draft_version_returns_409()
+    {
+        var (controller, service, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
+
+        var result = await controller.Supersede(draft.PlanId, draft.VersionId,
+            new SupersedeRequest { Reason = "test" });
         result.Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
+    [Fact]
+    public async Task DeletePlan_terminates_and_returns_204()
+    {
+        var (controller, service, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
+
+        var result = await controller.DeletePlan(v1.PlanId);
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task DeletePlan_unknown_plan_returns_404()
+    {
+        var (controller, _, _) = Build();
+        var result = await controller.DeletePlan("does-not-exist");
+        result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
+    public async Task AddBenefit_amends_and_returns_201()
+    {
+        var (controller, service, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
+
+        var result = await controller.AddBenefit(v1.PlanId, new Benefit { ServiceCategory = "Urgent Care", CopayAmount = 50m });
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+    }
+
+    [Fact]
+    public async Task AddBenefit_unknown_plan_returns_404()
+    {
+        var (controller, _, _) = Build();
+        var result = await controller.AddBenefit("does-not-exist", new Benefit { ServiceCategory = "X" });
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
     }
 
     [Fact]
@@ -154,12 +207,15 @@ public class BenefitPlansControllerVersionTests
         var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
         var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
 
-        var result = await controller.GetPlan(v1.Id);
+        // Every real caller passes the business-key PlanId here, not the
+        // internal auto-generated Id (see BenefitPlanService.GetPlanAsync's
+        // doc comment) -- GetByPlanIdAsync underneath filters on PlanId.
+        var result = await controller.GetPlan(v1.PlanId);
 
         result.Result.Should().BeOfType<OkObjectResult>();
         recording.Should().NotBeNull();
         recording!.GetPlanCalls.Should().HaveCount(1);
-        recording.GetPlanCalls[0].PlanId.Should().Be(v1.Id);
+        recording.GetPlanCalls[0].PlanId.Should().Be(v1.PlanId);
         recording.GetPlanCalls[0].TenantId.Should().Be(Tenant);
     }
 

@@ -100,6 +100,18 @@ public interface IBenefitPlanRepository
         string planId,
         IReadOnlyList<NetworkTier> tiers,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Persists a standalone termination: <paramref name="version"/> must
+    /// already have <c>VersionState=Superseded</c>, <c>SupersededAt</c> set,
+    /// <c>SupersededByVersionId=null</c> (no successor -- distinguishes a
+    /// terminated plan from one replaced by an amendment), and
+    /// <c>IsActive=false</c>, applied by the service layer. Mirrors
+    /// <see cref="PublishAndSupersedeAsync"/>'s contract of taking a fully
+    /// pre-mutated object and just persisting it. Returns <c>false</c> when
+    /// the row was not found.
+    /// </summary>
+    Task<bool> TerminateVersionAsync(BenefitPlan version);
 }
 
 /// <summary>
@@ -476,6 +488,26 @@ public class BenefitPlanRepository : IBenefitPlanRepository
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             // Row was deleted between lookup and patch.
+            return false;
+        }
+    }
+
+    public async Task<bool> TerminateVersionAsync(BenefitPlan version)
+    {
+        if (version.VersionState != PlanVersionState.Superseded)
+        {
+            throw new InvalidOperationException(
+                "TerminateVersionAsync expects version to already have VersionState=Superseded applied by the service layer.");
+        }
+
+        version.ModifiedDate = DateTime.UtcNow;
+        try
+        {
+            await _container.ReplaceItemAsync(version, version.Id, new PartitionKey(version.TenantId));
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
             return false;
         }
     }
