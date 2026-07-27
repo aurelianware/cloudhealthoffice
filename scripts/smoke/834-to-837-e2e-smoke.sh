@@ -129,9 +129,17 @@ import834_response=$(curl -sS -f -X POST "${ENROLLMENT_IMPORT_URL}/api/v1/enroll
   -F "file=@${FIXTURE_834}")
 echo "$import834_response" | jq '{successCount, failedCount, coverageRecordsCreated, coverageMappingsUnresolved}'
 
-coverage_unresolved=$(echo "$import834_response" | jq '.coverageMappingsUnresolved')
-if [[ "$coverage_unresolved" -gt 0 ]]; then
-  echo "FAIL: ${coverage_unresolved} coverage record(s) had no plan-code mapping — step 2 didn't take." >&2
+# The fixture carries three subscribers across four distinct
+# group/insurance-line/plan-code combinations (HLT/PPO, DEN, VIS, and a
+# second subscriber's HLT/HMO) -- step 2 above deliberately seeds only the
+# one this smoke test's target member (FIXTURE_MEMBER_ID) actually needs.
+# Any other combination in the batch legitimately has no mapping, so a
+# nonzero coverageMappingsUnresolved here is expected and not this test's
+# concern -- what matters is whether the target member's own coverage
+# resolved, which step 5 verifies directly via BenefitPlanId.
+coverage_created=$(echo "$import834_response" | jq '.coverageRecordsCreated')
+if [[ "$coverage_created" -lt 1 ]]; then
+  echo "FAIL: no coverage records were created at all — step 2's mapping didn't take." >&2
   exit 1
 fi
 
@@ -167,7 +175,12 @@ status=""
 while [[ $(date +%s) -lt $deadline ]]; do
   claim=$(curl -sS -f "${CLAIMS_URL}/api/claims/${claim_id}" -H "X-Tenant-ID: ${TENANT_ID}")
   status=$(echo "$claim" | jq -r '.status')
-  if [[ "$status" != "Submitted" ]]; then
+  # ClaimStatus has no JsonStringEnumConverter, so the API returns the raw
+  # numeric enum value here, not "Submitted" — Submitted = 1 (Claim.cs).
+  # Comparing against the string "Submitted" always mismatched, so this
+  # loop used to break on the very first poll, before adjudication had any
+  # chance to run asynchronously.
+  if [[ "$status" != "1" ]]; then
     break
   fi
   sleep 2
