@@ -1,0 +1,45 @@
+# Scaling a Healthcare Claims Platform in Azure, Part One: The Service Principal That Was Never There
+
+This platform has spent its whole life on a laptop. The Million Claim Challenge series proved it at a million claims — on Docker Desktop, one machine, one developer's local Kubernetes cluster. A separate stretch of work after that built the 834 enrollment and 837 claims evaluator on-ramp, so a partner could drop real EDI files in and watch enrollment turn into priced claims. Neither of those proved anything about running anywhere else. This is the start of finding out — and the first real day of it went to a permissions bug so quiet it took hours of correct-looking fixes to notice it was fixing the wrong thing.
+
+## Why now
+
+The Million Claim Challenge answered a scale question: does the adjudication pipeline hold up at real volume. The 834/837 on-ramp answered a different one: does a partner's actual EDI file turn into a correct claim, end to end, without hand-massaging the input first. Both were proven locally. Neither was proven in a cloud a customer could actually point at. Today's work picked that question back up — not a redesign, the same platform, the same manifests, pointed at a real Azure subscription instead of a laptop's Kubernetes context.
+
+The Azure environment backing this platform had been rebuilt from scratch — new container registry, new everything downstream of it — which meant today wasn't "redeploy to the cloud that's already there." It was "stand the cloud back up, then find out what breaks the first time anything real tries to run on it."
+
+## Standing it back up
+
+A fresh Azure Container Registry, a two-node autoscaling AKS cluster, a Key Vault, a real Storage account, a Cosmos DB account, and — because nothing was hosting one — a Kafka cluster stood up in-cluster from scratch via the Strimzi operator. None of this was exotic; all of it was first-time-in-this-environment provisioning, the kind of work where every resource has to actually get created before anything downstream of it can be tested.
+
+Two bugs surfaced immediately that had nothing to do with today's rebuild and everything to do with manifests nobody had exercised end-to-end before. member-document-service's Kubernetes manifest was still pointed at the Azurite local-emulator placeholder connection string, hardcoded directly into the committed secret — meaning a real deployment would have quietly never touched real storage at all. eligibility-service's batch-eligibility feature had no storage or database wiring in its manifest whatsoever; the application code gracefully falls back to an in-memory store in Development, but the manifest declared Production, and Production with no Cosmos DB configured throws on startup rather than degrading. Neither bug was reachable until today, because today was the first time either manifest had ever been applied against infrastructure that actually existed.
+
+## The service principal that was never there
+
+The container-image import step kept failing with the same error, over and over: `ERROR: The resource with name 'clouhealthoffice' and type 'Microsoft.ContainerRegistry/registries' could not be found in subscription`. The registry existed. It had just been created, in the right subscription, confirmed directly. The fix looked obvious: grant the CI identity the roles it needed on that registry. AcrPush granted. Same failure. Contributor granted, in case the import operation needed more than push access. Same failure, five, then ten, then forty minutes later — well past any reasonable Azure RBAC propagation delay.
+
+The instinct to blame propagation didn't survive a direct test: role assignments created against the identity were confirmed present, by scope, immediately and repeatedly, every single time. The permissions were correct. Something else was wrong.
+
+`az role assignment create --assignee-object-id` does not verify that the object id it's given actually exists as a real, live identity in the tenant. Give it a syntactically valid GUID and a principal type, and it will happily write a role-assignment record pointing at nothing — no error, a clean success response, indistinguishable from a real grant. Every permission granted that morning had been granted correctly, to an identity that was never the one authenticating from GitHub Actions.
+
+Confirming it without ever printing a live secret took a small trick: hash the subscription id the CI was actually authenticating into, on both sides — one hash computed locally from the known-correct value, one printed from inside the running GitHub Actions job — and compare the digests instead of the values. They didn't match. The CI's real identity was authenticating into an entirely different, older Azure tenant: the one this environment had lived in before being rebuilt, still wired up from months of prior work, still holding permissions on resource groups with no connection to anything created today. Nobody had ever updated the three secrets — client id, tenant id, subscription id — that tell the deploy pipeline which identity, in which tenant, is doing the deploying. Every fix that morning had been correct and completely irrelevant, because it was aimed at a service principal the actual CI job had never once used.
+
+The real fix was to create the service principal that should have existed from the start — a fresh app registration in the correct tenant, an OIDC federated credential scoped to the exact GitHub Actions subject claim the workflow presents, the right roles granted to an identity that could actually prove, from inside its own authenticated session, that it was the one being granted them.
+
+## Four more bugs, in order
+
+Fixing the identity didn't finish the story; it just let the pipeline get far enough to hit the next four bugs, each smaller than the last.
+
+`az acr import` needed an explicit resource group. Without one, resolving which resource group a registry lives in requires broader list permission than a role scoped to that one registry grants — a caller can be fully authorized to act on a resource it can't yet find.
+
+One service manifest — idcard-service — turned out to be a placeholder: four lines of comments pointing at the real manifest that lived elsewhere in the repository. The deploy loop applied it anyway, got nothing back to apply, and failed outright, taking down every service that came after it alphabetically in the same loop.
+
+A namespace resource quota, written when the service fleet was a fraction of its current size, capped total CPU limits at a number the real ~30-service deployment blew straight through the first time it tried to schedule all at once.
+
+And one bug that stayed a bug on purpose: this Azure subscription is a free trial, hard-capped at four total regional vCPUs — already fully spent by the two nodes already running. The autoscaler can't add a third node no matter how the cluster itself is configured, because there's no quota left to give it. That's not a bug in this platform. It's a billing decision waiting on a human, and it's disclosed rather than worked around.
+
+## What actually shipped
+
+By the end of the day, roughly twenty-seven services were running on real Azure Kubernetes Service infrastructure — not a plan for it, not manifests that claimed to support it, actual pods, actually scheduled, actually serving. That distinction — "deployed to Azure" versus "written to be deployable to Azure, someday, unverified" — is the entire point of this series.
+
+Part Two picks up once the vCPU ceiling is resolved: closing the loop on the full fleet actually running end to end, with the portal and every replica the manifests ask for. After Azure, the plan is to run this same exercise somewhere else — GCP, AWS — and see which of today's lessons turn out to be Azure-specific, and which turn out to just be true about deploying a real platform to a real cloud for the first time.
