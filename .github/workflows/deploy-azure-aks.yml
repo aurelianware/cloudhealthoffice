@@ -659,14 +659,21 @@ jobs:
         run: |
           ACR="${{ env.REGISTRY }}"
           SHA="sha-${{ github.sha }}"
-          for manifest in src/services/*/k8s/*.yaml; do
-            echo "Applying ${manifest}..."
-            sed \
+          # idcard-service/k8s/idcard-service-deployment.yaml is a
+          # comments-only alias pointing at the authoritative copy below --
+          # apply the real one instead of the placeholder the glob picks up.
+          for manifest in src/services/*/k8s/*.yaml k8s/idcard-service.yaml; do
+            transformed=$(sed \
               -e "s|clouhealthoffice.azurecr.io/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
               -e "s|ghcr.io/aurelianware/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
               -e "s|:latest|:${SHA}|g" \
-              "$manifest" \
-              | kubectl apply -f -
+              "$manifest")
+            if ! grep -q "^kind:" <<< "$transformed"; then
+              echo "Skipping ${manifest} (no Kubernetes objects -- alias/placeholder file)"
+              continue
+            fi
+            echo "Applying ${manifest}..."
+            kubectl apply -f - <<< "$transformed"
           done
 
       - name: Deploy api-docs (Swagger UI + OpenAPI specs)
