@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scaling a Healthcare Claims Platform in Azure — Engineering Series | Cloud Health Office</title>
+  <meta name="description" content="Engineering field notes documenting this platform's first real deployment to a live Azure subscription — AKS, ACR, Key Vault, Cosmos DB, and the bugs only a real cloud environment exposes.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/azure-scaling">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Scaling a Healthcare Claims Platform in Azure — Engineering Series">
+  <meta property="og:description" content="Engineering field notes documenting this platform's first real deployment to a live Azure subscription.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/azure-scaling">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .source-note { font-size: .9rem !important; color: #8b949e !important; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/azure-scaling">Scaling in Azure</a></nav>
+    <div class="eyebrow">Engineering series</div><h1>Scaling a Healthcare Claims Platform in Azure</h1><p>A spinoff of the local-Kubernetes Million Claim Challenge field notes: the same platform, headed back to a real cloud subscription after a deliberate stretch focused on local-only evaluation. First stop is Azure, where it used to run before a full environment rebuild; GCP and AWS are planned after it.</p><div class="disclosure"><strong>Current scope:</strong> Part One covers the first day of standing up a rebuilt Azure environment and getting the first real services running on AKS. The full fleet at full replica count is still in progress.</div><article class="evidence-block" style="padding:22px"><div class="eyebrow">Part One</div><h2 style="margin-top:8px">Scaling a Healthcare Claims Platform in Azure, Part One: The Service Principal That Was Never There</h2><p>Standing this platform back up on a real Azure subscription to run the 834/837 evaluator on-ramp and claims-scale testing beyond a laptop, and the hours-long RBAC chase that turned out to be permissions granted to a service principal the CI pipeline never actually used.</p><div class="article-links"><a href="/insights/azure-scaling/part-1-the-service-principal-that-was-never-there">Read article</a></div></article>
+  </main>
+</body>
+</html>

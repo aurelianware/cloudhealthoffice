@@ -1,0 +1,53 @@
+# Scaling a Healthcare Claims Platform in Azure, Part One: The Service Principal That Was Never There
+
+This platform used to run in Azure. It doesn't get talked about much, because the roadmap deliberately pulled back from it — not because the cloud story broke, but because a health plan evaluating a new claims platform shouldn't have to provision a cloud subscription, get billing approved, and wait on IT sign-off just to see whether the thing actually works. Local Kubernetes on a laptop got that barrier to zero, and the Million Claim Challenge series spent its life proving the platform could hold up at real volume under exactly that constraint — a million claims, one machine, Docker Desktop. A separate stretch of work after that built the 834 enrollment and 837 claims evaluator on-ramp, so a partner could drop real EDI files in and watch enrollment turn into priced claims, still entirely local. Today picked the other half of the story back up — and the first real day of it went to a permissions bug so quiet it took hours of correct-looking fixes to notice it was fixing the wrong thing.
+
+## Why now
+
+Local-first was never meant to be the whole story, just the part that had to come first. An evaluator who likes what they see running on their own laptop still eventually needs the platform to run somewhere real — the cloud they'll actually deploy to, not a synthetic stand-in. That's the gap today's work picked back up: not proving the platform works, the Million Claim Challenge and the 834/837 on-ramp already did that, but proving it still works once it's someone else's cloud subscription instead of a local `kind` cluster.
+
+It wasn't a resume-from-where-it-left-off exercise, either. The Azure subscription this platform used to run in was gone — a full rebuild, new container registry, new everything downstream of it. Today wasn't "redeploy to the cloud that's already there." It was "stand the cloud back up from nothing, then find out what breaks the first time anything real tries to run on it" — including, it turned out, leftover assumptions from the environment that used to exist.
+
+## Standing it back up
+
+A fresh Azure Container Registry, a two-node autoscaling AKS cluster with room to grow to six, a Key Vault, a real Storage account, a Cosmos DB account, and — because nothing was hosting one — a Kafka cluster stood up in-cluster from scratch via the Strimzi operator. None of this was exotic; all of it was first-time-in-this-environment provisioning, the kind of work where every resource has to actually get created before anything downstream of it can be tested.
+
+By the end of the day, that infrastructure was running close to thirty of this platform's services as real Kubernetes deployments — not a demo slice, close to the actual fleet. Two of those subsystems are the whole reason this exercise exists. enrollment-import-service, and the benefit-plan, coverage, and member services behind it, are the 834 enrollment on-ramp. claims-service, eligibility-service, and the adjudication pipeline behind them are where 837 claims processing and the Million Claim Challenge's scale story live. Standing the platform up in Azure isn't the finish line here — it's what makes it possible to ask the next two questions at all: does the same evaluator on-ramp that already accepts a partner's real 834 and 837 files locally behave the same way against Azure infrastructure, and does the same claims-volume methodology that reached a million claims on a laptop reach a comparable number against AKS's autoscaling node pool, a real Kafka cluster, and Cosmos DB instead of a Mongo container sharing the same machine as the test.
+
+Two bugs surfaced immediately that had nothing to do with today's rebuild and everything to do with manifests nobody had exercised end-to-end before. member-document-service's Kubernetes manifest was still pointed at the Azurite local-emulator placeholder connection string, hardcoded directly into the committed secret — meaning a real deployment would have quietly never touched real storage at all. eligibility-service's batch-eligibility feature had no storage or database wiring in its manifest whatsoever; the application code gracefully falls back to an in-memory store in Development, but the manifest declared Production, and Production with no Cosmos DB configured throws on startup rather than degrading. Neither bug was reachable until today, because today was the first time either manifest had ever been applied against infrastructure that actually existed.
+
+## The service principal that was never there
+
+The container-image import step kept failing with the same error, over and over: `ERROR: The resource with name 'clouhealthoffice' and type 'Microsoft.ContainerRegistry/registries' could not be found in subscription`. The registry existed. It had just been created, in the right subscription, confirmed directly. The fix looked obvious: grant the CI identity the roles it needed on that registry. AcrPush granted. Same failure. Contributor granted, in case the import operation needed more than push access. Same failure, five, then ten, then forty minutes later — well past any reasonable Azure RBAC propagation delay.
+
+The instinct to blame propagation didn't survive a direct test: role assignments created against the identity were confirmed present, by scope, immediately and repeatedly, every single time. The permissions were correct. Something else was wrong.
+
+`az role assignment create --assignee-object-id` does not verify that the object id it's given actually exists as a real, live identity in the tenant. Give it a syntactically valid GUID and a principal type, and it will happily write a role-assignment record pointing at nothing — no error, a clean success response, indistinguishable from a real grant. Every permission granted that morning had been granted correctly, to an identity that was never the one authenticating from GitHub Actions.
+
+Confirming it without ever printing a live secret took a small trick: hash the subscription id the CI was actually authenticating into, on both sides — one hash computed locally from the known-correct value, one printed from inside the running GitHub Actions job — and compare the digests instead of the values. They didn't match. The CI's real identity was authenticating into an entirely different, older Azure tenant: the one this environment had lived in before being rebuilt, still wired up from months of prior work, still holding permissions on resource groups with no connection to anything created today. Nobody had ever updated the three secrets — client id, tenant id, subscription id — that tell the deploy pipeline which identity, in which tenant, is doing the deploying. Every fix that morning had been correct and completely irrelevant, because it was aimed at a service principal the actual CI job had never once used.
+
+The real fix was to create the service principal that should have existed from the start — a fresh app registration in the correct tenant, an OIDC federated credential scoped to the exact GitHub Actions subject claim the workflow presents, the right roles granted to an identity that could actually prove, from inside its own authenticated session, that it was the one being granted them.
+
+## Four more bugs, in order
+
+Fixing the identity didn't finish the story; it just let the pipeline get far enough to hit the next four bugs, each smaller than the last.
+
+`az acr import` needed an explicit resource group. Without one, resolving which resource group a registry lives in requires broader list permission than a role scoped to that one registry grants — a caller can be fully authorized to act on a resource it can't yet find.
+
+One service manifest — idcard-service — turned out to be a placeholder: four lines of comments pointing at the real manifest that lived elsewhere in the repository. The deploy loop applied it anyway, got nothing back to apply, and failed outright, taking down every service that came after it alphabetically in the same loop.
+
+A namespace resource quota, written when the service fleet was a fraction of its current size, capped total CPU limits at a number the real ~30-service deployment blew straight through the first time it tried to schedule all at once.
+
+And one bug that stayed a bug on purpose: this Azure subscription is a free trial, hard-capped at four total regional vCPUs — already fully spent by the two nodes already running. The autoscaler can't add a third node no matter how the cluster itself is configured, because there's no quota left to give it. That's not a bug in this platform. It's a billing decision waiting on a human, and it's disclosed rather than worked around.
+
+## Running the on-ramp, and the scale test, somewhere real
+
+Locally, this platform can already take a partner's raw 834 enrollment file, turn it into member and coverage records, then take an 837 claims file against that same population and turn it into priced claims — the evaluator on-ramp the 834/837 work built. Locally, it can also take a million synthetic claims and hold up under real concurrent load — the Million Claim Challenge's whole reason for existing. Neither of those has ever run against infrastructure like this: an AKS node pool that actually autoscales instead of a fixed local node count, a real Kafka cluster instead of no message bus at all, Cosmos DB instead of a database container sharing the same laptop as the test.
+
+That's the actual point of today, not just the exercise of getting something running. Once the vCPU ceiling above is resolved and the full fleet is confirmed at real replica counts, the next test isn't a new feature — it's the same 834/837 on-ramp and the same claims-scale methodology this series has already proven locally, run again, against a cloud a customer could actually deploy to. If the numbers hold, that's real evidence. If they don't, that's the next thing worth finding out.
+
+## What actually shipped
+
+By the end of the day, roughly twenty-seven services were running on real Azure Kubernetes Service infrastructure — not a plan for it, not manifests that claimed to support it, actual pods, actually scheduled, actually serving.
+
+Part Two picks up once the vCPU ceiling is resolved: the full fleet at real replica counts, then the 834/837 on-ramp and a claims-volume run against this same environment. After Azure, the plan is to run this same exercise somewhere else — GCP, AWS — and see which of today's lessons turn out to be Azure-specific, and which turn out to just be true about deploying a real platform to a real cloud.
