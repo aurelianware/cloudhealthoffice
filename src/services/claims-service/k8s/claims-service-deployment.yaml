@@ -13,6 +13,7 @@ data:
   Services__AuthorizationService: "http://authorization-service"
   Services__BenefitPlanServiceTimeoutSeconds: "5"
   Messaging__AdjudicationMaxConcurrentCalls: "32"
+  Messaging__Backend: "ServiceBus"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -92,6 +93,16 @@ spec:
             configMapKeyRef:
               name: claims-service-config
               key: Messaging__AdjudicationMaxConcurrentCalls
+        - name: Messaging__Backend
+          valueFrom:
+            configMapKeyRef:
+              name: claims-service-config
+              key: Messaging__Backend
+        - name: Messaging__ServiceBusConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: servicebus-secret
+              key: connectionString
         - name: Redis__ConnectionString
           valueFrom:
             secretKeyRef:
