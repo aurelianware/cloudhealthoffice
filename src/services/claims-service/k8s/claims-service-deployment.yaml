@@ -12,6 +12,7 @@ data:
   Services__ProviderService: "http://provider-service"
   Services__AuthorizationService: "http://authorization-service"
   Services__BenefitPlanServiceTimeoutSeconds: "5"
+  ClaimsImport__Raw837MaxConcurrency: "16"
   Messaging__AdjudicationMaxConcurrentCalls: "32"
   Messaging__Backend: "ServiceBus"
 ---
@@ -88,6 +89,11 @@ spec:
             configMapKeyRef:
               name: claims-service-config
               key: Services__BenefitPlanServiceTimeoutSeconds
+        - name: ClaimsImport__Raw837MaxConcurrency
+          valueFrom:
+            configMapKeyRef:
+              name: claims-service-config
+              key: ClaimsImport__Raw837MaxConcurrency
         - name: Messaging__AdjudicationMaxConcurrentCalls
           valueFrom:
             configMapKeyRef:
