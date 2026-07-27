@@ -54,7 +54,7 @@ public sealed class BenefitViewServiceFamilyModelTests
         var plan = SamplePlan(FamilyAccumulatorModel.Embedded);
         await repo.CreateAsync(plan);
 
-        var result = await view.GetMemberViewAsync(plan.Id, plan.TenantId, DateTime.UtcNow);
+        var result = await view.GetMemberViewAsync(plan.PlanId, plan.TenantId, DateTime.UtcNow);
 
         result.Should().NotBeNull();
         result!.FamilyAccumulatorModel.Should().Be("Embedded");
@@ -67,7 +67,7 @@ public sealed class BenefitViewServiceFamilyModelTests
         var plan = SamplePlan(FamilyAccumulatorModel.Aggregate);
         await repo.CreateAsync(plan);
 
-        var result = await view.GetMemberViewAsync(plan.Id, plan.TenantId, DateTime.UtcNow);
+        var result = await view.GetMemberViewAsync(plan.PlanId, plan.TenantId, DateTime.UtcNow);
 
         result.Should().NotBeNull();
         result!.FamilyAccumulatorModel.Should().Be("Aggregate");

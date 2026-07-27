@@ -163,20 +163,33 @@ public class BenefitPlansController : ControllerBase
     }
 
     /// <summary>
-    /// Delete a benefit plan (soft delete)
+    /// Delete a benefit plan. Terminates its current Published version
+    /// (Superseded, no successor) rather than editing it in place.
     /// </summary>
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeletePlan(string id)
     {
-        var deleted = await _service.DeletePlanAsync(id, TenantId);
-        if (!deleted)
+        try
         {
-            return NotFound(new { message = $"Benefit plan '{id}' not found" });
-        }
+            var deleted = await _service.DeletePlanAsync(id, TenantId, ResolveActorId());
+            if (!deleted)
+            {
+                return NotFound(new { message = $"Benefit plan '{id}' not found" });
+            }
 
-        return NoContent();
+            return NoContent();
+        }
+        catch (PlanVersionStateException ex) when (ex.IsNotFound)
+        {
+            return NotFound(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId });
+        }
+        catch (PlanVersionStateException ex)
+        {
+            return Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+        }
     }
 
     /// <summary>
@@ -196,19 +209,39 @@ public class BenefitPlansController : ControllerBase
     }
 
     /// <summary>
-    /// Add a benefit to a plan
+    /// Add a benefit to a plan. Creates an amendment (new Draft), adds the
+    /// benefit, and publishes it immediately -- benefits are identity
+    /// content (5.1), so this cannot edit the Published row in place.
     /// </summary>
     [HttpPost("{id}/benefits")]
     [ProducesResponseType(typeof(Benefit), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<Benefit>> AddBenefit(string id, [FromBody] Benefit benefit)
     {
-        var added = await _service.AddBenefitAsync(id, TenantId, benefit);
-        if (added == null)
+        try
         {
-            return NotFound(new { message = $"Benefit plan '{id}' not found" });
-        }
+            var added = await _service.AddBenefitAsync(id, TenantId, ResolveActorId(), benefit);
+            if (added == null)
+            {
+                return NotFound(new { message = $"Benefit plan '{id}' not found" });
+            }
 
-        return CreatedAtAction(nameof(GetPlanBenefits), new { id }, added);
+            return CreatedAtAction(nameof(GetPlanBenefits), new { id }, added);
+        }
+        catch (PlanLimitValidationException ex)
+        {
+            return BadRequest(PlanLimitValidationPayload(ex));
+        }
+        catch (PlanVersionStateException ex) when (ex.IsNotFound)
+        {
+            return NotFound(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId });
+        }
+        catch (PlanVersionStateException ex)
+        {
+            return Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+        }
     }
 
     /// <summary>
@@ -407,9 +440,10 @@ public class BenefitPlansController : ControllerBase
     }
 
     /// <summary>
-    /// Standalone supersede (without a successor) is reserved for a future
-    /// release; this endpoint exists for API parity and currently returns
-    /// 409 with an explanation.
+    /// Terminates a Published version with no successor -- the standalone
+    /// counterpart to the supersede-via-Publish path in
+    /// <see cref="Publish"/>. <c>SupersededByVersionId</c> stays null,
+    /// distinguishing "ended" from "replaced by an amendment".
     /// </summary>
     [HttpPost("{planId}/versions/{versionId}/supersede")]
     [ProducesResponseType(typeof(BenefitPlan), StatusCodes.Status200OK)]
