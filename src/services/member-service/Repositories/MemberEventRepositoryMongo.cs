@@ -72,8 +72,11 @@ public class MemberEventRepositoryMongo : IMemberEventRepository
         if (string.IsNullOrEmpty(evt.TenantId) || string.IsNullOrEmpty(evt.MemberId))
             throw new ArgumentException("TenantId and MemberId are required");
 
-        if (string.IsNullOrEmpty(evt.Id))
-            evt.Id = evt.EventId;
+        // Mongo's _id index is global to the collection, while EventId is only
+        // unique within (TenantId, MemberId). Always replace the publisher's
+        // Cosmos-compatible Id so the same idempotency key can be reused safely
+        // by another tenant or member.
+        evt.Id = MemberEvent.BuildMongoDocumentId(evt.TenantId, evt.MemberId, evt.EventId);
         if (string.IsNullOrEmpty(evt.PartitionKey))
             evt.PartitionKey = MemberEvent.BuildPartitionKey(evt.TenantId, evt.MemberId);
     }

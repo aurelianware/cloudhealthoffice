@@ -100,6 +100,54 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
     }
 
     [Fact]
+    public async Task ImportRaw837_MultipleClaims_SubmitsConcurrentlyAndPreservesFileOrder()
+    {
+        var secondClaim = SingleClaimSample.Replace(
+            "CLM-RAW837-0001",
+            "CLM-RAW837-0002",
+            StringComparison.Ordinal);
+        var bothStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = 0;
+
+        _service
+            .SubmitAsync(Arg.Any<AdapterClaim>(), "test-tenant",
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var claim = call.Arg<AdapterClaim>();
+                if (Interlocked.Increment(ref started) == 2)
+                {
+                    bothStarted.TrySetResult();
+                }
+
+                await release.Task;
+                claim.Id = $"id-{claim.ClaimNumber}";
+                return ClaimSubmissionResult.Ok(claim);
+            });
+
+        var responseTask = _client.PostAsync(
+            "/api/v1/claims/import/raw837",
+            BuildFileContent($"{SingleClaimSample}{secondClaim}", "batch.837"));
+
+        await bothStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        release.TrySetResult();
+
+        var response = await responseTask;
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.Content.ReadFromJsonAsync<Raw837ImportResult>();
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.SucceededCount);
+        Assert.Collection(
+            result.Results,
+            first => Assert.Equal("CLM-RAW837-0001", first.ClaimNumber),
+            second => Assert.Equal("CLM-RAW837-0002", second.ClaimNumber));
+    }
+
+    [Fact]
     public async Task ImportRaw837_NoFile_ReturnsBadRequest()
     {
         var response = await _client.PostAsync(
