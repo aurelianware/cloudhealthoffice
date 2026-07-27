@@ -106,7 +106,12 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
     public Task<BenefitPlan?> GetPlanAsync(string id, string tenantId)
     {
-        return _repository.GetByIdAsync(id, tenantId);
+        // Despite the parameter name, every real caller (claims-service's
+        // benefit-plan resolver, ChoBenefitPlanAdapter, GetAccumulation)
+        // passes the plan's business-key PlanId here, not the internal
+        // auto-generated Id -- GetByIdAsync filters on the wrong field and
+        // 404s on a plan that was just created successfully.
+        return _repository.GetByPlanIdAsync(id, tenantId);
     }
 
     public async Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId)
