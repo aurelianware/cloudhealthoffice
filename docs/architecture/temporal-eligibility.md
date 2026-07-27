@@ -97,8 +97,8 @@ rowNumber, subscriberId, serviceDate, isEligible, statusCode,
 planId, groupNumber, coverageLevel, coverageBeginDate, coverageEndDate, error
 ```
 
-It's stored in `IBatchJobStore` (in-memory by default, pluggable to Cosmos /
-blob storage) and served via `GET /batch/{jobId}/result` once
+It's stored in `IBatchJobStore` (in-memory by default, pluggable to MongoDB
+or Cosmos DB + blob storage) and served via `GET /batch/{jobId}/result` once
 `Status = Completed`.
 
 ## 3. Multi-tenancy
@@ -120,8 +120,8 @@ from the `BatchEligibility:StorageMode` config value:
 | Mode       | Job store                                   | Queue                         | Notes                                                                             |
 | ---------- | ------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------- |
 | InMemory   | `InMemoryBatchJobStore`                     | `InMemoryBatchQueue`          | Dev only. Jobs do not survive restarts. No cross-replica visibility. Warn on boot. |
-| Persistent | `CosmosBatchJobStore` (+ Blob for payloads) | `ServiceBusBatchQueue`        | Production. Required connection strings: Cosmos, Blob Storage, Service Bus.       |
-| Auto       | Persistent when all three CS are set; InMemory in dev when they're not; throws at startup otherwise. |
+| Persistent | `BatchJobStore` (+ Blob for payloads)       | `ServiceBusBatchQueue`        | Production. `BatchJobStore` runs against either MongoDB or Cosmos DB for NoSQL via a pluggable `IBatchJobContainer` (`MongoContainerAdapter` / `CosmosContainerAdapter`) — MongoDB is checked first. Required connection strings: MongoDB or Cosmos, Blob Storage, Service Bus. |
+| Auto       | Persistent when a document store (Mongo or Cosmos) + Blob + Service Bus are all set; InMemory in dev when they're not; throws at startup otherwise. |
 
 Never registers both in-memory and persistent implementations simultaneously.
 
@@ -130,8 +130,9 @@ Never registers both in-memory and persistent implementations simultaneously.
 - **InMemory** is single-instance only. `GET /batch/{jobId}` on a different
   pod returns 404; queued messages stay on the pod that received them.
 - **Persistent** gives true multi-replica semantics:
-  - Job state lives in Cosmos (`batch-jobs` container, partition key
-    `/tenantId`) → any pod can read/write any job.
+  - Job state lives in MongoDB or Cosmos DB (`batch-jobs`
+    container/collection, partitioned/scoped by `tenantId`) → any pod can
+    read/write any job.
   - Queue delivery comes from Service Bus with `MaxConcurrentCalls = 4`,
     `AutoCompleteMessages = false`. Messages complete on handler success,
     abandon on failure; Service Bus auto-DLQs after `MaxDeliveryCount = 10`.
@@ -140,9 +141,10 @@ Never registers both in-memory and persistent implementations simultaneously.
     `{tenantId}/{jobId}/{kind}.csv`. Reads always go back through the
     service — no SAS URIs are minted.
 - **TTL**: the Cosmos container is provisioned with `defaultTtl = 7 days`
-  and the blob container with a 7-day lifecycle rule (see
-  `scripts/azure/provision-batch-eligibility.sh`). The in-memory store's
-  24-hour `Evict()` sweep applies only in dev.
+  (see `scripts/azure/provision-batch-eligibility.sh`); `MongoContainerAdapter`
+  creates an equivalent TTL index on `expiresAt`. The blob container has a
+  matching 7-day lifecycle rule. The in-memory store's 24-hour `Evict()`
+  sweep applies only in dev.
 
 ### 4.2 Streaming CSV
 

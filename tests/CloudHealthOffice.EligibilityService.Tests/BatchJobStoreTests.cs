@@ -6,16 +6,16 @@ using EligibilityService.Services;
 namespace CloudHealthOffice.EligibilityService.Tests;
 
 /// <summary>
-/// Exercises CosmosBatchJobStore through fake ICosmosBatchJobContainer /
+/// Exercises BatchJobStore through fake IBatchJobContainer /
 /// IBatchBlobContainer adapters so the emulator isn't required in CI.
 /// </summary>
-public class CosmosBatchJobStoreTests
+public class BatchJobStoreTests
 {
     [Fact]
     public async Task SmallPayload_StoresInline_AndReadsBack()
     {
         var (container, blobs) = Fakes();
-        var store = new CosmosBatchJobStore(container, blobs, inlineMaxBytes: 1024);
+        var store = new BatchJobStore(container, blobs, inlineMaxBytes: 1024);
 
         var job = new BatchEligibilityJob { TenantId = "t1", TotalRows = 3 };
         await store.SaveAsync(job);
@@ -34,7 +34,7 @@ public class CosmosBatchJobStoreTests
     public async Task LargePayload_PromotesToBlob()
     {
         var (container, blobs) = Fakes();
-        var store = new CosmosBatchJobStore(container, blobs, inlineMaxBytes: 64);
+        var store = new BatchJobStore(container, blobs, inlineMaxBytes: 64);
 
         var job = new BatchEligibilityJob { TenantId = "t1", TotalRows = 500 };
         await store.SaveAsync(job);
@@ -51,7 +51,7 @@ public class CosmosBatchJobStoreTests
     public async Task StreamingWrite_AlwaysGoesToBlob()
     {
         var (container, blobs) = Fakes();
-        var store = new CosmosBatchJobStore(container, blobs, inlineMaxBytes: 1_048_576);
+        var store = new BatchJobStore(container, blobs, inlineMaxBytes: 1_048_576);
 
         var job = new BatchEligibilityJob { TenantId = "t1" };
         await store.SaveAsync(job);
@@ -70,7 +70,7 @@ public class CosmosBatchJobStoreTests
     public async Task Partitioning_ByTenantId()
     {
         var (container, blobs) = Fakes();
-        var store = new CosmosBatchJobStore(container, blobs);
+        var store = new BatchJobStore(container, blobs);
 
         await store.SaveAsync(new BatchEligibilityJob { Id = "J1", TenantId = "tenant-a" });
         await store.SaveAsync(new BatchEligibilityJob { Id = "J1", TenantId = "tenant-b" });
@@ -90,16 +90,16 @@ public class CosmosBatchJobStoreTests
     public async Task JobNotFound_ReturnsNull()
     {
         var (container, blobs) = Fakes();
-        var store = new CosmosBatchJobStore(container, blobs);
+        var store = new BatchJobStore(container, blobs);
 
         Assert.Null(await store.GetAsync("t1", "missing"));
         Assert.Null(await store.GetResultAsync("t1", "missing"));
     }
 
-    private static (FakeCosmosContainer, FakeBlobContainer) Fakes()
-        => (new FakeCosmosContainer(), new FakeBlobContainer());
+    private static (FakeJobContainer, FakeBlobContainer) Fakes()
+        => (new FakeJobContainer(), new FakeBlobContainer());
 
-    private class FakeCosmosContainer : ICosmosBatchJobContainer
+    private class FakeJobContainer : IBatchJobContainer
     {
         private readonly ConcurrentDictionary<string, BatchEligibilityJob> _jobs = new();
         private readonly ConcurrentDictionary<string, (byte[]? inline, string? blobUri)> _payloads = new();

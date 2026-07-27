@@ -50,6 +50,17 @@ spec:
             configMapKeyRef:
               name: eligibility-service-config
               key: MongoDb__DatabaseName
+        # Mongo is checked first (see BatchEligibilityServiceCollectionExtensions) --
+        # reuses the same database-secret every other Mongo-backed service in this
+        # fleet already points at, so BatchEligibility needs no Azure-specific
+        # resource of its own. BatchEligibility__CosmosDb__ConnectionString below
+        # stays wired as a fallback for environments that deliberately run Cosmos
+        # DB for NoSQL instead.
+        - name: BatchEligibility__MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
         - name: BatchEligibility__CosmosDb__ConnectionString
           valueFrom:
             secretKeyRef:
