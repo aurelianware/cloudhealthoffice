@@ -14,7 +14,7 @@ data:
   Services__BenefitPlanServiceTimeoutSeconds: "5"
   ClaimsImport__Raw837MaxConcurrency: "16"
   Messaging__AdjudicationMaxConcurrentCalls: "32"
-  Messaging__Backend: "ServiceBus"
+  Messaging__Backend: "Auto"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -109,6 +109,7 @@ spec:
             secretKeyRef:
               name: servicebus-secret
               key: connectionString
+              optional: true
         - name: Redis__ConnectionString
           valueFrom:
             secretKeyRef:

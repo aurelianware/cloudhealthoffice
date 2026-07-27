@@ -25,6 +25,7 @@ env:
   AKS_NAME: ${{ vars.AKS_NAME || 'cho-aks' }}
   ACA_SITE_NAME: ${{ vars.ACA_SITE_NAME || 'cho-site' }}
   RESOURCE_GROUP: ${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}
+  SERVICEBUS_NAMESPACE: ${{ vars.SERVICEBUS_NAMESPACE || 'clouhealthoffice-messaging' }}
   IMAGE_PREFIX: cloudhealthoffice
   # Azure Key Vault secret provider — set these GitHub settings to enable:
   # Repository variable: KEY_VAULT_NAME        Application Key Vault name (empty = use GitHub Secrets only)
@@ -451,6 +452,9 @@ jobs:
             # Redis
             fetch_secret "Redis--ConnectionString"       "KV_REDIS_CONNECTION_STRING"
 
+            # Service Bus
+            fetch_secret "ServiceBus--ConnectionString"  "KV_SERVICEBUS_CONNECTION_STRING"
+
             # Kafka
             fetch_secret "Kafka--SaslUsername"            "KV_KAFKA_SASL_USERNAME"
             fetch_secret "Kafka--SaslPassword"            "KV_KAFKA_SASL_PASSWORD"
@@ -500,6 +504,46 @@ jobs:
       - name: Create namespace
         run: |
           kubectl create namespace ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Service Bus secret
+        run: |
+          set -euo pipefail
+
+          # Prefer an operator-managed Key Vault/GitHub secret. On a fresh
+          # environment, create a least-privilege namespace authorization rule
+          # and retrieve its key through the already-authenticated Azure CLI.
+          CONN="${KV_SERVICEBUS_CONNECTION_STRING:-${{ secrets.SERVICEBUS_CONNECTION_STRING }}}"
+          if [ -z "$CONN" ]; then
+            az servicebus namespace show \
+              --name "${{ env.SERVICEBUS_NAMESPACE }}" \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --output none
+
+            az servicebus namespace authorization-rule create \
+              --name claims-service \
+              --namespace-name "${{ env.SERVICEBUS_NAMESPACE }}" \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --rights Listen Send \
+              --output none
+
+            CONN=$(az servicebus namespace authorization-rule keys list \
+              --name claims-service \
+              --namespace-name "${{ env.SERVICEBUS_NAMESPACE }}" \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --query primaryConnectionString \
+              --output tsv)
+          fi
+
+          if [ -z "$CONN" ]; then
+            echo "::error::Unable to resolve a Service Bus connection string"
+            exit 1
+          fi
+
+          echo "::add-mask::$CONN"
+          kubectl create secret generic servicebus-secret \
+            --from-literal=connectionString="$CONN" \
+            -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create database secret (MongoDB or CosmosDB)

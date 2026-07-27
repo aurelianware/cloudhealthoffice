@@ -39,6 +39,9 @@ AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
 PRICING_API_KEY="local-dev-key"
 PRICING_API_ADMIN_SECRET="local-dev-admin"
 REDIS_CONNECTION_STRING=""  # auto-set below if empty
+LOCAL_SERVICEBUS_NAMESPACE=""
+LOCAL_SERVICEBUS_RESOURCE_GROUP=""
+LOCAL_SERVICEBUS_LOCATION=""
 
 # Source local overrides (real credentials for auth/payments)
 if [[ -f .env.local ]]; then
@@ -177,6 +180,33 @@ ok "$NAMESPACE"
 kubectl delete resourcequota compute-resources -n "$NAMESPACE" 2>/dev/null || true
 kubectl delete networkpolicy allow-ingress-from-portal -n "$NAMESPACE" 2>/dev/null || true
 ok "removed ResourceQuota and NetworkPolicy (not needed locally)"
+
+# ── Configure claims messaging ───────────────────────────────────────────────
+# Azure Service Bus is opt-in for local development. Configure all three
+# LOCAL_SERVICEBUS_* values in .env.local to provision the claims entities,
+# create a least-privilege Listen/Send rule, and install servicebus-secret.
+# With no configuration, claims-service explicitly uses its in-process bus.
+CLAIMS_MESSAGING_BACKEND="InMemory"
+if [[ -n "$LOCAL_SERVICEBUS_NAMESPACE" ||
+      -n "$LOCAL_SERVICEBUS_RESOURCE_GROUP" ||
+      -n "$LOCAL_SERVICEBUS_LOCATION" ]]; then
+  if [[ -z "$LOCAL_SERVICEBUS_NAMESPACE" ||
+        -z "$LOCAL_SERVICEBUS_RESOURCE_GROUP" ||
+        -z "$LOCAL_SERVICEBUS_LOCATION" ]]; then
+    err "Set LOCAL_SERVICEBUS_NAMESPACE, LOCAL_SERVICEBUS_RESOURCE_GROUP, and LOCAL_SERVICEBUS_LOCATION together"
+  fi
+
+  log "Configuring Azure Service Bus for local claims messaging"
+  SERVICEBUS_NAMESPACE="$LOCAL_SERVICEBUS_NAMESPACE" \
+    RESOURCE_GROUP="$LOCAL_SERVICEBUS_RESOURCE_GROUP" \
+    LOCATION="$LOCAL_SERVICEBUS_LOCATION" \
+    K8S_NAMESPACE="$NAMESPACE" \
+    ./scripts/azure/bootstrap-local-servicebus.sh
+  CLAIMS_MESSAGING_BACKEND="ServiceBus"
+  ok "claims messaging: Azure Service Bus"
+else
+  ok "claims messaging: InMemory (set LOCAL_SERVICEBUS_* in .env.local to opt in)"
+fi
 
 # ── Create secrets ────────────────────────────────────────────────────────────
 log "Creating secrets"
@@ -394,10 +424,12 @@ deploy_service() {
     fi
 
     # Replace imagePullPolicy: Always with Never for local images
+    local backend="$CLAIMS_MESSAGING_BACKEND"
     sed \
       -e 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' \
       -e 's/storageClassName: azurefile-csi/storageClassName: standard/g' \
       -e 's/ReadWriteMany/ReadWriteOnce/g' \
+      -e "s/Messaging__Backend: \"Auto\"/Messaging__Backend: \"$backend\"/g" \
       "$manifest" \
       | kubectl apply -f - 2>/dev/null \
       && ok "$name" || warn "$name failed"
