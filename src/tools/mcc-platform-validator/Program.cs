@@ -47,6 +47,7 @@ Console.WriteLine($"  Auth URL:    {options.AuthorizationUrl}");
 Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
 Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
+Console.WriteLine($"  Seed workers:{options.SeedParallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
 Console.WriteLine($"  Auth fixtures:{(options.SeedAuthorizations ? " enabled" : " disabled")}");
@@ -101,19 +102,20 @@ var claims = await MeasureLifecycleValuePhaseAsync(
     "Preparation",
     () => GenerateClaimsAsync(options));
 
+var fixtureScopeId = MccFixtureScope.Create(options.TenantId, options.Seed);
 var providerPool = await MeasureLifecycleValuePhaseAsync(lifecycleTimings, "Fixture normalization", "Preparation", () =>
 {
     NormalizePriorAuthEdgeCases(claims, options);
     MccValidationProviderNormalizer.Normalize(
         claims,
         options.Seed,
-        validationPlanId,
+        fixtureScopeId,
         new MccWorkflowValidationCapabilities(
             ScorePriorAuthValidationEvidence: options.SeedAuthorizations,
             ScorePriorAuthProviderValidationEvidence: options.SeedAuthorizations));
-    MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
+    MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, fixtureScopeId);
     MccCleanPaidFixture.NormalizeClaims(claims);
-    return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId));
+    return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, fixtureScopeId));
 });
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 Console.WriteLine(
@@ -338,7 +340,7 @@ if (options.ServiceBusOnly && options.ServiceBusReconciliationEnabled)
             orderedResults,
             TimeSpan.FromSeconds(options.ServiceBusReconciliationTimeoutSeconds),
             TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds),
-            Math.Max(options.Parallelism, 64));
+            options.Parallelism);
         orderedResults = reconciliation.Results;
 
         if (reconciliation.Candidates > 0)
@@ -680,13 +682,37 @@ static async Task<ObservedClaimStatus> ObserveServiceBusOutcomeAsync(
 
     while (true)
     {
-        var observed = await source.GetAsync(submittedClaimId, CancellationToken.None);
+        var remaining = deadline - DateTimeOffset.UtcNow;
+        if (remaining <= TimeSpan.Zero)
+        {
+            throw new TimeoutException(
+                $"Timed out waiting {timeout.TotalSeconds:N0}s for Service Bus adjudication of claim {submittedClaimId}");
+        }
+
+        ObservedClaimStatus? observed;
+        using (var attemptTimeout = new CancellationTokenSource(
+                   remaining < TimeSpan.FromSeconds(5) ? remaining : TimeSpan.FromSeconds(5)))
+        {
+            try
+            {
+                observed = await source.GetAsync(submittedClaimId, attemptTimeout.Token);
+            }
+            catch (OperationCanceledException) when (attemptTimeout.IsCancellationRequested)
+            {
+                observed = null;
+            }
+            catch (HttpRequestException)
+            {
+                observed = null;
+            }
+        }
+
         if (observed?.IsTerminal is true)
         {
             return observed;
         }
 
-        var remaining = deadline - DateTimeOffset.UtcNow;
+        remaining = deadline - DateTimeOffset.UtcNow;
         if (remaining <= TimeSpan.Zero)
         {
             throw new TimeoutException(
@@ -699,11 +725,25 @@ static async Task<ObservedClaimStatus> ObserveServiceBusOutcomeAsync(
 
 static async Task RequireHealthyAsync(HttpClient http, string url, string serviceName)
 {
-    using var response = await http.GetAsync(url);
-    if (!response.IsSuccessStatusCode)
-    {
-        throw new InvalidOperationException($"{serviceName} health check failed: {(int)response.StatusCode} {response.ReasonPhrase}");
-    }
+    await ProviderSeedRetryPolicy.ExecuteAsync(
+        async () =>
+        {
+            using var attemptTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var response = await http.GetAsync(url, attemptTimeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ProviderSeedRequestException(
+                    $"{serviceName} health check failed",
+                    response.StatusCode,
+                    response.ReasonPhrase ?? string.Empty);
+            }
+        },
+        CancellationToken.None,
+        (attempt, delay, exception) =>
+            Console.WriteLine(
+                $"  Transient {serviceName} health failure; " +
+                $"retry {attempt}/{ProviderSeedRetryPolicy.MaxAttempts} in {delay.TotalMilliseconds:N0} ms: " +
+                exception.Message));
 
     Console.WriteLine($"healthy: {serviceName}");
 }
@@ -1531,7 +1571,7 @@ static async Task<MemberFixturePreparation> SeedMembersAsync(
 
     await Parallel.ForEachAsync(
         members,
-        new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
+        new ParallelOptions { MaxDegreeOfParallelism = options.SeedParallelism },
         async (member, _) =>
         {
             if (await MemberExistsAsync(http, options, member.MemberId))
@@ -2270,41 +2310,56 @@ static async Task<FixtureCount> SeedProvidersAsync(
 
     await Parallel.ForEachAsync(
         providers,
-        new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
-        async (provider, _) =>
+        new ParallelOptions { MaxDegreeOfParallelism = options.SeedParallelism },
+        async (provider, cancellationToken) =>
         {
-            var providerId = await GetProviderIdByNpiAsync(http, options, provider.Npi);
-            if (providerId is not null)
+            var providerWasCreated = false;
+            await ProviderSeedRetryPolicy.ExecuteAsync(
+                async () =>
+                {
+                    var providerId = await GetProviderIdByNpiAsync(http, options, provider.Npi);
+                    if (providerId is null)
+                    {
+                        providerId = await CreateProviderAsync(http, options, provider, validationPlanId, json);
+                        providerWasCreated = true;
+                    }
+
+                    if (!IsProviderExcluded(provider))
+                    {
+                        await EnsureProviderCredentialingAsync(
+                            http,
+                            options,
+                            providerId,
+                            EffectiveDateForProvider(provider),
+                            json);
+                        await EnsureProviderNetworkParticipationAsync(
+                            http,
+                            options,
+                            providerId,
+                            provider,
+                            json);
+                        await EnsureProviderVerificationFreshnessAsync(http, options, providerId, json);
+                    }
+                    else
+                    {
+                        await EnsureProviderExclusionAsync(http, options, providerId, json);
+                    }
+                },
+                cancellationToken,
+                (attempt, delay, exception) =>
+                    Console.WriteLine(
+                        $"\n  Transient provider seed failure ({provider.Npi}); " +
+                        $"retry {attempt}/{ProviderSeedRetryPolicy.MaxAttempts} in {delay.TotalMilliseconds:N0} ms: " +
+                        exception.Message));
+
+            if (providerWasCreated)
+            {
+                Interlocked.Increment(ref created);
+            }
+            else
             {
                 Interlocked.Increment(ref existing);
             }
-            else
-            {
-                providerId = await CreateProviderAsync(http, options, provider, validationPlanId, json);
-                Interlocked.Increment(ref created);
-            }
-
-            if (!IsProviderExcluded(provider))
-            {
-                await EnsureProviderCredentialingAsync(
-                    http,
-                    options,
-                    providerId,
-                    EffectiveDateForProvider(provider),
-                    json);
-                await EnsureProviderNetworkParticipationAsync(
-                    http,
-                    options,
-                    providerId,
-                    provider,
-                    json);
-                await EnsureProviderVerificationFreshnessAsync(http, options, providerId, json);
-            }
-            else
-            {
-                await EnsureProviderExclusionAsync(http, options, providerId, json);
-            }
-
             WriteSeedingProgress("providers", Interlocked.Increment(ref processed), providers.Count, progressInterval, progressLock);
         });
 
@@ -2359,7 +2414,8 @@ static async Task<bool> ProviderNetworkExistsAsync(HttpClient http, ValidatorOpt
     }
 
     var body = await response.Content.ReadAsStringAsync();
-    throw new InvalidOperationException($"provider network lookup failed ({networkId}): {(int)response.StatusCode} {body}");
+    throw new ProviderSeedRequestException(
+        $"provider network lookup failed ({networkId})", response.StatusCode, body);
 }
 
 static async Task EnsureProviderNetworkParticipationAsync(
@@ -2406,8 +2462,10 @@ static async Task EnsureProviderNetworkParticipationAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode && response.StatusCode is not System.Net.HttpStatusCode.Conflict)
     {
-        throw new InvalidOperationException(
-            $"provider network participation seed failed ({providerId}/{provider.Npi}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider network participation seed failed ({providerId}/{provider.Npi})",
+            response.StatusCode,
+            body);
     }
 }
 
@@ -2430,8 +2488,10 @@ static async Task<bool> ProviderHasActiveNetworkParticipationAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider network membership lookup failed ({networkId}/{npi}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider network membership lookup failed ({networkId}/{npi})",
+            response.StatusCode,
+            body);
     }
 
     using var document = JsonDocument.Parse(body);
@@ -2473,7 +2533,8 @@ static async Task CreateProviderNetworkAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode && response.StatusCode is not System.Net.HttpStatusCode.Conflict)
     {
-        throw new InvalidOperationException($"provider network seed failed ({networkId}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider network seed failed ({networkId})", response.StatusCode, body);
     }
 }
 
@@ -2493,7 +2554,8 @@ static async Task<string?> GetProviderIdByNpiAsync(HttpClient http, ValidatorOpt
     }
 
     var failureBody = await response.Content.ReadAsStringAsync();
-    throw new InvalidOperationException($"provider lookup failed ({npi}): {(int)response.StatusCode} {failureBody}");
+    throw new ProviderSeedRequestException(
+        $"provider lookup failed ({npi})", response.StatusCode, failureBody);
 }
 
 static string? ExtractProviderId(string body)
@@ -2550,8 +2612,8 @@ static async Task EnsureProviderCredentialingAsync(
     var updateBody = await update.Content.ReadAsStringAsync();
     if (!update.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider credentialing seed failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+        throw new ProviderSeedRequestException(
+            $"provider credentialing seed failed ({providerId})", update.StatusCode, updateBody);
     }
 }
 
@@ -2580,8 +2642,8 @@ static async Task EnsureProviderExclusionAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider fetch failed for exclusion check ({providerId}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider fetch failed for exclusion check ({providerId})", response.StatusCode, body);
     }
 
     var node = JsonNode.Parse(body)
@@ -2606,8 +2668,8 @@ static async Task EnsureProviderExclusionAsync(
     var updateBody = await update.Content.ReadAsStringAsync();
     if (!update.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider exclusion correction failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+        throw new ProviderSeedRequestException(
+            $"provider exclusion correction failed ({providerId})", update.StatusCode, updateBody);
     }
 }
 
@@ -2634,8 +2696,10 @@ static async Task EnsureProviderVerificationFreshnessAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider fetch failed for verification freshness check ({providerId}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider fetch failed for verification freshness check ({providerId})",
+            response.StatusCode,
+            body);
     }
 
     var node = JsonNode.Parse(body)
@@ -2655,8 +2719,10 @@ static async Task EnsureProviderVerificationFreshnessAsync(
     var updateBody = await update.Content.ReadAsStringAsync();
     if (!update.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider verification freshness refresh failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+        throw new ProviderSeedRequestException(
+            $"provider verification freshness refresh failed ({providerId})",
+            update.StatusCode,
+            updateBody);
     }
 }
 
@@ -2745,7 +2811,8 @@ static async Task<string> CreateProviderAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException($"provider seed failed ({provider.Npi}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider seed failed ({provider.Npi})", response.StatusCode, body);
     }
 
     return ExtractProviderId(body)
@@ -3675,6 +3742,8 @@ static void PrintUsage()
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 10)
       -p, --parallelism <count>  Number of claims to process concurrently (default: 10)
+      --seed-parallelism <count> Number of member/provider fixtures to seed concurrently
+                                 (default: same as --parallelism)
       --max-claims <count>       Maximum accepted --claims value before local safety capping (default: 10000)
       --line-of-business <code>  Adjudication line of business: 1 Commercial, 2 Medicare, 3 Medicaid, 4 CHIP, 5 Exchange (default: 3)
       --no-prior-auth-scenarios  Disable deterministic PA-required claim scenarios

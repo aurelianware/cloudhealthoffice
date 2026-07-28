@@ -19,10 +19,9 @@ param accountName string = take(toLower('${baseName}-mongo-${uniqueString(subscr
 @description('MongoDB database name')
 param databaseName string = 'cloudhealthoffice'
 
-@description('Shared database throughput. Free-tier deployments are intentionally fixed at 1,000 RU/s.')
-@allowed([
-  1000
-])
+@description('Shared database throughput. The first 1,000 RU/s receives the free-tier discount; higher benchmark values are billable.')
+@minValue(1000)
+@maxValue(100000)
 param throughput int = 1000
 
 resource cosmosMongoAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {

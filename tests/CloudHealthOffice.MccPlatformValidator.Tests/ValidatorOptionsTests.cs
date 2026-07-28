@@ -30,6 +30,19 @@ public class ValidatorOptionsTests
 
         Assert.Equal(ValidatorOptions.MaxParallelism, options.Parallelism);
         Assert.Equal(96, options.Parallelism);
+        Assert.Equal(options.Parallelism, options.SeedParallelism);
+    }
+
+    [Fact]
+    public void Parse_WhenSeedParallelismProvided_SeparatesFixtureAndClaimConcurrency()
+    {
+        var options = ValidatorOptions.Parse([
+            "--parallelism", "56",
+            "--seed-parallelism", "4"
+        ]);
+
+        Assert.Equal(56, options.Parallelism);
+        Assert.Equal(4, options.SeedParallelism);
     }
 
     [Fact]

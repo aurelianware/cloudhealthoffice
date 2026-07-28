@@ -30,6 +30,15 @@ internal sealed class HttpClaimStatusSource : IClaimStatusSource
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
+            if (response.StatusCode is HttpStatusCode.RequestTimeout
+                or HttpStatusCode.TooManyRequests
+                || (int)response.StatusCode >= 500)
+            {
+                // A transient read failure means the persisted outcome is not
+                // observable yet; callers retain it for bounded reconciliation.
+                return null;
+            }
+
             throw new InvalidOperationException(
                 $"claim status read failed ({submittedClaimId}): {(int)response.StatusCode} {body}");
         }
