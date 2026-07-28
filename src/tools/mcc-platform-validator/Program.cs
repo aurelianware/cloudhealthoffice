@@ -1809,6 +1809,8 @@ static async Task<bool> SeedPriorAuthAuthorizationFixturesAsync(
     IReadOnlyCollection<SyntheticClaim> claims,
     JsonSerializerOptions json)
 {
+    const int batchSize = 500;
+
     if (!options.PriorAuthScenariosEnabled)
     {
         Console.WriteLine("Authorization fixtures: skipped (prior-auth scenarios disabled)");
@@ -1835,45 +1837,77 @@ static async Task<bool> SeedPriorAuthAuthorizationFixturesAsync(
         return false;
     }
 
-    var payload = new
-    {
-        authorizations = fixtureClaims.Select(claim => BuildPriorAuthAuthorizationFixture(claim, options)).ToList()
-    };
-
     try
     {
-        using var response = await http.PostAsJsonAsync($"{options.AuthorizationUrl}/api/authorizations/dev-seed", payload, json);
-        var body = await response.Content.ReadAsStringAsync();
+        var totalSeeded = 0;
+        var totalCreated = 0;
+        var totalUpdated = 0;
+        var batches = (fixtureClaims.Count + batchSize - 1) / batchSize;
 
-        if (response.StatusCode is System.Net.HttpStatusCode.NotFound
-            or System.Net.HttpStatusCode.Unauthorized
-            or System.Net.HttpStatusCode.Forbidden)
+        for (var offset = 0; offset < fixtureClaims.Count; offset += batchSize)
         {
-            Console.WriteLine($"Authorization fixtures: skipped ({(int)response.StatusCode} from authorization-service)");
-            return false;
-        }
+            var batchNumber = (offset / batchSize) + 1;
+            var payload = new
+            {
+                authorizations = fixtureClaims
+                    .Skip(offset)
+                    .Take(batchSize)
+                    .Select(claim => BuildPriorAuthAuthorizationFixture(claim, options))
+                    .ToList()
+            };
 
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Authorization fixture seed failed: {(int)response.StatusCode} {body}");
-        }
+            using var response = await http.PostAsJsonAsync(
+                $"{options.AuthorizationUrl}/api/authorizations/dev-seed",
+                payload,
+                json);
+            var body = await response.Content.ReadAsStringAsync();
 
-        if (!TryReadAuthorizationFixtureSeedResponse(body, out var total, out var created, out var updated))
-        {
-            Console.WriteLine("Authorization fixtures: skipped (authorization-service did not expose compatible dev-seed evidence)");
-            return false;
+            if (response.StatusCode is System.Net.HttpStatusCode.NotFound
+                or System.Net.HttpStatusCode.Unauthorized
+                or System.Net.HttpStatusCode.Forbidden)
+            {
+                Console.WriteLine($"Authorization fixtures: skipped ({(int)response.StatusCode} from authorization-service)");
+                return false;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    $"Authorization fixture seed batch {batchNumber:N0}/{batches:N0} failed: " +
+                    $"{(int)response.StatusCode} {body}");
+            }
+
+            if (!TryReadAuthorizationFixtureSeedResponse(body, out var total, out var created, out var updated))
+            {
+                Console.WriteLine(
+                    "Authorization fixtures: skipped " +
+                    "(authorization-service did not expose compatible dev-seed evidence)");
+                return false;
+            }
+
+            totalSeeded += total;
+            totalCreated += created;
+            totalUpdated += updated;
+
+            if (batches > 1 && (batchNumber == batches || batchNumber % 5 == 0))
+            {
+                Console.WriteLine(
+                    $"Authorization fixtures: seeded batch {batchNumber:N0}/{batches:N0} " +
+                    $"({totalSeeded:N0}/{fixtureClaims.Count:N0})");
+            }
         }
 
         Console.WriteLine(
-            $"Authorization fixtures: seeded {total:N0} prior authorization fixtures ({created:N0} new, {updated:N0} updated)");
-        return total > 0;
+            $"Authorization fixtures: seeded {totalSeeded:N0} prior authorization fixtures " +
+            $"({totalCreated:N0} new, {totalUpdated:N0} updated)");
+        return totalSeeded > 0;
     }
     catch (HttpRequestException ex)
     {
         Console.WriteLine($"Authorization fixtures: skipped ({ex.Message})");
         return false;
     }
-    catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+    catch (TaskCanceledException ex)
     {
         Console.WriteLine($"Authorization fixtures: skipped ({ex.Message})");
         return false;
