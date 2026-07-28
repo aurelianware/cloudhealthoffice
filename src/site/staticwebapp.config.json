@@ -43,6 +43,11 @@
       "statusCode": 301
     },
     {
+      "route": "/founder.html",
+      "redirect": "/founder",
+      "statusCode": 301
+    },
+    {
       "route": "/assessment.html",
       "redirect": "/assessment",
       "statusCode": 301
@@ -81,6 +86,10 @@
     {
       "route": "/platform",
       "rewrite": "/platform.html"
+    },
+    {
+      "route": "/founder",
+      "rewrite": "/founder.html"
     },
     {
       "route": "/assessment",

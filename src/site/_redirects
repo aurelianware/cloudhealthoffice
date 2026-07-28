@@ -17,6 +17,7 @@
 /solutions-providers.html                  /solutions-providers               301
 /pricing.html                              /pricing                           301
 /platform.html                             /platform                          301
+/founder.html                              /founder                           301
 /assessment.html                           /assessment                        301
 /insights.html                             /insights                          301
 /release-notes.html                        /release-notes                     301
@@ -49,6 +50,7 @@
 /solutions-providers                       /solutions-providers.html          200
 /pricing                                   /pricing.html                      200
 /platform                                  /platform.html                     200
+/founder                                   /founder.html                      200
 /assessment                                /assessment.html                   200
 /insights                                  /insights.html                     200
 /release-notes                             /release-notes.html                200
