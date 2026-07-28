@@ -534,6 +534,24 @@ module cosmosDb 'modules/cosmos-db.bicep' = if (enableCosmosDb) {
   }
 }
 
+// =========================
+// Cosmos DB for MongoDB lifetime free tier
+// =========================
+// Separate from the NoSQL API account above. This is opt-in because Azure
+// permits only one free-tier Cosmos DB account per subscription.
+param enableCosmosMongoFreeTier bool = false
+param cosmosMongoDatabaseName string = 'cloudhealthoffice'
+
+module cosmosMongoFreeTier 'modules/cosmos-mongodb-free-tier.bicep' = if (enableCosmosMongoFreeTier) {
+  name: 'cosmos-mongodb-free-tier-module'
+  params: {
+    baseName: baseName
+    location: location
+    databaseName: cosmosMongoDatabaseName
+    throughput: 1000
+  }
+}
+
 // Cosmos DB managed API connection (legacy Logic App connector)
 resource connCosmosDb 'Microsoft.Web/connections@2016-06-01' = if (enableManagedApiConnections && enableCosmosDb) {
   name: 'documentdb'
@@ -603,6 +621,12 @@ output cosmosDbDatabaseName string = enableCosmosDb ? cosmosDb.outputs.cosmosDat
 output priorAuthContainerName string = enableCosmosDb ? cosmosDb.outputs.priorAuthContainerName : 'disabled'
 output providerDirectoryContainerName string = enableCosmosDb ? cosmosDb.outputs.providerDirectoryContainerName : 'disabled'
 output cosmosDbConnectionId string = enableManagedApiConnections && enableCosmosDb ? connCosmosDb.id : 'disabled'
+
+// Cosmos DB for MongoDB free-tier outputs (connection strings are deliberately
+// excluded; retrieve them directly into the target secret store).
+output cosmosMongoFreeTierAccountName string = enableCosmosMongoFreeTier ? cosmosMongoFreeTier!.outputs.cosmosMongoAccountName : 'disabled'
+output cosmosMongoFreeTierEndpoint string = enableCosmosMongoFreeTier ? cosmosMongoFreeTier!.outputs.cosmosMongoEndpoint : 'disabled'
+output cosmosMongoFreeTierDatabaseName string = enableCosmosMongoFreeTier ? cosmosMongoFreeTier!.outputs.cosmosMongoDatabaseName : 'disabled'
 
 // ClaimRiskScorer outputs
 output claimRiskScorerFunctionName string = enableClaimRiskScorer ? claimRiskScorerFunc.name : 'disabled'
