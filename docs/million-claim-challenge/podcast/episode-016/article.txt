@@ -23,6 +23,8 @@ The new `--servicebus-only` mode does exactly that. It submits the structured cl
 Bus deliver it to one of three local claims-service replicas, and polls only the persisted claim
 until it reaches a terminal status. Payment and workflow scoring come from that persisted result.
 
+![Architecture diagram showing a large claim corpus entering an API, crossing a message bus, fanning out to three parallel workers, and persisting outcomes and audit evidence](/graphics/million-claim-challenge/episode-16/async-service-bus-architecture.jpg "The Episode 16 path: structured MCC claims enter through claims-service, cross Azure Service Bus, fan out across three local Kubernetes claims-service replicas, and finish in MongoDB with lifecycle evidence.")
+
 ## Making local Service Bus reproducible
 
 Using a manually copied RootManage connection string would have made the benchmark work, but not
@@ -57,6 +59,8 @@ restarts, and no claims-service error logs.
 After the queue drained, MongoDB told the complete story: 1,000,000 claims, 1,000,000 terminal,
 zero nonterminal, and 2,000,000 lifecycle events. The validator had measured a deadline, not loss.
 
+![Timeline diagram showing nearly all claims completing before an observation boundary and a small delayed tail continuing afterward into the same terminal store](/graphics/million-claim-challenge/episode-16/observation-window-eventual-completion.jpg "The 180-second polling window classified 122 delayed observations as failures, while post-run reconciliation showed the small late tail continued to the same terminal store: no lost claims and no dead letters.")
+
 That does not make the 122 disappear from the published result. The validator exited nonzero, 20
 workflow checks were not successfully scored inside the window, and 18 paid scenarios never
 entered the payment comparison. Part 15 remains the strict zero-platform-failure million-claim
@@ -75,6 +79,8 @@ A single 16.1-megabyte X12 837P file containing 100,000 claims went to
 `POST /api/v1/claims/import/raw837` with importer concurrency 64. The parser mapped every claim,
 the importer created 100,000 claim records and 100,000 import transactions, Service Bus carried the
 work to adjudication, and MongoDB recorded 200,000 lifecycle events.
+
+![Architecture diagram showing one raw EDI file becoming many claim records, building a buffered queue, then fanning out to parallel workers and durable stores](/graphics/million-claim-challenge/episode-16/raw-837-onramp.jpg "The raw 837P path is a separate workload: one X12 file is parsed into 100,000 claim submissions, buffered by Service Bus, processed by three local workers, and persisted with import and lifecycle evidence.")
 
 All 100,000 claims were accepted. All 100,000 reached a terminal state. Parsing and submission
 took 299.77 seconds—333.59 claims per second. The last adjudication event arrived 501.45 seconds
