@@ -69,7 +69,36 @@ internal sealed class MccServiceBusReconciler
         {
             while (true)
             {
-                var observed = await _source.GetAsync(result.SubmittedClaimId!, cancellationToken);
+                var remaining = deadline - DateTimeOffset.UtcNow;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    return result with
+                    {
+                        Error =
+                            $"Claim remained nonterminal after the initial observation timeout and " +
+                            $"{timeout.TotalSeconds:N0}s post-window reconciliation"
+                    };
+                }
+
+                ObservedClaimStatus? observed;
+                using (var attemptTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    attemptTimeout.CancelAfter(
+                        remaining < TimeSpan.FromSeconds(5) ? remaining : TimeSpan.FromSeconds(5));
+                    try
+                    {
+                        observed = await _source.GetAsync(result.SubmittedClaimId!, attemptTimeout.Token);
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        observed = null;
+                    }
+                    catch (HttpRequestException)
+                    {
+                        observed = null;
+                    }
+                }
+
                 if (observed?.IsTerminal is true)
                 {
                     var businessDenialCode = observed.Outcome is ClaimValidationOutcome.BusinessDenial
@@ -96,7 +125,7 @@ internal sealed class MccServiceBusReconciler
                     };
                 }
 
-                var remaining = deadline - DateTimeOffset.UtcNow;
+                remaining = deadline - DateTimeOffset.UtcNow;
                 if (remaining <= TimeSpan.Zero)
                 {
                     return result with
