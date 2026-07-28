@@ -55,6 +55,12 @@
     "serviceBusName": {
       "value": "cho-prod-servicebus"
     },
+    "enableCosmosMongoFreeTier": {
+      "value": false
+    },
+    "cosmosMongoDatabaseName": {
+      "value": "cloudhealthoffice"
+    },
     "enableEcs": {
       "value": true
     },

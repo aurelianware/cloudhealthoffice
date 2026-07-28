@@ -42,6 +42,8 @@ REDIS_CONNECTION_STRING=""  # auto-set below if empty
 LOCAL_SERVICEBUS_NAMESPACE=""
 LOCAL_SERVICEBUS_RESOURCE_GROUP=""
 LOCAL_SERVICEBUS_LOCATION=""
+LOCAL_COSMOS_MONGODB_ACCOUNT=""
+LOCAL_COSMOS_MONGODB_RESOURCE_GROUP=""
 
 # Source local overrides (real credentials for auth/payments)
 if [[ -f .env.local ]]; then
@@ -211,6 +213,32 @@ fi
 # ── Create secrets ────────────────────────────────────────────────────────────
 log "Creating secrets"
 MONGO_CONN="mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb.${NAMESPACE}.svc.cluster.local:27017/?authSource=admin"
+
+if [[ -n "$LOCAL_COSMOS_MONGODB_ACCOUNT" || -n "$LOCAL_COSMOS_MONGODB_RESOURCE_GROUP" ]]; then
+  [[ -n "$LOCAL_COSMOS_MONGODB_ACCOUNT" ]] \
+    || err "LOCAL_COSMOS_MONGODB_ACCOUNT is required when LOCAL_COSMOS_MONGODB_RESOURCE_GROUP is set"
+  [[ -n "$LOCAL_COSMOS_MONGODB_RESOURCE_GROUP" ]] \
+    || err "LOCAL_COSMOS_MONGODB_RESOURCE_GROUP is required when LOCAL_COSMOS_MONGODB_ACCOUNT is set"
+  command -v az >/dev/null 2>&1 || err "Azure CLI is required for Cosmos DB for MongoDB"
+
+  account_kind="$(az cosmosdb show \
+    --name "$LOCAL_COSMOS_MONGODB_ACCOUNT" \
+    --resource-group "$LOCAL_COSMOS_MONGODB_RESOURCE_GROUP" \
+    --query kind --output tsv)"
+  [[ "$account_kind" == "MongoDB" ]] \
+    || err "Cosmos account '$LOCAL_COSMOS_MONGODB_ACCOUNT' is '$account_kind', not 'MongoDB'"
+
+  MONGO_CONN="$(az cosmosdb keys list \
+    --name "$LOCAL_COSMOS_MONGODB_ACCOUNT" \
+    --resource-group "$LOCAL_COSMOS_MONGODB_RESOURCE_GROUP" \
+    --type connection-strings \
+    --query 'connectionStrings[0].connectionString' \
+    --output tsv)"
+  [[ -n "$MONGO_CONN" ]] || err "Azure CLI returned an empty Cosmos DB for MongoDB connection string"
+  ok "MongoDB persistence: Azure Cosmos DB for MongoDB"
+else
+  ok "MongoDB persistence: local StatefulSet"
+fi
 
 # MongoDB auth
 kubectl create secret generic mongodb-auth \
