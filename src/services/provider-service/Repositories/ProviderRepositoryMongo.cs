@@ -22,33 +22,6 @@ public class ProviderRepositoryMongo : IProviderRepository
         _collection = database.GetCollection<Provider>("Providers");
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
-
-        CreateIndexes();
-    }
-
-    private void CreateIndexes()
-    {
-        var keys = Builders<Provider>.IndexKeys;
-        var models = new List<CreateIndexModel<Provider>>
-        {
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.NPI)),
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.LastName)),
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.OrganizationName)),
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ZipCode)),
-            // Multikey index for network participations
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending("NetworkParticipations.PlanId")),
-            // Network roster (capability 5.4) — multikey on the new
-            // NetworkParticipation.NetworkId, scoped under TenantId for
-            // partition-aware lookups. Tier secondary key keeps the
-            // common (network + tier) filter index-only.
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending("NetworkParticipations.NetworkId")),
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending("NetworkParticipations.NetworkId").Ascending("NetworkParticipations.NetworkTier")),
-            // Version-chain indexes
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ProviderId).Ascending(p => p.VersionNumber)),
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ProviderId).Ascending(p => p.VersionId)),
-            new CreateIndexModel<Provider>(keys.Ascending(p => p.TenantId).Ascending(p => p.ProviderId).Ascending(p => p.VersionState))
-        };
-        _collection.Indexes.CreateMany(models);
     }
 
     private string GetTenantId()

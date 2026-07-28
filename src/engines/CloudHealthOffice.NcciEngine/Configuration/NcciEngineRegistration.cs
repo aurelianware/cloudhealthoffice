@@ -4,6 +4,7 @@ using CloudHealthOffice.NcciEngine.Persistence;
 using CloudHealthOffice.NcciEngine.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.NcciEngine.Configuration;
@@ -111,6 +112,11 @@ public class NcciEngineBuilder
     public NcciEngineBuilder UseMongoRepository()
     {
         _services.AddScoped<INcciRepository, NcciRepositoryMongo>();
+        _services.AddSingleton<IHostedService>(sp =>
+            new NcciMongoIndexInitializer(
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<IConfiguration>(),
+                sp.GetRequiredService<ILogger<NcciMongoIndexInitializer>>()));
         return this;
     }
 

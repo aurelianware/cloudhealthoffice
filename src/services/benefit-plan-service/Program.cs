@@ -48,6 +48,20 @@ if (useMongo)
     builder.Services.AddScoped<IPlanVersionEventPublisher, MongoPlanVersionEventPublisher>();
     builder.Services.AddScoped<IPlanYearTransitionPublisher, MongoPlanYearTransitionPublisher>();
     builder.Services.AddScoped<IPlanYearScheduleSource, MongoPlanYearScheduleSource>();
+    // Cosmos DB for MongoDB requires explicit indexes for ORDER BY paths.
+    // Local MongoDB can otherwise conceal the missing-index incompatibility.
+    builder.Services.AddSingleton<IHostedService>(sp =>
+        new BenefitPlanIndexInitializer(
+            sp.GetRequiredService<IMongoClient>()
+              .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<ILogger<BenefitPlanIndexInitializer>>()));
+    builder.Services.AddSingleton<IHostedService>(sp =>
+        new ServiceCategoryMappingIndexInitializer(
+            sp.GetRequiredService<IMongoClient>()
+              .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<ILogger<ServiceCategoryMappingIndexInitializer>>()));
     // Ensures (TenantId, PlanId, EventId) and (TenantId, PlanId, Version)
     // unique indexes exist on the events collection — the publisher's
     // retry-on-duplicate loop depends on them.

@@ -507,6 +507,55 @@ public class MassAdjudicationRunRepositoryTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task SaveAsync_inserts_large_claim_result_sets_in_cosmos_safe_batches()
+    {
+        var database = Substitute.For<IMongoDatabase>();
+        var runs = Substitute.For<IMongoCollection<MassAdjudicationRunSummary>>();
+        var claimResults = Substitute.For<IMongoCollection<MassAdjudicationClaimResult>>();
+
+        database.GetCollection<MassAdjudicationRunSummary>(
+                MassAdjudicationRunRepositoryMongo.CollectionName,
+                Arg.Any<MongoCollectionSettings?>())
+            .Returns(runs);
+        database.GetCollection<MassAdjudicationClaimResult>(
+                MassAdjudicationRunRepositoryMongo.ClaimResultsCollectionName,
+                Arg.Any<MongoCollectionSettings?>())
+            .Returns(claimResults);
+        runs.ReplaceOneAsync(
+                Arg.Any<FilterDefinition<MassAdjudicationRunSummary>>(),
+                Arg.Any<MassAdjudicationRunSummary>(),
+                Arg.Any<ReplaceOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Substitute.For<ReplaceOneResult>()));
+        claimResults.InsertManyAsync(
+                Arg.Any<IEnumerable<MassAdjudicationClaimResult>>(),
+                Arg.Any<InsertManyOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        claimResults.DeleteManyAsync(
+                Arg.Any<FilterDefinition<MassAdjudicationClaimResult>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Substitute.For<DeleteResult>()));
+
+        var summary = CreateSummary();
+        summary.ClaimResults.AddRange(
+            Enumerable.Range(1, 125).Select(index => new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = $"GEN-{index:D3}",
+                ClaimType = "Professional",
+                Outcome = "Paid"
+            }));
+
+        await new MassAdjudicationRunRepositoryMongo(database).SaveAsync(summary);
+
+        var insertedBatches = claimResults.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IMongoCollection<MassAdjudicationClaimResult>.InsertManyAsync))
+            .Select(call => ((IEnumerable<MassAdjudicationClaimResult>)call.GetArguments()[0]!).Count())
+            .ToArray();
+        insertedBatches.Should().Equal(50, 50, 25);
+    }
+
     private static MassAdjudicationRunSummary CreateSummary() => new()
     {
         Run = new MassAdjudicationRunMetadata

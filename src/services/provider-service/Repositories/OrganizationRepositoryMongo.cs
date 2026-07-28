@@ -25,23 +25,6 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
         _collection = database.GetCollection<Organization>("Organizations");
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
-
-        CreateIndexes();
-    }
-
-    private void CreateIndexes()
-    {
-        var keys = Builders<Organization>.IndexKeys;
-        var models = new List<CreateIndexModel<Organization>>
-        {
-            new CreateIndexModel<Organization>(keys.Ascending(o => o.TenantId).Ascending(o => o.OrganizationId).Ascending(o => o.VersionNumber)),
-            new CreateIndexModel<Organization>(keys.Ascending(o => o.TenantId).Ascending(o => o.OrganizationId).Ascending(o => o.VersionId)),
-            new CreateIndexModel<Organization>(keys.Ascending(o => o.TenantId).Ascending(o => o.NetworkType)),
-            new CreateIndexModel<Organization>(keys.Ascending(o => o.TenantId).Ascending(o => o.LineOfBusiness)),
-            new CreateIndexModel<Organization>(keys.Ascending(o => o.TenantId).Ascending(o => o.ParentOrganizationId)),
-            new CreateIndexModel<Organization>(keys.Ascending(o => o.TenantId).Ascending(o => o.VersionState))
-        };
-        _collection.Indexes.CreateMany(models);
     }
 
     private string GetTenantId()

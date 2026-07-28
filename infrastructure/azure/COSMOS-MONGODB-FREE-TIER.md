@@ -7,7 +7,8 @@ services continue to run in local Kubernetes.
 The deployment is intentionally separate from
 `modules/cosmos-db.bicep`, which provisions the Cosmos DB for NoSQL API.
 The MongoDB module is opt-in, enables the lifetime free-tier discount when
-the account is created, and fixes shared database throughput at 1,000 RU/s.
+the account is created, uses the MongoDB 5.0 API required by the repository's
+MongoDB.Driver version, and fixes shared database throughput at 1,000 RU/s.
 
 Azure permits one free-tier Cosmos DB account per subscription. The free
 allowance covers the first 1,000 RU/s and 25 GB of storage. Throughput or
