@@ -127,6 +127,25 @@ public class MccClaimStatusObserverTests
     }
 
     [Fact]
+    public void FromClaimJson_ParsesPersistedPlanPayment()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse("""
+        {
+          "status": 5,
+          "adjudicationResult": {
+            "payerPayment": 123.45
+          }
+        }
+        """);
+
+        var observed = ObservedClaimStatus.FromClaimJson(document.RootElement);
+
+        Assert.Equal(ClaimValidationOutcome.Paid, observed.Outcome);
+        Assert.Equal(123.45m, observed.PlanPayment);
+        Assert.True(observed.IsTerminal);
+    }
+
+    [Fact]
     public async Task DetectUnexpectedPendAsync_WhenExpectedPaidPersistedPended_ReturnsMismatch()
     {
         var observer = new MccClaimStatusObserver(new FakeClaimStatusSource([

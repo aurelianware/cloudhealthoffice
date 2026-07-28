@@ -267,13 +267,15 @@ internal sealed record ObservedClaimStatus(
     string RawStatus,
     string? PendCode,
     bool IsTerminal,
-    string? BusinessDenialCode = null)
+    string? BusinessDenialCode = null,
+    decimal? PlanPayment = null)
 {
     public static ObservedClaimStatus FromClaimJson(JsonElement root)
     {
         var rawStatus = TryReadStringOrNumber(root, "status") ?? string.Empty;
         var pendCode = TryReadPendCode(root);
         var businessDenialCode = MccWorkflowValidation.NormalizeBusinessDenialCode(TryReadBusinessDenialCode(root));
+        var planPayment = TryReadPlanPayment(root);
         var outcome = rawStatus.Trim() switch
         {
             "4" => ClaimValidationOutcome.Pended,
@@ -295,7 +297,8 @@ internal sealed record ObservedClaimStatus(
             outcome is ClaimValidationOutcome.Pended
                 or ClaimValidationOutcome.Paid
                 or ClaimValidationOutcome.BusinessDenial,
-            businessDenialCode);
+            businessDenialCode,
+            planPayment);
     }
 
     private static string? TryReadStringOrNumber(JsonElement root, string propertyName)
@@ -341,6 +344,27 @@ internal sealed record ObservedClaimStatus(
             JsonValueKind.Number => denialReasonCode.TryGetInt32(out var number)
                 ? number.ToString()
                 : denialReasonCode.GetRawText(),
+            _ => null
+        };
+    }
+
+    private static decimal? TryReadPlanPayment(JsonElement root)
+    {
+        if (!root.TryGetProperty("adjudicationResult", out var adjudicationResult)
+            || adjudicationResult.ValueKind is not JsonValueKind.Object
+            || !adjudicationResult.TryGetProperty("payerPayment", out var payerPayment))
+        {
+            return null;
+        }
+
+        return payerPayment.ValueKind switch
+        {
+            JsonValueKind.Number when payerPayment.TryGetDecimal(out var amount) => amount,
+            JsonValueKind.String when decimal.TryParse(
+                payerPayment.GetString(),
+                System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var amount) => amount,
             _ => null
         };
     }

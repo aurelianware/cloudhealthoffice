@@ -14,6 +14,7 @@ public sealed record ValidatorOptions(
     bool SeedProviders,
     bool SeedAuthorizations,
     bool SkipClaimUpdate,
+    bool ServiceBusOnly,
     bool PendObservationEnabled,
     int PendObservationTimeoutSeconds,
     int PendObservationIntervalMilliseconds,
@@ -31,7 +32,9 @@ public sealed record ValidatorOptions(
     bool ShowHelp)
 {
     public const int DefaultMaxClaims = 10_000;
-    public const int MaxParallelism = 64;
+    // Three local claims-service replicas default to 32 Service Bus calls each.
+    // Allow the validator to keep that 96-call consumer pool fed.
+    public const int MaxParallelism = 96;
 
     public static ValidatorOptions Parse(string[] args)
     {
@@ -78,6 +81,9 @@ public sealed record ValidatorOptions(
                     break;
                 case "--skip-claim-update":
                     options.SkipClaimUpdate = true;
+                    break;
+                case "--servicebus-only":
+                    options.ServiceBusOnly = true;
                     break;
                 case "--no-pend-observation":
                     options.PendObservationEnabled = false;
@@ -159,6 +165,7 @@ public sealed record ValidatorOptions(
             options.SeedProviders,
             options.SeedAuthorizations,
             options.SkipClaimUpdate,
+            options.ServiceBusOnly,
             options.PendObservationEnabled,
             Math.Clamp(options.PendObservationTimeoutSeconds, 1, 300),
             Math.Clamp(options.PendObservationIntervalMilliseconds, 100, 30_000),
@@ -191,6 +198,7 @@ public sealed record ValidatorOptions(
         public bool SeedProviders { get; set; } = true;
         public bool SeedAuthorizations { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
+        public bool ServiceBusOnly { get; set; }
         public bool PendObservationEnabled { get; set; } = true;
         public int PendObservationTimeoutSeconds { get; set; } = 45;
         public int PendObservationIntervalMilliseconds { get; set; } = 1000;
