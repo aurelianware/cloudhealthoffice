@@ -50,6 +50,7 @@ Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
 Console.WriteLine($"  Auth fixtures:{(options.SeedAuthorizations ? " enabled" : " disabled")}");
+Console.WriteLine($"  Adjudication:{(options.ServiceBusOnly ? " Service Bus only (persisted outcome)" : " synchronous + workflow observation")}");
 Console.WriteLine($"  Pend observe:{(options.PendObservationEnabled ? $" enabled ({options.PendObservationTimeoutSeconds}s/{options.PendObservationIntervalMilliseconds}ms)" : " disabled")}");
 Console.WriteLine($"  Pend diag:   {(options.PendDiagnosticsPath is not null ? $"enabled -> {options.PendDiagnosticsPath}" : "disabled")}");
 Console.WriteLine();
@@ -79,11 +80,16 @@ await MeasureLifecyclePhaseAsync(lifecycleTimings, "Reference rule seeding", "Pr
 });
 
 var validationPlanId = Guid.NewGuid();
-await MeasureLifecyclePhaseAsync(lifecycleTimings, "Validation plan setup", "Preparation", async () =>
-{
-    await CreateValidationPlanAsync(http, options, validationPlanId, json);
-    await SeedValidationPlanServiceCategoryOverridesAsync(http, options, validationPlanId, json);
-});
+var validationPlanBusinessId = await MeasureLifecycleValuePhaseAsync(
+    lifecycleTimings,
+    "Validation plan setup",
+    "Preparation",
+    async () =>
+    {
+        var planId = await CreateValidationPlanAsync(http, options, validationPlanId, json);
+        await SeedValidationPlanServiceCategoryOverridesAsync(http, options, validationPlanId, json);
+        return planId;
+    });
 
 var claims = await MeasureLifecycleValuePhaseAsync(
     lifecycleTimings,
@@ -226,7 +232,14 @@ await Parallel.ForEachAsync(
     new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
     async (claim, _) =>
     {
-        var result = await ProcessClaimAsync(http, options, claim, validationPlanId, answerKey, json);
+        var result = await ProcessClaimAsync(
+            http,
+            options,
+            claim,
+            validationPlanId,
+            validationPlanBusinessId,
+            answerKey,
+            json);
         results.Add(result);
 
         var done = Interlocked.Increment(ref completed);
@@ -312,7 +325,7 @@ var orderedResults = results
 postProcessingStopwatch.Stop();
 postProcessingTimings.Add(("Result ordering", postProcessingStopwatch.Elapsed));
 
-if (options.PendObservationEnabled)
+if (options.PendObservationEnabled && !options.ServiceBusOnly)
 {
     await MeasureLifecyclePhaseAsync(lifecycleTimings, "Expected-pend observation", "Observation", async () =>
     {
@@ -441,6 +454,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     ValidatorOptions options,
     SyntheticClaim claim,
     Guid validationPlanId,
+    string validationPlanBusinessId,
     MccAnswerKey answerKey,
     JsonSerializerOptions json)
 {
@@ -459,9 +473,49 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         var networkTier = NetworkTier(claim);
         failureStage = "submit";
         var stage = Stopwatch.StartNew();
-        var submitted = await SubmitClaimAsync(http, options, claim, validationPlanId, json);
+        var submitted = await SubmitClaimAsync(
+            http,
+            options,
+            claim,
+            validationPlanBusinessId,
+            json);
         stage.Stop();
         submitElapsed = stage.Elapsed;
+
+        if (options.ServiceBusOnly)
+        {
+            failureStage = "servicebus-observation";
+            stage.Restart();
+            var observed = await ObserveServiceBusOutcomeAsync(http, options, submitted.Id);
+            stage.Stop();
+            adjudicationElapsed = stage.Elapsed;
+            sw.Stop();
+
+            var observedDenialCode = observed.Outcome is ClaimValidationOutcome.BusinessDenial
+                ? observed.BusinessDenialCode
+                : null;
+
+            return new ClaimValidationResult(
+                claim.ClaimId,
+                submitted.Id,
+                claim.ClaimType,
+                expectedValidation.Scenario,
+                expectedValidation.ExpectedOutcome?.ToString(),
+                expectedValidation.ExpectedBusinessDenialCode,
+                MccWorkflowValidation.ValidationStatus(expectedValidation, observed.Outcome, observedDenialCode),
+                observed.Outcome,
+                observed.Outcome is ClaimValidationOutcome.Paid,
+                observed.PlanPayment,
+                expectedPlanPayment,
+                sw.Elapsed,
+                submitElapsed,
+                adjudicationElapsed,
+                TimeSpan.Zero,
+                new Dictionary<string, double>(),
+                observedDenialCode,
+                null,
+                null);
+        }
 
         failureStage = "adjudicate";
         stage.Restart();
@@ -551,6 +605,35 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             null,
             failureStage,
             ex.Message);
+    }
+}
+
+static async Task<ObservedClaimStatus> ObserveServiceBusOutcomeAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    string submittedClaimId)
+{
+    var source = new HttpClaimStatusSource(http, options.ClaimsUrl);
+    var timeout = TimeSpan.FromSeconds(options.PendObservationTimeoutSeconds);
+    var interval = TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds);
+    var deadline = DateTimeOffset.UtcNow.Add(timeout);
+
+    while (true)
+    {
+        var observed = await source.GetAsync(submittedClaimId, CancellationToken.None);
+        if (observed?.IsTerminal is true)
+        {
+            return observed;
+        }
+
+        var remaining = deadline - DateTimeOffset.UtcNow;
+        if (remaining <= TimeSpan.Zero)
+        {
+            throw new TimeoutException(
+                $"Timed out waiting {timeout.TotalSeconds:N0}s for Service Bus adjudication of claim {submittedClaimId}");
+        }
+
+        await Task.Delay(interval < remaining ? interval : remaining);
     }
 }
 
@@ -666,13 +749,18 @@ static bool IsMccBehavioralHealthMappingPresent(ServiceCategoryMappingSeedView m
             && string.Equals(rule.CodeRangeEnd, "90899", StringComparison.OrdinalIgnoreCase));
 }
 
-static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions options, Guid planGuid, JsonSerializerOptions json)
+static async Task<string> CreateValidationPlanAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    Guid planGuid,
+    JsonSerializerOptions json)
 {
+    var businessPlanId = $"MCC-LOCAL-{DateTime.UtcNow:yyyyMMddHHmmss}";
     var plan = new
     {
         id = planGuid.ToString(),
         tenantId = options.TenantId,
-        planId = $"MCC-LOCAL-{DateTime.UtcNow:yyyyMMddHHmmss}",
+        planId = businessPlanId,
         planName = "MCC Local Validation PPO",
         payer = "Cloud Health Office MCC",
         effectiveDate = "2025-01-01T00:00:00Z",
@@ -752,6 +840,7 @@ static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions op
     }
 
     Console.WriteLine($"created: validation benefit plan {planGuid}");
+    return businessPlanId;
 }
 
 // Plan-specific ServiceCategoryMapping overrides for the validation plan. The
@@ -2585,7 +2674,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
     HttpClient http,
     ValidatorOptions options,
     SyntheticClaim claim,
-    Guid validationPlanId,
+    string validationPlanBusinessId,
     JsonSerializerOptions json)
 {
     var payload = new
@@ -2594,7 +2683,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
         claimNumber = claim.ClaimId,
         memberId = claim.Member.MemberId,
         subscriberId = claim.Member.SubscriberId,
-        benefitPlanId = validationPlanId.ToString(),
+        benefitPlanId = validationPlanBusinessId,
         subscriberFirstName = claim.Member.FirstName,
         subscriberLastName = claim.Member.LastName,
         patientFirstName = claim.Member.FirstName,
@@ -3457,6 +3546,8 @@ static void PrintUsage()
       --no-seed-providers        Skip synthetic provider seeding
       --no-seed-authorizations   Skip prior authorization fixture seeding
       --skip-claim-update        Do not write adjudication projection back to claims-service
+      --servicebus-only          Submit claims and score only the persisted asynchronous Service Bus outcome;
+                                 skips synchronous benefit adjudication and writeback
       --no-pend-observation      Do not poll claims-service for expected-pend claim status
       --pend-observation-timeout <seconds>
                                  Max wait for expected-pend claims after benchmark timing stops (default: 45)
