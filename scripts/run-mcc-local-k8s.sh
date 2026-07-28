@@ -45,6 +45,52 @@ log() {
   printf '\033[1;34m==>\033[0m %s\n' "$*"
 }
 
+duration_seconds() {
+  local duration="$1"
+  if [[ "$duration" =~ ^([0-9]+)([smh])$ ]]; then
+    case "${BASH_REMATCH[2]}" in
+      s) echo "${BASH_REMATCH[1]}" ;;
+      m) echo "$((BASH_REMATCH[1] * 60))" ;;
+      h) echo "$((BASH_REMATCH[1] * 3600))" ;;
+    esac
+    return
+  fi
+
+  echo "Unsupported duration '${duration}'; use an integer followed by s, m, or h" >&2
+  return 2
+}
+
+wait_for_job_terminal() {
+  local job_name="$1"
+  local timeout="$2"
+  local timeout_seconds
+  local deadline
+  local conditions
+
+  timeout_seconds="$(duration_seconds "$timeout")"
+  deadline=$((SECONDS + timeout_seconds))
+
+  while (( SECONDS < deadline )); do
+    conditions="$(
+      kubectl get job "$job_name" \
+        -n "$NAMESPACE" \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}'
+    )"
+    if [[ "$conditions" == *"Complete=True"* ]]; then
+      return 0
+    fi
+    if [[ "$conditions" == *"Failed=True"* ]]; then
+      return 1
+    fi
+    sleep 2
+  done
+
+  echo "Timed out after ${timeout} waiting for job/${job_name}" >&2
+  return 124
+}
+
+# Invoked indirectly by the signal/exit trap installed below.
+# shellcheck disable=SC2329
 restore_claims_concurrency() {
   local exit_code=$?
   trap - EXIT INT TERM HUP
@@ -173,16 +219,21 @@ spec:
             - /tmp/mcc-summary.json
 EOF
 
-# macOS idle sleep pauses the Docker Desktop VM -- and every pod inside it --
-# for as long as the Mac is asleep. On a long unattended run that shows up
-# as unexplained wall-clock time with no matching code-side cost: the
-# validator's own Stopwatch (CLOCK_MONOTONIC) doesn't count the paused
-# interval, but timestamps do once the VM resumes. `caffeinate` keeps the
-# system awake for the duration of the wait so multi-hundred-thousand-claim
-# runs aren't silently interrupted.
+# macOS idle sleep pauses the Docker Desktop VM -- and every pod inside it.
+# Keep the host awake while polling both successful and failed terminal states.
+caffeinate_pid=""
 if command -v caffeinate >/dev/null 2>&1; then
-  caffeinate -dis kubectl wait -n "$NAMESPACE" --for=condition=complete "job/${JOB_NAME}" --timeout="$JOB_TIMEOUT"
-else
-  kubectl wait -n "$NAMESPACE" --for=condition=complete "job/${JOB_NAME}" --timeout="$JOB_TIMEOUT"
+  caffeinate -dis -w "$$" &
+  caffeinate_pid=$!
 fi
+
+job_status=0
+wait_for_job_terminal "$JOB_NAME" "$JOB_TIMEOUT" || job_status=$?
+
+if [[ -n "$caffeinate_pid" ]]; then
+  kill "$caffeinate_pid" >/dev/null 2>&1 || true
+  wait "$caffeinate_pid" 2>/dev/null || true
+fi
+
 kubectl logs -n "$NAMESPACE" "job/${JOB_NAME}"
+exit "$job_status"
