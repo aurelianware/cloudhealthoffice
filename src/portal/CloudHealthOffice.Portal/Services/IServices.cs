@@ -141,6 +141,9 @@ public class MassAdjudicationRunSummary
     public int BusinessDenials { get; set; }
     public int ObservationTimeouts { get; set; }
     public int PlatformFailures { get; set; }
+    public int ServiceBusObservationTimeouts { get; set; }
+    public int ServiceBusLateCompletions { get; set; }
+    public int ServiceBusUnreconciledClaims { get; set; }
     public int WorkflowScenarios { get; set; }
     public int WorkflowMatches { get; set; }
     public int WorkflowMismatches { get; set; }
@@ -300,6 +303,8 @@ public class MassAdjudicationClaimResult
     public double AdjudicationMilliseconds { get; set; }
     public double WritebackMilliseconds { get; set; }
     public Dictionary<string, double> AdjudicationStepMilliseconds { get; set; } = new();
+    public bool ServiceBusObservationTimedOut { get; set; }
+    public bool ReconciledAfterObservationTimeout { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 }
 

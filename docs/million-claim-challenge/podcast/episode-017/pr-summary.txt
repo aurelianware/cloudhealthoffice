@@ -1,0 +1,35 @@
+# Episode 017 implementation summary
+
+## Validator
+
+- Preserve the submitted claim ID when Service Bus observation reaches its deadline.
+- Classify the event as `ObservationTimeout`, distinct from a submission or platform exception.
+- Revisit timed-out claims after the timed benchmark phase.
+- Re-score terminal persisted outcomes, denial codes, payer payments, and workflow evidence.
+- Keep unresolved claims as observation timeouts and return a nonzero process exit.
+- Add separate summary counts for initial Service Bus timeouts, reconciled late completions, and
+  unreconciled claims.
+- Record reconciliation as an Observation lifecycle phase excluded from throughput.
+
+## Published evidence
+
+- Persist the new run-level counts in claims-service.
+- Publish claim-level flags identifying a timed-out observation and successful late
+  reconciliation.
+- Display Service Bus window timeouts, late completions, and unresolved claims in the Mass
+  Adjudication console.
+
+## Local automation
+
+- Add `SERVICEBUS_ONLY` to the run and sweep scripts.
+- Add `SERVICEBUS_RECONCILIATION_ENABLED`.
+- Add `SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS`.
+
+## Verification
+
+- Validator tests cover late paid, late business-denial, payment, unresolved, ignored, summary,
+  and option-parsing behavior.
+- Claims-service repository tests cover persistence of run-level and claim-level reconciliation
+  evidence.
+- A live controlled-overload run reconciled 936/936 delayed claims and restored complete workflow
+  and payment scoring.

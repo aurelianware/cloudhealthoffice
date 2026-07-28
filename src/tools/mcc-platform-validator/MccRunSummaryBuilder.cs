@@ -20,12 +20,17 @@ internal static class MccRunSummaryBuilder
         MassAdjudicationFixturePreparation? fixturePreparation = null)
     {
         var totalClaims = Math.Max(results.Count, totalClaimsOverride ?? results.Count);
-        var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+        var processed = results.Count(r =>
+            r.Outcome is not ClaimValidationOutcome.PlatformFailure
+                and not ClaimValidationOutcome.ObservationTimeout);
         var adjudicated = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
         var pended = results.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
         var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
         var observationTimeouts = results.Count(r => r.Outcome is ClaimValidationOutcome.ObservationTimeout);
         var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
+        var serviceBusObservationTimeouts = results.Count(r => r.ServiceBusObservationTimedOut);
+        var serviceBusLateCompletions = results.Count(r => r.ReconciledAfterObservationTimeout);
+        var serviceBusUnreconciledClaims = serviceBusObservationTimeouts - serviceBusLateCompletions;
         var validationScenarios = results.Count(r => r.ValidationStatus is not "Unspecified");
         var validationMatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus);
         var validationMismatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MismatchedStatus);
@@ -97,7 +102,9 @@ internal static class MccRunSummaryBuilder
                 r.SubmitElapsed.TotalMilliseconds,
                 r.AdjudicationElapsed.TotalMilliseconds,
                 r.UpdateElapsed.TotalMilliseconds,
-                r.AdjudicationStepTimings))
+                r.AdjudicationStepTimings,
+                r.ServiceBusObservationTimedOut,
+                r.ReconciledAfterObservationTimeout))
             .ToList()
             : new List<MassAdjudicationClaimResult>();
 
@@ -127,6 +134,9 @@ internal static class MccRunSummaryBuilder
             businessDenials,
             observationTimeouts,
             platformFailures,
+            serviceBusObservationTimeouts,
+            serviceBusLateCompletions,
+            serviceBusUnreconciledClaims,
             validationScenarios,
             validationMatches,
             validationMismatches,
@@ -272,10 +282,15 @@ internal static class MccRunSummaryBuilder
             return 2;
         }
 
+        if (result.ReconciledAfterObservationTimeout)
+        {
+            return 3;
+        }
+
         var paymentDelta = PaymentDelta(result);
         if (paymentDelta.HasValue && paymentDelta.Value > PaymentTolerance)
         {
-            return 3;
+            return 4;
         }
 
         return 100;

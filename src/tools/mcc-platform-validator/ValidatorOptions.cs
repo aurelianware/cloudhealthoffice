@@ -15,6 +15,8 @@ public sealed record ValidatorOptions(
     bool SeedAuthorizations,
     bool SkipClaimUpdate,
     bool ServiceBusOnly,
+    bool ServiceBusReconciliationEnabled,
+    int ServiceBusReconciliationTimeoutSeconds,
     bool PendObservationEnabled,
     int PendObservationTimeoutSeconds,
     int PendObservationIntervalMilliseconds,
@@ -84,6 +86,12 @@ public sealed record ValidatorOptions(
                     break;
                 case "--servicebus-only":
                     options.ServiceBusOnly = true;
+                    break;
+                case "--no-servicebus-reconciliation":
+                    options.ServiceBusReconciliationEnabled = false;
+                    break;
+                case "--servicebus-reconciliation-timeout" when i + 1 < args.Length:
+                    options.ServiceBusReconciliationTimeoutSeconds = int.Parse(args[++i]);
                     break;
                 case "--no-pend-observation":
                     options.PendObservationEnabled = false;
@@ -166,6 +174,8 @@ public sealed record ValidatorOptions(
             options.SeedAuthorizations,
             options.SkipClaimUpdate,
             options.ServiceBusOnly,
+            options.ServiceBusReconciliationEnabled,
+            Math.Clamp(options.ServiceBusReconciliationTimeoutSeconds, 1, 900),
             options.PendObservationEnabled,
             Math.Clamp(options.PendObservationTimeoutSeconds, 1, 300),
             Math.Clamp(options.PendObservationIntervalMilliseconds, 100, 30_000),
@@ -199,6 +209,8 @@ public sealed record ValidatorOptions(
         public bool SeedAuthorizations { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
         public bool ServiceBusOnly { get; set; }
+        public bool ServiceBusReconciliationEnabled { get; set; } = true;
+        public int ServiceBusReconciliationTimeoutSeconds { get; set; } = 300;
         public bool PendObservationEnabled { get; set; } = true;
         public int PendObservationTimeoutSeconds { get; set; } = 45;
         public int PendObservationIntervalMilliseconds { get; set; } = 1000;
