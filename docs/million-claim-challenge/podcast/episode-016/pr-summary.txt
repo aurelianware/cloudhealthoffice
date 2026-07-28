@@ -1,0 +1,47 @@
+# Episode 016 implementation summary
+
+## PR #1040 — raw 837 parallel import and Azure Service Bus claims path
+
+- Changed multi-claim raw 837 submission from effectively sequential work to bounded parallel
+  submission while preserving source-file result order.
+- Added the Azure Service Bus-backed claim-version event path used by local claims adjudication.
+
+## PR #1041 — reproducible local Service Bus bootstrap
+
+- Added opt-in local bootstrap automation for Azure Service Bus.
+- Creates claims entities and a least-privilege Listen/Send authorization rule.
+- Installs the connection as Kubernetes `servicebus-secret`.
+- Keeps in-memory messaging as the fallback when local Service Bus settings are absent.
+
+## PR #1042 — Service Bus-only MCC validation
+
+- Added `--servicebus-only`: submit through claims-service, skip synchronous adjudication, poll and
+  score the persisted asynchronous result.
+- Captured persisted payer payment for the payment gate.
+- Fixed a real async identifier bug: the validator submitted a benefit-plan document GUID while
+  the asynchronous resolver expects the business `planId`.
+- Raised validator parallelism cap to 96 to match three claims pods with 32 Service Bus calls each.
+
+## PR #1044 — scale preparation and validated importer default
+
+- Raised the committed raw-837 importer default from 16 to the then-validated 32.
+- Batched 6,376 prior-authorization fixtures in groups of 500 after the first 1M attempt exceeded
+  the validator's 60-second HTTP timeout with one oversized request.
+- The second 1M attempt completed and produced the Episode 16 evidence.
+
+## Live p64 validation after PR #1044
+
+- Tested importer concurrency 64 without changing the committed default.
+- 10K raw X12: 10,000/10,000 terminal at 200.00 claims/sec end-to-end.
+- 100K raw X12: 100,000/100,000 terminal at 199.42 claims/sec end-to-end.
+- Zero dead letters, pod restarts, or claims-service error/exception log matches.
+
+## Evidence boundary
+
+The 1M MCC result and 100K raw 837 result are different workloads:
+
+- MCC: mixed deterministic corpus, structured JSON submission, answer-key scoring.
+- Raw 837: repeated professional-claim fixture, EDI parser/importer measurement, one expected
+  business-denial disposition.
+
+Do not combine their throughput values or correctness claims.
