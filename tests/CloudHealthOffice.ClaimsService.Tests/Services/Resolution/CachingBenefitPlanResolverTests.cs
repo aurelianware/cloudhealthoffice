@@ -68,4 +68,28 @@ public class CachingBenefitPlanResolverTests
 
         await _inner.Received(2).GetPlanAsync("tenant-1", "p1", Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task GetPlan_ConcurrentCacheMisses_AreCoalesced()
+    {
+        var sut = new CachingBenefitPlanResolver(_inner, _cache);
+        var release = new TaskCompletionSource<ResolvedBenefitPlan?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _inner.GetPlanAsync("tenant-1", "new-plan", Arg.Any<CancellationToken>())
+            .Returns(_ => release.Task);
+
+        var requests = Enumerable.Range(0, 20)
+            .Select(_ => sut.GetPlanAsync("tenant-1", "new-plan"))
+            .ToArray();
+
+        await _inner.Received(1)
+            .GetPlanAsync("tenant-1", "new-plan", Arg.Any<CancellationToken>());
+        release.SetResult(new ResolvedBenefitPlan { Id = "new-plan" });
+
+        var results = await Task.WhenAll(requests);
+
+        Assert.All(results, result => Assert.Equal("new-plan", result?.Id));
+        await _inner.Received(1)
+            .GetPlanAsync("tenant-1", "new-plan", Arg.Any<CancellationToken>());
+    }
 }
