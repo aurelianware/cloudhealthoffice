@@ -58,6 +58,21 @@ public class ValidatorOptionsTests
     }
 
     [Fact]
+    public void Parse_WhenServiceBusReconciliationOptionsProvided_AppliesOverrides()
+    {
+        var defaults = ValidatorOptions.Parse([]);
+        var disabled = ValidatorOptions.Parse([
+            "--no-servicebus-reconciliation",
+            "--servicebus-reconciliation-timeout", "120"
+        ]);
+
+        Assert.True(defaults.ServiceBusReconciliationEnabled);
+        Assert.Equal(300, defaults.ServiceBusReconciliationTimeoutSeconds);
+        Assert.False(disabled.ServiceBusReconciliationEnabled);
+        Assert.Equal(120, disabled.ServiceBusReconciliationTimeoutSeconds);
+    }
+
+    [Fact]
     public void Parse_WhenMemberUrlProvided_AppliesOverride()
     {
         var options = ValidatorOptions.Parse(["--member-url", "http://member-service/"]);

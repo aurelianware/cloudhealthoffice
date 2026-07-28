@@ -19,6 +19,9 @@ MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
 SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
+SERVICEBUS_ONLY="${SERVICEBUS_ONLY:-false}"
+SERVICEBUS_RECONCILIATION_ENABLED="${SERVICEBUS_RECONCILIATION_ENABLED:-true}"
+SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS="${SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS:-300}"
 CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS="${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS:-15}"
 PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
@@ -99,6 +102,8 @@ run_case() {
   local json_file="$OUTPUT_DIR/${job_name}.json"
   local seed_member_arg=""
   local seed_provider_arg=""
+  local servicebus_only_arg=""
+  local servicebus_reconciliation_arg=""
   local pend_observation_arg=""
   local status="ok"
 
@@ -107,6 +112,12 @@ run_case() {
   fi
   if [[ "$SEED_PROVIDERS" != "true" ]]; then
     seed_provider_arg='                --no-seed-providers \'
+  fi
+  if [[ "$SERVICEBUS_ONLY" == "true" ]]; then
+    servicebus_only_arg='                --servicebus-only \'
+  fi
+  if [[ "$SERVICEBUS_RECONCILIATION_ENABLED" != "true" ]]; then
+    servicebus_reconciliation_arg='                --no-servicebus-reconciliation \'
   fi
   if [[ "$PEND_OBSERVATION_ENABLED" != "true" ]]; then
     pend_observation_arg='                --no-pend-observation \'
@@ -146,11 +157,14 @@ spec:
                 --benefit-url http://benefit-plan-service \
                 --member-url http://member-service \
                 --provider-url http://provider-service \
+                --servicebus-reconciliation-timeout "${SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS}" \
                 --pend-observation-timeout "${PEND_OBSERVATION_TIMEOUT_SECONDS}" \
                 --pend-observation-interval-ms "${PEND_OBSERVATION_INTERVAL_MS}" \
                 --progress-every "${PROGRESS_EVERY}" \
 ${seed_member_arg}
 ${seed_provider_arg}
+${servicebus_only_arg}
+${servicebus_reconciliation_arg}
 ${pend_observation_arg}
                 --summary-json /tmp/mcc-summary.json
               status=\$?

@@ -106,6 +106,45 @@ public class MccRunSummaryBuilderTests
     }
 
     [Fact]
+    public void Build_ReportsServiceBusPostWindowReconciliationSeparately()
+    {
+        var options = ValidatorOptions.Parse(["--claims", "3"]);
+        var results = new List<ClaimValidationResult>
+        {
+            Result("IN-WINDOW", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid),
+            Result("LATE", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.MatchedStatus, ClaimValidationOutcome.Paid)
+                with
+                {
+                    ServiceBusObservationTimedOut = true,
+                    ReconciledAfterObservationTimeout = true
+                },
+            Result("UNRESOLVED", MccWorkflowValidation.CleanProfessionalPaidScenario, MccWorkflowValidation.ObservationTimeoutStatus, ClaimValidationOutcome.ObservationTimeout)
+                with
+                {
+                    ServiceBusObservationTimedOut = true,
+                    FailureStage = "servicebus-observation"
+                }
+        };
+
+        var summary = MccRunSummaryBuilder.Build(
+            results,
+            TimeSpan.FromSeconds(1),
+            options,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(2, summary.Processed);
+        Assert.Equal(2, summary.ServiceBusObservationTimeouts);
+        Assert.Equal(1, summary.ServiceBusLateCompletions);
+        Assert.Equal(1, summary.ServiceBusUnreconciledClaims);
+        Assert.Equal(1, summary.ObservationTimeouts);
+        Assert.Contains(
+            summary.ClaimResults,
+            result => result.GeneratedClaimId == "LATE"
+                && result.ReconciledAfterObservationTimeout);
+    }
+
+    [Fact]
     public void Build_GroupsPaymentDeltaDistributionForComparableRowsOnly()
     {
         var options = ValidatorOptions.Parse(["--claims", "6"]);

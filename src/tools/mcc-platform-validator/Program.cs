@@ -51,6 +51,10 @@ Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} 
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
 Console.WriteLine($"  Auth fixtures:{(options.SeedAuthorizations ? " enabled" : " disabled")}");
 Console.WriteLine($"  Adjudication:{(options.ServiceBusOnly ? " Service Bus only (persisted outcome)" : " synchronous + workflow observation")}");
+Console.WriteLine(
+    $"  SB reconcile:{(options.ServiceBusOnly && options.ServiceBusReconciliationEnabled
+        ? $" enabled ({options.ServiceBusReconciliationTimeoutSeconds}s)"
+        : " disabled")}");
 Console.WriteLine($"  Pend observe:{(options.PendObservationEnabled ? $" enabled ({options.PendObservationTimeoutSeconds}s/{options.PendObservationIntervalMilliseconds}ms)" : " disabled")}");
 Console.WriteLine($"  Pend diag:   {(options.PendDiagnosticsPath is not null ? $"enabled -> {options.PendDiagnosticsPath}" : "disabled")}");
 Console.WriteLine();
@@ -201,7 +205,7 @@ var fixturePreparation = new MassAdjudicationFixturePreparation(
 var results = new ConcurrentBag<ClaimValidationResult>();
 var total = new Stopwatch();
 var completed = 0;
-var platformFailures = 0;
+var incompleteClaims = 0;
 var lastProgressPublishTicks = 0L;
 var progressLock = new object();
 var progressPublishGate = new SemaphoreSlim(1, 1);
@@ -243,9 +247,9 @@ await Parallel.ForEachAsync(
         results.Add(result);
 
         var done = Interlocked.Increment(ref completed);
-        if (result.Outcome is ClaimValidationOutcome.PlatformFailure)
+        if (result.Outcome is ClaimValidationOutcome.PlatformFailure or ClaimValidationOutcome.ObservationTimeout)
         {
-            Interlocked.Increment(ref platformFailures);
+            Interlocked.Increment(ref incompleteClaims);
         }
 
         if (done % options.ProgressEvery == 0 || done == claims.Count)
@@ -253,8 +257,8 @@ await Parallel.ForEachAsync(
             lock (progressLock)
             {
                 var currentDone = Volatile.Read(ref completed);
-                var failures = Math.Min(Volatile.Read(ref platformFailures), currentDone);
-                Console.Write($"\r  Processed: {currentDone:N0}/{claims.Count:N0}  processed={currentDone - failures:N0}  platformFailures={failures:N0}");
+                var incomplete = Math.Min(Volatile.Read(ref incompleteClaims), currentDone);
+                Console.Write($"\r  Processed: {currentDone:N0}/{claims.Count:N0}  terminal={currentDone - incomplete:N0}  incomplete={incomplete:N0}");
             }
 
             if (!options.NoPublishSummary
@@ -325,6 +329,28 @@ var orderedResults = results
 postProcessingStopwatch.Stop();
 postProcessingTimings.Add(("Result ordering", postProcessingStopwatch.Elapsed));
 
+if (options.ServiceBusOnly && options.ServiceBusReconciliationEnabled)
+{
+    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Service Bus post-window reconciliation", "Observation", async () =>
+    {
+        var reconciler = new MccServiceBusReconciler(new HttpClaimStatusSource(http, options.ClaimsUrl));
+        var reconciliation = await reconciler.ReconcileAsync(
+            orderedResults,
+            TimeSpan.FromSeconds(options.ServiceBusReconciliationTimeoutSeconds),
+            TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds),
+            Math.Max(options.Parallelism, 64));
+        orderedResults = reconciliation.Results;
+
+        if (reconciliation.Candidates > 0)
+        {
+            Console.WriteLine(
+                $"  Service Bus reconciliation: {reconciliation.Reconciled:N0}/{reconciliation.Candidates:N0} late claims reconciled, " +
+                $"{reconciliation.Unreconciled:N0} still unresolved");
+            Console.WriteLine();
+        }
+    });
+}
+
 if (options.PendObservationEnabled && !options.ServiceBusOnly)
 {
     await MeasureLifecyclePhaseAsync(lifecycleTimings, "Expected-pend observation", "Observation", async () =>
@@ -387,7 +413,7 @@ if (!options.NoPublishSummary)
 
 WritePostProcessingTimings(postProcessingTimings, lifecycleTimings, runStartedAtUtc);
 
-if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure))
+if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure or ClaimValidationOutcome.ObservationTimeout))
 {
     Environment.ExitCode = 1;
 }
@@ -464,6 +490,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     var updateElapsed = TimeSpan.Zero;
     var failureStage = "unknown";
     var expectedValidation = answerKey.ExpectedValidationFor(claim);
+    string? submittedClaimId = null;
     var expectedPlanPayment = expectedValidation.ExpectedOutcome is not ClaimValidationOutcome.Paid
         ? null
         : claim.ExpectedOutcome?.ExpectedPaidAmount;
@@ -479,6 +506,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             claim,
             validationPlanBusinessId,
             json);
+        submittedClaimId = submitted.Id;
         stage.Stop();
         submitElapsed = stage.Elapsed;
 
@@ -486,7 +514,39 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         {
             failureStage = "servicebus-observation";
             stage.Restart();
-            var observed = await ObserveServiceBusOutcomeAsync(http, options, submitted.Id);
+            ObservedClaimStatus observed;
+            try
+            {
+                observed = await ObserveServiceBusOutcomeAsync(http, options, submitted.Id);
+            }
+            catch (TimeoutException ex)
+            {
+                stage.Stop();
+                adjudicationElapsed = stage.Elapsed;
+                sw.Stop();
+
+                return new ClaimValidationResult(
+                    claim.ClaimId,
+                    submitted.Id,
+                    claim.ClaimType,
+                    expectedValidation.Scenario,
+                    expectedValidation.ExpectedOutcome?.ToString(),
+                    expectedValidation.ExpectedBusinessDenialCode,
+                    MccWorkflowValidation.ObservationTimeoutStatus,
+                    ClaimValidationOutcome.ObservationTimeout,
+                    false,
+                    null,
+                    expectedPlanPayment,
+                    sw.Elapsed,
+                    submitElapsed,
+                    adjudicationElapsed,
+                    TimeSpan.Zero,
+                    new Dictionary<string, double>(),
+                    null,
+                    failureStage,
+                    ex.Message,
+                    ServiceBusObservationTimedOut: true);
+            }
             stage.Stop();
             adjudicationElapsed = stage.Elapsed;
             sw.Stop();
@@ -587,7 +647,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         sw.Stop();
         return new ClaimValidationResult(
             claim.ClaimId,
-            null,
+            submittedClaimId,
             claim.ClaimType,
             expectedValidation.Scenario,
             expectedValidation.ExpectedOutcome?.ToString(),
@@ -3236,6 +3296,9 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     Console.WriteLine($"  Business denials:   {summary.BusinessDenials:N0}");
     Console.WriteLine($"  Platform failures:  {summary.PlatformFailures:N0}");
     Console.WriteLine($"  Observation timeout: {summary.ObservationTimeouts:N0}");
+    Console.WriteLine(
+        $"  SB post-window:     {summary.ServiceBusLateCompletions:N0}/{summary.ServiceBusObservationTimeouts:N0} reconciled late, " +
+        $"{summary.ServiceBusUnreconciledClaims:N0} unresolved");
     Console.WriteLine($"  Workflow checks:    {summary.WorkflowMatches:N0}/{summary.WorkflowScenarios:N0} matched ({summary.WorkflowMismatches:N0} mismatched, {summary.WorkflowUnsupported:N0} unsupported, {summary.WorkflowObservationTimeouts:N0} observation timeouts)");
     Console.WriteLine($"  Elapsed:            {summary.Elapsed:mm\\:ss\\.fff}");
     Console.WriteLine($"  Throughput:         {summary.ThroughputClaimsPerSecond:N2} claims/sec");
@@ -3371,12 +3434,17 @@ static MassAdjudicationRunSummary BuildProgressSummary(
     MassAdjudicationFixturePreparation fixturePreparation)
 {
     var runCompletedAtUtc = DateTimeOffset.UtcNow;
-    var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+    var processed = results.Count(r =>
+        r.Outcome is not ClaimValidationOutcome.PlatformFailure
+            and not ClaimValidationOutcome.ObservationTimeout);
     var paid = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
     var pended = results.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
     var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
     var observationTimeouts = results.Count(r => r.Outcome is ClaimValidationOutcome.ObservationTimeout);
     var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
+    var serviceBusObservationTimeouts = results.Count(r => r.ServiceBusObservationTimedOut);
+    var serviceBusLateCompletions = results.Count(r => r.ReconciledAfterObservationTimeout);
+    var serviceBusUnreconciledClaims = serviceBusObservationTimeouts - serviceBusLateCompletions;
     var workflowScenarios = results.Count(r => r.ValidationStatus is not "Unspecified");
     var workflowMatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus);
     var workflowMismatches = results.Count(r =>
@@ -3412,6 +3480,9 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         businessDenials,
         observationTimeouts,
         platformFailures,
+        serviceBusObservationTimeouts,
+        serviceBusLateCompletions,
+        serviceBusUnreconciledClaims,
         workflowScenarios,
         workflowMatches,
         workflowMismatches,
@@ -3455,7 +3526,9 @@ static MassAdjudicationRunProgress CreateProgress(
         .Order()
         .ToArray();
     var completedClaims = results.Count;
-    var processedClaims = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+    var processedClaims = results.Count(r =>
+        r.Outcome is not ClaimValidationOutcome.PlatformFailure
+            and not ClaimValidationOutcome.ObservationTimeout);
     var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
     var pendingExpectedPendObservations = results.Count(r => MccRunSummaryBuilder.IsExpectedPendObservationPending(r, phase));
     var pendingTerminalStatusObservations = results.Count(r => MccRunSummaryBuilder.IsTerminalStatusObservationPending(r, phase));
@@ -3582,6 +3655,10 @@ static void PrintUsage()
       --skip-claim-update        Do not write adjudication projection back to claims-service
       --servicebus-only          Submit claims and score only the persisted asynchronous Service Bus outcome;
                                  skips synchronous benefit adjudication and writeback
+      --no-servicebus-reconciliation
+                                 Do not revisit Service Bus observation timeouts after the timed pass
+      --servicebus-reconciliation-timeout <seconds>
+                                 Maximum post-window reconciliation wait (default: 300)
       --no-pend-observation      Do not poll claims-service for expected-pend claim status
       --pend-observation-timeout <seconds>
                                  Max wait for expected-pend claims after benchmark timing stops (default: 45)
@@ -3661,7 +3738,9 @@ internal sealed record ClaimValidationResult(
     string? BusinessDenialCode,
     string? FailureStage,
     string? Error,
-    JsonElement? SyncAdjudicationSnapshot = null);
+    JsonElement? SyncAdjudicationSnapshot = null,
+    bool ServiceBusObservationTimedOut = false,
+    bool ReconciledAfterObservationTimeout = false);
 
 internal sealed record MassAdjudicationRunSummary(
     string Id,
@@ -3674,6 +3753,9 @@ internal sealed record MassAdjudicationRunSummary(
     int BusinessDenials,
     int ObservationTimeouts,
     int PlatformFailures,
+    int ServiceBusObservationTimeouts,
+    int ServiceBusLateCompletions,
+    int ServiceBusUnreconciledClaims,
     int WorkflowScenarios,
     int WorkflowMatches,
     int WorkflowMismatches,
@@ -3833,7 +3915,9 @@ internal sealed record MassAdjudicationClaimResult(
     double SubmitMilliseconds,
     double AdjudicationMilliseconds,
     double WritebackMilliseconds,
-    IReadOnlyDictionary<string, double> AdjudicationStepMilliseconds);
+    IReadOnlyDictionary<string, double> AdjudicationStepMilliseconds,
+    bool ServiceBusObservationTimedOut,
+    bool ReconciledAfterObservationTimeout);
 
 internal sealed record AdjudicationResponseDto(
     string ClaimId,
