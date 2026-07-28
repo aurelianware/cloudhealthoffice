@@ -12,7 +12,7 @@ data:
   Services__ProviderService: "http://provider-service"
   Services__AuthorizationService: "http://authorization-service"
   Services__BenefitPlanServiceTimeoutSeconds: "5"
-  ClaimsImport__Raw837MaxConcurrency: "16"
+  ClaimsImport__Raw837MaxConcurrency: "32"
   Messaging__AdjudicationMaxConcurrentCalls: "32"
   Messaging__Backend: "Auto"
 ---

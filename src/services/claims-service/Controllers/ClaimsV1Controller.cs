@@ -63,7 +63,7 @@ public class ClaimsV1Controller : ControllerBase
         _importTransactions = importTransactions;
         _logger = logger;
         _raw837MaxConcurrency = Math.Clamp(
-            configuration.GetValue("ClaimsImport:Raw837MaxConcurrency", 16),
+            configuration.GetValue("ClaimsImport:Raw837MaxConcurrency", 32),
             1,
             64);
     }
