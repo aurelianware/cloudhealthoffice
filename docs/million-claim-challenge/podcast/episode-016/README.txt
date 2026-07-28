@@ -26,6 +26,7 @@ Primary sources:
 - `pr-summary.txt` — implementation history
 - `article.txt` — draft field note
 - `podcast-prompt.txt` — two-host production prompt
+- `visual-prompts.txt` — generation notes for the three article illustrations
 
 Production notes:
 

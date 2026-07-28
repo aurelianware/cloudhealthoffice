@@ -1,0 +1,36 @@
+# Episode 016 article illustration prompts
+
+These three illustrations were generated as wide, text-free technical editorial visuals. They
+share a near-black navy canvas, cyan/teal ingestion paths, emerald terminal outcomes, restrained
+amber buffering, and an isometric enterprise-architecture style. Text stays in the article's alt
+attributes and captions so the technical meaning remains accessible and editable.
+
+## Asynchronous Service Bus architecture
+
+Visualize a large field of structured healthcare claim records converging into an API intake,
+crossing a durable message-bus channel, fanning out to three parallel Kubernetes workers, and
+writing terminal outcomes plus lifecycle evidence to durable stores. Keep the flow unambiguously
+left to right. No embedded text, logos, people, medical symbols, or vendor trademarks.
+
+Published asset:
+`/graphics/million-claim-challenge/episode-16/async-service-bus-architecture.jpg`
+
+## Observation window versus eventual completion
+
+Visualize many claim tokens traveling toward terminal storage across a fixed time boundary.
+Nearly all complete before the boundary; a very small amber tail crosses afterward and continues
+into the same green terminal store. Run an unbroken audit trail beneath the timeline. Show delay,
+not loss or dead-letter failure. No embedded text, logos, or warning symbols.
+
+Published asset:
+`/graphics/million-claim-challenge/episode-16/observation-window-eventual-completion.jpg`
+
+## Raw X12 837 onramp
+
+Visualize one substantial EDI-style electronic document entering a parser and mapper, becoming a
+large stream of individual claim records, building visible depth in a durable queue, then fanning
+out to three parallel workers and durable persistence/audit stores. Make the one-file-to-many-
+claims transformation clear. No embedded text, logos, people, or vendor trademarks.
+
+Published asset:
+`/graphics/million-claim-challenge/episode-16/raw-837-onramp.jpg`
