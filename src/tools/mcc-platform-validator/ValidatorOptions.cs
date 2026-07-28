@@ -25,6 +25,7 @@ public sealed record ValidatorOptions(
     int TimeoutSeconds,
     int ProgressEvery,
     int Parallelism,
+    int SeedParallelism,
     int LineOfBusiness,
     string? SummaryJsonPath,
     bool NoPublishSummary,
@@ -117,6 +118,9 @@ public sealed record ValidatorOptions(
                 case "--parallelism" or "-p" when i + 1 < args.Length:
                     options.Parallelism = int.Parse(args[++i]);
                     break;
+                case "--seed-parallelism" when i + 1 < args.Length:
+                    options.SeedParallelism = int.Parse(args[++i]);
+                    break;
                 case "--max-claims" when i + 1 < args.Length:
                     options.MaxClaims = int.Parse(args[++i]);
                     break;
@@ -184,6 +188,9 @@ public sealed record ValidatorOptions(
             Math.Max(5, options.TimeoutSeconds),
             Math.Max(1, options.ProgressEvery),
             Math.Max(1, options.Parallelism),
+            options.SeedParallelism > 0
+                ? Math.Clamp(options.SeedParallelism, 1, MaxParallelism)
+                : Math.Max(1, options.Parallelism),
             Math.Clamp(options.LineOfBusiness, 1, 5),
             options.SummaryJsonPath,
             options.NoPublishSummary,
@@ -219,6 +226,7 @@ public sealed record ValidatorOptions(
         public int TimeoutSeconds { get; set; } = 60;
         public int ProgressEvery { get; set; } = 10;
         public int Parallelism { get; set; } = 10;
+        public int SeedParallelism { get; set; }
         public int MaxClaims { get; set; } = DefaultMaxClaims;
         public int LineOfBusiness { get; set; } = 3;
         public string? SummaryJsonPath { get; set; }

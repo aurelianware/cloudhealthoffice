@@ -43,6 +43,10 @@ controls a separate, non-free-tier NoSQL API account and defaults to `true`;
 disable it when the MongoDB free-tier account is the only Cosmos resource you
 want.
 
+The module defaults to 1,000 RU/s, but `throughput` can be raised for a
+billable benchmark deployment. The lifetime-free discount still applies to
+the first 1,000 RU/s.
+
 ## Connect local Kubernetes
 
 Use the account name printed by the provision command:
@@ -87,6 +91,22 @@ The free tier is a useful throttling and retry-resilience exercise, but its
 Report initial observation timeouts, reconciled completions, unresolved
 claims, Mongo error `16500`, and overall completion time alongside the normal
 Million Claim Challenge correctness score.
+
+For a temporary benchmark, use the guarded wrapper. It records the current
+manual throughput, scales up, runs the supplied command, and restores the
+original value on success, failure, interruption, or terminal disconnect:
+
+```bash
+COSMOS_MONGODB_ACCOUNT=<account-name> \
+RESOURCE_GROUP=cho-mcc \
+TARGET_THROUGHPUT=10000 \
+./scripts/azure/with-cosmos-mongodb-benchmark-throughput.sh -- \
+env CLAIMS=1000 MAX_CLAIMS=1000 PARALLELISM=12 \
+  ./scripts/run-mcc-local-k8s.sh
+```
+
+The wrapper rejects values above 20,000 RU/s unless `MAX_THROUGHPUT` is
+explicitly increased.
 
 As a planning baseline, the July 2026 local benchmark database held about
 60.5 GB of logical document data for 9.6 million retained claims plus their

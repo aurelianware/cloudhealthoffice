@@ -8,12 +8,15 @@
 #
 # Optional env vars:
 #   BASE_NAME      — resource name prefix (default: cho-mcc)
+#   THROUGHPUT     — shared database RU/s (default: 1000; values above
+#                    1000 are billable)
 set -euo pipefail
 
 : "${RESOURCE_GROUP:?RESOURCE_GROUP is required}"
 : "${LOCATION:?LOCATION is required}"
 
 BASE_NAME="${BASE_NAME:-cho-mcc}"
+THROUGHPUT="${THROUGHPUT:-1000}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TEMPLATE_FILE="${REPO_ROOT}/infrastructure/azure/modules/cosmos-mongodb-free-tier.bicep"
@@ -64,7 +67,7 @@ account_name="$(
     --name "$DEPLOYMENT_NAME" \
     --resource-group "$RESOURCE_GROUP" \
     --template-file "$TEMPLATE_FILE" \
-    --parameters baseName="$BASE_NAME" location="$LOCATION" \
+    --parameters baseName="$BASE_NAME" location="$LOCATION" throughput="$THROUGHPUT" \
     --query properties.outputs.cosmosMongoAccountName.value \
     --output tsv
 )"
@@ -75,7 +78,7 @@ if [[ -z "$account_name" ]]; then
 fi
 
 echo "==> Cosmos DB for MongoDB free-tier account ready: ${account_name}"
-echo "==> Database: cloudhealthoffice; shared throughput: 1000 RU/s"
+echo "==> Database: cloudhealthoffice; shared throughput: ${THROUGHPUT} RU/s"
 echo
 echo "Connect local Kubernetes with:"
 echo "  COSMOS_MONGODB_ACCOUNT=${account_name} \\"
