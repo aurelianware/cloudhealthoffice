@@ -1,0 +1,114 @@
+# Running a Healthcare Claims Platform Locally in Kubernetes, Part 16: The Million Went Through the Bus
+
+Part 15 reached the number this series had named from the beginning: one million claims. It also
+ended with an uncomfortable result. The clean re-run processed every claim with zero platform
+failures, but sustained throughput settled at 123.81 claims per second—well below shorter runs.
+Redis had been proven innocent after its memory fix. The gap was real, and unexplained.
+
+Part 16 changes the path being measured.
+
+## The benchmark was still taking a synchronous shortcut
+
+The validator submitted each claim through claims-service, but then called synchronous
+adjudication and wrote the result back itself. That was useful for deterministic scoring, and it
+helped build every correctness gate in this series. It was not the same thing as letting the
+platform's asynchronous claims pipeline own the work from submission to persisted disposition.
+
+That distinction matters operationally. A real inbound claim should be accepted, published,
+consumed, adjudicated, and persisted without the submitting client orchestrating the middle of
+the workflow.
+
+The new `--servicebus-only` mode does exactly that. It submits the structured claim to
+`POST /api/v1/claims`, waits for claims-service to publish the version event, lets Azure Service
+Bus deliver it to one of three local claims-service replicas, and polls only the persisted claim
+until it reaches a terminal status. Payment and workflow scoring come from that persisted result.
+
+![Architecture diagram showing a large claim corpus entering an API, crossing a message bus, fanning out to three parallel workers, and persisting outcomes and audit evidence](/graphics/million-claim-challenge/episode-16/async-service-bus-architecture.jpg "The Episode 16 path: structured MCC claims enter through claims-service, cross Azure Service Bus, fan out across three local Kubernetes claims-service replicas, and finish in MongoDB with lifecycle evidence.")
+
+## Making local Service Bus reproducible
+
+Using a manually copied RootManage connection string would have made the benchmark work, but not
+made the environment reproducible. The local deployment now has an opt-in bootstrap path instead:
+configure the namespace, resource group, and location, and the script creates the claims entities,
+creates a least-privilege Listen/Send authorization rule, and installs its connection as
+`servicebus-secret`. Without those settings, local development keeps the in-memory bus.
+
+The first Service Bus smoke test also found a quieter bug. The validation benefit plan has both a
+document GUID and a business `planId`. The synchronous path accepted the GUID the validator had
+always sent. The asynchronous plan resolver looked up the business identifier. Claims reached the
+bus correctly, then adjudicated without their configured network tier. The fix was not to teach the
+resolver to guess; it was to submit the identifier its contract already required.
+
+## One million, asynchronously
+
+The final run used a fresh tenant, the full deterministic million-claim corpus, validator
+parallelism 96, three claims-service replicas, and 32 configured Service Bus calls per replica.
+Preparation seeded 962,936 members, 9,200 COB coverage rows, 135,598 providers, and 6,376 prior
+authorization fixtures. The authorization fixtures needed their own scale fix: one large seed
+request crossed the validator's 60-second HTTP timeout, so they moved to bounded batches of 500.
+
+The timed result was 155.89 claims per second, with 910-millisecond P95 and 1,205-millisecond P99
+latency. That is 25.9 percent faster than Part 15's clean million-claim result and 7.5 percent above
+the 145.04-per-second 250,000-claim record from Part 10.
+
+The validator reported 999,878 processed and 122 platform failures. Every one of those failures
+was the same kind: the claim did not become terminal inside its 180-second observation window.
+They clustered in two brief periods. There were no submission failures, no dead letters, no pod
+restarts, and no claims-service error logs.
+
+After the queue drained, MongoDB told the complete story: 1,000,000 claims, 1,000,000 terminal,
+zero nonterminal, and 2,000,000 lifecycle events. The validator had measured a deadline, not loss.
+
+![Timeline diagram showing nearly all claims completing before an observation boundary and a small delayed tail continuing afterward into the same terminal store](/graphics/million-claim-challenge/episode-16/observation-window-eventual-completion.jpg "The 180-second polling window classified 122 delayed observations as failures, while post-run reconciliation showed the small late tail continued to the same terminal store: no lost claims and no dead letters.")
+
+That does not make the 122 disappear from the published result. The validator exited nonzero, 20
+workflow checks were not successfully scored inside the window, and 18 paid scenarios never
+entered the payment comparison. Part 15 remains the strict zero-platform-failure million-claim
+baseline. Part 16 is the faster asynchronous result with 100 percent eventual completion and a
+new validator limitation made visible.
+
+## MCC still was not an 837 test
+
+There was one more boundary to make explicit. MCC submits structured JSON. It deliberately avoids
+EDI parsing so its answer key can isolate adjudication behavior. Running a million MCC claims
+cannot prove that an evaluator can drop a real 837 file into the platform.
+
+So the raw onramp got its own test.
+
+A single 16.1-megabyte X12 837P file containing 100,000 claims went to
+`POST /api/v1/claims/import/raw837` with importer concurrency 64. The parser mapped every claim,
+the importer created 100,000 claim records and 100,000 import transactions, Service Bus carried the
+work to adjudication, and MongoDB recorded 200,000 lifecycle events.
+
+![Architecture diagram showing one raw EDI file becoming many claim records, building a buffered queue, then fanning out to parallel workers and durable stores](/graphics/million-claim-challenge/episode-16/raw-837-onramp.jpg "The raw 837P path is a separate workload: one X12 file is parsed into 100,000 claim submissions, buffered by Service Bus, processed by three local workers, and persisted with import and lifecycle evidence.")
+
+All 100,000 claims were accepted. All 100,000 reached a terminal state. Parsing and submission
+took 299.77 seconds—333.59 claims per second. The last adjudication event arrived 501.45 seconds
+after the request began, for 199.42 claims per second end-to-end. The subscription drained to zero
+active and zero dead-letter messages. All three claims pods stayed up with zero restarts and no
+matching error logs.
+
+Every claim ended in the same business-denial status because this scale fixture deliberately
+reused a known COB-secondary claim. That is not a diverse correctness corpus and it should not be
+presented as one. It is proof of the complete technical onramp: raw X12, parser, mapper, claim
+submission, Service Bus, adjudication, persistence, and audit evidence.
+
+The prior clean raw-837 run at concurrency 32 reached 139.09 claims per second end-to-end.
+Concurrency 64 reached 199.42 at ten times the claim count—a 43.4 percent improvement without a
+dead letter or lost claim.
+
+## What the numbers mean now
+
+Part 15's open sustained-throughput question has an answer: the asynchronous Service Bus path can
+carry the full mixed corpus faster than the prior client-orchestrated path on this local cluster.
+It is not a production capacity claim, and it does not erase the difference between a fixed
+observation deadline and eventual completion.
+
+The raw 837 result answers a different question: the EDI front door can feed that asynchronous
+pipeline at sustained six-figure volume, and at p64 the importer is faster than the consumers
+behind it. The observed Service Bus backlog peaked around 39,000 messages, then drained completely.
+That is what a queue is for.
+
+The next work is no longer "can it reach one million?" It is making the evidence system understand
+late completion without manual database reconciliation, and repeating these paths in AKS when
+subscription quota is available.

@@ -47,12 +47,14 @@ public class ClaimsV1Controller : ControllerBase
     private readonly IExplanationOfBenefitProjector _eobProjector;
     private readonly IClaimImportTransactionRepository _importTransactions;
     private readonly ILogger<ClaimsV1Controller> _logger;
+    private readonly int _raw837MaxConcurrency;
 
     public ClaimsV1Controller(
         ClaimAdapterFactory adapterFactory,
         IClaimSubmissionService submissionService,
         IExplanationOfBenefitProjector eobProjector,
         IClaimImportTransactionRepository importTransactions,
+        IConfiguration configuration,
         ILogger<ClaimsV1Controller> logger)
     {
         _adapterFactory = adapterFactory;
@@ -60,6 +62,10 @@ public class ClaimsV1Controller : ControllerBase
         _eobProjector = eobProjector;
         _importTransactions = importTransactions;
         _logger = logger;
+        _raw837MaxConcurrency = Math.Clamp(
+            configuration.GetValue("ClaimsImport:Raw837MaxConcurrency", 32),
+            1,
+            64);
     }
 
     /// <summary>
@@ -156,26 +162,39 @@ public class ClaimsV1Controller : ControllerBase
         var correlationId = ResolveCorrelationId();
 
         _logger.LogInformation(
-            "Parsed uploaded 837 file {FileName} for tenant {TenantId}: {Count} claim(s)",
-            SanitizeForLog(file.FileName), SanitizeForLog(tenantId), parsedClaims.Count);
+            "Parsed uploaded 837 file {FileName} for tenant {TenantId}: {Count} claim(s), submitting with max concurrency {MaxConcurrency}",
+            SanitizeForLog(file.FileName), SanitizeForLog(tenantId), parsedClaims.Count, _raw837MaxConcurrency);
 
-        var results = new List<Raw837ClaimResult>(parsedClaims.Count);
-        foreach (var parsed in parsedClaims)
+        var results = new Raw837ClaimResult[parsedClaims.Count];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, parsedClaims.Count),
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = _raw837MaxConcurrency,
+                CancellationToken = ct
+            },
+            async (index, cancellationToken) =>
         {
+            var parsed = parsedClaims[index];
             var adapterClaim = ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(parsed, tenantId);
-            var result = await _submissionService.SubmitAsync(adapterClaim, tenantId, actorId, correlationId, ct);
+            var result = await _submissionService.SubmitAsync(
+                adapterClaim,
+                tenantId,
+                actorId,
+                correlationId,
+                cancellationToken);
 
             var errors = result.Success
                 ? []
                 : result.Errors.Select(e => $"{e.Field}: {e.Message}").ToList();
 
-            results.Add(new Raw837ClaimResult
+            results[index] = new Raw837ClaimResult
             {
                 ClaimNumber = parsed.ClaimId,
                 Success = result.Success,
                 ClaimId = result.Claim?.Id,
                 Errors = errors
-            });
+            };
 
             // Persisted regardless of outcome — a rejected claim is exactly
             // what an evaluator troubleshooting a dropped file needs to see.
@@ -201,14 +220,14 @@ public class ClaimsV1Controller : ControllerBase
                     "Failed to persist ClaimImportTransaction for claim {ClaimNumber}",
                     SanitizeForLog(parsed.ClaimId));
             }
-        }
+        });
 
         return Ok(new Raw837ImportResult
         {
             FileName = file.FileName,
             TotalClaims = parsedClaims.Count,
             SucceededCount = results.Count(r => r.Success),
-            Results = results
+            Results = results.ToList()
         });
     }
 

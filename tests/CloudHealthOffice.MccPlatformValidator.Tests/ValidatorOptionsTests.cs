@@ -24,6 +24,28 @@ public class ValidatorOptionsTests
     }
 
     [Fact]
+    public void Parse_WhenParallelismExceedsLocalConsumerCapacity_CapsAtMaximum()
+    {
+        var options = ValidatorOptions.Parse(["--parallelism", "128"]);
+
+        Assert.Equal(ValidatorOptions.MaxParallelism, options.Parallelism);
+        Assert.Equal(96, options.Parallelism);
+        Assert.Equal(options.Parallelism, options.SeedParallelism);
+    }
+
+    [Fact]
+    public void Parse_WhenSeedParallelismProvided_SeparatesFixtureAndClaimConcurrency()
+    {
+        var options = ValidatorOptions.Parse([
+            "--parallelism", "56",
+            "--seed-parallelism", "4"
+        ]);
+
+        Assert.Equal(56, options.Parallelism);
+        Assert.Equal(4, options.SeedParallelism);
+    }
+
+    [Fact]
     public void Parse_WhenNoSeedProvidersProvided_DisablesProviderSeeding()
     {
         var options = ValidatorOptions.Parse(["--no-seed-providers"]);
@@ -37,6 +59,30 @@ public class ValidatorOptionsTests
         var options = ValidatorOptions.Parse(["--no-seed-members"]);
 
         Assert.False(options.SeedMembers);
+    }
+
+    [Fact]
+    public void Parse_WhenServiceBusOnlyProvided_EnablesAsynchronousAdjudicationMode()
+    {
+        var options = ValidatorOptions.Parse(["--servicebus-only"]);
+
+        Assert.True(options.ServiceBusOnly);
+        Assert.False(ValidatorOptions.Parse([]).ServiceBusOnly);
+    }
+
+    [Fact]
+    public void Parse_WhenServiceBusReconciliationOptionsProvided_AppliesOverrides()
+    {
+        var defaults = ValidatorOptions.Parse([]);
+        var disabled = ValidatorOptions.Parse([
+            "--no-servicebus-reconciliation",
+            "--servicebus-reconciliation-timeout", "120"
+        ]);
+
+        Assert.True(defaults.ServiceBusReconciliationEnabled);
+        Assert.Equal(300, defaults.ServiceBusReconciliationTimeoutSeconds);
+        Assert.False(disabled.ServiceBusReconciliationEnabled);
+        Assert.Equal(120, disabled.ServiceBusReconciliationTimeoutSeconds);
     }
 
     [Fact]

@@ -201,7 +201,7 @@ public class PlanCodeMappingsController : ControllerBase
     [HttpDelete("{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
-    public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken ct)
+    public async Task<IActionResult> Delete([FromRoute] string id, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(TenantId))
         {
@@ -238,7 +238,7 @@ public class CreatePlanCodeMappingRequest
 
 public class PlanCodeMappingResponse
 {
-    public Guid Id { get; set; }
+    public string Id { get; set; } = string.Empty;
     public string GroupNumber { get; set; } = string.Empty;
     public string InsuranceLineCode { get; set; } = string.Empty;
     public string ExternalPlanCode { get; set; } = string.Empty;

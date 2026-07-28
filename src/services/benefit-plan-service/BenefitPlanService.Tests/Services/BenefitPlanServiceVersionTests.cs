@@ -183,15 +183,121 @@ public class BenefitPlanServiceVersionTests
     }
 
     [Fact]
-    public async Task SupersedeVersionAsync_throws_invalid_operation_today()
+    public async Task SupersedeVersionAsync_terminates_published_version_with_no_successor()
     {
-        var (service, _, _, _) = Build();
+        var (service, _, transitions, events) = Build();
 
         var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
         var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
 
-        var act = () => service.SupersedeVersionAsync(v1.PlanId, v1.VersionId, Tenant, Actor, "test", DateTime.UtcNow);
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        var effectiveDate = DateTime.UtcNow;
+        var terminated = await service.SupersedeVersionAsync(v1.PlanId, v1.VersionId, Tenant, Actor, "test reason", effectiveDate);
+
+        terminated.VersionState.Should().Be(PlanVersionState.Superseded);
+        terminated.SupersededAt.Should().NotBeNull();
+        terminated.SupersededByVersionId.Should().BeNull();
+        terminated.IsActive.Should().BeFalse();
+        terminated.TerminationDate.Should().Be(effectiveDate);
+
+        // No longer resolvable as the current Published version.
+        (await service.GetPlanAsync(v1.PlanId, Tenant)).Should().BeNull();
+
+        transitions.Items.Should().ContainSingle(t =>
+            t.TransitionType == PlanVersionTransitionType.Terminate
+            && t.FromVersionId == v1.VersionId
+            && t.ToVersionId == null
+            && t.Reason == "test reason");
+        events.Events.Should().ContainSingle(e =>
+            e.EventType == PlanVersionEventType.PlanVersionTerminated && e.VersionId == v1.VersionId);
+    }
+
+    [Fact]
+    public async Task SupersedeVersionAsync_throws_when_version_not_published()
+    {
+        var (service, _, _, _) = Build();
+
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
+
+        var act = () => service.SupersedeVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor, "test", DateTime.UtcNow);
+        await act.Should().ThrowAsync<PlanVersionStateException>()
+            .Where(ex => ex.CurrentState == PlanVersionState.Draft);
+    }
+
+    [Fact]
+    public async Task SupersedeVersionAsync_unknown_version_throws_with_isNotFound_set()
+    {
+        var (service, _, _, _) = Build();
+
+        var act = () => service.SupersedeVersionAsync("plan", "no-such-version", Tenant, Actor, "test", DateTime.UtcNow);
+        await act.Should().ThrowAsync<PlanVersionStateException>()
+            .Where(ex => ex.IsNotFound);
+    }
+
+    [Fact]
+    public async Task DeletePlanAsync_terminates_current_published_version()
+    {
+        var (service, _, transitions, _) = Build();
+
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
+
+        var deleted = await service.DeletePlanAsync(v1.PlanId, Tenant, Actor);
+
+        deleted.Should().BeTrue();
+        (await service.GetPlanAsync(v1.PlanId, Tenant)).Should().BeNull();
+        transitions.Items.Should().ContainSingle(t => t.TransitionType == PlanVersionTransitionType.Terminate);
+    }
+
+    [Fact]
+    public async Task DeletePlanAsync_returns_false_for_unknown_plan()
+    {
+        var (service, _, _, _) = Build();
+
+        var deleted = await service.DeletePlanAsync("does-not-exist", Tenant, Actor);
+
+        deleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AddBenefitAsync_amends_and_publishes_new_version_with_benefit()
+    {
+        var (service, _, transitions, _) = Build();
+
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
+
+        var newBenefit = new Benefit { ServiceCategory = "Urgent Care", CopayAmount = 50m };
+        var added = await service.AddBenefitAsync(v1.PlanId, Tenant, Actor, newBenefit);
+
+        added.Should().Be(newBenefit);
+
+        var current = await service.GetPlanAsync(v1.PlanId, Tenant);
+        current.Should().NotBeNull();
+        current!.VersionNumber.Should().Be(2);
+        current.PredecessorVersionId.Should().Be(v1.VersionId);
+        current.Benefits.Should().Contain(b => b.ServiceCategory == "Urgent Care" && b.CopayAmount == 50m);
+        current.Benefits.Should().HaveCount(v1.Benefits.Count + 1);
+
+        var v1Reloaded = await service.GetVersionAsync(v1.PlanId, v1.VersionId, Tenant);
+        v1Reloaded!.VersionState.Should().Be(PlanVersionState.Superseded);
+        v1Reloaded.SupersededByVersionId.Should().Be(current.VersionId);
+
+        transitions.Items.Select(t => t.TransitionType).Should().BeEquivalentTo(new[]
+        {
+            PlanVersionTransitionType.Publish,
+            PlanVersionTransitionType.Amend,
+            PlanVersionTransitionType.Supersede
+        });
+    }
+
+    [Fact]
+    public async Task AddBenefitAsync_returns_null_for_unknown_plan()
+    {
+        var (service, _, _, _) = Build();
+
+        var added = await service.AddBenefitAsync("does-not-exist", Tenant, Actor, new Benefit { ServiceCategory = "X" });
+
+        added.Should().BeNull();
     }
 
     [Fact]

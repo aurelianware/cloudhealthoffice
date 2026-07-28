@@ -14,6 +14,9 @@ public sealed record ValidatorOptions(
     bool SeedProviders,
     bool SeedAuthorizations,
     bool SkipClaimUpdate,
+    bool ServiceBusOnly,
+    bool ServiceBusReconciliationEnabled,
+    int ServiceBusReconciliationTimeoutSeconds,
     bool PendObservationEnabled,
     int PendObservationTimeoutSeconds,
     int PendObservationIntervalMilliseconds,
@@ -22,6 +25,7 @@ public sealed record ValidatorOptions(
     int TimeoutSeconds,
     int ProgressEvery,
     int Parallelism,
+    int SeedParallelism,
     int LineOfBusiness,
     string? SummaryJsonPath,
     bool NoPublishSummary,
@@ -31,7 +35,9 @@ public sealed record ValidatorOptions(
     bool ShowHelp)
 {
     public const int DefaultMaxClaims = 10_000;
-    public const int MaxParallelism = 64;
+    // Three local claims-service replicas default to 32 Service Bus calls each.
+    // Allow the validator to keep that 96-call consumer pool fed.
+    public const int MaxParallelism = 96;
 
     public static ValidatorOptions Parse(string[] args)
     {
@@ -79,6 +85,15 @@ public sealed record ValidatorOptions(
                 case "--skip-claim-update":
                     options.SkipClaimUpdate = true;
                     break;
+                case "--servicebus-only":
+                    options.ServiceBusOnly = true;
+                    break;
+                case "--no-servicebus-reconciliation":
+                    options.ServiceBusReconciliationEnabled = false;
+                    break;
+                case "--servicebus-reconciliation-timeout" when i + 1 < args.Length:
+                    options.ServiceBusReconciliationTimeoutSeconds = int.Parse(args[++i]);
+                    break;
                 case "--no-pend-observation":
                     options.PendObservationEnabled = false;
                     break;
@@ -102,6 +117,9 @@ public sealed record ValidatorOptions(
                     break;
                 case "--parallelism" or "-p" when i + 1 < args.Length:
                     options.Parallelism = int.Parse(args[++i]);
+                    break;
+                case "--seed-parallelism" when i + 1 < args.Length:
+                    options.SeedParallelism = int.Parse(args[++i]);
                     break;
                 case "--max-claims" when i + 1 < args.Length:
                     options.MaxClaims = int.Parse(args[++i]);
@@ -159,6 +177,9 @@ public sealed record ValidatorOptions(
             options.SeedProviders,
             options.SeedAuthorizations,
             options.SkipClaimUpdate,
+            options.ServiceBusOnly,
+            options.ServiceBusReconciliationEnabled,
+            Math.Clamp(options.ServiceBusReconciliationTimeoutSeconds, 1, 900),
             options.PendObservationEnabled,
             Math.Clamp(options.PendObservationTimeoutSeconds, 1, 300),
             Math.Clamp(options.PendObservationIntervalMilliseconds, 100, 30_000),
@@ -167,6 +188,9 @@ public sealed record ValidatorOptions(
             Math.Max(5, options.TimeoutSeconds),
             Math.Max(1, options.ProgressEvery),
             Math.Max(1, options.Parallelism),
+            options.SeedParallelism > 0
+                ? Math.Clamp(options.SeedParallelism, 1, MaxParallelism)
+                : Math.Max(1, options.Parallelism),
             Math.Clamp(options.LineOfBusiness, 1, 5),
             options.SummaryJsonPath,
             options.NoPublishSummary,
@@ -191,6 +215,9 @@ public sealed record ValidatorOptions(
         public bool SeedProviders { get; set; } = true;
         public bool SeedAuthorizations { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
+        public bool ServiceBusOnly { get; set; }
+        public bool ServiceBusReconciliationEnabled { get; set; } = true;
+        public int ServiceBusReconciliationTimeoutSeconds { get; set; } = 300;
         public bool PendObservationEnabled { get; set; } = true;
         public int PendObservationTimeoutSeconds { get; set; } = 45;
         public int PendObservationIntervalMilliseconds { get; set; } = 1000;
@@ -199,6 +226,7 @@ public sealed record ValidatorOptions(
         public int TimeoutSeconds { get; set; } = 60;
         public int ProgressEvery { get; set; } = 10;
         public int Parallelism { get; set; } = 10;
+        public int SeedParallelism { get; set; }
         public int MaxClaims { get; set; } = DefaultMaxClaims;
         public int LineOfBusiness { get; set; } = 3;
         public string? SummaryJsonPath { get; set; }

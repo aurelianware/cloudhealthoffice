@@ -39,6 +39,11 @@ AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
 PRICING_API_KEY="local-dev-key"
 PRICING_API_ADMIN_SECRET="local-dev-admin"
 REDIS_CONNECTION_STRING=""  # auto-set below if empty
+LOCAL_SERVICEBUS_NAMESPACE=""
+LOCAL_SERVICEBUS_RESOURCE_GROUP=""
+LOCAL_SERVICEBUS_LOCATION=""
+LOCAL_COSMOS_MONGODB_ACCOUNT=""
+LOCAL_COSMOS_MONGODB_RESOURCE_GROUP=""
 
 # Source local overrides (real credentials for auth/payments)
 if [[ -f .env.local ]]; then
@@ -178,9 +183,62 @@ kubectl delete resourcequota compute-resources -n "$NAMESPACE" 2>/dev/null || tr
 kubectl delete networkpolicy allow-ingress-from-portal -n "$NAMESPACE" 2>/dev/null || true
 ok "removed ResourceQuota and NetworkPolicy (not needed locally)"
 
+# ── Configure claims messaging ───────────────────────────────────────────────
+# Azure Service Bus is opt-in for local development. Configure all three
+# LOCAL_SERVICEBUS_* values in .env.local to provision the claims entities,
+# create a least-privilege Listen/Send rule, and install servicebus-secret.
+# With no configuration, claims-service explicitly uses its in-process bus.
+CLAIMS_MESSAGING_BACKEND="InMemory"
+if [[ -n "$LOCAL_SERVICEBUS_NAMESPACE" ||
+      -n "$LOCAL_SERVICEBUS_RESOURCE_GROUP" ||
+      -n "$LOCAL_SERVICEBUS_LOCATION" ]]; then
+  if [[ -z "$LOCAL_SERVICEBUS_NAMESPACE" ||
+        -z "$LOCAL_SERVICEBUS_RESOURCE_GROUP" ||
+        -z "$LOCAL_SERVICEBUS_LOCATION" ]]; then
+    err "Set LOCAL_SERVICEBUS_NAMESPACE, LOCAL_SERVICEBUS_RESOURCE_GROUP, and LOCAL_SERVICEBUS_LOCATION together"
+  fi
+
+  log "Configuring Azure Service Bus for local claims messaging"
+  SERVICEBUS_NAMESPACE="$LOCAL_SERVICEBUS_NAMESPACE" \
+    RESOURCE_GROUP="$LOCAL_SERVICEBUS_RESOURCE_GROUP" \
+    LOCATION="$LOCAL_SERVICEBUS_LOCATION" \
+    K8S_NAMESPACE="$NAMESPACE" \
+    ./scripts/azure/bootstrap-local-servicebus.sh
+  CLAIMS_MESSAGING_BACKEND="ServiceBus"
+  ok "claims messaging: Azure Service Bus"
+else
+  ok "claims messaging: InMemory (set LOCAL_SERVICEBUS_* in .env.local to opt in)"
+fi
+
 # ── Create secrets ────────────────────────────────────────────────────────────
 log "Creating secrets"
 MONGO_CONN="mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb.${NAMESPACE}.svc.cluster.local:27017/?authSource=admin"
+
+if [[ -n "$LOCAL_COSMOS_MONGODB_ACCOUNT" || -n "$LOCAL_COSMOS_MONGODB_RESOURCE_GROUP" ]]; then
+  [[ -n "$LOCAL_COSMOS_MONGODB_ACCOUNT" ]] \
+    || err "LOCAL_COSMOS_MONGODB_ACCOUNT is required when LOCAL_COSMOS_MONGODB_RESOURCE_GROUP is set"
+  [[ -n "$LOCAL_COSMOS_MONGODB_RESOURCE_GROUP" ]] \
+    || err "LOCAL_COSMOS_MONGODB_RESOURCE_GROUP is required when LOCAL_COSMOS_MONGODB_ACCOUNT is set"
+  command -v az >/dev/null 2>&1 || err "Azure CLI is required for Cosmos DB for MongoDB"
+
+  account_kind="$(az cosmosdb show \
+    --name "$LOCAL_COSMOS_MONGODB_ACCOUNT" \
+    --resource-group "$LOCAL_COSMOS_MONGODB_RESOURCE_GROUP" \
+    --query kind --output tsv)"
+  [[ "$account_kind" == "MongoDB" ]] \
+    || err "Cosmos account '$LOCAL_COSMOS_MONGODB_ACCOUNT' is '$account_kind', not 'MongoDB'"
+
+  MONGO_CONN="$(az cosmosdb keys list \
+    --name "$LOCAL_COSMOS_MONGODB_ACCOUNT" \
+    --resource-group "$LOCAL_COSMOS_MONGODB_RESOURCE_GROUP" \
+    --type connection-strings \
+    --query 'connectionStrings[0].connectionString' \
+    --output tsv)"
+  [[ -n "$MONGO_CONN" ]] || err "Azure CLI returned an empty Cosmos DB for MongoDB connection string"
+  ok "MongoDB persistence: Azure Cosmos DB for MongoDB"
+else
+  ok "MongoDB persistence: local StatefulSet"
+fi
 
 # MongoDB auth
 kubectl create secret generic mongodb-auth \
@@ -394,10 +452,12 @@ deploy_service() {
     fi
 
     # Replace imagePullPolicy: Always with Never for local images
+    local backend="$CLAIMS_MESSAGING_BACKEND"
     sed \
       -e 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' \
       -e 's/storageClassName: azurefile-csi/storageClassName: standard/g' \
       -e 's/ReadWriteMany/ReadWriteOnce/g' \
+      -e "s/Messaging__Backend: \"Auto\"/Messaging__Backend: \"$backend\"/g" \
       "$manifest" \
       | kubectl apply -f - 2>/dev/null \
       && ok "$name" || warn "$name failed"

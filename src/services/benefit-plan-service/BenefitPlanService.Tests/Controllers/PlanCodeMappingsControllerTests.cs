@@ -108,7 +108,7 @@ public sealed class PlanCodeMappingsControllerTests
     {
         var controller = Build(new InMemoryEnrollment834PlanCodeMappingRepository());
 
-        var result = await controller.Delete(Guid.NewGuid(), default);
+        var result = await controller.Delete(Guid.NewGuid().ToString(), default);
 
         result.Should().BeOfType<NotFoundObjectResult>();
     }

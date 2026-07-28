@@ -37,25 +37,6 @@ internal class NcciRepositoryMongo : INcciRepository
             configuration["NcciEngine:MongoVersionCollection"] ?? "ncci_version");
 
         _logger = logger;
-        EnsureIndexes();
-    }
-
-    private void EnsureIndexes()
-    {
-        _pairs.Indexes.CreateOne(new CreateIndexModel<NcciEditPair>(
-            Builders<NcciEditPair>.IndexKeys
-                .Ascending(p => p.TenantId)
-                .Ascending(p => p.Column1Code)
-                .Ascending(p => p.Column2Code)
-                .Ascending(p => p.EffectiveDate),
-            new CreateIndexOptions { Background = true }));
-
-        _mues.Indexes.CreateOne(new CreateIndexModel<MueEntry>(
-            Builders<MueEntry>.IndexKeys
-                .Ascending(m => m.TenantId)
-                .Ascending(m => m.ProcedureCode)
-                .Ascending(m => m.EffectiveDate),
-            new CreateIndexOptions { Background = true }));
     }
 
     // ── NCCI Edit Pairs ────────────────────────────────────────────

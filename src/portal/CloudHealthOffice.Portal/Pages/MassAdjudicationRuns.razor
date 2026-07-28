@@ -220,6 +220,12 @@
                     <MudItem xs="6" md="4">@Metric("Business Denials", $"{_selectedRun.BusinessDenials:N0}", "#ffca28")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Platform Failures", $"{_selectedRun.PlatformFailures:N0}", "#ff0055")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Observation Timeouts", $"{_selectedRun.ObservationTimeouts:N0}", _selectedRun.ObservationTimeouts == 0 ? "#00ff88" : "#ff0055")</MudItem>
+                    @if (_selectedRun.ServiceBusObservationTimeouts > 0)
+                    {
+                        <MudItem xs="6" md="4">@Metric("SB Window Timeouts", $"{_selectedRun.ServiceBusObservationTimeouts:N0}", "#ffca28")</MudItem>
+                        <MudItem xs="6" md="4">@Metric("SB Late Completions", $"{_selectedRun.ServiceBusLateCompletions:N0}", _selectedRun.ServiceBusLateCompletions == _selectedRun.ServiceBusObservationTimeouts ? "#00ff88" : "#ffca28")</MudItem>
+                        <MudItem xs="6" md="4">@Metric("SB Unreconciled", $"{_selectedRun.ServiceBusUnreconciledClaims:N0}", _selectedRun.ServiceBusUnreconciledClaims == 0 ? "#00ff88" : "#ff0055")</MudItem>
+                    }
                     <MudItem xs="6" md="4">@Metric("Claims/sec", $"{_selectedRun.ThroughputClaimsPerSecond:N2}/s", "#7dd3fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("P95 / P99", $"{_selectedRun.P95LatencyMilliseconds:N0} / {_selectedRun.P99LatencyMilliseconds:N0} ms", "#c084fc")</MudItem>
                     <MudItem xs="6" md="4">@Metric("Workflow Checks", $"{_selectedRun.WorkflowMatches:N0} / {_selectedRun.WorkflowScenarios:N0}", "#00ff88")</MudItem>

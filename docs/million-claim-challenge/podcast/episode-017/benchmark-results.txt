@@ -1,0 +1,75 @@
+# Episode 017 benchmark results
+
+## Run A — normal three-pod smoke
+
+- Date: 2026-07-28
+- Tenant: `mcc-reconcile-smoke-20260728`
+- Environment: local Docker Desktop Kubernetes
+- Messaging: Azure Service Bus
+- Persistence: local MongoDB
+- Claims-service replicas: 3
+- Validator parallelism: 96
+- Claims: 1,000
+- Initial observation window: 1 second
+- Post-window reconciliation limit: 60 seconds
+
+Result:
+
+  Processed:                    1,000/1,000
+  Initial observation timeouts: 0
+  Workflow checks:              130/130 matched
+  Payment gate:                 20/20 exact within $0.01
+  Platform failures:            0
+  Throughput:                   185.67 claims/sec
+  P95 / P99:                    790 / 894 ms
+
+Purpose: confirm the change does not alter a clean asynchronous result when every claim completes
+inside the initial window.
+
+## Run B — controlled overload to force post-window reconciliation
+
+- Date: 2026-07-28
+- Tenant: `mcc-reconcile-overload-20260728`
+- Environment: local Docker Desktop Kubernetes
+- Messaging: Azure Service Bus
+- Persistence: local MongoDB
+- Claims-service replicas: temporarily reduced from 3 to 1, then restored to 3
+- Validator parallelism: 96
+- Claims: 1,000
+- Initial observation window: 1 second
+- Post-window reconciliation limit: 60 seconds
+
+Timed-window result:
+
+  Completed inside window:      64
+  Observation timeouts:         936
+  Timed throughput:             79.46 claims/sec
+  P95 / P99:                    1,296 / 1,333 ms
+
+Post-window result:
+
+  Reconciled late:              936/936
+  Reconciliation duration:      1.49 seconds
+  Unresolved:                   0
+  Final processed:              1,000/1,000
+  Final paid:                   815
+  Final pended:                 18
+  Final business denials:       167
+  Workflow checks:              130/130 matched
+  Workflow timeouts:            0
+  Payment gate:                 20/20 exact within $0.01
+  Platform failures:            0
+  Final observation timeouts:   0
+
+Operational verification:
+
+- claims-service restored to 3 desired / 3 ready replicas
+- all three restored pods reported zero restarts
+
+Interpretation:
+
+- The initial timeout count remains visible as a measurement of work completing outside the
+  configured window.
+- Reconciliation changes the final evidence, not timed throughput or latency.
+- A claim that remains nonterminal after reconciliation still produces a nonzero validator exit.
+- This controlled overload proves the reconciliation mechanism; it is not a capacity result.

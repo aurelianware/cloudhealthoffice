@@ -26,7 +26,9 @@ public class MassAdjudicationRunRepositoryTests
             ExpectedBusinessDenialCode = "PRIOR_AUTH_REQUIRED",
             ValidationStatus = "Matched",
             Outcome = "Paid",
-            AdjudicationSuccess = true
+            AdjudicationSuccess = true,
+            ServiceBusObservationTimedOut = true,
+            ReconciledAfterObservationTimeout = true
         });
 
         var saved = await repo.SaveAsync(summary);
@@ -39,6 +41,8 @@ public class MassAdjudicationRunRepositoryTests
         saved.ClaimResults[0].CreatedAtUtc.Should().Be(saved.CreatedAtUtc);
         saved.ClaimResults[0].ValidationScenario.Should().Be("TxStarInpatientNoAuth");
         saved.ClaimResults[0].ValidationStatus.Should().Be("Matched");
+        saved.ClaimResults[0].ServiceBusObservationTimedOut.Should().BeTrue();
+        saved.ClaimResults[0].ReconciledAfterObservationTimeout.Should().BeTrue();
     }
 
     [Fact]
@@ -48,6 +52,9 @@ public class MassAdjudicationRunRepositoryTests
         var summary = CreateSummary();
         summary.Pended = 46;
         summary.ObservationTimeouts = 1;
+        summary.ServiceBusObservationTimeouts = 122;
+        summary.ServiceBusLateCompletions = 121;
+        summary.ServiceBusUnreconciledClaims = 1;
         summary.WorkflowUnsupported = 73;
         summary.WorkflowObservationTimeouts = 2;
         summary.AveragePaymentDelta = 59.36m;
@@ -97,6 +104,9 @@ public class MassAdjudicationRunRepositoryTests
         reread.Should().NotBeNull();
         reread.Pended.Should().Be(46);
         reread.ObservationTimeouts.Should().Be(1);
+        reread.ServiceBusObservationTimeouts.Should().Be(122);
+        reread.ServiceBusLateCompletions.Should().Be(121);
+        reread.ServiceBusUnreconciledClaims.Should().Be(1);
         reread.WorkflowUnsupported.Should().Be(73);
         reread.WorkflowObservationTimeouts.Should().Be(2);
         reread.AveragePaymentDelta.Should().Be(59.36m);
@@ -495,6 +505,55 @@ public class MassAdjudicationRunRepositoryTests
         await claimResults.DidNotReceive().DeleteManyAsync(
             Arg.Any<FilterDefinition<MassAdjudicationClaimResult>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SaveAsync_inserts_large_claim_result_sets_in_cosmos_safe_batches()
+    {
+        var database = Substitute.For<IMongoDatabase>();
+        var runs = Substitute.For<IMongoCollection<MassAdjudicationRunSummary>>();
+        var claimResults = Substitute.For<IMongoCollection<MassAdjudicationClaimResult>>();
+
+        database.GetCollection<MassAdjudicationRunSummary>(
+                MassAdjudicationRunRepositoryMongo.CollectionName,
+                Arg.Any<MongoCollectionSettings?>())
+            .Returns(runs);
+        database.GetCollection<MassAdjudicationClaimResult>(
+                MassAdjudicationRunRepositoryMongo.ClaimResultsCollectionName,
+                Arg.Any<MongoCollectionSettings?>())
+            .Returns(claimResults);
+        runs.ReplaceOneAsync(
+                Arg.Any<FilterDefinition<MassAdjudicationRunSummary>>(),
+                Arg.Any<MassAdjudicationRunSummary>(),
+                Arg.Any<ReplaceOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Substitute.For<ReplaceOneResult>()));
+        claimResults.InsertManyAsync(
+                Arg.Any<IEnumerable<MassAdjudicationClaimResult>>(),
+                Arg.Any<InsertManyOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        claimResults.DeleteManyAsync(
+                Arg.Any<FilterDefinition<MassAdjudicationClaimResult>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Substitute.For<DeleteResult>()));
+
+        var summary = CreateSummary();
+        summary.ClaimResults.AddRange(
+            Enumerable.Range(1, 125).Select(index => new MassAdjudicationClaimResult
+            {
+                GeneratedClaimId = $"GEN-{index:D3}",
+                ClaimType = "Professional",
+                Outcome = "Paid"
+            }));
+
+        await new MassAdjudicationRunRepositoryMongo(database).SaveAsync(summary);
+
+        var insertedBatches = claimResults.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IMongoCollection<MassAdjudicationClaimResult>.InsertManyAsync))
+            .Select(call => ((IEnumerable<MassAdjudicationClaimResult>)call.GetArguments()[0]!).Count())
+            .ToArray();
+        insertedBatches.Should().Equal(50, 50, 25);
     }
 
     private static MassAdjudicationRunSummary CreateSummary() => new()

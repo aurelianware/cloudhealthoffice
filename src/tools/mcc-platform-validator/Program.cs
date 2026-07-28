@@ -47,9 +47,15 @@ Console.WriteLine($"  Auth URL:    {options.AuthorizationUrl}");
 Console.WriteLine($"  Claims:      {options.Claims:N0}");
 Console.WriteLine($"  Seed:        {options.Seed}");
 Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
+Console.WriteLine($"  Seed workers:{options.SeedParallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
 Console.WriteLine($"  Auth fixtures:{(options.SeedAuthorizations ? " enabled" : " disabled")}");
+Console.WriteLine($"  Adjudication:{(options.ServiceBusOnly ? " Service Bus only (persisted outcome)" : " synchronous + workflow observation")}");
+Console.WriteLine(
+    $"  SB reconcile:{(options.ServiceBusOnly && options.ServiceBusReconciliationEnabled
+        ? $" enabled ({options.ServiceBusReconciliationTimeoutSeconds}s)"
+        : " disabled")}");
 Console.WriteLine($"  Pend observe:{(options.PendObservationEnabled ? $" enabled ({options.PendObservationTimeoutSeconds}s/{options.PendObservationIntervalMilliseconds}ms)" : " disabled")}");
 Console.WriteLine($"  Pend diag:   {(options.PendDiagnosticsPath is not null ? $"enabled -> {options.PendDiagnosticsPath}" : "disabled")}");
 Console.WriteLine();
@@ -79,11 +85,16 @@ await MeasureLifecyclePhaseAsync(lifecycleTimings, "Reference rule seeding", "Pr
 });
 
 var validationPlanId = Guid.NewGuid();
-await MeasureLifecyclePhaseAsync(lifecycleTimings, "Validation plan setup", "Preparation", async () =>
-{
-    await CreateValidationPlanAsync(http, options, validationPlanId, json);
-    await SeedValidationPlanServiceCategoryOverridesAsync(http, options, validationPlanId, json);
-});
+var validationPlanBusinessId = await MeasureLifecycleValuePhaseAsync(
+    lifecycleTimings,
+    "Validation plan setup",
+    "Preparation",
+    async () =>
+    {
+        var planId = await CreateValidationPlanAsync(http, options, validationPlanId, json);
+        await SeedValidationPlanServiceCategoryOverridesAsync(http, options, validationPlanId, json);
+        return planId;
+    });
 
 var claims = await MeasureLifecycleValuePhaseAsync(
     lifecycleTimings,
@@ -91,19 +102,20 @@ var claims = await MeasureLifecycleValuePhaseAsync(
     "Preparation",
     () => GenerateClaimsAsync(options));
 
+var fixtureScopeId = MccFixtureScope.Create(options.TenantId, options.Seed);
 var providerPool = await MeasureLifecycleValuePhaseAsync(lifecycleTimings, "Fixture normalization", "Preparation", () =>
 {
     NormalizePriorAuthEdgeCases(claims, options);
     MccValidationProviderNormalizer.Normalize(
         claims,
         options.Seed,
-        validationPlanId,
+        fixtureScopeId,
         new MccWorkflowValidationCapabilities(
             ScorePriorAuthValidationEvidence: options.SeedAuthorizations,
             ScorePriorAuthProviderValidationEvidence: options.SeedAuthorizations));
-    MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, validationPlanId);
+    MccFixtureIsolation.IsolateValidationMembers(claims, options.Seed, fixtureScopeId);
     MccCleanPaidFixture.NormalizeClaims(claims);
-    return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, validationPlanId));
+    return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, fixtureScopeId));
 });
 Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
 Console.WriteLine(
@@ -195,7 +207,7 @@ var fixturePreparation = new MassAdjudicationFixturePreparation(
 var results = new ConcurrentBag<ClaimValidationResult>();
 var total = new Stopwatch();
 var completed = 0;
-var platformFailures = 0;
+var incompleteClaims = 0;
 var lastProgressPublishTicks = 0L;
 var progressLock = new object();
 var progressPublishGate = new SemaphoreSlim(1, 1);
@@ -226,13 +238,20 @@ await Parallel.ForEachAsync(
     new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
     async (claim, _) =>
     {
-        var result = await ProcessClaimAsync(http, options, claim, validationPlanId, answerKey, json);
+        var result = await ProcessClaimAsync(
+            http,
+            options,
+            claim,
+            validationPlanId,
+            validationPlanBusinessId,
+            answerKey,
+            json);
         results.Add(result);
 
         var done = Interlocked.Increment(ref completed);
-        if (result.Outcome is ClaimValidationOutcome.PlatformFailure)
+        if (result.Outcome is ClaimValidationOutcome.PlatformFailure or ClaimValidationOutcome.ObservationTimeout)
         {
-            Interlocked.Increment(ref platformFailures);
+            Interlocked.Increment(ref incompleteClaims);
         }
 
         if (done % options.ProgressEvery == 0 || done == claims.Count)
@@ -240,8 +259,8 @@ await Parallel.ForEachAsync(
             lock (progressLock)
             {
                 var currentDone = Volatile.Read(ref completed);
-                var failures = Math.Min(Volatile.Read(ref platformFailures), currentDone);
-                Console.Write($"\r  Processed: {currentDone:N0}/{claims.Count:N0}  processed={currentDone - failures:N0}  platformFailures={failures:N0}");
+                var incomplete = Math.Min(Volatile.Read(ref incompleteClaims), currentDone);
+                Console.Write($"\r  Processed: {currentDone:N0}/{claims.Count:N0}  terminal={currentDone - incomplete:N0}  incomplete={incomplete:N0}");
             }
 
             if (!options.NoPublishSummary
@@ -312,7 +331,29 @@ var orderedResults = results
 postProcessingStopwatch.Stop();
 postProcessingTimings.Add(("Result ordering", postProcessingStopwatch.Elapsed));
 
-if (options.PendObservationEnabled)
+if (options.ServiceBusOnly && options.ServiceBusReconciliationEnabled)
+{
+    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Service Bus post-window reconciliation", "Observation", async () =>
+    {
+        var reconciler = new MccServiceBusReconciler(new HttpClaimStatusSource(http, options.ClaimsUrl));
+        var reconciliation = await reconciler.ReconcileAsync(
+            orderedResults,
+            TimeSpan.FromSeconds(options.ServiceBusReconciliationTimeoutSeconds),
+            TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds),
+            options.Parallelism);
+        orderedResults = reconciliation.Results;
+
+        if (reconciliation.Candidates > 0)
+        {
+            Console.WriteLine(
+                $"  Service Bus reconciliation: {reconciliation.Reconciled:N0}/{reconciliation.Candidates:N0} late claims reconciled, " +
+                $"{reconciliation.Unreconciled:N0} still unresolved");
+            Console.WriteLine();
+        }
+    });
+}
+
+if (options.PendObservationEnabled && !options.ServiceBusOnly)
 {
     await MeasureLifecyclePhaseAsync(lifecycleTimings, "Expected-pend observation", "Observation", async () =>
     {
@@ -374,7 +415,7 @@ if (!options.NoPublishSummary)
 
 WritePostProcessingTimings(postProcessingTimings, lifecycleTimings, runStartedAtUtc);
 
-if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure))
+if (orderedResults.Any(r => r.Outcome is ClaimValidationOutcome.PlatformFailure or ClaimValidationOutcome.ObservationTimeout))
 {
     Environment.ExitCode = 1;
 }
@@ -441,6 +482,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     ValidatorOptions options,
     SyntheticClaim claim,
     Guid validationPlanId,
+    string validationPlanBusinessId,
     MccAnswerKey answerKey,
     JsonSerializerOptions json)
 {
@@ -450,6 +492,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     var updateElapsed = TimeSpan.Zero;
     var failureStage = "unknown";
     var expectedValidation = answerKey.ExpectedValidationFor(claim);
+    string? submittedClaimId = null;
     var expectedPlanPayment = expectedValidation.ExpectedOutcome is not ClaimValidationOutcome.Paid
         ? null
         : claim.ExpectedOutcome?.ExpectedPaidAmount;
@@ -459,9 +502,82 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         var networkTier = NetworkTier(claim);
         failureStage = "submit";
         var stage = Stopwatch.StartNew();
-        var submitted = await SubmitClaimAsync(http, options, claim, validationPlanId, json);
+        var submitted = await SubmitClaimAsync(
+            http,
+            options,
+            claim,
+            validationPlanBusinessId,
+            json);
+        submittedClaimId = submitted.Id;
         stage.Stop();
         submitElapsed = stage.Elapsed;
+
+        if (options.ServiceBusOnly)
+        {
+            failureStage = "servicebus-observation";
+            stage.Restart();
+            ObservedClaimStatus observed;
+            try
+            {
+                observed = await ObserveServiceBusOutcomeAsync(http, options, submitted.Id);
+            }
+            catch (TimeoutException ex)
+            {
+                stage.Stop();
+                adjudicationElapsed = stage.Elapsed;
+                sw.Stop();
+
+                return new ClaimValidationResult(
+                    claim.ClaimId,
+                    submitted.Id,
+                    claim.ClaimType,
+                    expectedValidation.Scenario,
+                    expectedValidation.ExpectedOutcome?.ToString(),
+                    expectedValidation.ExpectedBusinessDenialCode,
+                    MccWorkflowValidation.ObservationTimeoutStatus,
+                    ClaimValidationOutcome.ObservationTimeout,
+                    false,
+                    null,
+                    expectedPlanPayment,
+                    sw.Elapsed,
+                    submitElapsed,
+                    adjudicationElapsed,
+                    TimeSpan.Zero,
+                    new Dictionary<string, double>(),
+                    null,
+                    failureStage,
+                    ex.Message,
+                    ServiceBusObservationTimedOut: true);
+            }
+            stage.Stop();
+            adjudicationElapsed = stage.Elapsed;
+            sw.Stop();
+
+            var observedDenialCode = observed.Outcome is ClaimValidationOutcome.BusinessDenial
+                ? observed.BusinessDenialCode
+                : null;
+
+            return new ClaimValidationResult(
+                claim.ClaimId,
+                submitted.Id,
+                claim.ClaimType,
+                expectedValidation.Scenario,
+                expectedValidation.ExpectedOutcome?.ToString(),
+                expectedValidation.ExpectedBusinessDenialCode,
+                MccWorkflowValidation.ValidationStatus(expectedValidation, observed.Outcome, observedDenialCode),
+                observed.Outcome,
+                observed.Outcome is ClaimValidationOutcome.Paid,
+                observed.PlanPayment,
+                expectedPlanPayment,
+                sw.Elapsed,
+                submitElapsed,
+                adjudicationElapsed,
+                TimeSpan.Zero,
+                new Dictionary<string, double>(),
+                observedDenialCode,
+                null,
+                null);
+        }
 
         failureStage = "adjudicate";
         stage.Restart();
@@ -533,7 +649,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         sw.Stop();
         return new ClaimValidationResult(
             claim.ClaimId,
-            null,
+            submittedClaimId,
             claim.ClaimType,
             expectedValidation.Scenario,
             expectedValidation.ExpectedOutcome?.ToString(),
@@ -554,13 +670,80 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     }
 }
 
+static async Task<ObservedClaimStatus> ObserveServiceBusOutcomeAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    string submittedClaimId)
+{
+    var source = new HttpClaimStatusSource(http, options.ClaimsUrl);
+    var timeout = TimeSpan.FromSeconds(options.PendObservationTimeoutSeconds);
+    var interval = TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds);
+    var deadline = DateTimeOffset.UtcNow.Add(timeout);
+
+    while (true)
+    {
+        var remaining = deadline - DateTimeOffset.UtcNow;
+        if (remaining <= TimeSpan.Zero)
+        {
+            throw new TimeoutException(
+                $"Timed out waiting {timeout.TotalSeconds:N0}s for Service Bus adjudication of claim {submittedClaimId}");
+        }
+
+        ObservedClaimStatus? observed;
+        using (var attemptTimeout = new CancellationTokenSource(
+                   remaining < TimeSpan.FromSeconds(5) ? remaining : TimeSpan.FromSeconds(5)))
+        {
+            try
+            {
+                observed = await source.GetAsync(submittedClaimId, attemptTimeout.Token);
+            }
+            catch (OperationCanceledException) when (attemptTimeout.IsCancellationRequested)
+            {
+                observed = null;
+            }
+            catch (HttpRequestException)
+            {
+                observed = null;
+            }
+        }
+
+        if (observed?.IsTerminal is true)
+        {
+            return observed;
+        }
+
+        remaining = deadline - DateTimeOffset.UtcNow;
+        if (remaining <= TimeSpan.Zero)
+        {
+            throw new TimeoutException(
+                $"Timed out waiting {timeout.TotalSeconds:N0}s for Service Bus adjudication of claim {submittedClaimId}");
+        }
+
+        await Task.Delay(interval < remaining ? interval : remaining);
+    }
+}
+
 static async Task RequireHealthyAsync(HttpClient http, string url, string serviceName)
 {
-    using var response = await http.GetAsync(url);
-    if (!response.IsSuccessStatusCode)
-    {
-        throw new InvalidOperationException($"{serviceName} health check failed: {(int)response.StatusCode} {response.ReasonPhrase}");
-    }
+    await ProviderSeedRetryPolicy.ExecuteAsync(
+        async () =>
+        {
+            using var attemptTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var response = await http.GetAsync(url, attemptTimeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ProviderSeedRequestException(
+                    $"{serviceName} health check failed",
+                    response.StatusCode,
+                    response.ReasonPhrase ?? string.Empty);
+            }
+        },
+        CancellationToken.None,
+        (attempt, delay, exception) =>
+            Console.WriteLine(
+                $"  Transient {serviceName} health failure; " +
+                $"retry {attempt}/{ProviderSeedRetryPolicy.MaxAttempts} in {delay.TotalMilliseconds:N0} ms: " +
+                exception.Message));
 
     Console.WriteLine($"healthy: {serviceName}");
 }
@@ -666,13 +849,18 @@ static bool IsMccBehavioralHealthMappingPresent(ServiceCategoryMappingSeedView m
             && string.Equals(rule.CodeRangeEnd, "90899", StringComparison.OrdinalIgnoreCase));
 }
 
-static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions options, Guid planGuid, JsonSerializerOptions json)
+static async Task<string> CreateValidationPlanAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    Guid planGuid,
+    JsonSerializerOptions json)
 {
+    var businessPlanId = $"MCC-LOCAL-{DateTime.UtcNow:yyyyMMddHHmmss}";
     var plan = new
     {
         id = planGuid.ToString(),
         tenantId = options.TenantId,
-        planId = $"MCC-LOCAL-{DateTime.UtcNow:yyyyMMddHHmmss}",
+        planId = businessPlanId,
         planName = "MCC Local Validation PPO",
         payer = "Cloud Health Office MCC",
         effectiveDate = "2025-01-01T00:00:00Z",
@@ -752,6 +940,7 @@ static async Task CreateValidationPlanAsync(HttpClient http, ValidatorOptions op
     }
 
     Console.WriteLine($"created: validation benefit plan {planGuid}");
+    return businessPlanId;
 }
 
 // Plan-specific ServiceCategoryMapping overrides for the validation plan. The
@@ -1382,7 +1571,7 @@ static async Task<MemberFixturePreparation> SeedMembersAsync(
 
     await Parallel.ForEachAsync(
         members,
-        new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
+        new ParallelOptions { MaxDegreeOfParallelism = options.SeedParallelism },
         async (member, _) =>
         {
             if (await MemberExistsAsync(http, options, member.MemberId))
@@ -1720,6 +1909,8 @@ static async Task<bool> SeedPriorAuthAuthorizationFixturesAsync(
     IReadOnlyCollection<SyntheticClaim> claims,
     JsonSerializerOptions json)
 {
+    const int batchSize = 500;
+
     if (!options.PriorAuthScenariosEnabled)
     {
         Console.WriteLine("Authorization fixtures: skipped (prior-auth scenarios disabled)");
@@ -1746,45 +1937,77 @@ static async Task<bool> SeedPriorAuthAuthorizationFixturesAsync(
         return false;
     }
 
-    var payload = new
-    {
-        authorizations = fixtureClaims.Select(claim => BuildPriorAuthAuthorizationFixture(claim, options)).ToList()
-    };
-
     try
     {
-        using var response = await http.PostAsJsonAsync($"{options.AuthorizationUrl}/api/authorizations/dev-seed", payload, json);
-        var body = await response.Content.ReadAsStringAsync();
+        var totalSeeded = 0;
+        var totalCreated = 0;
+        var totalUpdated = 0;
+        var batches = (fixtureClaims.Count + batchSize - 1) / batchSize;
 
-        if (response.StatusCode is System.Net.HttpStatusCode.NotFound
-            or System.Net.HttpStatusCode.Unauthorized
-            or System.Net.HttpStatusCode.Forbidden)
+        for (var offset = 0; offset < fixtureClaims.Count; offset += batchSize)
         {
-            Console.WriteLine($"Authorization fixtures: skipped ({(int)response.StatusCode} from authorization-service)");
-            return false;
-        }
+            var batchNumber = (offset / batchSize) + 1;
+            var payload = new
+            {
+                authorizations = fixtureClaims
+                    .Skip(offset)
+                    .Take(batchSize)
+                    .Select(claim => BuildPriorAuthAuthorizationFixture(claim, options))
+                    .ToList()
+            };
 
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Authorization fixture seed failed: {(int)response.StatusCode} {body}");
-        }
+            using var response = await http.PostAsJsonAsync(
+                $"{options.AuthorizationUrl}/api/authorizations/dev-seed",
+                payload,
+                json);
+            var body = await response.Content.ReadAsStringAsync();
 
-        if (!TryReadAuthorizationFixtureSeedResponse(body, out var total, out var created, out var updated))
-        {
-            Console.WriteLine("Authorization fixtures: skipped (authorization-service did not expose compatible dev-seed evidence)");
-            return false;
+            if (response.StatusCode is System.Net.HttpStatusCode.NotFound
+                or System.Net.HttpStatusCode.Unauthorized
+                or System.Net.HttpStatusCode.Forbidden)
+            {
+                Console.WriteLine($"Authorization fixtures: skipped ({(int)response.StatusCode} from authorization-service)");
+                return false;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    $"Authorization fixture seed batch {batchNumber:N0}/{batches:N0} failed: " +
+                    $"{(int)response.StatusCode} {body}");
+            }
+
+            if (!TryReadAuthorizationFixtureSeedResponse(body, out var total, out var created, out var updated))
+            {
+                Console.WriteLine(
+                    "Authorization fixtures: skipped " +
+                    "(authorization-service did not expose compatible dev-seed evidence)");
+                return false;
+            }
+
+            totalSeeded += total;
+            totalCreated += created;
+            totalUpdated += updated;
+
+            if (batches > 1 && (batchNumber == batches || batchNumber % 5 == 0))
+            {
+                Console.WriteLine(
+                    $"Authorization fixtures: seeded batch {batchNumber:N0}/{batches:N0} " +
+                    $"({totalSeeded:N0}/{fixtureClaims.Count:N0})");
+            }
         }
 
         Console.WriteLine(
-            $"Authorization fixtures: seeded {total:N0} prior authorization fixtures ({created:N0} new, {updated:N0} updated)");
-        return total > 0;
+            $"Authorization fixtures: seeded {totalSeeded:N0} prior authorization fixtures " +
+            $"({totalCreated:N0} new, {totalUpdated:N0} updated)");
+        return totalSeeded > 0;
     }
     catch (HttpRequestException ex)
     {
         Console.WriteLine($"Authorization fixtures: skipped ({ex.Message})");
         return false;
     }
-    catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+    catch (TaskCanceledException ex)
     {
         Console.WriteLine($"Authorization fixtures: skipped ({ex.Message})");
         return false;
@@ -2087,41 +2310,56 @@ static async Task<FixtureCount> SeedProvidersAsync(
 
     await Parallel.ForEachAsync(
         providers,
-        new ParallelOptions { MaxDegreeOfParallelism = options.Parallelism },
-        async (provider, _) =>
+        new ParallelOptions { MaxDegreeOfParallelism = options.SeedParallelism },
+        async (provider, cancellationToken) =>
         {
-            var providerId = await GetProviderIdByNpiAsync(http, options, provider.Npi);
-            if (providerId is not null)
+            var providerWasCreated = false;
+            await ProviderSeedRetryPolicy.ExecuteAsync(
+                async () =>
+                {
+                    var providerId = await GetProviderIdByNpiAsync(http, options, provider.Npi);
+                    if (providerId is null)
+                    {
+                        providerId = await CreateProviderAsync(http, options, provider, validationPlanId, json);
+                        providerWasCreated = true;
+                    }
+
+                    if (!IsProviderExcluded(provider))
+                    {
+                        await EnsureProviderCredentialingAsync(
+                            http,
+                            options,
+                            providerId,
+                            EffectiveDateForProvider(provider),
+                            json);
+                        await EnsureProviderNetworkParticipationAsync(
+                            http,
+                            options,
+                            providerId,
+                            provider,
+                            json);
+                        await EnsureProviderVerificationFreshnessAsync(http, options, providerId, json);
+                    }
+                    else
+                    {
+                        await EnsureProviderExclusionAsync(http, options, providerId, json);
+                    }
+                },
+                cancellationToken,
+                (attempt, delay, exception) =>
+                    Console.WriteLine(
+                        $"\n  Transient provider seed failure ({provider.Npi}); " +
+                        $"retry {attempt}/{ProviderSeedRetryPolicy.MaxAttempts} in {delay.TotalMilliseconds:N0} ms: " +
+                        exception.Message));
+
+            if (providerWasCreated)
+            {
+                Interlocked.Increment(ref created);
+            }
+            else
             {
                 Interlocked.Increment(ref existing);
             }
-            else
-            {
-                providerId = await CreateProviderAsync(http, options, provider, validationPlanId, json);
-                Interlocked.Increment(ref created);
-            }
-
-            if (!IsProviderExcluded(provider))
-            {
-                await EnsureProviderCredentialingAsync(
-                    http,
-                    options,
-                    providerId,
-                    EffectiveDateForProvider(provider),
-                    json);
-                await EnsureProviderNetworkParticipationAsync(
-                    http,
-                    options,
-                    providerId,
-                    provider,
-                    json);
-                await EnsureProviderVerificationFreshnessAsync(http, options, providerId, json);
-            }
-            else
-            {
-                await EnsureProviderExclusionAsync(http, options, providerId, json);
-            }
-
             WriteSeedingProgress("providers", Interlocked.Increment(ref processed), providers.Count, progressInterval, progressLock);
         });
 
@@ -2176,7 +2414,8 @@ static async Task<bool> ProviderNetworkExistsAsync(HttpClient http, ValidatorOpt
     }
 
     var body = await response.Content.ReadAsStringAsync();
-    throw new InvalidOperationException($"provider network lookup failed ({networkId}): {(int)response.StatusCode} {body}");
+    throw new ProviderSeedRequestException(
+        $"provider network lookup failed ({networkId})", response.StatusCode, body);
 }
 
 static async Task EnsureProviderNetworkParticipationAsync(
@@ -2223,8 +2462,10 @@ static async Task EnsureProviderNetworkParticipationAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode && response.StatusCode is not System.Net.HttpStatusCode.Conflict)
     {
-        throw new InvalidOperationException(
-            $"provider network participation seed failed ({providerId}/{provider.Npi}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider network participation seed failed ({providerId}/{provider.Npi})",
+            response.StatusCode,
+            body);
     }
 }
 
@@ -2247,8 +2488,10 @@ static async Task<bool> ProviderHasActiveNetworkParticipationAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider network membership lookup failed ({networkId}/{npi}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider network membership lookup failed ({networkId}/{npi})",
+            response.StatusCode,
+            body);
     }
 
     using var document = JsonDocument.Parse(body);
@@ -2290,7 +2533,8 @@ static async Task CreateProviderNetworkAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode && response.StatusCode is not System.Net.HttpStatusCode.Conflict)
     {
-        throw new InvalidOperationException($"provider network seed failed ({networkId}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider network seed failed ({networkId})", response.StatusCode, body);
     }
 }
 
@@ -2310,7 +2554,8 @@ static async Task<string?> GetProviderIdByNpiAsync(HttpClient http, ValidatorOpt
     }
 
     var failureBody = await response.Content.ReadAsStringAsync();
-    throw new InvalidOperationException($"provider lookup failed ({npi}): {(int)response.StatusCode} {failureBody}");
+    throw new ProviderSeedRequestException(
+        $"provider lookup failed ({npi})", response.StatusCode, failureBody);
 }
 
 static string? ExtractProviderId(string body)
@@ -2367,8 +2612,8 @@ static async Task EnsureProviderCredentialingAsync(
     var updateBody = await update.Content.ReadAsStringAsync();
     if (!update.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider credentialing seed failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+        throw new ProviderSeedRequestException(
+            $"provider credentialing seed failed ({providerId})", update.StatusCode, updateBody);
     }
 }
 
@@ -2397,8 +2642,8 @@ static async Task EnsureProviderExclusionAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider fetch failed for exclusion check ({providerId}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider fetch failed for exclusion check ({providerId})", response.StatusCode, body);
     }
 
     var node = JsonNode.Parse(body)
@@ -2423,8 +2668,8 @@ static async Task EnsureProviderExclusionAsync(
     var updateBody = await update.Content.ReadAsStringAsync();
     if (!update.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider exclusion correction failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+        throw new ProviderSeedRequestException(
+            $"provider exclusion correction failed ({providerId})", update.StatusCode, updateBody);
     }
 }
 
@@ -2451,8 +2696,10 @@ static async Task EnsureProviderVerificationFreshnessAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider fetch failed for verification freshness check ({providerId}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider fetch failed for verification freshness check ({providerId})",
+            response.StatusCode,
+            body);
     }
 
     var node = JsonNode.Parse(body)
@@ -2472,8 +2719,10 @@ static async Task EnsureProviderVerificationFreshnessAsync(
     var updateBody = await update.Content.ReadAsStringAsync();
     if (!update.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException(
-            $"provider verification freshness refresh failed ({providerId}): {(int)update.StatusCode} {updateBody}");
+        throw new ProviderSeedRequestException(
+            $"provider verification freshness refresh failed ({providerId})",
+            update.StatusCode,
+            updateBody);
     }
 }
 
@@ -2562,7 +2811,8 @@ static async Task<string> CreateProviderAsync(
     var body = await response.Content.ReadAsStringAsync();
     if (!response.IsSuccessStatusCode)
     {
-        throw new InvalidOperationException($"provider seed failed ({provider.Npi}): {(int)response.StatusCode} {body}");
+        throw new ProviderSeedRequestException(
+            $"provider seed failed ({provider.Npi})", response.StatusCode, body);
     }
 
     return ExtractProviderId(body)
@@ -2585,7 +2835,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
     HttpClient http,
     ValidatorOptions options,
     SyntheticClaim claim,
-    Guid validationPlanId,
+    string validationPlanBusinessId,
     JsonSerializerOptions json)
 {
     var payload = new
@@ -2594,7 +2844,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
         claimNumber = claim.ClaimId,
         memberId = claim.Member.MemberId,
         subscriberId = claim.Member.SubscriberId,
-        benefitPlanId = validationPlanId.ToString(),
+        benefitPlanId = validationPlanBusinessId,
         subscriberFirstName = claim.Member.FirstName,
         subscriberLastName = claim.Member.LastName,
         patientFirstName = claim.Member.FirstName,
@@ -3113,6 +3363,9 @@ static void WriteSummary(MassAdjudicationRunSummary summary)
     Console.WriteLine($"  Business denials:   {summary.BusinessDenials:N0}");
     Console.WriteLine($"  Platform failures:  {summary.PlatformFailures:N0}");
     Console.WriteLine($"  Observation timeout: {summary.ObservationTimeouts:N0}");
+    Console.WriteLine(
+        $"  SB post-window:     {summary.ServiceBusLateCompletions:N0}/{summary.ServiceBusObservationTimeouts:N0} reconciled late, " +
+        $"{summary.ServiceBusUnreconciledClaims:N0} unresolved");
     Console.WriteLine($"  Workflow checks:    {summary.WorkflowMatches:N0}/{summary.WorkflowScenarios:N0} matched ({summary.WorkflowMismatches:N0} mismatched, {summary.WorkflowUnsupported:N0} unsupported, {summary.WorkflowObservationTimeouts:N0} observation timeouts)");
     Console.WriteLine($"  Elapsed:            {summary.Elapsed:mm\\:ss\\.fff}");
     Console.WriteLine($"  Throughput:         {summary.ThroughputClaimsPerSecond:N2} claims/sec");
@@ -3248,12 +3501,17 @@ static MassAdjudicationRunSummary BuildProgressSummary(
     MassAdjudicationFixturePreparation fixturePreparation)
 {
     var runCompletedAtUtc = DateTimeOffset.UtcNow;
-    var processed = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+    var processed = results.Count(r =>
+        r.Outcome is not ClaimValidationOutcome.PlatformFailure
+            and not ClaimValidationOutcome.ObservationTimeout);
     var paid = results.Count(r => r.Outcome is ClaimValidationOutcome.Paid);
     var pended = results.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
     var businessDenials = results.Count(r => r.Outcome is ClaimValidationOutcome.BusinessDenial);
     var observationTimeouts = results.Count(r => r.Outcome is ClaimValidationOutcome.ObservationTimeout);
     var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
+    var serviceBusObservationTimeouts = results.Count(r => r.ServiceBusObservationTimedOut);
+    var serviceBusLateCompletions = results.Count(r => r.ReconciledAfterObservationTimeout);
+    var serviceBusUnreconciledClaims = serviceBusObservationTimeouts - serviceBusLateCompletions;
     var workflowScenarios = results.Count(r => r.ValidationStatus is not "Unspecified");
     var workflowMatches = results.Count(r => r.ValidationStatus == MccWorkflowValidation.MatchedStatus);
     var workflowMismatches = results.Count(r =>
@@ -3289,6 +3547,9 @@ static MassAdjudicationRunSummary BuildProgressSummary(
         businessDenials,
         observationTimeouts,
         platformFailures,
+        serviceBusObservationTimeouts,
+        serviceBusLateCompletions,
+        serviceBusUnreconciledClaims,
         workflowScenarios,
         workflowMatches,
         workflowMismatches,
@@ -3332,7 +3593,9 @@ static MassAdjudicationRunProgress CreateProgress(
         .Order()
         .ToArray();
     var completedClaims = results.Count;
-    var processedClaims = results.Count(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure);
+    var processedClaims = results.Count(r =>
+        r.Outcome is not ClaimValidationOutcome.PlatformFailure
+            and not ClaimValidationOutcome.ObservationTimeout);
     var platformFailures = results.Count(r => r.Outcome is ClaimValidationOutcome.PlatformFailure);
     var pendingExpectedPendObservations = results.Count(r => MccRunSummaryBuilder.IsExpectedPendObservationPending(r, phase));
     var pendingTerminalStatusObservations = results.Count(r => MccRunSummaryBuilder.IsTerminalStatusObservationPending(r, phase));
@@ -3457,6 +3720,12 @@ static void PrintUsage()
       --no-seed-providers        Skip synthetic provider seeding
       --no-seed-authorizations   Skip prior authorization fixture seeding
       --skip-claim-update        Do not write adjudication projection back to claims-service
+      --servicebus-only          Submit claims and score only the persisted asynchronous Service Bus outcome;
+                                 skips synchronous benefit adjudication and writeback
+      --no-servicebus-reconciliation
+                                 Do not revisit Service Bus observation timeouts after the timed pass
+      --servicebus-reconciliation-timeout <seconds>
+                                 Maximum post-window reconciliation wait (default: 300)
       --no-pend-observation      Do not poll claims-service for expected-pend claim status
       --pend-observation-timeout <seconds>
                                  Max wait for expected-pend claims after benchmark timing stops (default: 45)
@@ -3473,6 +3742,8 @@ static void PrintUsage()
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 10)
       -p, --parallelism <count>  Number of claims to process concurrently (default: 10)
+      --seed-parallelism <count> Number of member/provider fixtures to seed concurrently
+                                 (default: same as --parallelism)
       --max-claims <count>       Maximum accepted --claims value before local safety capping (default: 10000)
       --line-of-business <code>  Adjudication line of business: 1 Commercial, 2 Medicare, 3 Medicaid, 4 CHIP, 5 Exchange (default: 3)
       --no-prior-auth-scenarios  Disable deterministic PA-required claim scenarios
@@ -3536,7 +3807,9 @@ internal sealed record ClaimValidationResult(
     string? BusinessDenialCode,
     string? FailureStage,
     string? Error,
-    JsonElement? SyncAdjudicationSnapshot = null);
+    JsonElement? SyncAdjudicationSnapshot = null,
+    bool ServiceBusObservationTimedOut = false,
+    bool ReconciledAfterObservationTimeout = false);
 
 internal sealed record MassAdjudicationRunSummary(
     string Id,
@@ -3549,6 +3822,9 @@ internal sealed record MassAdjudicationRunSummary(
     int BusinessDenials,
     int ObservationTimeouts,
     int PlatformFailures,
+    int ServiceBusObservationTimeouts,
+    int ServiceBusLateCompletions,
+    int ServiceBusUnreconciledClaims,
     int WorkflowScenarios,
     int WorkflowMatches,
     int WorkflowMismatches,
@@ -3708,7 +3984,9 @@ internal sealed record MassAdjudicationClaimResult(
     double SubmitMilliseconds,
     double AdjudicationMilliseconds,
     double WritebackMilliseconds,
-    IReadOnlyDictionary<string, double> AdjudicationStepMilliseconds);
+    IReadOnlyDictionary<string, double> AdjudicationStepMilliseconds,
+    bool ServiceBusObservationTimedOut,
+    bool ReconciledAfterObservationTimeout);
 
 internal sealed record AdjudicationResponseDto(
     string ClaimId,

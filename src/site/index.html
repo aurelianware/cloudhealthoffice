@@ -194,8 +194,8 @@
     gap: 10px;
     flex-wrap: wrap;
   ">
-    <span>Latest proof: 1,000,000-claim local Kubernetes validation, zero platform failures, zero unsupported scenarios, 129,981/130,000 workflow checks matched.</span>
-    <a href="/docs/million-claim-challenge/evidence#episode-015" style="
+    <span>Latest proof: 1,000,000 claims through asynchronous Service Bus adjudication at 155.89 claims/sec, with every claim eventually terminal.</span>
+    <a href="/docs/million-claim-challenge/evidence#episode-016" style="
       color: #00ff88;
       font-weight: 600;
       text-decoration: none;
@@ -296,19 +296,20 @@
         </h1>
 
         <p class="hero-subheadline">
-          Cloud Health Office is source-available payer infrastructure with a published 1,000,000-claim local Kubernetes validation:
-          zero platform failures, zero unsupported scenarios, 129,981/130,000 workflow checks matched, zero unexpected pends, and every comparable payment within one cent.
+          Cloud Health Office is source-available payer infrastructure with published local Kubernetes evidence:
+          1,000,000 claims through asynchronous Service Bus adjudication at 155.89 claims/sec, every claim eventually terminal,
+          and a separate 100,000-claim raw X12 837 run at 199.42 claims/sec end-to-end.
           <br>
           Deployable in your cloud for technical evaluation and pilot-scoped engagements.
         </p>
 
         <div class="hero-cta">
-          <a href="/docs/million-claim-challenge/evidence#episode-015"
+          <a href="/docs/million-claim-challenge/evidence#episode-016"
              class="button"
              style="font-size:1.05rem; padding:15px 38px;">Inspect the 1M evidence &rarr;</a>
-          <a href="/insights/million-claim-challenge/part-15-one-million-claims"
+          <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus"
              class="button button-secondary"
-             style="font-size:1.05rem; padding:15px 38px;">Read Part 15 &rarr;</a>
+             style="font-size:1.05rem; padding:15px 38px;">Read Part 16 &rarr;</a>
           <a href="https://github.com/aurelianware/cloudhealthoffice"
              class="button button-secondary"
              style="font-size:1.05rem; padding:15px 38px;"
@@ -1124,21 +1125,21 @@
         <div class="section-header">
           <span class="section-eyebrow" style="color:#00ffff;">Million Claim Challenge</span>
           <h2 class="section-title">The proof ladder is public.</h2>
-          <p class="section-subtitle">The Million Claim Challenge is designed for one million deterministic synthetic claims across professional, institutional, dental, and 29 named edge-case scenarios. The latest published Cloud Health Office proof reached that full target: every claim processed, zero platform failures, zero unsupported scenarios, 129,981/130,000 workflow checks matched, zero unexpected pends, and every comparable payment within one cent.</p>
+          <p class="section-subtitle">The Million Claim Challenge is designed for one million deterministic synthetic claims across professional, institutional, dental, and 29 named edge-case scenarios. The latest run moved the full corpus onto asynchronous Service Bus adjudication: 155.89 claims/sec, all 1,000,000 eventually terminal, 2,000,000 lifecycle events, zero dead letters, and 19,982/19,982 observed payment comparisons exact.</p>
         </div>
 
         <div class="stats-inner" style="margin: 32px 0;">
           <div class="stat-item">
-            <span class="stat-number">129,981</span>
+            <span class="stat-number">129,980</span>
             <span class="stat-label">Workflow Checks<br>Matched</span>
           </div>
           <div class="stat-item">
-            <span class="stat-number">0</span>
-            <span class="stat-label">Unexpected<br>Pends</span>
+            <span class="stat-number">155.89</span>
+            <span class="stat-label">Claims/Sec<br>at 1M</span>
           </div>
           <div class="stat-item">
             <span class="stat-number">0</span>
-            <span class="stat-label">Unsupported<br>Scenarios</span>
+            <span class="stat-label">Dead-Letter<br>Messages</span>
           </div>
           <div class="stat-item">
             <span class="stat-number">$0.00</span>
@@ -1147,23 +1148,22 @@
         </div>
 
         <div style="text-align:center; margin-bottom:48px;">
-          <a href="/docs/million-claim-challenge/evidence#episode-015" class="button">Inspect the 1M Evidence &rarr;</a>
+          <a href="/docs/million-claim-challenge/evidence#episode-016" class="button">Inspect the Latest Evidence &rarr;</a>
           <a href="/docs/million-claim-challenge" class="button button-secondary">Explore the Benchmark Methodology &rarr;</a>
         </div>
 
         <div class="section-header">
           <span class="section-eyebrow" style="color:#00ff88;">What the Evidence Says</span>
-          <h2 class="section-title" style="font-size:1.4rem;">Current proof, open question.</h2>
+          <h2 class="section-title" style="font-size:1.4rem;">Faster, asynchronous, and still disclosed honestly.</h2>
         </div>
         <p style="text-align:center; color:#999; max-width:700px; margin:0 auto 24px;">
-          The 1M result is a local Docker Desktop Kubernetes validation, not a production cloud capacity claim. It reached the full
-          million-claim target this benchmark series was built around, with every correctness gate holding at that scale -- and the run
-          surfaced a real bug only that scale could expose: Redis hit an undocumented memory ceiling once a genuine million-claim working
-          set built up, found and fixed live. Sustained throughput at this scale (123.81 claims/sec) is lower than the 500K run's rate and
-          remains an open question, disclosed rather than hidden.
+          The latest 1M result is local Docker Desktop Kubernetes validation, not a production-cloud capacity claim. The validator
+          recorded 122 claims outside its 180-second observation window; post-run verification found all 1,000,000 terminal,
+          with zero dead letters, pod restarts, or claims-service error logs. Part 15's 123.81 claims/sec run remains the strict
+          zero-platform-failure baseline; Part 16 records the faster 155.89 claims/sec asynchronous path and its limitation.
         </p>
         <div style="text-align:center;">
-          <a href="/insights/million-claim-challenge/part-15-one-million-claims" class="button button-secondary">Read the 1M writeup &rarr;</a>
+          <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus" class="button button-secondary">Read Part 16 &rarr;</a>
         </div>
       </div>
     </section>

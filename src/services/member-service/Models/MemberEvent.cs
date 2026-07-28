@@ -1,5 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using MongoDB.Bson.Serialization.Attributes;
@@ -104,6 +106,24 @@ public class MemberEvent
 
     public static string BuildPartitionKey(string tenantId, string memberId) =>
         $"{tenantId}:{memberId}";
+
+    /// <summary>
+    /// Builds the globally unique document id required by MongoDB's <c>_id</c>
+    /// index. Event ids are only unique within a tenant/member stream, so using
+    /// <see cref="EventId"/> directly would make otherwise independent tenants
+    /// collide. Length-prefixing keeps the hash input unambiguous even when an
+    /// identifier contains separator characters.
+    /// </summary>
+    public static string BuildMongoDocumentId(string tenantId, string memberId, string eventId)
+    {
+        ArgumentNullException.ThrowIfNull(tenantId);
+        ArgumentNullException.ThrowIfNull(memberId);
+        ArgumentNullException.ThrowIfNull(eventId);
+
+        var scopedId =
+            $"{tenantId.Length}:{tenantId}{memberId.Length}:{memberId}{eventId.Length}:{eventId}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scopedId)));
+    }
 }
 
 public enum MemberEventType

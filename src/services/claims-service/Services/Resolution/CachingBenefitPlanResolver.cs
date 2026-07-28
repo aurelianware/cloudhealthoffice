@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using System.Collections.Concurrent;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -30,6 +31,7 @@ public sealed class CachingBenefitPlanResolver : IBenefitPlanResolver
     private readonly IBenefitPlanResolver _inner;
     private readonly IMemoryCache _cache;
     private readonly TimeSpan _ttl;
+    private readonly ConcurrentDictionary<string, Lazy<Task<ResolvedBenefitPlan?>>> _inflight = new();
 
     public CachingBenefitPlanResolver(IBenefitPlanResolver inner, IMemoryCache cache)
         : this(inner, cache, DefaultTtl) { }
@@ -45,6 +47,42 @@ public sealed class CachingBenefitPlanResolver : IBenefitPlanResolver
         string tenantId, string planId, CancellationToken ct = default)
     {
         var key = BuildCacheKey(tenantId, planId);
+        if (_cache.TryGetValue<ResolvedBenefitPlan>(key, out var cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        // A newly published plan causes many claims to miss together. Without
+        // single-flight coalescing, every miss reaches benefit-plan-service
+        // and can exhaust a Cosmos free-tier RU budget before the first result
+        // populates the cache.
+        var candidate = new Lazy<Task<ResolvedBenefitPlan?>>(
+            () => ResolveAndCacheAsync(key, tenantId, planId, ct),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        var inflight = _inflight.GetOrAdd(key, candidate);
+
+        try
+        {
+            return await inflight.Value.WaitAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (_inflight.TryGetValue(key, out var current)
+                && ReferenceEquals(current, inflight))
+            {
+                _inflight.TryRemove(key, out _);
+            }
+        }
+    }
+
+    private async Task<ResolvedBenefitPlan?> ResolveAndCacheAsync(
+        string key,
+        string tenantId,
+        string planId,
+        CancellationToken ct)
+    {
+        // A previous flight may have filled the cache between the caller's
+        // initial check and this lazy operation beginning.
         if (_cache.TryGetValue<ResolvedBenefitPlan>(key, out var cached) && cached is not null)
         {
             return cached;

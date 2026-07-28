@@ -74,6 +74,40 @@ Expected-pend scenarios score as:
 - `Unsupported` only when a future expected-pend subtype requires a signal the
   validator still cannot distinguish from persisted claim state.
 
+## Service Bus Post-Window Reconciliation
+
+`--servicebus-only` polls each submitted claim for a persisted terminal outcome
+inside the configured observation window. If that window expires, the validator
+preserves the submitted claim ID and marks the result as an observation timeout
+instead of discarding the ID as a generic platform failure.
+
+After the timed benchmark stops, the validator revisits those claims in bounded
+parallel. A terminal result found during this pass is fully re-scored from
+persisted state, including:
+
+- workflow outcome and business-denial code;
+- payer payment and the payment-accuracy gate;
+- paid, pended, and business-denial summary counts.
+
+The run summary reports the initial Service Bus observation timeouts, late
+completions reconciled after the window, and claims still unresolved after
+reconciliation as separate values. Timed throughput, P95, and P99 remain based
+on the original observation window; reconciliation is recorded as a separate
+post-window lifecycle phase.
+
+Defaults:
+
+- Reconciliation is enabled whenever `--servicebus-only` is active.
+- `--servicebus-reconciliation-timeout 300`
+- The poll interval comes from `--pend-observation-interval-ms`.
+- Pass `--no-servicebus-reconciliation` only to reproduce the pre-reconciliation
+  behavior intentionally.
+
+For `scripts/run-mcc-local-k8s.sh` and `scripts/sweep-mcc-local-k8s.sh`, set
+`SERVICEBUS_ONLY=true` to select the asynchronous path. Reconciliation can be
+controlled with `SERVICEBUS_RECONCILIATION_ENABLED` and
+`SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS`.
+
 ## Pend Diagnostics (`--pend-diagnostics`)
 
 Off by default. When given a path, the validator captures, for every

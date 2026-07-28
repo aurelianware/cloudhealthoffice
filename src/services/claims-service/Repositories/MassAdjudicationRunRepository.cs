@@ -28,6 +28,8 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
 {
     internal const string CollectionName = "MassAdjudicationRuns";
     internal const string ClaimResultsCollectionName = "MassAdjudicationClaimResults";
+    internal const int ClaimResultInsertBatchSize = 50;
+    private const int MaxRateLimitAttempts = 6;
     private readonly IMongoCollection<MassAdjudicationRunSummary> _collection;
     private readonly IMongoCollection<MassAdjudicationClaimResult> _claimResults;
 
@@ -73,7 +75,11 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
 
         if (claimResults.Count > 0)
         {
-            await _claimResults.InsertManyAsync(claimResults, cancellationToken: ct);
+            foreach (var batch in claimResults.Chunk(ClaimResultInsertBatchSize))
+            {
+                await InsertClaimResultBatchAsync(batch, ct);
+            }
+
             var newResultIds = claimResults.Select(x => x.Id).ToArray();
             var staleResultFilter = Builders<MassAdjudicationClaimResult>.Filter.And(
                 Builders<MassAdjudicationClaimResult>.Filter.Eq(x => x.TenantId, summary.Run.TenantId),
@@ -84,6 +90,41 @@ public sealed class MassAdjudicationRunRepositoryMongo : IMassAdjudicationRunRep
 
         return summary;
     }
+
+    private async Task InsertClaimResultBatchAsync(
+        IReadOnlyCollection<MassAdjudicationClaimResult> batch,
+        CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await _claimResults.InsertManyAsync(
+                    batch,
+                    new InsertManyOptions { IsOrdered = true },
+                    ct);
+                return;
+            }
+            catch (Exception ex) when (IsCosmosRateLimit(ex) && attempt < MaxRateLimitAttempts)
+            {
+                // Cosmos DB for MongoDB reports throttling as code 16500.
+                // Keep retries local to a small batch so a free-tier account
+                // can recover without replaying the entire run summary.
+                var delay = TimeSpan.FromMilliseconds(50 * (1 << (attempt - 1)));
+                await Task.Delay(delay, ct);
+            }
+        }
+    }
+
+    internal static bool IsCosmosRateLimit(Exception exception) =>
+        exception switch
+        {
+            MongoCommandException command => command.Code == 16500,
+            MongoWriteException write => write.WriteError?.Code == 16500,
+            MongoBulkWriteException<MassAdjudicationClaimResult> bulk =>
+                bulk.WriteErrors.Any(error => error.Code == 16500),
+            _ => false
+        };
 
     public async Task<IReadOnlyList<MassAdjudicationRunSummary>> ListAsync(
         string tenantId,
