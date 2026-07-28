@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quick Start — Cloud Health Office Documentation</title>
-  <meta name="description" content="Get Cloud Health Office running locally on Kubernetes, run scored Million Claim Challenge validation, inspect the Mass Adjudication console, and compare your run to the published clean 100K evidence." />
+  <meta name="description" content="Get Cloud Health Office running locally on Kubernetes, run scored Million Claim Challenge validation, inspect the Mass Adjudication console, and compare your run to the published 1M evidence." />
   <meta name="keywords" content="Cloud Health Office quick start, Kubernetes local development, healthcare payer platform setup, FHIR R4 quick start, X12 EDI local development, claims adjudication tutorial, CMS-0057-F getting started" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/quickstart" />
 
@@ -18,7 +18,7 @@
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "Cloud Health Office Quick Start Guide",
-    "description": "Step-by-step guide to running Cloud Health Office locally on Kubernetes, executing scored Million Claim Challenge validation, inspecting the operator console, and comparing against the published clean 100K evidence.",
+    "description": "Step-by-step guide to running Cloud Health Office locally on Kubernetes, executing scored Million Claim Challenge validation, inspecting the operator console, and comparing against the published 1M evidence.",
     "url": "https://cloudhealthoffice.com/docs/quickstart",
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
     "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
@@ -157,19 +157,16 @@
         <div class="callout callout-info">
           <div class="callout-title">Current evidence to compare against</div>
           <p>
-            The latest published Cloud Health Office proof is this series' first full
-            <strong>1,000,000-claim local Docker Desktop Kubernetes run</strong> &mdash; the target this benchmark was built
-            around from the start: zero unsupported scenarios held at full scale, 129,981/130,000 workflow checks matched, an
-            exact payment gate on 20,000/20,000 comparisons, and the wall-clock-gap fix held to 7 milliseconds unaccounted out of
-            two and a half hours. Scope matters: this is local engineering evidence, not a production cloud capacity claim.
+            The latest published Cloud Health Office proof runs the full
+            <strong>1,000,000-claim corpus through asynchronous Service Bus adjudication</strong> in local Docker Desktop
+            Kubernetes: 155.89 claims/sec, 910 ms P95, 1,205 ms P99, and 129,980/130,000 workflow checks matched inside
+            the observation window. Scope matters: this is local engineering evidence, not a production-cloud capacity claim.
           </p>
           <p>
-            The run also found a bug no smaller run ever could: Redis, backing the benefit-calculation accumulator cache, hit a
-            768MB memory ceiling once true million-claim scale built a working set of ~962,000 distinct member accumulators,
-            forcing eviction churn that produced 23 platform failures late in the run. Fixed live and verified on an identical
-            re-run (0 platform failures). Stated honestly: sustained throughput at this scale (123.81 claims/sec) is still well
-            below the 363 claims/sec verified at 20,000-claim scale, confirmed not caused by Redis, and remains an open question
-            for whoever picks this up next.
+            The validator recorded 122 claims outside its 180-second observation window. Post-run checks found all
+            1,000,000 claims terminal, 2,000,000 lifecycle events, zero dead letters, zero pod restarts, and no claims-service
+            error logs. Part 15's 123.81 claims/sec result remains the strict zero-platform-failure baseline; Part 16 is the
+            faster asynchronous result with its reconciliation limitation disclosed.
           </p>
           <p>
             Getting there took several rounds of prior work. A 500,000-claim run at 2x the prior scale (61,063/65,000 workflow
@@ -184,9 +181,9 @@
             that load, and a memory ceiling the fix immediately exposed once throughput actually rose.
           </p>
           <p>
-            <a href="/docs/million-claim-challenge/evidence#episode-015"><strong>Inspect the 1M evidence archive</strong></a>
+            <a href="/docs/million-claim-challenge/evidence#episode-016"><strong>Inspect the latest 1M evidence</strong></a>
             or read
-            <a href="/insights/million-claim-challenge/part-15-one-million-claims"><strong>Part 15: One Million Claims, and the Bug Only That Scale Could Find</strong></a>.
+            <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus"><strong>Part 16: The Million Went Through the Bus</strong></a>.
           </p>
         </div>
 
@@ -209,6 +206,7 @@
             <li><a href="/insights/million-claim-challenge/part-13-the-gap-was-the-laptop">Part 13: The Gap Was the Laptop</a></li>
             <li><a href="/insights/million-claim-challenge/part-14-zero-unsupported-parallelism">Part 14: Zero Unsupported, Then the Parallelism Nobody Profiled</a></li>
             <li><a href="/insights/million-claim-challenge/part-15-one-million-claims">Part 15: One Million Claims, and the Bug Only That Scale Could Find</a></li>
+            <li><a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus">Part 16: The Million Went Through the Bus</a></li>
           </ul>
         </div>
 
@@ -413,9 +411,9 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error || 
             <p>Understand the deterministic corpus, answer key, workflow scoring, supported gaps, and published evidence.</p>
             <span class="card-arrow">Challenge guide &rarr;</span>
           </a>
-          <a href="/docs/million-claim-challenge/evidence#episode-015" class="docs-hub-card">
+          <a href="/docs/million-claim-challenge/evidence#episode-016" class="docs-hub-card">
             <h3>1M Evidence Archive</h3>
-            <p>Review the full 1,000,000-claim local Kubernetes result, run settings, correctness gates, and the open sustained-throughput question.</p>
+            <p>Review the full 1,000,000-claim asynchronous result, 100% eventual completion evidence, and the separate 100K raw X12 837 onramp run.</p>
             <span class="card-arrow">Inspect evidence &rarr;</span>
           </a>
           <a href="/docs/compliance" class="docs-hub-card">

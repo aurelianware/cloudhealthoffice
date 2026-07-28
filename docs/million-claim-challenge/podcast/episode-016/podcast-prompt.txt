@@ -1,0 +1,42 @@
+Create a 10-12 minute two-host engineering podcast episode for Cloud Health Office's Million Claim
+Challenge series.
+
+Episode title:
+"Running a Healthcare Claims Platform Locally in Kubernetes, Part 16: The Million Went Through the Bus"
+
+Use a natural conversation between two senior engineers. One host should drive the investigation;
+the other should challenge assumptions, ask what each number actually proves, and keep the
+distinction between throughput, correctness, and eventual completion explicit.
+
+The central story:
+
+Part 15 reached a clean million claims at 123.81 claims/sec but left an unexplained sustained-
+throughput gap. Part 16 adds a true Service Bus-only validator mode and runs the full mixed corpus
+through asynchronous local adjudication at 155.89 claims/sec. The validator records 122
+observation-window timeouts, but post-run evidence proves all 1,000,000 claims eventually terminal,
+2,000,000 lifecycle events, zero dead letters, zero pod restarts, and clean service logs.
+
+Then make the second boundary explicit: MCC uses structured JSON and never proved the raw EDI
+onramp. A separate 100,000-claim X12 837P file is parsed, imported, sent through Service Bus, and
+adjudicated at 199.42 claims/sec end-to-end, with every claim accepted and terminal.
+
+Required discussion:
+
+- Why the previous validator's synchronous adjudication call was not the same as measuring the
+  platform-owned asynchronous path.
+- How least-privilege local Service Bus bootstrap replaced manual secret copying while preserving
+  an in-memory fallback.
+- The benefit-plan GUID versus business `planId` bug found only on the asynchronous resolver.
+- Why 6,376 authorization fixtures needed bounded seed batches.
+- Exact 1M metrics: 155.89 claims/sec, 910 ms P95, 1,205 ms P99.
+- Exact post-run evidence: 1,000,000 terminal and 2,000,000 lifecycle events.
+- Why the 122 timeouts must remain disclosed even though no claim was lost.
+- Why Part 15 remains the last strict zero-failure 1M baseline.
+- Exact 100K raw-837 metrics: 333.59 claims/sec parse-and-submit, 199.42 claims/sec end-to-end.
+- Why 100,000 valid business denials in the repeated COB fixture are not platform failures—and
+  also are not diverse adjudication-correctness evidence.
+- The difference between the MCC JSON corpus and raw X12 837 benchmark.
+- Local Docker Desktop Kubernetes scope; do not imply AKS or production-cloud results.
+
+Close with the next challenge: teach the validator to reconcile claims that complete after its
+observation window, then repeat in AKS when Azure quota permits.
