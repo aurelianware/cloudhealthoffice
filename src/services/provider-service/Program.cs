@@ -56,6 +56,7 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<INetworkParticipationEventPublisher, MongoNetworkParticipationEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventPublisher, MongoCredentialingEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventRepository, MongoCredentialingEventRepository>();
+    builder.Services.AddHostedService<ProviderQueryIndexInitializer>();
     builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
     builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
     builder.Services.AddHostedService<NetworkParticipationEventIndexInitializer>();

@@ -52,7 +52,9 @@ resource cosmosMongoAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' =
       }
     ]
     apiProperties: {
-      serverVersion: '4.2'
+      // MongoDB.Driver 3.x requires wire version 9 or newer. Cosmos DB for
+      // MongoDB 4.2 reports wire version 8, so use 5.0 for compatibility.
+      serverVersion: '5.0'
     }
     enableFreeTier: true
     enableAutomaticFailover: false

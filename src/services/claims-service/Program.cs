@@ -236,8 +236,11 @@ builder.Services.AddHttpClient(HttpBenefitPlanResolver.HttpClientName, client =>
     client.Timeout = TimeSpan.FromSeconds(benefitPlanServiceTimeoutSeconds);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
-builder.Services.AddScoped<HttpBenefitPlanResolver>();
-builder.Services.AddScoped<IBenefitPlanResolver>(sp =>
+// Both resolver layers are stateless/thread-safe. Singleton lifetime lets the
+// caching decorator coalesce concurrent first reads for a newly published
+// plan across claim-processing scopes in this replica.
+builder.Services.AddSingleton<HttpBenefitPlanResolver>();
+builder.Services.AddSingleton<IBenefitPlanResolver>(sp =>
     new CachingBenefitPlanResolver(
         sp.GetRequiredService<HttpBenefitPlanResolver>(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
