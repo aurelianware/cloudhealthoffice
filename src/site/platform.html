@@ -302,22 +302,22 @@
             <span>claims processed in local Kubernetes</span>
           </div>
           <div class="mcc-proof-metric">
-            <strong>123.81 claims/sec</strong>
-            <span>sustained throughput at full million-claim scale</span>
+            <strong>155.89 claims/sec</strong>
+            <span>asynchronous Service Bus throughput at full million-claim scale</span>
           </div>
           <div class="mcc-proof-metric">
-            <strong>957 ms / 1,290 ms</strong>
+            <strong>910 ms / 1,205 ms</strong>
             <span>P95 and P99 latency</span>
           </div>
           <div class="mcc-proof-metric">
-            <strong>0 platform failures</strong>
-            <span>129,981/130,000 workflow checks matched, 0 unsupported; payment gate exact on 20,000/20,000</span>
+            <strong>100% eventual completion</strong>
+            <span>122 observation-window timeouts; 1,000,000/1,000,000 later terminal, 0 dead letters</span>
           </div>
         </div>
         <p style="font-size:0.95rem; color:#888;">
-          Sustained throughput at this scale is lower than the 186.06 claims/sec measured on the prior 500,000-claim run, confirmed not
-          caused by the Redis eviction bug this run found and fixed, and remains open local work.
-          <a href="/insights/million-claim-challenge/part-15-one-million-claims" style="color:#00ffff;">Read the 1M writeup</a>
+          This local result is not a production-cloud capacity claim. Part 15 remains the strict zero-platform-failure 1M baseline;
+          Part 16 measures the faster platform-owned asynchronous path and discloses its fixed observation-window limitation.
+          <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus" style="color:#00ffff;">Read Part 16</a>
           &middot;
           <a href="/docs/million-claim-challenge" style="color:#00ffff;">See the benchmark methodology &rarr;</a>
         </p>

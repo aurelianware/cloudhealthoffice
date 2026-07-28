@@ -1,0 +1,122 @@
+# Episode 016 benchmark results
+
+## Environment and scope
+
+- Date: 2026-07-27/28
+- Platform: local Docker Desktop Kubernetes
+- Claims-service replicas: 3
+- Service Bus consumer concurrency: 32 per pod, 96 total configured calls
+- Messaging: Azure Service Bus namespace provisioned for local development
+- Authorization: least-privilege Listen/Send rule installed as `servicebus-secret`
+- Persistence: local MongoDB
+- These are local validation measurements, not production-cloud capacity claims.
+
+## Run A — full MCC corpus through Service Bus-only adjudication
+
+- Tenant: `mcc-sb-mixed-1m-p96-v3`
+- Workload: 1,000,000 deterministic mixed MCC claims submitted as structured JSON
+- Validator parallelism: 96
+- Path: `POST /api/v1/claims` -> Azure Service Bus -> local claims-service adjudication -> MongoDB
+- This run did not parse an 837 file.
+
+Validator summary:
+
+  Total claims:       1,000,000
+  Processed in window: 999,878
+  Paid/adjudicated:   813,726
+  Pended:             19,019
+  Business denials:   167,133
+  Platform failures:  122
+  Workflow checks:    129,980/130,000 matched
+  Workflow mismatches: 20
+  Throughput:         155.89 claims/sec
+  P95 latency:        910 ms
+  P99 latency:        1,205 ms
+  Payment gate:       19,982/19,982 exact within $0.01
+  Timed adjudication: 1:46:54
+  Preparation:        33:18
+
+The 122 validator failures were all `servicebus-observation` timeouts: the claim did not become
+terminal inside that claim's 180-second polling window. They clustered in two brief periods.
+They were not submission failures, dead letters, or lost claims.
+
+Post-run verification:
+
+  Persisted claims:       1,000,000
+  Terminal claims:        1,000,000
+  Nonterminal claims:     0
+  Final paid:             813,845
+  Final pended:           19,019
+  Final business denials: 167,136
+  Lifecycle events:       2,000,000
+  Service Bus active:     0
+  Service Bus dead-letter: 0
+  Claims pod restarts:    0
+  Claims-service error/exception log matches: 0
+
+Interpretation:
+
+- Latest sustained 1M throughput improved from Part 15's 123.81 claims/sec to 155.89 claims/sec:
+  +25.9%.
+- It also exceeded Part 10's 250K record of 145.04 claims/sec by 7.5%.
+- Part 15 remains the latest strict zero-platform-failure 1M validator result.
+- Episode 16 proves 100% eventual completion on the asynchronous path, while also exposing that a
+  fixed per-claim observation window can misclassify delayed work as failed at genuine scale.
+- The 20 workflow mismatches and 18 missing payment comparisons were claims that timed out before
+  the validator could score their persisted outcomes; the validator did not reconcile them later.
+
+## Run B — 10K raw X12 837P at importer concurrency 64
+
+- File size: 1,590,586 bytes
+- Claims: 10,000
+- Importer concurrency: 64
+- Accepted: 10,000/10,000
+- Parse and submit: 27.45 seconds, 364.36 claims/sec
+- All terminal: 50 seconds from request start, 200.00 claims/sec
+- Import transactions: 10,000
+- Lifecycle events: 20,000
+- Active/dead-letter after drain: 0/0
+- Pod restarts: 0
+- Error/exception log matches: 0
+
+## Run C — 100K raw X12 837P at importer concurrency 64
+
+- File size: 16,100,587 bytes (below the endpoint's 20 MB request limit)
+- Claims: 100,000
+- Importer concurrency: 64
+- Path: raw X12 file -> parser/importer -> claims-service -> Azure Service Bus -> local
+  adjudication -> MongoDB
+- Accepted: 100,000/100,000
+- Parse and submit: 299.77 seconds, 333.59 claims/sec
+- Last adjudication event: 501.45 seconds from request start
+- End-to-end throughput: 199.42 claims/sec
+- Terminal: 100,000/100,000
+- Import transactions: 100,000
+- Lifecycle events: 200,000
+- Final status: 100,000 business denials (expected for the deliberately reused COB-secondary
+  fixture; a valid business disposition, not a platform failure)
+- Peak observed active Service Bus backlog: approximately 39,000
+- Active/dead-letter after drain: 0/0
+- Pod restarts: 0
+- Error/exception log matches: 0
+
+Comparison with the prior clean raw-837 p32 run:
+
+| Run | Claims | Import concurrency | End-to-end throughput | Result |
+|---|---:|---:|---:|---|
+| Prior p32 | 10,000 | 32 | 139.09 claims/sec | Clean |
+| p64 smoke | 10,000 | 64 | 200.00 claims/sec | Clean |
+| p64 sustained | 100,000 | 64 | 199.42 claims/sec | Clean |
+
+The 100K p64 result is 43.4% faster than the prior p32 result while preserving complete
+acceptance, terminal persistence, event evidence, and an empty dead-letter queue.
+
+## What remains open
+
+- Add post-window reconciliation so the MCC validator can distinguish delayed completion from
+  permanent failure without manual MongoDB verification.
+- Re-score the 122 delayed claims after reconciliation, including the 20 workflow checks and 18
+  payment comparisons they contained.
+- Treat importer concurrency 64 as locally validated; production defaults still require
+  environment-specific capacity testing.
+- Repeat on AKS after trial-subscription quota is available. No AKS result is claimed here.

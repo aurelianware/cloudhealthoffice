@@ -74,6 +74,12 @@ const publications = [
     part: 'Part 15',
     slug: 'part-15-one-million-claims',
     summary: 'Running this series\' first full 1,000,000-claim confirmation, finding a Redis memory ceiling that only that scale could expose, and fixing it live.'
+  },
+  {
+    episode: '016',
+    part: 'Part 16',
+    slug: 'part-16-the-million-went-through-the-bus',
+    summary: 'Moving the full million-claim corpus onto asynchronous Service Bus adjudication, then proving the separate raw X12 837 onramp at 100,000 claims.'
   }
 ];
 
@@ -229,7 +235,7 @@ for (const publication of publications) {
   const content = `
     <div class="eyebrow">Million Claim Challenge · ${publication.part}</div>
     <h1>${escapeHtml(rendered.title)}</h1>
-    <div class="disclosure"><strong>Evidence scope:</strong> This engineering field note describes local Kubernetes development and validation. It is not a production-cloud capacity claim or evidence that the full one-million-claim corpus has been completed.</div>
+    <div class="disclosure"><strong>Evidence scope:</strong> This engineering field note describes local Kubernetes development and validation. It is not a production-cloud capacity claim. Exact results and limitations are preserved in the linked evidence artifact.</div>
     <div class="article-links">
       <a href="/docs/million-claim-challenge/evidence#episode-${publication.episode}">View evidence</a>
       <a href="${githubBase}/episode-${publication.episode}/article.txt" target="_blank" rel="noopener noreferrer">View article source</a>
@@ -249,7 +255,7 @@ writeFileSync(join(outputDir, 'index.html'), pageShell({
   description: 'Engineering field notes documenting how the Million Claim Challenge became a repeatable, inspectable claims-adjudication benchmark.',
   canonical: 'https://cloudhealthoffice.com/insights/million-claim-challenge',
   type: 'website',
-  content: `<div class="eyebrow">Engineering series</div><h1>Million Claim Challenge Field Notes</h1><p>How the benchmark moved from local Kubernetes runs to repeatable measurement, honest workflow scoring, and operator-facing evidence.</p><div class="disclosure"><strong>Current verified scope:</strong> the latest published proof is a clean 100,000-claim local Kubernetes run. The full million remains the target.</div>${cards}`
+  content: `<div class="eyebrow">Engineering series</div><h1>Million Claim Challenge Field Notes</h1><p>How the benchmark moved from local Kubernetes runs to repeatable measurement, honest workflow scoring, and operator-facing evidence.</p><div class="disclosure"><strong>Current verified scope:</strong> the latest asynchronous local Kubernetes run reached the full 1,000,000-claim corpus at 155.89 claims/sec, with all claims eventually terminal. A separate 100,000-claim raw X12 837 run reached 199.42 claims/sec end-to-end. These are local validation results, not production-cloud capacity claims.</div>${cards}`
 }));
 
 const evidenceSections = publications.map((publication) => {

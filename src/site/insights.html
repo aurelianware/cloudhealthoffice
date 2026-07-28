@@ -295,36 +295,35 @@
           <p>
             Cloud Health Office moved from repeatable throughput runs into broader edge-case scoring and operator-visible evidence:
             expected pends are observed from persisted claim status, unsupported scenarios are separated from mismatches, and the Mass Adjudication console can inspect run summaries and claim-level evidence.
-            The latest published scale result is a clean 100K local Kubernetes validation on Docker Desktop, not a production cloud benchmark.
+            The latest published scale result is one million mixed claims through Azure Service Bus at 155.89 claims per second, plus a separate 100,000-claim raw X12 837P run at 199.42 end-to-end claims per second. Both are local Kubernetes validations on Docker Desktop, not production cloud benchmarks.
           </p>
 
           <div class="proof-metrics" aria-label="Latest Million Claim Challenge local benchmark metrics">
             <div class="proof-metric">
-              <strong>100,000</strong>
-              <span>synthetic claims processed in the clean local run</span>
+              <strong>1,000,000</strong>
+              <span>mixed claims eventually terminal through Service Bus</span>
             </div>
             <div class="proof-metric">
-              <strong>11,534 / 13,000</strong>
-              <span>workflow checks matched with zero scoreable mismatches</span>
+              <strong>155.89/sec</strong>
+              <span>asynchronous submission throughput at p96</span>
             </div>
             <div class="proof-metric">
-              <strong>0</strong>
-              <span>unexpected pends across the scoreable non-pend sweep</span>
+              <strong>0 / 0</strong>
+              <span>active and dead-lettered Service Bus messages after drain</span>
             </div>
             <div class="proof-metric">
-              <strong>2,000 / 2,000</strong>
-              <span>comparable payments within one cent</span>
+              <strong>$0.00</strong>
+              <span>payment variance across 19,982 compared claims</span>
             </div>
           </div>
 
           <p>
-            The benchmark distinguishes valid business denials from platform failures. Correct denials are not errors;
-            unsupported scenarios are not wins; and payment accuracy is now a formal gate for comparable claims.
-            The next work is to optimize fixture preparation and investigate the local scaling ceiling without weakening correctness.
+            The asynchronous validator observed 999,878 claims within its 180-second windows and timed out on 122 observations clustered in two brief episodes. Post-run reconciliation found exactly one million terminal claims in MongoDB, with no dead letters, pod restarts, or error logs. The separate raw 837P run accepted and adjudicated all 100,000 transactions.
           </p>
           <p style="font-size:0.95rem;color:#888;">
             Local Docker Desktop Kubernetes benchmark, not a production cloud benchmark.
             <a href="/docs/million-claim-challenge" style="color:#00ffff;">Read the methodology</a> &middot;
+            <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus" style="color:#00ffff;">Read Part 16</a> &middot;
             <a href="/insights/million-claim-challenge" style="color:#00ffff;">Engineering series</a> &middot;
             <a href="/docs/million-claim-challenge/evidence" style="color:#00ffff;">Evidence archive &rarr;</a>
           </p>

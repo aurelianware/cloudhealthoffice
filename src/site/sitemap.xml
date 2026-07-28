@@ -115,19 +115,19 @@
   </url>
   <url>
     <loc>https://cloudhealthoffice.com/docs/million-claim-challenge</loc>
-    <lastmod>2026-07-24</lastmod>
+    <lastmod>2026-07-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://cloudhealthoffice.com/docs/million-claim-challenge/evidence</loc>
-    <lastmod>2026-07-24</lastmod>
+    <lastmod>2026-07-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://cloudhealthoffice.com/insights/million-claim-challenge</loc>
-    <lastmod>2026-07-24</lastmod>
+    <lastmod>2026-07-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -194,6 +194,12 @@
   <url>
     <loc>https://cloudhealthoffice.com/insights/million-claim-challenge/part-15-one-million-claims</loc>
     <lastmod>2026-07-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cloudhealthoffice.com/insights/million-claim-challenge/part-16-the-million-went-through-the-bus</loc>
+    <lastmod>2026-07-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
