@@ -172,6 +172,15 @@
       .proof-quote {
         padding-left: 20px;
       }
+
+      /* Mobile menu: lay the open menu out as block flow rather than a flex
+         column. The homepage nav contains the "Platform" dropdown, and under
+         flex-column + max-height the submenu was compressed out of flow and
+         overlapped the links below it (Docs, Founding Client, Founder,
+         Contact Sales). Block flow lets the submenu push those items down. */
+      nav ul#mainNav.mobile-menu-open {
+        display: block;
+      }
     }
   </style>
 </head>
