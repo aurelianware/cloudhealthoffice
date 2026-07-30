@@ -14,14 +14,14 @@
   <meta property="og:url" content="https://cloudhealthoffice.com/platform">
   <meta property="og:title" content="FHIR R4 & EDI Platform Architecture — Cloud Health Office">
   <meta property="og:description" content="An evidence-based view of Cloud Health Office: implemented services, FHIR and X12 capabilities, local benchmarks, and pilot-stage deployment architecture.">
-  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/platform-capability-spine.jpg">
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="https://cloudhealthoffice.com/platform">
   <meta name="twitter:title" content="FHIR R4 & EDI Platform Architecture — Cloud Health Office">
   <meta name="twitter:description" content="An evidence-based view of Cloud Health Office: implemented services, FHIR and X12 capabilities, local benchmarks, and pilot-stage deployment architecture.">
-  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/platform-capability-spine.jpg">
 
   <title>Compliance &amp; Modernization Layer for Legacy Payer Systems — Cloud Health Office</title>
 
@@ -53,6 +53,7 @@
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
   <link rel="stylesheet" href="css/sentinel.css">
+  <link rel="stylesheet" href="css/editorial-visuals.css">
   <script src="js/auth.js"></script>
   <script src="js/mobile-nav.js"></script>
   <style>
@@ -269,6 +270,28 @@
             <div class="stat-label">Current Platform<br>Engagement Stage</div>
           </div>
         </div>
+
+        <figure id="capability-spine" class="cho-visual">
+          <div class="cho-visual__intro">
+            <span class="cho-visual__eyebrow">Shared platform spine</span>
+            <h2 class="cho-visual__title">Four payer domains. One evidence path.</h2>
+            <p class="cho-visual__summary">Claims, financial operations, provider operations, and interoperability remain independently deployable while sharing security, events, and operational evidence.</p>
+          </div>
+          <div class="cho-visual__frame">
+            <img class="cho-visual__image"
+                 src="graphics/cloudhealthoffice/platform-capability-spine.jpg"
+                 width="1672" height="941"
+                 loading="lazy"
+                 alt="Four connected payer capability domains for claims, financial operations, provider operations, and interoperability surround a shared secure event and evidence hub with a common datastore." />
+          </div>
+          <div class="cho-visual__key" style="--cho-key-columns:4" aria-label="Cloud Health Office capability domains">
+            <div class="cho-visual__key-item"><strong>Claims</strong>Intake, rules, adjudication, and outcome events.</div>
+            <div class="cho-visual__key-item"><strong>Financial</strong>Billing, capitation, payment, and ledger evidence.</div>
+            <div class="cho-visual__key-item"><strong>Provider</strong>Credentials, networks, enrollment, and verification.</div>
+            <div class="cho-visual__key-item"><strong>Interop</strong>X12 transactions, FHIR resources, and external APIs.</div>
+          </div>
+          <figcaption class="cho-visual__caption">The domains can be evaluated together or introduced incrementally around an existing payer core.</figcaption>
+        </figure>
       </section>
 
       <!-- ===== PRODUCT LINE CONTEXT (W3.2) ===== -->

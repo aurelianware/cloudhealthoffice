@@ -14,14 +14,14 @@
   <meta property="og:url" content="https://cloudhealthoffice.com/" />
   <meta property="og:title" content="Cloud Health Office — Evidence-Led Payer Platform" />
   <meta property="og:description" content="Source-available payer infrastructure with inspectable benchmark evidence: 1,000,000-claim local Kubernetes validation, CMS-0057-F APIs, X12/FHIR workflows, and your-cloud deployment." />
-  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg" />
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:url" content="https://cloudhealthoffice.com/" />
   <meta name="twitter:title" content="Cloud Health Office — Evidence-Led Payer Platform" />
   <meta name="twitter:description" content="Source-available payer infrastructure with inspectable benchmark evidence: 1,000,000-claim local Kubernetes validation, CMS-0057-F APIs, X12/FHIR workflows, and your-cloud deployment." />
-  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg" />
 
   <!-- JSON-LD Structured Data -->
   <script type="application/ld+json">
@@ -64,6 +64,7 @@
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
   <link rel="stylesheet" href="css/sentinel.css" />
+  <link rel="stylesheet" href="css/editorial-visuals.css" />
   <script src="js/auth.js"></script>
   <script src="js/mobile-nav.js"></script>
   <style>
@@ -327,6 +328,29 @@
       </div>
 
       <div class="hero-scroll-hint" aria-hidden="true">&darr; SCROLL</div>
+    </section>
+
+    <section id="platform-flow" aria-labelledby="claims-pipeline-heading" style="padding:1px 0 24px; background:linear-gradient(180deg,#000 0%,#020711 100%);">
+      <figure class="cho-visual cho-visual--lead">
+        <div class="cho-visual__intro">
+          <span class="cho-visual__eyebrow">The platform in one view</span>
+          <h2 id="claims-pipeline-heading" class="cho-visual__title">From raw claim to inspectable outcome.</h2>
+          <p class="cho-visual__summary">Cloud Health Office turns healthcare transactions into durable work, routes them through focused payer services, and preserves the evidence needed to explain what happened.</p>
+        </div>
+        <div class="cho-visual__frame">
+          <img class="cho-visual__image"
+               src="graphics/cloudhealthoffice/claims-evidence-pipeline.jpg"
+               width="1672" height="941"
+               loading="lazy"
+               alt="Healthcare transaction cards converge into a secure intake pipeline, move through an asynchronous message hub and modular payer services, then resolve into an evidence store, audit ledger, and verified claim outcome." />
+        </div>
+        <div class="cho-visual__key" aria-label="Claims platform flow">
+          <div class="cho-visual__key-item"><strong>1 · Intake</strong>X12 and API transactions become validated, durable work.</div>
+          <div class="cho-visual__key-item"><strong>2 · Process</strong>Eligibility, pricing, adjudication, and payment services scale independently.</div>
+          <div class="cho-visual__key-item"><strong>3 · Prove</strong>Outcomes, lifecycle events, and audit evidence stay connected.</div>
+        </div>
+        <figcaption class="cho-visual__caption">Conceptual platform view. Exact integrations and operating topology are validated for each payer environment.</figcaption>
+      </figure>
     </section>
 
     <!-- ===== CMS-0057-F EXPLAINER STRIP ===== -->
