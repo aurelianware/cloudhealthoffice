@@ -627,6 +627,86 @@
   @media (max-width: 620px) {
     .pricing-grid { grid-template-columns: 1fr; max-width: 440px; }
   }
+
+  /* Founding-client nav link + nav wrapping on small screens */
+  .nav-founding { color: var(--accent-teal) !important; font-weight: 600; }
+  @media (max-width: 760px) {
+    nav { flex-wrap: wrap; gap: 16px; }
+    .nav-links { flex-wrap: wrap; gap: 18px 20px; justify-content: flex-start; }
+  }
+
+  /* HERO call-to-action buttons */
+  .hero-actions {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn-primary, .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 13px 28px;
+    border-radius: 999px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+  }
+  .btn-primary {
+    background: var(--gradient-blue);
+    color: var(--bg-primary);
+    box-shadow: var(--shadow-glow-blue);
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 48px rgba(56, 189, 248, 0.3); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-hover);
+  }
+  .btn-secondary:hover { background: var(--bg-card-hover); }
+
+  /* Layer 1 qualification helper note */
+  .layer-note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: rgba(56, 189, 248, 0.06);
+    border: 1px solid rgba(56, 189, 248, 0.18);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .layer-note strong { color: var(--accent-blue); font-weight: 600; }
+
+  /* Sticky primary CTA (pricing palette) */
+  .sticky-cta {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 12px 20px;
+    background: rgba(10, 15, 26, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border-hover);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+    transform: translateY(130%);
+    transition: transform 0.35s ease;
+  }
+  .sticky-cta.visible { transform: translateY(0); }
+  .sticky-cta p { margin: 0; font-size: 14px; font-weight: 500; color: var(--text-secondary); }
+  .sticky-cta .btn-primary, .sticky-cta .btn-secondary { padding: 10px 22px; font-size: 14px; }
+  @media (max-width: 680px) {
+    .sticky-cta p { display: none; }
+    .sticky-cta .btn-primary, .sticky-cta .btn-secondary { flex: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { .sticky-cta { transition: none; } }
 </style>
 </head>
 <body>
@@ -635,10 +715,11 @@
 <nav>
   <div class="logo">CloudHealthOffice <span>by Aurelianware</span></div>
   <div class="nav-links">
+    <a href="/solutions-payers">Solutions</a>
     <a href="/platform">Platform</a>
+    <a href="/cms-0057f-compliance">Compliance</a>
     <a href="/docs">Docs</a>
-    <a href="/docs/api">API Reference</a>
-    <a href="/founder">Founder</a>
+    <a href="/#founding-partner-form" class="nav-founding">Founding Client</a>
     <a href="/contact" class="nav-cta">Contact Sales</a>
   </div>
 </nav>
@@ -647,6 +728,10 @@
   <div class="hero-badge">Four Product Lines &middot; PMPM Platform Engagement</div>
   <h1>Compliance now. Modernization on your timeline.</h1>
   <p>Most health plans engage Cloud Health Office through Platform Engagement &mdash; multi-year, payer-scale relationships priced per member per month (PMPM). We also offer Public Tools, Transactional Services, and Managed Data Services for developers, integrators, and small plans with specific data needs. Modernize now. Replace later.</p>
+  <div class="hero-actions">
+    <a href="/#founding-partner-form" class="btn-primary" data-ga-event="founding_client_cta_click">Apply for Founding Client &rarr;</a>
+    <a href="/contact" class="btn-secondary">Talk to Sales</a>
+  </div>
 </section>
 
 <div class="pricing-grid">
@@ -784,6 +869,7 @@
       <div class="layer-row"><strong>Who enters here</strong>A payer locked into QNXT, HealthEdge, Facets, or a comparable legacy core, staring down the CMS-0057-F deadline, who needs a compliance surface stood up in weeks without a platform-rebuild project.</div>
       <div class="layer-row"><strong>What&rsquo;s included</strong>Patient Access, Provider Directory, Prior Authorization (CRD &rarr; DTR &rarr; PAS), and Payer-to-Payer APIs. SMART-on-FHIR scope enforcement at the resource-type level. Ships as Helm into your existing Kubernetes cluster or Azure AKS. Read-mostly &mdash; your core admin remains system of record.</div>
       <div class="layer-row"><strong>Commercial shape</strong>Small annual subscription priced PMPM, weeks-to-deploy. Pilot-specific terms negotiated per engagement.</div>
+      <div class="layer-note"><strong>Where most payers start.</strong> Pilot-scoped entry point &mdash; an indicative PMPM starting range is shared during discovery, sized to your membership and CMS-0057-F scope. No platform-rebuild commitment required.</div>
     </div>
 
     <div class="layer-card">
@@ -910,15 +996,48 @@
 </section>
 
 <footer class="footer">
-  <p>&copy; 2026 Aurelianware, Inc. &middot; <a href="/legal/privacy-policy">Privacy</a> &middot; <a href="/docs">Docs</a> &middot; <a href="/docs/api">API docs</a></p>
-    <p style="margin-top:18px;"><a href="/founder">Meet the founder &rarr;</a></p>
+  <p>
+    <a href="/solutions-payers">Solutions</a> &middot;
+    <a href="/platform">Platform</a> &middot;
+    <a href="/cms-0057f-compliance">Compliance</a> &middot;
+    <a href="/docs">Docs</a> &middot;
+    <a href="/docs/api">API docs</a> &middot;
+    <a href="/claims-repricing">Free tools</a> &middot;
+    <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a>
+  </p>
+  <p style="margin-top:14px;">
+    Questions? <a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a> &middot;
+    <a href="/#founding-partner-form">Apply for the Founding Client Program</a> &middot;
+    <a href="/founder">Meet the founder</a>
+  </p>
+  <p style="margin-top:18px; color: var(--text-muted);">&copy; 2026 Aurelianware, Inc. &middot; Source-available (BSL 1.1) &middot; <a href="mailto:licensing@cloudhealthoffice.com">Commercial licensing</a> &middot; <a href="/legal/privacy-policy">Privacy</a></p>
   </footer>
 
+</div>
+
+<!-- ===== STICKY PRIMARY CTA ===== -->
+<div id="stickyCta" class="sticky-cta" role="region" aria-label="Get started with Cloud Health Office">
+  <p>Ready to scope a CMS-0057-F pilot?</p>
+  <a href="/#founding-partner-form" class="btn-primary" data-ga-event="sticky_founding_client_click">Apply for Founding Client &rarr;</a>
+  <a href="/contact" class="btn-secondary">Talk to Sales</a>
 </div>
 
 <script>
 // Pricing toggle and calculator removed — pricing available upon request.
 // Contact sales@cloudhealthoffice.com for a personalized quote.
+
+// Reveal the sticky CTA once the hero has scrolled out of view.
+(function() {
+  var bar = document.getElementById('stickyCta');
+  var hero = document.querySelector('.hero');
+  if (!bar || !hero) return;
+  function update() {
+    bar.classList.toggle('visible', hero.getBoundingClientRect().bottom < 0);
+  }
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
+})();
 </script>
 </body>
 </html>
