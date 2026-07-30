@@ -14,7 +14,7 @@
   <meta property="og:description" content="Vendor-neutral CMS-0057-F readiness layer deployable alongside an existing CAPS. FHIR R4 APIs, Da Vinci IGs, X12 EDI, and Kubernetes-native deployment."/>
   <meta property="og:type" content="website"/>
   <meta property="og:url" content="https://cloudhealthoffice.com/cms-0057f-compliance"/>
-  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-cms0057f.png"/>
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/cms-interoperability-layer.jpg"/>
   <meta property="og:site_name" content="Cloud Health Office"/>
 
   <!-- Twitter -->
@@ -22,6 +22,7 @@
   <meta name="twitter:card" content="summary_large_image"/>
   <meta name="twitter:title" content="CMS-0057-F Readiness — Cloud Health Office"/>
   <meta name="twitter:description" content="Vendor-neutral FHIR R4 readiness layer for payer CAPS platforms. Kubernetes-native and deployable alongside legacy core systems."/>
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/cms-interoperability-layer.jpg"/>
 
   <!-- JSON-LD: SoftwareApplication -->
 
@@ -107,6 +108,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/editorial-visuals.css"/>
 
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -336,7 +338,6 @@
     <h2 class="section-title">What is CMS-0057-F?</h2>
     <p class="section-desc">The <strong>Advancing Interoperability and Improving Prior Authorization Processes</strong> final rule requires Medicare Advantage, Medicaid, CHIP, and QHP issuers to implement standardized FHIR R4 APIs — improving prior authorization, reducing provider burden, and enabling patient data access. Compliance deadline: <strong>January 1, 2027</strong>.</p>
 
-```
 <!-- Inline SVG: Required APIs Diagram -->
 <div class="flow-diagram" data-reveal>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="960" height="320" role="img" aria-label="CMS-0057-F required APIs diagram showing four API categories">
@@ -423,7 +424,6 @@
     </g>
   </svg>
 </div>
-```
 
   </div>
 </section>
@@ -438,7 +438,22 @@
     <h2 class="section-title">How Cloud Health Office Fits Your Stack</h2>
     <p class="section-desc">CHO deploys as a compliance layer alongside your existing core admin processing system. No replatforming. No rip-and-replace. Your CAPS stays in place — CHO handles FHIR, EDI, terminology translation, provider verification, and CMS compliance.</p>
 
-```
+    <figure id="compliance-layer-visual" class="cho-visual" data-reveal>
+      <div class="cho-visual__frame">
+        <img class="cho-visual__image"
+             src="graphics/cloudhealthoffice/cms-interoperability-layer.jpg"
+             width="1672" height="941"
+             loading="lazy"
+             alt="An existing payer core sends healthcare transactions through a modular compliance gateway with security, consent, routing, bidirectional data translation, and audit services, then out to member, provider, payer, and regulator-facing channels." />
+      </div>
+      <div class="cho-visual__key" aria-label="CMS interoperability architecture">
+        <div class="cho-visual__key-item"><strong>Existing core</strong>The payer’s current CAPS and source data remain systems of record.</div>
+        <div class="cho-visual__key-item"><strong>CHO layer</strong>Security, consent, prior authorization, translation, and evidence sit beside the core.</div>
+        <div class="cho-visual__key-item"><strong>Required access</strong>FHIR-facing channels serve members, providers, and payer-to-payer exchange.</div>
+      </div>
+      <figcaption class="cho-visual__caption">The illustration gives the architectural relationship; the implementation diagram below names the individual services and standards.</figcaption>
+    </figure>
+
 <div class="arch-diagram" data-reveal>
 <svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1280" viewBox="0 0 1360 1280">
 <style>
@@ -627,7 +642,6 @@
 </svg>
 
 </div>
-```
 
   </div>
 </section>
@@ -916,7 +930,6 @@
     <h2 class="section-title">X12 EDI ↔ FHIR R4 — Bidirectional Implementation Evidence</h2>
     <p class="section-desc">X12 transactions from the core admin system can be transformed to FHIR R4 resources conforming to Da Vinci profiles through configurable, auditable mapping pipelines.</p>
 
-```
 <!-- X12-FHIR Flow SVG -->
 <div class="flow-diagram" data-reveal>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 260" width="960" height="260" role="img" aria-label="X12 EDI to FHIR R4 transformation flow diagram">
@@ -966,7 +979,6 @@
     <g transform="translate(845,215)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="rgba(0,255,136,.05)" stroke="rgba(0,255,136,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ff88" text-anchor="middle">DocumentReference</text></g>
   </svg>
 </div>
-```
 
   </div>
 </section>
@@ -981,7 +993,6 @@
     <h2 class="section-title">SNOMED CT ↔ CPT/ICD — The Gap No One Else Solves</h2>
     <p class="section-desc">Da Vinci workflows (CRD, DTR, PAS) exchange clinical data in SNOMED CT. Your CAPS adjudicates in CPT and ICD-10-CM. Without built-in translation, prior auth requests cannot be matched to benefit configuration. Most implementations treat this as "customer responsibility." CHO solves it natively.</p>
 
-```
 <div class="api-grid">
   <article class="api-card">
     <span class="status">Implemented</span>
@@ -1008,7 +1019,6 @@
     <p>Auto-loading at startup, runtime upload via Admin API, SHA-256 version tracking, and full audit trail. Plan-specific overrides support Texas TMPPM, state Medicaid variations, and custom coding policy per tenant.</p>
   </article>
 </div>
-```
 
   </div>
 </section>
@@ -1023,7 +1033,6 @@
     <h2 class="section-title">Multi-Source Provider Verification</h2>
     <p class="section-desc">Provider Access API and Prior Authorization require verified, current provider records. CHO aggregates five federal and state data sources into a composite Provider Integrity Score (0–100) per NPI — blocking excluded providers automatically.</p>
 
-```
 <div class="api-grid">
   <article class="api-card">
     <span class="status">Implemented</span>
@@ -1050,7 +1059,6 @@
     <p>Weighted algorithm across all five sources produces a single integrity score per NPI. Configurable thresholds, automatic blocking, and audit-logged verification results for compliance documentation.</p>
   </article>
 </div>
-```
 
   </div>
 </section>
@@ -1065,7 +1073,6 @@
     <h2 class="section-title">CMS-0057-F Coverage</h2>
     <p class="section-desc">Coverage for the required FHIR and prior authorization surfaces, validated through automated tests and implementation artifacts rather than brittle release-count claims.</p>
 
-```
 <table class="compliance-table" data-reveal>
   <thead>
     <tr>
@@ -1094,7 +1101,6 @@
     <tr><td>Provider Verification &amp; Directory</td><td>NPPES / OIG / PECOS / FSMB Integrity Score</td><td>—</td><td><span class="status-badge done">Implemented</span></td></tr>
   </tbody>
 </table>
-```
 
   </div>
 </section>
@@ -1132,7 +1138,6 @@
     <h2 class="section-title">Implementation Timeline</h2>
     <p class="section-desc">The CMS deadline is January 2027. The practical path is to stand up the compliance surface first, validate integrations, then expand modernization scope deliberately.</p>
 
-```
 <div class="timeline" data-reveal>
   <div class="timeline-track"></div>
 
@@ -1157,7 +1162,6 @@
     <div class="timeline-desc">All impacted payers must be operational. Medicare Advantage, Medicaid managed care, CHIP, and QHP issuers on federal Marketplaces.</div>
   </div>
 </div>
-```
 
   </div>
 </section>
@@ -1172,7 +1176,6 @@
     <h2 class="section-title">Da Vinci IG Conformance</h2>
     <p class="section-desc">Cloud Health Office validates against all required HL7 Da Vinci Implementation Guides for CMS-0057-F compliance.</p>
 
-```
 <div class="api-grid">
   <article class="api-card">
     <span class="status">Implemented</span>
@@ -1199,7 +1202,6 @@
     <p>FHIR Questionnaire and QuestionnaireResponse. Automated clinical documentation collection from payer rules. Reduced provider administrative burden.</p>
   </article>
 </div>
-```
 
   </div>
 </section>
@@ -1214,7 +1216,6 @@
     <h2 class="section-title">Who Must Comply with CMS-0057-F?</h2>
     <p class="section-desc">If you're a regulated payer, you're in scope. Cloud Health Office serves every payer type impacted by the rule.</p>
 
-```
 <div class="api-grid">
   <article class="api-card">
     <h3>Medicare Advantage (MA)</h3>
@@ -1233,7 +1234,6 @@
     <p>Qualified Health Plans on federal Marketplaces must implement all required APIs. State-based marketplace issuers should monitor state adoption.</p>
   </article>
 </div>
-```
 
   </div>
 </section>
@@ -1248,7 +1248,6 @@
     <h2 class="section-title">Payer Compliance Checklist</h2>
     <p class="section-desc">A comprehensive readiness checklist for health plans implementing CMS-0057-F with Cloud Health Office.</p>
 
-```
 <div class="checklist" data-reveal>
   <div class="checklist-group">
     <h4>Pre-Implementation</h4>
@@ -1303,7 +1302,6 @@
     <div class="checklist-item">CMS attestation and audit trail</div>
   </div>
 </div>
-```
 
   </div>
 </section>
@@ -1331,7 +1329,6 @@
     <h2 class="section-title">Deploy in Under an Hour</h2>
     <p class="section-desc">Clone, build, validate, deploy. Use the source-available implementation to evaluate the CMS-0057-F compliance surface before a payer-specific rollout.</p>
 
-```
 <div class="flow-diagram" style="font-family:var(--mono);font-size:.82rem;line-height:2;color:var(--text-muted)">
   <span style="color:var(--text-dim)"># Clone and build</span><br/>
   <span style="color:var(--green)">$</span> git clone https://github.com/aurelianware/cloudhealthoffice.git<br/>
@@ -1344,7 +1341,6 @@
   <span style="color:var(--green)">$</span> node dist/src/fhir/examples.js<br/><br/>
   <span style="color:var(--cyan)">✓ FHIR endpoints validated for CMS-0057-F readiness.</span>
 </div>
-```
 
   </div>
 </section>
@@ -1359,7 +1355,6 @@
     <h2 class="section-title">Standards, Specifications, and Documentation</h2>
     <p class="section-desc">Everything you need to understand CMS-0057-F requirements and Cloud Health Office implementation.</p>
 
-```
 <div class="api-grid">
   <article class="api-card">
     <span class="api-tag">CMS Regulations</span>
@@ -1382,7 +1377,6 @@
     <p>FHIR Integration Guide, Security Hardening, HIPAA Compliance Matrix, Deployment Guide, and Config-to-Workflow Generator docs.</p>
   </article>
 </div>
-```
 
   </div>
 </section>

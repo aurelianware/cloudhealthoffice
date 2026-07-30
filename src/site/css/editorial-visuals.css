@@ -1,0 +1,154 @@
+/* Explanatory architecture illustrations shared by Cloud Health Office landing pages. */
+.cho-visual {
+  width: min(100%, 1180px);
+  margin: clamp(36px, 6vw, 72px) auto;
+  scroll-margin-top: 96px;
+}
+
+.cho-visual--lead {
+  width: min(calc(100% - 32px), 1280px);
+  margin-top: clamp(28px, 5vw, 56px);
+}
+
+#platform-flow {
+  scroll-margin-top: 96px;
+}
+
+.cho-visual__intro {
+  max-width: 780px;
+  margin: 0 auto clamp(20px, 3vw, 30px);
+  text-align: center;
+}
+
+.cho-visual__eyebrow {
+  display: block;
+  margin-bottom: 10px;
+  color: #00ff88;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.cho-visual__title {
+  margin: 0 0 12px;
+  color: #fff;
+  font-size: clamp(1.55rem, 3vw, 2.4rem);
+  line-height: 1.15;
+  text-shadow: none;
+}
+
+.cho-visual__summary {
+  margin: 0;
+  color: rgba(224, 232, 240, 0.76);
+  font-size: clamp(0.98rem, 1.4vw, 1.08rem);
+  line-height: 1.7;
+}
+
+.cho-visual__frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0, 255, 255, 0.24);
+  border-radius: clamp(14px, 2vw, 22px);
+  background: #020914;
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.55),
+    0 0 45px rgba(0, 210, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.cho-visual__frame::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.06), transparent 24%, transparent 76%, rgba(0, 255, 136, 0.045));
+  content: "";
+  pointer-events: none;
+}
+
+.cho-visual__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1672 / 941;
+  object-fit: cover;
+}
+
+.cho-visual__key {
+  display: grid;
+  grid-template-columns: repeat(var(--cho-key-columns, 3), minmax(0, 1fr));
+  gap: 1px;
+  margin: 0 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 255, 255, 0.12);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  background: rgba(0, 255, 255, 0.12);
+}
+
+.cho-visual__key-item {
+  min-width: 0;
+  padding: 15px 18px 17px;
+  background: rgba(3, 10, 20, 0.97);
+  color: rgba(210, 220, 230, 0.72);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.cho-visual__key-item strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #00ffff;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cho-visual__caption {
+  max-width: 860px;
+  margin: 14px auto 0;
+  color: rgba(190, 200, 210, 0.62);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .cho-visual {
+    margin-top: 34px;
+    margin-bottom: 42px;
+  }
+
+  .cho-visual__intro {
+    padding-inline: 8px;
+  }
+
+  .cho-visual__key {
+    grid-template-columns: 1fr;
+    margin-inline: 6px;
+  }
+
+  .cho-visual__key-item {
+    padding: 12px 14px;
+  }
+
+  .cho-visual__caption {
+    padding-inline: 10px;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cho-visual__frame {
+    transition: border-color 240ms ease, box-shadow 240ms ease;
+  }
+
+  .cho-visual__frame:hover {
+    border-color: rgba(0, 255, 255, 0.4);
+    box-shadow:
+      0 30px 90px rgba(0, 0, 0, 0.6),
+      0 0 55px rgba(0, 210, 255, 0.12),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+  }
+}
