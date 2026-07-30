@@ -14,14 +14,14 @@
   <meta property="og:url" content="https://cloudhealthoffice.com/claims-repricing">
   <meta property="og:title" content="Free Medicare Claims Repricing Tool — Cloud Health Office">
   <meta property="og:description" content="Look up Medicare RBRVS, OPPS, and MS-DRG rates instantly. Free tier includes 1,000 claims/month. No credit card required.">
-  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/medicare-repricing-engine.jpg">
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="https://cloudhealthoffice.com/claims-repricing">
   <meta name="twitter:title" content="Free Medicare Claims Repricing Tool — Cloud Health Office">
   <meta name="twitter:description" content="Look up Medicare RBRVS, OPPS, and MS-DRG rates instantly. Free tier includes 1,000 claims/month. No credit card required.">
-  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/medicare-repricing-engine.jpg">
 
   <title>Free Medicare Claims Repricing &amp; Fee Schedule Lookup — Cloud Health Office</title>
 
@@ -102,6 +102,7 @@
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
   <link rel="stylesheet" href="css/sentinel.css">
+  <link rel="stylesheet" href="css/editorial-visuals.css">
   <script src="js/auth.js"></script>
   <script src="js/mobile-nav.js"></script>
   <style>
@@ -341,6 +342,27 @@
           audit existing payments, or benchmark your commercial contracts against Medicare.
         </p>
       </section>
+
+      <figure id="repricing-flow" class="cho-visual">
+        <div class="cho-visual__intro">
+          <span class="cho-visual__eyebrow">Explainable repricing</span>
+          <h2 class="cho-visual__title">One claim. Three Medicare payment methods.</h2>
+          <p class="cho-visual__summary">The pricing engine selects the appropriate professional, outpatient, or inpatient methodology, applies the relevant CMS source data and adjustments, and returns a component-level result.</p>
+        </div>
+        <div class="cho-visual__frame">
+          <img class="cho-visual__image"
+               src="graphics/cloudhealthoffice/medicare-repricing-engine.jpg"
+               width="1672" height="941"
+               loading="lazy"
+               alt="A healthcare claim enters a pricing engine, branches through professional, outpatient, and inpatient fee schedule modules with policy adjustments, then recombines into a verified itemized price result and audit trail." />
+        </div>
+        <div class="cho-visual__key" aria-label="Medicare claims repricing flow">
+          <div class="cho-visual__key-item"><strong>Select</strong>Identify the claim setting and applicable payment methodology.</div>
+          <div class="cho-visual__key-item"><strong>Calculate</strong>Apply fee-schedule data, geography, modifiers, and policy rules.</div>
+          <div class="cho-visual__key-item"><strong>Explain</strong>Return the allowed amount with its component breakdown and source trail.</div>
+        </div>
+        <figcaption class="cho-visual__caption">Conceptual flow for RBRVS professional, OPPS outpatient, and MS-DRG inpatient repricing.</figcaption>
+      </figure>
 
       <!-- ===== SUPPORTED FEE SCHEDULES ===== -->
       <section class="assessment-section">
