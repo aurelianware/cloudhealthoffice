@@ -1,0 +1,158 @@
+/* Cloud Health Office — Shared conversion components (Sentinel theme)
+   Reused across the homepage and platform pages. Design tokens come from
+   sentinel.css (--neon-cyan, --neon-green, --radius-*). */
+
+/* === CLEAN LINE ICONS (replaces emoji feature icons) === */
+.feature-icon {
+  color: var(--neon-cyan);
+}
+
+.feature-icon svg {
+  width: 26px;
+  height: 26px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* === PROOF METRICS (larger, scannable) === */
+.stats-inner--proof .stat-number {
+  font-size: clamp(2.8rem, 6.5vw, 4.6rem);
+}
+
+/* === TRUST SIGNALS STRIP === */
+.trust-strip {
+  border-top: 1px solid rgba(0, 255, 136, 0.18);
+  border-bottom: 1px solid rgba(0, 255, 136, 0.18);
+  background: linear-gradient(90deg, #00110a 0%, #00060f 50%, #00110a 100%);
+  padding: 34px 24px;
+}
+
+.trust-strip__inner {
+  max-width: 1160px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.trust-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.trust-item svg {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  stroke: var(--neon-green);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  margin-top: 2px;
+}
+
+.trust-item strong {
+  display: block;
+  color: #fff;
+  font-size: 0.95rem;
+  margin-bottom: 3px;
+}
+
+.trust-item span {
+  color: rgba(176, 176, 176, 0.72);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .trust-strip__inner {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+}
+
+@media (max-width: 520px) {
+  .trust-strip__inner {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* === STICKY PRIMARY CTA === */
+.sticky-cta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: rgba(3, 6, 12, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(0, 255, 136, 0.28);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+  transform: translateY(130%);
+  transition: transform 0.35s ease;
+}
+
+.sticky-cta.visible {
+  transform: translateY(0);
+}
+
+.sticky-cta__text {
+  color: rgba(225, 225, 225, 0.92);
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.sticky-cta .button {
+  margin: 0;
+  padding: 11px 24px;
+  font-size: 0.95rem;
+}
+
+.sticky-cta__primary {
+  background: linear-gradient(90deg, #00c060, #00ff88);
+  border-color: #00ff88;
+  color: #000;
+}
+
+.sticky-cta__primary:hover {
+  background: #000;
+  color: #00ff88;
+}
+
+.sticky-cta__secondary {
+  background: transparent;
+  color: var(--neon-cyan);
+}
+
+@media (max-width: 680px) {
+  .sticky-cta__text {
+    display: none;
+  }
+  .sticky-cta {
+    gap: 10px;
+  }
+  .sticky-cta .button {
+    flex: 1;
+    text-align: center;
+    padding: 12px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sticky-cta {
+    transition: none;
+  }
+}
