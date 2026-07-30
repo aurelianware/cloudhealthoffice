@@ -102,7 +102,7 @@ Cloud Health Office deploys HIPAA-oriented EDI infrastructure through a focused,
 - 99.9% uptime SLA
 - Automated retry with exponential backoff
 
-#### 4. Enhanced Claim Status (ECS)
+#### 4. Claim Status
 
 **X215 Authorization Inquiry:**
 - Real-time authorization status
@@ -368,7 +368,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 - [ ] Additional payer tenant onboarding
 - [ ] Performance optimization
-- [ ] Advanced features activation (ECS, Appeals)
+- [ ] Advanced features activation (Claim Status, Appeals)
 - [ ] Cost optimization
 
 **Timeline:** 6 weeks from decision to multi-payer production deployment
