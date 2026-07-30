@@ -43,8 +43,8 @@
         <p class="docs-subtitle">Cloud Health Office is a cloud-native multi-tenant SaaS platform that processes healthcare EDI transactions for unlimited health plans. Configuration-driven, backend-agnostic, and deployable to any Kubernetes cluster.</p>
 
         <figure class="docs-diagram">
-          <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 36 microservices, 9 adjudication engines, 7 FHIR R4 APIs, and multi-cloud deployment" />
-          <figcaption>Platform overview — 36 microservices, 9 engines, 6 parsers, 7 FHIR APIs, 17 Argo Workflows</figcaption>
+          <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 36 microservices, 9 adjudication engines, 5 FHIR R4 APIs, 60 portal pages, and multi-cloud deployment" />
+          <figcaption>Platform overview — 36 microservices, 9 engines, 5 parsers, 5 FHIR APIs, 17 Argo Workflows, 60 portal pages</figcaption>
         </figure>
 
         <h2 id="overview">Overview</h2>
@@ -70,8 +70,8 @@
         <h3>Calculation Engines (9)</h3>
         <p>Benefit Engine (HDHP/HSA, aggregate family accumulators, DRG inpatient), <a href="/docs/fee-schedule-engine">Fee Schedule Engine</a> (DRG lookup, Medicaid cross-schedule, multiple procedure ranking), NCCI Engine, COB Engine, Risk Adjustment Engine, Encounter Engine, Claims Scrub Engine, Capitation Engine, and Operating Mode Engine.</p>
 
-        <h3>X12 Parsers (6)</h3>
-        <p>837 Claims, 835 Remittance, 834 Enrollment, 276/277 Claim Status, 278 Prior Auth, and X12 Encoder. All written in C# (.NET 8) with zero external dependencies.</p>
+        <h3>X12 Parsers (5) + Encoder</h3>
+        <p>Five inbound parsers — 837 Claims, 835 Remittance, 834 Enrollment, 276/277 Claim Status, and 278 Prior Auth — plus a shared X12 Encoder for outbound generation. All written in C# (.NET 8) with zero external dependencies.</p>
 
         <h2 id="adjudication">Claims Adjudication Pipeline</h2>
         <p>The 10-step claims adjudication pipeline processes an 837 from SFTP ingestion through Argo Workflows to real-time adjudication with full benefit calculation, completing in under 500ms end-to-end.</p>
