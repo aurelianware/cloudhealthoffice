@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="hs-title hs-desc">
+  <title id="hs-title">HIPAA technical safeguards</title>
+  <desc id="hs-desc">Five layers of defense in depth for protected health information: private endpoints for network isolation with no public IPs, PHI masking in Application Insights via DCR-based redaction, customer-managed encryption keys (BYOK), a seven-year data lifecycle with automated tiering and retention, and automated CI/CD checks that block PHI in logs and telemetry.</desc>
+  <defs>
+    <style>
+      .card-title { font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; font-weight: 700; fill: #ffffff; }
+      .card-sub { font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; fill: #b0b0b0; }
+      .ic { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="300" fill="#000000"/>
+
+  <text x="600" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="900" fill="#ffffff" text-anchor="middle">HIPAA Technical Safeguards</text>
+  <text x="600" y="68" font-family="Segoe UI, system-ui, sans-serif" font-size="14" fill="#00ff88" text-anchor="middle" opacity="0.85">Defense in depth for protected health information</text>
+
+  <!-- Card 1: Private Endpoints (cyan) -->
+  <g transform="translate(40,102)">
+    <rect width="208" height="168" rx="12" fill="rgba(0,255,255,0.05)" stroke="rgba(0,255,255,0.35)" stroke-width="1"/>
+    <g transform="translate(82,26)" stroke="#00ffff">
+      <rect class="ic" x="10" y="20" width="24" height="18" rx="3"/>
+      <path class="ic" d="M15 20 v-5 a7 7 0 0 1 14 0 v5"/>
+      <circle cx="22" cy="29" r="2.4" fill="#00ffff" stroke="none"/>
+    </g>
+    <text class="card-title" x="104" y="108" text-anchor="middle">Private Endpoints</text>
+    <text class="card-sub" x="104" y="130" text-anchor="middle">Network isolation for PHI</text>
+    <text class="card-sub" x="104" y="147" text-anchor="middle">No public IP addresses</text>
+  </g>
+
+  <!-- Card 2: PHI Masking (green) -->
+  <g transform="translate(268,102)">
+    <rect width="208" height="168" rx="12" fill="rgba(0,255,136,0.05)" stroke="rgba(0,255,136,0.35)" stroke-width="1"/>
+    <g transform="translate(82,26)" stroke="#00ff88">
+      <path class="ic" d="M6 22 q16 -13 32 0 q-16 13 -32 0"/>
+      <circle class="ic" cx="22" cy="22" r="5"/>
+      <line class="ic" x1="9" y1="9" x2="35" y2="35"/>
+    </g>
+    <text class="card-title" x="104" y="108" text-anchor="middle">PHI Masking</text>
+    <text class="card-sub" x="104" y="130" text-anchor="middle">Application Insights</text>
+    <text class="card-sub" x="104" y="147" text-anchor="middle">DCR-based redaction</text>
+  </g>
+
+  <!-- Card 3: BYOK Encryption (cyan) -->
+  <g transform="translate(496,102)">
+    <rect width="208" height="168" rx="12" fill="rgba(0,255,255,0.05)" stroke="rgba(0,255,255,0.35)" stroke-width="1"/>
+    <g transform="translate(82,26)" stroke="#00ffff">
+      <circle class="ic" cx="16" cy="18" r="7"/>
+      <path class="ic" d="M21 23 L35 37"/>
+      <path class="ic" d="M30 32 l4 4"/>
+      <path class="ic" d="M26 28 l4 4"/>
+    </g>
+    <text class="card-title" x="104" y="108" text-anchor="middle">BYOK Encryption</text>
+    <text class="card-sub" x="104" y="130" text-anchor="middle">Customer-managed</text>
+    <text class="card-sub" x="104" y="147" text-anchor="middle">encryption keys</text>
+  </g>
+
+  <!-- Card 4: 7-Year Lifecycle (green) -->
+  <g transform="translate(724,102)">
+    <rect width="208" height="168" rx="12" fill="rgba(0,255,136,0.05)" stroke="rgba(0,255,136,0.35)" stroke-width="1"/>
+    <g transform="translate(82,26)" stroke="#00ff88">
+      <circle class="ic" cx="22" cy="23" r="13"/>
+      <path class="ic" d="M22 23 L22 15"/>
+      <path class="ic" d="M22 23 L29 26"/>
+    </g>
+    <text class="card-title" x="104" y="108" text-anchor="middle">7-Year Lifecycle</text>
+    <text class="card-sub" x="104" y="130" text-anchor="middle">Automated tiering</text>
+    <text class="card-sub" x="104" y="147" text-anchor="middle">&amp; retention</text>
+  </g>
+
+  <!-- Card 5: CI/CD PHI Checks (cyan) -->
+  <g transform="translate(952,102)">
+    <rect width="208" height="168" rx="12" fill="rgba(0,255,255,0.05)" stroke="rgba(0,255,255,0.35)" stroke-width="1"/>
+    <g transform="translate(82,24)" stroke="#00ffff">
+      <path class="ic" d="M22 8 l13 5 v9 c0 8 -6 13 -13 16 c-7 -3 -13 -8 -13 -16 v-9 z"/>
+      <path class="ic" d="M15 22 l5 5 l9 -10" stroke="#00ff88"/>
+    </g>
+    <text class="card-title" x="104" y="108" text-anchor="middle">CI/CD PHI Checks</text>
+    <text class="card-sub" x="104" y="130" text-anchor="middle">Block PHI in logs</text>
+    <text class="card-sub" x="104" y="147" text-anchor="middle">&amp; telemetry</text>
+  </g>
+</svg>
