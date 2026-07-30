@@ -86,9 +86,19 @@
 
         <h2 id="multi-tenant">Multi-Tenant Design</h2>
         <p>Every API request carries an <code>X-Tenant-ID</code> header that determines data isolation, configuration routing, and audit logging. The configuration-driven approach means no code changes are required to onboard new payers — only a JSON configuration file defining clearinghouse mappings, benefit rules, and EDI trading partner details.</p>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/multi-tenant-routing.svg" alt="Multi-tenant request routing: payers each send an X-Tenant-ID header through a shared tenant context gateway handling authentication, rate limiting, configuration routing, and audit logging, which fans out to isolated per-tenant lanes for config, database partition, message-bus topic, and audit log." />
+          <figcaption>Multi-tenant routing — one deployment, per-tenant isolation resolved from the <code>X-Tenant-ID</code> header</figcaption>
+        </figure>
+
         <p>The <strong>Config-to-Workflow Generator</strong> takes a payer's configuration file and generates complete Argo Workflow YAML and Bicep infrastructure definitions, enabling automated environment provisioning.</p>
 
         <h2 id="infrastructure">Infrastructure</h2>
+        <figure class="docs-diagram">
+          <img src="/graphics/infrastructure-topology.svg" alt="Infrastructure topology: a Kubernetes cluster on AKS, EKS, or GKE running Argo Events triggers into Argo Workflows orchestration, driving 36 .NET 8 microservices over Azure Service Bus or Kafka, backed by MongoDB or Cosmos DB, Redis, and Azure Storage Gen2, with cross-cutting rails for secrets management and observability." />
+          <figcaption>Infrastructure topology — event-driven orchestration on Kubernetes with cross-cutting secrets and observability</figcaption>
+        </figure>
         <table>
           <thead><tr><th>Component</th><th>Technology</th><th>Purpose</th></tr></thead>
           <tbody>
@@ -104,7 +114,20 @@
         </table>
 
         <h2 id="security">HIPAA Security</h2>
-        <p>The platform addresses HIPAA technical safeguards with private endpoints for network isolation of PHI, PHI masking in Application Insights using DCR-based redaction, customer-managed encryption keys (BYOK), 7-year data lifecycle management with automated tiering, and automated CI/CD checks designed to prevent PHI exposure in logs and telemetry.</p>
+        <p>The platform addresses HIPAA technical safeguards through five layers of defense in depth for PHI:</p>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/hipaa-security-layers.svg" alt="HIPAA technical safeguards in five layers: private endpoints for network isolation with no public IPs, PHI masking in Application Insights via DCR-based redaction, customer-managed encryption keys (BYOK), a seven-year data lifecycle with automated tiering, and automated CI/CD checks that block PHI in logs and telemetry." />
+          <figcaption>Five layers of defense in depth for protected health information</figcaption>
+        </figure>
+
+        <ul>
+          <li><strong>Private endpoints</strong> — network isolation of PHI with no public IP addresses exposed.</li>
+          <li><strong>PHI masking</strong> — Application Insights redaction using DCR-based rules.</li>
+          <li><strong>BYOK encryption</strong> — customer-managed encryption keys.</li>
+          <li><strong>7-year data lifecycle</strong> — automated tiering and retention.</li>
+          <li><strong>CI/CD PHI checks</strong> — automated gates designed to keep PHI out of logs and telemetry.</li>
+        </ul>
 
         <div class="callout callout-info">
           <div class="callout-title">Canonical architecture document</div>
