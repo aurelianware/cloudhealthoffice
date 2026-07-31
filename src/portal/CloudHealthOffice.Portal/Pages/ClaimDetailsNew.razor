@@ -3,6 +3,8 @@
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IClaimsService ClaimsService
+@inject IWorkQueueService WorkQueueService
+@inject IUserContextService UserContextService
 @inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -63,23 +65,21 @@
                 </MudItem>
                 <MudItem xs="12" md="4">
                     <!-- Action Buttons -->
-                    @if (_claim.IsEditable)
+                    @if (CanResolvePendedClaim)
                     {
                         <MudStack Spacing="2">
                             <MudButton Variant="Variant.Filled" 
                                       Color="Color.Success"
                                       FullWidth="true"
                                       StartIcon="@Icons.Material.Filled.CheckCircle"
-                                      OnClick="@(() => ApproveClaimAsync())"
-                                      Disabled="!_claim.CanApprove">
+                                      OnClick="@(() => ApproveClaimAsync())">
                                 Approve
                             </MudButton>
                             <MudButton Variant="Variant.Filled" 
                                       Color="Color.Error"
                                       FullWidth="true"
                                       StartIcon="@Icons.Material.Filled.Cancel"
-                                      OnClick="@(() => DenyClaimAsync())"
-                                      Disabled="!_claim.CanDeny">
+                                      OnClick="@(() => DenyClaimAsync())">
                                 Deny
                             </MudButton>
                             <MudButton Variant="Variant.Outlined" 
@@ -95,12 +95,96 @@
                     else
                     {
                         <MudAlert Severity="Severity.Info">
-                            This claim has been finalized and cannot be edited.
+                            This claim is not awaiting an examiner disposition.
                         </MudAlert>
                     }
                 </MudItem>
             </MudGrid>
         </MudPaper>
+
+        @if (_claim.Status == "Pended")
+        {
+            <MudPaper Class="pa-5 mb-4" Elevation="2" Style="border-left: 4px solid var(--mud-palette-warning);">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Warning" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h6">Manual Review Required</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            @(_claim.PendDetails?.PendReason ?? "This claim requires examiner review before final disposition.")
+                        </MudText>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_claim.PendDetails?.PendCode))
+                    {
+                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Class="ml-auto">
+                            @_claim.PendDetails.PendCode
+                        </MudChip>
+                    }
+                </MudStack>
+
+                @if (_claim.PendDetails?.EditFailures.Count > 0)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Review @_claim.PendDetails.EditFailures.Count deterministic edit
+                        @(_claim.PendDetails.EditFailures.Count == 1 ? "failure" : "failures") before resolving the claim.
+                    </MudText>
+                }
+            </MudPaper>
+        }
+
+        @if (_claim.AiExamination is { } aiExamination)
+        {
+            <MudPaper Class="pa-5 mb-4" Elevation="2" Style="border: 1px solid rgba(0,255,255,0.35);">
+                <MudGrid>
+                    <MudItem xs="12" md="8">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Info" Size="Size.Large" />
+                            <div>
+                                <MudText Typo="Typo.h6">AI Claims Examiner Advisory</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Decision support only — a human examiner remains responsible for the claim disposition.
+                                </MudText>
+                            </div>
+                        </MudStack>
+                        <MudText Typo="Typo.body1" Class="mb-3">
+                            @(string.IsNullOrWhiteSpace(aiExamination.Rationale)
+                                ? "No rationale was supplied with this recommendation."
+                                : aiExamination.Rationale)
+                        </MudText>
+                        @if (aiExamination.PolicyCitations.Count > 0)
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">Policy evidence</MudText>
+                            @foreach (var citation in aiExamination.PolicyCitations)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                                    &bull; @citation
+                                </MudText>
+                            }
+                        }
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudPaper Class="pa-4" Elevation="0" Style="background: rgba(0,255,255,0.05);">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Recommended disposition</MudText>
+                            <MudChip T="string"
+                                     Color="@GetAiRecommendationColor(aiExamination.RecommendedDisposition)"
+                                     Variant="Variant.Filled"
+                                     Size="Size.Large"
+                                     Class="my-2">
+                                @aiExamination.RecommendedDisposition
+                            </MudChip>
+                            <MudText Typo="Typo.body2">
+                                Confidence: @aiExamination.ConfidenceScore.ToString("P0")
+                            </MudText>
+                            @if (!string.IsNullOrWhiteSpace(aiExamination.ExaminerAgreement))
+                            {
+                                <MudDivider Class="my-3" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Human feedback</MudText>
+                                <MudText Typo="Typo.body2">@aiExamination.ExaminerAgreement</MudText>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        }
 
         <!-- Financial Summary Cards -->
         <MudGrid Class="mb-4">
@@ -931,6 +1015,14 @@
         _ => Color.Default
     };
 
+    private static Color GetAiRecommendationColor(string recommendation) => recommendation switch
+    {
+        "Approve" => Color.Success,
+        "Deny" => Color.Error,
+        "RequestInfo" => Color.Warning,
+        _ => Color.Info
+    };
+
     private List<KeyValuePair<string, DateTime?>> GetImportantDates()
     {
         if (_claim == null) return new();
@@ -1035,7 +1127,9 @@
         
         try
         {
-            await ClaimsService.UpdateClaimStatusAsync(_claim.ClaimId, "Approved", "Claim approved by claims examiner");
+            await ResolvePendedClaimAsync(
+                "Approved",
+                "Claim approved by claims examiner");
             Snackbar.Add("Claim approved successfully", Severity.Success);
             await LoadClaimDetails();
         }
@@ -1057,7 +1151,7 @@
         {
             try
             {
-                await ClaimsService.UpdateClaimStatusAsync(_claim.ClaimId, "Denied", denialReason);
+                await ResolvePendedClaimAsync("Denied", denialReason);
                 Snackbar.Add("Claim denied successfully", Severity.Success);
                 await LoadClaimDetails();
             }
@@ -1067,6 +1161,42 @@
             }
         }
     }
+
+    private bool CanResolvePendedClaim =>
+        string.Equals(_claim?.Status, "Pended", StringComparison.OrdinalIgnoreCase);
+
+    private async Task ResolvePendedClaimAsync(string disposition, string reason)
+    {
+        if (_claim is null) return;
+
+        string? agreement = null;
+        if (_claim.AiExamination is not null)
+        {
+            agreement = string.Equals(
+                NormalizeDisposition(_claim.AiExamination.RecommendedDisposition),
+                disposition,
+                StringComparison.OrdinalIgnoreCase)
+                ? "Accepted"
+                : "Overridden";
+        }
+
+        var user = await UserContextService.GetCurrentUserAsync();
+        var examinerUserId = user?.UserId ?? user?.Email ?? "portal-examiner";
+
+        await WorkQueueService.ResolvePendedClaimAsync(
+            _claim.ClaimId,
+            disposition,
+            reason,
+            agreement,
+            examinerUserId);
+    }
+
+    private static string NormalizeDisposition(string disposition) => disposition switch
+    {
+        "Approve" => "Approved",
+        "Deny" => "Denied",
+        _ => disposition,
+    };
 
     private async Task ReversalFlowAsync()
     {

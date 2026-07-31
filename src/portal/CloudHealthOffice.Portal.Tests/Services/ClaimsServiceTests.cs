@@ -384,6 +384,76 @@ public class ClaimsServiceTests
     }
 
     [Fact]
+    public async Task GetClaimByIdAsync_WhenPendedWithAiAdvisory_DeserializesExaminerContext()
+    {
+        const string json = """
+        {
+          "id": "claim-pended-ai",
+          "claimNumber": "GUIDE-PEND-001",
+          "status": 4,
+          "submittedDate": "2026-07-31T05:31:21Z",
+          "serviceDateFrom": "2026-07-30T00:00:00Z",
+          "serviceDateTo": "2026-07-30T00:00:00Z",
+          "diagnosisCodes": [],
+          "claimLines": [],
+          "pendDetails": {
+            "pendCode": "NCCI",
+            "pendReason": "NCCI pair edit requires human review",
+            "editFailures": [
+              {
+                "editType": "NcciPair",
+                "ruleId": "NE001",
+                "column1Code": "27447",
+                "column2Code": "27486",
+                "affectedLineNumbers": [1, 2]
+              }
+            ]
+          },
+          "aiExamination": {
+            "recommendedDisposition": "RequestInfo",
+            "confidenceScore": 0.87,
+            "rationale": "Confirm whether distinct procedural services support modifier 59.",
+            "policyCitations": ["CMS NCCI Policy Manual Ch. 1"],
+            "modelId": "synthetic-guide-fixture",
+            "promptVersion": "ncci-pend-v1"
+          }
+        }
+        """;
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetClaimByIdAsync("claim-pended-ai");
+
+        result.Should().NotBeNull();
+        result!.Status.Should().Be("Pended");
+        result.PendDetails!.PendCode.Should().Be("NCCI");
+        result.PendDetails.EditFailures.Should().ContainSingle()
+            .Which.RuleId.Should().Be("NE001");
+        result.AiExamination!.RecommendedDisposition.Should().Be("RequestInfo");
+        result.AiExamination.ConfidenceScore.Should().Be(0.87);
+        result.AiExamination.PolicyCitations.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task TryRecordAiExaminerAgreementAsync_WhenApiSucceeds_ReturnsTrue()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.TryRecordAiExaminerAgreementAsync(
+            "claim-pended-ai",
+            "Overridden",
+            "examiner-1",
+            "Clinical documentation supports a different disposition.");
+
+        result.Should().BeTrue();
+        handler.CapturedRequests.Should().ContainSingle();
+        handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Post);
+        handler.CapturedUrls[0].Should().Contain(
+            "/claims/claim-pended-ai/ai-examination/agreement");
+    }
+
+    [Fact]
     public async Task GetClaimByIdAsync_WhenApiReturnsNull_ReturnsNull()
     {
         var sut = CreateService(new HttpClient(

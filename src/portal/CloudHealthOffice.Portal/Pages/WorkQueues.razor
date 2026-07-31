@@ -3,6 +3,7 @@
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IWorkQueueService WorkQueueService
+@inject IUserContextService UserContextService
 @inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
 
@@ -155,6 +156,7 @@
             <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="new Func<WorkQueueItem, object>(x => x.DaysInQueue)">Days in Queue</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.Priority)">Priority</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.TotalCharged)">Charged</MudTableSortLabel></MudTh>
+            <MudTh>AI Advisory</MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.AssignedTo)">Assigned To</MudTableSortLabel></MudTh>
             <MudTh>Actions</MudTh>
         </HeaderContent>
@@ -184,6 +186,23 @@
                 </MudChip>
             </MudTd>
             <MudTd DataLabel="Charged">@context.TotalCharged.ToString("C")</MudTd>
+            <MudTd DataLabel="AI Advisory">
+                @if (!string.IsNullOrWhiteSpace(context.AiRecommendedDisposition))
+                {
+                    <MudTooltip Text="@(context.AiRationale ?? "Open the claim to review the advisory rationale and policy evidence.")">
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="@GetAiRecommendationColor(context.AiRecommendedDisposition)"
+                                 Variant="Variant.Outlined">
+                            @GetAiRecommendationLabel(context)
+                        </MudChip>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Not available</MudText>
+                }
+            </MudTd>
             <MudTd DataLabel="Assigned To">
                 <MudSelect T="string" Value="@context.AssignedTo" ValueChanged="@(val => OnReassign(context.ClaimId, val))"
                            Variant="Variant.Text" Dense="true" Margin="Margin.Dense" Style="min-width: 140px;">
@@ -229,7 +248,7 @@
     private List<WorkQueueItem> _allItems = new();
     private List<WorkQueueItem> _filteredItems = new();
     private string? _selectedQueueFilter;
-    private string _selectedExaminer = "Sarah Williams";
+    private string _selectedExaminer = "All";
 
     private int TotalCount => _summary == null ? 0
         : _summary.NcciEditFailures + _summary.MissingAuth + _summary.ProviderNotContracted
@@ -302,7 +321,20 @@
 
     private async Task OnOverride(string claimId)
     {
-        await WorkQueueService.OverrideAsync(claimId, "Examiner override — reviewed and approved");
+        var item = _allItems.FirstOrDefault(i => i.ClaimId == claimId);
+        var agreement = item?.AiRecommendedDisposition is null
+            ? null
+            : string.Equals(item.AiRecommendedDisposition, "Approve", StringComparison.OrdinalIgnoreCase)
+                ? "Accepted"
+                : "Overridden";
+        var user = await UserContextService.GetCurrentUserAsync();
+
+        await WorkQueueService.ResolvePendedClaimAsync(
+            claimId,
+            "Approved",
+            "Examiner override — reviewed and approved",
+            agreement,
+            user?.UserId ?? user?.Email ?? "portal-examiner");
         _allItems.RemoveAll(i => i.ClaimId == claimId);
         if (_summary != null) _summary.NcciEditFailures = Math.Max(0, _summary.NcciEditFailures - 1);
         ApplyFilters();
@@ -330,4 +362,26 @@
         "Medium" => Color.Warning,
         _ => Color.Default
     };
+
+    private static Color GetAiRecommendationColor(string recommendation) => recommendation switch
+    {
+        "Approve" => Color.Success,
+        "Deny" => Color.Error,
+        "RequestInfo" => Color.Warning,
+        _ => Color.Info
+    };
+
+    private static string GetAiRecommendationLabel(WorkQueueItem item)
+    {
+        var disposition = item.AiRecommendedDisposition switch
+        {
+            "RequestInfo" => "Request Info",
+            "EscalateToHuman" => "Escalate",
+            var value => value
+        };
+
+        return item.AiConfidenceScore.HasValue
+            ? $"{disposition} · {item.AiConfidenceScore.Value:P0}"
+            : disposition ?? "Advisory";
+    }
 }

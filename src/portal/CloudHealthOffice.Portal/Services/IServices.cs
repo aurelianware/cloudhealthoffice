@@ -21,6 +21,11 @@ public interface IClaimsService
         string? paymentStatus = null);
     Task<string> SubmitClaimAsync(SubmitClaimRequest request);
     Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null);
+    Task<bool> TryRecordAiExaminerAgreementAsync(
+        string claimId,
+        string agreement,
+        string examinerUserId,
+        string? notes = null);
     Task<AdjudicationTransparencyData?> GetAdjudicationDataAsync(string claimId);
 
     /// <summary>
@@ -811,6 +816,8 @@ public class ClaimDetails : ClaimSummary
     public DateTime? PaidDate { get; set; }
     public string? CheckNumber { get; set; }
     public string? DenialReason { get; set; }
+    public ClaimPendDetails? PendDetails { get; set; }
+    public ClaimAiExamination? AiExamination { get; set; }
     [JsonPropertyName("adjudicationResult")]
     public ClaimAdjudicationProjection? AdjudicationResult
     {
@@ -858,6 +865,40 @@ public class ClaimDetails : ClaimSummary
         get => _auditTrail;
         set => _auditTrail = value ?? new();
     }
+}
+
+public class ClaimPendDetails
+{
+    public string PendCode { get; set; } = string.Empty;
+    public string PendReason { get; set; } = string.Empty;
+    public DateTime PendedAt { get; set; }
+    public List<ClaimPendEditFailure> EditFailures { get; set; } = new();
+}
+
+public class ClaimPendEditFailure
+{
+    public string EditType { get; set; } = string.Empty;
+    public string RuleId { get; set; } = string.Empty;
+    public string? Column1Code { get; set; }
+    public string? Column2Code { get; set; }
+    public List<int> AffectedLineNumbers { get; set; } = new();
+    public bool ModifierOverridePresent { get; set; }
+    public string? SuggestedCarc { get; set; }
+    public string? SuggestedRarc { get; set; }
+}
+
+public class ClaimAiExamination
+{
+    public string RecommendedDisposition { get; set; } = string.Empty;
+    public double ConfidenceScore { get; set; }
+    public string? Rationale { get; set; }
+    public List<string> PolicyCitations { get; set; } = new();
+    public string? ModelId { get; set; }
+    public string? PromptVersion { get; set; }
+    public DateTime GeneratedAt { get; set; }
+    public string? ExaminerAgreement { get; set; }
+    public DateTime? ExaminerActedAt { get; set; }
+    public string? ExaminerUserId { get; set; }
 }
 
 public class ClaimDiagnosisCode
@@ -2389,6 +2430,12 @@ public interface IWorkQueueService
         string? assignedTo = null, int limit = 100);
     Task AssignClaimAsync(string claimId, string assignTo);
     Task OverrideAsync(string claimId, string overrideReason);
+    Task ResolvePendedClaimAsync(
+        string claimId,
+        string disposition,
+        string reason,
+        string? aiExaminerAgreement,
+        string examinerUserId);
 }
 
 public class WorkQueueSummary
@@ -2414,6 +2461,11 @@ public class WorkQueueItem
     public string AssignedTo { get; set; } = string.Empty;
     public decimal TotalCharged { get; set; }
     public List<string> ProcedureCodes { get; set; } = new();
+    public string? AiRecommendedDisposition { get; set; }
+    public double? AiConfidenceScore { get; set; }
+    public string? AiRationale { get; set; }
+    public List<string> AiPolicyCitations { get; set; } = new();
+    public string? AiExaminerAgreement { get; set; }
 }
 
 // ---------------------------------------------------------------------------

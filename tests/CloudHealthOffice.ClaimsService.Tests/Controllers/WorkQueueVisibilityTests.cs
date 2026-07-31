@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Models;
@@ -143,6 +144,51 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
         Assert.NotNull(items);
         var item = Assert.Single(items!);
         Assert.Equal("claim-cob-pended", item.ClaimId);
+    }
+
+    [Fact]
+    public async Task ResolvePendedClaim_Approves_And_Persists_Ai_Feedback()
+    {
+        var claim = NcciPendedClaim();
+        claim.AiExamination = new AiExamination
+        {
+            RecommendedDisposition = "RequestInfo",
+            ConfidenceScore = 0.87,
+        };
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+        _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/resolve",
+            new
+            {
+                disposition = "Approved",
+                reason = "Documentation supports modifier 59",
+                aiExaminerAgreement = "Overridden",
+                examinerUserId = "examiner-1",
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _repo.Received(1).UpdateAsync(Arg.Is<Claim>(saved =>
+            saved.Status == ClaimStatus.Approved
+            && saved.VersionState == ClaimVersionState.Adjudicated
+            && saved.AiExamination!.ExaminerAgreement == "Overridden"
+            && saved.AiExamination.ExaminerUserId == "examiner-1"));
+    }
+
+    [Fact]
+    public async Task ResolvePendedClaim_Denies_Only_Pended_Claims()
+    {
+        var claim = NcciPendedClaim();
+        claim.Status = ClaimStatus.Approved;
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/resolve",
+            new { disposition = "Denied", reason = "Documentation not received" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await _repo.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
     }
 
     private sealed class WorkQueueSummaryDto

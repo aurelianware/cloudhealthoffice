@@ -137,7 +137,10 @@ public class WorkQueueServiceTests
                   providerName = "Dr. Smith", serviceDate = "2025-03-01",
                   queueReason = "NCCI Edit Failure", queueReasonCode = "NCCI",
                   daysInQueue = 3, priority = "High", assignedTo = "Sarah",
-                  totalCharged = 2500m, procedureCodes = new[] { "99213", "99214" } }
+                  totalCharged = 2500m, procedureCodes = new[] { "99213", "99214" },
+                  aiRecommendedDisposition = "RequestInfo", aiConfidenceScore = 0.87,
+                  aiRationale = "Confirm distinct procedural services.",
+                  aiPolicyCitations = new[] { "CMS NCCI Policy Manual Ch. 1" } }
         }, JsonOpts);
 
         var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
@@ -147,6 +150,9 @@ public class WorkQueueServiceTests
         result[0].QueueReason.Should().Be("NCCI Edit Failure");
         result[0].Priority.Should().Be("High");
         result[0].ProcedureCodes.Should().Contain("99213");
+        result[0].AiRecommendedDisposition.Should().Be("RequestInfo");
+        result[0].AiConfidenceScore.Should().Be(0.87);
+        result[0].AiPolicyCitations.Should().ContainSingle();
     }
 
     [Fact]
@@ -185,6 +191,29 @@ public class WorkQueueServiceTests
 
         handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Post);
         handler.CapturedUrls[0].Should().Contain("/work-queue/CLM-1/override");
+    }
+
+    [Fact]
+    public async Task ResolvePendedClaimAsync_PostsDispositionAndAiFeedbackToDedicatedEndpoint()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.ResolvePendedClaimAsync(
+            "CLM-1",
+            "Approved",
+            "Documentation supports modifier 59",
+            "Overridden",
+            "examiner-1");
+
+        var request = handler.CapturedRequests[0];
+        request.Method.Should().Be(HttpMethod.Post);
+        handler.CapturedUrls[0].Should().Contain("/work-queue/CLM-1/resolve");
+
+        var body = await request.Content!.ReadAsStringAsync();
+        body.Should().Contain("\"disposition\":\"Approved\"");
+        body.Should().Contain("\"aiExaminerAgreement\":\"Overridden\"");
+        body.Should().Contain("\"examinerUserId\":\"examiner-1\"");
     }
 
     [Fact]
