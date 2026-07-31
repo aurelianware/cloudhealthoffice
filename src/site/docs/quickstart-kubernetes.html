@@ -411,18 +411,20 @@ kubectl logs -n cloudhealthoffice mongodb-0</code></pre>
         <!-- Tear Down -->
         <h2 id="tear-down">Tear Down</h2>
 
-        <h3>Stop everything (keep data)</h3>
-<pre><code>kubectl delete namespace cloudhealthoffice</code></pre>
-        <p>Data in MongoDB PVCs persists. Re-run <code>./scripts/deploy-local.sh --skip-build</code> to bring it back.</p>
+        <h3>Stop local workloads (keep the MongoDB PVC)</h3>
+<pre><code>kubectl scale deployment --all --replicas=0 -n cloudhealthoffice
+kubectl scale statefulset mongodb --replicas=0 -n cloudhealthoffice</code></pre>
+        <p>The PVC remains while the workloads are scaled down. Re-run <code>./scripts/deploy-local.sh --skip-build</code> to restore the local manifests and replica counts.</p>
 
         <div class="callout callout-warning">
           <div class="callout-title">Local success is not a production gate</div>
-          <p>Before moving real traffic, complete the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a> for identity, secrets, tenant isolation, production sizing, backups, restore, Service Bus, observability, and rollback evidence.</p>
+          <p>Before moving real traffic, complete the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a> and the <a href="/docs/backup-restore-disaster-recovery">Backup &amp; Disaster Recovery Runbook</a>. The local single-node MongoDB PVC survives ordinary pod restarts, but it is not a production backup or high-availability design.</p>
         </div>
 
         <h3>Full reset (delete everything including data)</h3>
 <pre><code>kubectl delete namespace cloudhealthoffice
 docker volume prune -f</code></pre>
+        <p>Deleting the namespace requests deletion of namespaced PVCs. Whether an underlying volume remains depends on the storage class reclaim policy; do not treat it as recoverable unless an independent backup has been tested.</p>
 
         <!-- Next Steps -->
         <h2 id="next-steps">Next Steps</h2>

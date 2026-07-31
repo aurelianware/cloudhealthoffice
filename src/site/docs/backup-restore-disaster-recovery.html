@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backup, Restore &amp; Disaster Recovery Runbook — Cloud Health Office</title>
+  <meta name="description" content="Plan, test, and execute Cloud Health Office recovery for MongoDB, Azure Cosmos DB, Service Bus, Kubernetes, Key Vault, and application data." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/backup-restore-disaster-recovery" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/backup-restore-disaster-recovery" />
+  <meta property="og:title" content="Backup, Restore &amp; Disaster Recovery Runbook — Cloud Health Office" />
+  <meta property="og:description" content="An evidence-driven recovery runbook for Cloud Health Office data, messaging, secrets, Kubernetes workloads, and post-restore validation." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/docs-deployment-pipeline.svg" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Backup, Restore and Disaster Recovery Runbook",
+    "description": "Plan, test, and execute Cloud Health Office recovery for MongoDB, Azure Cosmos DB, Azure Service Bus, Kubernetes, Azure Key Vault, and application data.",
+    "url": "https://cloudhealthoffice.com/docs/backup-restore-disaster-recovery",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-07-31",
+    "dateModified": "2026-07-31",
+    "proficiencyLevel": "Advanced",
+    "about": ["Disaster recovery", "MongoDB", "Azure Cosmos DB", "Azure Service Bus", "Kubernetes", "Azure Key Vault"],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Backup, Restore and Disaster Recovery", "item": "https://cloudhealthoffice.com/docs/backup-restore-disaster-recovery" }
+      ]
+    }
+  }
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/founder">Founder</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Operations</div>
+            <ul>
+              <li><a href="/docs/deployment">Deployment</a></li>
+              <li><a href="/docs/production-readiness-checklist">Production Readiness</a></li>
+              <li><a href="/docs/backup-restore-disaster-recovery" class="active">Backup &amp; Disaster Recovery</a></li>
+              <li><a href="/docs/837-intake-adjudication-operations">837 Operations Runbook</a></li>
+              <li><a href="/docs/review-resolve-pended-claim">Pended Claims Operations</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#principles">Recovery Principles</a></li>
+              <li><a href="#targets">RTO &amp; RPO</a></li>
+              <li><a href="#inventory">Protection Inventory</a></li>
+              <li><a href="#mongo">MongoDB</a></li>
+              <li><a href="#cosmos">Cosmos DB</a></li>
+              <li><a href="#servicebus">Service Bus</a></li>
+              <li><a href="#kubernetes">Kubernetes &amp; Secrets</a></li>
+              <li><a href="#execute">Execute Recovery</a></li>
+              <li><a href="#validate">Validate Data</a></li>
+              <li><a href="#drill">Run a Drill</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a><span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a><span class="sep">&#x25B8;</span>
+          <span class="current">Backup, Restore &amp; Disaster Recovery</span>
+        </div>
+
+        <h1>Backup, Restore &amp; Disaster Recovery Runbook</h1>
+        <p class="docs-subtitle">Recover Cloud Health Office without guessing: identify the authoritative data, select a safe recovery point, restore into isolation, reconcile asynchronous work, validate healthcare correctness, and record evidence against approved RTO and RPO.</p>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">A persistent volume is not a backup</div>
+          <p>The local Kubernetes deployment uses one MongoDB StatefulSet and a 10 GiB persistent volume. That protects data from an ordinary pod restart, but it is not high availability, point-in-time recovery, or disaster recovery. Treat this posture as development-only.</p>
+        </div>
+
+        <h2 id="principles">1. Recovery Principles</h2>
+        <ol>
+          <li><strong>Declare the source of truth.</strong> Recover durable business records before caches, projections, queues, or generated output.</li>
+          <li><strong>Restore into isolation first.</strong> Never overwrite the only surviving copy while investigating corruption or accidental deletion.</li>
+          <li><strong>Preserve the incident boundary.</strong> Record the last known-good UTC time, first known-bad write, release SHA, configuration, tenant scope, and affected identifiers.</li>
+          <li><strong>Prefer replayable state over queue recovery.</strong> Service Bus is transport, not the system of record. Rebuild work from persisted events or an approved reconciliation source when messages cannot be recovered.</li>
+          <li><strong>Prove application correctness.</strong> A successful provider restore is incomplete until claim versions, member coverage, benefit configuration, payments, audit history, tenant isolation, and message reconciliation pass.</li>
+          <li><strong>Separate recovery from failback.</strong> Stabilize the recovered environment before returning traffic or attempting to restore the original topology.</li>
+        </ol>
+
+        <h2 id="targets">2. Approve RTO and RPO Before the Incident</h2>
+        <p>RTO is the maximum acceptable time to restore service. RPO is the maximum acceptable data-loss window. The values below are planning fields, not product guarantees or contractual service levels.</p>
+        <table>
+          <thead><tr><th>Capability</th><th>Business owner</th><th>RTO</th><th>RPO</th><th>Recovery source</th></tr></thead>
+          <tbody>
+            <tr><td>Claim intake and adjudication</td><td>________</td><td>________</td><td>________</td><td>Claims database, append-only claim events, source 837 files, Service Bus state</td></tr>
+            <tr><td>Membership and coverage</td><td>________</td><td>________</td><td>________</td><td>Member database plus accepted 834 or upstream enrollment source</td></tr>
+            <tr><td>Benefits, providers, and pricing</td><td>________</td><td>________</td><td>________</td><td>Configuration database plus approved source files</td></tr>
+            <tr><td>Payments and remittance</td><td>________</td><td>________</td><td>________</td><td>Financial records, immutable audit evidence, bank or payment reconciliation</td></tr>
+            <tr><td>Platform configuration and secrets</td><td>________</td><td>________</td><td>________</td><td>Git, infrastructure as code, Key Vault, approved configuration register</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="inventory">3. Capture the Protection Inventory</h2>
+        <p>Complete this inventory for every environment. A blank or assumed cell is a no-go for production traffic.</p>
+        <table>
+          <thead><tr><th>Asset</th><th>Repository posture</th><th>Production evidence required</th></tr></thead>
+          <tbody>
+            <tr><td>Local MongoDB</td><td>Single MongoDB 6.0 StatefulSet, one PVC, no scheduled backup job in the local bootstrap</td><td>Development export when needed; do not present this as production DR</td></tr>
+            <tr><td>Cosmos DB for MongoDB</td><td>Free-tier benchmark module is single-region with automatic failover disabled; backup policy is not declared in that module</td><td>Observed backup mode and retention, latest restorable timestamp, restore permissions, completed isolated restore</td></tr>
+            <tr><td>Cosmos DB for NoSQL</td><td>Current module is single-region with automatic failover disabled; backup policy is not explicitly declared</td><td>Observed backup mode, region design, recovery point, network/RBAC reconstruction, completed restore</td></tr>
+            <tr><td>Azure Service Bus</td><td>Standard tier in the main template; claim messages have TTL, duplicate detection, retry, and DLQ controls</td><td>Entity inventory, replay source, DLQ evidence, regional recovery design, reconciliation procedure</td></tr>
+            <tr><td>Kubernetes</td><td>Deployments and services are reproducible from Git and deployment automation; some workloads use PVCs</td><td>Release SHA, image digests, manifests/configuration, cluster backup scope, alternate-cluster restore test</td></tr>
+            <tr><td>Azure Key Vault</td><td>Application vault enables soft delete, 90-day retention, and purge protection</td><td>Recovery permissions, secret/key inventory, rotation source, recovery test without exporting secret values to evidence</td></tr>
+          </tbody>
+        </table>
+
+        <div class="code-block-header"><span>Shell</span><span>capture before a drill</span></div>
+        <pre><code>NAMESPACE='cloudhealthoffice'
+EVIDENCE_DIR="recovery-evidence-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$EVIDENCE_DIR"
+
+git rev-parse HEAD &gt; "$EVIDENCE_DIR/release-sha.txt"
+kubectl get deployment,statefulset,pvc -n "$NAMESPACE" -o wide \
+  &gt; "$EVIDENCE_DIR/kubernetes-inventory.txt"
+kubectl get configmap -n "$NAMESPACE" \
+  &gt; "$EVIDENCE_DIR/configmap-inventory.txt"</code></pre>
+        <p>Do not export Kubernetes Secret objects or decrypted credentials into the evidence directory.</p>
+
+        <h2 id="mongo">4. Recover Local or Self-Managed MongoDB</h2>
+        <p>For local development, create a logical export before a destructive experiment. Production self-managed MongoDB requires an approved replica-set, backup, encryption, retention, monitoring, and off-cluster storage design beyond the local manifest.</p>
+
+        <h3>Create a local development export</h3>
+        <div class="code-block-header"><span>Shell</span><span>local development only</span></div>
+        <pre><code>NAMESPACE='cloudhealthoffice'
+MONGO_POD="$(kubectl get pod -n "$NAMESPACE" \
+  -l app=mongodb -o jsonpath='{.items[0].metadata.name}')"
+
+kubectl exec -n "$NAMESPACE" "$MONGO_POD" -- sh -c \
+  'mongodump --archive=/tmp/cho-mongo.archive.gz --gzip \
+    --username "$MONGO_INITDB_ROOT_USERNAME" \
+    --password "$MONGO_INITDB_ROOT_PASSWORD" \
+    --authenticationDatabase admin'
+
+kubectl cp \
+  "$NAMESPACE/$MONGO_POD:/tmp/cho-mongo.archive.gz" \
+  "./cho-mongo.archive.gz"</code></pre>
+        <p>Encrypt the archive, move it outside the cluster, record its checksum and UTC creation time, and delete the pod copy. A backup that remains only on the same laptop or cluster does not cover device or cluster loss.</p>
+
+        <h3>Restore into an isolated target</h3>
+        <div class="callout callout-warning">
+          <div class="callout-title">Never test with the production URI</div>
+          <p>Set <code>ISOLATED_MONGO_URI</code> to a new, access-restricted database. The <code>--drop</code> option deletes collections in that target before restoring them.</p>
+        </div>
+        <div class="code-block-header"><span>Shell</span><span>operator workstation</span></div>
+        <pre><code>test -n "$ISOLATED_MONGO_URI"
+mongorestore \
+  --uri "$ISOLATED_MONGO_URI" \
+  --archive="./cho-mongo.archive.gz" \
+  --gzip \
+  --drop</code></pre>
+        <p>Use a dedicated recovery identity, rotate any credential exposed during the exercise, and retain only sanitized command output as evidence.</p>
+
+        <h2 id="cosmos">5. Recover Azure Cosmos DB</h2>
+        <p>Cloud Health Office supports both the Cosmos DB native SDK and Cosmos DB for MongoDB through the MongoDB driver. Recovery is an account capability, not a driver behavior. Query the deployed account rather than assuming its backup mode from the application connection string.</p>
+
+        <div class="code-block-header"><span>Shell</span><span>Azure CLI inventory</span></div>
+        <pre><code>az cosmosdb show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$COSMOS_ACCOUNT" \
+  --query '{
+    kind:kind,
+    backupPolicy:backupPolicy,
+    locations:locations[].locationName,
+    automaticFailover:enableAutomaticFailover,
+    multipleWrites:enableMultipleWriteLocations,
+    publicNetworkAccess:publicNetworkAccess
+  }'</code></pre>
+
+        <h3>Required production posture</h3>
+        <ul class="readiness-checklist">
+          <li>Choose periodic or continuous backup deliberately and document its retention, storage redundancy, cost, and RPO impact.</li>
+          <li>For point-in-time recovery, enable an approved continuous-backup tier and confirm the latest restorable timestamp before every drill.</li>
+          <li>Grant restore discovery and execution permissions to a controlled break-glass identity, then test them before an incident.</li>
+          <li>Restore to a new account or use an explicitly approved same-account restore path; preserve the source until validation is complete.</li>
+          <li>Reapply settings that point-in-time restore does not reproduce, including applicable firewall, virtual-network, private-endpoint, region, and data-plane RBAC configuration.</li>
+          <li>Rebuild secrets and application configuration to reference the recovered endpoint without committing connection strings.</li>
+        </ul>
+
+        <div class="code-block-header"><span>Shell</span><span>example policy change</span></div>
+        <pre><code>az cosmosdb update \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$COSMOS_ACCOUNT" \
+  --backup-policy-type Continuous \
+  --continuous-tier Continuous30Days</code></pre>
+        <p>Changing backup policy affects cost and recovery behavior. Review it through change control, then follow Microsoft’s current <a href="https://learn.microsoft.com/azure/cosmos-db/restore-account-continuous-backup" target="_blank" rel="noopener noreferrer">continuous-backup account restore procedure</a> or <a href="https://learn.microsoft.com/azure/cosmos-db/how-to-restore-in-account-continuous-backup" target="_blank" rel="noopener noreferrer">same-account restore procedure</a>. Record the source account, recovery timestamp in UTC, target account, restored resources, and job result.</p>
+
+        <h2 id="servicebus">6. Recover Azure Service Bus and Asynchronous Work</h2>
+        <p>The main infrastructure template provisions Standard tier. Standard namespaces do not provide native multi-region Geo-Replication or metadata Geo-Disaster Recovery. If production RTO/RPO requires regional messaging recovery, design and fund that capability explicitly.</p>
+        <div class="callout callout-info">
+          <div class="callout-title">Know what a failover protects</div>
+          <p>On Premium tier, Service Bus Geo-Replication covers metadata and message data. Metadata Geo-Disaster Recovery copies entity configuration but not messages. Neither should be treated as a substitute for durable business records and reconciliation.</p>
+        </div>
+
+        <ol>
+          <li><strong>Freeze producers when safe.</strong> Prevent new work from widening the recovery boundary.</li>
+          <li><strong>Capture entity state.</strong> Record active, scheduled, transfer, and dead-letter counts plus entity configuration.</li>
+          <li><strong>Recover the namespace.</strong> Reprovision entities and filters from infrastructure as code, or invoke the approved Premium failover procedure.</li>
+          <li><strong>Repoint identities and endpoints.</strong> Restore RBAC, private endpoints, DNS, and application secret references; validate Send and Listen separately.</li>
+          <li><strong>Reconcile transport with durable state.</strong> Compare accepted claim versions and other source records against completed outcomes.</li>
+          <li><strong>Replay only missing work.</strong> Preserve deterministic message identity and persisted-result checks. Never bulk-replay a DLQ before correcting its cause.</li>
+        </ol>
+
+        <div class="code-block-header"><span>Shell</span><span>claim adjudication subscription</span></div>
+        <pre><code>az servicebus topic subscription show \
+  --resource-group "$RESOURCE_GROUP" \
+  --namespace-name "$SERVICEBUS_NAMESPACE" \
+  --topic-name claim-version-events \
+  --name adjudication-orchestrator \
+  --query '{
+    active:countDetails.activeMessageCount,
+    deadLetter:countDetails.deadLetterMessageCount,
+    transferDeadLetter:countDetails.transferDeadLetterMessageCount,
+    maxDelivery:maxDeliveryCount,
+    lockDuration:lockDuration
+  }'</code></pre>
+        <p>Use the <a href="/docs/837-intake-adjudication-operations">837 Intake &amp; Adjudication Operations Runbook</a> for claim-level tracing, retries, dead letters, deterministic message IDs, and recovery verification.</p>
+
+        <h2 id="kubernetes">7. Recover Kubernetes Configuration and Secrets</h2>
+        <p>Rebuild stateless workloads from the reviewed Git SHA, pinned image digests, infrastructure templates, and deployment automation. Back up Kubernetes cluster state only where it contains authoritative resources or persistent volumes that cannot be reproduced safely.</p>
+        <ul class="readiness-checklist">
+          <li>Record the release SHA, container digests, Helm values or manifests, feature flags, replica counts, autoscaling limits, and environment-specific configuration.</li>
+          <li>Use Azure Backup for AKS only after its backup extension, vault, policy, identity permissions, supported CSI volumes, and alternate-cluster restore have been validated.</li>
+          <li>Keep database-native recovery as the primary plan for databases; do not assume a crash-consistent PVC snapshot is application-consistent.</li>
+          <li>Restore network policies, ingress, certificates, workload identity, private DNS, monitoring, alerting, and policy assignments before traffic.</li>
+          <li>Keep secret values in Key Vault or the approved secret system. Evidence should contain secret names, versions, expiry, and recovery status—not values.</li>
+        </ul>
+
+        <h3>Key Vault recovery checks</h3>
+        <div class="code-block-header"><span>Shell</span><span>Azure CLI</span></div>
+        <pre><code>az keyvault show-deleted --name "$KEY_VAULT_NAME"
+az keyvault recover --name "$KEY_VAULT_NAME"
+
+az keyvault secret show-deleted \
+  --vault-name "$KEY_VAULT_NAME" \
+  --name "$SECRET_NAME"
+az keyvault secret recover \
+  --vault-name "$KEY_VAULT_NAME" \
+  --name "$SECRET_NAME"</code></pre>
+        <p>The application Key Vault module enables soft delete with 90-day retention and purge protection. Recovery still requires the correct control-plane permissions, restored network access, workload identity, and application verification.</p>
+
+        <h2 id="execute">8. Execute an Incident Recovery</h2>
+        <table>
+          <thead><tr><th>Phase</th><th>Required actions</th><th>Exit criterion</th></tr></thead>
+          <tbody>
+            <tr><td>Declare</td><td>Open incident record; name commander, recovery lead, data validator, security lead, and business decision maker; start UTC timeline.</td><td>Authority and scope are explicit.</td></tr>
+            <tr><td>Contain</td><td>Stop unsafe writes, preserve source data and logs, restrict access, identify last known-good time and affected tenants.</td><td>Recovery boundary is no longer widening.</td></tr>
+            <tr><td>Select</td><td>Inventory available recovery points, quantify potential data loss, obtain business approval, and choose an isolated target.</td><td>Recovery point and expected RPO breach are recorded.</td></tr>
+            <tr><td>Restore</td><td>Recover data first, then platform configuration, secrets, networking, workloads, and asynchronous transport.</td><td>Isolated environment is technically healthy.</td></tr>
+            <tr><td>Validate</td><td>Run structural, domain, tenant, financial, and message reconciliation checks; security reviews access and exposure.</td><td>Named validators sign the evidence.</td></tr>
+            <tr><td>Cut over</td><td>Freeze recovered data, apply final delta if designed, update endpoints, run smoke tests, gradually resume traffic, watch rollback triggers.</td><td>Business owner approves service restoration.</td></tr>
+            <tr><td>Close</td><td>Rotate temporary access, preserve evidence, monitor for delayed failures, document actual RTO/RPO, and assign corrective actions.</td><td>Incident review and follow-up owners are scheduled.</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="validate">9. Validate Healthcare Data After Restore</h2>
+        <p>Use counts as a starting point, not the final proof. Sample records across tenants and lifecycle states, and compare them with independent source evidence.</p>
+        <ul class="readiness-checklist">
+          <li><strong>Structural:</strong> expected databases, collections or containers, indexes, partition keys, schema versions, and migrations are present.</li>
+          <li><strong>Claims:</strong> claim version chains are complete; accepted 837 claims reconcile to persisted outcomes; paid or adjusted claims retain audit history.</li>
+          <li><strong>Membership:</strong> members, coverage spans, identifiers, and accepted enrollment transactions agree without impossible gaps or overlaps.</li>
+          <li><strong>Benefits and providers:</strong> effective dates, network assignments, fee schedules, authorization rules, and configuration versions match the recovery point.</li>
+          <li><strong>Financial:</strong> payment batches, remittances, totals, ledger references, and external settlement records reconcile; no payment is duplicated.</li>
+          <li><strong>Messaging:</strong> durable accepted work is classified as completed, pending, safely replayable, or explicitly excepted; DLQs contain no unexplained messages.</li>
+          <li><strong>Tenancy and privacy:</strong> tenant scoping, encryption, audit access, and representative authorization checks pass before user traffic.</li>
+          <li><strong>Operations:</strong> health checks, dashboards, logs, traces, alerts, backup jobs, and the next scheduled recovery point are working.</li>
+        </ul>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">No-go conditions</div>
+          <p>Do not resume production traffic with an unknown recovery point, unexplained record-count delta, incomplete claim or payment reconciliation, broken tenant isolation, missing audit history, untested credentials, unexplained dead letters, or no executable rollback from the recovered environment.</p>
+        </div>
+
+        <h2 id="drill">10. Run and Record a Restore Drill</h2>
+        <ol>
+          <li>Choose one production-like but non-production environment and publish the scenario, scope, approved disruption, and safety boundaries.</li>
+          <li>Start the RTO clock, capture inventory, and select a recovery point without assistance from undocumented knowledge.</li>
+          <li>Restore data and platform components into an isolated target using the same identities and controls expected during an incident.</li>
+          <li>Run the complete validation checklist, reconcile asynchronous work, and exercise the cutover decision without routing real production traffic.</li>
+          <li>Record actual RTO, achieved RPO, manual steps, access failures, missing telemetry, correctness exceptions, cost, and operator handoffs.</li>
+          <li>Assign every gap an owner and due date. Repeat the failed portion; a document review alone does not close a failed restore control.</li>
+        </ol>
+
+        <table>
+          <thead><tr><th>Evidence</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Scenario and drill ID</td><td>________________________________________</td></tr>
+            <tr><td>Source and isolated target</td><td>________________________________________</td></tr>
+            <tr><td>Recovery point in UTC</td><td>________________________________________</td></tr>
+            <tr><td>RTO target / actual</td><td>________________________________________</td></tr>
+            <tr><td>RPO target / achieved</td><td>________________________________________</td></tr>
+            <tr><td>Validation result and exceptions</td><td>________________________________________</td></tr>
+            <tr><td>Approvers and evidence location</td><td>________________________________________</td></tr>
+            <tr><td>Next drill date</td><td>________________________________________</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Related Guides</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top:20px;">
+          <a href="/docs/production-readiness-checklist" class="docs-hub-card">
+            <h3>Production Readiness Checklist</h3>
+            <p>Use successful restore evidence as a required go-live gate.</p>
+            <span class="card-arrow">Review launch gates &rarr;</span>
+          </a>
+          <a href="/docs/837-intake-adjudication-operations" class="docs-hub-card">
+            <h3>837 Operations Runbook</h3>
+            <p>Reconcile claims, Service Bus deliveries, retries, and dead letters after recovery.</p>
+            <span class="card-arrow">Open operations runbook &rarr;</span>
+          </a>
+        </div>
+        <div class="docs-pager">
+          <a href="/docs/production-readiness-checklist"><div class="pager-label">&larr; Previous</div><div class="pager-title">Production Readiness</div></a>
+          <a href="/docs/837-intake-adjudication-operations" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">837 Operations Runbook</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F readiness, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col"><h5>Product</h5><ul><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/release-notes">Release Notes</a></li></ul></div>
+        <div class="footer-col"><h5>Documentation</h5><ul><li><a href="/docs/quickstart">Quick Start</a></li><li><a href="/docs/claims-guide">Claims Guide</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="footer-col"><h5>Contact</h5><ul><li><a href="/contact">Contact Sales</a></li><li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li><li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li></ul></div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use</p>
+        <p><a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
