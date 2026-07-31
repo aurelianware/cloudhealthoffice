@@ -248,6 +248,39 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<bool> TryRecordAiExaminerAgreementAsync(
+        string claimId,
+        string agreement,
+        string examinerUserId,
+        string? notes = null)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/ai-examination/agreement",
+                new { agreement, examinerUserId, notes });
+
+            if (response.IsSuccessStatusCode)
+            {
+                return true;
+            }
+
+            _logger.LogWarning(
+                "Could not record AI examiner agreement for claim {ClaimId}: HTTP {StatusCode}",
+                claimId,
+                response.StatusCode);
+            return false;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex,
+                "Could not record AI examiner agreement for claim {ClaimId}",
+                claimId);
+            return false;
+        }
+    }
+
     public async Task<AdjudicationTransparencyData?> GetAdjudicationDataAsync(string claimId)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
@@ -2948,7 +2981,35 @@ public class WorkQueueService : IWorkQueueService
         try
         {
             var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/Claims/work-queue/{Uri.EscapeDataString(claimId)}/override",
-                new { Reason = overrideReason });
+                new { OverrideReason = overrideReason });
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
+    public async Task ResolvePendedClaimAsync(
+        string claimId,
+        string disposition,
+        string reason,
+        string? aiExaminerAgreement,
+        string examinerUserId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{baseUrl}/Claims/work-queue/{Uri.EscapeDataString(claimId)}/resolve",
+                new
+                {
+                    disposition,
+                    reason,
+                    aiExaminerAgreement,
+                    examinerUserId,
+                });
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)

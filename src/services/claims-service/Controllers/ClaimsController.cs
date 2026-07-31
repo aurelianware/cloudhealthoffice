@@ -1249,15 +1249,99 @@ public class ClaimsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> OverrideClaim(string claimId, [FromBody] OverrideClaimRequest request)
     {
+        var result = await ResolvePendedClaim(
+            claimId,
+            new ResolvePendedClaimRequest
+            {
+                Disposition = "Approved",
+                Reason = request.OverrideReason,
+            });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Resolve a pended claim through an explicit human-examiner action.
+    /// Unlike the generic status endpoint, this path is allowed to cross the
+    /// Pended review gate. It persists the final version state, records any
+    /// AI-advisory feedback in the same claim write, and emits finalization.
+    /// </summary>
+    [HttpPost("work-queue/{claimId}/resolve")]
+    [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult> ResolvePendedClaim(
+        string claimId,
+        [FromBody] ResolvePendedClaimRequest request)
+    {
+        if (!Enum.TryParse<ClaimStatus>(request.Disposition, ignoreCase: true, out var disposition)
+            || disposition is not (ClaimStatus.Approved or ClaimStatus.Denied))
+        {
+            return BadRequest("disposition must be Approved or Denied");
+        }
+
         var claim = await _claimRepository.GetByIdAsync(claimId);
         if (claim == null) return NotFound();
+        if (claim.Status != ClaimStatus.Pended)
+        {
+            return Conflict($"Claim {claimId} is {claim.Status}, not Pended");
+        }
 
-        claim.Status = ClaimStatus.Approved;
-        claim.LastUpdatedDate = DateTime.UtcNow;
-        await _claimRepository.UpdateAsync(claim);
+        var actedAt = DateTime.UtcNow;
+        claim.Status = disposition;
+        claim.VersionState = ClaimRepository.MapStatusToVersionState(disposition);
+        claim.AdjudicatedDate = actedAt;
+        claim.LastUpdatedDate = actedAt;
+        if (!string.IsNullOrWhiteSpace(request.Reason))
+        {
+            claim.ClaimNotes = string.IsNullOrWhiteSpace(claim.ClaimNotes)
+                ? request.Reason
+                : $"{claim.ClaimNotes}\n{actedAt:yyyy-MM-dd HH:mm}: {request.Reason}";
+        }
 
-        _logger.LogInformation("Claim {ClaimId} override-approved: {Reason}", SanitizeForLog(claimId), SanitizeForLog(request.OverrideReason));
-        return Ok(new { claimId, status = "Approved", overrideReason = request.OverrideReason });
+        if (claim.AiExamination is not null && !string.IsNullOrWhiteSpace(request.AiExaminerAgreement))
+        {
+            var validAgreements = new[] { "Accepted", "Modified", "Overridden" };
+            if (!validAgreements.Contains(request.AiExaminerAgreement))
+            {
+                return BadRequest($"aiExaminerAgreement must be one of: {string.Join(", ", validAgreements)}");
+            }
+
+            claim.AiExamination.ExaminerAgreement = request.AiExaminerAgreement;
+            claim.AiExamination.ExaminerActedAt = actedAt;
+            claim.AiExamination.ExaminerUserId = request.ExaminerUserId;
+        }
+
+        var updated = await _claimRepository.UpdateAsync(claim);
+
+        if (claim.AiExamination is not null && !string.IsNullOrWhiteSpace(request.AiExaminerAgreement))
+        {
+            var auditUpdated = await _auditRepository.SetExaminerAgreementAsync(
+                claimId,
+                GetTenantId(),
+                request.AiExaminerAgreement,
+                request.ExaminerUserId ?? "portal-examiner",
+                request.Reason);
+
+            if (auditUpdated is null)
+            {
+                _logger.LogWarning(
+                    "No audit row found for claim {Id} when resolving pended claim; live AI feedback was persisted",
+                    SanitizeForLog(claimId));
+            }
+        }
+
+        await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
+
+        _logger.LogInformation(
+            "Examiner {User} resolved pended claim {ClaimId} as {Disposition}: {Reason}",
+            SanitizeForLog(request.ExaminerUserId),
+            SanitizeForLog(claimId),
+            disposition,
+            SanitizeForLog(request.Reason));
+
+        return Ok(updated);
     }
 
     private static string MapPendReason(string? code) => code switch
@@ -1338,6 +1422,14 @@ public class AssignClaimRequest
 public class OverrideClaimRequest
 {
     public string OverrideReason { get; set; } = string.Empty;
+}
+
+public class ResolvePendedClaimRequest
+{
+    public string Disposition { get; set; } = string.Empty;
+    public string? Reason { get; set; }
+    public string? AiExaminerAgreement { get; set; }
+    public string? ExaminerUserId { get; set; }
 }
 
 /// <summary>
