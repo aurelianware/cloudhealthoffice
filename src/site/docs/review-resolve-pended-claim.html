@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Review and Resolve a Pended Claim — Cloud Health Office</title>
-  <meta name="description" content="Learn how a claims examiner reviews deterministic pend evidence, uses optional AI decision support, and resolves a pended claim in Cloud Health Office." />
+  <title>Pended Claims Operations Guide — Cloud Health Office</title>
+  <meta name="description" content="Operate pended claims in Cloud Health Office: understand queue routing, review deterministic evidence, control optional AI costs, resolve claims, and verify the audit trail." />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/review-resolve-pended-claim" />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/review-resolve-pended-claim" />
-  <meta property="og:title" content="Review and Resolve a Pended Claim — Cloud Health Office" />
-  <meta property="og:description" content="Follow a pended claim from the examiner work queue through evidence review and an auditable human disposition." />
+  <meta property="og:title" content="Pended Claims Operations Guide — Cloud Health Office" />
+  <meta property="og:description" content="Route, review, resolve, and audit pended claims—with deterministic evidence and deliberately enabled AI decision support." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/user-guides/pended-claim/ai-advisory.png" />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "TechArticle",
-    "headline": "Review and Resolve a Pended Claim",
-    "description": "Review deterministic claim pend evidence, optional AI decision support, and complete a human examiner disposition in Cloud Health Office.",
+    "headline": "Pended Claims Operations Guide",
+    "description": "Operate pended claim queues, review deterministic evidence, control optional AI decision support, and complete auditable human dispositions in Cloud Health Office.",
     "url": "https://cloudhealthoffice.com/docs/review-resolve-pended-claim",
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
     "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
     "datePublished": "2026-07-30",
-    "dateModified": "2026-07-30",
+    "dateModified": "2026-07-31",
     "proficiencyLevel": "Intermediate",
     "about": ["Claims examination", "Pended claims", "NCCI edits", "Human-in-the-loop AI"],
     "breadcrumb": {
@@ -29,7 +29,7 @@
       "itemListElement": [
         { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
         { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
-        { "@type": "ListItem", "position": 3, "name": "Review and Resolve a Pended Claim", "item": "https://cloudhealthoffice.com/docs/review-resolve-pended-claim" }
+        { "@type": "ListItem", "position": 3, "name": "Pended Claims Operations Guide", "item": "https://cloudhealthoffice.com/docs/review-resolve-pended-claim" }
       ]
     }
   }
@@ -90,7 +90,7 @@
             <div class="docs-sidebar-section-title">User Guides</div>
             <ul>
               <li><a href="/docs/submit-837-follow-claim">Submit &amp; Follow an 837</a></li>
-              <li><a href="/docs/review-resolve-pended-claim" class="active">Review a Pended Claim</a></li>
+              <li><a href="/docs/review-resolve-pended-claim" class="active">Pended Claims Operations</a></li>
               <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
               <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
               <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
@@ -101,12 +101,15 @@
           <div class="docs-sidebar-section">
             <div class="docs-sidebar-section-title">On This Page</div>
             <ul class="toc-sub">
-              <li><a href="#before-you-start">Before You Start</a></li>
+              <li><a href="#operating-model">Operating Model</a></li>
+              <li><a href="#routing">Queue Routing</a></li>
+              <li><a href="#before-you-start">Operator Checklist</a></li>
               <li><a href="#queue">Open the Work Queue</a></li>
               <li><a href="#evidence">Review the Evidence</a></li>
               <li><a href="#ai-advisory">Use the AI Advisory</a></li>
               <li><a href="#resolve">Resolve the Claim</a></li>
               <li><a href="#enable-ai">Enable AI Deliberately</a></li>
+              <li><a href="#verify">Verify the Workflow</a></li>
               <li><a href="#capture">Refresh Screenshots</a></li>
               <li><a href="#troubleshooting">Troubleshooting</a></li>
             </ul>
@@ -118,21 +121,51 @@
         <div class="docs-breadcrumb">
           <a href="/">Home</a><span class="sep">&#x25B8;</span>
           <a href="/docs">Docs</a><span class="sep">&#x25B8;</span>
-          <span class="current">Review and Resolve a Pended Claim</span>
+          <span class="current">Pended Claims Operations Guide</span>
         </div>
 
-        <h1>Review and Resolve a Pended Claim</h1>
-        <p class="docs-subtitle">Move from a deterministic adjudication edit to an auditable human decision, with optional AI guidance that never replaces the claims examiner.</p>
+        <h1>Pended Claims Operations Guide</h1>
+        <p class="docs-subtitle">Route, review, resolve, and audit claims that need human judgment—with deterministic evidence as the source of truth and AI assistance enabled only by deliberate policy.</p>
 
         <div class="callout callout-info">
           <div class="callout-title">Pended is not denied</div>
           <p>A pended claim has stopped at a human-review gate. The underlying edit evidence remains authoritative until an examiner deliberately approves or denies the claim.</p>
         </div>
 
-        <h2 id="before-you-start">Before You Start</h2>
+        <h2 id="operating-model">How Pended Claims Move Through the Platform</h2>
+        <p>Cloud Health Office separates deterministic adjudication from discretionary review. A rules stage records structured evidence and places the claim in <strong>Pended</strong> status. The queue exposes that evidence to an examiner, who makes the final disposition through a dedicated resolution action.</p>
+        <table>
+          <thead><tr><th>State</th><th>Owner</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-production">Submitted</span></td><td>Platform</td><td>The accepted claim moves through scrubbing, network and credentialing, benefit calculation, edits, and persistence.</td></tr>
+            <tr><td><span class="badge badge-required">Pended</span></td><td>Claims operations</td><td>Structured <code>PendDetails</code> preserve the reason, affected lines, rule identifiers, and suggested adjustment codes.</td></tr>
+            <tr><td><span class="badge badge-complete">Approved</span> or <strong>Denied</strong></td><td>Examiner</td><td>The explicit examiner action crosses the review gate, records notes and AI agreement when applicable, and finalizes the claim version.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout callout-success">
+          <div class="callout-title">One evidence record, two decision aids</div>
+          <p>The deterministic pend record is always available. An AI recommendation may be attached later, but it is a separate advisory record and cannot overwrite the original rule evidence.</p>
+        </div>
+
+        <h2 id="routing">Know the Queue Routing Codes</h2>
+        <p>The work queue groups related pend codes into examiner-friendly categories. Use the code—not free-text alone—for routing, reporting, and operational escalation.</p>
+        <table>
+          <thead><tr><th>Queue</th><th>Pend codes</th><th>Typical examiner focus</th></tr></thead>
+          <tbody>
+            <tr><td>NCCI Edit Failure</td><td><code>NCCI</code>, <code>MUE</code></td><td>Bundled procedures, units, line-level modifiers, and documentation supporting distinct services.</td></tr>
+            <tr><td>Missing Authorization</td><td><code>AUTH</code>, <code>NOAUTH</code></td><td>Authorization identifiers, service/date alignment, and retrospective-review policy.</td></tr>
+            <tr><td>Provider Not Contracted</td><td><code>OON</code>, <code>NOCONTRACT</code></td><td>Network participation, effective dates, credentialing, and permitted out-of-network handling.</td></tr>
+            <tr><td>COB Required</td><td><code>COB</code></td><td>Other coverage, payer order, primary payment information, and member coordination records.</td></tr>
+            <tr><td>Medical Review</td><td><code>MEDREVIEW</code>, <code>CLINICAL</code>, or uncategorized</td><td>Clinical records, medical-necessity policy, and cases requiring specialized judgment.</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="before-you-start">Operator Checklist</h2>
         <ul>
           <li>Sign in with Claims Examiner or Claims Supervisor permissions.</li>
           <li>Use a claim whose current status is <strong>Pended</strong>.</li>
+          <li>Confirm you are operating in the intended tenant before viewing or resolving work.</li>
+          <li>Review the queue reason and age before assignment; older claims may require priority escalation.</li>
           <li>Use synthetic data in local development and documentation captures.</li>
         </ul>
         <p>If you are starting with an X12 transaction, complete <a href="/docs/submit-837-follow-claim">Submit an 837 and Follow the Claim</a> first.</p>
@@ -168,9 +201,25 @@
         <h2 id="resolve">4. Resolve the Claim</h2>
         <p>Choose <strong>Approve</strong> when the submitted evidence supports payment under policy, or <strong>Deny</strong> and enter the reason when it does not. These controls use the dedicated pend-resolution workflow—not the generic adjudication status writer—so the human-review gate is crossed explicitly.</p>
         <p>Resolution persists the final claim and version state, records examiner notes, emits the finalized-claim event, and stores <strong>Accepted</strong> or <strong>Overridden</strong> feedback when an AI recommendation was present. The feedback supports later quality analysis; it does not train or change the model during the decision.</p>
+        <table>
+          <thead><tr><th>Examiner action</th><th>Final state</th><th>AI feedback when present</th></tr></thead>
+          <tbody>
+            <tr><td>Approve and follow the recommendation</td><td><code>Approved</code> / <code>Adjudicated</code></td><td><code>Accepted</code></td></tr>
+            <tr><td>Approve or deny with a changed rationale</td><td><code>Approved</code> or <code>Denied</code> / <code>Adjudicated</code></td><td><code>Modified</code></td></tr>
+            <tr><td>Choose the opposite disposition</td><td><code>Approved</code> or <code>Denied</code> / <code>Adjudicated</code></td><td><code>Overridden</code></td></tr>
+          </tbody>
+        </table>
+        <p>After resolution, refresh the queue and claim detail. The item should leave the active queue, while the claim retains its original <code>PendDetails</code>, examiner notes, adjudicated timestamp, and any advisory record for audit.</p>
 
-        <h2 id="enable-ai">Enable AI Deliberately</h2>
-        <p>The local deployment and Million Claim Challenge leave the metered AI path off by default. Production configuration can use best-effort examination, where an AI outage does not block deterministic adjudication.</p>
+        <h2 id="enable-ai">Operate AI as an Explicit, Metered Capability</h2>
+        <p>The local deployment and Million Claim Challenge leave the metered AI path off by default. Production and controlled demos can use best-effort examination, where an AI outage does not block deterministic adjudication or manual review.</p>
+        <table>
+          <thead><tr><th>Mode</th><th>Examiner service</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><code>Disabled</code></td><td>Scale to zero</td><td>Default for local development, regression testing, and Million Claim Challenge runs. No metered model invocation.</td></tr>
+            <tr><td><code>BestEffort</code></td><td>One or more replicas</td><td>Production or an intentional demo. Eligible NCCI modifier pends receive advisory analysis; failures degrade to the human queue.</td></tr>
+          </tbody>
+        </table>
         <p>To opt in for a local development or demo run, place these values in your uncommitted <code>.env.local</code> and redeploy:</p>
         <div class="code-block-header"><span>Environment</span><span>.env.local</span></div>
         <pre><code>LOCAL_ENABLE_AI_CLAIMS_EXAMINER=true
@@ -178,8 +227,18 @@ ANTHROPIC_API_KEY=&lt;your-api-key&gt;</code></pre>
         <div class="code-block-header"><span>Shell</span><span>repository root</span></div>
         <pre><code>scripts/deploy-local.sh</code></pre>
         <p>When opt-in is absent, bootstrap sets <code>Adjudication__Enforcement__AiMode=Disabled</code> and scales <code>claims-examiner-service</code> to zero. Never commit the API key or place it in a guide screenshot.</p>
+        <div class="callout callout-warning">
+          <div class="callout-title">Controlled-demo checklist</div>
+          <p>Confirm the secret contains a real API key without printing it, submit only the intended synthetic claim, capture the recommendation and audit result, then restore <code>AiMode=Disabled</code> and scale the examiner back to zero.</p>
+        </div>
 
-        <h2 id="capture">Refresh the Guide Screenshots with Playwright</h2>
+        <h2 id="verify">Verify the Complete Workflow</h2>
+        <p>The repository includes a strict regression test for the non-metered path. It creates an isolated tenant, provisions provider and plan prerequisites, imports an 834, submits a real two-line 837, verifies NCCI rule <code>NE001</code> reaches the queue, resolves the claim, and confirms it leaves the queue.</p>
+        <div class="code-block-header"><span>Shell</span><span>repository root</span></div>
+        <pre><code>scripts/smoke/837-pended-claim-e2e-smoke.sh</code></pre>
+        <p>The test fails closed unless Kubernetes reports <code>AiMode=Disabled</code> and zero examiner replicas. A metered run requires the explicit <code>ALLOW_METERED_AI=true</code> opt-in; never add that flag to routine CI or benchmark automation.</p>
+
+        <h2 id="capture">Maintain the Guide Screenshots</h2>
         <p>The checked-in capture workflow keeps documentation images repeatable after intentional portal changes. Use a synthetic pended claim that already contains the evidence and advisory fields you want to demonstrate.</p>
         <div class="code-block-header"><span>Shell</span><span>src/site</span></div>
         <pre><code>npm install
@@ -193,7 +252,10 @@ GUIDE_CLAIM_ID=&lt;synthetic-pended-claim-id&gt; npm run guides:capture:pended-c
             <tr><td>No claims appear</td><td>Use All Examiners, clear the queue-type filter, and confirm the claim status is Pended for the current tenant.</td></tr>
             <tr><td>No AI advisory appears</td><td>This is expected when AI is disabled or the pend is not eligible. Review the deterministic evidence and continue manually.</td></tr>
             <tr><td>Approve or Deny returns a conflict</td><td>Refresh the claim. Another examiner or process may already have resolved it.</td></tr>
+            <tr><td>An NCCI failure is denied instead of pended</td><td>Confirm the tenant uses <code>NcciMode=PendForReview</code>, then check whether an earlier stage already produced a higher-priority denial.</td></tr>
+            <tr><td>Provider or member prerequisite dominates the result</td><td>Confirm active member status, valid NPI, network participation on the service date, and an approved credentialing event-chain decision.</td></tr>
             <tr><td>AI opt-in deployment stops</td><td>Confirm <code>ANTHROPIC_API_KEY</code> is set only in the local secret source and rerun bootstrap.</td></tr>
+            <tr><td>AI request fails after opt-in</td><td>Leave the claim in the human queue, inspect examiner-service health and the advisory audit record, then disable the metered path if the demo is complete.</td></tr>
             <tr><td>Screenshot capture cannot find the claim</td><td>Confirm the portal tenant, claim ID, local portal URL, and local demo authentication configuration.</td></tr>
           </tbody>
         </table>
