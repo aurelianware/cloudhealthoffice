@@ -807,7 +807,7 @@ public class ClaimDetails : ClaimSummary
     public decimal PatientResponsibility { get; set; }
     public string? ClaimNotes { get; set; }
     public string? ReferralNumber { get; set; }
-    public DateTime ReceivedDate { get; set; }
+    public DateTime? ReceivedDate { get; set; }
     public DateTime? PaidDate { get; set; }
     public string? CheckNumber { get; set; }
     public string? DenialReason { get; set; }

@@ -360,6 +360,30 @@ public class ClaimsServiceTests
     }
 
     [Fact]
+    public async Task GetClaimByIdAsync_WhenReceivedDateIsNull_DeserializesSafely()
+    {
+        const string json = """
+        {
+          "id": "claim-raw-837",
+          "claimNumber": "SMOKE-837",
+          "receivedDate": null,
+          "serviceDateFrom": "2026-07-31T00:00:00Z",
+          "serviceDateTo": "2026-07-31T00:00:00Z",
+          "submittedDate": "2026-07-31T05:31:21Z",
+          "diagnosisCodes": [],
+          "claimLines": []
+        }
+        """;
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetClaimByIdAsync("claim-raw-837");
+
+        result.Should().NotBeNull();
+        result!.ReceivedDate.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetClaimByIdAsync_WhenApiReturnsNull_ReturnsNull()
     {
         var sut = CreateService(new HttpClient(

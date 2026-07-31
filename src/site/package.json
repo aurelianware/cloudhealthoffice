@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "build": "node scripts/generate-mcc-publications.mjs && node build.mjs"
+    "build": "node scripts/generate-mcc-publications.mjs && node build.mjs",
+    "guides:capture:837": "node scripts/capture-837-user-guide.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   }
 }

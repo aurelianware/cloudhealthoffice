@@ -192,6 +192,28 @@
   margin-top: 10px; font-style: normal;
 }
 
+.guide-screenshot {
+  margin: 28px 0 36px;
+  border: 1px solid rgba(0,255,255,0.18);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #050505;
+  box-shadow: 0 18px 48px rgba(0,0,0,0.32);
+}
+.guide-screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.guide-screenshot figcaption {
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(0,255,255,0.12);
+  color: rgba(176,176,176,0.68);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
 /* === DOCS HUB CARDS === */
 .docs-hub-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
