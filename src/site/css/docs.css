@@ -155,6 +155,47 @@
 .callout p { margin-bottom: 8px; }
 .callout p:last-child { margin-bottom: 0; }
 
+/* === READINESS CHECKLISTS === */
+.readiness-checklist {
+  list-style: none;
+  margin: 20px 0 30px;
+  padding: 0;
+}
+.readiness-checklist li {
+  position: relative;
+  margin: 0;
+  padding: 11px 14px 11px 42px;
+  border-bottom: 1px solid rgba(0,255,255,0.08);
+  color: rgba(190,190,190,0.92);
+  line-height: 1.6;
+}
+.readiness-checklist li::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 16px;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(0,255,255,0.55);
+  border-radius: 2px;
+  background: rgba(0,255,255,0.03);
+  box-shadow: 0 0 8px rgba(0,255,255,0.08);
+}
+.readiness-checklist strong { color: #fff; }
+.gate-label {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 9px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,200,0,0.3);
+  background: rgba(255,200,0,0.08);
+  color: #ffc800;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
 /* === TABLES === */
 .docs-content table {
   width: 100%; border-collapse: collapse;

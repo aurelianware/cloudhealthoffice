@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Production Readiness Checklist — Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office production-readiness checklist for infrastructure, identity, secrets, data recovery, Service Bus, observability, capacity, rollback, and go-live validation." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/production-readiness-checklist" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/production-readiness-checklist" />
+  <meta property="og:title" content="Production Readiness Checklist — Cloud Health Office" />
+  <meta property="og:description" content="An evidence-driven go-live checklist for securely operating Cloud Health Office in a customer-owned production environment." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/docs-deployment-pipeline.svg" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Cloud Health Office Production Readiness Checklist",
+    "description": "Evidence-driven go-live gates for infrastructure, security, data recovery, messaging, observability, capacity, rollback, and operations.",
+    "url": "https://cloudhealthoffice.com/docs/production-readiness-checklist",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-07-31",
+    "dateModified": "2026-07-31",
+    "proficiencyLevel": "Advanced",
+    "about": ["Production readiness", "Kubernetes", "Azure", "HIPAA-oriented infrastructure", "Disaster recovery", "Go-live"],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Production Readiness Checklist", "item": "https://cloudhealthoffice.com/docs/production-readiness-checklist" }
+      ]
+    }
+  }
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/founder">Founder</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+              <li><a href="/docs/production-readiness-checklist" class="active">Production Readiness</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Operations</div>
+            <ul>
+              <li><a href="/docs/837-intake-adjudication-operations">837 Operations Runbook</a></li>
+              <li><a href="/docs/review-resolve-pended-claim">Pended Claims Operations</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#how-to-use">How to Use</a></li>
+              <li><a href="#ownership">Ownership &amp; Change</a></li>
+              <li><a href="#infrastructure">Infrastructure</a></li>
+              <li><a href="#security">Identity &amp; Secrets</a></li>
+              <li><a href="#data">Data &amp; Recovery</a></li>
+              <li><a href="#messaging">Messaging &amp; Integrations</a></li>
+              <li><a href="#observability">Observability</a></li>
+              <li><a href="#configuration">Application Configuration</a></li>
+              <li><a href="#capacity">Capacity &amp; Resilience</a></li>
+              <li><a href="#launch">Go-Live Gates</a></li>
+              <li><a href="#after-launch">After Launch</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a><span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a><span class="sep">&#x25B8;</span>
+          <span class="current">Production Readiness Checklist</span>
+        </div>
+
+        <h1>Production Readiness Checklist</h1>
+        <p class="docs-subtitle">Turn a technically successful deployment into an evidence-backed go-live decision with named owners, tested recovery, production-sized dependencies, measurable service objectives, and a rehearsed rollback.</p>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-deployment-pipeline.svg" alt="Cloud Health Office gated deployment pipeline moving through development, UAT, approval, production deployment, verification, and rollback readiness." />
+          <figcaption>Production readiness is a gate, not a deployment command. Every required control needs evidence and an accountable owner.</figcaption>
+        </figure>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">Readiness is environment-specific</div>
+          <p>A successful local Kubernetes or Million Claim Challenge run is valuable engineering evidence, but it does not prove production identity, network, backup, restore, privacy, support, or change-management controls.</p>
+        </div>
+
+        <h2 id="how-to-use">How to Use This Checklist</h2>
+        <p>Copy each item into the customer&rsquo;s change record or launch workbook. Record an owner, evidence link, verification date, and exception decision. An unchecked required item blocks go-live unless the accountable risk owner signs a time-bounded exception.</p>
+        <table>
+          <thead><tr><th>Gate</th><th>Meaning</th><th>Required evidence</th></tr></thead>
+          <tbody>
+            <tr><td><span class="gate-label">Required</span></td><td>Must pass before production traffic.</td><td>Test result, configuration export, dashboard, approval, or recovery record.</td></tr>
+            <tr><td><span class="badge badge-production">Conditional</span></td><td>Required when the named capability is enabled.</td><td>Capability-specific security, support, and failure-mode evidence.</td></tr>
+            <tr><td><span class="badge badge-complete">Observed</span></td><td>Validated during the launch observation window.</td><td>Timestamped operational metrics and named reviewer.</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="ownership">1. Ownership, Scope, and Change Control</h2>
+        <ul class="readiness-checklist">
+          <li><strong>Production scope is written down.</strong> Tenants, lines of business, trading partners, claim types, APIs, payment functions, and optional integrations are explicitly in or out.</li>
+          <li><strong>Every critical component has an owner.</strong> Application, Kubernetes, database, Service Bus, identity, network, clearinghouse, security, compliance, and claims operations contacts are named.</li>
+          <li><strong>Service objectives are approved.</strong> Availability, intake timeliness, adjudication completion, queue age, RTO, and RPO targets are measurable.</li>
+          <li><strong>The release is immutable and traceable.</strong> Commit SHA, container digests, infrastructure version, Helm values, and tenant configuration are attached to the change record.</li>
+          <li><strong>The deployment window and communications plan are approved.</strong> Business owners, support, on-call responders, vendors, and rollback decision makers know the schedule.</li>
+          <li><strong>Open defects are dispositioned.</strong> No unresolved critical issue remains; accepted risks have an owner, expiry date, and mitigation.</li>
+        </ul>
+
+        <h2 id="infrastructure">2. Infrastructure and Network</h2>
+        <ul class="readiness-checklist">
+          <li><strong>Subscription and regional quota are confirmed.</strong> AKS node families, public IPs, load balancers, storage, Cosmos DB or MongoDB, and Service Bus can scale to the tested target.</li>
+          <li><strong>Production is isolated from development and UAT.</strong> Resource groups, identities, secrets, databases, queues, storage, DNS, and telemetry do not share mutable production state.</li>
+          <li><strong>Resource requests, limits, probes, and disruption budgets are set.</strong> Critical services tolerate node maintenance and avoid uncontrolled eviction or noisy-neighbor pressure.</li>
+          <li><strong>Ingress, DNS, TLS, and certificates are validated.</strong> Public and private endpoints match the intended trust boundary; expiration monitoring is active.</li>
+          <li><strong>Network access defaults to deny.</strong> Required east-west service paths, Azure private endpoints, egress destinations, and administrative access are documented and tested.</li>
+          <li><strong>Autoscaling has safe bounds.</strong> Minimum availability, maximum cost, downstream capacity, and scale-up behavior have been tested rather than inferred.</li>
+          <li><strong>Infrastructure What-If or equivalent shows no unexpected deletion.</strong> The reviewed plan is attached to the release approval.</li>
+        </ul>
+
+        <h2 id="security">3. Identity, Secrets, and Privacy</h2>
+        <ul class="readiness-checklist">
+          <li><strong>Human access uses the production identity provider.</strong> Microsoft Entra ID tenant settings, redirect URIs, MFA, role mappings, break-glass access, and termination procedures are tested.</li>
+          <li><strong>Workloads use scoped identities.</strong> Service-specific Workload Identity or managed identity replaces shared administrator credentials wherever supported.</li>
+          <li><strong>Secrets originate in Azure Key Vault.</strong> No placeholder, local-development, trial, or example credential remains in a production pod or pipeline variable.</li>
+          <li><strong>Secret permissions follow least privilege.</strong> Each service can read only the keys and external resources it needs; production operators cannot casually export plaintext secrets.</li>
+          <li><strong>Rotation is rehearsed.</strong> Database, Service Bus, SFTP, API, encryption, signing, and third-party credentials can rotate without an undocumented outage.</li>
+          <li><strong>Encryption is verified in transit and at rest.</strong> Certificates, database settings, storage, backups, queues, and external connections meet the customer security baseline.</li>
+          <li><strong>PHI-safe logging is reviewed.</strong> Request bodies, X12 payloads, member identifiers, tokens, and secrets do not appear in routine logs, traces, screenshots, or alerts.</li>
+          <li><strong>Security and dependency scans are dispositioned.</strong> Critical findings block launch; accepted findings carry an owner and remediation date.</li>
+          <li><strong>Audit retention and access are approved.</strong> Identity, deployment, application, Key Vault, database, and operator actions are queryable for the required period.</li>
+        </ul>
+
+        <h2 id="data">4. Data Stores, Backup, and Recovery</h2>
+        <ul class="readiness-checklist">
+          <li><strong>The production backend is explicit.</strong> MongoDB or Cosmos DB for MongoDB is configured consistently across services; no unintended Cosmos fallback or local in-memory store remains.</li>
+          <li><strong>Driver compatibility is proven against the selected service.</strong> Queries, indexes, transactions, retry behavior, serialization, and concurrency semantics have run against the exact production database type and version.</li>
+          <li><strong>Capacity is based on a representative test.</strong> Free-tier results are not used as a production sizing baseline; throughput, storage, working set, connections, and tail latency have headroom.</li>
+          <li><strong>Tenant isolation is verified.</strong> Partition keys, repository filters, indexes, and support queries prevent cross-tenant reads and writes.</li>
+          <li><strong>Indexes and retention policies are deployed.</strong> Required unique, compound, TTL, and audit/event indexes exist before traffic begins.</li>
+          <li><strong>Backups are active and monitored.</strong> Frequency, retention, encryption, geographic scope, and failure alerts meet the approved RPO.</li>
+          <li><strong>A restore drill has passed.</strong> A recent backup was restored into an isolated environment, validated at the application level, timed against RTO, and documented.</li>
+          <li><strong>Schema and data migrations are reversible.</strong> Cutover, compatibility window, validation counts, and rollback source are recorded.</li>
+          <li><strong>Redis and caches are treated as disposable.</strong> No authoritative claim, enrollment, financial, or audit state exists only in cache.</li>
+        </ul>
+
+        <h2 id="messaging">5. Messaging and External Integrations</h2>
+        <ul class="readiness-checklist">
+          <li><strong>Azure Service Bus is selected in production.</strong> Startup logs confirm the expected backend; an in-memory fallback is never accepted as production evidence.</li>
+          <li><strong>Topics, queues, subscriptions, and filters match infrastructure code.</strong> TTL, locks, duplicate detection, delivery counts, dead-letter behavior, and access policies are reviewed.</li>
+          <li><strong>Senders and receivers use least-privilege authorization.</strong> Administrative connection strings are not distributed to application pods.</li>
+          <li><strong>Dead-letter alerts and ownership are active.</strong> Operators know who investigates, preserves evidence, approves replay, and verifies recovery.</li>
+          <li><strong>Duplicate and redelivery behavior is tested.</strong> Deterministic message IDs and persisted-result guards prevent double adjudication or duplicate side effects.</li>
+          <li><strong>Clearinghouse connectivity is certified.</strong> SFTP host keys, credentials, folders, naming, acknowledgments, retry expectations, and support contacts are confirmed with each partner.</li>
+          <li><strong>FHIR and external API trust is validated.</strong> OAuth scopes, certificates, rate limits, timeouts, CORS, and trading-partner identifiers match production agreements.</li>
+          <li><strong>Optional metered integrations are deliberate.</strong> AI examination, payment gateways, email, and other billed services are enabled only with owner, budget, alert, and failure-mode approval.</li>
+        </ul>
+
+        <h2 id="observability">6. Observability and Support</h2>
+        <ul class="readiness-checklist">
+          <li><strong>Health checks reflect real dependencies.</strong> Kubernetes readiness and liveness behavior has been observed during database, Service Bus, and downstream-service failure.</li>
+          <li><strong>Dashboards cover the business flow.</strong> Intake, accepted claims, active messages, completions, p95/p99 latency, pends, denials, retries, dead letters, payment output, and API errors are visible.</li>
+          <li><strong>Distributed traces cross service boundaries.</strong> A claim can be followed from API request through Service Bus delivery and downstream HTTP calls without exposing PHI.</li>
+          <li><strong>Alerts are actionable and tested.</strong> Every page has threshold, owner, runbook, escalation, and silence policy; synthetic alert tests reached the on-call responder.</li>
+          <li><strong>Log and metric retention meet policy.</strong> Access controls, export, redaction, and cost limits are approved.</li>
+          <li><strong>Support has safe diagnostic access.</strong> Operators can identify tenant, claim ID, stage, delivery count, release, and dependency health without direct uncontrolled data access.</li>
+          <li><strong>Operational runbooks are linked from alerts.</strong> Include the <a href="/docs/837-intake-adjudication-operations">837 Operations Runbook</a> and <a href="/docs/review-resolve-pended-claim">Pended Claims Operations Guide</a>.</li>
+        </ul>
+
+        <h2 id="configuration">7. Application and Tenant Configuration</h2>
+        <ul class="readiness-checklist">
+          <li><strong>The environment is production.</strong> Development-only authentication, local stubs, demo users, permissive CORS, debug output, and sample secrets are removed.</li>
+          <li><strong>Tenant routing and adapter modes are approved.</strong> Replace, augment, and legacy-system connections match the signed implementation scope.</li>
+          <li><strong>Enforcement policy is explicit.</strong> Network, credentialing, provider-integrity, NCCI, COB, prior-authorization, and AI modes are recorded and tested.</li>
+          <li><strong>Reference data is current.</strong> Benefit plans, plan-code mappings, fee schedules, NCCI/MUE tables, terminology, networks, provider participation, and credentialing effective dates cover launch traffic.</li>
+          <li><strong>Trading-partner identifiers are production values.</strong> ISA/GS sender and receiver IDs, payer identifiers, group mappings, and file conventions are not copied from synthetic fixtures.</li>
+          <li><strong>Financial controls are approved.</strong> Payment accounts, segregation of duties, approval limits, 835 generation, reconciliation, and reversal paths are validated before real disbursement.</li>
+          <li><strong>AI remains off unless approved.</strong> If enabled, use <code>BestEffort</code>, confirm the production key source, meter and alert usage, preserve human authority, and test graceful degradation.</li>
+        </ul>
+
+        <h2 id="capacity">8. Capacity, Resilience, and Rollback</h2>
+        <ul class="readiness-checklist">
+          <li><strong>A representative UAT load test passed.</strong> Arrival pattern, claim mix, tenant mix, dependencies, database, Service Bus, and network path resemble production.</li>
+          <li><strong>Capacity settings are recorded together.</strong> Replicas, concurrent consumers, raw-file parallelism, node size, database size, cache, and downstream limits form one reproducible baseline.</li>
+          <li><strong>Scale does not compromise correctness.</strong> Result accuracy, tenant isolation, payment agreement, eventual completion, and zero unexplained dead letters hold at target load.</li>
+          <li><strong>Dependency failures were exercised.</strong> Database latency, Service Bus interruption, downstream timeouts, pod termination, and redelivery recover without silent loss or duplicate payment.</li>
+          <li><strong>The rollback procedure was rehearsed.</strong> Previous application and infrastructure versions, configuration, data compatibility, decision authority, and verification steps are known.</li>
+          <li><strong>Rollback preserves data safety.</strong> No rollback assumes destructive database reset; forward-only migrations have an explicit compatibility or restore strategy.</li>
+          <li><strong>Cost guardrails are configured.</strong> Budgets and alerts cover AKS, database throughput, storage, Service Bus, telemetry, external APIs, and optional AI usage.</li>
+        </ul>
+
+        <h2 id="launch">9. Final Go-Live Gates</h2>
+        <table>
+          <thead><tr><th>Decision</th><th>Minimum condition</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-complete">Go</span></td><td>All required gates pass; conditional capabilities have evidence; rollback and restore are proven; accountable business, security, operations, and engineering owners approve.</td></tr>
+            <tr><td><span class="badge badge-required">Conditional Go</span></td><td>Only documented noncritical exceptions remain, each with risk owner, mitigation, monitoring, expiry date, and rollback trigger.</td></tr>
+            <tr><td><strong>No-Go</strong></td><td>Unknown data recovery, unresolved critical security issue, production placeholders, unverified tenant isolation, unexplained DLQ messages, failed correctness tests, or no executable rollback.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Freeze the approved release, configuration, and infrastructure plan.</li>
+          <li>Confirm current backups and capture the pre-deployment baseline.</li>
+          <li>Notify stakeholders and open the incident bridge or launch channel.</li>
+          <li>Deploy through the approved production gate.</li>
+          <li>Run health, identity, tenant-isolation, FHIR, raw 837, adjudication, pend-resolution, and remittance smoke tests.</li>
+          <li>Compare metrics with the pre-deployment baseline and UAT evidence.</li>
+          <li>Announce go, conditional go, or rollback with the named decision maker.</li>
+        </ol>
+
+        <h3>Go-Live Evidence Packet</h3>
+        <table>
+          <thead><tr><th>Artifact</th><th>Accountable owner</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Release and infrastructure manifest</td><td>Engineering / Platform</td><td>Commit, image digests, What-If, Helm values, approvals</td></tr>
+            <tr><td>Security readiness</td><td>Security</td><td>Scan results, identity review, Key Vault access, logging review</td></tr>
+            <tr><td>Recovery readiness</td><td>Data / Platform</td><td>Backup status, restore-drill result, measured RTO/RPO</td></tr>
+            <tr><td>Operational readiness</td><td>SRE / Support</td><td>Dashboards, tested alerts, on-call roster, runbooks, escalation</td></tr>
+            <tr><td>Claims correctness</td><td>Claims operations</td><td>Representative adjudication, pend, payment, and reconciliation results</td></tr>
+            <tr><td>Business approval</td><td>Product / Customer</td><td>UAT sign-off, launch scope, exception acceptance, go/no-go record</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="after-launch">10. After Launch</h2>
+        <table>
+          <thead><tr><th>Window</th><th>Required review</th></tr></thead>
+          <tbody>
+            <tr><td>First 30 minutes</td><td>Pod health, authentication, API errors, Service Bus backlog, database latency, claim completion, pends, denials, and dead letters.</td></tr>
+            <tr><td>First 24 hours</td><td>Trading-partner acknowledgments, queue age, payment/remittance reconciliation, alert quality, support contacts, cost anomalies, and tenant-isolation evidence.</td></tr>
+            <tr><td>First 7 days</td><td>SLO trend, capacity headroom, recurring manual work, false pends/denials, security events, backup success, incident actions, and accepted-risk closure.</td></tr>
+          </tbody>
+        </table>
+        <p>Close the launch only after temporary access, diagnostic logging, elevated capacity, demo integrations, and relaxed alert thresholds have been removed or formally accepted as production configuration.</p>
+
+        <h2>Related Guides</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top:20px;">
+          <a href="/docs/deployment" class="docs-hub-card">
+            <h3>Deployment Guide</h3>
+            <p>Provision infrastructure, configure Kubernetes, manage secrets, and run the release pipeline.</p>
+            <span class="card-arrow">Open deployment guide &rarr;</span>
+          </a>
+          <a href="/docs/837-intake-adjudication-operations" class="docs-hub-card">
+            <h3>837 Operations Runbook</h3>
+            <p>Monitor asynchronous adjudication, diagnose backlog, and recover retries or dead letters.</p>
+            <span class="card-arrow">Open operations runbook &rarr;</span>
+          </a>
+        </div>
+        <div class="docs-pager">
+          <a href="/docs/deployment"><div class="pager-label">&larr; Previous</div><div class="pager-title">Deployment</div></a>
+          <a href="/docs/837-intake-adjudication-operations" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">837 Operations Runbook</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F readiness, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col"><h5>Product</h5><ul><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/release-notes">Release Notes</a></li></ul></div>
+        <div class="footer-col"><h5>Documentation</h5><ul><li><a href="/docs/quickstart">Quick Start</a></li><li><a href="/docs/claims-guide">Claims Guide</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="footer-col"><h5>Contact</h5><ul><li><a href="/contact">Contact Sales</a></li><li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li><li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li></ul></div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use</p>
+        <p><a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

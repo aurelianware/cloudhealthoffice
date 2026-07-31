@@ -30,7 +30,7 @@
     <div class="docs-wrapper">
       <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
-        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment" class="active">Deployment</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment" class="active">Deployment</a></li><li><a href="/docs/production-readiness-checklist">Production Readiness</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">User Guides</div><ul><li><a href="/docs/finance-guide">Finance Guide</a></li><li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li><li><a href="/docs/claims-guide">Claims Adjudication</a></li><li><a href="/docs/prior-auth-guide">Prior Authorization</a></li><li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li><li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li><li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li><li><a href="/docs/provider-verification-guide">Provider Verification</a></li><li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">State Compliance</div><ul><li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li><li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#saas">Option A: SaaS</a></li><li><a href="#self-hosted">Option B: Self-Hosted</a></li><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#local-dev">Local Development</a></li><li><a href="#cicd">CI/CD Pipeline</a></li><li><a href="#production">Production Deployment</a></li><li><a href="#secrets">Secret Management</a></li><li><a href="#verification">Verification</a></li></ul></div>
@@ -253,9 +253,14 @@ curl https://api.your-domain.example/fhir/r4/metadata | jq .status</code></pre>
           <p>For the complete 3,000+ line deployment guide including secrets management, rollback procedures, and troubleshooting, see <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/deployment/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">DEPLOYMENT.md</a> on GitHub.</p>
         </div>
 
+        <div class="callout callout-success">
+          <div class="callout-title">Before production traffic</div>
+          <p>Complete the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a> to capture ownership, restore evidence, production sizing, security controls, operational monitoring, and the final go/no-go record.</p>
+        </div>
+
         <div class="docs-pager">
           <a href="/docs/api"><div class="pager-label">&larr; Previous</div><div class="pager-title">API Reference</div></a>
-          <a href="/docs/finance-guide" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Finance Guide</div></a>
+          <a href="/docs/production-readiness-checklist" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Production Readiness</div></a>
         </div>
       </div>
     </div>
