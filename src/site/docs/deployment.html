@@ -255,7 +255,7 @@ curl https://api.your-domain.example/fhir/r4/metadata | jq .status</code></pre>
 
         <div class="callout callout-success">
           <div class="callout-title">Before production traffic</div>
-          <p>Complete the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a> and run an isolated restore using the <a href="/docs/backup-restore-disaster-recovery">Backup &amp; Disaster Recovery Runbook</a> to capture ownership, recovery evidence, production sizing, security controls, operational monitoring, and the final go/no-go record.</p>
+          <p>Complete the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a>, run an isolated restore using the <a href="/docs/backup-restore-disaster-recovery">Backup &amp; Disaster Recovery Runbook</a>, and test paging with the <a href="/docs/observability-alerting-incident-response">Observability &amp; Incident Response Runbook</a> before routing production traffic.</p>
         </div>
 
         <div class="docs-pager">
