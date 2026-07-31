@@ -164,6 +164,26 @@ The script seeds local reference data, submits a professional claim, runs
 adjudication, and prints the claim ID, allowed amount, plan payment, and member
 responsibility.
 
+To exercise the stricter human-examiner lifecycle, add these port-forwards in
+separate terminals:
+
+```bash
+kubectl port-forward -n cloudhealthoffice svc/member-service 5003:80
+kubectl port-forward -n cloudhealthoffice svc/provider-service 5004:80
+kubectl port-forward -n cloudhealthoffice svc/enrollment-import-service 5011:80
+```
+
+Then run:
+
+```bash
+./scripts/smoke/837-pended-claim-e2e-smoke.sh
+```
+
+This test provisions an isolated tenant, imports an 834, submits a real
+two-line 837 that triggers an NCCI bundling edit, verifies the claim appears in
+the work queue, and resolves it through the examiner endpoint. It fails closed
+unless local AI examination is disabled, preventing accidental metered API use.
+
 ## Run a Scored MCC Validation
 
 Start small. A 1,000-claim run is enough to verify the pipeline, result
