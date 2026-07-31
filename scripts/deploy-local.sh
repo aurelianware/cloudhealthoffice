@@ -22,6 +22,7 @@ KIND_CLUSTER_NAME=""
 LOCAL_DOTNET_REGISTRY="${LOCAL_DOTNET_REGISTRY:-mcr.microsoft.com}"
 LOCAL_CLAIMS_REPLICAS="${LOCAL_CLAIMS_REPLICAS:-2}"
 LOCAL_BENEFIT_PLAN_REPLICAS="${LOCAL_BENEFIT_PLAN_REPLICAS:-3}"
+LOCAL_ENABLE_AI_CLAIMS_EXAMINER="${LOCAL_ENABLE_AI_CLAIMS_EXAMINER:-false}"
 
 # Defaults — overridden by .env.local if present
 MONGO_USER="admin"
@@ -326,6 +327,9 @@ kubectl create secret generic pricing-api-secret \
 ok "pricing-api-secret"
 
 # Local service stubs for optional integrations used by background workflows.
+if [[ "$LOCAL_ENABLE_AI_CLAIMS_EXAMINER" == "true" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
+  err "ANTHROPIC_API_KEY is required when LOCAL_ENABLE_AI_CLAIMS_EXAMINER=true"
+fi
 kubectl create secret generic anthropic-secret \
   --namespace "$NAMESPACE" \
   --from-literal=apiKey="${ANTHROPIC_API_KEY:-local-dev}" \
@@ -541,6 +545,17 @@ done
 kubectl scale deployment --all -n "$NAMESPACE" --replicas=1 >/dev/null 2>&1 || true
 kubectl scale deployment/claims-service -n "$NAMESPACE" --replicas="$LOCAL_CLAIMS_REPLICAS" >/dev/null 2>&1 || true
 kubectl scale deployment/benefit-plan-service -n "$NAMESPACE" --replicas="$LOCAL_BENEFIT_PLAN_REPLICAS" >/dev/null 2>&1 || true
+if [[ "$LOCAL_ENABLE_AI_CLAIMS_EXAMINER" == "true" ]]; then
+  kubectl set env deployment/claims-service -n "$NAMESPACE" \
+    Adjudication__Enforcement__AiMode=BestEffort >/dev/null 2>&1 || true
+  kubectl scale deployment/claims-examiner-service -n "$NAMESPACE" --replicas=1 >/dev/null 2>&1 || true
+  ok "AI Claims Examiner enabled for local development"
+else
+  kubectl set env deployment/claims-service -n "$NAMESPACE" \
+    Adjudication__Enforcement__AiMode=Disabled >/dev/null 2>&1 || true
+  kubectl scale deployment/claims-examiner-service -n "$NAMESPACE" --replicas=0 >/dev/null 2>&1 || true
+  ok "AI Claims Examiner disabled (set LOCAL_ENABLE_AI_CLAIMS_EXAMINER=true to opt in)"
+fi
 kubectl delete hpa --all -n "$NAMESPACE" >/dev/null 2>&1 || true
 
 # ── Deploy portal ─────────────────────────────────────────────────────────────

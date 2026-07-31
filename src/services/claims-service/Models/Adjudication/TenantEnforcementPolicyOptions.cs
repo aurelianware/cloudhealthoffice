@@ -52,5 +52,5 @@ public class TenantEnforcementPolicyOptions
     /// of AI. <see cref="AiEnforcementMode.Disabled"/> is the operational
     /// kill switch.
     /// </summary>
-    public AiEnforcementMode AiMode { get; set; } = AiEnforcementMode.BestEffort;
+    public AiEnforcementMode AiMode { get; set; } = AiEnforcementMode.Disabled;
 }
