@@ -1122,7 +1122,7 @@
         The run-level evidence surface is the <strong>Mass Adjudication console</strong> inside the portal, which exposes run history, claims/sec, latency, workflow checks, unsupported scenarios, mismatches, payment delta, and claim-level drilldown.
       </p>
       <p style="font-size:.78rem;color:var(--text-dim);line-height:1.7;border-top:1px solid var(--border);padding-top:1rem;margin:0">
-        <strong style="color:var(--text-muted)">Scope &amp; caveats:</strong> Local Million Claim Challenge numbers validate repeatability and correctness — they are not production cloud-capacity claims. Payment accuracy is visible as payment delta, but a formal amount-level scoring gate is still pending. Expected-pend observation confirms expected pends persisted as pended; a full false-pend sweep is future work.
+        <strong style="color:var(--text-muted)">Scope &amp; caveats:</strong> These are local Kubernetes measurements, not production-cloud capacity claims. Part 15 is the latest strict zero-platform-failure one-million-claim result, with 20,000/20,000 sampled payment checks exact within one cent. Part 16 reached 155.89 claims/sec through asynchronous Service Bus adjudication and all 1,000,000 claims eventually became terminal; 122 claims exceeded the validator's 180-second observation window, leaving 20 workflow checks and 18 payment comparisons unreconciled inside that run.
       </p>
     </div>
   </div>

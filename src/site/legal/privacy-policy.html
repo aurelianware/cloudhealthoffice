@@ -12,7 +12,7 @@
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="og:url" content="https://cloudhealthoffice.com/legal/privacy-policy" />
   <meta property="og:title" content="Privacy Policy — Cloud Health Office" />
-  <meta property="og:description" content="Cloud Health Office Privacy Policy. Healthcare data handling, CCPA/CPRA rights, GDPR compliance, and HIPAA-oriented safeguards." />
+  <meta property="og:description" content="Cloud Health Office Privacy Policy. Healthcare data handling, applicable privacy rights, analytics practices, and HIPAA-oriented deployment safeguards." />
 
   <!-- Privacy-friendly analytics by Plausible -->
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
@@ -203,9 +203,9 @@
       <div class="legal-header">
         <h1>Privacy Policy</h1>
         <p class="legal-meta">
-          <strong>Effective Date:</strong> March 1, 2026 &nbsp;&middot;&nbsp;
-          <strong>Last Updated:</strong> February 17, 2026 &nbsp;&middot;&nbsp;
-          <strong>Version:</strong> 2.0
+          <strong>Effective Date:</strong> July 30, 2026 &nbsp;&middot;&nbsp;
+          <strong>Last Updated:</strong> July 30, 2026 &nbsp;&middot;&nbsp;
+          <strong>Version:</strong> 2.1
         </p>
       </div>
 
@@ -217,7 +217,7 @@
           <li><a href="#information-we-collect">Information We Collect</a></li>
           <li><a href="#how-we-use">How We Use Information</a></li>
           <li><a href="#sharing">Information Sharing</a></li>
-          <li><a href="#hipaa">HIPAA Compliance</a></li>
+          <li><a href="#hipaa">HIPAA-Regulated Deployments</a></li>
           <li><a href="#retention">Data Retention</a></li>
           <li><a href="#security">Data Security</a></li>
           <li><a href="#your-rights">Your Rights</a></li>
@@ -238,9 +238,10 @@
           our EDI integration services for HIPAA-covered healthcare workflows ("Services").
         </p>
         <p>
-          Cloud Health Office is designed specifically for healthcare organizations and processes
-          Protected Health Information (PHI) in accordance with the Health Insurance Portability
-          and Accountability Act of 1996 (HIPAA) and its implementing regulations.
+          Cloud Health Office is designed for healthcare organizations and supports deployments
+          that may process Protected Health Information (PHI). PHI processing begins only under
+          an applicable agreement, including a Business Associate Agreement (BAA) where required,
+          and is subject to the controls and responsibilities defined for that deployment.
         </p>
       </section>
 
@@ -259,7 +260,7 @@
         </ul>
 
         <h3>2.2 Protected Health Information (PHI)</h3>
-        <p>As a Business Associate under HIPAA, we process PHI on behalf of our Covered Entity customers, including:</p>
+        <p>If a contracted deployment is authorized to process PHI, Aurelianware acts in the role defined by the applicable agreement, including as a Business Associate where required. Data processed may include:</p>
         <ul>
           <li>Patient/Member identifiers (name, date of birth, member ID)</li>
           <li>Provider information (NPI, names, addresses)</li>
@@ -323,7 +324,7 @@
         </div>
 
         <h3>4.2 Service Providers and Subcontractors</h3>
-        <p>We may share information with trusted service providers who assist in operating our Services. All subcontractors processing PHI are bound by Business Associate Agreements.</p>
+        <p>We may share information with service providers that assist in operating our Services. Any subcontractor authorized to process PHI must be subject to written terms that provide the protections required by HIPAA and the applicable customer agreement.</p>
 
         <h3>4.3 Legal Requirements</h3>
         <p>We may disclose information when required by law, including HIPAA-permitted disclosures, government audit requests, or court orders.</p>
@@ -334,28 +335,28 @@
 
       <!-- 5. HIPAA -->
       <section class="legal-section" id="hipaa">
-        <h2>5. HIPAA Compliance</h2>
+        <h2>5. HIPAA-Regulated Deployments</h2>
 
         <h3>5.1 Business Associate Agreement</h3>
-        <p>Before processing any PHI, we execute a Business Associate Agreement (BAA) with each Covered Entity customer that specifies permitted uses and disclosures of PHI, safeguards for PHI protection, breach notification requirements, subcontractor requirements, and termination and data return/destruction procedures.</p>
+        <p>Before Aurelianware processes PHI as a Business Associate, we execute a BAA with the applicable Covered Entity or Business Associate. The BAA defines permitted uses and disclosures, safeguards, breach-notification obligations, subcontractor requirements, and termination and data-return or destruction procedures.</p>
 
         <h3>5.2 Administrative Safeguards</h3>
         <ul>
-          <li>Designated HIPAA Privacy and Security Officers</li>
-          <li>Workforce training on HIPAA requirements</li>
-          <li>Policies and procedures for PHI handling</li>
-          <li>Sanctions for policy violations</li>
+          <li>Designated privacy and security contacts for the engagement</li>
+          <li>Role-appropriate HIPAA training before workforce access to PHI</li>
+          <li>Documented policies and procedures for PHI handling</li>
+          <li>Workforce-access and policy-enforcement procedures</li>
         </ul>
 
         <h3>5.3 Physical Safeguards</h3>
         <ul>
-          <li>Azure datacenter security (SOC 2 Type II certified)</li>
-          <li>Facility access controls</li>
-          <li>Workstation security policies</li>
-          <li>Device and media controls</li>
+          <li>Physical datacenter controls provided by the selected cloud provider</li>
+          <li>Workstation, device, and media controls appropriate to personnel with access</li>
+          <li>Customer-controlled deployment boundaries where the platform runs in the customer's cloud</li>
         </ul>
 
-        <h3>5.4 Technical Safeguards</h3>
+        <h3>5.4 Reference Technical Safeguards</h3>
+        <p>Cloud Health Office provides reference architecture and configuration for safeguards including the following. Their operation and effectiveness must be validated for each production deployment:</p>
         <ul>
           <li>Encryption at rest (AES-256) and in transit (TLS 1.2+)</li>
           <li>Access controls and authentication</li>
@@ -366,10 +367,10 @@
 
         <h3>5.5 Breach Notification</h3>
         <ul>
-          <li>We notify affected Covered Entities within 24 hours of discovery</li>
-          <li>We cooperate in breach investigation and mitigation</li>
-          <li>We maintain breach documentation for 6 years</li>
-          <li>We report to HHS as required by the Breach Notification Rule</li>
+          <li>Notification timelines and responsibilities are defined in the applicable BAA and by law</li>
+          <li>We cooperate with the contracting organization in investigation and mitigation</li>
+          <li>Required breach documentation is retained for the legally applicable period</li>
+          <li>Regulatory reporting responsibility is assigned in the applicable agreement</li>
         </ul>
       </section>
 
@@ -378,20 +379,20 @@
         <h2>6. Data Retention</h2>
 
         <h3>6.1 PHI Retention</h3>
-        <p>PHI is retained in accordance with customer data retention policies, applicable BAA requirements, and HIPAA minimum 6-year retention for compliance documentation. <strong>7-year retention for claims data and EDI transaction archives</strong> (configurable from 1 to 10 years).</p>
+        <p>PHI retention is governed by customer policy, the applicable BAA, and legal requirements. The reference infrastructure supports configurable retention from 1 to 10 years; a 7-year claims and EDI archive policy is available but is not imposed on every deployment.</p>
 
         <h3>6.2 Account Information</h3>
-        <p>Customer account information is retained during active subscription and for 7 years after termination for compliance and audit records.</p>
+        <p>Customer account information is retained during an active engagement and afterward only for the period required by contract, legitimate business need, or applicable law.</p>
 
         <h3>6.3 Application and Audit Logs</h3>
         <ul>
-          <li><strong>Application logs:</strong> 365 days (performance metrics, error logs, operational data)</li>
-          <li><strong>Audit logs:</strong> 7 years (access logs, PHI disclosure tracking, security events)</li>
+          <li><strong>Application logs:</strong> Configurable by deployment and customer policy</li>
+          <li><strong>Audit logs:</strong> Configurable for the contractual and regulatory retention period</li>
           <li><strong>Log sanitization:</strong> Control characters are stripped to mitigate log forging; PHI redaction applied within PHI-aware logging components</li>
         </ul>
 
         <h3>6.4 Data Deletion</h3>
-        <p>Upon termination of services, PHI is securely deleted within <strong>90 days</strong> (or returned per BAA within 60 days if requested). Backups are purged according to retention schedules (maximum 90 days). Audit logs are retained 7 years for compliance. De-identified, aggregated data may be retained indefinitely.</p>
+        <p>Upon termination, PHI is returned or securely deleted according to the applicable BAA and customer-approved retention schedule. Backup expiration and required audit-record retention are documented for the deployment. De-identified, aggregated data may be retained where permitted by contract and law.</p>
       </section>
 
       <!-- 7. Security -->
@@ -399,24 +400,21 @@
         <h2>7. Data Security</h2>
 
         <h3>7.1 Security Measures</h3>
+        <p>The reference architecture supports the following controls. The final control set depends on the customer's cloud, configuration, operating model, and contract and must be validated before production use:</p>
         <ul>
-          <li>Microsoft Azure SOC 2 Type II certified infrastructure</li>
-          <li>Premium Key Vault with HSM-backed encryption keys</li>
-          <li>Private endpoints for network isolation</li>
+          <li>Deployment on Microsoft Azure infrastructure, including services covered by Microsoft's published compliance scope where applicable</li>
+          <li>Key Vault and HSM-backed key options</li>
+          <li>Private-endpoint network-isolation patterns</li>
           <li>Role-Based Access Control (RBAC)</li>
-          <li>Multi-factor authentication</li>
-          <li>Regular security assessments and penetration testing</li>
+          <li>Identity-provider multi-factor authentication options</li>
+          <li>Automated dependency, secret, and code scanning in the public repository</li>
         </ul>
 
-        <h3>7.2 Security Certifications</h3>
-        <ul>
-          <li>HIPAA compliance attestation</li>
-          <li>SOC 2 Type II certification (via Azure)</li>
-          <li>ISO 27001 certification (via Azure)</li>
-        </ul>
+        <h3>7.2 Third-Party Certifications</h3>
+        <p>Microsoft publishes compliance documentation for Azure services, including applicable SOC 2 and ISO 27001 coverage. Those certifications apply to Microsoft's audited environment and do not constitute an Aurelianware or Cloud Health Office certification. Current assurance documentation and deployment responsibilities are reviewed during a production engagement.</p>
 
         <h3>7.3 Incident Response</h3>
-        <p>We maintain a 24/7 incident response program including incident classification and escalation, forensic investigation capabilities, communication protocols for customers, and post-incident analysis and remediation.</p>
+        <p>We maintain incident classification, escalation, investigation, customer-communication, and post-incident review procedures appropriate to the contracted service. Coverage hours, response targets, and notification obligations are defined in the applicable service agreement and BAA; 24/7 coverage is not implied unless expressly contracted.</p>
       </section>
 
       <!-- 8. Your Rights -->
@@ -424,7 +422,7 @@
         <h2>8. Your Rights</h2>
 
         <h3>8.1 HIPAA Individual Rights</h3>
-        <p>As a Business Associate, we support Covered Entities in fulfilling individual rights including the right to access PHI, request amendment, accounting of disclosures, request restrictions, and confidential communications. Individuals should contact their Covered Entity (health plan/provider) to exercise these rights.</p>
+        <p>When acting as a Business Associate under a BAA, we support the contracting organization in fulfilling applicable individual-rights obligations, including access, amendment, accounting of disclosures, restrictions, and confidential communications. Individuals should contact their health plan or provider to exercise these rights.</p>
 
         <h3>8.2 Customer Rights</h3>
         <ul>
@@ -459,24 +457,24 @@
         <h2>10. International Data Transfers and GDPR</h2>
 
         <h3>10.1 Data Location</h3>
-        <p>By default, customer data is processed and stored in the Azure region selected during deployment (United States regions). Data does not leave the selected geographic region unless explicitly configured by the customer.</p>
+        <p>The reference architecture supports customer-selected cloud regions. The actual storage, telemetry, backup, support-access, and transfer locations for a production deployment are documented during architecture review and in the applicable agreement.</p>
 
         <h3>10.2 European Union and GDPR</h3>
-        <p><strong>Legal Basis for Processing:</strong></p>
+        <p>Where the GDPR applies, the customer and Aurelianware document their respective controller and processor roles, applicable legal bases, data-subject request procedures, and required processing terms. Depending on the activity, a legal basis may include:</p>
         <ul>
           <li><strong>Contractual necessity</strong> — processing to perform contractual obligations</li>
           <li><strong>Legitimate interests</strong> — fraud prevention, security</li>
           <li><strong>Legal compliance</strong> — HIPAA, tax laws</li>
           <li><strong>Consent</strong> — marketing communications</li>
         </ul>
-        <p><strong>EU Resident Rights:</strong> right of access, rectification, erasure, restriction of processing, data portability, right to object, and right not to be subject to automated decision-making.</p>
-        <p><strong>Data Protection Officer:</strong> <a href="mailto:dpo@cloudhealthoffice.com">dpo@cloudhealthoffice.com</a></p>
+        <p><strong>EU Resident Rights:</strong> Applicable rights may include access, rectification, erasure, restriction of processing, data portability, objection, and protections related to automated decision-making.</p>
+        <p><strong>Data protection inquiries:</strong> <a href="mailto:privacy@cloudhealthoffice.com">privacy@cloudhealthoffice.com</a></p>
 
         <h3>10.3 Cross-Border Transfers</h3>
-        <p>If data transfer outside the United States is necessary, we utilize Standard Contractual Clauses (SCCs) approved by the European Commission, implement additional safeguards per the Schrems II decision, and comply with applicable data localization requirements.</p>
+        <p>If a deployment requires a restricted cross-border transfer, the parties select and document an applicable transfer mechanism, such as European Commission Standard Contractual Clauses where appropriate, together with any required supplementary safeguards.</p>
 
         <h3>10.4 UK GDPR</h3>
-        <p>For UK-based customers, we comply with the UK General Data Protection Regulation (UK GDPR) and Data Protection Act 2018. The same rights and protections apply as described above.</p>
+        <p>Where UK GDPR applies, the parties document the applicable roles, processing terms, individual-rights procedures, and international-transfer mechanism for the engagement.</p>
       </section>
 
       <!-- 11. Cookies -->
@@ -484,15 +482,15 @@
         <h2>11. Cookies and Tracking Technologies</h2>
 
         <h3>11.1 Use of Cookies</h3>
-        <p><strong>Essential Cookies</strong> (always active): authentication and session management, security and fraud prevention, load balancing.</p>
-        <p><strong>Analytics Cookies</strong> (always active): website usage analytics, feature usage tracking, performance monitoring. We use Google Analytics to measure site traffic, campaign attribution, and product interest trends.</p>
-        <p><strong>Marketing Cookies</strong> (opt-in): campaign attribution.</p>
+        <p><strong>Essential storage:</strong> Authenticated product surfaces may use storage needed for session management, security, and service operation.</p>
+        <p><strong>Analytics:</strong> The public marketing site currently loads Google Analytics and Plausible Analytics to measure traffic, campaign attribution, and product interest. Depending on browser and analytics configuration, these services may use cookies or similar identifiers.</p>
+        <p><strong>Advertising:</strong> We do not currently operate a separate behavioral-advertising cookie network on the public marketing site.</p>
 
         <h3>11.2 Cookie Management</h3>
-        <p>You can control cookie preferences through your browser settings or our cookie consent banner on first visit.</p>
+        <p>You can restrict cookies and similar storage through your browser settings or privacy extensions. Blocking analytics may reduce the usage information available to us but does not prevent access to the public site.</p>
 
         <h3>11.3 Do Not Track (DNT)</h3>
-        <p>We honor Do Not Track (DNT) browser signals for analytics and marketing cookies. Essential cookies remain active to ensure service functionality.</p>
+        <p>Browsers do not implement a uniform Do Not Track standard, and the current site does not alter analytics loading solely in response to the DNT signal. Browser-level blocking and privacy controls remain available.</p>
       </section>
 
       <!-- 12. Changes -->
@@ -519,16 +517,16 @@
               <td><a href="mailto:privacy@cloudhealthoffice.com">privacy@cloudhealthoffice.com</a></td>
             </tr>
             <tr>
-              <td>HIPAA Privacy Officer</td>
+              <td>HIPAA Privacy Inquiries</td>
               <td><a href="mailto:hipaa-privacy@cloudhealthoffice.com">hipaa-privacy@cloudhealthoffice.com</a></td>
             </tr>
             <tr>
-              <td>HIPAA Security Officer</td>
+              <td>HIPAA Security Inquiries</td>
               <td><a href="mailto:hipaa-security@cloudhealthoffice.com">hipaa-security@cloudhealthoffice.com</a></td>
             </tr>
             <tr>
-              <td>Data Protection Officer (GDPR)</td>
-              <td><a href="mailto:dpo@cloudhealthoffice.com">dpo@cloudhealthoffice.com</a></td>
+              <td>Data Protection Inquiries</td>
+              <td><a href="mailto:privacy@cloudhealthoffice.com">privacy@cloudhealthoffice.com</a></td>
             </tr>
             <tr>
               <td>General Support</td>
@@ -573,13 +571,13 @@
               <td>Claim Data</td>
               <td>Claim #, Status</td>
               <td>EDI processing</td>
-              <td>7 years</td>
+              <td>Per BAA and deployment policy</td>
             </tr>
             <tr>
               <td>Attachments</td>
               <td>Medical records</td>
               <td>275 processing</td>
-              <td>7 years</td>
+              <td>Per BAA and deployment policy</td>
             </tr>
           </tbody>
         </table>
@@ -587,56 +585,57 @@
 
       <!-- Appendix B -->
       <section class="legal-section">
-        <h2>Appendix B: Third-Party Service Providers (Subprocessors)</h2>
+        <h2>Appendix B: Potential Third-Party Service Providers</h2>
+        <p>Service-provider use varies by deployment. The definitive subprocessor list, permitted data, regions, and contractual safeguards are documented for each production engagement. PHI must not be sent to a provider unless that use is authorized by the applicable BAA and architecture review.</p>
         <table class="legal-table">
           <thead>
             <tr>
               <th>Provider</th>
               <th>Service</th>
-              <th>BAA</th>
-              <th>Certification</th>
-              <th>Data Location</th>
+              <th>Expected PHI Use</th>
+              <th>Assurance Note</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>Microsoft Azure</td>
-              <td>Cloud Infrastructure</td>
-              <td>Yes</td>
-              <td>SOC 2, ISO 27001, HIPAA</td>
-              <td>United States</td>
-            </tr>
-            <tr>
-              <td>Application Insights</td>
-              <td>Monitoring</td>
-              <td>Yes</td>
-              <td>SOC 2 (via Azure)</td>
-              <td>United States</td>
-            </tr>
-            <tr>
-              <td>Service Bus</td>
-              <td>Messaging</td>
-              <td>Yes</td>
-              <td>SOC 2 (via Azure)</td>
-              <td>United States</td>
+              <td>Cloud infrastructure, messaging, and monitoring</td>
+              <td>Only within approved services and configuration</td>
+              <td>Microsoft's published compliance scope applies to Microsoft, not Aurelianware</td>
             </tr>
             <tr>
               <td>Stripe, Inc.</td>
               <td>Payment Processing</td>
-              <td>No</td>
-              <td>PCI DSS Level 1</td>
-              <td>United States</td>
+              <td>Not intended for PHI</td>
+              <td>Used only for configured commercial payment flows</td>
             </tr>
             <tr>
               <td>SendGrid (Twilio)</td>
               <td>Transactional Email</td>
-              <td>Yes</td>
-              <td>SOC 2 Type II</td>
-              <td>United States</td>
+              <td>Not intended for PHI unless expressly approved</td>
+              <td>Use and content restrictions are deployment-specific</td>
+            </tr>
+            <tr>
+              <td>Google Analytics and Plausible Analytics</td>
+              <td>Public-site analytics</td>
+              <td>Not intended for PHI</td>
+              <td>Used for aggregate traffic, attribution, and engagement measurement</td>
+            </tr>
+            <tr>
+              <td>Formspree</td>
+              <td>Marketing-site lead forms</td>
+              <td>Not intended for PHI</td>
+              <td>Visitors are asked for business contact and evaluation information only</td>
+            </tr>
+            <tr>
+              <td>Proton</td>
+              <td>Discovery-call scheduling</td>
+              <td>Not intended for PHI</td>
+              <td>Visitors choose what information to provide when booking</td>
             </tr>
           </tbody>
         </table>
-        <p>We will notify customers of any additions or changes to subprocessors with at least <strong>30 days' advance notice</strong>. Customers may object to new subprocessors within 15 days by contacting <a href="mailto:privacy@cloudhealthoffice.com">privacy@cloudhealthoffice.com</a>.</p>
+        <p>Subprocessor notice periods and objection rights are defined in the applicable customer agreement. Questions may be sent to <a href="mailto:privacy@cloudhealthoffice.com">privacy@cloudhealthoffice.com</a>.</p>
       </section>
 
     </div><!-- end .legal-container -->
