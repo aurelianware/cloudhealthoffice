@@ -285,6 +285,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://cloudhealthoffice.com/docs/submit-837-follow-claim</loc>
+    <lastmod>2026-07-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules</loc>
     <lastmod>2026-06-20</lastmod>
     <changefreq>monthly</changefreq>

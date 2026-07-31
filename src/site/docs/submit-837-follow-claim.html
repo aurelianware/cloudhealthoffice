@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submit an 837 and Follow the Claim — Cloud Health Office</title>
+  <meta name="description" content="A hands-on Cloud Health Office tutorial: submit a synthetic X12 837 claim through the local Kubernetes stack and inspect its adjudication result in the portal." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/submit-837-follow-claim" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/submit-837-follow-claim" />
+  <meta property="og:title" content="Submit an 837 and Follow the Claim — Cloud Health Office" />
+  <meta property="og:description" content="Submit a real synthetic 837 transaction, wait for adjudication, and inspect every result in the Cloud Health Office portal." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/user-guides/submit-837/claim-overview.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Submit an 837 and Follow the Claim",
+    "description": "Submit a synthetic X12 837 claim through a local Cloud Health Office deployment and inspect its adjudication result.",
+    "url": "https://cloudhealthoffice.com/docs/submit-837-follow-claim",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-07-30",
+    "dateModified": "2026-07-30",
+    "proficiencyLevel": "Beginner",
+    "about": ["X12 837", "Claims adjudication", "Local Kubernetes", "Healthcare EDI"],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Submit an 837 and Follow the Claim", "item": "https://cloudhealthoffice.com/docs/submit-837-follow-claim" }
+      ]
+    }
+  }
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/founder">Founder</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/submit-837-follow-claim" class="active">Submit &amp; Follow an 837</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#what-you-will-do">What You Will Do</a></li>
+              <li><a href="#prerequisites">Prerequisites</a></li>
+              <li><a href="#submit">Submit the 837</a></li>
+              <li><a href="#inspect">Inspect the Claim</a></li>
+              <li><a href="#trace">Read the Pipeline</a></li>
+              <li><a href="#capture">Refresh Screenshots</a></li>
+              <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a><span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a><span class="sep">&#x25B8;</span>
+          <span class="current">Submit an 837 and Follow the Claim</span>
+        </div>
+
+        <h1>Submit an 837 and Follow the Claim</h1>
+        <p class="docs-subtitle">Send a real synthetic X12 837 through the local Kubernetes services, wait for asynchronous adjudication, and examine the resulting claim in the portal.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Synthetic data only</div>
+          <p>This walkthrough uses generated member, provider, and claim data. Never place PHI, credentials, customer identifiers, or private environment URLs in documentation screenshots.</p>
+        </div>
+
+        <h2 id="what-you-will-do">What You Will Do</h2>
+        <p>The repository&rsquo;s end-to-end smoke workflow creates the minimum benefit-plan context, imports an 834 enrollment transaction, submits an actual 837 professional claim, and polls the claims API until adjudication reaches a terminal state.</p>
+        <ol>
+          <li>Create a synthetic benefit plan and external plan-code mapping.</li>
+          <li>Import a synthetic 834 member enrollment.</li>
+          <li>Submit one X12 837P claim to the claims API.</li>
+          <li>Let the local services process the claim asynchronously.</li>
+          <li>Open the saved claim and its adjudication trace in the portal.</li>
+        </ol>
+
+        <h2 id="prerequisites">Prerequisites</h2>
+        <ul>
+          <li>A running local Cloud Health Office Kubernetes deployment</li>
+          <li><code>kubectl</code>, <code>curl</code>, and <code>jq</code></li>
+          <li>Local port-forwards for benefit plans, enrollment import, claims, and the portal</li>
+          <li>Development-only local demo authentication enabled for the portal</li>
+        </ul>
+        <div class="callout callout-warning">
+          <div class="callout-title">Authentication boundary</div>
+          <p>Local demo sign-in is intended only for local development and guided demonstrations. Production environments must use normal identity-provider authentication and the appropriate Claims Examiner authorization.</p>
+        </div>
+
+        <h2 id="submit">1. Submit the 837 Workflow</h2>
+        <p>From the repository root, run the smoke workflow with a dedicated synthetic tenant:</p>
+        <div class="code-block-header"><span>Shell</span><span>repository root</span></div>
+        <pre><code>TENANT_ID=guide-837 \
+BENEFIT_PLAN_URL=http://localhost:5002 \
+ENROLLMENT_IMPORT_URL=http://localhost:5011 \
+CLAIMS_URL=http://localhost:5001 \
+scripts/smoke/834-to-837-e2e-smoke.sh</code></pre>
+        <p>The final output includes the claim ID, claim number, resolved benefit plan, terminal status, and financial totals. Keep the claim ID; it is the stable identifier used by the portal route and screenshot workflow.</p>
+        <div class="callout callout-success">
+          <div class="callout-title">What success means</div>
+          <p>The 834 member was accepted, the 837 claim was persisted, a benefit plan was resolved, and the claim reached a terminal adjudication state. The exact Approved, Denied, or Pended result depends on the rules and reference data loaded in your environment.</p>
+        </div>
+
+        <h2 id="inspect">2. Inspect the Claim in the Portal</h2>
+        <p>Sign in through the Development-only local demo endpoint, then open <code>/claims/{claimId}</code>. The overview connects the original transaction to the persisted claim: claim number, disposition, claim type, member, billing provider, service dates, charges, allowed amount, payer payment, and member responsibility.</p>
+        <figure class="guide-screenshot">
+          <img src="/graphics/user-guides/submit-837/claim-overview.png" alt="Cloud Health Office claim detail page showing a synthetic denied professional claim, financial summary cards, member information, and provider information." loading="lazy" />
+          <figcaption>A synthetic 837P after local adjudication. The image contains generated identifiers only.</figcaption>
+        </figure>
+        <p>A denied claim can still represent a healthy pipeline run. In this example the transaction was accepted and processed, but the configured adjudication rules produced a denied disposition with no allowed or paid amount.</p>
+
+        <h2 id="trace">3. Read the Adjudication Pipeline</h2>
+        <p>Select <strong>Adjudication Pipeline</strong> to see how the claim moved through intake, benefit calculation, disposition, and persistence. This is the fastest way to distinguish an ingestion failure from an expected business-rule outcome.</p>
+        <figure class="guide-screenshot">
+          <img src="/graphics/user-guides/submit-837/adjudication-pipeline.png" alt="Cloud Health Office adjudication pipeline showing passed intake, benefit calculation, disposition, and persistence steps for a synthetic claim." loading="lazy" />
+          <figcaption>Each recorded stage explains what the platform did before the final claim status was saved.</figcaption>
+        </figure>
+        <p>Also review the NCCI/MUE section beneath the timeline. It shows whether procedure-code combinations or unit limits contributed to the result.</p>
+
+        <h2 id="capture">Refresh the Guide Screenshots with Playwright</h2>
+        <p>The screenshots above are generated by a checked-in Playwright workflow, so the guide can be refreshed after intentional portal changes instead of accumulating stale hand-captured images.</p>
+        <div class="code-block-header"><span>Shell</span><span>src/site</span></div>
+        <pre><code>npm install
+GUIDE_CLAIM_ID=&lt;synthetic-claim-id&gt; npm run guides:capture:837</code></pre>
+        <p>The command launches local Chrome headlessly at a fixed viewport, signs in through the local demo endpoint, and replaces the two images under <code>src/site/graphics/user-guides/submit-837/</code>.</p>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+        <table>
+          <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
+          <tbody>
+            <tr><td>Member or plan setup fails</td><td>Confirm the benefit-plan and enrollment-import port-forwards and use a fresh synthetic tenant ID.</td></tr>
+            <tr><td>Claim stays Submitted</td><td>Check claims-service and adjudication-service logs, then verify the configured message transport and consumers.</td></tr>
+            <tr><td>BenefitPlanId is empty</td><td>Confirm the external plan-code mapping and the member&rsquo;s active coverage dates.</td></tr>
+            <tr><td>Portal cannot load the claim</td><td>Confirm the portal tenant matches <code>TENANT_ID</code>, the claims-service URL is reachable, and the claim ID came from the same run.</td></tr>
+            <tr><td>Playwright cannot connect</td><td>Confirm Chrome is installed, the portal is listening at <code>GUIDE_PORTAL_URL</code>, and local demo authentication is enabled.</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Next Steps</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top:20px;">
+          <a href="/docs/claims-guide" class="docs-hub-card">
+            <h3>Claims Adjudication Guide</h3>
+            <p>Go deeper into clinical edits, work queues, payment, denials, and 835 generation.</p>
+            <span class="card-arrow">Read guide &rarr;</span>
+          </a>
+          <a href="/docs/benefit-plan-guide" class="docs-hub-card">
+            <h3>Benefit Plan Configuration</h3>
+            <p>Understand the plan structures and cost-sharing rules used during adjudication.</p>
+            <span class="card-arrow">Configure plans &rarr;</span>
+          </a>
+        </div>
+        <div class="docs-pager">
+          <a href="/docs"><div class="pager-label">&larr; Previous</div><div class="pager-title">Docs Home</div></a>
+          <a href="/docs/claims-guide" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Claims Adjudication</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F readiness, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col"><h5>Product</h5><ul><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/release-notes">Release Notes</a></li></ul></div>
+        <div class="footer-col"><h5>Documentation</h5><ul><li><a href="/docs/quickstart">Quick Start</a></li><li><a href="/docs/claims-guide">Claims Guide</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="footer-col"><h5>Contact</h5><ul><li><a href="/contact">Contact Sales</a></li><li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li><li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li></ul></div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use</p>
+        <p><a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
