@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>837 Intake &amp; Adjudication Operations Runbook — Cloud Health Office</title>
+  <meta name="description" content="Operate Cloud Health Office 837 intake and asynchronous adjudication: monitor Service Bus, tune consumers, diagnose stuck claims, handle retries and dead letters, and verify recovery." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/837-intake-adjudication-operations" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/837-intake-adjudication-operations" />
+  <meta property="og:title" content="837 Intake &amp; Adjudication Operations Runbook — Cloud Health Office" />
+  <meta property="og:description" content="A practical runbook for monitoring, scaling, troubleshooting, and recovering the asynchronous 837 adjudication pipeline." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/user-guides/submit-837/adjudication-pipeline.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "837 Intake and Adjudication Operations Runbook",
+    "description": "Operate Cloud Health Office raw 837 intake, Azure Service Bus delivery, adjudication consumers, retries, dead letters, scaling, and incident recovery.",
+    "url": "https://cloudhealthoffice.com/docs/837-intake-adjudication-operations",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-07-31",
+    "dateModified": "2026-07-31",
+    "proficiencyLevel": "Advanced",
+    "about": ["X12 837", "Claims adjudication", "Azure Service Bus", "Kubernetes operations", "Incident response"],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "837 Intake and Adjudication Operations Runbook", "item": "https://cloudhealthoffice.com/docs/837-intake-adjudication-operations" }
+      ]
+    }
+  }
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/founder">Founder</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/submit-837-follow-claim">Submit &amp; Follow an 837</a></li>
+              <li><a href="/docs/837-intake-adjudication-operations" class="active">837 Operations Runbook</a></li>
+              <li><a href="/docs/review-resolve-pended-claim">Pended Claims Operations</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#flow">Operational Flow</a></li>
+              <li><a href="#baseline">Know the Baseline</a></li>
+              <li><a href="#monitor">Monitor the Pipeline</a></li>
+              <li><a href="#diagnose">Diagnose a Slow Claim</a></li>
+              <li><a href="#retries">Retries &amp; Dead Letters</a></li>
+              <li><a href="#scaling">Scale Safely</a></li>
+              <li><a href="#mcc-production">MCC vs. Production</a></li>
+              <li><a href="#incident">Incident Checklist</a></li>
+              <li><a href="#verify">Verify Recovery</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a><span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a><span class="sep">&#x25B8;</span>
+          <span class="current">837 Intake &amp; Adjudication Operations</span>
+        </div>
+
+        <h1>837 Intake &amp; Adjudication Operations Runbook</h1>
+        <p class="docs-subtitle">Monitor the asynchronous claims path, distinguish intake pressure from consumer pressure, recover failed deliveries without corrupting claim state, and prove the pipeline is healthy again.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Audience and scope</div>
+          <p>This runbook is for platform and claims operations teams responsible for the path from accepted raw X12 837 files through persisted adjudication. For the end-user workflow, start with <a href="/docs/submit-837-follow-claim">Submit &amp; Follow an 837</a>.</p>
+        </div>
+
+        <h2 id="flow">Understand the Operational Flow</h2>
+        <p>Intake and adjudication are separate capacity domains. The raw-file endpoint parses and submits claims concurrently; each accepted claim is persisted and emits a submitted event. Service Bus then delivers that event to an adjudication consumer.</p>
+        <figure class="guide-screenshot">
+          <img src="/graphics/user-guides/submit-837/adjudication-pipeline.png" alt="Cloud Health Office asynchronous 837 flow from raw X12 intake through Service Bus and the adjudication stages to persisted claim status." loading="lazy" />
+          <figcaption>Increasing file-import concurrency does not automatically increase adjudication throughput. The Service Bus subscription and claims-service consumers form a separate scaling boundary.</figcaption>
+        </figure>
+        <table>
+          <thead><tr><th>Boundary</th><th>Primary control</th><th>Failure signal</th></tr></thead>
+          <tbody>
+            <tr><td>Raw 837 parsing and submission</td><td><code>ClaimsImport__Raw837MaxConcurrency</code></td><td>Slow upload response, parser errors, submission failures, or rapidly growing accepted-but-not-finished counts.</td></tr>
+            <tr><td>Service Bus delivery</td><td>Topic, subscription, filter, lock, and delivery-count configuration</td><td>Active-message growth, repeated deliveries, dead letters, throttling, or authorization failures.</td></tr>
+            <tr><td>Adjudication consumers</td><td>Claims-service replicas × <code>Messaging__AdjudicationMaxConcurrentCalls</code></td><td>Backlog growth while pods are healthy, high downstream latency, CPU pressure, or database contention.</td></tr>
+            <tr><td>Persistence and dependencies</td><td>MongoDB capacity plus member, provider, coverage, and benefit-plan health</td><td>Stage-specific latency, version conflicts, timeouts, or messages repeatedly abandoned.</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="baseline">Know the Expected Baseline</h2>
+        <p>The canonical topic is <code>claim-version-events</code>. The <code>adjudication-orchestrator</code> subscription filters for <code>MessageType=ClaimVersionSubmitted</code>. Provisioning sets a 14-day message TTL, five-minute lock, maximum delivery count of 10, dead-lettering on expiration and filter exceptions, and one-hour duplicate detection on the topic.</p>
+        <p>Every submission writes the append-only claim event first, then sends the Service Bus trigger. A Service Bus send failure does not erase the accepted claim or its audit record. Every adjudication run writes the final projection and emits an adjudicated event independently.</p>
+        <div class="callout callout-success">
+          <div class="callout-title">At-least-once without double adjudication</div>
+          <p>Submitted and adjudicated messages use deterministic message IDs. If Service Bus redelivers an already-adjudicated claim, the orchestrator recognizes the persisted result and completes the message without running the pipeline again.</p>
+        </div>
+
+        <h2 id="monitor">Monitor the Pipeline</h2>
+        <h3>1. Confirm the active messaging backend</h3>
+        <p>At startup, claims-service records whether it selected Service Bus or the local in-memory fallback. Confirm this before interpreting queue metrics.</p>
+        <div class="code-block-header"><span>Shell</span><span>local Kubernetes</span></div>
+        <pre><code>kubectl logs -n cloudhealthoffice \
+  -l app=claims-service --all-containers --prefix --tail=200 |
+  rg 'IMessageBus='</code></pre>
+
+        <h3>2. Inspect deployment capacity</h3>
+        <div class="code-block-header"><span>Shell</span><span>local Kubernetes</span></div>
+        <pre><code>kubectl get deployment claims-service -n cloudhealthoffice
+
+kubectl get configmap claims-service-config \
+  -n cloudhealthoffice \
+  -o jsonpath='{.data.Messaging__AdjudicationMaxConcurrentCalls}'</code></pre>
+        <p>Effective maximum handler concurrency is approximately replicas multiplied by maximum concurrent calls. It is a ceiling, not a throughput promise: downstream services and the database still determine sustainable completion rate.</p>
+
+        <h3>3. Inspect the Service Bus subscription</h3>
+        <div class="code-block-header"><span>Shell</span><span>Azure CLI</span></div>
+        <pre><code>az servicebus topic subscription show \
+  --resource-group "$RESOURCE_GROUP" \
+  --namespace-name "$SERVICEBUS_NAMESPACE" \
+  --topic-name claim-version-events \
+  --name adjudication-orchestrator \
+  --query '{
+    active:countDetails.activeMessageCount,
+    deadLetter:countDetails.deadLetterMessageCount,
+    maxDelivery:maxDeliveryCount,
+    lockDuration:lockDuration
+  }'</code></pre>
+        <p>Track Active Messages, Dead-lettered Messages, Incoming Messages, Outgoing Messages, Server Errors, and Throttled Requests together. Queue depth without arrival and completion rates is not enough to distinguish a brief burst from a sustained bottleneck.</p>
+
+        <h2 id="diagnose">Diagnose a Submitted or Slow Claim</h2>
+        <ol>
+          <li><strong>Confirm acceptance.</strong> The raw 837 response must contain a successful result and claim ID. Parser rejection is an intake problem, not a Service Bus problem.</li>
+          <li><strong>Read the persisted claim.</strong> A claim that remains <code>Submitted</code> has not reached a later persisted disposition. A pended, approved, or denied claim has completed adjudication even if another observation tool has not caught up.</li>
+          <li><strong>Find the claim in logs.</strong> Search all claims-service pods for the claim ID and look for submission, delivery number, stage outcomes, persistence, and examiner-resolution messages.</li>
+          <li><strong>Check queue depth and delivery count.</strong> A growing active count suggests insufficient consumption. Repeated delivery numbers suggest a deterministic handler failure or unavailable dependency.</li>
+          <li><strong>Identify the slow stage.</strong> Scrubbing, provider integrity, network credentialing, benefit calculation, NCCI, COB, optional AI, and persistence have distinct dependencies and telemetry.</li>
+          <li><strong>Check MongoDB last.</strong> If multiple stages and services slow together, inspect database CPU, memory, connections, locks, storage latency, and version-conflict logs before adding more consumers.</li>
+        </ol>
+        <div class="code-block-header"><span>Shell</span><span>claim trace</span></div>
+        <pre><code>CLAIM_ID='&lt;claim-id&gt;'
+
+kubectl logs -n cloudhealthoffice \
+  -l app=claims-service --all-containers --prefix --since=30m |
+  rg -C 3 "$CLAIM_ID"</code></pre>
+
+        <h2 id="retries">Handle Retries and Dead Letters</h2>
+        <p>If a handler throws before completing the message, Service Bus abandons it and redelivers it. After 10 deliveries, the message moves to the subscription dead-letter queue. A persistence failure is retriable; an already-persisted adjudication is safe on redelivery.</p>
+        <table>
+          <thead><tr><th>Condition</th><th>Operator response</th></tr></thead>
+          <tbody>
+            <tr><td>One transient redelivery</td><td>Observe. Confirm the next delivery completes and the claim reaches a persisted disposition.</td></tr>
+            <tr><td>Repeated delivery with the same stage failure</td><td>Stop scaling changes, identify the deterministic dependency or data error, and correct the cause before delivery 10.</td></tr>
+            <tr><td>Message in the DLQ</td><td>Inspect message properties, claim ID, tenant ID, delivery count, and dead-letter reason using Azure Service Bus Explorer. Preserve evidence before replay.</td></tr>
+            <tr><td>Accepted claim but no submitted message</td><td>Use the append-only claim event as evidence, restore the transport, and use a controlled replay procedure. Do not fabricate a new claim or force its status.</td></tr>
+            <tr><td>Duplicate or operator retry</td><td>Rely on deterministic message IDs and persisted-result checks. Avoid changing message identity merely to bypass duplicate detection.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout callout-warning">
+          <div class="callout-title">Replay only after the cause is fixed</div>
+          <p>Replaying a DLQ message while the same dependency is failing consumes delivery attempts again. Reusing the same message ID inside the one-hour duplicate-detection window may also be suppressed. Record the original message and recovery decision in the incident timeline.</p>
+        </div>
+
+        <h2 id="scaling">Scale Consumers Safely</h2>
+        <p>Scale one dimension at a time and observe sustained completion rate, p95/p99 stage latency, error rate, database behavior, and Service Bus backlog. More parallelism can reduce throughput when consumers saturate MongoDB or a shared downstream service.</p>
+        <table>
+          <thead><tr><th>Change</th><th>Use when</th><th>Watch for</th></tr></thead>
+          <tbody>
+            <tr><td>Increase claims-service replicas</td><td>Existing pods are CPU-bound or a wider pool improves downstream overlap.</td><td>Connection growth, cache cold starts, Mongo contention, and uneven message distribution.</td></tr>
+            <tr><td>Increase concurrent calls per replica</td><td>Pods have headroom and handlers spend significant time awaiting healthy dependencies.</td><td>Memory growth, timeouts, lock pressure, and higher tail latency.</td></tr>
+            <tr><td>Increase raw 837 import concurrency</td><td>Parsing/submission is the measured bottleneck.</td><td>A faster producer can hide consumer saturation by growing the Service Bus backlog.</td></tr>
+            <tr><td>Increase MongoDB resources</td><td>Database metrics and claim-stage traces identify the data layer as the bottleneck.</td><td>Storage latency, working-set fit, connection limits, and whether the change improves completion rather than only submission.</td></tr>
+          </tbody>
+        </table>
+        <p>For repeatable experiments, record replicas, concurrent calls, claim count, database configuration, arrival rate, completion rate, p95/p99 latency, retries, dead letters, and the time when the final claim settled.</p>
+
+        <h2 id="mcc-production">Separate MCC and Production Postures</h2>
+        <table>
+          <thead><tr><th>Setting</th><th>Million Claim Challenge</th><th>Production or controlled demo</th></tr></thead>
+          <tbody>
+            <tr><td>Tenant and data</td><td>Isolated synthetic fixture and deterministic answer key</td><td>Tenant policy, protected data controls, and production audit requirements</td></tr>
+            <tr><td>AI examiner</td><td><code>Disabled</code>, zero replicas by default</td><td>Explicit <code>BestEffort</code> opt-in where approved; metered usage monitored</td></tr>
+            <tr><td>Concurrency</td><td>Recorded benchmark variable with automatic restoration</td><td>Change-controlled setting based on capacity and service-level objectives</td></tr>
+            <tr><td>Success criterion</td><td>Eventual completion, scoring accuracy, payment agreement, and zero unexplained dead letters</td><td>Timeliness, correctness, queue age, audit completeness, and safe recovery</td></tr>
+          </tbody>
+        </table>
+        <p>The local deployment uses the in-memory bus unless all local Service Bus settings are supplied. When Service Bus is configured, bootstrap provisions least-privilege Send/Listen access and installs the Kubernetes connection secret. Always confirm the backend before presenting a run as asynchronous Service Bus evidence.</p>
+
+        <h2 id="incident">Incident Response Checklist</h2>
+        <ol>
+          <li>Record UTC start time, tenant, affected claim IDs, release version, and current configuration.</li>
+          <li>Measure accepted, active, completed, retried, and dead-lettered counts. Do not rely on submission rate alone.</li>
+          <li>Confirm claims-service pod health and the selected messaging backend.</li>
+          <li>Inspect Service Bus subscription depth, errors, throttling, and DLQ state.</li>
+          <li>Trace representative claims through stage logs and downstream dependencies.</li>
+          <li>Freeze concurrency changes if error rate or tail latency is rising.</li>
+          <li>Correct the underlying service, configuration, data, or capacity issue.</li>
+          <li>Replay only the affected messages using an approved, auditable procedure.</li>
+          <li>Verify persisted claim states, queue drain, retry stabilization, and zero unexplained DLQ messages.</li>
+          <li>Restore temporary benchmark or diagnostic settings and document the final state.</li>
+        </ol>
+
+        <h2 id="verify">Verify Recovery End to End</h2>
+        <p>Recovery is complete only when a new raw 837 and the previously affected work both settle correctly. Run the standard tutorial for a clean claim and the strict pended-claim smoke test for the human-review path.</p>
+        <div class="code-block-header"><span>Shell</span><span>repository root</span></div>
+        <pre><code>scripts/smoke/834-to-837-e2e-smoke.sh
+scripts/smoke/837-pended-claim-e2e-smoke.sh</code></pre>
+        <ul>
+          <li>Confirm the raw 837 response contains a successful claim ID.</li>
+          <li>Confirm Service Bus logs show delivery to the adjudication orchestrator.</li>
+          <li>Confirm the claim leaves <code>Submitted</code> and persists the expected terminal or pended state.</li>
+          <li>Confirm resolved pends leave the examiner queue with <code>versionState=Adjudicated</code>.</li>
+          <li>Confirm Active Messages return to baseline and the DLQ contains no unexplained messages.</li>
+          <li>Confirm temporary replica, concurrency, database, and AI settings were restored.</li>
+        </ul>
+
+        <h2>Related Guides</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top:20px;">
+          <a href="/docs/submit-837-follow-claim" class="docs-hub-card">
+            <h3>Submit &amp; Follow an 837</h3>
+            <p>Run the end-user workflow with synthetic enrollment and claim transactions.</p>
+            <span class="card-arrow">Open tutorial &rarr;</span>
+          </a>
+          <a href="/docs/review-resolve-pended-claim" class="docs-hub-card">
+            <h3>Pended Claims Operations</h3>
+            <p>Route, examine, resolve, and audit claims that require human judgment.</p>
+            <span class="card-arrow">Open guide &rarr;</span>
+          </a>
+        </div>
+        <div class="docs-pager">
+          <a href="/docs/submit-837-follow-claim"><div class="pager-label">&larr; Previous</div><div class="pager-title">Submit &amp; Follow an 837</div></a>
+          <a href="/docs/review-resolve-pended-claim" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Pended Claims Operations</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F readiness, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col"><h5>Product</h5><ul><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/release-notes">Release Notes</a></li></ul></div>
+        <div class="footer-col"><h5>Documentation</h5><ul><li><a href="/docs/quickstart">Quick Start</a></li><li><a href="/docs/claims-guide">Claims Guide</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="footer-col"><h5>Contact</h5><ul><li><a href="/contact">Contact Sales</a></li><li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li><li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li></ul></div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use</p>
+        <p><a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
