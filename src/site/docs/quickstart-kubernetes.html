@@ -415,6 +415,11 @@ kubectl logs -n cloudhealthoffice mongodb-0</code></pre>
 <pre><code>kubectl delete namespace cloudhealthoffice</code></pre>
         <p>Data in MongoDB PVCs persists. Re-run <code>./scripts/deploy-local.sh --skip-build</code> to bring it back.</p>
 
+        <div class="callout callout-warning">
+          <div class="callout-title">Local success is not a production gate</div>
+          <p>Before moving real traffic, complete the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a> for identity, secrets, tenant isolation, production sizing, backups, restore, Service Bus, observability, and rollback evidence.</p>
+        </div>
+
         <h3>Full reset (delete everything including data)</h3>
 <pre><code>kubectl delete namespace cloudhealthoffice
 docker volume prune -f</code></pre>
