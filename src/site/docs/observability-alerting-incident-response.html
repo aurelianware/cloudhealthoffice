@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Observability, Alerting &amp; Incident Response Runbook — Cloud Health Office</title>
+  <meta name="description" content="Operate Cloud Health Office with health checks, metrics, traces, PHI-safe logs, Service Bus and Kubernetes alerts, incident response, and evidence-driven recovery." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/observability-alerting-incident-response" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/observability-alerting-incident-response" />
+  <meta property="og:title" content="Observability, Alerting &amp; Incident Response Runbook — Cloud Health Office" />
+  <meta property="og:description" content="A practical operating model for detecting, triaging, resolving, and learning from Cloud Health Office production incidents." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/docs-observability-command-center.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Observability, Alerting and Incident Response Runbook",
+    "description": "Operate Cloud Health Office with health checks, metrics, traces, PHI-safe logs, Service Bus and Kubernetes alerts, incident response, and evidence-driven recovery.",
+    "url": "https://cloudhealthoffice.com/docs/observability-alerting-incident-response",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-07-31",
+    "dateModified": "2026-07-31",
+    "proficiencyLevel": "Advanced",
+    "about": ["Observability", "OpenTelemetry", "Prometheus", "Azure Monitor", "Incident response", "Healthcare operations"],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Observability, Alerting and Incident Response", "item": "https://cloudhealthoffice.com/docs/observability-alerting-incident-response" }
+      ]
+    }
+  }
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/founder">Founder</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Operations</div>
+            <ul>
+              <li><a href="/docs/deployment">Deployment</a></li>
+              <li><a href="/docs/production-readiness-checklist">Production Readiness</a></li>
+              <li><a href="/docs/backup-restore-disaster-recovery">Backup &amp; Disaster Recovery</a></li>
+              <li><a href="/docs/observability-alerting-incident-response" class="active">Observability &amp; Incidents</a></li>
+              <li><a href="/docs/837-intake-adjudication-operations">837 Operations Runbook</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#posture">Current Posture</a></li>
+              <li><a href="#objectives">Objectives &amp; Signals</a></li>
+              <li><a href="#health">Health &amp; Synthetics</a></li>
+              <li><a href="#telemetry">Metrics, Traces &amp; Logs</a></li>
+              <li><a href="#claims">Claims &amp; Service Bus</a></li>
+              <li><a href="#platform">Database &amp; Kubernetes</a></li>
+              <li><a href="#alerts">Alert Design</a></li>
+              <li><a href="#incident">Incident Response</a></li>
+              <li><a href="#verify">Verify Recovery</a></li>
+              <li><a href="#drill">Run a Drill</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a><span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a><span class="sep">&#x25B8;</span>
+          <span class="current">Observability, Alerting &amp; Incident Response</span>
+        </div>
+
+        <h1>Observability, Alerting &amp; Incident Response Runbook</h1>
+        <p class="docs-subtitle">Detect failures from business impact, follow a claim or transaction across asynchronous boundaries, protect PHI in telemetry, page the right owner, restore service safely, and prove the platform is healthy again.</p>
+
+        <figure class="guide-screenshot">
+          <img src="/graphics/docs-observability-command-center.png" alt="Cloud Health Office operational command center receiving PHI-safe telemetry from healthcare transactions, Kubernetes services, Service Bus, and databases, then turning it into dashboards and incident response signals." loading="eager" />
+          <figcaption>Operational confidence comes from correlating business outcomes, application telemetry, messaging pressure, dependency health, and platform saturation—not from a single green dashboard.</figcaption>
+        </figure>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">Provisioned is not proven</div>
+          <p>The repository contains observability code and deployment assets, but an Application Insights resource, Prometheus dependency, workbook, or alert manifest is not evidence that telemetry is arriving, alerts reach a responder, or the responder can use them. Production readiness requires an end-to-end signal and paging drill.</p>
+        </div>
+
+        <h2 id="posture">1. Know the Current Observability Posture</h2>
+        <table>
+          <thead><tr><th>Capability</th><th>Repository evidence</th><th>Operator must verify</th></tr></thead>
+          <tbody>
+            <tr><td>Application metrics</td><td>Shared OpenTelemetry setup exposes <code>/metrics</code>; custom HTTP, claims, EDI, PAS, and compliance-oriented instruments exist</td><td>Every production service is scraped or exported, labels stay bounded, gaps alert, and retention meets policy</td></tr>
+            <tr><td>Distributed traces</td><td>ASP.NET Core, HttpClient, Redis, MongoDB, Service Bus, and Cloud Health Office activity sources are registered</td><td><code>Observability__OtlpEndpoint</code> reaches a production collector/backend and cross-service traces are searchable</td></tr>
+            <tr><td>Telemetry privacy</td><td>A mandatory span processor removes prohibited attributes; identifiers supplied to the shared activity helper are hashed</td><td>Logs, exception messages, baggage, custom activity sources, and exporter access also meet the approved PHI policy</td></tr>
+            <tr><td>Health checks</td><td>Shared <code>/health</code>, <code>/health/live</code>, and <code>/health/ready</code> endpoints can test self, MongoDB/Cosmos DB, Redis, and named HTTP dependencies</td><td>Each workload calls the shared mapping, probes use the correct endpoint, and readiness covers critical dependencies without creating cascading load</td></tr>
+            <tr><td>Prometheus and Grafana</td><td>Local scrape configuration, a claims dashboard, Helm monitoring dependency, and example alert rules are present</td><td>Service discovery, ServiceMonitors, rule loading, Alertmanager routing, dashboard queries, and notification delivery work in the target cluster</td></tr>
+            <tr><td>Azure monitoring</td><td>Infrastructure provisions Application Insights and four Azure Monitor workbooks; AKS templates include Log Analytics integration</td><td>Application exporters and diagnostic settings are connected; workbooks return current data; ingestion, sampling, retention, RBAC, and cost controls are approved</td></tr>
+            <tr><td>OTel Collector</td><td>The Kubernetes collector manifest is explicitly marked as a scaffold with a debug exporter</td><td>Select and configure the production backend before deployment; do not treat the scaffold as a production telemetry pipeline</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="objectives">2. Start with Service Objectives and User Impact</h2>
+        <p>Page on symptoms that threaten an approved objective. Use component signals to diagnose the cause. Thresholds must be derived from tenant traffic, contractual obligations, and measured baselines rather than copied unchanged from this guide.</p>
+        <table>
+          <thead><tr><th>Service-level indicator</th><th>Good event</th><th>Failure symptom</th><th>Diagnostic signals</th></tr></thead>
+          <tbody>
+            <tr><td>API availability</td><td>Authorized request returns the expected non-5xx response</td><td>Elevated error ratio or failed synthetic workflow</td><td>HTTP rate/errors/duration, ingress, pod readiness, dependency spans</td></tr>
+            <tr><td>837 acceptance</td><td>Valid file produces accepted claim IDs within the intake objective</td><td>Parser or submission failures, slow upload, partial acceptance</td><td>EDI count, raw-import latency, validation outcomes, claims persistence</td></tr>
+            <tr><td>Claim completion</td><td>Accepted claim reaches an auditable final or pended disposition within the objective</td><td>Submitted claims age beyond the window or outcomes stop advancing</td><td>Service Bus active/DLQ counts, consumer rate, stage latency, database contention</td></tr>
+            <tr><td>Correctness</td><td>Outcome, allowed amount, payment, and audit trail match deterministic rules and reconciliation</td><td>Unexpected denial/pend shift, duplicate payment, missing version, unexplained mismatch</td><td>Outcome ratios, answer-key or control totals, event history, payment reconciliation</td></tr>
+            <tr><td>Eligibility and authorization</td><td>Transactions complete within applicable processing objectives with traceable decisions</td><td>Timeouts, stale decisions, backlog, or partner failure</td><td>EDI/PAS counters, dependency latency, partner status, queue age</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Record the approved objectives</h3>
+        <table>
+          <thead><tr><th>Indicator</th><th>Objective</th><th>Window</th><th>Owner</th><th>Page threshold</th></tr></thead>
+          <tbody>
+            <tr><td>API availability</td><td>________</td><td>________</td><td>________</td><td>________</td></tr>
+            <tr><td>837 acceptance latency</td><td>________</td><td>________</td><td>________</td><td>________</td></tr>
+            <tr><td>Claim completion latency</td><td>________</td><td>________</td><td>________</td><td>________</td></tr>
+            <tr><td>Queue age</td><td>________</td><td>________</td><td>________</td><td>________</td></tr>
+            <tr><td>Correctness / reconciliation</td><td>________</td><td>________</td><td>________</td><td>________</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="health">3. Use Health Checks and Synthetic Workflows Correctly</h2>
+        <table>
+          <thead><tr><th>Signal</th><th>Question answered</th><th>Do not use it for</th></tr></thead>
+          <tbody>
+            <tr><td><code>/health/live</code></td><td>Is this process running?</td><td>Dependency checks that cause Kubernetes to restart a healthy process during an external outage</td></tr>
+            <tr><td><code>/health/ready</code></td><td>Can this instance safely receive work with its configured dependencies?</td><td>Proving an end-to-end healthcare workflow or measuring historical reliability</td></tr>
+            <tr><td><code>/health</code></td><td>What is the combined current health-check report?</td><td>A public unauthenticated diagnostic surface with sensitive dependency detail</td></tr>
+            <tr><td>Synthetic transaction</td><td>Can a controlled user journey complete across real boundaries?</td><td>Submitting PHI, triggering real payment, consuming metered AI unintentionally, or polluting production reporting</td></tr>
+          </tbody>
+        </table>
+
+        <div class="code-block-header"><span>Shell</span><span>local Kubernetes</span></div>
+        <pre><code>NAMESPACE='cloudhealthoffice'
+
+kubectl get pods -n "$NAMESPACE"
+kubectl get deployment -n "$NAMESPACE"
+
+kubectl port-forward -n "$NAMESPACE" \
+  service/claims-service 18080:80
+
+curl --fail --silent http://127.0.0.1:18080/health/live | jq
+curl --fail --silent http://127.0.0.1:18080/health/ready | jq
+curl --fail --silent http://127.0.0.1:18080/metrics | head</code></pre>
+        <p>Use the actual service port exposed by the target deployment. A production synthetic should use a dedicated tenant, synthetic member and provider identifiers, a nonpayable claim path, a unique correlation value, and explicit cleanup or retention rules.</p>
+
+        <h2 id="telemetry">4. Correlate Metrics, Traces, and PHI-Safe Logs</h2>
+        <h3>Metrics: detect and size</h3>
+        <p>The shared meter is <code>CloudHealthOffice</code>. Core instruments include <code>cho.http.request.duration</code>, <code>cho.claims.processing.duration</code>, <code>cho.edi.transactions.total</code>, <code>cho.claims.adjudication.outcome.total</code>, and <code>cho.telemetry.scrub.total</code>. Prometheus renders dotted names with underscores.</p>
+        <div class="code-block-header"><span>PromQL</span><span>starter queries</span></div>
+        <pre><code><span class="code-comment"># p95 claim-processing latency</span>
+histogram_quantile(
+  0.95,
+  sum(rate(cho_claims_processing_duration_bucket[5m])) by (le)
+)
+
+<span class="code-comment"># adjudication outcomes in the last hour</span>
+sum by (cho_outcome) (
+  increase(cho_claims_adjudication_outcome_total[1h])
+)
+
+<span class="code-comment"># PHI attributes removed before span export</span>
+sum by (service_name, attribute_name) (
+  increase(cho_telemetry_scrub_total[15m])
+)</code></pre>
+        <p>A nonzero telemetry-scrub rate is a privacy defect signal: the processor prevented export of a prohibited span attribute, but the emitting code still attempted to add it.</p>
+        <p>If Azure Monitor is the selected backend, review Microsoft’s current <a href="https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-configuration" target="_blank" rel="noopener noreferrer">Application Insights OpenTelemetry configuration</a> before choosing exporters, sampling, ingestion limits, and cost controls.</p>
+
+        <h3>Traces: locate the slow or failing boundary</h3>
+        <ol>
+          <li>Start with the service, route, environment, release, and UTC interval from the alert.</li>
+          <li>Follow the trace across ASP.NET Core, outbound HTTP, MongoDB/Redis, Service Bus, and Cloud Health Office business spans.</li>
+          <li>Compare a failing trace with a successful trace from the same transaction type and release.</li>
+          <li>Search by approved hashed identifiers or incident-safe correlation fields. Never paste a raw member ID, MBI, SSN, patient name, payload, or authorization header into telemetry tools.</li>
+          <li>If the trace ends at an asynchronous send, pivot to deterministic message ID, persisted event, queue state, and consumer logs.</li>
+        </ol>
+
+        <h3>Logs: explain decisions without copying the record</h3>
+        <ul class="readiness-checklist">
+          <li>Log stable event names, service, environment, release, tenant scope where approved, trace/span IDs, hashed business identifiers, decision codes, duration, retry count, and exception class.</li>
+          <li>Do not log raw X12, FHIR resources, request or response bodies, names, dates of birth, member or subscriber identifiers, addresses, tokens, secrets, connection strings, or payment account details.</li>
+          <li>Restrict telemetry access by role, audit access, encrypt in transit and at rest, define retention, and prevent unreviewed exports or support copies.</li>
+          <li>Test custom logging and activity sources separately. The mandatory span processor protects exported span attributes; it does not automatically sanitize every log message or external telemetry path.</li>
+        </ul>
+
+        <h2 id="claims">5. Monitor Claims and Azure Service Bus Together</h2>
+        <p>Submission rate is not completion rate. Watch accepted claims, persisted dispositions, queue state, delivery failures, and dependency pressure on the same timeline.</p>
+        <table>
+          <thead><tr><th>Signal</th><th>Interpretation</th><th>Response</th></tr></thead>
+          <tbody>
+            <tr><td>Incoming exceeds outgoing briefly</td><td>Normal burst or consumer lag</td><td>Watch active-message count, oldest-work age, and completion rate</td></tr>
+            <tr><td>Active messages rise continuously</td><td>Consumers cannot sustain arrival rate</td><td>Identify slow stage or dependency before increasing parallelism</td></tr>
+            <tr><td>Dead-lettered messages &gt; 0</td><td>Work exhausted delivery policy or expired</td><td>Page the owning team, preserve evidence, fix cause, then replay deliberately</td></tr>
+            <tr><td>Throttled requests or server errors</td><td>Namespace/service pressure or provider failure</td><td>Correlate with client retries, handler latency, delivery count, and tier limits</td></tr>
+            <tr><td>Queue clears but submitted claims remain</td><td>Missing trigger, filtered message, persistence inconsistency, or observation gap</td><td>Reconcile durable claim events and statuses; do not infer success from an empty queue</td></tr>
+            <tr><td>Pend/deny ratio shifts</td><td>Data, configuration, dependency, or code behavior changed</td><td>Compare by tenant, claim type, rule/stage, and release before declaring capacity failure</td></tr>
+          </tbody>
+        </table>
+        <p>Azure Monitor exposes Service Bus message and request metrics including Active Messages, Dead-lettered Messages, Incoming/Outgoing/Completed/Abandoned Messages, Server Errors, User Errors, and Throttled Requests. Counts can be point-in-time and incoming/outgoing totals need not match because of filters, duplicates, expiration, dead-lettering, and consumer lag. Use the current <a href="https://learn.microsoft.com/azure/service-bus-messaging/monitor-service-bus-reference" target="_blank" rel="noopener noreferrer">Service Bus monitoring data reference</a> when implementing rules.</p>
+        <p>For the operational procedure, use the <a href="/docs/837-intake-adjudication-operations">837 Intake &amp; Adjudication Operations Runbook</a>.</p>
+
+        <h2 id="platform">6. Monitor Databases and Kubernetes as Capacity Boundaries</h2>
+        <table>
+          <thead><tr><th>Layer</th><th>Watch</th><th>Evidence of saturation or failure</th></tr></thead>
+          <tbody>
+            <tr><td>MongoDB</td><td>Operation latency, connections, CPU, working set, storage latency/capacity, locks/queues, replication and backup status where applicable</td><td>Broad stage slowdown, timeouts, version conflicts, connection pressure, eviction, or storage stalls</td></tr>
+            <tr><td>Cosmos DB</td><td>Request rate, normalized RU consumption, throttled requests, latency, availability, data size, region/replication health, backup status</td><td>HTTP 429s, rising request charge/latency, hot partitions, exhausted throughput, or region issue</td></tr>
+            <tr><td>Kubernetes workload</td><td>Desired vs. available replicas, readiness, restarts, OOM kills, CPU throttling, memory working set, pending pods, HPA behavior</td><td>Unavailable replicas, crash loops, repeated restarts, scheduling failure, or resource saturation</td></tr>
+            <tr><td>Kubernetes cluster</td><td>Node readiness, allocatable CPU/memory, disk pressure, networking, DNS, ingress, certificate expiry</td><td>NotReady nodes, pod eviction, network errors, DNS latency, or expiring certificate</td></tr>
+            <tr><td>Telemetry pipeline</td><td>Scrape success, exporter/collector errors, dropped spans, ingestion delay, cardinality, retention, alert evaluation and notification</td><td>Missing series, stale dashboards, collector backlog, sudden ingestion loss/spike, or undelivered test alert</td></tr>
+          </tbody>
+        </table>
+        <p>For AKS, use the current <a href="https://learn.microsoft.com/azure/aks/monitor-aks" target="_blank" rel="noopener noreferrer">Azure Kubernetes Service monitoring guidance</a> to select Container Insights, managed Prometheus, Grafana, and cluster alert coverage for the deployed topology.</p>
+        <p>More claims-service replicas or concurrent handlers can make database contention worse. Scale one dimension at a time and require completion-rate improvement—not only higher submission rate.</p>
+
+        <h2 id="alerts">7. Design Alerts That a Responder Can Act On</h2>
+        <p>Every page needs a condition, sustained window, severity, owner, user impact, dashboard, runbook, first three actions, escalation path, and resolution signal. Route warnings to a work queue when immediate human action is unnecessary.</p>
+        <table>
+          <thead><tr><th>Severity</th><th>Use when</th><th>Expected response</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-required">SEV-1</span></td><td>Widespread outage, active data-integrity or payment risk, confirmed cross-tenant exposure, material security event, or recovery required</td><td>Page immediately; incident commander and business/security leadership engaged</td></tr>
+            <tr><td><span class="badge badge-production">SEV-2</span></td><td>Material degradation, sustained objective breach, growing claim backlog, critical dependency loss, or contained tenant impact</td><td>Page primary owner; establish incident channel and mitigation plan</td></tr>
+            <tr><td><span class="badge badge-complete">SEV-3</span></td><td>Early warning, reduced redundancy, nonurgent drift, capacity trend, or isolated recoverable failure</td><td>Create owned work; escalate if impact or duration increases</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Starter conditions to tune with real baselines</h3>
+        <ul class="readiness-checklist">
+          <li>Failed end-to-end synthetic transaction for two consecutive runs.</li>
+          <li>Sustained API 5xx ratio or latency consumes the approved error budget.</li>
+          <li>Accepted claims age beyond the completion objective or accepted-versus-disposition reconciliation diverges.</li>
+          <li>Any unexplained Service Bus dead letter; sustained throttling, server errors, or growing active-message age.</li>
+          <li>Available replicas fall below required capacity; repeated restarts, OOM kills, pending pods, or NotReady nodes persist.</li>
+          <li>Database throttling, connection pressure, latency, or storage capacity breaches the tested operating envelope.</li>
+          <li><code>cho.telemetry.scrub.total</code> increases in production, telemetry stops arriving, or an alert-delivery canary fails.</li>
+          <li>Any correctness, duplicate-payment, tenant-isolation, secret-exposure, or audit-integrity signal.</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Review the existing rules before enabling pages</div>
+          <p>The repository’s Prometheus rules focus primarily on Argo, Kafka, X12, SFTP, and EDI-era signals. Validate that each metric is emitted in the selected production architecture, replace stale runbook links, add the current Service Bus claims path, and test Alertmanager or Azure action-group delivery before relying on them.</p>
+        </div>
+
+        <h2 id="incident">8. Respond to an Incident</h2>
+        <table>
+          <thead><tr><th>Role</th><th>Responsibility</th></tr></thead>
+          <tbody>
+            <tr><td>Incident commander</td><td>Owns severity, priorities, decision cadence, roles, escalation, and final service-restoration decision</td></tr>
+            <tr><td>Operations lead</td><td>Triages telemetry, executes mitigations, and records exact changes and UTC timestamps</td></tr>
+            <tr><td>Application/data lead</td><td>Protects correctness, defines reconciliation, evaluates replay/rollback/recovery, and signs data validation</td></tr>
+            <tr><td>Security/privacy lead</td><td>Handles suspected exposure, evidence access, containment, legal/compliance escalation, and notification process</td></tr>
+            <tr><td>Communications lead</td><td>Provides factual stakeholder updates with impact, scope, mitigation, and next-update time</td></tr>
+          </tbody>
+        </table>
+
+        <ol>
+          <li><strong>Declare.</strong> Record alert, UTC start, severity, affected capability/tenants, release, commander, responders, and next update.</li>
+          <li><strong>Confirm impact.</strong> Use a safe synthetic and durable business records; distinguish monitoring failure from service failure.</li>
+          <li><strong>Bound the incident.</strong> Identify first known-bad time, last known-good result, blast radius, data/payment/privacy risk, and whether the boundary is expanding.</li>
+          <li><strong>Stabilize.</strong> Stop unsafe writes or producers if necessary; preserve logs and durable evidence; avoid destructive cleanup and uncontrolled replay.</li>
+          <li><strong>Diagnose.</strong> Move from service objective to metrics, trace, logs, queue, dependency, database, and cluster. Change one controlled variable at a time.</li>
+          <li><strong>Mitigate.</strong> Roll back, scale, disable an optional dependency, fail over, or invoke the <a href="/docs/backup-restore-disaster-recovery">Backup &amp; Disaster Recovery Runbook</a> using named authority.</li>
+          <li><strong>Validate.</strong> Reconcile accepted and completed work, run correctness controls, verify tenant isolation and payments, clear unexplained DLQs, and confirm alerts recover.</li>
+          <li><strong>Close.</strong> Remove temporary access/capacity/logging, preserve evidence, record actual impact and objective breach, and schedule the review.</li>
+        </ol>
+
+        <div class="code-block-header"><span>Incident record</span><span>minimum evidence</span></div>
+        <pre><code>Incident ID:
+UTC start / detected / mitigated / resolved:
+Severity and decision maker:
+Affected capabilities and tenants:
+User and business impact:
+Release SHA and configuration changes:
+Primary signals and trace references:
+Data, payment, privacy, and compliance assessment:
+Mitigations with owner and UTC time:
+Reconciliation and recovery evidence:
+Outstanding risk and next update:
+Follow-up owners and due dates:</code></pre>
+
+        <h2 id="verify">9. Verify Recovery Before Declaring Resolution</h2>
+        <ul class="readiness-checklist">
+          <li>The original symptom and the underlying cause are both absent for a defined observation window.</li>
+          <li>End-to-end synthetics pass from more than one observation point where applicable.</li>
+          <li>Error rate, latency, queue age, completion rate, database pressure, and Kubernetes health return to the expected envelope.</li>
+          <li>Accepted claims and other transactions reconcile to durable, auditable outcomes; no unexplained messages remain in a DLQ.</li>
+          <li>Outcome distributions, allowed amounts, payments, coverage, and tenant boundaries pass targeted correctness checks.</li>
+          <li>Telemetry is complete, PHI-scrub counters are investigated, alerts evaluate, and a notification reaches the expected responder.</li>
+          <li>Rollback remains available until the business and technical owners approve closure.</li>
+        </ul>
+
+        <h2 id="drill">10. Test the Operating System, Not Just the Dashboard</h2>
+        <ol>
+          <li>Choose one scenario: stopped consumer, unavailable dependency, injected HTTP error, growing queue, pod restart, telemetry loss, DLQ message, or restore/failover exercise.</li>
+          <li>Declare safety boundaries, synthetic tenant/data, expected signals, maximum impact, abort condition, and cleanup owner.</li>
+          <li>Start the scenario and measure detection time, notification time, acknowledgment time, diagnosis time, mitigation time, and verified recovery time.</li>
+          <li>Require the responder to use the alert, dashboard, trace, and linked runbook without undocumented assistance.</li>
+          <li>Verify no raw PHI or secrets entered telemetry, chat, tickets, screenshots, or drill evidence.</li>
+          <li>Fix missing/noisy signals, unclear ownership, broken links, permissions, and unsafe instructions; repeat the failed portion.</li>
+        </ol>
+
+        <table>
+          <thead><tr><th>Drill evidence</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Scenario, environment, and safety boundary</td><td>________________________________________</td></tr>
+            <tr><td>Expected / observed signals</td><td>________________________________________</td></tr>
+            <tr><td>Detected / notified / acknowledged</td><td>________________________________________</td></tr>
+            <tr><td>Mitigated / verified / resolved</td><td>________________________________________</td></tr>
+            <tr><td>PHI and access review</td><td>________________________________________</td></tr>
+            <tr><td>Gaps, owners, and due dates</td><td>________________________________________</td></tr>
+            <tr><td>Next drill date</td><td>________________________________________</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Related Guides</h2>
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top:20px;">
+          <a href="/docs/backup-restore-disaster-recovery" class="docs-hub-card">
+            <h3>Backup &amp; Disaster Recovery</h3>
+            <p>Recover data and platform services when ordinary mitigation is insufficient.</p>
+            <span class="card-arrow">Open recovery runbook &rarr;</span>
+          </a>
+          <a href="/docs/837-intake-adjudication-operations" class="docs-hub-card">
+            <h3>837 Operations Runbook</h3>
+            <p>Trace claim intake, Service Bus delivery, adjudication, retries, and dead letters.</p>
+            <span class="card-arrow">Open claims runbook &rarr;</span>
+          </a>
+        </div>
+        <div class="docs-pager">
+          <a href="/docs/backup-restore-disaster-recovery"><div class="pager-label">&larr; Previous</div><div class="pager-title">Backup &amp; Disaster Recovery</div></a>
+          <a href="/docs/837-intake-adjudication-operations" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">837 Operations Runbook</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F readiness, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col"><h5>Product</h5><ul><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/release-notes">Release Notes</a></li></ul></div>
+        <div class="footer-col"><h5>Documentation</h5><ul><li><a href="/docs/quickstart">Quick Start</a></li><li><a href="/docs/claims-guide">Claims Guide</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="footer-col"><h5>Contact</h5><ul><li><a href="/contact">Contact Sales</a></li><li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li><li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li></ul></div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use</p>
+        <p><a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
