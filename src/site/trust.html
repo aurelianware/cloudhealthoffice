@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trust &amp; Security | Cloud Health Office</title>
+  <meta name="description" content="Review Cloud Health Office security boundaries, PHI handling, assurance status, vulnerability reporting, and production-readiness responsibilities." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/trust" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/trust" />
+  <meta property="og:title" content="Trust &amp; Security | Cloud Health Office" />
+  <meta property="og:description" content="Clear security boundaries, inspectable controls, and deployment-specific assurance for healthcare payer infrastructure." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/platform-capability-spine.jpg" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Trust &amp; Security | Cloud Health Office" />
+  <meta name="twitter:description" content="Clear security boundaries, inspectable controls, and deployment-specific assurance for healthcare payer infrastructure." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/platform-capability-spine.jpg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "Cloud Health Office Trust and Security",
+    "url": "https://cloudhealthoffice.com/trust",
+    "description": "Security boundaries, PHI handling, deployment responsibilities, assurance status, vulnerability reporting, and production-readiness guidance for Cloud Health Office.",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Cloud Health Office",
+      "url": "https://cloudhealthoffice.com"
+    },
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Trust and Security",
+          "item": "https://cloudhealthoffice.com/trust"
+        }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
+
+  <link rel="stylesheet" href="css/sentinel.css" />
+  <link rel="stylesheet" href="css/conversion.css" />
+  <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
+
+  <style>
+    body {
+      padding: 0;
+      max-width: none;
+      margin: 0;
+      background: #000;
+    }
+
+    .trust-hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(84px, 11vw, 150px) 24px 90px;
+      border-bottom: 1px solid rgba(0, 255, 255, 0.18);
+      background:
+        radial-gradient(circle at 75% 20%, rgba(0, 255, 136, 0.12), transparent 32%),
+        radial-gradient(circle at 25% 15%, rgba(0, 255, 255, 0.12), transparent 34%),
+        linear-gradient(180deg, #02080d 0%, #000 100%);
+    }
+
+    .trust-hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.18;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: 54px 54px;
+      mask-image: linear-gradient(180deg, #000, transparent 85%);
+    }
+
+    .trust-hero__inner,
+    .trust-container {
+      position: relative;
+      width: min(1160px, 100%);
+      margin: 0 auto;
+    }
+
+    .trust-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 22px;
+      color: #00ff88;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .trust-eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00ff88;
+      box-shadow: 0 0 14px rgba(0, 255, 136, 0.8);
+    }
+
+    .trust-hero h1 {
+      max-width: 900px;
+      margin: 0;
+      color: #fff;
+      font-size: clamp(2.8rem, 7vw, 5.6rem);
+      line-height: 0.98;
+      letter-spacing: -0.035em;
+    }
+
+    .trust-hero h1 span {
+      color: #00ffff;
+    }
+
+    .trust-hero__summary {
+      max-width: 760px;
+      margin: 30px 0 0;
+      color: rgba(220, 230, 230, 0.78);
+      font-size: clamp(1.04rem, 2vw, 1.28rem);
+      line-height: 1.75;
+    }
+
+    .trust-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 34px;
+    }
+
+    .trust-proof-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 64px;
+      border: 1px solid rgba(0, 255, 255, 0.14);
+      background: rgba(0, 255, 255, 0.14);
+    }
+
+    .trust-proof {
+      min-height: 142px;
+      padding: 24px;
+      background: rgba(1, 9, 14, 0.97);
+    }
+
+    .trust-proof strong {
+      display: block;
+      margin-bottom: 8px;
+      color: #00ffff;
+      font-size: 1rem;
+    }
+
+    .trust-proof span {
+      color: rgba(200, 210, 210, 0.72);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .trust-section {
+      padding: 90px 24px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .trust-section--soft {
+      background: linear-gradient(180deg, #020609 0%, #000 100%);
+    }
+
+    .trust-section__header {
+      max-width: 780px;
+      margin-bottom: 42px;
+    }
+
+    .trust-section__label {
+      color: #00ff88;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .trust-section h2 {
+      margin: 12px 0 16px;
+      color: #fff;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      line-height: 1.12;
+    }
+
+    .trust-section__intro {
+      color: rgba(200, 210, 210, 0.75);
+      font-size: 1.05rem;
+      line-height: 1.75;
+    }
+
+    .status-grid,
+    .control-grid,
+    .process-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .status-card,
+    .control-card,
+    .process-card {
+      padding: 26px;
+      border: 1px solid rgba(0, 255, 255, 0.16);
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(0, 255, 255, 0.055), rgba(0, 0, 0, 0.35));
+    }
+
+    .status-badge {
+      display: inline-block;
+      margin-bottom: 17px;
+      padding: 5px 9px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      color: #00ffff;
+      font-size: 0.67rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .status-badge--green { color: #00ff88; }
+    .status-badge--gold { color: #ffc800; }
+    .status-badge--muted { color: #aab4b4; }
+
+    .status-card h3,
+    .control-card h3,
+    .process-card h3 {
+      margin: 0 0 10px;
+      color: #fff;
+      font-size: 1.1rem;
+    }
+
+    .status-card p,
+    .control-card p,
+    .process-card p {
+      margin: 0;
+      color: rgba(200, 210, 210, 0.72);
+      font-size: 0.92rem;
+      line-height: 1.68;
+    }
+
+    .trust-table-wrap {
+      overflow-x: auto;
+      border: 1px solid rgba(0, 255, 255, 0.16);
+      border-radius: 10px;
+    }
+
+    .trust-table {
+      width: 100%;
+      min-width: 780px;
+      border-collapse: collapse;
+      background: rgba(2, 8, 12, 0.8);
+    }
+
+    .trust-table th,
+    .trust-table td {
+      padding: 18px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      text-align: left;
+      vertical-align: top;
+      line-height: 1.55;
+    }
+
+    .trust-table th {
+      color: #00ffff;
+      font-size: 0.74rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(0, 255, 255, 0.055);
+    }
+
+    .trust-table td {
+      color: rgba(215, 225, 225, 0.76);
+      font-size: 0.9rem;
+    }
+
+    .trust-table td:first-child {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .trust-visual {
+      margin: 44px 0 0;
+      border: 1px solid rgba(0, 255, 255, 0.18);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .trust-visual img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .trust-visual figcaption {
+      padding: 15px 18px;
+      color: rgba(180, 190, 190, 0.68);
+      font-size: 0.82rem;
+      line-height: 1.55;
+      border-top: 1px solid rgba(0, 255, 255, 0.12);
+    }
+
+    .trust-note {
+      margin-top: 28px;
+      padding: 20px 22px;
+      border-left: 3px solid #ffc800;
+      background: rgba(255, 200, 0, 0.06);
+      color: rgba(225, 220, 195, 0.82);
+      line-height: 1.7;
+    }
+
+    .control-card ul {
+      margin: 15px 0 0;
+      padding-left: 18px;
+      color: rgba(200, 210, 210, 0.72);
+    }
+
+    .control-card li {
+      margin: 8px 0;
+      line-height: 1.55;
+    }
+
+    .process-number {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      margin-bottom: 18px;
+      border: 1px solid #00ff88;
+      border-radius: 50%;
+      color: #00ff88;
+      font-weight: 900;
+    }
+
+    .trust-cta {
+      padding: 88px 24px;
+      text-align: center;
+      background:
+        radial-gradient(circle at 50% 100%, rgba(0, 255, 136, 0.13), transparent 42%),
+        #000;
+    }
+
+    .trust-cta h2 {
+      margin: 0 auto 18px;
+      max-width: 800px;
+      font-size: clamp(2.1rem, 5vw, 3.8rem);
+    }
+
+    .trust-cta p {
+      max-width: 700px;
+      margin: 0 auto;
+      color: rgba(200, 210, 210, 0.74);
+      line-height: 1.7;
+    }
+
+    .trust-cta .trust-actions {
+      justify-content: center;
+    }
+
+    @media (max-width: 900px) {
+      .trust-proof-grid,
+      .status-grid,
+      .control-grid,
+      .process-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .trust-proof-grid,
+      .status-grid,
+      .control-grid,
+      .process-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .trust-actions .button {
+        width: 100%;
+      }
+
+      .trust-section {
+        padding: 70px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-to-main" href="#main-content">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/cms-0057f-compliance">Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/trust" aria-current="page" style="color:#00ff88; font-weight:bold;">Trust</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/#founding-partner-form">Founding Client</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      updateNavigation('#mainNav');
+    });
+  </script>
+
+  <main id="main-content">
+    <header class="trust-hero">
+      <div class="trust-hero__inner">
+        <div class="trust-eyebrow">Public assurance center &middot; Updated July 2026</div>
+        <h1>Trust starts with <span>clear boundaries.</span></h1>
+        <p class="trust-hero__summary">
+          Cloud Health Office is source-available payer infrastructure, not a black-box certification claim.
+          This page distinguishes controls visible in the repository, reference deployment patterns, customer
+          responsibilities, cloud-provider assurance, and the work required before production PHI processing.
+        </p>
+        <div class="trust-actions">
+          <a href="/docs/architecture" class="button">Inspect the architecture &rarr;</a>
+          <a href="mailto:security@cloudhealthoffice.com?subject=Private%20Security%20Report" class="button button-secondary">Report a vulnerability privately</a>
+        </div>
+
+        <div class="trust-proof-grid" aria-label="Trust principles">
+          <div class="trust-proof">
+            <strong>Source visible</strong>
+            <span>Security-sensitive implementation and infrastructure patterns can be inspected in the public repository.</span>
+          </div>
+          <div class="trust-proof">
+            <strong>Synthetic by default</strong>
+            <span>Public tests, demonstrations, screenshots, and benchmark artifacts must not contain real PHI or production credentials.</span>
+          </div>
+          <div class="trust-proof">
+            <strong>Your-cloud option</strong>
+            <span>Customer-controlled deployment boundaries keep infrastructure, identity, keys, and data ownership explicit.</span>
+          </div>
+          <div class="trust-proof">
+            <strong>No borrowed badges</strong>
+            <span>Azure certifications apply to Microsoft's audited environment; they are not presented as Aurelianware certifications.</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="trust-section trust-section--soft" aria-labelledby="assurance-heading">
+      <div class="trust-container">
+        <div class="trust-section__header">
+          <div class="trust-section__label">Current assurance status</div>
+          <h2 id="assurance-heading">What is public, what is configurable, and what is not claimed.</h2>
+          <p class="trust-section__intro">
+            A repository control, a reference architecture, and a production operating control are different things.
+            Cloud Health Office keeps those categories separate so a security review can test the right evidence.
+          </p>
+        </div>
+
+        <div class="status-grid">
+          <article class="status-card">
+            <span class="status-badge status-badge--green">Public &amp; implemented</span>
+            <h3>Secure development checks</h3>
+            <p>Automated dependency, secret, container, and PHI-focused checks run in the public repository. Findings still require review and remediation.</p>
+          </article>
+          <article class="status-card">
+            <span class="status-badge">Reference architecture</span>
+            <h3>Deployment security patterns</h3>
+            <p>Infrastructure supports private endpoints, managed identities, RBAC, key-management options, audit logging, and tenant-aware routing.</p>
+          </article>
+          <article class="status-card">
+            <span class="status-badge status-badge--gold">Validation required</span>
+            <h3>Production effectiveness</h3>
+            <p>Identity, networks, keys, logging, retention, integrations, recovery, and operating procedures must be verified in the target environment.</p>
+          </article>
+          <article class="status-card">
+            <span class="status-badge status-badge--muted">Not currently claimed</span>
+            <h3>Aurelianware certifications</h3>
+            <p>This site does not claim that Aurelianware or Cloud Health Office currently holds SOC 2 Type II or HITRUST certification.</p>
+          </article>
+          <article class="status-card">
+            <span class="status-badge status-badge--gold">Contractual</span>
+            <h3>BAA, SLA, and support</h3>
+            <p>PHI processing, support coverage, incident-notification targets, availability commitments, and retention terms are defined per engagement.</p>
+          </article>
+          <article class="status-card">
+            <span class="status-badge status-badge--muted">No public production claim</span>
+            <h3>Capacity and compliance</h3>
+            <p>Published benchmarks are local validation evidence. Production capacity and regulatory posture require customer-specific testing and review.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-section" aria-labelledby="responsibility-heading">
+      <div class="trust-container">
+        <div class="trust-section__header">
+          <div class="trust-section__label">Shared responsibility</div>
+          <h2 id="responsibility-heading">Security ownership stays visible.</h2>
+          <p class="trust-section__intro">
+            The final boundary varies by operating model, but responsibility never disappears into a generic
+            “HIPAA-ready cloud” statement.
+          </p>
+        </div>
+
+        <div class="trust-table-wrap">
+          <table class="trust-table">
+            <thead>
+              <tr>
+                <th scope="col">Control domain</th>
+                <th scope="col">Cloud Health Office provides</th>
+                <th scope="col">Customer validates and operates</th>
+                <th scope="col">Cloud provider provides</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Identity and access</td>
+                <td>Authentication, authorization, RBAC, tenant-context, and managed-identity integration patterns.</td>
+                <td>Identity-provider configuration, role assignments, access reviews, MFA policy, and workforce lifecycle.</td>
+                <td>Identity and key-management service availability and underlying platform controls.</td>
+              </tr>
+              <tr>
+                <td>Data protection</td>
+                <td>Encryption configuration, PHI-aware logging, data partitioning, retention options, and secret-store integration.</td>
+                <td>Approved data classes, key ownership, retention schedule, backup policy, export controls, and deletion acceptance.</td>
+                <td>Encryption primitives, regional storage services, physical media controls, and documented service assurance.</td>
+              </tr>
+              <tr>
+                <td>Network security</td>
+                <td>Private-endpoint, ingress, egress, service-to-service, and network-policy reference patterns.</td>
+                <td>Production topology, DNS, firewall, allow-list, egress, certificate, and administrative-access configuration.</td>
+                <td>Virtual-network and managed-service isolation capabilities plus infrastructure availability.</td>
+              </tr>
+              <tr>
+                <td>Monitoring and response</td>
+                <td>Structured audit events, telemetry redaction patterns, health signals, and alerting templates.</td>
+                <td>Alert routing, on-call coverage, SIEM integration, incident command, evidence retention, and notification decisions.</td>
+                <td>Platform logs, regional status, native monitoring services, and provider incident communications.</td>
+              </tr>
+              <tr>
+                <td>Compliance and contracts</td>
+                <td>Control documentation, implementation evidence, architecture review, and contract-specific commitments.</td>
+                <td>Risk analysis, policies, vendor review, BAA determination, regulatory interpretation, and production acceptance.</td>
+                <td>Service-specific compliance documentation and contractual terms for eligible cloud services.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure class="trust-visual">
+          <img
+            src="graphics/hipaa-security-layers.svg"
+            width="1200"
+            height="300"
+            loading="lazy"
+            alt="Reference defense-in-depth layers for network isolation, telemetry redaction, encryption keys, data lifecycle controls, and automated delivery checks."
+          />
+          <figcaption>
+            Reference safeguard layers. Availability and effectiveness depend on the selected cloud services,
+            configuration, customer operating model, and production validation.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="trust-section trust-section--soft" aria-labelledby="phi-heading">
+      <div class="trust-container">
+        <div class="trust-section__header">
+          <div class="trust-section__label">PHI boundaries</div>
+          <h2 id="phi-heading">No real PHI is required to evaluate the platform.</h2>
+          <p class="trust-section__intro">
+            Public evaluation begins with deterministic synthetic data. A production PHI workload is a separate,
+            governed step with explicit contractual, architectural, and operational prerequisites.
+          </p>
+        </div>
+
+        <div class="control-grid">
+          <article class="control-card">
+            <h3>Before PHI processing</h3>
+            <ul>
+              <li>Define the parties' HIPAA roles and execute a BAA where required.</li>
+              <li>Approve every service, region, data flow, support path, and subprocessor in scope.</li>
+              <li>Complete security architecture, threat-model, retention, recovery, and access reviews.</li>
+            </ul>
+          </article>
+          <article class="control-card">
+            <h3>Inside the deployment</h3>
+            <ul>
+              <li>Keep credentials in approved secret stores and use least-privilege identities.</li>
+              <li>Redact or omit PHI from logs, traces, screenshots, benchmark artifacts, and support messages.</li>
+              <li>Apply tenant, authorization, network, encryption, audit, and lifecycle controls to the accepted design.</li>
+            </ul>
+          </article>
+          <article class="control-card">
+            <h3>Public and support channels</h3>
+            <ul>
+              <li>Never submit PHI, production credentials, tenant identifiers, or sensitive logs through public GitHub channels.</li>
+              <li>Use private security reporting for suspected vulnerabilities.</li>
+              <li>Use only synthetic or contractually approved de-identified material for public evidence.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="trust-note">
+          Cloud Health Office is not currently presented as a packaged production appliance. Deployment operators
+          remain responsible for their hosting environment, controls, agreements, and regulatory posture.
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-section" aria-labelledby="engineering-heading">
+      <div class="trust-container">
+        <div class="trust-section__header">
+          <div class="trust-section__label">Inspectable engineering</div>
+          <h2 id="engineering-heading">Security evidence is attached to the delivery path.</h2>
+          <p class="trust-section__intro">
+            Public source does not make software secure by itself. It does make the checks, changes, and unresolved
+            work easier to inspect.
+          </p>
+        </div>
+
+        <div class="control-grid">
+          <article class="control-card">
+            <h3>Repository controls</h3>
+            <ul>
+              <li>Language-specific tests and security-oriented validation</li>
+              <li>Dependency and container scanning</li>
+              <li>Secret scanning and PHI-focused validation</li>
+              <li>Pull-request review before changes reach <code>main</code></li>
+            </ul>
+          </article>
+          <article class="control-card">
+            <h3>Security-sensitive defaults</h3>
+            <ul>
+              <li>Least-privilege local credentials</li>
+              <li>Secret-store and environment-variable patterns</li>
+              <li>Authorization, tenant-isolation, and data-handling tests</li>
+              <li>Deterministic synthetic fixtures for regression and scale evidence</li>
+            </ul>
+          </article>
+          <article class="control-card">
+            <h3>Review the evidence</h3>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice/security" target="_blank" rel="noopener noreferrer">Repository security overview</a></li>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security policy</a></li>
+              <li><a href="/docs/architecture">Architecture documentation</a></li>
+              <li><a href="/legal/privacy-policy">Privacy and data-handling policy</a></li>
+            </ul>
+          </article>
+        </div>
+
+        <figure class="trust-visual">
+          <img
+            src="graphics/infrastructure-topology.svg"
+            width="1200"
+            height="660"
+            loading="lazy"
+            alt="Reference infrastructure topology showing ingress, application services, messaging, storage, identity, monitoring, and administrative boundaries."
+          />
+          <figcaption>
+            Reference infrastructure topology for architecture review. Exact services, trust boundaries, and controls
+            must be reconciled with the target payer environment.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="trust-section trust-section--soft" aria-labelledby="reporting-heading">
+      <div class="trust-container">
+        <div class="trust-section__header">
+          <div class="trust-section__label">Vulnerability reporting</div>
+          <h2 id="reporting-heading">Report suspected vulnerabilities privately.</h2>
+          <p class="trust-section__intro">
+            Do not disclose security vulnerabilities, PHI, credentials, or tenant data through public issues,
+            discussions, pull requests, or comments.
+          </p>
+        </div>
+
+        <div class="process-grid">
+          <article class="process-card">
+            <div class="process-number">1</div>
+            <h3>Email the security contact</h3>
+            <p><a href="mailto:security@cloudhealthoffice.com">security@cloudhealthoffice.com</a> is the private reporting channel.</p>
+          </article>
+          <article class="process-card">
+            <div class="process-number">2</div>
+            <h3>Provide reproducible detail</h3>
+            <p>Include the affected component, steps, potential impact, and redacted evidence. Do not include real PHI or production credentials.</p>
+          </article>
+          <article class="process-card">
+            <div class="process-number">3</div>
+            <h3>Protect affected parties</h3>
+            <p>Coordinate disclosure privately while the issue is evaluated and remediated. Public reporting can follow an agreed disclosure path.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-section" aria-labelledby="review-heading">
+      <div class="trust-container">
+        <div class="trust-section__header">
+          <div class="trust-section__label">Production review path</div>
+          <h2 id="review-heading">From technical evaluation to governed operation.</h2>
+          <p class="trust-section__intro">
+            Production readiness is an acceptance process, not a checkbox inherited from a repository or cloud provider.
+          </p>
+        </div>
+
+        <div class="process-grid">
+          <article class="process-card">
+            <div class="process-number">1</div>
+            <h3>Define scope and data</h3>
+            <p>Identify workflows, users, integrations, data classifications, regions, recovery objectives, operating model, and regulatory responsibilities.</p>
+          </article>
+          <article class="process-card">
+            <div class="process-number">2</div>
+            <h3>Validate the deployment</h3>
+            <p>Test identity, authorization, isolation, encryption, redaction, auditability, recovery, capacity, failure handling, and operational procedures.</p>
+          </article>
+          <article class="process-card">
+            <div class="process-number">3</div>
+            <h3>Accept and operate</h3>
+            <p>Execute required agreements, record exceptions, approve evidence, establish support and incident paths, and monitor the accepted control baseline.</p>
+          </article>
+        </div>
+
+        <figure class="trust-visual">
+          <img
+            src="graphics/multi-tenant-routing.svg"
+            width="1200"
+            height="560"
+            loading="lazy"
+            alt="Reference tenant-aware request routing through a shared gateway into tenant-specific configuration, data, messaging, and audit lanes."
+          />
+          <figcaption>
+            Tenant-aware routing is an implementation pattern, not proof of complete isolation by itself. Authorization,
+            storage partitioning, messaging, configuration, audit, and deployment topology must be tested together.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="trust-cta" aria-labelledby="trust-cta-heading">
+      <div class="trust-container">
+        <h2 id="trust-cta-heading">Bring your security questionnaire and your architecture team.</h2>
+        <p>
+          We will review the source-visible controls, identify deployment-specific gaps, and define the evidence
+          required before your organization accepts a pilot or production workload.
+        </p>
+        <div class="trust-actions">
+          <a href="/schedule-demo" class="button">Schedule a security review &rarr;</a>
+          <a href="/contact" class="button button-secondary">Send requirements first</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Source-available payer infrastructure with explicit deployment, evidence, and operating boundaries.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Evidence &amp; Trust</h5>
+          <ul>
+            <li><a href="/trust">Trust &amp; Security</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/legal/privacy-policy">Privacy Policy</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security Policy</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="/contact">Contact Sales</a></li>
+            <li><a href="/schedule-demo">Schedule a Review</a></li>
+            <li><a href="mailto:security@cloudhealthoffice.com">Security</a></li>
+            <li><a href="mailto:privacy@cloudhealthoffice.com">Privacy</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1)</p>
+        <p><a href="/trust">Trust</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy">Privacy</a> &nbsp;&middot;&nbsp; <a href="mailto:security@cloudhealthoffice.com">Report a vulnerability</a></p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
