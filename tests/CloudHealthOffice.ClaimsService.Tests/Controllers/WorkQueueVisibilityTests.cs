@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using ClaimsService.Services;
 using NSubstitute;
 using Xunit;
 
@@ -23,13 +24,21 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
 
     private readonly HttpClient _client;
     private readonly IClaimRepository _repo;
+    private readonly IClaimVersionEventPublisher _versionPublisher;
+    private readonly IClaimVersionEventReader _versionReader;
 
     public WorkQueueVisibilityTests(ClaimsApiFactory factory)
     {
         _repo = factory.ClaimRepository;
+        _versionPublisher = factory.VersionEventPublisher;
+        _versionReader = factory.VersionEventReader;
         _client = factory.CreateClient();
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
         _repo.ClearReceivedCalls();
+        _versionPublisher.ClearReceivedCalls();
+        _versionReader.ClearReceivedCalls();
+        _versionReader.GetAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ClaimVersionEvent>());
     }
 
     private static Claim NcciPendedClaim() => new()
@@ -174,6 +183,45 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
             && saved.VersionState == ClaimVersionState.Adjudicated
             && saved.AiExamination!.ExaminerAgreement == "Overridden"
             && saved.AiExamination.ExaminerUserId == "examiner-1"));
+        await _versionPublisher.Received(1).PublishVersionAdjudicatedAsync(
+            Arg.Is<Claim>(saved => saved.Id == claim.Id),
+            "examiner-1",
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AuditTimeline_CombinesVersionEventsWithStructuredPend_InChronologicalOrder()
+    {
+        var claim = NcciPendedClaim();
+        claim.ClaimVersionId = "chain-1";
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+        _versionReader.GetAsync("test-tenant", "chain-1", Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                new ClaimVersionEvent
+                {
+                    EventType = ClaimVersionEventType.ClaimVersionSubmitted,
+                    OccurredAt = claim.PendDetails!.PendedAt.AddMinutes(-1),
+                    ActorId = "837-ingress",
+                    Version = 1
+                }
+            });
+
+        var response = await _client.GetAsync($"/api/claims/{claim.Id}/audit-timeline");
+        response.EnsureSuccessStatusCode();
+
+        var timeline = await response.Content.ReadFromJsonAsync<List<AuditEntryDto>>(Json);
+        Assert.Collection(timeline!,
+            submitted => Assert.Equal("Claim submitted", submitted.Action),
+            pended =>
+            {
+                Assert.Equal("Claim pended for review", pended.Action);
+                Assert.Equal("Pended", pended.NewValue);
+                Assert.Contains("NCCI", pended.Notes);
+            });
+        await _versionReader.Received(1).GetAsync(
+            "test-tenant", "chain-1", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -206,5 +254,12 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
         public string QueueReason { get; set; } = string.Empty;
         public string QueueReasonCode { get; set; } = string.Empty;
         public List<string> ProcedureCodes { get; set; } = new();
+    }
+
+    private sealed class AuditEntryDto
+    {
+        public string Action { get; set; } = string.Empty;
+        public string? NewValue { get; set; }
+        public string? Notes { get; set; }
     }
 }

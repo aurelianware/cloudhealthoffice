@@ -246,6 +246,7 @@
           </tbody>
         </table>
         <p>After resolution, refresh the queue and claim detail. The item should leave the active queue, while the claim retains its original <code>PendDetails</code>, examiner notes, adjudicated timestamp, and any advisory record for audit.</p>
+        <p>Open <strong>Change History</strong> to verify the chronological record. It combines the append-only claim-version stream with the structured pend snapshot, showing submission, the human-review gate, and the examiner's final approved or denied decision. The final entry identifies the examiner and retains the decision reason; normal adjudication entries continue to identify the system actor.</p>
         <figure class="guide-screenshot">
           <img src="/graphics/user-guides/pended-claim/examiner-disposition.png" alt="Resolved synthetic claim showing its final examiner disposition, original pend reason, examiner notes, pend code, and retained AI feedback." loading="lazy" />
           <figcaption>The resolved view keeps the human decision beside the original exception context, even after the claim leaves the active work queue.</figcaption>

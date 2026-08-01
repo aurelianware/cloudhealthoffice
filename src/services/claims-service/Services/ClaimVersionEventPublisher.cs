@@ -50,6 +50,45 @@ public interface IClaimVersionEventPublisher
         CancellationToken ct = default);
 }
 
+/// <summary>Reads the append-only version stream for a single tenant-owned claim chain.</summary>
+public interface IClaimVersionEventReader
+{
+    Task<IReadOnlyList<ClaimVersionEvent>> GetAsync(
+        string tenantId,
+        string claimVersionId,
+        CancellationToken ct = default);
+}
+
+public sealed class MongoClaimVersionEventReader : IClaimVersionEventReader
+{
+    private readonly IMongoCollection<ClaimVersionEvent> _collection;
+
+    public MongoClaimVersionEventReader(IMongoDatabase database, IConfiguration configuration)
+    {
+        var collectionName = configuration["CosmosDb:ClaimVersionEventsContainer"] ?? "ClaimVersionEvents";
+        _collection = database.GetCollection<ClaimVersionEvent>(collectionName);
+    }
+
+    public async Task<IReadOnlyList<ClaimVersionEvent>> GetAsync(
+        string tenantId,
+        string claimVersionId,
+        CancellationToken ct = default) =>
+        await _collection
+            .Find(evt => evt.TenantId == tenantId && evt.ClaimVersionId == claimVersionId)
+            .SortBy(evt => evt.Version)
+            .ThenBy(evt => evt.OccurredAt)
+            .ToListAsync(ct);
+}
+
+public sealed class NoopClaimVersionEventReader : IClaimVersionEventReader
+{
+    public Task<IReadOnlyList<ClaimVersionEvent>> GetAsync(
+        string tenantId,
+        string claimVersionId,
+        CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ClaimVersionEvent>>(Array.Empty<ClaimVersionEvent>());
+}
+
 public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublisher
 {
     private const int MaxRetries = 5;
@@ -101,7 +140,8 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
             ["adjudicatedDate"] = version.AdjudicatedDate,
             ["allowedAmount"] = version.AdjudicationResult?.AllowedAmount,
             ["payerPayment"] = version.AdjudicationResult?.PayerPayment,
-            ["patientResponsibility"] = version.AdjudicationResult?.PatientResponsibility
+            ["patientResponsibility"] = version.AdjudicationResult?.PatientResponsibility,
+            ["notes"] = version.ClaimNotes
         };
 
         var evt = new ClaimVersionEvent
