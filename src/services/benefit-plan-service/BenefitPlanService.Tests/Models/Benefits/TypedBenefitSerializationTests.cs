@@ -3,6 +3,8 @@ using BenefitPlanService.Models;
 using BenefitPlanService.Models.Benefits;
 using BenefitRulePredicate = CloudHealthOffice.BenefitEngine.Domain.BenefitRulePredicate;
 using BenefitMemberGender = CloudHealthOffice.BenefitEngine.Domain.BenefitMemberGender;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 
 namespace BenefitPlanService.Tests.Models.Benefits;
 
@@ -41,6 +43,42 @@ public class TypedBenefitSerializationTests
         back.Should().BeOfType<MedicalBenefit>();
         back!.Id.Should().Be("b1");
         back.InNetworkCopay.Should().Be(25m);
+    }
+
+    [Fact]
+    public void MedicalBenefit_round_trips_explicit_exclusion()
+    {
+        Benefit src = new MedicalBenefit
+        {
+            Id = "excluded-1",
+            ServiceCategory = "COSMETIC",
+            Description = "Cosmetic Procedures",
+            IsCovered = false,
+            CptCodes = ["15819", "15820"],
+        };
+
+        var json = JsonSerializer.Serialize(src, Opts);
+        var back = JsonSerializer.Deserialize<Benefit>(json, Opts);
+
+        back.Should().NotBeNull();
+        back!.IsCovered.Should().BeFalse();
+        back.CptCodes.Should().Equal("15819", "15820");
+    }
+
+    [Fact]
+    public void MedicalBenefit_mongo_round_trip_preserves_explicit_exclusion()
+    {
+        var src = new MedicalBenefit
+        {
+            ServiceCategory = "COSMETIC",
+            Description = "Cosmetic Procedures",
+            IsCovered = false,
+        };
+
+        var document = src.ToBsonDocument();
+        var back = BsonSerializer.Deserialize<MedicalBenefit>(document);
+
+        back.IsCovered.Should().BeFalse();
     }
 
     [Fact]

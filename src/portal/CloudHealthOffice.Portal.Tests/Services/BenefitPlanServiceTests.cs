@@ -291,13 +291,19 @@ public class BenefitPlanServiceTests
                 individualOutOfPocketMax = 6000m, familyOutOfPocketMax = 12000m,
                 coinsurance = 20m, monthlyPremium = 450m
             },
-            benefits = new[]
+            benefits = new object[]
             {
                 new
                 {
                     id = "BEN-1", benefitType = "medical", serviceCategory = "98",
                     description = "Office Visit", inNetworkCopay = 25m,
                     priorAuthRequired = false
+                },
+                new
+                {
+                    id = "EXC-1", benefitType = "medical", serviceCategory = "COSMETIC",
+                    description = "Cosmetic Procedures", isCovered = false,
+                    cptCodes = new[] { "15819", "15820" }
                 }
             }
         }, JsonOpts);
@@ -319,6 +325,15 @@ public class BenefitPlanServiceTests
         result.AssignedBenefits.Should().Be(1);
         result.Benefits.Should().ContainSingle()
             .Which.Copay.Should().Be(25m);
+        result.Exclusions.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new
+            {
+                BenefitId = "EXC-1",
+                ServiceCategory = "COSMETIC",
+                Description = "Cosmetic Procedures",
+                IsCovered = false,
+                CptCodes = new[] { "15819", "15820" },
+            }, options => options.ExcludingMissingMembers());
     }
 
     [Fact]
@@ -399,6 +414,7 @@ public class BenefitPlanServiceTests
         json.RootElement.GetProperty("inNetworkCopay").GetDecimal().Should().Be(30m);
         json.RootElement.GetProperty("outNetworkCoinsurance").GetDecimal().Should().Be(0.4m);
         json.RootElement.GetProperty("deductibleApplies").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("isCovered").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
@@ -427,6 +443,35 @@ public class BenefitPlanServiceTests
         captured.RequestUri!.AbsoluteUri.Should().EndWith("/v1/plans/PLN-100/benefits/BEN%2F1");
         using var json = JsonDocument.Parse(capturedBody!);
         json.RootElement.GetProperty("inNetworkCoinsurance").GetDecimal().Should().Be(0.2m);
+    }
+
+    [Fact]
+    public async Task AddBenefitAsync_sends_explicit_exclusion_payload()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = new StringContent("{}"),
+            };
+        });
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.AddBenefitAsync("PLN-100", new UpsertPlanBenefitRequest
+        {
+            BenefitType = "medical",
+            ServiceCategory = "COSMETIC",
+            Description = "Cosmetic Procedures",
+            IsCovered = false,
+            CptCodes = ["15819", "15820"],
+        });
+
+        using var json = JsonDocument.Parse(capturedBody!);
+        json.RootElement.GetProperty("isCovered").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("serviceCategory").GetString().Should().Be("COSMETIC");
+        json.RootElement.GetProperty("cptCodes").GetArrayLength().Should().Be(2);
     }
 
     // ── GetAvailableBenefitsAsync ──

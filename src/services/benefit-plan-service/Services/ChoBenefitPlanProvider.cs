@@ -87,7 +87,7 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             {
                 ServiceTypeCode = b.ServiceCategory,
                 ServiceTypeDescription = b.Description,
-                IsCovered = true,
+                IsCovered = b.IsCovered,
                 AuthRequired = b.PriorAuthRequired || b.RequiresPriorAuth,
                 VisitLimit = b.VisitLimit,
                 DollarLimit = b.AnnualMaximum ?? b.LifetimeMaximum,

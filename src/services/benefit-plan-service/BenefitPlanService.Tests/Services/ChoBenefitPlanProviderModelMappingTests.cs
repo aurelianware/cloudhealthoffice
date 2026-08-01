@@ -146,6 +146,25 @@ public sealed class ChoBenefitPlanProviderModelMappingTests
     }
 
     [Fact]
+    public void MapToConfig_Projects_ExplicitExclusion_AsUncoveredCategory()
+    {
+        var provider = Build();
+        var plan = SamplePlan();
+        plan.Benefits.Add(new MedicalBenefit
+        {
+            ServiceCategory = "COSMETIC",
+            Description = "Cosmetic Procedures",
+            IsCovered = false,
+        });
+
+        var config = provider.MapToConfig(plan);
+
+        var exclusion = config.GetCategories("COSMETIC").Should().ContainSingle().Subject;
+        exclusion.IsCovered.Should().BeFalse();
+        exclusion.ServiceTypeDescription.Should().Be("Cosmetic Procedures");
+    }
+
+    [Fact]
     public void MapToConfig_Carries_Predicate_From_NonEmpty_Rules()
     {
         var provider = Build();

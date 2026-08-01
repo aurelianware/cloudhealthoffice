@@ -243,6 +243,16 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
             return null;
         }
 
+        if (!benefit.IsCovered)
+        {
+            return new BenefitAppliedResult
+            {
+                IsCovered = false,
+                ServiceCategory = benefit.ServiceCategory,
+                DenialReason = $"{benefit.Description} is not covered under this plan"
+            };
+        }
+
         // Check if specific CPT code is covered
         if (!string.IsNullOrEmpty(cptCode) && benefit.CptCodes != null && benefit.CptCodes.Any())
         {
