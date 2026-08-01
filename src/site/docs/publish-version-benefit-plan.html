@@ -1,0 +1,59 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Publish and Version a Benefit Plan — Cloud Health Office</title>
+  <meta name="description" content="Create drafts, publish immutable benefit-plan versions, amend active plans, and verify lifecycle history in Cloud Health Office." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/publish-version-benefit-plan" /><link rel="stylesheet" href="/css/sentinel.css" /><link rel="stylesheet" href="/css/docs.css" /><script src="/js/auth.js"></script><script src="/js/mobile-nav.js"></script>
+</head><body><a href="#main-content" class="skip-to-main">Skip to main content</a>
+<nav><div class="nav-inner"><a href="/" class="nav-logo"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle navigation menu" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="/contact">Contact Sales</a></li></ul></div></div></nav>
+<main id="main-content"><div class="docs-wrapper"><aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner"><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Benefit Plan Tutorials</div><ul><li><a href="/docs/create-verify-benefit-plan">1. Create &amp; Verify</a></li><li><a href="/docs/configure-benefits-cost-sharing">2. Benefits &amp; Cost Sharing</a></li><li><a class="active" href="/docs/publish-version-benefit-plan">3. Publish &amp; Version</a></li><li><a href="/docs/validate-benefit-plan">4. Validate the Plan</a></li><li><a href="/docs/configure-plan-networks">5. Networks</a></li></ul></div><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#draft">Create a Draft</a></li><li><a href="#publish">Publish</a></li><li><a href="#amend">Amend</a></li><li><a href="#history">Verify History</a></li></ul></div></div></aside>
+<div class="docs-content"><div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Publish and Version a Benefit Plan</span></div>
+<h1>Publish and Version a Benefit Plan</h1><p class="docs-subtitle">Use immutable published versions so claims can be reproduced against the configuration effective on the date of service.</p>
+<div class="callout callout-info"><div class="callout-title">Why versioning matters</div><p>A published version is not edited in place. Amendments create a new draft, and publishing the successor preserves the configuration that governed earlier claims.</p></div>
+<h2 id="lifecycle">Plan Lifecycle</h2><div class="architecture-diagram"><div class="arch-row"><div class="arch-box primary"><strong>Draft</strong><br><span>Editable candidate</span></div><div class="arch-arrow">&rarr;</div><div class="arch-box success"><strong>Published</strong><br><span>Effective configuration</span></div><div class="arch-arrow">&rarr;</div><div class="arch-box"><strong>Superseded</strong><br><span>Retained history</span></div></div></div>
+<table><thead><tr><th>State</th><th>Use</th><th>Mutation rule</th></tr></thead><tbody><tr><td>Draft</td><td>Review before activation</td><td>May be changed before publication</td></tr><tr><td>Published</td><td>Resolved for effective claims and member views</td><td>Immutable; amend to change</td></tr><tr><td>Superseded</td><td>Historical reconstruction and audit</td><td>Read-only</td></tr></tbody></table>
+<h2 id="draft">1. Create a Draft</h2><p>For a new controlled plan, create a draft rather than using the convenience create-and-publish endpoint:</p><div class="code-block-header"><span>Shell</span><span>new draft</span></div><pre><code>draft=$(curl -fsS -X POST \
+  "${BENEFIT_PLAN_URL}/api/v1/plans/drafts" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  -d '{
+    "tenantId": "placeholder",
+    "planId": "EVAL-PPO-2027",
+    "planName": "Evaluator Premier PPO 2027",
+    "payer": "Acme Health Plan",
+    "effectiveDate": "2027-01-01T00:00:00Z",
+    "planType": "PPO",
+    "metalLevel": "Gold",
+    "lineOfBusiness": "Commercial",
+    "costSharing": {
+      "individualDeductible": 1750,
+      "familyDeductible": 3500,
+      "individualOutOfPocketMax": 6500,
+      "familyOutOfPocketMax": 13000
+    }
+  }')
+
+echo "$draft" | jq '{planId,versionId,versionNumber,versionState}'
+VERSION_ID=$(echo "$draft" | jq -r '.versionId')</code></pre>
+<h2 id="publish">2. Publish the Reviewed Version</h2><div class="code-block-header"><span>Shell</span><span>publish</span></div><pre><code>curl -fsS -X POST \
+  "${BENEFIT_PLAN_URL}/api/v1/plans/EVAL-PPO-2027/versions/${VERSION_ID}/publish" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  -d '{"effectiveDate":"2027-01-01T00:00:00Z"}' |
+  jq '{planId,versionId,versionNumber,versionState,publishedAt}'</code></pre>
+<div class="callout callout-warning"><div class="callout-title">Effective-date control</div><p>Confirm regulatory limits, network references, service mappings, and member communications before publication. Publication makes the version eligible for runtime resolution.</p></div>
+<h2 id="amend">3. Amend a Published Plan</h2><p>Create a successor draft from the latest published version:</p><div class="code-block-header"><span>Shell</span><span>amend</span></div><pre><code>amendment=$(curl -fsS -X POST \
+  "${BENEFIT_PLAN_URL}/api/v1/plans/EVAL-PPO-2027/amend" \
+  -H "X-Tenant-ID: ${TENANT_ID}")
+
+echo "$amendment" |
+  jq '{planId,versionId,versionNumber,versionState,predecessorVersionId}'</code></pre><p>Review and publish the new draft using its returned <code>versionId</code>. The former published version becomes superseded rather than disappearing.</p>
+<h2 id="history">4. Verify Version History</h2><div class="code-block-header"><span>Shell</span><span>history</span></div><pre><code>curl -fsS \
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  "${BENEFIT_PLAN_URL}/api/v1/plans/EVAL-PPO-2027/versions" |
+  jq '.items[] | {
+    versionNumber, versionId, versionState,
+    effectiveDate, publishedAt, predecessorVersionId
+  }'</code></pre>
+<div class="callout callout-success"><div class="callout-title">Completion check</div><p>The chain has monotonic version numbers, a predecessor link on the amendment, one current published version, and retained superseded history.</p></div>
+<div class="docs-pager"><a href="/docs/configure-benefits-cost-sharing"><div class="pager-label">&larr; Previous</div><div class="pager-title">Benefits &amp; Cost Sharing</div></a><a href="/docs/validate-benefit-plan" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Validate the Plan</div></a></div>
+</div></div></main><button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button><div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div><footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p></div></div></footer><script>const toggle=document.getElementById('docsMobileToggle'),sidebar=document.getElementById('docsSidebar'),overlay=document.getElementById('docsSidebarOverlay');if(toggle&&sidebar){toggle.onclick=()=>{sidebar.classList.toggle('open');overlay.classList.toggle('open');};overlay.onclick=()=>{sidebar.classList.remove('open');overlay.classList.remove('open');};}</script></body></html>

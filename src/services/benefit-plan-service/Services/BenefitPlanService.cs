@@ -593,6 +593,8 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
     private static CostSharing CloneCostSharing(CostSharing c) => new()
     {
+        Coinsurance = c.Coinsurance,
+        MonthlyPremium = c.MonthlyPremium,
         IndividualDeductible = c.IndividualDeductible,
         FamilyDeductible = c.FamilyDeductible,
         IndividualOutOfPocketMax = c.IndividualOutOfPocketMax,

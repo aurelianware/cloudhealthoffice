@@ -171,4 +171,30 @@ public class AdapterTypedBenefitRoundTripTests
         back.Benefits[2].Should().BeOfType<PreventiveBenefit>();
         ((PharmacyBenefit)back.Benefits[1]).FormularyTier.Should().Be("Tier 1");
     }
+
+    [Fact]
+    public void AdapterBenefitPlan_round_trip_preserves_administrative_cost_sharing()
+    {
+        var plan = new BenefitPlan
+        {
+            TenantId = "t",
+            PlanId = "P",
+            PlanName = "Premium plan",
+            Payer = "Acme",
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PlanType = PlanType.PPO,
+            CostSharing = new CostSharing
+            {
+                MonthlyPremium = 475m,
+                Coinsurance = 20m,
+                IndividualDeductible = 1500m,
+            },
+        };
+
+        var back = AdapterBenefitPlan.From(plan).ToBenefitPlan();
+
+        back.CostSharing.MonthlyPremium.Should().Be(475m);
+        back.CostSharing.Coinsurance.Should().Be(20m);
+        back.CostSharing.IndividualDeductible.Should().Be(1500m);
+    }
 }

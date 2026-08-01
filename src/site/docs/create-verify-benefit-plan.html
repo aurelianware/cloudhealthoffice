@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create and Verify a Benefit Plan — Cloud Health Office</title>
+  <meta name="description" content="Create a synthetic benefit plan in the Cloud Health Office portal, verify it through the API, and understand which settings drive claims adjudication." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/create-verify-benefit-plan" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Create and Verify a Benefit Plan — Cloud Health Office" />
+  <meta property="og:description" content="A hands-on evaluator guide to creating and verifying a benefit plan." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/user-guides/benefit-plans/create-plan.png" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script><script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav><div class="nav-inner"><a href="/" class="nav-logo" aria-label="Cloud Health Office Home"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li><li><a href="/contact" style="color:#00ffff;font-weight:bold;">Contact Sales</a></li></ul></div></div></nav>
+  <script>document.addEventListener('DOMContentLoaded',()=>{updateNavigation('#mainNav');});</script>
+  <main id="main-content"><div class="docs-wrapper">
+    <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
+      <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li><li><a href="/docs/benefit-plan-guide">Benefit Plan Concepts</a></li></ul></div>
+      <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Benefit Plan Tutorials</div><ul><li><a class="active" href="/docs/create-verify-benefit-plan">1. Create &amp; Verify</a></li><li><a href="/docs/configure-benefits-cost-sharing">2. Benefits &amp; Cost Sharing</a></li><li><a href="/docs/publish-version-benefit-plan">3. Publish &amp; Version</a></li><li><a href="/docs/validate-benefit-plan">4. Validate the Plan</a></li><li><a href="/docs/configure-plan-networks">5. Networks</a></li></ul></div>
+      <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#outcome">Outcome</a></li><li><a href="#open">Open the Workspace</a></li><li><a href="#create">Create the Plan</a></li><li><a href="#verify">Verify with the API</a></li><li><a href="#troubleshooting">Troubleshooting</a></li></ul></div>
+    </div></aside>
+    <div class="docs-content">
+      <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Create and Verify a Benefit Plan</span></div>
+      <h1>Create and Verify a Benefit Plan</h1>
+      <p class="docs-subtitle">Build a realistic synthetic PPO plan in the portal, then verify the persisted configuration through the benefit-plan API.</p>
+      <div class="callout callout-info"><div class="callout-title">Evaluator path · 15 minutes</div><p>This tutorial uses synthetic configuration and the Development-only local demo sign-in. It does not require member PHI or production credentials.</p></div>
+
+      <h2 id="outcome">What You Will Produce</h2>
+      <p>You will create <code>Evaluator Premier PPO 2026</code> with a 2026 effective date, representative cost sharing, and a network label. The next tutorial adds service-level benefits through the API.</p>
+      <table><thead><tr><th>Setting</th><th>Evaluator value</th><th>Why it matters</th></tr></thead><tbody>
+        <tr><td>Plan name</td><td>Evaluator Premier PPO 2026</td><td>Human-readable operations label</td></tr>
+        <tr><td>Product / metal tier</td><td>PPO / Gold</td><td>Product classification and member-facing tier</td></tr>
+        <tr><td>Plan year</td><td>2026</td><td>Effective benefit and accumulator period</td></tr>
+        <tr><td>Individual deductible</td><td>$1,500</td><td>Member responsibility before deductible-covered services pay</td></tr>
+        <tr><td>Individual OOP maximum</td><td>$6,000</td><td>Upper bound for applicable member cost sharing</td></tr>
+      </tbody></table>
+
+      <h2 id="open">1. Open the Benefit Plan Workspace</h2>
+      <ol><li>Start the local Kubernetes deployment and portal port-forward.</li><li>Open <code>http://localhost:8080/local-demo/sign-in?redirectUri=/benefit-plans</code>.</li><li>Confirm the tenant badge says <strong>Local Demo Tenant (Demo)</strong>.</li><li>Select <strong>Configuration → Benefit Plans</strong> if you enter through another portal page.</li></ol>
+      <div class="callout callout-warning"><div class="callout-title">Production authentication</div><p>The local demo sign-in exists for development and guided demonstrations. Use the configured identity provider and least-privilege roles outside a local environment.</p></div>
+
+      <h2 id="create">2. Create the Plan</h2>
+      <p>Select <strong>New Plan</strong>. Enter a plan name, select the product and metal tiers, identify the provider network, and complete the financial structure.</p>
+      <figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/create-plan.png" alt="Cloud Health Office Create New Benefit Plan dialog showing basic information and financial structure fields." loading="lazy" /><figcaption>The portal groups identity, coverage dates, and plan-level cost sharing into one reviewable form.</figcaption></figure>
+      <ol><li>Use <strong>Acme Corporation</strong> as the synthetic sponsor.</li><li>Set the name to <strong>Evaluator Premier PPO 2026</strong>.</li><li>Select <strong>PPO</strong> and <strong>Gold</strong>.</li><li>Set the network to <strong>National Premier Network</strong>.</li><li>Use plan year <strong>2026</strong> and effective date <strong>01/01/2026</strong>.</li><li>Enter the deductible and out-of-pocket values from the table above, then select <strong>Create Plan</strong>.</li></ol>
+      <p>The portal generates the stable plan ID. Copy that ID from the plan list; every remaining tutorial refers to it as <code>PLAN_ID</code>.</p>
+      <figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/plan-list.png" alt="Cloud Health Office Benefit Plans workspace showing the synthetic evaluator plan and its generated plan ID." loading="lazy" /><figcaption>Search by the generated plan ID or plan name to isolate the evaluator configuration from other synthetic test plans.</figcaption></figure>
+
+      <h2 id="verify">3. Verify the Persisted Plan</h2>
+      <p>Verify the service response rather than relying only on a success notification:</p>
+      <div class="code-block-header"><span>Shell</span><span>local benefit-plan service</span></div>
+      <pre><code>export BENEFIT_PLAN_URL=http://localhost:5002
+export TENANT_ID=&lt;portal-tenant-id&gt;
+export PLAN_ID=&lt;generated-plan-id&gt;
+
+curl -fsS \
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  "${BENEFIT_PLAN_URL}/api/v1/plans/${PLAN_ID}" |
+  jq '{planId, planName, planType, metalLevel,
+       effectiveDate, costSharing}'</code></pre>
+      <p>Open the plan from the workspace and compare the overview with the API response. Sponsor, product type, metal tier, network, plan year, lifecycle status, premium, deductible, out-of-pocket maximums, and coinsurance should agree.</p>
+      <figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/plan-details.png" alt="Cloud Health Office benefit plan overview showing verified plan identity, network, lifecycle status, premium, deductibles, out-of-pocket maximums, and coinsurance." loading="lazy" /><figcaption>The plan overview projects the persisted service response into an operations-friendly verification screen.</figcaption></figure>
+      <div class="callout callout-success"><div class="callout-title">Completion check</div><p>The API and portal contain the generated plan ID, selected plan identity, 2026 effective date, $475 monthly premium, $1,500 individual deductible, $6,000 individual out-of-pocket maximum, and 20% plan-level coinsurance.</p></div>
+
+      <h2 id="troubleshooting">Troubleshooting</h2>
+      <table><thead><tr><th>Symptom</th><th>Check</th></tr></thead><tbody>
+        <tr><td>Create Plan remains disabled</td><td>Complete every required field, including Plan Name and Effective Date.</td></tr>
+        <tr><td>Plan is missing from the list</td><td>Clear filters and confirm the portal tenant matches the <code>X-Tenant-ID</code> used by the service.</td></tr>
+        <tr><td>API returns 404</td><td>Use the generated plan ID—not the display name—and the same tenant header.</td></tr>
+        <tr><td>Portal values differ from API values</td><td>Treat the API response as the verification boundary and record the projection issue for review.</td></tr>
+      </tbody></table>
+      <div class="docs-pager"><a href="/docs/benefit-plan-guide"><div class="pager-label">&larr; Concepts</div><div class="pager-title">Benefit Plan Configuration</div></a><a href="/docs/configure-benefits-cost-sharing" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Benefits &amp; Cost Sharing</div></a></div>
+    </div>
+  </div></main>
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button><div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &middot; Source-available platform (BSL 1.1)</p></div></div></footer>
+  <script>const toggle=document.getElementById('docsMobileToggle'),sidebar=document.getElementById('docsSidebar'),overlay=document.getElementById('docsSidebarOverlay');if(toggle&&sidebar){toggle.addEventListener('click',()=>{sidebar.classList.toggle('open');overlay.classList.toggle('open');});overlay.addEventListener('click',()=>{sidebar.classList.remove('open');overlay.classList.remove('open');});}</script>
+</body></html>

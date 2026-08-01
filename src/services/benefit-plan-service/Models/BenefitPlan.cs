@@ -379,6 +379,21 @@ public class NetworkTier
 /// </summary>
 public class CostSharing
 {
+    /// <summary>
+    /// Plan-level default coinsurance percentage used by administrative
+    /// surfaces. Service-level benefit rules remain authoritative during
+    /// adjudication.
+    /// </summary>
+    [JsonPropertyName("coinsurance")]
+    public decimal Coinsurance { get; set; }
+
+    /// <summary>
+    /// Informational monthly member premium displayed by administrative
+    /// surfaces. Premium billing remains the financial system of record.
+    /// </summary>
+    [JsonPropertyName("monthlyPremium")]
+    public decimal MonthlyPremium { get; set; }
+
     [JsonPropertyName("individualDeductible")]
     public decimal IndividualDeductible { get; set; }
 

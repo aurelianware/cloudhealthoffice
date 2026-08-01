@@ -559,6 +559,8 @@ public class AdapterNetworkTier
 
 public class AdapterCostSharing
 {
+    public decimal Coinsurance { get; set; }
+    public decimal MonthlyPremium { get; set; }
     public decimal IndividualDeductible { get; set; }
     public decimal FamilyDeductible { get; set; }
     public decimal IndividualOutOfPocketMax { get; set; }
@@ -574,6 +576,8 @@ public class AdapterCostSharing
 
     public static AdapterCostSharing From(CostSharing c) => new()
     {
+        Coinsurance = c.Coinsurance,
+        MonthlyPremium = c.MonthlyPremium,
         IndividualDeductible = c.IndividualDeductible,
         FamilyDeductible = c.FamilyDeductible,
         IndividualOutOfPocketMax = c.IndividualOutOfPocketMax,
@@ -590,6 +594,8 @@ public class AdapterCostSharing
 
     public CostSharing ToCostSharing() => new()
     {
+        Coinsurance = Coinsurance,
+        MonthlyPremium = MonthlyPremium,
         IndividualDeductible = IndividualDeductible,
         FamilyDeductible = FamilyDeductible,
         IndividualOutOfPocketMax = IndividualOutOfPocketMax,

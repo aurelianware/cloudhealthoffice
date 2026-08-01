@@ -1370,6 +1370,7 @@ public class BenefitPlanListItem
     public string Network { get; set; } = string.Empty;
     public int EnrolledMembers { get; set; }
     public int AssignedBenefits { get; set; }
+    public decimal MonthlyPremium { get; set; }
     public string Status { get; set; } = string.Empty;
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
@@ -1383,7 +1384,6 @@ public class BenefitPlanDetails : BenefitPlanListItem
     public decimal IndividualOOPMax { get; set; }
     public decimal FamilyOOPMax { get; set; }
     public decimal Coinsurance { get; set; }
-    public decimal MonthlyPremium { get; set; }
     public string PlanYear { get; set; } = string.Empty;
     public List<PlanBenefit> Benefits { get; set; } = new();
     public List<string> Exclusions { get; set; } = new();

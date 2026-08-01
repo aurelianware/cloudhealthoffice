@@ -1144,6 +1144,7 @@ public class ProviderService : IProviderService
 
 public class BenefitPlanService : IBenefitPlanService
 {
+    private static readonly JsonSerializerOptions BenefitPlanJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<BenefitPlanService> _logger;
@@ -1181,8 +1182,10 @@ public class BenefitPlanService : IBenefitPlanService
             if (!string.IsNullOrEmpty(productType))
                 query += $"planType={productType}";
 
-            var plans = await _httpClient.GetFromJsonAsync<List<BenefitPlanListItem>>(query);
-            return plans ?? new List<BenefitPlanListItem>();
+            var plans = await _httpClient.GetFromJsonAsync<List<BenefitPlanApiResponse>>(
+                query,
+                BenefitPlanJsonOptions);
+            return plans?.Select(MapListItem).ToList() ?? new List<BenefitPlanListItem>();
         }
         catch (HttpRequestException ex)
         {
@@ -1196,7 +1199,10 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<BenefitPlanDetails>($"{baseUrl}/v1/plans/{planId}");
+            var plan = await _httpClient.GetFromJsonAsync<BenefitPlanApiResponse>(
+                $"{baseUrl}/v1/plans/{Uri.EscapeDataString(planId)}",
+                BenefitPlanJsonOptions);
+            return plan == null ? null : MapDetails(plan);
         }
         catch (HttpRequestException ex)
         {
@@ -1219,9 +1225,19 @@ public class BenefitPlanService : IBenefitPlanService
                 payer = request.SponsorId,
                 planType = request.ProductType,
                 metalLevel = request.MetalTier,
-                network = request.Network,
                 effectiveDate = request.EffectiveDate == default ? DateTime.UtcNow : request.EffectiveDate,
-                planYear = request.PlanYear,
+                lineOfBusiness = "Commercial",
+                networkTiers = string.IsNullOrWhiteSpace(request.Network)
+                    ? Array.Empty<object>()
+                    : new[]
+                    {
+                        new
+                        {
+                            tierName = request.Network,
+                            tierLevel = 1,
+                            networkId = request.Network
+                        }
+                    },
                 costSharing = new
                 {
                     individualDeductible = request.IndividualDeductible,
@@ -1357,6 +1373,145 @@ public class BenefitPlanService : IBenefitPlanService
     private class CreateBenefitPlanResponse
     {
         public string PlanId { get; set; } = string.Empty;
+    }
+
+    private static BenefitPlanListItem MapListItem(BenefitPlanApiResponse plan)
+    {
+        var primaryNetwork = plan.NetworkTiers
+            .OrderBy(tier => tier.TierLevel)
+            .FirstOrDefault();
+
+        return new BenefitPlanListItem
+        {
+            PlanId = plan.PlanId,
+            PlanName = plan.PlanName,
+            SponsorId = plan.Payer,
+            SponsorName = plan.Payer,
+            ProductType = plan.PlanType,
+            Network = primaryNetwork?.NetworkId ?? primaryNetwork?.TierName ?? string.Empty,
+            EnrolledMembers = 0,
+            AssignedBenefits = plan.Benefits.Count,
+            MonthlyPremium = plan.CostSharing.MonthlyPremium,
+            Status = MapStatus(plan),
+            EffectiveDate = plan.EffectiveDate,
+            TerminationDate = plan.TerminationDate
+        };
+    }
+
+    private static BenefitPlanDetails MapDetails(BenefitPlanApiResponse plan)
+    {
+        var listItem = MapListItem(plan);
+        return new BenefitPlanDetails
+        {
+            PlanId = listItem.PlanId,
+            PlanName = listItem.PlanName,
+            SponsorId = listItem.SponsorId,
+            SponsorName = listItem.SponsorName,
+            ProductType = listItem.ProductType,
+            Network = listItem.Network,
+            EnrolledMembers = listItem.EnrolledMembers,
+            AssignedBenefits = listItem.AssignedBenefits,
+            MonthlyPremium = listItem.MonthlyPremium,
+            Status = listItem.Status,
+            EffectiveDate = listItem.EffectiveDate,
+            TerminationDate = listItem.TerminationDate,
+            MetalTier = plan.MetalLevel ?? string.Empty,
+            IndividualDeductible = plan.CostSharing.IndividualDeductible,
+            FamilyDeductible = plan.CostSharing.FamilyDeductible,
+            IndividualOOPMax = plan.CostSharing.IndividualOutOfPocketMax,
+            FamilyOOPMax = plan.CostSharing.FamilyOutOfPocketMax,
+            Coinsurance = plan.CostSharing.Coinsurance,
+            PlanYear = plan.EffectiveDate.Year.ToString(),
+            Benefits = plan.Benefits.Select(MapBenefit).ToList()
+        };
+    }
+
+    private static PlanBenefit MapBenefit(BenefitPlanApiBenefit benefit)
+    {
+        var coinsurance = benefit.InNetworkCoinsurance ?? benefit.CoinsurancePercentage;
+        var normalizedCoinsurance = NormalizePercent(coinsurance);
+
+        return new PlanBenefit
+        {
+            BenefitId = benefit.Id,
+            ServiceType = string.IsNullOrWhiteSpace(benefit.Description)
+                ? benefit.ServiceCategory
+                : benefit.Description,
+            Category = string.IsNullOrWhiteSpace(benefit.BenefitType)
+                ? "Medical"
+                : char.ToUpperInvariant(benefit.BenefitType[0]) + benefit.BenefitType[1..],
+            Copay = benefit.InNetworkCopay ?? benefit.CopayAmount,
+            CoinsurancePercent = normalizedCoinsurance,
+            CoveragePercent = normalizedCoinsurance.HasValue ? 100m - normalizedCoinsurance.Value : null,
+            AnnualLimit = benefit.VisitLimit,
+            PriorAuthRequired = benefit.PriorAuthRequired || benefit.RequiresPriorAuth
+        };
+    }
+
+    private static decimal? NormalizePercent(decimal? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return value.Value is >= 0m and <= 1m ? value.Value * 100m : value.Value;
+    }
+
+    private static string MapStatus(BenefitPlanApiResponse plan) => plan.VersionState switch
+    {
+        "Draft" => "Pending",
+        "Published" => plan.IsActive ? "Active" : "Inactive",
+        "Superseded" => "Inactive",
+        _ => plan.IsActive ? "Active" : "Inactive"
+    };
+
+    private sealed class BenefitPlanApiResponse
+    {
+        public string PlanId { get; set; } = string.Empty;
+        public string PlanName { get; set; } = string.Empty;
+        public string Payer { get; set; } = string.Empty;
+        public string PlanType { get; set; } = string.Empty;
+        public string? MetalLevel { get; set; }
+        public DateTime EffectiveDate { get; set; }
+        public DateTime? TerminationDate { get; set; }
+        public bool IsActive { get; set; }
+        public string VersionState { get; set; } = string.Empty;
+        public List<BenefitPlanApiNetworkTier> NetworkTiers { get; set; } = new();
+        public BenefitPlanApiCostSharing CostSharing { get; set; } = new();
+        public List<BenefitPlanApiBenefit> Benefits { get; set; } = new();
+    }
+
+    private sealed class BenefitPlanApiNetworkTier
+    {
+        public string TierName { get; set; } = string.Empty;
+        public int TierLevel { get; set; }
+        public string? NetworkId { get; set; }
+    }
+
+    private sealed class BenefitPlanApiCostSharing
+    {
+        public decimal IndividualDeductible { get; set; }
+        public decimal FamilyDeductible { get; set; }
+        public decimal IndividualOutOfPocketMax { get; set; }
+        public decimal FamilyOutOfPocketMax { get; set; }
+        public decimal Coinsurance { get; set; }
+        public decimal MonthlyPremium { get; set; }
+    }
+
+    private sealed class BenefitPlanApiBenefit
+    {
+        public string Id { get; set; } = string.Empty;
+        public string BenefitType { get; set; } = string.Empty;
+        public string ServiceCategory { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal? InNetworkCopay { get; set; }
+        public decimal? InNetworkCoinsurance { get; set; }
+        public decimal? CopayAmount { get; set; }
+        public decimal? CoinsurancePercentage { get; set; }
+        public bool PriorAuthRequired { get; set; }
+        public bool RequiresPriorAuth { get; set; }
+        public int? VisitLimit { get; set; }
     }
 }
 

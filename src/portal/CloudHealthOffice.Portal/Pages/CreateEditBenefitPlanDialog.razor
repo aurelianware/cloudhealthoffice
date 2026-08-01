@@ -1,4 +1,5 @@
 @using CloudHealthOffice.Portal.Services
+@using System.Globalization
 @inject IBenefitPlanService BenefitPlanService
 @inject ISnackbar Snackbar
 
@@ -120,6 +121,7 @@
                                         Variant="Variant.Outlined"
                                         Min="0"
                                         Format="C"
+                                        Culture="@UsCulture"
                                         Required="true"
                                         T="decimal" />
                     </MudItem>
@@ -140,6 +142,7 @@
                                         Variant="Variant.Outlined"
                                         Min="0"
                                         Format="C"
+                                        Culture="@UsCulture"
                                         Required="true"
                                         T="decimal" />
                     </MudItem>
@@ -150,6 +153,7 @@
                                         Variant="Variant.Outlined"
                                         Min="0"
                                         Format="C"
+                                        Culture="@UsCulture"
                                         Required="true"
                                         T="decimal" />
                     </MudItem>
@@ -160,6 +164,7 @@
                                         Variant="Variant.Outlined"
                                         Min="0"
                                         Format="C"
+                                        Culture="@UsCulture"
                                         Required="true"
                                         T="decimal" />
                     </MudItem>
@@ -170,6 +175,7 @@
                                         Variant="Variant.Outlined"
                                         Min="0"
                                         Format="C"
+                                        Culture="@UsCulture"
                                         Required="true"
                                         T="decimal" />
                     </MudItem>
@@ -210,6 +216,7 @@
     private CreateBenefitPlanRequest _request = new();
     private UpdateBenefitPlanRequest? _updateRequest;
     private DateTime? _effectiveDate = DateTime.Today;
+    private static readonly CultureInfo UsCulture = CultureInfo.GetCultureInfo("en-US");
 
     protected override async Task OnInitializedAsync()
     {
