@@ -173,6 +173,7 @@ public class AdapterBenefit
     public string Id { get; set; } = string.Empty;
     public string ServiceCategory { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public bool IsCovered { get; set; } = true;
     public List<string> CptCodes { get; set; } = new();
     public decimal? InNetworkCopay { get; set; }
     public decimal? OutNetworkCopay { get; set; }
@@ -227,6 +228,7 @@ public class AdapterBenefit
         b.Id = Id;
         b.ServiceCategory = ServiceCategory;
         b.Description = Description;
+        b.IsCovered = IsCovered;
         b.CptCodes = CptCodes.ToList();
         b.InNetworkCopay = InNetworkCopay;
         b.OutNetworkCopay = OutNetworkCopay;
@@ -252,6 +254,7 @@ public class AdapterBenefit
         Id = b.Id;
         ServiceCategory = b.ServiceCategory;
         Description = b.Description;
+        IsCovered = b.IsCovered;
         CptCodes = b.CptCodes.ToList();
         InNetworkCopay = b.InNetworkCopay;
         OutNetworkCopay = b.OutNetworkCopay;

@@ -1300,6 +1300,7 @@ public class BenefitPlanService : IBenefitPlanService
             benefitType = request.BenefitType,
             serviceCategory = request.ServiceCategory,
             description = request.Description,
+            isCovered = request.IsCovered,
             cptCodes = request.CptCodes,
             inNetworkCopay = request.InNetworkCopay,
             outNetworkCopay = request.OutNetworkCopay,
@@ -1443,7 +1444,7 @@ public class BenefitPlanService : IBenefitPlanService
             ProductType = plan.PlanType,
             Network = primaryNetwork?.NetworkId ?? primaryNetwork?.TierName ?? string.Empty,
             EnrolledMembers = 0,
-            AssignedBenefits = plan.Benefits.Count,
+            AssignedBenefits = plan.Benefits.Count(IsCovered),
             MonthlyPremium = plan.CostSharing.MonthlyPremium,
             Status = MapStatus(plan),
             EffectiveDate = plan.EffectiveDate,
@@ -1475,9 +1476,12 @@ public class BenefitPlanService : IBenefitPlanService
             FamilyOOPMax = plan.CostSharing.FamilyOutOfPocketMax,
             Coinsurance = plan.CostSharing.Coinsurance,
             PlanYear = plan.EffectiveDate.Year.ToString(),
-            Benefits = plan.Benefits.Select(MapBenefit).ToList()
+            Benefits = plan.Benefits.Where(IsCovered).Select(MapBenefit).ToList(),
+            Exclusions = plan.Benefits.Where(benefit => !IsCovered(benefit)).Select(MapBenefit).ToList()
         };
     }
+
+    private static bool IsCovered(BenefitPlanApiBenefit benefit) => benefit.IsCovered != false;
 
     private static PlanBenefit MapBenefit(BenefitPlanApiBenefit benefit)
     {
@@ -1490,6 +1494,7 @@ public class BenefitPlanService : IBenefitPlanService
             BenefitType = string.IsNullOrWhiteSpace(benefit.BenefitType) ? "medical" : benefit.BenefitType,
             ServiceCategory = benefit.ServiceCategory,
             Description = benefit.Description,
+            IsCovered = IsCovered(benefit),
             ServiceType = string.IsNullOrWhiteSpace(benefit.Description)
                 ? benefit.ServiceCategory
                 : benefit.Description,
@@ -1570,6 +1575,7 @@ public class BenefitPlanService : IBenefitPlanService
         public string BenefitType { get; set; } = string.Empty;
         public string ServiceCategory { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public bool? IsCovered { get; set; }
         public List<string> CptCodes { get; set; } = new();
         public decimal? InNetworkCopay { get; set; }
         public decimal? OutNetworkCopay { get; set; }

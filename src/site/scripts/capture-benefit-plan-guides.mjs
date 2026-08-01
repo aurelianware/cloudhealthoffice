@@ -74,6 +74,21 @@ try {
     fullPage: false
   });
   await page.getByRole("button", { name: "Cancel" }).click();
+
+  await page.locator(".mud-tab").filter({ hasText: "Exclusions" }).click();
+  await page.getByText("Services Not Covered", { exact: true }).waitFor();
+  await page.screenshot({
+    path: path.join(outputDirectory, "exclusions-tab.png"),
+    fullPage: false
+  });
+
+  await page.getByRole("button", { name: "Add Exclusion" }).click();
+  await page.getByText("Add Plan Exclusion", { exact: true }).waitFor();
+  await page.screenshot({
+    path: path.join(outputDirectory, "add-plan-exclusion.png"),
+    fullPage: false
+  });
+  await page.getByRole("button", { name: "Cancel" }).click();
 } finally {
   await browser.close();
 }

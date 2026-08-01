@@ -1388,7 +1388,7 @@ public class BenefitPlanDetails : BenefitPlanListItem
     public decimal Coinsurance { get; set; }
     public string PlanYear { get; set; } = string.Empty;
     public List<PlanBenefit> Benefits { get; set; } = new();
-    public List<string> Exclusions { get; set; } = new();
+    public List<PlanBenefit> Exclusions { get; set; } = new();
 }
 
 public class PlanBenefit
@@ -1397,6 +1397,7 @@ public class PlanBenefit
     public string BenefitType { get; set; } = "medical";
     public string ServiceCategory { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public bool IsCovered { get; set; } = true;
     public string ServiceType { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
     public decimal? Copay { get; set; }
@@ -1417,6 +1418,7 @@ public class UpsertPlanBenefitRequest
     public string BenefitType { get; set; } = "medical";
     public string ServiceCategory { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public bool IsCovered { get; set; } = true;
     public List<string> CptCodes { get; set; } = new();
     public decimal? InNetworkCopay { get; set; }
     public decimal? OutNetworkCopay { get; set; }
