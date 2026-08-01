@@ -1484,6 +1484,9 @@ public class BenefitPlanService : IBenefitPlanService
         return new BenefitPlanDetails
         {
             PlanId = listItem.PlanId,
+            VersionId = plan.VersionId,
+            VersionNumber = plan.VersionNumber,
+            VersionState = plan.VersionState,
             PlanName = listItem.PlanName,
             SponsorId = listItem.SponsorId,
             SponsorName = listItem.SponsorName,
@@ -1574,6 +1577,8 @@ public class BenefitPlanService : IBenefitPlanService
     private sealed class BenefitPlanApiResponse
     {
         public string PlanId { get; set; } = string.Empty;
+        public string VersionId { get; set; } = string.Empty;
+        public int VersionNumber { get; set; }
         public string PlanName { get; set; } = string.Empty;
         public string Payer { get; set; } = string.Empty;
         public string PlanType { get; set; } = string.Empty;
