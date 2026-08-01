@@ -497,6 +497,9 @@ public interface IProviderService
     Task<string> CreateProviderAsync(CreateProviderRequest request);
     Task UpdateProviderAsync(string providerId, UpdateProviderRequest request);
     Task<List<string>> GetSpecialtiesAsync();
+    Task<ProviderNetworkInfo?> GetNetworkAsync(string networkId);
+    Task<ProviderNetworkRoster?> GetNetworkRosterAsync(string networkId, DateTime asOfDate, int pageSize = 25);
+    Task<ProviderNetworkMembership?> GetNetworkMembershipAsync(string networkId, string npi, DateTime asOfDate);
 
     /// <summary>
     /// Trigger an on-demand verification refresh for a single provider
@@ -523,6 +526,76 @@ public class ProviderIntegrityRefreshResult
     public string? IntegrityRating { get; set; }
     public DateTimeOffset? LastVerifiedAt { get; set; }
     public DateTimeOffset? NextVerificationDue { get; set; }
+}
+
+public class ProviderNetworkInfo
+{
+    public string OrganizationId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string NetworkType { get; set; } = string.Empty;
+    public string LineOfBusiness { get; set; } = string.Empty;
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public int VersionNumber { get; set; }
+    public string VersionState { get; set; } = string.Empty;
+}
+
+public class ProviderNetworkRoster
+{
+    public List<ProviderNetworkRosterEntry> Items { get; set; } = new();
+    public string? NextCursor { get; set; }
+    public int PageSize { get; set; }
+}
+
+public class ProviderNetworkRosterEntry
+{
+    public string ProviderId { get; set; } = string.Empty;
+    public ProviderNetworkRosterProvider Provider { get; set; } = new();
+    public ProviderNetworkRosterParticipation Participation { get; set; } = new();
+    public ProviderNetworkRosterIntegrity? IntegrityScore { get; set; }
+}
+
+public class ProviderNetworkRosterProvider
+{
+    public string Npi { get; set; } = string.Empty;
+    public string ProviderType { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string PrimarySpecialty { get; set; } = string.Empty;
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public bool AcceptingNewPatients { get; set; }
+}
+
+public class ProviderNetworkRosterParticipation
+{
+    public string? PlanId { get; set; }
+    public string LineOfBusiness { get; set; } = string.Empty;
+    public string NetworkTier { get; set; } = string.Empty;
+    public bool AcceptingNewPatients { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+}
+
+public class ProviderNetworkRosterIntegrity
+{
+    public int? Score { get; set; }
+    public string? Rating { get; set; }
+    public DateTimeOffset? LastVerifiedAt { get; set; }
+}
+
+public class ProviderNetworkMembership
+{
+    public string NetworkId { get; set; } = string.Empty;
+    public string Npi { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
+    public bool IsActiveMember { get; set; }
+    public DateTime AsOfDate { get; set; }
+    public DateTime? EffectiveFrom { get; set; }
+    public DateTime? EffectiveTo { get; set; }
+    public string? ParticipationStatus { get; set; }
+    public string? LineOfBusiness { get; set; }
+    public string? NetworkTier { get; set; }
 }
 
 public interface IBenefitPlanService
