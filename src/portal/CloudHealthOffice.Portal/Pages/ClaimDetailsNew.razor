@@ -131,6 +131,62 @@
             </MudPaper>
         }
 
+        @if (HasExaminerDispositionRecord)
+        {
+            <MudPaper Class="pa-5 mb-4" Elevation="2" Style="border-left: 4px solid var(--mud-palette-success);">
+                <MudGrid>
+                    <MudItem xs="12" md="8">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.FactCheck" Color="Color.Success" Size="Size.Large" />
+                            <div>
+                                <MudText Typo="Typo.h6">Examiner Disposition Record</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Human review completed; the original pend evidence remains attached to this claim.
+                                </MudText>
+                            </div>
+                        </MudStack>
+                        <MudText Typo="Typo.subtitle2">Original review reason</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-3">@_claim.PendDetails!.PendReason</MudText>
+                        @if (!string.IsNullOrWhiteSpace(_claim.ClaimNotes))
+                        {
+                            <MudText Typo="Typo.subtitle2">Examiner notes</MudText>
+                            <MudText Typo="Typo.body2">@_claim.ClaimNotes</MudText>
+                        }
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudPaper Class="pa-4" Elevation="0" Style="background: rgba(0,255,136,0.05);">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Final disposition</MudText>
+                            <MudChip T="string"
+                                     Color="@GetStatusColor(_claim.Status)"
+                                     Variant="Variant.Filled"
+                                     Size="Size.Large"
+                                     Class="my-2">
+                                @_claim.Status
+                            </MudChip>
+                            @if (_claim.AdjudicatedDate.HasValue)
+                            {
+                                <MudText Typo="Typo.body2">Recorded @_claim.AdjudicatedDate.Value.ToString("MMM d, yyyy HH:mm 'UTC'")</MudText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_claim.PendDetails?.PendCode))
+                            {
+                                <MudText Typo="Typo.body2" Class="mt-2">Pend code: <code>@_claim.PendDetails.PendCode</code></MudText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_claim.AiExamination?.ExaminerAgreement))
+                            {
+                                <MudDivider Class="my-3" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">AI advisory feedback</MudText>
+                                <MudText Typo="Typo.body2">@_claim.AiExamination.ExaminerAgreement</MudText>
+                                @if (!string.IsNullOrWhiteSpace(_claim.AiExamination.ExaminerUserId))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">by @_claim.AiExamination.ExaminerUserId</MudText>
+                                }
+                            }
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        }
+
         @if (_claim.AiExamination is { } aiExamination)
         {
             <MudPaper Class="pa-5 mb-4" Elevation="2" Style="border: 1px solid rgba(0,255,255,0.35);">
@@ -1164,6 +1220,11 @@
 
     private bool CanResolvePendedClaim =>
         string.Equals(_claim?.Status, "Pended", StringComparison.OrdinalIgnoreCase);
+
+    private bool HasExaminerDispositionRecord =>
+        _claim?.PendDetails is not null
+        && (_claim.Status.Equals("Approved", StringComparison.OrdinalIgnoreCase)
+            || _claim.Status.Equals("Denied", StringComparison.OrdinalIgnoreCase));
 
     private async Task ResolvePendedClaimAsync(string disposition, string reason)
     {
