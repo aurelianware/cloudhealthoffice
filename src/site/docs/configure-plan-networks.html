@@ -1,0 +1,44 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" /><title>Configure Benefit Plan Networks — Cloud Health Office</title><meta name="description" content="Configure network tiers and verify in-network and out-of-network benefit behavior in Cloud Health Office." /><link rel="canonical" href="https://cloudhealthoffice.com/docs/configure-plan-networks" /><link rel="stylesheet" href="/css/sentinel.css" /><link rel="stylesheet" href="/css/docs.css" /><script src="/js/auth.js"></script><script src="/js/mobile-nav.js"></script></head><body><a href="#main-content" class="skip-to-main">Skip to main content</a>
+<nav><div class="nav-inner"><a href="/" class="nav-logo"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle navigation menu" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="/contact">Contact Sales</a></li></ul></div></div></nav>
+<main id="main-content"><div class="docs-wrapper"><aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner"><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Benefit Plan Tutorials</div><ul><li><a href="/docs/create-verify-benefit-plan">1. Create &amp; Verify</a></li><li><a href="/docs/configure-benefits-cost-sharing">2. Benefits &amp; Cost Sharing</a></li><li><a href="/docs/publish-version-benefit-plan">3. Publish &amp; Version</a></li><li><a href="/docs/validate-benefit-plan">4. Validate the Plan</a></li><li><a class="active" href="/docs/configure-plan-networks">5. Networks</a></li></ul></div><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#model">Network Model</a></li><li><a href="#configure">Configure Tiers</a></li><li><a href="#benefits">Tiered Benefits</a></li><li><a href="#verify">Verify</a></li></ul></div></div></aside>
+<div class="docs-content"><div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Configure Plan Networks</span></div><h1>Configure Plan Networks</h1><p class="docs-subtitle">Connect plan-level network tiers to distinct in-network and out-of-network cost sharing, then verify the tier selected during adjudication.</p>
+<div class="callout callout-info"><div class="callout-title">Two related configurations</div><p>The plan defines tier identities and cost-sharing behavior. Provider participation determines which tier applies to a claim. Test both sides of that boundary.</p></div>
+<h2 id="model">Network Model</h2><div class="architecture-diagram"><div class="arch-row"><div class="arch-box"><strong>Provider participation</strong><br><span>Provider + plan + network</span></div><div class="arch-arrow">&rarr;</div><div class="arch-box primary"><strong>Network tier</strong><br><span>Tier 1 or Tier 2</span></div><div class="arch-arrow">&rarr;</div><div class="arch-box success"><strong>Benefit rule</strong><br><span>Copay / coinsurance</span></div></div></div>
+<table><thead><tr><th>Tier</th><th>Example network ID</th><th>Typical cost sharing</th></tr></thead><tbody><tr><td>Tier 1 — In-Network</td><td><code>CHO-PREMIER</code></td><td>Lower copay and coinsurance</td></tr><tr><td>Tier 2 — Out-of-Network</td><td><code>CHO-EXTENDED</code></td><td>Higher cost sharing and deductible</td></tr></tbody></table>
+<h2 id="configure">1. Configure Network Tiers</h2><p>Network tiers are versioned plan identity. Include them when creating a draft, or amend a published plan and publish the successor.</p><div class="code-block-header"><span>JSON</span><span>inside a plan draft</span></div><pre><code>{
+  "networkTiers": [
+    {
+      "tierName": "In-Network",
+      "tierLevel": 1,
+      "networkId": "CHO-PREMIER"
+    },
+    {
+      "tierName": "Out-of-Network",
+      "tierLevel": 2,
+      "networkId": "CHO-EXTENDED"
+    }
+  ]
+}</code></pre>
+<p>Keep the network ID stable and use human-readable tier names. Provider-network participation should reference the same identifier rather than copying display labels.</p>
+<h2 id="benefits">2. Configure Tiered Cost Sharing</h2><p>Each covered-service rule can carry both in-network and out-of-network values:</p><div class="code-block-header"><span>JSON</span><span>office visit benefit</span></div><pre><code>{
+  "benefitType": "medical",
+  "serviceCategory": "98",
+  "description": "Professional Office Visit",
+  "inNetworkCopay": 30.00,
+  "outNetworkCopay": 60.00,
+  "deductibleApplies": false,
+  "oopApplies": true,
+  "priorAuthRequired": false
+}</code></pre>
+<p>For deductible-based services, configure the plan&rsquo;s in-network and out-of-network deductible and OOP maximum fields as well as the service-level coinsurance.</p>
+<h2 id="verify">3. Verify Both Paths</h2><ol><li>Retrieve the member view and confirm that the category exposes the expected In-Network and Out-of-Network values.</li><li>Submit a synthetic claim for a provider participating in <code>CHO-PREMIER</code>.</li><li>Confirm the adjudication request records the in-network tier and applies the lower cost sharing.</li><li>Repeat with a synthetic nonparticipating provider and confirm the out-of-network rule.</li><li>Test an emergency scenario separately; emergency and surprise-billing protections can override ordinary network treatment.</li></ol>
+<div class="code-block-header"><span>Shell</span><span>inspect the member view</span></div><pre><code>curl -fsS \
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  "${BENEFIT_PLAN_URL}/api/v1/benefit-plans/${PLAN_ID}/member-view?serviceDate=2026-07-15" |
+  jq '.categories[] |
+      select(.serviceCategory == "98") |
+      {displayName,inNetwork,outOfNetwork}'</code></pre>
+<div class="callout callout-success"><div class="callout-title">Completion check</div><p>The member view exposes both tiers, provider participation selects the expected tier, and two otherwise equivalent synthetic claims produce the configured in-network and out-of-network responsibility.</p></div>
+<h2>Evaluator Review Questions</h2><ul><li>Can the reviewer trace a provider&rsquo;s participation record to the plan network ID?</li><li>Are network-tier fields present for every service category that permits out-of-network care?</li><li>Do accumulator buckets align with network-specific deductible and OOP values?</li><li>Are emergency and regulatory exceptions covered by explicit test cases?</li></ul>
+<div class="docs-pager"><a href="/docs/validate-benefit-plan"><div class="pager-label">&larr; Previous</div><div class="pager-title">Validate the Plan</div></a><a href="/docs/benefit-plan-guide" class="next"><div class="pager-label">Reference &rarr;</div><div class="pager-title">Benefit Plan Concepts</div></a></div>
+</div></div></main><button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button><div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div><footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p></div></div></footer><script>const toggle=document.getElementById('docsMobileToggle'),sidebar=document.getElementById('docsSidebar'),overlay=document.getElementById('docsSidebarOverlay');if(toggle&&sidebar){toggle.onclick=()=>{sidebar.classList.toggle('open');overlay.classList.toggle('open');};overlay.onclick=()=>{sidebar.classList.remove('open');overlay.classList.remove('open');};}</script></body></html>
