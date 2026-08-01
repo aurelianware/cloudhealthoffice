@@ -1103,6 +1103,64 @@ public class ProviderService : IProviderService
         }
     }
 
+    public async Task<ProviderNetworkInfo?> GetNetworkAsync(string networkId)
+    {
+        var baseUrl = _configuration["Services:ProviderService"];
+        try
+        {
+            using var response = await _httpClient.GetAsync(
+                $"{baseUrl}/v1/networks/{Uri.EscapeDataString(networkId)}");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ProviderNetworkInfo>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Provider Service");
+            throw new ServiceUnavailableException("Provider Service", ex);
+        }
+    }
+
+    public async Task<ProviderNetworkRoster?> GetNetworkRosterAsync(
+        string networkId, DateTime asOfDate, int pageSize = 25)
+    {
+        var baseUrl = _configuration["Services:ProviderService"];
+        try
+        {
+            var url = $"{baseUrl}/v1/networks/{Uri.EscapeDataString(networkId)}/roster" +
+                      $"?asOfDate={asOfDate:yyyy-MM-dd}&pageSize={Math.Clamp(pageSize, 1, 200)}";
+            using var response = await _httpClient.GetAsync(url);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ProviderNetworkRoster>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Provider Service");
+            throw new ServiceUnavailableException("Provider Service", ex);
+        }
+    }
+
+    public async Task<ProviderNetworkMembership?> GetNetworkMembershipAsync(
+        string networkId, string npi, DateTime asOfDate)
+    {
+        var baseUrl = _configuration["Services:ProviderService"];
+        try
+        {
+            var url = $"{baseUrl}/v1/networks/{Uri.EscapeDataString(networkId)}/members/" +
+                      $"{Uri.EscapeDataString(npi)}?asOf={asOfDate:yyyy-MM-dd}";
+            using var response = await _httpClient.GetAsync(url);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ProviderNetworkMembership>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Provider Service");
+            throw new ServiceUnavailableException("Provider Service", ex);
+        }
+    }
+
     public async Task<ProviderIntegrityRefreshResult?> RefreshProviderVerificationAsync(string providerId)
     {
         var baseUrl = _configuration["Services:ProviderService"];

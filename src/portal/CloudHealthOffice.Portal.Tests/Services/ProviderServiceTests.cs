@@ -303,6 +303,96 @@ public class ProviderServiceTests
         result.Should().Contain("Pediatrics");
     }
 
+    [Fact]
+    public async Task GetNetworkAsync_WhenApiReturns200_DeserializesNetworkIdentity()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            organizationId = "CHO-PREMIER",
+            name = "Premier Network",
+            networkType = "PPO",
+            lineOfBusiness = "Commercial",
+            effectiveDate = "2026-01-01T00:00:00Z",
+            status = "Active",
+            versionNumber = 2,
+            versionState = "Active"
+        }, JsonOpts);
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetNetworkAsync("CHO PREMIER");
+
+        result.Should().NotBeNull();
+        result!.OrganizationId.Should().Be("CHO-PREMIER");
+        result.VersionNumber.Should().Be(2);
+        handler.CapturedUrls.Single().Should().Contain("/v1/networks/CHO%20PREMIER");
+    }
+
+    [Fact]
+    public async Task GetNetworkRosterAsync_BuildsSnapshotQueryAndDeserializesParticipation()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            items = new[]
+            {
+                new
+                {
+                    providerId = "PRV-1",
+                    provider = new { npi = "1999999992", displayName = "Demo Medical Group", primarySpecialty = "General Practice" },
+                    participation = new { planId = "PLAN-1", lineOfBusiness = "Commercial", networkTier = "InNetwork", effectiveDate = "2026-01-01" },
+                    integrityScore = new { score = 100, rating = "Clear" }
+                }
+            },
+            pageSize = 25
+        }, JsonOpts);
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetNetworkRosterAsync("CHO-PREMIER", new DateTime(2026, 8, 1));
+
+        result.Should().NotBeNull();
+        result!.Items.Should().ContainSingle();
+        result.Items[0].Provider.Npi.Should().Be("1999999992");
+        result.Items[0].Participation.PlanId.Should().Be("PLAN-1");
+        result.Items[0].IntegrityScore!.Rating.Should().Be("Clear");
+        handler.CapturedUrls.Single().Should().Contain("asOfDate=2026-08-01").And.Contain("pageSize=25");
+    }
+
+    [Fact]
+    public async Task GetNetworkMembershipAsync_ReturnsActiveSnapshotAndEncodesNpi()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            networkId = "CHO-PREMIER",
+            npi = "1999999992",
+            providerId = "PRV-1",
+            isActiveMember = true,
+            asOfDate = "2026-08-01",
+            participationStatus = "active",
+            lineOfBusiness = "Commercial",
+            networkTier = "InNetwork"
+        }, JsonOpts);
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetNetworkMembershipAsync("CHO-PREMIER", "1999999992", new DateTime(2026, 8, 1));
+
+        result.Should().NotBeNull();
+        result!.IsActiveMember.Should().BeTrue();
+        result.NetworkTier.Should().Be("InNetwork");
+        handler.CapturedUrls.Single().Should().Contain("/members/1999999992?asOf=2026-08-01");
+    }
+
+    [Fact]
+    public async Task GetNetworkMembershipAsync_WhenParticipationDoesNotExist_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.NotFound, "{}")));
+
+        var result = await sut.GetNetworkMembershipAsync("CHO-PREMIER", "1000000004", new DateTime(2026, 8, 1));
+
+        result.Should().BeNull();
+    }
+
     // ── ProviderContract and ProviderPerformance via GetProviderByIdAsync ────────
 
     [Fact]
