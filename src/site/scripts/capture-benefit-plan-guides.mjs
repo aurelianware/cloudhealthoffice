@@ -75,6 +75,21 @@ try {
   });
   await page.getByRole("button", { name: "Cancel" }).click();
 
+  await page.locator(".mud-tab").filter({ hasText: "Networks" }).click();
+  await page.getByText("Plan Network Tiers", { exact: true }).waitFor();
+  await page.screenshot({
+    path: path.join(outputDirectory, "networks-tab.png"),
+    fullPage: false
+  });
+
+  await page.getByRole("button", { name: "Add Network Tier" }).click();
+  await page.getByText("Add Network Tier", { exact: true }).first().waitFor();
+  await page.screenshot({
+    path: path.join(outputDirectory, "add-network-tier.png"),
+    fullPage: false
+  });
+  await page.getByRole("button", { name: "Cancel" }).click();
+
   await page.locator(".mud-tab").filter({ hasText: "Exclusions" }).click();
   await page.getByText("Services Not Covered", { exact: true }).waitFor();
   await page.screenshot({

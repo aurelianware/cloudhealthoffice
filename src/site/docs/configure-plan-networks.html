@@ -5,10 +5,18 @@
 <div class="callout callout-info"><div class="callout-title">Two related configurations</div><p>The plan defines tier identities and cost-sharing behavior. Provider participation determines which tier applies to a claim. Test both sides of that boundary.</p></div>
 <h2 id="model">Network Model</h2><div class="architecture-diagram"><div class="arch-row"><div class="arch-box"><strong>Provider participation</strong><br><span>Provider + plan + network</span></div><div class="arch-arrow">&rarr;</div><div class="arch-box primary"><strong>Network tier</strong><br><span>Tier 1 or Tier 2</span></div><div class="arch-arrow">&rarr;</div><div class="arch-box success"><strong>Benefit rule</strong><br><span>Copay / coinsurance</span></div></div></div>
 <table><thead><tr><th>Tier</th><th>Example network ID</th><th>Typical cost sharing</th></tr></thead><tbody><tr><td>Tier 1 — In-Network</td><td><code>CHO-PREMIER</code></td><td>Lower copay and coinsurance</td></tr><tr><td>Tier 2 — Out-of-Network</td><td><code>CHO-EXTENDED</code></td><td>Higher cost sharing and deductible</td></tr></tbody></table>
-<h2 id="configure">1. Configure Network Tiers</h2><p>Network tiers are versioned plan identity. Include them when creating a draft, or amend a published plan and publish the successor.</p><div class="code-block-header"><span>JSON</span><span>inside a plan draft</span></div><pre><code>{
-  "networkTiers": [
+<h2 id="configure">1. Configure Network Tiers</h2><p>Open the plan in the portal and select <strong>Networks</strong>. The tier table shows the priority, operator-facing name, and stable network organization ID used to resolve provider participation.</p>
+<figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/networks-tab.png" alt="Cloud Health Office Networks tab showing preferred and out-of-network tiers with priorities, stable network IDs, and edit and remove actions." loading="lazy" /><figcaption>The Networks tab makes the complete effective tier set visible instead of collapsing the plan to its primary network.</figcaption></figure>
+<p>Choose <strong>Add Network Tier</strong>. Set a unique priority beginning with Tier 1, enter a human-readable tier name, and use the same stable organization ID referenced by provider participation. Duplicate tier levels and network IDs are rejected.</p>
+<figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/add-network-tier.png" alt="Add Network Tier dialog with tier level, tier name, and stable network ID fields." loading="lazy" /><figcaption>The editor explains the provider-participation boundary and makes the version-safe publish behavior explicit before saving.</figcaption></figure>
+<p>Select <strong>Add Network Tier</strong> to publish the successor version. Use the pencil action to revise a tier or the delete action to remove it; each operation replaces the complete tier set atomically on one new published version, preserving the prior version for audit.</p>
+<h3>Optional: automate the complete tier set through the API</h3><p>For repeatable environment setup, send the complete desired collection. This endpoint uses the same amendment-and-publish behavior as the portal.</p><div class="code-block-header"><span>Shell</span><span>replace network tiers</span></div><pre><code>curl -fsS -X PUT \
+  "${BENEFIT_PLAN_URL}/api/v1/plans/${PLAN_ID}/network-tiers" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  -d '[
     {
-      "tierName": "In-Network",
+      "tierName": "Premier Network",
       "tierLevel": 1,
       "networkId": "CHO-PREMIER"
     },
@@ -17,9 +25,8 @@
       "tierLevel": 2,
       "networkId": "CHO-EXTENDED"
     }
-  ]
-}</code></pre>
-<p>Keep the network ID stable and use human-readable tier names. Provider-network participation should reference the same identifier rather than copying display labels.</p>
+  ]' | jq</code></pre>
+<div class="callout callout-warning"><div class="callout-title">Replace semantics</div><p>The API body is the complete desired tier set. Omitting an existing tier removes it from the successor version; retrieve and review the current plan before automating an update.</p></div>
 <h2 id="benefits">2. Configure Tiered Cost Sharing</h2><p>Each covered-service rule can carry both in-network and out-of-network values:</p><div class="code-block-header"><span>JSON</span><span>office visit benefit</span></div><pre><code>{
   "benefitType": "medical",
   "serviceCategory": "98",

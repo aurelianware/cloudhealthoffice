@@ -234,6 +234,52 @@ public class BenefitPlansControllerVersionTests
     }
 
     [Fact]
+    public async Task ReplaceNetworkTiers_amends_and_returns_200()
+    {
+        var (controller, service, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
+
+        var result = await controller.ReplaceNetworkTiers(v1.PlanId, new List<NetworkTier>
+        {
+            new() { TierName = "Preferred", TierLevel = 1, NetworkId = "NET-A" },
+            new() { TierName = "Extended", TierLevel = 2, NetworkId = "NET-B" },
+        });
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IReadOnlyList<NetworkTier>>()
+            .Which.Should().HaveCount(2);
+        (await service.GetPlanAsync(v1.PlanId, Tenant))!.VersionNumber.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ReplaceNetworkTiers_duplicate_level_returns_400()
+    {
+        var (controller, service, repo) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
+
+        var result = await controller.ReplaceNetworkTiers(v1.PlanId, new List<NetworkTier>
+        {
+            new() { TierName = "Preferred", TierLevel = 1, NetworkId = "NET-A" },
+            new() { TierName = "Extended", TierLevel = 1, NetworkId = "NET-B" },
+        });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        repo.Docs.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ReplaceNetworkTiers_unknown_plan_returns_404()
+    {
+        var (controller, _, _) = Build();
+
+        var result = await controller.ReplaceNetworkTiers("missing", new List<NetworkTier>());
+
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
     public async Task GetPlan_routes_through_adapter_factory()
     {
         RecordingChoAdapter? recording = null;

@@ -1284,6 +1284,32 @@ public class BenefitPlanService : IBenefitPlanService
         UpsertPlanBenefitRequest request)
         => WriteBenefitAsync(HttpMethod.Put, planId, benefitId, request);
 
+    public async Task ReplaceNetworkTiersAsync(
+        string planId,
+        IReadOnlyList<PlanNetworkTier> networkTiers)
+    {
+        var baseUrl = _configuration["Services:BenefitPlanService"];
+        var url = $"{baseUrl}/v1/plans/{Uri.EscapeDataString(planId)}/network-tiers";
+        var payload = networkTiers.Select(tier => new
+        {
+            id = tier.Id,
+            tierName = tier.TierName.Trim(),
+            tierLevel = tier.TierLevel,
+            networkId = tier.NetworkId.Trim(),
+        });
+
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync(url, payload);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Benefit Plan Service");
+            throw new ServiceUnavailableException("Benefit Plan Service", ex);
+        }
+    }
+
     private async Task WriteBenefitAsync(
         HttpMethod method,
         string planId,
@@ -1477,7 +1503,16 @@ public class BenefitPlanService : IBenefitPlanService
             Coinsurance = plan.CostSharing.Coinsurance,
             PlanYear = plan.EffectiveDate.Year.ToString(),
             Benefits = plan.Benefits.Where(IsCovered).Select(MapBenefit).ToList(),
-            Exclusions = plan.Benefits.Where(benefit => !IsCovered(benefit)).Select(MapBenefit).ToList()
+            Exclusions = plan.Benefits.Where(benefit => !IsCovered(benefit)).Select(MapBenefit).ToList(),
+            NetworkTiers = plan.NetworkTiers
+                .OrderBy(tier => tier.TierLevel)
+                .Select(tier => new PlanNetworkTier
+                {
+                    Id = tier.Id,
+                    TierName = tier.TierName,
+                    TierLevel = tier.TierLevel,
+                    NetworkId = tier.NetworkId ?? string.Empty,
+                }).ToList()
         };
     }
 
@@ -1554,6 +1589,7 @@ public class BenefitPlanService : IBenefitPlanService
 
     private sealed class BenefitPlanApiNetworkTier
     {
+        public string Id { get; set; } = string.Empty;
         public string TierName { get; set; } = string.Empty;
         public int TierLevel { get; set; }
         public string? NetworkId { get; set; }

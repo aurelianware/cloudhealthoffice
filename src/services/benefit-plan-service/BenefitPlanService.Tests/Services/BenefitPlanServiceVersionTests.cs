@@ -353,6 +353,86 @@ public class BenefitPlanServiceVersionTests
     }
 
     [Fact]
+    public async Task ReplaceNetworkTiersAsync_publishes_one_successor_with_complete_tier_set()
+    {
+        var (service, _, transitions, _) = Build();
+        var source = SamplePlan();
+        source.NetworkTiers.Add(new NetworkTier
+        {
+            Id = "tier-1", TierName = "Preferred", TierLevel = 1, NetworkId = "NET-A"
+        });
+        var draft = await service.CreateDraftAsync(source, Tenant, Actor);
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
+
+        var replacement = new[]
+        {
+            new NetworkTier { Id = "tier-1", TierName = "Premier", TierLevel = 1, NetworkId = "NET-A" },
+            new NetworkTier { Id = "tier-2", TierName = "Extended", TierLevel = 2, NetworkId = "NET-B" },
+        };
+        var updated = await service.ReplaceNetworkTiersAsync(v1.PlanId, Tenant, Actor, replacement);
+
+        updated.Should().BeEquivalentTo(replacement);
+        var current = await service.GetPlanAsync(v1.PlanId, Tenant);
+        current!.VersionNumber.Should().Be(2);
+        current.PredecessorVersionId.Should().Be(v1.VersionId);
+        current.NetworkTiers.Should().BeEquivalentTo(replacement);
+        transitions.Items.Select(item => item.TransitionType).Should().BeEquivalentTo(new[]
+        {
+            PlanVersionTransitionType.Publish,
+            PlanVersionTransitionType.Amend,
+            PlanVersionTransitionType.Supersede,
+        });
+    }
+
+    [Fact]
+    public async Task ReplaceNetworkTiersAsync_rejects_duplicate_levels_without_creating_draft()
+    {
+        var (service, repo, _, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
+
+        var act = () => service.ReplaceNetworkTiersAsync(v1.PlanId, Tenant, Actor, new[]
+        {
+            new NetworkTier { TierName = "Preferred", TierLevel = 1, NetworkId = "NET-A" },
+            new NetworkTier { TierName = "Extended", TierLevel = 1, NetworkId = "NET-B" },
+        });
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("Tier levels must be unique*");
+        repo.Docs.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ReplaceNetworkTiersAsync_rejects_duplicate_network_ids_case_insensitively()
+    {
+        var (service, repo, _, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
+
+        var act = () => service.ReplaceNetworkTiersAsync(v1.PlanId, Tenant, Actor, new[]
+        {
+            new NetworkTier { TierName = "Preferred", TierLevel = 1, NetworkId = "NET-A" },
+            new NetworkTier { TierName = "Extended", TierLevel = 2, NetworkId = "net-a" },
+        });
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("Network IDs must be unique*");
+        repo.Docs.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ReplaceNetworkTiersAsync_returns_null_for_unknown_plan()
+    {
+        var (service, repo, _, _) = Build();
+
+        var updated = await service.ReplaceNetworkTiersAsync(
+            "missing", Tenant, Actor, Array.Empty<NetworkTier>());
+
+        updated.Should().BeNull();
+        repo.Docs.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task LegacyCreatePlanAsync_marks_v1_published_for_backcompat()
     {
         var (service, _, _, _) = Build();
