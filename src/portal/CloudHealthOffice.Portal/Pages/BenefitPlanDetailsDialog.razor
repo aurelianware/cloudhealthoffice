@@ -1,4 +1,5 @@
 @using CloudHealthOffice.Portal.Services
+@using System.Globalization
 @inject IBenefitPlanService BenefitPlanService
 @inject IDialogService DialogService
 
@@ -78,23 +79,23 @@
                                 <tbody>
                                     <tr>
                                         <td><strong>Monthly Premium:</strong></td>
-                                        <td>@_plan.MonthlyPremium.ToString("C")</td>
+                                        <td>@FormatCurrency(_plan.MonthlyPremium)</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Individual Deductible:</strong></td>
-                                        <td>@_plan.IndividualDeductible.ToString("C")</td>
+                                        <td>@FormatCurrency(_plan.IndividualDeductible)</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Family Deductible:</strong></td>
-                                        <td>@_plan.FamilyDeductible.ToString("C")</td>
+                                        <td>@FormatCurrency(_plan.FamilyDeductible)</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Individual OOP Max:</strong></td>
-                                        <td>@_plan.IndividualOOPMax.ToString("C")</td>
+                                        <td>@FormatCurrency(_plan.IndividualOOPMax)</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Family OOP Max:</strong></td>
-                                        <td>@_plan.FamilyOOPMax.ToString("C")</td>
+                                        <td>@FormatCurrency(_plan.FamilyOOPMax)</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Coinsurance:</strong></td>
@@ -171,7 +172,7 @@
                             <MudTd DataLabel="Copay">
                                 @if (context.Copay.HasValue)
                                 {
-                                    @context.Copay.Value.ToString("C")
+                                    @FormatCurrency(context.Copay.Value)
                                 }
                                 else
                                 {
@@ -285,6 +286,9 @@
 
     private BenefitPlanDetails? _plan;
     private string? _serviceError;
+    private static readonly CultureInfo UsCulture = CultureInfo.GetCultureInfo("en-US");
+
+    private static string FormatCurrency(decimal value) => value.ToString("C", UsCulture);
 
     protected override async Task OnInitializedAsync()
     {

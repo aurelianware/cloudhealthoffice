@@ -37,6 +37,7 @@ public class BenefitPlanServiceVersionTests
         EffectiveDate = new DateTime(2026, 1, 1),
         PlanType = PlanType.HMO,
         LineOfBusiness = LineOfBusiness.Commercial,
+        CostSharing = new CostSharing { MonthlyPremium = 475m, Coinsurance = 20m },
         Benefits = { new Benefit { ServiceCategory = "Office Visit", CopayAmount = 25m } }
     };
 
@@ -102,6 +103,8 @@ public class BenefitPlanServiceVersionTests
         v2Draft.VersionState.Should().Be(PlanVersionState.Draft);
         v2Draft.PredecessorVersionId.Should().Be(v1.VersionId);
         v2Draft.Benefits.Should().HaveSameCount(v1.Benefits);
+        v2Draft.CostSharing.MonthlyPremium.Should().Be(v1.CostSharing.MonthlyPremium);
+        v2Draft.CostSharing.Coinsurance.Should().Be(v1.CostSharing.Coinsurance);
         transitions.Items.Should().ContainSingle(t =>
             t.TransitionType == PlanVersionTransitionType.Amend && t.FromVersionId == v1.VersionId);
     }

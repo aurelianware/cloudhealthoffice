@@ -228,10 +228,19 @@ public class BenefitPlanServiceTests
     {
         var json = JsonSerializer.Serialize(new[]
         {
-            new { planId = "PLN-10", planName = "Platinum EPO", sponsorId = "SP-1",
-                  sponsorName = "Acme Corp", productType = "EPO", network = "Tier1",
-                  enrolledMembers = 500, assignedBenefits = 12, status = "Active",
-                  effectiveDate = "2025-01-01" }
+            new
+            {
+                planId = "PLN-10", planName = "Platinum EPO", payer = "Acme Corp",
+                planType = "EPO", metalLevel = "Platinum", isActive = true,
+                versionState = "Published", effectiveDate = "2025-01-01",
+                networkTiers = new[] { new { tierName = "Preferred", tierLevel = 1, networkId = "Tier1" } },
+                benefits = Enumerable.Range(1, 12).Select(index => new
+                {
+                    id = $"BEN-{index}", benefitType = "medical",
+                    serviceCategory = index.ToString(), description = $"Benefit {index}"
+                }),
+                costSharing = new { monthlyPremium = 475m }
+            }
         }, JsonOpts);
 
         var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
@@ -240,7 +249,11 @@ public class BenefitPlanServiceTests
 
         result.Should().ContainSingle();
         result[0].ProductType.Should().Be("EPO");
-        result[0].EnrolledMembers.Should().Be(500);
+        result[0].SponsorName.Should().Be("Acme Corp");
+        result[0].Network.Should().Be("Tier1");
+        result[0].AssignedBenefits.Should().Be(12);
+        result[0].MonthlyPremium.Should().Be(475m);
+        result[0].Status.Should().Be("Active");
     }
 
     // ── GetBenefitPlanByIdAsync ──
@@ -250,19 +263,25 @@ public class BenefitPlanServiceTests
     {
         var json = JsonSerializer.Serialize(new
         {
-            planId = "PLN-100", planName = "Gold PPO", sponsorId = "SP-1",
-            sponsorName = "Acme", productType = "PPO", network = "Broad",
-            enrolledMembers = 1200, assignedBenefits = 18, status = "Active",
-            effectiveDate = "2025-01-01",
-            metalTier = "Gold", individualDeductible = 750m, familyDeductible = 1500m,
-            individualOOPMax = 6000m, familyOOPMax = 12000m, coinsurance = 0.20m,
-            monthlyPremium = 450m, planYear = "2025",
+            planId = "PLN-100", planName = "Gold PPO", payer = "Acme",
+            planType = "PPO", metalLevel = "Gold", isActive = true,
+            versionState = "Published", effectiveDate = "2025-01-01",
+            networkTiers = new[] { new { tierName = "Broad", tierLevel = 1, networkId = "BROAD-1" } },
+            costSharing = new
+            {
+                individualDeductible = 750m, familyDeductible = 1500m,
+                individualOutOfPocketMax = 6000m, familyOutOfPocketMax = 12000m,
+                coinsurance = 20m, monthlyPremium = 450m
+            },
             benefits = new[]
             {
-                new { benefitId = "BEN-1", serviceType = "Office Visit",
-                      category = "Medical", copay = 25m, priorAuthRequired = false }
-            },
-            exclusions = new[] { "Cosmetic surgery", "Experimental treatments" }
+                new
+                {
+                    id = "BEN-1", benefitType = "medical", serviceCategory = "98",
+                    description = "Office Visit", inNetworkCopay = 25m,
+                    priorAuthRequired = false
+                }
+            }
         }, JsonOpts);
 
         var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
@@ -271,12 +290,17 @@ public class BenefitPlanServiceTests
 
         result.Should().NotBeNull();
         result!.MetalTier.Should().Be("Gold");
+        result.SponsorName.Should().Be("Acme");
+        result.ProductType.Should().Be("PPO");
+        result.Network.Should().Be("BROAD-1");
         result.IndividualDeductible.Should().Be(750m);
         result.FamilyOOPMax.Should().Be(12000m);
         result.MonthlyPremium.Should().Be(450m);
+        result.Coinsurance.Should().Be(20m);
+        result.PlanYear.Should().Be("2025");
+        result.AssignedBenefits.Should().Be(1);
         result.Benefits.Should().ContainSingle()
             .Which.Copay.Should().Be(25m);
-        result.Exclusions.Should().HaveCount(2);
     }
 
     [Fact]
@@ -469,26 +493,26 @@ public class BenefitPlanServiceTests
     {
         var json = JsonSerializer.Serialize(new
         {
-            planId = "PLN-200", planName = "Silver PPO",
-            sponsorId = "SP-2", sponsorName = "MegaCorp", productType = "PPO",
-            network = "Narrow", enrolledMembers = 800, assignedBenefits = 10,
-            status = "Active", effectiveDate = "2026-01-01T00:00:00Z",
-            metalTier = "Silver", individualDeductible = 2000m, familyDeductible = 4000m,
-            individualOOPMax = 7000m, familyOOPMax = 14000m, coinsurance = 0.30m,
-            monthlyPremium = 380m, planYear = "2026",
+            planId = "PLN-200", planName = "Silver PPO", payer = "MegaCorp",
+            planType = "PPO", metalLevel = "Silver", isActive = true,
+            versionState = "Published", effectiveDate = "2026-01-01T00:00:00Z",
+            networkTiers = new[] { new { tierName = "Narrow", tierLevel = 1, networkId = "NARROW-1" } },
+            costSharing = new
+            {
+                individualDeductible = 2000m, familyDeductible = 4000m,
+                individualOutOfPocketMax = 7000m, familyOutOfPocketMax = 14000m,
+                coinsurance = 30m, monthlyPremium = 380m
+            },
             benefits = new[]
             {
                 new
                 {
-                    benefitId = "BEN-FULL", serviceType = "Physical Therapy",
-                    category = "Rehabilitative", copay = 40m,
-                    coinsurancePercent = 0.20m,
-                    coveragePercent = 0.80m,
-                    annualLimit = 60,
+                    id = "BEN-FULL", benefitType = "medical", serviceCategory = "PT",
+                    description = "Physical Therapy", inNetworkCopay = 40m,
+                    inNetworkCoinsurance = 0.20m, visitLimit = 60,
                     priorAuthRequired = true
                 }
-            },
-            exclusions = Array.Empty<string>()
+            }
         }, JsonOpts);
 
         var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
@@ -497,8 +521,10 @@ public class BenefitPlanServiceTests
 
         result.Should().NotBeNull();
         var benefit = result!.Benefits.Should().ContainSingle().Subject;
-        benefit.CoinsurancePercent.Should().Be(0.20m);
-        benefit.CoveragePercent.Should().Be(0.80m);
+        benefit.ServiceType.Should().Be("Physical Therapy");
+        benefit.Category.Should().Be("Medical");
+        benefit.CoinsurancePercent.Should().Be(20m);
+        benefit.CoveragePercent.Should().Be(80m);
         benefit.AnnualLimit.Should().Be(60);
         benefit.PriorAuthRequired.Should().BeTrue();
     }

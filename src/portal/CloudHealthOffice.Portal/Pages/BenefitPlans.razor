@@ -96,7 +96,7 @@
             <MudCard Elevation="1">
                 <MudCardContent>
                     <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Premium</MudText>
-                    <MudText Typo="Typo.h4">$475</MudText>
+                    <MudText Typo="Typo.h4">@FormatAveragePremium()</MudText>
                 </MudCardContent>
             </MudCard>
         </MudItem>
@@ -183,6 +183,17 @@
 @code {
     private List<BenefitPlanListItem> _allPlans = new();
     private List<BenefitPlanListItem> _filteredPlans = new();
+
+    private string FormatAveragePremium()
+    {
+        var configuredPremiums = _filteredPlans
+            .Where(plan => plan.MonthlyPremium > 0)
+            .Select(plan => plan.MonthlyPremium)
+            .ToList();
+        return configuredPremiums.Count == 0
+            ? "$0"
+            : $"${configuredPremiums.Average():N0}";
+    }
     private bool _isLoading = true;
     private string? _serviceError;
 
