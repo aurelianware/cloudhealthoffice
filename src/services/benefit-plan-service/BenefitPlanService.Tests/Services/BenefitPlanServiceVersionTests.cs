@@ -304,6 +304,55 @@ public class BenefitPlanServiceVersionTests
     }
 
     [Fact]
+    public async Task UpdateBenefitAsync_replaces_rule_in_new_published_version()
+    {
+        var (service, _, transitions, _) = Build();
+        var source = SamplePlan();
+        source.Benefits[0].Id = "office-visit";
+        var draft = await service.CreateDraftAsync(source, Tenant, Actor);
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
+
+        var replacement = new Benefit
+        {
+            ServiceCategory = "Office Visit",
+            Description = "Primary care office visit",
+            InNetworkCopay = 35m,
+            DeductibleApplies = false,
+        };
+        var updated = await service.UpdateBenefitAsync(
+            v1.PlanId, "office-visit", Tenant, Actor, replacement);
+
+        updated.Should().NotBeNull();
+        updated!.Id.Should().Be("office-visit");
+        var current = await service.GetPlanAsync(v1.PlanId, Tenant);
+        current!.VersionNumber.Should().Be(2);
+        current.PredecessorVersionId.Should().Be(v1.VersionId);
+        current.Benefits.Should().ContainSingle();
+        current.Benefits[0].InNetworkCopay.Should().Be(35m);
+        current.Benefits[0].Description.Should().Be("Primary care office visit");
+        transitions.Items.Select(item => item.TransitionType).Should().BeEquivalentTo(new[]
+        {
+            PlanVersionTransitionType.Publish,
+            PlanVersionTransitionType.Amend,
+            PlanVersionTransitionType.Supersede,
+        });
+    }
+
+    [Fact]
+    public async Task UpdateBenefitAsync_returns_null_without_creating_version_when_rule_is_unknown()
+    {
+        var (service, repo, _, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
+
+        var updated = await service.UpdateBenefitAsync(
+            v1.PlanId, "does-not-exist", Tenant, Actor, new Benefit { ServiceCategory = "X" });
+
+        updated.Should().BeNull();
+        repo.Docs.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task LegacyCreatePlanAsync_marks_v1_published_for_backcompat()
     {
         var (service, _, _, _) = Build();

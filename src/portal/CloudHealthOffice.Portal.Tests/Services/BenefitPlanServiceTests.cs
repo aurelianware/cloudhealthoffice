@@ -90,6 +90,24 @@ public class BenefitPlanServiceTests
         ex.ServiceName.Should().Be("Benefit Plan Service");
     }
 
+    [Fact]
+    public async Task AddBenefitAsync_WhenApiFails_ThrowsServiceUnavailableException()
+    {
+        var sut = CreateService();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.AddBenefitAsync("PLN-001", new UpsertPlanBenefitRequest()));
+        ex.ServiceName.Should().Be("Benefit Plan Service");
+    }
+
+    [Fact]
+    public async Task UpdateBenefitAsync_WhenApiFails_ThrowsServiceUnavailableException()
+    {
+        var sut = CreateService();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.UpdateBenefitAsync("PLN-001", "BEN-1", new UpsertPlanBenefitRequest()));
+        ex.ServiceName.Should().Be("Benefit Plan Service");
+    }
+
     // ── GetAvailableBenefitsAsync ──
 
     [Fact]
@@ -346,6 +364,69 @@ public class BenefitPlanServiceTests
         handler.CapturedRequests.Should().ContainSingle();
         handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Put);
         handler.CapturedUrls[0].Should().Contain("/v1/plans/PLN-100");
+    }
+
+    [Fact]
+    public async Task AddBenefitAsync_sends_version_safe_service_payload()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = new StringContent("{}"),
+            };
+        });
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.AddBenefitAsync("PLN/100", new UpsertPlanBenefitRequest
+        {
+            BenefitType = "medical",
+            ServiceCategory = "98",
+            Description = "Professional Office Visit",
+            CptCodes = ["99213", "99214"],
+            InNetworkCopay = 30m,
+            OutNetworkCoinsurancePercent = 40m,
+            DeductibleApplies = false,
+            OopApplies = true,
+        });
+
+        var captured = handler.CapturedRequests.Should().ContainSingle().Subject;
+        captured.Method.Should().Be(HttpMethod.Post);
+        captured.RequestUri!.AbsoluteUri.Should().Contain("/v1/plans/PLN%2F100/benefits");
+        using var json = JsonDocument.Parse(capturedBody!);
+        json.RootElement.GetProperty("inNetworkCopay").GetDecimal().Should().Be(30m);
+        json.RootElement.GetProperty("outNetworkCoinsurance").GetDecimal().Should().Be(0.4m);
+        json.RootElement.GetProperty("deductibleApplies").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UpdateBenefitAsync_sends_put_to_escaped_rule_url()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}"),
+            };
+        });
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.UpdateBenefitAsync("PLN-100", "BEN/1", new UpsertPlanBenefitRequest
+        {
+            ServiceCategory = "73",
+            Description = "Diagnostic Lab",
+            InNetworkCoinsurancePercent = 20m,
+        });
+
+        var captured = handler.CapturedRequests.Should().ContainSingle().Subject;
+        captured.Method.Should().Be(HttpMethod.Put);
+        captured.RequestUri!.AbsoluteUri.Should().EndWith("/v1/plans/PLN-100/benefits/BEN%2F1");
+        using var json = JsonDocument.Parse(capturedBody!);
+        json.RootElement.GetProperty("inNetworkCoinsurance").GetDecimal().Should().Be(0.2m);
     }
 
     // ── GetAvailableBenefitsAsync ──
