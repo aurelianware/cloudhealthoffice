@@ -38,6 +38,20 @@
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
   <link rel="stylesheet" href="/css/sentinel.css" />
   <link rel="stylesheet" href="/css/docs.css" />
+  <style>
+    .exception-chain { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:9px; margin:24px 0; }
+    .exception-step { position:relative; min-height:106px; padding:15px 11px; border:1px solid rgba(0,255,255,.22); border-radius:8px; background:rgba(0,255,255,.035); }
+    .exception-step::after { content:"\2192"; position:absolute; right:-10px; top:42px; z-index:1; color:#00ffff; background:#000; padding:0 2px; }
+    .exception-step:last-child::after { content:none; }
+    .exception-step strong { display:block; color:#00ffff; margin-bottom:7px; font-size:.9rem; }
+    .exception-step span { color:rgba(255,255,255,.68); font-size:.8rem; line-height:1.35; }
+    .exception-step.optional { border-style:dashed; border-color:rgba(255,200,0,.5); background:rgba(255,200,0,.04); }
+    .exception-step.optional strong { color:#ffc800; }
+    .exception-step.human, .exception-step.audit { border-color:rgba(0,255,136,.42); background:rgba(0,255,136,.05); }
+    .exception-step.human strong, .exception-step.audit strong { color:#00ff88; }
+    @media (max-width:1000px) { .exception-chain { grid-template-columns:repeat(3,minmax(0,1fr)); } .exception-step:nth-child(3)::after { content:none; } }
+    @media (max-width:650px) { .exception-chain { grid-template-columns:1fr; } .exception-step { min-height:0; } .exception-step::after, .exception-step:nth-child(3)::after { content:"\2193"; right:50%; top:auto; bottom:-16px; } }
+  </style>
   <script src="/js/auth.js"></script>
   <script src="/js/mobile-nav.js"></script>
 </head>
@@ -103,6 +117,7 @@
             <div class="docs-sidebar-section-title">On This Page</div>
             <ul class="toc-sub">
               <li><a href="#operating-model">Operating Model</a></li>
+              <li><a href="#exception-journey">Exception Journey</a></li>
               <li><a href="#routing">Queue Routing</a></li>
               <li><a href="#before-you-start">Operator Checklist</a></li>
               <li><a href="#queue">Open the Work Queue</a></li>
@@ -147,6 +162,26 @@
           <div class="callout-title">One evidence record, two decision aids</div>
           <p>The deterministic pend record is always available. An AI recommendation may be attached later, but it is a separate advisory record and cannot overwrite the original rule evidence.</p>
         </div>
+
+        <h2 id="exception-journey">The Exception-Path Evaluator Journey</h2>
+        <p>Follow one synthetic claim across six evidence checkpoints. The dashed AI step is deliberately optional: removing it does not break the path from deterministic adjudication to an auditable human decision.</p>
+        <div class="exception-chain" aria-label="Pended claim evaluator journey">
+          <div class="exception-step"><strong>1. X12 837</strong><span>A real claim enters through the ordinary intake path.</span></div>
+          <div class="exception-step"><strong>2. Pended</strong><span>A rule stops finalization and records a structured reason.</span></div>
+          <div class="exception-step"><strong>3. Evidence</strong><span>Lines, rule IDs, modifiers, and codes remain authoritative.</span></div>
+          <div class="exception-step optional"><strong>4. AI advisory</strong><span>Optional, metered decision support; never the disposition.</span></div>
+          <div class="exception-step human"><strong>5. Human action</strong><span>An examiner approves or denies with a recorded reason.</span></div>
+          <div class="exception-step audit"><strong>6. Audit record</strong><span>Final state, notes, original pend, and AI feedback remain visible.</span></div>
+        </div>
+        <table>
+          <thead><tr><th>Checkpoint</th><th>Pass condition</th><th>Evidence to retain</th></tr></thead>
+          <tbody>
+            <tr><td>Rule-to-queue</td><td>The expected pend appears in the correct work queue.</td><td>Claim ID, pend code, reason, affected lines, rule ID.</td></tr>
+            <tr><td>Advisory boundary</td><td>Human review works with AI disabled; advisory failure cannot block it.</td><td>AI mode, recommendation metadata when present, model and prompt version.</td></tr>
+            <tr><td>Human disposition</td><td>Only an explicit examiner action crosses the review gate.</td><td>Final state, timestamp, examiner notes, advisory agreement when applicable.</td></tr>
+            <tr><td>Post-resolution proof</td><td>The item leaves the active queue while its exception context remains inspectable.</td><td>Original pend evidence, disposition record, claim version and finalized event.</td></tr>
+          </tbody>
+        </table>
 
         <h2 id="routing">Know the Queue Routing Codes</h2>
         <p>The work queue groups related pend codes into examiner-friendly categories. Use the code—not free-text alone—for routing, reporting, and operational escalation.</p>
@@ -211,6 +246,10 @@
           </tbody>
         </table>
         <p>After resolution, refresh the queue and claim detail. The item should leave the active queue, while the claim retains its original <code>PendDetails</code>, examiner notes, adjudicated timestamp, and any advisory record for audit.</p>
+        <figure class="guide-screenshot">
+          <img src="/graphics/user-guides/pended-claim/examiner-disposition.png" alt="Resolved synthetic claim showing its final examiner disposition, original pend reason, examiner notes, pend code, and retained AI feedback." loading="lazy" />
+          <figcaption>The resolved view keeps the human decision beside the original exception context, even after the claim leaves the active work queue.</figcaption>
+        </figure>
 
         <h2 id="enable-ai">Operate AI as an Explicit, Metered Capability</h2>
         <p>The local deployment and Million Claim Challenge leave the metered AI path off by default. Production and controlled demos can use best-effort examination, where an AI outage does not block deterministic adjudication or manual review.</p>
@@ -244,7 +283,7 @@ ANTHROPIC_API_KEY=&lt;your-api-key&gt;</code></pre>
         <div class="code-block-header"><span>Shell</span><span>src/site</span></div>
         <pre><code>npm install
 GUIDE_CLAIM_ID=&lt;synthetic-pended-claim-id&gt; npm run guides:capture:pended-claim</code></pre>
-        <p>The command uses a fixed desktop viewport, local demo sign-in, and writes both images under <code>src/site/graphics/user-guides/pended-claim/</code>.</p>
+        <p>The command uses a fixed desktop viewport, local demo sign-in, and writes the queue, advisory, and resolved-disposition images under <code>src/site/graphics/user-guides/pended-claim/</code>. Set <code>GUIDE_RESOLVED_CLAIM_ID</code> when the resolved fixture is a separate claim.</p>
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <table>
