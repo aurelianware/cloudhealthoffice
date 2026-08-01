@@ -284,6 +284,47 @@ public class BenefitPlansController : ControllerBase
     }
 
     /// <summary>
+    /// Replace the plan's complete network-tier set. Creates and publishes a
+    /// successor version because network tiers are plan identity content.
+    /// An empty collection removes every tier.
+    /// </summary>
+    [HttpPut("{id}/network-tiers")]
+    [ProducesResponseType(typeof(IReadOnlyList<NetworkTier>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyList<NetworkTier>>> ReplaceNetworkTiers(
+        string id,
+        [FromBody] List<NetworkTier> networkTiers)
+    {
+        try
+        {
+            var updated = await _service.ReplaceNetworkTiersAsync(
+                id, TenantId, ResolveActorId(), networkTiers);
+            if (updated == null)
+                return NotFound(new { message = $"Benefit plan '{id}' not found" });
+
+            return Ok(updated);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { field = ex.ParamName, message = ex.Message });
+        }
+        catch (PlanLimitValidationException ex)
+        {
+            return BadRequest(PlanLimitValidationPayload(ex));
+        }
+        catch (PlanVersionStateException ex) when (ex.IsNotFound)
+        {
+            return NotFound(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId });
+        }
+        catch (PlanVersionStateException ex)
+        {
+            return Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+        }
+    }
+
+    /// <summary>
     /// Get deductible and out-of-pocket accumulation data for a subscriber.
     /// Used by eligibility-service to populate the 271 response with
     /// deductible-met / OOP-met progress.

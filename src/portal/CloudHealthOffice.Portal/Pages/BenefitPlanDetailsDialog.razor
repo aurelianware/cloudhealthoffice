@@ -234,6 +234,54 @@
                     </MudButton>
                 </MudTabPanel>
 
+                <!-- Networks Tab -->
+                <MudTabPanel Text="Networks" Icon="@Icons.Material.Filled.Hub"
+                             BadgeData="_plan.NetworkTiers.Count"
+                             BadgeColor="Color.Info">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Plan Network Tiers</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-4">
+                        Tier 1 is the preferred network. Network IDs must match the organization IDs used by provider participation.
+                    </MudText>
+                    @if (_plan.NetworkTiers.Any())
+                    {
+                        <MudTable Items="@_plan.NetworkTiers" Hover="true" Striped="true" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Priority</MudTh>
+                                <MudTh>Tier Name</MudTh>
+                                <MudTh>Network ID</MudTh>
+                                <MudTh>Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Priority">
+                                    <MudChip Size="Size.Small" Color="@(context.TierLevel == 1 ? Color.Success : Color.Default)">
+                                        Tier @context.TierLevel
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Tier Name"><strong>@context.TierName</strong></MudTd>
+                                <MudTd DataLabel="Network ID"><code>@context.NetworkId</code></MudTd>
+                                <MudTd DataLabel="Actions">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   Color="Color.Primary" Title="Edit network tier"
+                                                   OnClick="@(() => EditNetworkTier(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                   Color="Color.Error" Title="Remove network tier"
+                                                   OnClick="@(() => RemoveNetworkTier(context))" />
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Warning">No network tiers are configured for this plan.</MudAlert>
+                    }
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add" Class="mt-4"
+                               OnClick="AddNetworkTier">
+                        Add Network Tier
+                    </MudButton>
+                </MudTabPanel>
+
                 <!-- Exclusions Tab -->
                 <MudTabPanel Text="Exclusions" Icon="@Icons.Material.Filled.Block" 
                             BadgeData="_plan.Exclusions.Count" 
@@ -400,6 +448,55 @@
     private async Task AddExclusion()
     {
         await ShowExclusionDialogAsync(null);
+    }
+
+    private Task AddNetworkTier() => ShowNetworkTierDialogAsync(null);
+
+    private Task EditNetworkTier(PlanNetworkTier tier) => ShowNetworkTierDialogAsync(tier);
+
+    private async Task ShowNetworkTierDialogAsync(PlanNetworkTier? tier)
+    {
+        var parameters = new DialogParameters<AddEditPlanNetworkTierDialog>
+        {
+            { dialog => dialog.PlanId, PlanId },
+            { dialog => dialog.ExistingTiers, _plan?.NetworkTiers ?? new List<PlanNetworkTier>() },
+        };
+        if (tier != null) parameters.Add(dialog => dialog.ExistingTier, tier);
+
+        var title = tier == null ? "Add Network Tier" : "Edit Network Tier";
+        var dialog = await DialogService.ShowAsync<AddEditPlanNetworkTierDialog>(title, parameters, new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+        });
+        var result = await dialog.Result;
+        if (result is { Canceled: false }) await LoadPlanAsync();
+    }
+
+    private async Task RemoveNetworkTier(PlanNetworkTier tier)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Remove Network Tier",
+            $"Remove Tier {tier.TierLevel} — {tier.TierName}? This publishes a new plan version.",
+            yesText: "Remove", cancelText: "Cancel");
+        if (confirmed != true || _plan == null) return;
+
+        _serviceError = null;
+        try
+        {
+            await BenefitPlanService.ReplaceNetworkTiersAsync(
+                PlanId, _plan.NetworkTiers.Where(existing => existing.Id != tier.Id).ToList());
+            await LoadPlanAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (Exception)
+        {
+            _serviceError = "The network tier could not be removed. Try again.";
+        }
     }
 
     private async Task EditExclusion(PlanBenefit exclusion)
