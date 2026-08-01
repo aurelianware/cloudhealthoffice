@@ -104,6 +104,21 @@ try {
     fullPage: false
   });
   await page.getByRole("button", { name: "Cancel" }).click();
+
+  await page.locator(".mud-tab").filter({ hasText: "Validation" }).click();
+  await page.getByText("Ready for a claim test", { exact: true }).waitFor();
+  await page.screenshot({
+    path: path.join(outputDirectory, "validation-checks.png"),
+    fullPage: false
+  });
+
+  await page.getByTestId("run-synthetic-837").click();
+  await page.getByText(/Claim BPV837.*resolved to/).waitFor({ timeout: 90_000 });
+  await page.getByText("Network tier", { exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(outputDirectory, "synthetic-837-result.png"),
+    fullPage: false
+  });
 } finally {
   await browser.close();
 }

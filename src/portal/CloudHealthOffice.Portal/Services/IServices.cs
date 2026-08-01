@@ -549,6 +549,65 @@ public interface IBenefitPlanService
     Task<MemberBenefitView?> GetMemberViewAsync(string planId, DateTime serviceDate);
 }
 
+public interface IBenefitPlanValidationService
+{
+    bool SyntheticClaimsEnabled { get; }
+    Task<BenefitPlanValidationResult> ValidateAsync(
+        BenefitPlanDetails plan,
+        DateTime serviceDate,
+        CancellationToken cancellationToken = default);
+    Task<SyntheticClaimValidationResult> RunSynthetic837Async(
+        BenefitPlanDetails plan,
+        SyntheticClaimValidationRequest request,
+        CancellationToken cancellationToken = default);
+}
+
+public class BenefitPlanValidationResult
+{
+    public DateTime ServiceDate { get; set; }
+    public string PlanVersion { get; set; } = string.Empty;
+    public MemberBenefitView? MemberView { get; set; }
+    public List<BenefitPlanValidationCheck> Checks { get; set; } = new();
+    public bool IsValid => Checks.All(check => check.Severity != "Error");
+}
+
+public class BenefitPlanValidationCheck
+{
+    public string Name { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Success";
+}
+
+public class SyntheticClaimValidationRequest
+{
+    public DateTime ServiceDate { get; set; }
+    public string ProviderNpi { get; set; } = "1999999992";
+    public string ProcedureCode { get; set; } = "99213";
+    public decimal ChargeAmount { get; set; } = 150m;
+}
+
+public class SyntheticClaimValidationResult
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string ClaimNumber { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string ExpectedPlanId { get; set; } = string.Empty;
+    public string? ResolvedPlanId { get; set; }
+    public string PlanVersion { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string? NetworkTier { get; set; }
+    public decimal ChargeAmount { get; set; }
+    public decimal AllowedAmount { get; set; }
+    public decimal DeductibleAmount { get; set; }
+    public decimal CopayAmount { get; set; }
+    public decimal CoinsuranceAmount { get; set; }
+    public decimal PatientResponsibility { get; set; }
+    public decimal PaidAmount { get; set; }
+    public string? OutcomeReason { get; set; }
+    public TimeSpan Elapsed { get; set; }
+    public bool ExactPlanMatched => string.Equals(ExpectedPlanId, ResolvedPlanId, StringComparison.Ordinal);
+}
+
 public class MemberBenefitView
 {
     public string PlanId { get; set; } = string.Empty;
@@ -799,6 +858,8 @@ public class ClaimDetails : ClaimSummary
     private List<ClaimAudit> _auditTrail = new();
 
     public string SubscriberId { get; set; } = string.Empty;
+    public string? BenefitPlanId { get; set; }
+    public string? NetworkTier { get; set; }
     public string SubscriberName { get; set; } = string.Empty;
     public string PatientName { get; set; } = string.Empty;
     public string PatientRelationship { get; set; } = string.Empty;
@@ -840,6 +901,7 @@ public class ClaimDetails : ClaimSummary
             CheckNumber = value.CheckNumber;
             PaidDate = value.PaymentDate;
             DenialReason = value.DenialReason;
+            NetworkTier = value.NetworkTier;
         }
     }
     public List<ClaimDiagnosisCode> DiagnosisCodes
@@ -990,6 +1052,7 @@ public class ClaimServiceLine
 
 public class ClaimAdjudicationProjection
 {
+    public string? NetworkTier { get; set; }
     public decimal AllowedAmount { get; set; }
     public decimal DeductibleAmount { get; set; }
     public decimal CoinsuranceAmount { get; set; }
@@ -1381,6 +1444,9 @@ public class BenefitPlanListItem
 
 public class BenefitPlanDetails : BenefitPlanListItem
 {
+    public string VersionId { get; set; } = string.Empty;
+    public int VersionNumber { get; set; }
+    public string VersionState { get; set; } = string.Empty;
     public string MetalTier { get; set; } = string.Empty; // Bronze, Silver, Gold, Platinum
     public decimal IndividualDeductible { get; set; }
     public decimal FamilyDeductible { get; set; }

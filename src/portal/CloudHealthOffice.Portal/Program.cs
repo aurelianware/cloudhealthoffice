@@ -264,6 +264,7 @@ builder.Services.AddScoped<IMemberDocumentService, MemberDocumentService>();
 builder.Services.AddScoped<IIdCardService, CloudHealthOffice.Portal.Services.IdCardService>();
 builder.Services.AddScoped<IProviderService, ProviderService>();
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanService>();
+builder.Services.AddScoped<IBenefitPlanValidationService, BenefitPlanValidationService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();
