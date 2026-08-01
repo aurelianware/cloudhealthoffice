@@ -5,6 +5,7 @@ import path from "node:path";
 
 const portalUrl = (process.env.GUIDE_PORTAL_URL ?? "http://localhost:8080").replace(/\/$/, "");
 const claimId = process.env.GUIDE_CLAIM_ID;
+const resolvedClaimId = process.env.GUIDE_RESOLVED_CLAIM_ID;
 
 if (!claimId) {
   throw new Error(
@@ -49,6 +50,15 @@ try {
     path: path.join(outputDirectory, "ai-advisory.png"),
     fullPage: false
   });
+
+  if (resolvedClaimId) {
+    await page.goto(`${portalUrl}/claims/${resolvedClaimId}`, { waitUntil: "domcontentloaded" });
+    await page.getByText("Examiner Disposition Record", { exact: true }).waitFor();
+    await page.screenshot({
+      path: path.join(outputDirectory, "examiner-disposition.png"),
+      fullPage: false
+    });
+  }
 } finally {
   await browser.close();
 }
