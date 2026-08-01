@@ -108,6 +108,15 @@ public class BenefitPlanServiceTests
         ex.ServiceName.Should().Be("Benefit Plan Service");
     }
 
+    [Fact]
+    public async Task ReplaceNetworkTiersAsync_WhenApiFails_ThrowsServiceUnavailableException()
+    {
+        var sut = CreateService();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() =>
+            sut.ReplaceNetworkTiersAsync("PLN-001", Array.Empty<PlanNetworkTier>()));
+        ex.ServiceName.Should().Be("Benefit Plan Service");
+    }
+
     // ── GetAvailableBenefitsAsync ──
 
     [Fact]
@@ -317,6 +326,10 @@ public class BenefitPlanServiceTests
         result.SponsorName.Should().Be("Acme");
         result.ProductType.Should().Be("PPO");
         result.Network.Should().Be("BROAD-1");
+        result.NetworkTiers.Should().ContainSingle().Which.Should().BeEquivalentTo(new
+        {
+            TierName = "Broad", TierLevel = 1, NetworkId = "BROAD-1"
+        }, options => options.ExcludingMissingMembers());
         result.IndividualDeductible.Should().Be(750m);
         result.FamilyOOPMax.Should().Be(12000m);
         result.MonthlyPremium.Should().Be(450m);
@@ -472,6 +485,32 @@ public class BenefitPlanServiceTests
         json.RootElement.GetProperty("isCovered").GetBoolean().Should().BeFalse();
         json.RootElement.GetProperty("serviceCategory").GetString().Should().Be("COSMETIC");
         json.RootElement.GetProperty("cptCodes").GetArrayLength().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ReplaceNetworkTiersAsync_sends_complete_set_to_escaped_plan_url()
+    {
+        string? capturedBody = null;
+        var handler = new FakeHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]") };
+        });
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.ReplaceNetworkTiersAsync("PLN/100", new[]
+        {
+            new PlanNetworkTier { Id = "tier-1", TierName = " Preferred ", TierLevel = 1, NetworkId = " NET-A " },
+            new PlanNetworkTier { Id = "tier-2", TierName = "Extended", TierLevel = 2, NetworkId = "NET-B" },
+        });
+
+        var request = handler.CapturedRequests.Should().ContainSingle().Subject;
+        request.Method.Should().Be(HttpMethod.Put);
+        request.RequestUri!.AbsoluteUri.Should().EndWith("/v1/plans/PLN%2F100/network-tiers");
+        using var json = JsonDocument.Parse(capturedBody!);
+        json.RootElement.GetArrayLength().Should().Be(2);
+        json.RootElement[0].GetProperty("tierName").GetString().Should().Be("Preferred");
+        json.RootElement[0].GetProperty("networkId").GetString().Should().Be("NET-A");
     }
 
     // ── GetAvailableBenefitsAsync ──

@@ -1,0 +1,140 @@
+@using CloudHealthOffice.Portal.Services
+@inject IBenefitPlanService BenefitPlanService
+
+<MudDialog>
+    <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4">
+                @_serviceError
+            </MudAlert>
+        }
+
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+            Network tiers connect provider participation to tier-specific benefit rules. Saving creates and publishes a new plan version.
+        </MudAlert>
+
+        <MudForm @ref="_form" @bind-IsValid="_formIsValid">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudNumericField @bind-Value="_tier.TierLevel" Label="Tier Level"
+                                     Variant="Variant.Outlined" Min="1" Required="true"
+                                     HelperText="1 is the preferred tier" />
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <MudTextField @bind-Value="_tier.TierName" Label="Tier Name"
+                                  Placeholder="In-Network" Variant="Variant.Outlined"
+                                  Required="true" Immediate="true" RequiredError="Tier name is required" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_tier.NetworkId" Label="Network ID"
+                                  Placeholder="CHO-PREMIER" Variant="Variant.Outlined"
+                                  Required="true" Immediate="true" RequiredError="Network ID is required"
+                                  HelperText="Use the same stable organization ID referenced by provider participation." />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save"
+                   Disabled="@(!_formIsValid || _isSaving)">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>@(ExistingTier == null ? "Add Network Tier" : "Update Network Tier")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string PlanId { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<PlanNetworkTier> ExistingTiers { get; set; } = Array.Empty<PlanNetworkTier>();
+    [Parameter] public PlanNetworkTier? ExistingTier { get; set; }
+
+    private MudForm _form = null!;
+    private bool _formIsValid;
+    private bool _isSaving;
+    private string? _serviceError;
+    private PlanNetworkTier _tier = new();
+
+    protected override void OnInitialized()
+    {
+        if (ExistingTier != null)
+        {
+            _tier = Clone(ExistingTier);
+        }
+        else if (ExistingTiers.Count > 0)
+        {
+            _tier.TierLevel = ExistingTiers.Max(tier => tier.TierLevel) + 1;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _form.Validate();
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (!_formIsValid) return;
+
+        var others = ExistingTiers.Where(tier => tier.Id != ExistingTier?.Id).ToList();
+        if (others.Any(tier => tier.TierLevel == _tier.TierLevel))
+        {
+            _serviceError = $"Tier level {_tier.TierLevel} is already assigned.";
+            return;
+        }
+        if (others.Any(tier => string.Equals(tier.NetworkId, _tier.NetworkId.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            _serviceError = $"Network ID '{_tier.NetworkId.Trim()}' is already assigned.";
+            return;
+        }
+
+        _isSaving = true;
+        _serviceError = null;
+        _tier.TierName = _tier.TierName.Trim();
+        _tier.NetworkId = _tier.NetworkId.Trim();
+        if (string.IsNullOrEmpty(_tier.Id)) _tier.Id = Guid.NewGuid().ToString();
+
+        var replacement = others.Append(Clone(_tier)).OrderBy(tier => tier.TierLevel).ToList();
+        try
+        {
+            await BenefitPlanService.ReplaceNetworkTiersAsync(PlanId, replacement);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (Exception)
+        {
+            _serviceError = "The network tier could not be saved. Review the values and try again.";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private static PlanNetworkTier Clone(PlanNetworkTier tier) => new()
+    {
+        Id = tier.Id,
+        TierName = tier.TierName,
+        TierLevel = tier.TierLevel,
+        NetworkId = tier.NetworkId,
+    };
+}

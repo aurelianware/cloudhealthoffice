@@ -534,6 +534,7 @@ public interface IBenefitPlanService
     Task UpdateBenefitPlanAsync(string planId, UpdateBenefitPlanRequest request);
     Task AddBenefitAsync(string planId, UpsertPlanBenefitRequest request);
     Task UpdateBenefitAsync(string planId, string benefitId, UpsertPlanBenefitRequest request);
+    Task ReplaceNetworkTiersAsync(string planId, IReadOnlyList<PlanNetworkTier> networkTiers);
     Task<List<BenefitItem>> GetAvailableBenefitsAsync();
     Task<List<ServiceBenefitRule>> GetServiceBenefitRulesAsync(string planId);
     Task UpdateServiceBenefitRulesAsync(UpdateServiceBenefitRulesRequest request);
@@ -1389,6 +1390,15 @@ public class BenefitPlanDetails : BenefitPlanListItem
     public string PlanYear { get; set; } = string.Empty;
     public List<PlanBenefit> Benefits { get; set; } = new();
     public List<PlanBenefit> Exclusions { get; set; } = new();
+    public List<PlanNetworkTier> NetworkTiers { get; set; } = new();
+}
+
+public class PlanNetworkTier
+{
+    public string Id { get; set; } = string.Empty;
+    public string TierName { get; set; } = string.Empty;
+    public int TierLevel { get; set; } = 1;
+    public string NetworkId { get; set; } = string.Empty;
 }
 
 public class PlanBenefit

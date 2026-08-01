@@ -17,6 +17,8 @@ public interface IBenefitPlanService
     Task<bool> DeletePlanAsync(string id, string tenantId, string actorId);
     Task<Benefit?> AddBenefitAsync(string planId, string tenantId, string actorId, Benefit benefit);
     Task<Benefit?> UpdateBenefitAsync(string planId, string benefitId, string tenantId, string actorId, Benefit benefit);
+    Task<IReadOnlyList<NetworkTier>?> ReplaceNetworkTiersAsync(
+        string planId, string tenantId, string actorId, IReadOnlyList<NetworkTier> networkTiers);
     Task<BenefitAppliedResult?> ApplyBenefitRules(string planId, string tenantId, string serviceCategory, string? cptCode, decimal chargeAmount);
     Task<bool> CheckPriorAuthRequirement(string planId, string tenantId, string serviceCategory, string? cptCode);
     Task<MemberCostSharingResult> CalculateMemberCostSharing(string planId, string tenantId, decimal allowedAmount, decimal deductibleAccumulation, decimal oopAccumulation, string serviceCategory, bool inNetwork);
@@ -222,6 +224,51 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         await _repository.UpdateDraftAsync(draft);
         await PublishVersionAsync(planId, draft.VersionId, tenantId, actorId);
         return benefit;
+    }
+
+    public async Task<IReadOnlyList<NetworkTier>?> ReplaceNetworkTiersAsync(
+        string planId,
+        string tenantId,
+        string actorId,
+        IReadOnlyList<NetworkTier> networkTiers)
+    {
+        ArgumentNullException.ThrowIfNull(networkTiers);
+
+        var plan = await _repository.GetByPlanIdAsync(planId, tenantId);
+        if (plan == null)
+        {
+            return null;
+        }
+
+        ValidateNetworkTiers(networkTiers);
+
+        // Network tiers are plan identity. Replace the complete set on an
+        // amendment so a single portal action creates exactly one successor.
+        var draft = await AmendPublishedPlanAsync(planId, tenantId, actorId);
+        draft.NetworkTiers = networkTiers.Select(CloneNetworkTier).ToList();
+        await _repository.UpdateDraftAsync(draft);
+        await PublishVersionAsync(planId, draft.VersionId, tenantId, actorId);
+        return draft.NetworkTiers;
+    }
+
+    private static void ValidateNetworkTiers(IReadOnlyList<NetworkTier> networkTiers)
+    {
+        for (var index = 0; index < networkTiers.Count; index++)
+        {
+            var tier = networkTiers[index];
+            if (string.IsNullOrWhiteSpace(tier.TierName))
+                throw new ArgumentException("Tier name is required.", $"networkTiers[{index}].tierName");
+            if (tier.TierLevel < 1)
+                throw new ArgumentException("Tier level must be 1 or greater.", $"networkTiers[{index}].tierLevel");
+            if (string.IsNullOrWhiteSpace(tier.NetworkId))
+                throw new ArgumentException("Network ID is required.", $"networkTiers[{index}].networkId");
+        }
+
+        if (networkTiers.GroupBy(tier => tier.TierLevel).Any(group => group.Count() > 1))
+            throw new ArgumentException("Tier levels must be unique within a plan.", "networkTiers");
+        if (networkTiers.GroupBy(tier => tier.NetworkId!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Any(group => group.Count() > 1))
+            throw new ArgumentException("Network IDs must be unique within a plan.", "networkTiers");
     }
 
     /// <summary>
@@ -625,6 +672,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 #pragma warning disable CS0618 // Cloning ProviderNpis preserves the legacy field during the 5.5 migration window
     private static NetworkTier CloneNetworkTier(NetworkTier n) => new()
     {
+        Id = n.Id,
         TierName = n.TierName,
         TierLevel = n.TierLevel,
         NetworkId = n.NetworkId,
