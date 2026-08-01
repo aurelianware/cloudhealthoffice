@@ -23,6 +23,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimSubmissionService SubmissionService { get; } = Substitute.For<IClaimSubmissionService>();
     public IClaimAdapter ClaimAdapter { get; } = CreateChoStubAdapter();
     public IClaimVersionEventPublisher VersionEventPublisher { get; } = Substitute.For<IClaimVersionEventPublisher>();
+    public IClaimVersionEventReader VersionEventReader { get; } = Substitute.For<IClaimVersionEventReader>();
     public IClaimFinalizationService FinalizationService { get; } = Substitute.For<IClaimFinalizationService>();
     public IClaimAdjustmentRepository AdjustmentRepository { get; } = Substitute.For<IClaimAdjustmentRepository>();
     public IClaimAdjustmentService AdjustmentService { get; } = Substitute.For<IClaimAdjustmentService>();
@@ -61,6 +62,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(IClaimAdjustmentService)
                          || d.ServiceType == typeof(IClaimAdjustmentRepository)
                          || d.ServiceType == typeof(IClaimImportTransactionRepository)
+                         || d.ServiceType == typeof(IClaimVersionEventReader)
                          || d.ServiceType == typeof(IClaimAdapter)
                          || d.ServiceType == typeof(ClaimAdapterFactory)
                          || d.ServiceType == typeof(ClaimTenantConfigCache))
@@ -125,6 +127,10 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());
             services.AddSingleton(AuditRepository);
             services.AddSingleton(VersionEventPublisher);
+            services.AddSingleton(VersionEventReader);
+            VersionEventReader
+                .GetAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(Array.Empty<ClaimVersionEvent>());
             services.AddSingleton(FinalizationService);
             services.AddSingleton(AdjustmentRepository);
             services.AddSingleton(AdjustmentService);

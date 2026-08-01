@@ -18,6 +18,8 @@ public class ClaimsController : ControllerBase
     private readonly IClaimAcknowledgmentService _ackService;
     private readonly IMpipAdjudicationEnhancer _mpipEnhancer;
     private readonly IClaimEventPublisher _eventPublisher;
+    private readonly IClaimVersionEventPublisher _versionEventPublisher;
+    private readonly IClaimVersionEventReader _versionEventReader;
     private readonly IClaimSubmissionService _submissionService;
     private readonly IClaimFinalizationService _finalizationService;
     private readonly IClaimDiagnosisMetadataEnricher _diagnosisMetadataEnricher;
@@ -31,6 +33,8 @@ public class ClaimsController : ControllerBase
         IClaimAcknowledgmentService ackService,
         IMpipAdjudicationEnhancer mpipEnhancer,
         IClaimEventPublisher eventPublisher,
+        IClaimVersionEventPublisher versionEventPublisher,
+        IClaimVersionEventReader versionEventReader,
         IClaimSubmissionService submissionService,
         IClaimFinalizationService finalizationService,
         IClaimDiagnosisMetadataEnricher diagnosisMetadataEnricher,
@@ -43,6 +47,8 @@ public class ClaimsController : ControllerBase
         _ackService = ackService;
         _mpipEnhancer = mpipEnhancer;
         _eventPublisher = eventPublisher;
+        _versionEventPublisher = versionEventPublisher;
+        _versionEventReader = versionEventReader;
         _submissionService = submissionService;
         _finalizationService = finalizationService;
         _diagnosisMetadataEnricher = diagnosisMetadataEnricher;
@@ -210,6 +216,85 @@ public class ClaimsController : ControllerBase
 
         await _diagnosisMetadataEnricher.EnrichAsync(claim);
         return Ok(claim);
+    }
+
+    /// <summary>
+    /// Returns the tenant-scoped, chronological audit history for a claim.
+    /// The read model combines the append-only version stream with the
+    /// structured pend snapshot, which is intentionally not a version event.
+    /// </summary>
+    [HttpGet("{id}/audit-timeline")]
+    [ProducesResponseType(typeof(IReadOnlyList<ClaimAuditTimelineEntry>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<ClaimAuditTimelineEntry>>> GetAuditTimeline(
+        string id,
+        CancellationToken ct)
+    {
+        var claim = await _claimRepository.GetByIdAsync(id);
+        if (claim == null) return NotFound($"Claim {id} not found");
+
+        var events = string.IsNullOrWhiteSpace(claim.ClaimVersionId)
+            ? Array.Empty<ClaimVersionEvent>()
+            : await _versionEventReader.GetAsync(GetTenantId(), claim.ClaimVersionId, ct);
+
+        var timeline = events.Select(MapAuditEvent).ToList();
+        if (claim.PendDetails is not null)
+        {
+            timeline.Add(new ClaimAuditTimelineEntry
+            {
+                Timestamp = claim.PendDetails.PendedAt,
+                Action = "Claim pended for review",
+                ChangedBy = "adjudication-engine",
+                OldValue = "Submitted",
+                NewValue = "Pended",
+                Notes = string.IsNullOrWhiteSpace(claim.PendDetails.PendReason)
+                    ? claim.PendDetails.PendCode
+                    : $"{claim.PendDetails.PendCode}: {claim.PendDetails.PendReason}"
+            });
+
+            foreach (var entry in timeline.Where(entry =>
+                         (entry.EventType == ClaimVersionEventType.ClaimVersionAdjudicated.ToString()
+                          || entry.EventType == ClaimVersionEventType.ClaimVersionDenied.ToString())
+                         && entry.Timestamp >= claim.PendDetails.PendedAt))
+            {
+                entry.OldValue = "Pended";
+            }
+        }
+
+        return Ok(timeline.OrderBy(entry => entry.Timestamp).ToList());
+    }
+
+    private static ClaimAuditTimelineEntry MapAuditEvent(ClaimVersionEvent evt)
+    {
+        var (action, oldValue, newValue) = evt.EventType switch
+        {
+            ClaimVersionEventType.ClaimVersionSubmitted => ("Claim submitted", (string?)null, "Submitted"),
+            ClaimVersionEventType.ClaimVersionAdjudicated => ("Claim adjudicated", "Submitted", "Approved"),
+            ClaimVersionEventType.ClaimVersionPaid => ("Payment recorded", "Approved", "Paid"),
+            ClaimVersionEventType.ClaimVersionDenied => ("Claim denied", "Submitted", "Denied"),
+            ClaimVersionEventType.ClaimVersionSuperseded => ("Claim version superseded", (string?)null, "Superseded"),
+            ClaimVersionEventType.ClaimVersionVoided => ("Claim voided", (string?)null, "Voided"),
+            ClaimVersionEventType.ClaimVersionReversed => ("Claim reversed", (string?)null, "Reversed"),
+            _ => (evt.EventType.ToString(), (string?)null, (string?)null)
+        };
+
+        var reason = evt.Payload?["reason"]?.ToString()
+            ?? evt.Payload?["adjustmentReason"]?.ToString()
+            ?? evt.Payload?["denialReasonCode"]?.ToString()
+            ?? evt.Payload?["notes"]?.ToString();
+
+        return new ClaimAuditTimelineEntry
+        {
+            Timestamp = evt.OccurredAt,
+            Action = action,
+            ChangedBy = string.IsNullOrWhiteSpace(evt.ActorId) ? "system" : evt.ActorId,
+            OldValue = oldValue,
+            NewValue = newValue,
+            Notes = reason,
+            EventType = evt.EventType.ToString(),
+            Version = evt.Version,
+            CorrelationId = evt.CorrelationId
+        };
     }
 
     /// <summary>
@@ -1315,6 +1400,19 @@ public class ClaimsController : ControllerBase
 
         var updated = await _claimRepository.UpdateAsync(claim);
 
+        var examinerUserId = request.ExaminerUserId ?? "portal-examiner";
+        var correlationId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier;
+        if (disposition == ClaimStatus.Denied)
+        {
+            await _versionEventPublisher.PublishVersionDeniedAsync(
+                updated, request.Reason, examinerUserId, correlationId, HttpContext.RequestAborted);
+        }
+        else
+        {
+            await _versionEventPublisher.PublishVersionAdjudicatedAsync(
+                updated, examinerUserId, correlationId, HttpContext.RequestAborted);
+        }
+
         if (claim.AiExamination is not null && !string.IsNullOrWhiteSpace(request.AiExaminerAgreement))
         {
             var auditUpdated = await _auditRepository.SetExaminerAgreementAsync(
@@ -1430,6 +1528,19 @@ public class ResolvePendedClaimRequest
     public string? Reason { get; set; }
     public string? AiExaminerAgreement { get; set; }
     public string? ExaminerUserId { get; set; }
+}
+
+public class ClaimAuditTimelineEntry
+{
+    public DateTime Timestamp { get; set; }
+    public string Action { get; set; } = string.Empty;
+    public string ChangedBy { get; set; } = string.Empty;
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+    public string? Notes { get; set; }
+    public string? EventType { get; set; }
+    public int? Version { get; set; }
+    public string? CorrelationId { get; set; }
 }
 
 /// <summary>

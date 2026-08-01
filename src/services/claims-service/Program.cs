@@ -46,6 +46,7 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     // system-of-record for the version chain. Mirrors
     // MongoProviderVersionEventPublisher / MongoPlanVersionEventPublisher.
     builder.Services.AddScoped<IClaimVersionEventPublisher, MongoClaimVersionEventPublisher>();
+    builder.Services.AddScoped<IClaimVersionEventReader, MongoClaimVersionEventReader>();
     builder.Services.AddHostedService<ClaimVersionEventIndexInitializer>();
 
     // 5.12a — ClaimAdjustment aggregate persistence (Mongo per Gap 4
@@ -90,6 +91,7 @@ else
     // Noop publisher logs a warning so ops can spot the missing wiring
     // without breaking the lifecycle path.
     builder.Services.AddScoped<IClaimVersionEventPublisher, NoopClaimVersionEventPublisher>();
+    builder.Services.AddScoped<IClaimVersionEventReader, NoopClaimVersionEventReader>();
 
     // 5.12a — Cosmos-only deployments throw on adjustment writes per
     // Gap 4 ratification. Reads return null/empty; the noop is fail-loud
