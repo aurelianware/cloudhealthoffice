@@ -1,0 +1,151 @@
+@using CloudHealthOffice.Portal.Services
+@inject IBenefitPlanService BenefitPlanService
+
+<MudDialog>
+    <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4"
+                      ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">
+                @_serviceError
+            </MudAlert>
+        }
+
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+            Excluded services deny with CARC 96 when their mapped category is billed. Saving creates and publishes a new plan version; the current published version remains immutable.
+        </MudAlert>
+
+        <MudForm @ref="_form" @bind-IsValid="_formIsValid">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudSelect @bind-Value="_request.BenefitType" Label="Service Type"
+                               Variant="Variant.Outlined" Required="true" T="string">
+                        <MudSelectItem Value="@("medical")">Medical</MudSelectItem>
+                        <MudSelectItem Value="@("pharmacy")">Pharmacy</MudSelectItem>
+                        <MudSelectItem Value="@("dental")">Dental</MudSelectItem>
+                        <MudSelectItem Value="@("vision")">Vision</MudSelectItem>
+                        <MudSelectItem Value="@("behavioralHealth")">Behavioral Health</MudSelectItem>
+                        <MudSelectItem Value="@("dme")">Durable Medical Equipment</MudSelectItem>
+                        <MudSelectItem Value="@("maternity")">Maternity</MudSelectItem>
+                        <MudSelectItem Value="@("preventive")">Preventive</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_request.ServiceCategory" Label="Service Category"
+                                  Placeholder="COSMETIC" Variant="Variant.Outlined" Required="true"
+                                  Immediate="true" RequiredError="Service category is required" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_request.Description" Label="Exclusion Description"
+                                  Placeholder="Cosmetic Procedures" Variant="Variant.Outlined"
+                                  Required="true" Immediate="true" RequiredError="Description is required" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_cptCodes" Label="CPT / HCPCS Codes"
+                                  Placeholder="15819, 15820" Variant="Variant.Outlined" Immediate="true"
+                                  HelperText="Optional reference codes for reviewers. The service-category mapping determines which billed codes reach this exclusion." />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="Save"
+                   Disabled="@(!_formIsValid || _isSaving)">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>@(ExistingExclusion == null ? "Add Exclusion" : "Update Exclusion")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string PlanId { get; set; } = string.Empty;
+    [Parameter] public PlanBenefit? ExistingExclusion { get; set; }
+
+    private MudForm _form = null!;
+    private bool _formIsValid;
+    private bool _isSaving;
+    private string? _serviceError;
+    private string _cptCodes = string.Empty;
+    private UpsertPlanBenefitRequest _request = new() { IsCovered = false };
+
+    protected override void OnInitialized()
+    {
+        if (ExistingExclusion == null)
+        {
+            return;
+        }
+
+        _request = new UpsertPlanBenefitRequest
+        {
+            BenefitType = ExistingExclusion.BenefitType,
+            ServiceCategory = ExistingExclusion.ServiceCategory,
+            Description = ExistingExclusion.Description,
+            IsCovered = false,
+            CptCodes = ExistingExclusion.CptCodes.ToList(),
+        };
+        _cptCodes = string.Join(", ", ExistingExclusion.CptCodes);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _form.Validate();
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (!_formIsValid)
+        {
+            return;
+        }
+
+        _isSaving = true;
+        _serviceError = null;
+        _request.IsCovered = false;
+        _request.CptCodes = _cptCodes
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        try
+        {
+            if (ExistingExclusion == null)
+            {
+                await BenefitPlanService.AddBenefitAsync(PlanId, _request);
+            }
+            else
+            {
+                await BenefitPlanService.UpdateBenefitAsync(PlanId, ExistingExclusion.BenefitId, _request);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (Exception)
+        {
+            _serviceError = "The exclusion could not be saved. Review the values and try again.";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

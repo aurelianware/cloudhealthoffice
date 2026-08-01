@@ -1,17 +1,17 @@
 <!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Configure Benefits and Cost Sharing — Cloud Health Office</title>
-  <meta name="description" content="Add covered services, copays, coinsurance, deductible behavior, limits, and prior authorization requirements to a Cloud Health Office benefit plan." />
+  <title>Configure Benefits, Exclusions, and Cost Sharing — Cloud Health Office</title>
+  <meta name="description" content="Add covered services, explicit exclusions, copays, coinsurance, deductible behavior, limits, and prior authorization requirements to a Cloud Health Office benefit plan." />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/configure-benefits-cost-sharing" />
   <link rel="stylesheet" href="/css/sentinel.css" /><link rel="stylesheet" href="/css/docs.css" /><script src="/js/auth.js"></script><script src="/js/mobile-nav.js"></script>
 </head><body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
   <nav><div class="nav-inner"><a href="/" class="nav-logo"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle navigation menu" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="/contact">Contact Sales</a></li></ul></div></div></nav>
   <main id="main-content"><div class="docs-wrapper">
-    <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner"><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Benefit Plan Tutorials</div><ul><li><a href="/docs/create-verify-benefit-plan">1. Create &amp; Verify</a></li><li><a class="active" href="/docs/configure-benefits-cost-sharing">2. Benefits &amp; Cost Sharing</a></li><li><a href="/docs/publish-version-benefit-plan">3. Publish &amp; Version</a></li><li><a href="/docs/validate-benefit-plan">4. Validate the Plan</a></li><li><a href="/docs/configure-plan-networks">5. Networks</a></li></ul></div><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#model">Configuration Model</a></li><li><a href="#add">Add Benefits</a></li><li><a href="#verify">Verify</a></li><li><a href="#rules">Design Checks</a></li></ul></div></div></aside>
+    <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner"><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Benefit Plan Tutorials</div><ul><li><a href="/docs/create-verify-benefit-plan">1. Create &amp; Verify</a></li><li><a class="active" href="/docs/configure-benefits-cost-sharing">2. Benefits &amp; Cost Sharing</a></li><li><a href="/docs/publish-version-benefit-plan">3. Publish &amp; Version</a></li><li><a href="/docs/validate-benefit-plan">4. Validate the Plan</a></li><li><a href="/docs/configure-plan-networks">5. Networks</a></li></ul></div><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#model">Configuration Model</a></li><li><a href="#add">Add Benefits</a></li><li><a href="#exclude">Add Exclusions</a></li><li><a href="#verify">Verify</a></li><li><a href="#rules">Design Checks</a></li></ul></div></div></aside>
     <div class="docs-content"><div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Benefits and Cost Sharing</span></div>
-      <h1>Configure Benefits and Cost Sharing</h1><p class="docs-subtitle">Turn a plan shell into adjudication-ready rules for office visits, preventive care, inpatient services, and other covered categories.</p>
+      <h1>Configure Benefits, Exclusions, and Cost Sharing</h1><p class="docs-subtitle">Turn a plan shell into adjudication-ready rules for covered services and intentional non-covered-service denials.</p>
       <div class="callout callout-info"><div class="callout-title">Version-safe authoring</div><p>Adding or editing a benefit in the portal creates and publishes a successor plan version. The prior published version remains intact for claims and audit history.</p></div>
       <h2 id="model">How a Benefit Rule Works</h2>
       <p>A benefit connects a service category to member cost sharing and utilization controls. The engine evaluates the rule selected for the claim&rsquo;s mapped service category and network tier.</p>
@@ -52,17 +52,35 @@
     "priorAuthRequired": false
   }' | jq</code></pre>
       <p>Like the portal workflow, each API write creates and immediately publishes an amendment because benefits are version-identity content. Re-fetch the plan after each write instead of editing a previously retrieved JSON document.</p>
-      <h2 id="verify">2. Verify the Effective Configuration</h2><div class="code-block-header"><span>Shell</span><span>benefit summary</span></div><pre><code>curl -fsS \
+      <h2 id="exclude">2. Add Explicit Exclusions</h2>
+      <p>Select the <strong>Exclusions</strong> tab and choose <strong>Add Exclusion</strong>. Enter the mapped service category and a clear operator-facing description. Optional CPT or HCPCS codes provide review context, but the service-category mapping remains authoritative for routing billed codes to the exclusion.</p>
+      <figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/add-plan-exclusion.png" alt="Add Plan Exclusion dialog configured for cosmetic procedures with a mapped service category and reference billing codes." loading="lazy" /><figcaption>Explicit exclusions use the same version-safe authoring model as covered benefits and identify the adjudication result before the rule is published.</figcaption></figure>
+      <p>Select <strong>Add Exclusion</strong>. When a claim resolves to that category, benefit calculation returns a non-covered-service denial with CARC 96. Use the pencil action to revise an exclusion; each edit publishes another successor version.</p>
+      <div class="callout callout-warning"><div class="callout-title">Map before relying on the exclusion</div><p>An exclusion is enforced after procedure-code resolution. Confirm that the applicable CPT, HCPCS, revenue, place-of-service, and modifier rules map the billed line to the exclusion&rsquo;s service category. Reference codes entered in the exclusion form do not replace service-category mapping.</p></div>
+      <figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/exclusions-tab.png" alt="Cloud Health Office Exclusions tab showing cosmetic and investigational services, reference billing codes, CARC 96 results, and edit actions." loading="lazy" /><figcaption>The Exclusions tab distinguishes intentionally non-covered categories from missing benefit configuration and shows the expected claim result.</figcaption></figure>
+      <h3>Optional: automate an exclusion through the API</h3>
+      <div class="code-block-header"><span>Shell</span><span>cosmetic-procedure exclusion</span></div><pre><code>curl -fsS -X POST \
+  "${BENEFIT_PLAN_URL}/api/v1/plans/${PLAN_ID}/benefits" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  -d '{
+    "benefitType": "medical",
+    "serviceCategory": "COSMETIC",
+    "description": "Cosmetic and Elective Procedures",
+    "isCovered": false,
+    "cptCodes": ["15819", "15820", "15821"]
+  }' | jq</code></pre>
+      <h2 id="verify">3. Verify the Effective Configuration</h2><div class="code-block-header"><span>Shell</span><span>benefit summary</span></div><pre><code>curl -fsS \
   -H "X-Tenant-ID: ${TENANT_ID}" \
   "${BENEFIT_PLAN_URL}/api/v1/plans/${PLAN_ID}/benefits" |
   jq '.[] | {
     description, serviceCategory, inNetworkCopay,
     inNetworkCoinsurance, deductibleApplies,
-    oopApplies, priorAuthRequired
+    oopApplies, priorAuthRequired, isCovered
   }'</code></pre>
       <p>In the portal, confirm that fixed copays, percentage coinsurance, derived coverage percentages, and prior-authorization indicators match the intended configuration. The pencil action beside each row reopens its complete editable definition.</p>
       <figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/benefits-tab.png" alt="Cloud Health Office Benefits tab showing covered service rows with copays, coinsurance, coverage percentages, prior authorization requirements, and edit actions." loading="lazy" /><figcaption>The Benefits tab is both the effective-rule summary and the starting point for version-safe edits.</figcaption></figure>
-      <div class="callout callout-success"><div class="callout-title">Completion check</div><p>The office visit returns a $30 in-network copay without deductible, while diagnostic lab returns 20% in-network coinsurance after deductible.</p></div>
+      <div class="callout callout-success"><div class="callout-title">Completion check</div><p>The office visit returns a $30 in-network copay without deductible, diagnostic lab returns 20% in-network coinsurance after deductible, and a claim mapped to <code>COSMETIC</code> denies as non-covered with CARC 96.</p></div>
       <h2 id="rules">Benefit Design Checks</h2><ul><li>Do not configure both a copay and coinsurance unless the intended product explicitly uses both.</li><li>Represent percentages as decimals in the service API.</li><li>Verify that service-category mapping covers the CPT, HCPCS, revenue, or service-type codes used by claims.</li><li>Use only synthetic values in evaluator environments.</li><li>Review annual and visit limits independently from deductible and OOP behavior.</li></ul>
       <div class="docs-pager"><a href="/docs/create-verify-benefit-plan"><div class="pager-label">&larr; Previous</div><div class="pager-title">Create &amp; Verify</div></a><a href="/docs/publish-version-benefit-plan" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Publish &amp; Version</div></a></div>
     </div></div></main>

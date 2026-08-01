@@ -248,6 +248,15 @@ public class Benefit
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Whether the service is covered by this plan. Explicit exclusions are
+    /// authored as benefit categories with this flag set to false so they
+    /// participate in the same category mapping and rule-selection path as
+    /// covered services.
+    /// </summary>
+    [JsonPropertyName("isCovered")]
+    public bool IsCovered { get; set; } = true;
+
     [JsonPropertyName("cptCodes")]
     public List<string> CptCodes { get; set; } = new();
 

@@ -61,11 +61,12 @@ public class AdapterTypedBenefitRoundTripTests
         back.Should().BeOfType(src.GetType());
         back.ServiceCategory.Should().Be(src.ServiceCategory);
         back.Id.Should().Be(src.Id);
+        back.IsCovered.Should().Be(src.IsCovered);
     }
 
     public static IEnumerable<object[]> EachTypedBenefit() => new[]
     {
-        new object[] { new MedicalBenefit { Id = "m", ServiceCategory = "Primary Care", InNetworkCopay = 25m } },
+        new object[] { new MedicalBenefit { Id = "m", ServiceCategory = "COSMETIC", IsCovered = false } },
         new object[] { new DentalBenefit { Id = "d", ServiceCategory = "Dental", IsOrthodontic = true, LifetimeBenefitMaximum = 1500m } },
         new object[] { new PharmacyBenefit { Id = "p", ServiceCategory = "Pharmacy", FormularyTier = "Tier 1", DaysSupply = 30 } },
         new object[] { new BehavioralHealthBenefit { Id = "bh", ServiceCategory = "Mental Health", ParityCategory = "Outpatient" } },
