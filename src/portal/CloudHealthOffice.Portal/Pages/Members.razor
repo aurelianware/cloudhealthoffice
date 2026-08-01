@@ -116,8 +116,8 @@
                     </MudTd>
                     <MudTd DataLabel="Coverage Status">
                         <MudChip Size="Size.Small"
-                                Color="@GetStatusColor(context.CoverageStatus)">
-                            @context.CoverageStatus
+                                Color="@GetStatusColor(context.DisplayStatus)">
+                            @context.DisplayStatus
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Actions">
@@ -152,6 +152,14 @@
 </PermissionGate>
 
 @code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "memberId")]
+    public string? RequestedMemberId { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "open")]
+    public bool OpenRequestedMember { get; set; }
+
     private string _memberIdSearch = string.Empty;
     private string _lastNameSearch = string.Empty;
     private string _dobSearch = string.Empty;
@@ -160,6 +168,26 @@
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
     private string? _serviceError;
+    private string? _handledMemberQuery;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var requestedMemberId = RequestedMemberId?.Trim();
+        if (string.IsNullOrWhiteSpace(requestedMemberId) ||
+            string.Equals(requestedMemberId, _handledMemberQuery, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _handledMemberQuery = requestedMemberId;
+        _memberIdSearch = requestedMemberId;
+        await SearchMembers();
+
+        if (OpenRequestedMember && _members.Count == 1)
+        {
+            await ViewMemberDetails(_members[0].MemberId);
+        }
+    }
 
     private bool HasCriteria =>
         !string.IsNullOrWhiteSpace(_memberIdSearch) ||
