@@ -603,6 +603,20 @@
                                         <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">@_syntheticResult.OutcomeReason</MudAlert>
                                     }
                                     <MudText Typo="Typo.caption" Class="mt-3">Claim ID: @_syntheticResult.ClaimId · elapsed @_syntheticResult.Elapsed.TotalSeconds.ToString("0.0")s</MudText>
+                                    <MudStack Row="true" Spacing="2" Class="mt-3">
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                                   StartIcon="@Icons.Material.Filled.HealthAndSafety"
+                                                   Href="@($"/members?memberId={Uri.EscapeDataString(_syntheticResult.MemberId)}&open=true")"
+                                                   data-testid="open-synthetic-member">
+                                            Open member coverage
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                                                   StartIcon="@Icons.Material.Filled.ReceiptLong"
+                                                   Href="@($"/claims/{Uri.EscapeDataString(_syntheticResult.ClaimId)}")"
+                                                   data-testid="open-synthetic-claim">
+                                            Open claim details
+                                        </MudButton>
+                                    </MudStack>
                                 </MudPaper>
                             }
                         }

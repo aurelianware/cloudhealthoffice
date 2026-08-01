@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>First Claim Evaluator Journey — Cloud Health Office</title>
+  <meta name="description" content="Evaluate Cloud Health Office end to end: prove a benefit plan, member coverage, provider participation, raw X12 837 intake, adjudication, and claim evidence." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/first-claim-evaluator-journey" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/first-claim-evaluator-journey" />
+  <meta property="og:title" content="First Claim Evaluator Journey — Cloud Health Office" />
+  <meta property="og:description" content="Follow one synthetic claim from configuration and eligibility through provider-network resolution and adjudication evidence." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/user-guides/first-claim/claim-plan-resolution.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "First Claim Evaluator Journey",
+    "description": "Prove a Cloud Health Office claim from benefit-plan configuration and active coverage through provider participation, raw X12 837 intake, and adjudication evidence.",
+    "url": "https://cloudhealthoffice.com/docs/first-claim-evaluator-journey",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-08-01",
+    "dateModified": "2026-08-01",
+    "proficiencyLevel": "Beginner",
+    "about": ["X12 837", "Eligibility", "Provider networks", "Benefit plans", "Claims adjudication"]
+  }
+  </script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <style>
+    .proof-chain { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin:24px 0; }
+    .proof-step { position:relative; padding:16px 12px; border:1px solid rgba(0,255,255,.24); border-radius:8px; background:rgba(0,255,255,.035); min-height:88px; }
+    .proof-step::after { content:"\2192"; position:absolute; right:-10px; top:34px; z-index:1; color:#00ffff; background:#000; padding:0 2px; }
+    .proof-step:last-child::after { content:none; }
+    .proof-step strong { display:block; color:#00ffff; margin-bottom:7px; }
+    .proof-step span { color:rgba(255,255,255,.68); font-size:.88rem; line-height:1.35; }
+    .proof-step.success { border-color:rgba(0,255,136,.45); background:rgba(0,255,136,.05); }
+    .proof-step.success strong { color:#00ff88; }
+    @media (max-width:900px) { .proof-chain { grid-template-columns:1fr; } .proof-step { min-height:0; } .proof-step::after { content:"\2193"; right:50%; top:auto; bottom:-16px; } }
+  </style>
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav><div class="nav-inner"><a href="/" class="nav-logo" aria-label="Cloud Health Office Home"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="/contact">Contact Sales</a></li></ul></div></div></nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Evaluator Journey</div><ul><li><a class="active" href="/docs/first-claim-evaluator-journey">First Claim</a></li><li><a href="/docs/submit-837-follow-claim">Submit &amp; Follow an 837</a></li><li><a href="/docs/837-intake-adjudication-operations">837 Operations</a></li><li><a href="/docs/review-resolve-pended-claim">Pended Claims</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#proof-chain">Proof Chain</a></li><li><a href="#plan">Plan Readiness</a></li><li><a href="#coverage">Member Coverage</a></li><li><a href="#network">Provider Network</a></li><li><a href="#submit">Send the 837</a></li><li><a href="#trace">Read the Trace</a></li><li><a href="#capture">Refresh Evidence</a></li></ul></div>
+      </div></aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">First Claim Evaluator Journey</span></div>
+        <h1>First Claim Evaluator Journey</h1>
+        <p class="docs-subtitle">Follow one synthetic professional claim from plan configuration and active coverage through provider-network resolution, raw X12 837 intake, adjudication, and operator evidence.</p>
+
+        <div class="callout callout-info"><div class="callout-title">The evaluation question</div><p>Can the platform explain why this member, provider, service, plan, and network produced this exact claim outcome? This journey proves each dependency before treating the final status as meaningful.</p></div>
+        <div class="callout callout-warning"><div class="callout-title">Demo-only fixture creation</div><p>The guided synthetic-claim action is enabled only in Development, Local Demo, or an explicitly approved demo environment. It creates generated records and must not be enabled casually in production. Never use PHI in screenshots.</p></div>
+
+        <h2 id="proof-chain">The Five-Gate Proof Chain</h2>
+        <div class="proof-chain" aria-label="Five-gate claim proof chain"><div class="proof-step"><strong>1. Plan</strong><span>Published rules</span></div><div class="proof-step"><strong>2. Coverage</strong><span>Member + service date</span></div><div class="proof-step"><strong>3. Network</strong><span>Provider + tier</span></div><div class="proof-step"><strong>4. X12 837</strong><span>Real intake path</span></div><div class="proof-step success"><strong>5. Claim</strong><span>Traceable outcome</span></div></div>
+        <table><thead><tr><th>Gate</th><th>Evidence to record</th><th>Failure means</th></tr></thead><tbody>
+          <tr><td>Plan readiness</td><td>Published version, effective date, benefits, networks, member view</td><td>Do not submit yet; configuration is incomplete.</td></tr>
+          <tr><td>Member coverage</td><td>Active coverage, exact plan ID, effective period</td><td>The claim cannot resolve the intended benefit plan.</td></tr>
+          <tr><td>Provider participation</td><td>Active network membership on the service date</td><td>The claim may select another tier, pend, or deny.</td></tr>
+          <tr><td>837 intake</td><td>Accepted transaction, claim number, persisted claim ID</td><td>Diagnose EDI or intake before adjudication.</td></tr>
+          <tr><td>Adjudication</td><td>Terminal status, financials, outcome reason, pipeline stages</td><td>Explain the business result from recorded evidence.</td></tr>
+        </tbody></table>
+
+        <h2 id="plan">1. Prove the Plan Is Ready</h2>
+        <p>Open <strong>Configuration &rarr; Benefit Plans</strong>, select the published test plan, and open <strong>Validation</strong>. Choose the claim service date and refresh the checks. Continue only when the effective-date, publication, covered-benefit, network-tier, and member-view checks are explainable.</p>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/first-claim/plan-ready-for-claim.png" alt="Benefit plan Validation tab showing a published plan ready for a synthetic claim test." loading="lazy" /><figcaption>The readiness view turns configuration into explicit preconditions instead of allowing a misleading claim test.</figcaption></figure>
+
+        <h2 id="coverage">2. Prove Member Eligibility Selects the Plan</h2>
+        <p>The synthetic workflow creates an isolated member and active coverage whose <code>PlanId</code> is the stable identifier of the selected plan. Use <strong>Open member coverage</strong> from the result to inspect that record directly.</p>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/first-claim/member-active-coverage.png" alt="Synthetic Plan Validator member details showing active BPVALIDATE coverage for the evaluated benefit plan." loading="lazy" /><figcaption>Active coverage ties the generated member and service date to the exact plan expected during adjudication.</figcaption></figure>
+        <p>For a real integration, this same dependency normally arrives through an 834 enrollment transaction or coverage API. The synthetic action makes the evaluator fixture repeatable without bypassing the ordinary coverage read used by claims.</p>
+
+        <h2 id="network">3. Prove Provider Participation Selects the Tier</h2>
+        <p>Return to the plan&rsquo;s <strong>Networks</strong> tab. Resolve the preferred tier to provider-service, load its effective roster, and verify the test NPI on the same service date. The membership check uses the same date-sensitive endpoint consulted by the claims network-and-credentialing stage.</p>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/benefit-plans/network-membership-proof.png" alt="Provider participation result confirming that the synthetic NPI is an active member of the selected plan network on the service date." loading="lazy" /><figcaption>Plan tier, provider NPI, network organization, and service date agree before the claim is sent.</figcaption></figure>
+
+        <h2 id="submit">4. Send an Actual X12 837P</h2>
+        <p>In <strong>Validation &rarr; Synthetic 837 proof</strong>, confirm the generated provider NPI, procedure code, and charge, then select <strong>Run synthetic 837</strong>. The portal uploads an actual X12 837P and waits for the normal asynchronous claim projection; it does not call a benefit calculator shortcut.</p>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/first-claim/claim-plan-resolution.png" alt="Synthetic 837 result showing the resolved plan version, approved status, network tier, and claim financials." loading="lazy" /><figcaption>The result proves exact plan resolution and presents the financial outcome beside links to the generated member and persisted claim.</figcaption></figure>
+        <table><thead><tr><th>Result field</th><th>What it proves</th></tr></thead><tbody><tr><td>Resolved plan and version</td><td>Coverage selected the intended published configuration.</td></tr><tr><td>Network tier</td><td>Provider participation mapped to the expected cost-sharing tier.</td></tr><tr><td>Allowed and plan paid</td><td>Pricing and payer liability completed.</td></tr><tr><td>Deductible, copay, coinsurance</td><td>The configured benefits drove member responsibility.</td></tr><tr><td>Claim ID and elapsed time</td><td>The result is persisted and can be followed into operations.</td></tr></tbody></table>
+
+        <h2 id="trace">5. Read the Persisted Claim and Pipeline</h2>
+        <p>Select <strong>Open claim details</strong>, then open <strong>Adjudication Pipeline</strong>. Confirm that intake, eligibility and plan resolution, provider gates, benefit calculation, disposition, and persistence agree with the summary. An Approved, Denied, or Pended status is credible only when the recorded stages and reason explain it.</p>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/submit-837/adjudication-pipeline.png" alt="Cloud Health Office claim adjudication pipeline with recorded processing stages and statuses." loading="lazy" /><figcaption>The trace separates an expected rule outcome from an ingestion, projection, or infrastructure failure.</figcaption></figure>
+        <div class="callout callout-success"><div class="callout-title">Evaluation complete</div><p>You can identify the exact plan version, active member coverage, provider-network relationship, accepted 837, persisted claim, financial result, and the stages that produced its disposition.</p></div>
+
+        <h2 id="capture">Refresh the Playwright Evidence</h2>
+        <p>The checked-in capture workflow runs the same synthetic journey and replaces its three evaluator screenshots at a fixed desktop viewport.</p>
+        <div class="code-block-header"><span>Shell</span><span>src/site</span></div>
+        <pre><code>npm install
+GUIDE_PLAN_ID=GUIDE-PPO-2026 npm run guides:capture:first-claim</code></pre>
+        <p>Use only generated data. The broader <a href="/docs/submit-837-follow-claim">837 tutorial</a> covers the 834-to-837 shell workflow, while the <a href="/docs/837-intake-adjudication-operations">operations runbook</a> covers queues, consumers, retries, dead letters, and recovery.</p>
+
+        <div class="docs-pager"><a href="/docs"><div class="pager-label">&larr; Previous</div><div class="pager-title">Docs Home</div></a><a href="/docs/submit-837-follow-claim" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Submit &amp; Follow an 837</div></a></div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button><div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand"><h4>Cloud Health Office</h4><p>Cloud-native health plan administration with inspectable claims, eligibility, provider, and interoperability workflows.</p></div><div class="footer-col"><h5>Documentation</h5><ul><li><a href="/docs/quickstart">Quick Start</a></li><li><a href="/docs/claims-guide">Claims Guide</a></li><li><a href="/docs/api">API Reference</a></li></ul></div><div class="footer-col"><h5>Contact</h5><ul><li><a href="/contact">Contact Sales</a></li><li><a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a></li></ul></div></div><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &middot; Source-available (BSL 1.1)</p></div></div></footer>
+  <script>const toggle=document.getElementById('docsMobileToggle');const sidebar=document.getElementById('docsSidebar');const overlay=document.getElementById('docsSidebarOverlay');if(toggle&&sidebar){toggle.addEventListener('click',()=>{sidebar.classList.toggle('open');overlay.classList.toggle('open');});overlay.addEventListener('click',()=>{sidebar.classList.remove('open');overlay.classList.remove('open');});}</script>
+</body>
+</html>
