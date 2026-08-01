@@ -261,6 +261,29 @@ public class ClaimsServiceTests
     }
 
     [Fact]
+    public async Task GetClaimByIdAsync_LoadsAuditTimelineForClaimDetails()
+    {
+        var handler = new FakeHandler(request =>
+        {
+            var isTimeline = request.RequestUri!.AbsolutePath.EndsWith("/audit-timeline", StringComparison.Ordinal);
+            var json = isTimeline
+                ? """[{"timestamp":"2026-03-02T10:00:00Z","action":"Claim submitted","changedBy":"837-ingress","newValue":"Submitted"}]"""
+                : """{"id":"claim-100","claimNumber":"CLM-100","status":"Submitted"}""";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+            };
+        });
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetClaimByIdAsync("claim-100");
+
+        result!.AuditTrail.Should().ContainSingle()
+            .Which.ChangedBy.Should().Be("837-ingress");
+        handler.CapturedUrls.Should().Contain(url => url.EndsWith("/claims/claim-100/audit-timeline"));
+    }
+
+    [Fact]
     public async Task GetClaimByIdAsync_WhenApiReturnsMassAdjudicationClaimShape_DeserializesSafely()
     {
         const string json = """

@@ -47,13 +47,19 @@ public class ClaimsService : IClaimsService
             // Try by ID first, then fall back to claim number lookup
             var response = await _httpClient.GetAsync($"{baseUrl}/claims/{claimId}");
             if (response.IsSuccessStatusCode)
-                return await response.Content.ReadFromJsonAsync<ClaimDetails>(JsonOptions);
+            {
+                var claim = await response.Content.ReadFromJsonAsync<ClaimDetails>(JsonOptions);
+                return await AddAuditTrailAsync(baseUrl, claim);
+            }
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 var fallback = await _httpClient.GetAsync($"{baseUrl}/claims/number/{claimId}");
                 if (fallback.IsSuccessStatusCode)
-                    return await fallback.Content.ReadFromJsonAsync<ClaimDetails>(JsonOptions);
+                {
+                    var claim = await fallback.Content.ReadFromJsonAsync<ClaimDetails>(JsonOptions);
+                    return await AddAuditTrailAsync(baseUrl, claim);
+                }
                 if (fallback.StatusCode == System.Net.HttpStatusCode.NotFound)
                     return null;
                 fallback.EnsureSuccessStatusCode();
@@ -67,6 +73,20 @@ public class ClaimsService : IClaimsService
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
             throw new ServiceUnavailableException("Claims Service", ex);
         }
+    }
+
+    private async Task<ClaimDetails?> AddAuditTrailAsync(string? baseUrl, ClaimDetails? claim)
+    {
+        if (claim is null || string.IsNullOrWhiteSpace(claim.ClaimId)) return claim;
+
+        var response = await _httpClient.GetAsync(
+            $"{baseUrl}/claims/{Uri.EscapeDataString(claim.ClaimId)}/audit-timeline");
+        if (response.StatusCode == HttpStatusCode.NotFound) return claim;
+
+        response.EnsureSuccessStatusCode();
+        var timeline = await response.Content.ReadFromJsonAsync<List<ClaimAudit>>(JsonOptions);
+        if (timeline is { Count: > 0 }) claim.AuditTrail = timeline;
+        return claim;
     }
 
     public async Task<string?> GetExplanationOfBenefitJsonAsync(string claimId)

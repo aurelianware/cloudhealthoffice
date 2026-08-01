@@ -24,10 +24,13 @@ public class FakeHandler : HttpMessageHandler
     }
 
     public FakeHandler(HttpStatusCode statusCode, string responseBody)
-        : this(_ =>
+        : this(request =>
         {
             var response = new HttpResponseMessage(statusCode);
-            response.Content = new StringContent(responseBody, Encoding.UTF8, "application/json");
+            var body = request.RequestUri?.AbsolutePath.EndsWith("/audit-timeline", StringComparison.Ordinal) == true
+                ? "[]"
+                : responseBody;
+            response.Content = new StringContent(body, Encoding.UTF8, "application/json");
             return response;
         })
     {
