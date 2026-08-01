@@ -5,6 +5,7 @@ import path from "node:path";
 
 const portalUrl = (process.env.GUIDE_PORTAL_URL ?? "http://localhost:8080").replace(/\/$/, "");
 const planId = process.env.GUIDE_PLAN_ID;
+const providerNpi = process.env.GUIDE_PROVIDER_NPI ?? "1999999992";
 
 if (!planId) {
   throw new Error(
@@ -89,6 +90,22 @@ try {
     fullPage: false
   });
   await page.getByRole("button", { name: "Cancel" }).click();
+
+  await page.getByTestId("load-network-roster").click();
+  await page.getByText(/Effective provider roster/).waitFor();
+  await page.getByText(/Effective provider roster/).scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(outputDirectory, "network-roster-verification.png"),
+    fullPage: false
+  });
+
+  await page.getByTestId(`verify-roster-provider-${providerNpi}`).click();
+  await page.getByTestId("network-membership-result").waitFor();
+  await page.getByTestId("network-membership-result").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(outputDirectory, "network-membership-proof.png"),
+    fullPage: false
+  });
 
   await page.locator(".mud-tab").filter({ hasText: "Exclusions" }).click();
   await page.getByText("Services Not Covered", { exact: true }).waitFor();

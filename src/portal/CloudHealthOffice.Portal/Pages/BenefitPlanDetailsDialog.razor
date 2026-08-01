@@ -2,6 +2,7 @@
 @using System.Globalization
 @inject IBenefitPlanService BenefitPlanService
 @inject IBenefitPlanValidationService BenefitPlanValidationService
+@inject IProviderService ProviderService
 @inject IDialogService DialogService
 
 <MudDialog>
@@ -281,6 +282,141 @@
                                OnClick="AddNetworkTier">
                         Add Network Tier
                     </MudButton>
+
+                    @if (_plan.NetworkTiers.Any())
+                    {
+                        <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.h6" GutterBottom="true">Provider participation verification</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                            Resolve the selected plan tier to its provider-service network, inspect the effective roster,
+                            and prove a specific NPI's participation on the service date.
+                        </MudText>
+                        <MudGrid AlignItems="AlignItems.End">
+                            <MudItem xs="12" md="4">
+                                <MudSelect T="string" Label="Plan network tier" @bind-Value="_selectedNetworkId"
+                                           Variant="Variant.Outlined" data-testid="network-verification-tier">
+                                    @foreach (var tier in _plan.NetworkTiers.OrderBy(tier => tier.TierLevel))
+                                    {
+                                        <MudSelectItem T="string" Value="@tier.NetworkId">Tier @tier.TierLevel · @tier.TierName (@tier.NetworkId)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="6" md="3">
+                                <MudDatePicker Label="As-of date" @bind-Date="_networkAsOfDate"
+                                               DateFormat="MM/dd/yyyy" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6" md="3">
+                                <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                                           StartIcon="@Icons.Material.Filled.Groups"
+                                           Disabled="_networkVerificationBusy"
+                                           data-testid="load-network-roster"
+                                           OnClick="LoadNetworkRosterAsync">
+                                    Load effective roster
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_networkVerificationBusy)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Secondary" Class="mt-3" />
+                        }
+                        else if (_providerNetwork != null && _networkRoster != null)
+                        {
+                            <MudPaper Outlined="true" Class="pa-4 mt-3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <div>
+                                        <MudText Typo="Typo.subtitle1"><strong>@_providerNetwork.Name</strong></MudText>
+                                        <MudText Typo="Typo.body2"><code>@_providerNetwork.OrganizationId</code> · @_providerNetwork.NetworkType · @_providerNetwork.LineOfBusiness</MudText>
+                                        <MudText Typo="Typo.caption">Effective @_providerNetwork.EffectiveDate.ToString("MMM d, yyyy")@(_providerNetwork.TerminationDate.HasValue ? $" through {_providerNetwork.TerminationDate.Value:MMM d, yyyy}" : " · open-ended") · Version @_providerNetwork.VersionNumber</MudText>
+                                    </div>
+                                    <MudChip Color="@(_providerNetwork.Status == "Active" ? Color.Success : Color.Warning)" Icon="@Icons.Material.Filled.AccountTree">
+                                        @_providerNetwork.Status
+                                    </MudChip>
+                                </MudStack>
+                            </MudPaper>
+
+                            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Effective provider roster (@_networkRoster.Items.Count shown)</MudText>
+                            @if (_networkRoster.Items.Any())
+                            {
+                                <MudTable Items="@_networkRoster.Items" Dense="true" Hover="true" Striped="true" data-testid="network-roster-table">
+                                    <HeaderContent>
+                                        <MudTh>Provider</MudTh>
+                                        <MudTh>NPI</MudTh>
+                                        <MudTh>Specialty</MudTh>
+                                        <MudTh>Plan / Tier</MudTh>
+                                        <MudTh>Participation</MudTh>
+                                        <MudTh>Integrity</MudTh>
+                                        <MudTh>Verify</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Provider"><strong>@context.Provider.DisplayName</strong><br /><small>@context.Provider.City, @context.Provider.State</small></MudTd>
+                                        <MudTd DataLabel="NPI"><code>@context.Provider.Npi</code></MudTd>
+                                        <MudTd DataLabel="Specialty">@context.Provider.PrimarySpecialty</MudTd>
+                                        <MudTd DataLabel="Plan / Tier">@(context.Participation.PlanId ?? "Any plan")<br /><small>@context.Participation.NetworkTier</small></MudTd>
+                                        <MudTd DataLabel="Participation">@context.Participation.EffectiveDate.ToString("MM/dd/yyyy")<br /><small>@(context.Participation.TerminationDate?.ToString("MM/dd/yyyy") ?? "Open-ended")</small></MudTd>
+                                        <MudTd DataLabel="Integrity">
+                                            <MudChip Size="Size.Small" Color="@(context.IntegrityScore?.Rating == "Clear" ? Color.Success : Color.Default)">
+                                                @(context.IntegrityScore?.Score?.ToString() ?? "—") @(context.IntegrityScore?.Rating ?? "Unverified")
+                                            </MudChip>
+                                        </MudTd>
+                                        <MudTd DataLabel="Verify">
+                                            <MudIconButton Icon="@Icons.Material.Filled.VerifiedUser"
+                                                           Color="Color.Primary" Size="Size.Small"
+                                                           Title="Verify this NPI's participation"
+                                                           data-testid="@($"verify-roster-provider-{context.Provider.Npi}")"
+                                                           OnClick="@(() => VerifyNetworkMembershipAsync(context.Provider.Npi))" />
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">No providers are effective in this network on @_networkAsOfDate?.ToString("MMMM d, yyyy").</MudAlert>
+                            }
+
+                            <MudGrid AlignItems="AlignItems.End" Class="mt-3">
+                                <MudItem xs="12" sm="7" md="5">
+                                    <MudTextField Label="Verify provider NPI" @bind-Value="_networkMembershipNpi"
+                                                  Variant="Variant.Outlined" MaxLength="10"
+                                                  Placeholder="10-digit NPI" data-testid="network-membership-npi" />
+                                </MudItem>
+                                <MudItem xs="12" sm="5" md="3">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.VerifiedUser"
+                                               Disabled="_networkMembershipBusy"
+                                               data-testid="verify-network-membership"
+                                               OnClick="VerifyEnteredNetworkMembershipAsync">
+                                        Verify participation
+                                    </MudButton>
+                                </MudItem>
+                            </MudGrid>
+
+                            @if (_networkMembershipChecked)
+                            {
+                                <MudAlert Severity="@(_networkMembership?.IsActiveMember == true ? Severity.Success : Severity.Warning)"
+                                          Variant="Variant.Filled" Class="mt-3" data-testid="network-membership-result">
+                                    @if (_networkMembership?.IsActiveMember == true)
+                                    {
+                                        <span><strong>@_networkMembership.Npi is an active member</strong> of @_networkMembership.NetworkId on @_networkMembership.AsOfDate.ToString("MMMM d, yyyy") · @_networkMembership.NetworkTier · @_networkMembership.LineOfBusiness</span>
+                                    }
+                                    else if (_networkMembership != null)
+                                    {
+                                        <span><strong>@_networkMembership.Npi is not active</strong> on @_networkMembership.AsOfDate.ToString("MMMM d, yyyy") · @_networkMembership.ParticipationStatus</span>
+                                    }
+                                    else
+                                    {
+                                        <span><strong>@_networkMembershipNpi has no participation record</strong> in @_selectedNetworkId.</span>
+                                    }
+                                </MudAlert>
+                            }
+                        }
+                        else if (_networkVerificationAttempted)
+                        {
+                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-3">
+                                Network @_selectedNetworkId was not found in provider-service. Create the network organization before assigning provider participation.
+                            </MudAlert>
+                        }
+                    }
                 </MudTabPanel>
 
                 <!-- Exclusions Tab -->
@@ -517,6 +653,16 @@
     private bool _syntheticBusy;
     private SyntheticClaimValidationRequest _syntheticRequest = new() { ServiceDate = DateTime.Today };
     private SyntheticClaimValidationResult? _syntheticResult;
+    private string? _selectedNetworkId;
+    private DateTime? _networkAsOfDate = DateTime.Today;
+    private ProviderNetworkInfo? _providerNetwork;
+    private ProviderNetworkRoster? _networkRoster;
+    private ProviderNetworkMembership? _networkMembership;
+    private string _networkMembershipNpi = string.Empty;
+    private bool _networkVerificationBusy;
+    private bool _networkVerificationAttempted;
+    private bool _networkMembershipBusy;
+    private bool _networkMembershipChecked;
     private static readonly CultureInfo UsCulture = CultureInfo.GetCultureInfo("en-US");
 
     private static string FormatCurrency(decimal value) => value.ToString("C", UsCulture);
@@ -535,6 +681,8 @@
                 _validationServiceDate = today < _plan.EffectiveDate.Date ? _plan.EffectiveDate.Date : today;
                 if (_plan.TerminationDate.HasValue && _validationServiceDate > _plan.TerminationDate.Value.Date)
                     _validationServiceDate = _plan.TerminationDate.Value.Date;
+                _networkAsOfDate = _validationServiceDate;
+                _selectedNetworkId = _plan.NetworkTiers.OrderBy(tier => tier.TierLevel).FirstOrDefault()?.NetworkId;
                 await RunConfigurationValidationAsync();
             }
         }
@@ -604,6 +752,66 @@
         "Warning" => Icons.Material.Filled.Warning,
         _ => Icons.Material.Filled.CheckCircle
     };
+
+    private async Task LoadNetworkRosterAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedNetworkId) || !_networkAsOfDate.HasValue) return;
+        _networkVerificationBusy = true;
+        _networkVerificationAttempted = true;
+        _networkMembership = null;
+        _networkMembershipChecked = false;
+        _serviceError = null;
+        try
+        {
+            var networkTask = ProviderService.GetNetworkAsync(_selectedNetworkId);
+            var rosterTask = ProviderService.GetNetworkRosterAsync(_selectedNetworkId, _networkAsOfDate.Value);
+            await Task.WhenAll(networkTask, rosterTask);
+            _providerNetwork = await networkTask;
+            _networkRoster = await rosterTask;
+        }
+        catch (Exception ex)
+        {
+            _providerNetwork = null;
+            _networkRoster = null;
+            _serviceError = $"Provider network verification failed: {ex.Message}";
+        }
+        finally
+        {
+            _networkVerificationBusy = false;
+        }
+    }
+
+    private Task VerifyEnteredNetworkMembershipAsync()
+        => VerifyNetworkMembershipAsync(_networkMembershipNpi);
+
+    private async Task VerifyNetworkMembershipAsync(string npi)
+    {
+        if (string.IsNullOrWhiteSpace(_selectedNetworkId) || !_networkAsOfDate.HasValue) return;
+        _networkMembershipNpi = npi.Trim();
+        if (_networkMembershipNpi.Length != 10 || !_networkMembershipNpi.All(char.IsDigit))
+        {
+            _serviceError = "Enter a 10-digit NPI before verifying network participation.";
+            return;
+        }
+
+        _networkMembershipBusy = true;
+        _networkMembershipChecked = false;
+        _serviceError = null;
+        try
+        {
+            _networkMembership = await ProviderService.GetNetworkMembershipAsync(
+                _selectedNetworkId, _networkMembershipNpi, _networkAsOfDate.Value);
+            _networkMembershipChecked = true;
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"Provider participation verification failed: {ex.Message}";
+        }
+        finally
+        {
+            _networkMembershipBusy = false;
+        }
+    }
 
     private void Cancel()
     {
