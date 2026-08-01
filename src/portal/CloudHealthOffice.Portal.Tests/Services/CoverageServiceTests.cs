@@ -84,6 +84,29 @@ public class CoverageServiceTests
     }
 
     [Fact]
+    public async Task GetCoverageByMemberIdAsync_AcceptsStringEnumsFromCoverageApi()
+    {
+        var json = """
+            [{
+              "coverageId": "COV-STRING",
+              "planId": "GUIDE-PPO-2026",
+              "effectiveDate": "2026-08-01T00:00:00Z",
+              "status": "Active",
+              "lineOfBusiness": "Commercial"
+            }]
+            """;
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetCoverageByMemberIdAsync("BPV-001");
+
+        result.Should().ContainSingle();
+        result[0].Status.Should().Be(1);
+        result[0].StatusText.Should().Be("Active");
+        result[0].LineOfBusiness.Should().Be(1);
+    }
+
+    [Fact]
     public async Task GetCoverageByMemberIdAsync_WhenApiReturnsNull_ReturnsEmptyList()
     {
         var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, "null")));

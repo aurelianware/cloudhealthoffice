@@ -143,6 +143,21 @@ public class MemberServiceTests
     }
 
     [Fact]
+    public async Task SearchMembersAsync_UsesMemberStatusWhenCoverageStatusIsAbsent()
+    {
+        var json = """
+            [{"memberId":"BPV-001","firstName":"Plan","lastName":"Validator","dateOfBirth":"1985-01-15","status":"Active"}]
+            """;
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.SearchMembersAsync("BPV-001");
+
+        result.Should().ContainSingle();
+        result[0].DisplayStatus.Should().Be("Active");
+    }
+
+    [Fact]
     public async Task SearchMembersAsync_WhenApiReturnsEmptyArray_ReturnsEmptyList()
     {
         var sut = CreateService(new HttpClient(

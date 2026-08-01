@@ -5,6 +5,7 @@
   "scripts": {
     "build": "node scripts/generate-mcc-publications.mjs && node build.mjs",
     "guides:capture:837": "node scripts/capture-837-user-guide.mjs",
+    "guides:capture:first-claim": "node scripts/capture-first-claim-guide.mjs",
     "guides:capture:pended-claim": "node scripts/capture-pended-claim-guide.mjs",
     "guides:capture:benefit-plans": "node scripts/capture-benefit-plan-guides.mjs"
   },
