@@ -161,6 +161,7 @@
                             <MudTh>Coinsurance</MudTh>
                             <MudTh>Coverage %</MudTh>
                             <MudTh>Prior Auth</MudTh>
+                            <MudTh>Actions</MudTh>
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Service Type"><strong>@context.ServiceType</strong></MudTd>
@@ -208,6 +209,13 @@
                                 {
                                     <MudChip Size="Size.Small" Color="Color.Success">Not Required</MudChip>
                                 }
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Color="Color.Primary"
+                                               Title="Edit benefit rule"
+                                               OnClick="@(() => EditBenefit(context))" />
                             </MudTd>
                         </RowTemplate>
                         <NoRecordsContent>
@@ -291,6 +299,9 @@
     private static string FormatCurrency(decimal value) => value.ToString("C", UsCulture);
 
     protected override async Task OnInitializedAsync()
+        => await LoadPlanAsync();
+
+    private async Task LoadPlanAsync()
     {
         try
         {
@@ -317,10 +328,47 @@
         MudDialog.Close(DialogResult.Ok(true));
     }
 
-    private void AddBenefits()
+    private async Task AddBenefits()
     {
-        // In a real implementation, this would open a dialog to select benefits from library
-        // For now, just placeholder
+        var parameters = new DialogParameters<AddEditPlanBenefitDialog>
+        {
+            { dialog => dialog.PlanId, PlanId },
+        };
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+        };
+        var dialog = await DialogService.ShowAsync<AddEditPlanBenefitDialog>(
+            "Add Benefit Rule", parameters, options);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            await LoadPlanAsync();
+        }
+    }
+
+    private async Task EditBenefit(PlanBenefit benefit)
+    {
+        var parameters = new DialogParameters<AddEditPlanBenefitDialog>
+        {
+            { dialog => dialog.PlanId, PlanId },
+            { dialog => dialog.ExistingBenefit, benefit },
+        };
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+        };
+        var dialog = await DialogService.ShowAsync<AddEditPlanBenefitDialog>(
+            "Edit Benefit Rule", parameters, options);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            await LoadPlanAsync();
+        }
     }
 
     private Color GetProductTypeColor(string productType) => productType switch

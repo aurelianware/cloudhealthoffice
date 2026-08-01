@@ -532,6 +532,8 @@ public interface IBenefitPlanService
     Task<BenefitPlanDetails?> GetBenefitPlanByIdAsync(string planId);
     Task<string> CreateBenefitPlanAsync(CreateBenefitPlanRequest request);
     Task UpdateBenefitPlanAsync(string planId, UpdateBenefitPlanRequest request);
+    Task AddBenefitAsync(string planId, UpsertPlanBenefitRequest request);
+    Task UpdateBenefitAsync(string planId, string benefitId, UpsertPlanBenefitRequest request);
     Task<List<BenefitItem>> GetAvailableBenefitsAsync();
     Task<List<ServiceBenefitRule>> GetServiceBenefitRulesAsync(string planId);
     Task UpdateServiceBenefitRulesAsync(UpdateServiceBenefitRulesRequest request);
@@ -1392,13 +1394,39 @@ public class BenefitPlanDetails : BenefitPlanListItem
 public class PlanBenefit
 {
     public string BenefitId { get; set; } = string.Empty;
+    public string BenefitType { get; set; } = "medical";
+    public string ServiceCategory { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
     public string ServiceType { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
     public decimal? Copay { get; set; }
     public decimal? CoinsurancePercent { get; set; }
+    public decimal? OutNetworkCopay { get; set; }
+    public decimal? OutNetworkCoinsurancePercent { get; set; }
     public decimal? CoveragePercent { get; set; }
     public int? AnnualLimit { get; set; }
+    public string? VisitLimitPeriod { get; set; }
+    public bool DeductibleApplies { get; set; }
+    public bool OopApplies { get; set; }
     public bool PriorAuthRequired { get; set; }
+    public List<string> CptCodes { get; set; } = new();
+}
+
+public class UpsertPlanBenefitRequest
+{
+    public string BenefitType { get; set; } = "medical";
+    public string ServiceCategory { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public List<string> CptCodes { get; set; } = new();
+    public decimal? InNetworkCopay { get; set; }
+    public decimal? OutNetworkCopay { get; set; }
+    public decimal? InNetworkCoinsurancePercent { get; set; }
+    public decimal? OutNetworkCoinsurancePercent { get; set; }
+    public bool DeductibleApplies { get; set; } = true;
+    public bool OopApplies { get; set; } = true;
+    public bool PriorAuthRequired { get; set; }
+    public int? VisitLimit { get; set; }
+    public string? VisitLimitPeriod { get; set; }
 }
 
 public class BenefitItem

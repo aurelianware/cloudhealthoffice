@@ -1275,6 +1275,59 @@ public class BenefitPlanService : IBenefitPlanService
         }
     }
 
+    public Task AddBenefitAsync(string planId, UpsertPlanBenefitRequest request)
+        => WriteBenefitAsync(HttpMethod.Post, planId, benefitId: null, request);
+
+    public Task UpdateBenefitAsync(
+        string planId,
+        string benefitId,
+        UpsertPlanBenefitRequest request)
+        => WriteBenefitAsync(HttpMethod.Put, planId, benefitId, request);
+
+    private async Task WriteBenefitAsync(
+        HttpMethod method,
+        string planId,
+        string? benefitId,
+        UpsertPlanBenefitRequest request)
+    {
+        var baseUrl = _configuration["Services:BenefitPlanService"];
+        var escapedPlanId = Uri.EscapeDataString(planId);
+        var url = benefitId == null
+            ? $"{baseUrl}/v1/plans/{escapedPlanId}/benefits"
+            : $"{baseUrl}/v1/plans/{escapedPlanId}/benefits/{Uri.EscapeDataString(benefitId)}";
+        var payload = new
+        {
+            benefitType = request.BenefitType,
+            serviceCategory = request.ServiceCategory,
+            description = request.Description,
+            cptCodes = request.CptCodes,
+            inNetworkCopay = request.InNetworkCopay,
+            outNetworkCopay = request.OutNetworkCopay,
+            inNetworkCoinsurance = NormalizeApiPercent(request.InNetworkCoinsurancePercent),
+            outNetworkCoinsurance = NormalizeApiPercent(request.OutNetworkCoinsurancePercent),
+            deductibleApplies = request.DeductibleApplies,
+            oopApplies = request.OopApplies,
+            priorAuthRequired = request.PriorAuthRequired,
+            visitLimit = request.VisitLimit,
+            visitLimitPeriod = request.VisitLimitPeriod,
+        };
+
+        try
+        {
+            using var message = new HttpRequestMessage(method, url)
+            {
+                Content = JsonContent.Create(payload),
+            };
+            using var response = await _httpClient.SendAsync(message);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Benefit Plan Service");
+            throw new ServiceUnavailableException("Benefit Plan Service", ex);
+        }
+    }
+
     public async Task<List<BenefitItem>> GetAvailableBenefitsAsync()
     {
         var baseUrl = _configuration["Services:BenefitPlanService"];
@@ -1434,6 +1487,9 @@ public class BenefitPlanService : IBenefitPlanService
         return new PlanBenefit
         {
             BenefitId = benefit.Id,
+            BenefitType = string.IsNullOrWhiteSpace(benefit.BenefitType) ? "medical" : benefit.BenefitType,
+            ServiceCategory = benefit.ServiceCategory,
+            Description = benefit.Description,
             ServiceType = string.IsNullOrWhiteSpace(benefit.Description)
                 ? benefit.ServiceCategory
                 : benefit.Description,
@@ -1442,11 +1498,20 @@ public class BenefitPlanService : IBenefitPlanService
                 : char.ToUpperInvariant(benefit.BenefitType[0]) + benefit.BenefitType[1..],
             Copay = benefit.InNetworkCopay ?? benefit.CopayAmount,
             CoinsurancePercent = normalizedCoinsurance,
+            OutNetworkCopay = benefit.OutNetworkCopay,
+            OutNetworkCoinsurancePercent = NormalizePercent(benefit.OutNetworkCoinsurance),
             CoveragePercent = normalizedCoinsurance.HasValue ? 100m - normalizedCoinsurance.Value : null,
             AnnualLimit = benefit.VisitLimit,
-            PriorAuthRequired = benefit.PriorAuthRequired || benefit.RequiresPriorAuth
+            VisitLimitPeriod = benefit.VisitLimitPeriod,
+            DeductibleApplies = benefit.DeductibleApplies,
+            OopApplies = benefit.OopApplies,
+            PriorAuthRequired = benefit.PriorAuthRequired || benefit.RequiresPriorAuth,
+            CptCodes = benefit.CptCodes,
         };
     }
+
+    private static decimal? NormalizeApiPercent(decimal? value)
+        => value.HasValue ? value.Value / 100m : null;
 
     private static decimal? NormalizePercent(decimal? value)
     {
@@ -1505,13 +1570,19 @@ public class BenefitPlanService : IBenefitPlanService
         public string BenefitType { get; set; } = string.Empty;
         public string ServiceCategory { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public List<string> CptCodes { get; set; } = new();
         public decimal? InNetworkCopay { get; set; }
+        public decimal? OutNetworkCopay { get; set; }
         public decimal? InNetworkCoinsurance { get; set; }
+        public decimal? OutNetworkCoinsurance { get; set; }
         public decimal? CopayAmount { get; set; }
         public decimal? CoinsurancePercentage { get; set; }
+        public bool DeductibleApplies { get; set; }
+        public bool OopApplies { get; set; }
         public bool PriorAuthRequired { get; set; }
         public bool RequiresPriorAuth { get; set; }
         public int? VisitLimit { get; set; }
+        public string? VisitLimitPeriod { get; set; }
     }
 }
 
