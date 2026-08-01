@@ -1,6 +1,7 @@
 @using CloudHealthOffice.Portal.Services
 @using System.Globalization
 @inject IBenefitPlanService BenefitPlanService
+@inject IBenefitPlanValidationService BenefitPlanValidationService
 @inject IDialogService DialogService
 
 <MudDialog>
@@ -330,6 +331,148 @@
                     </MudButton>
                 </MudTabPanel>
 
+                <!-- Validation Tab -->
+                <MudTabPanel Text="Validation" Icon="@Icons.Material.Filled.FactCheck">
+                    <MudStack Spacing="3">
+                        <div>
+                            <MudText Typo="Typo.h6">Validate this exact plan</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Inspect the member-facing view as of a service date, then optionally send a real synthetic 837 through adjudication.
+                            </MudText>
+                        </div>
+
+                        <MudGrid AlignItems="AlignItems.End">
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudDatePicker Label="Service date" @bind-Date="_validationServiceDate"
+                                               DateFormat="MM/dd/yyyy" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Refresh"
+                                           Disabled="_validationBusy"
+                                           OnClick="RunConfigurationValidationAsync">
+                                    Refresh validation
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_validationBusy)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                        }
+                        else if (_validation != null)
+                        {
+                            <MudAlert Severity="@(_validation.IsValid ? Severity.Success : Severity.Error)"
+                                      Variant="Variant.Outlined">
+                                <strong>@(_validation.IsValid ? "Ready for a claim test" : "Configuration needs attention")</strong>
+                                · @_validation.PlanVersion · @_validation.ServiceDate.ToString("MMMM d, yyyy")
+                            </MudAlert>
+
+                            <MudGrid>
+                                @foreach (var check in _validation.Checks)
+                                {
+                                    <MudItem xs="12" md="6">
+                                        <MudPaper Outlined="true" Class="pa-3" Style="height:100%">
+                                            <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+                                                <MudIcon Icon="@ValidationIcon(check.Severity)" Color="@ValidationColor(check.Severity)" />
+                                                <div>
+                                                    <MudText Typo="Typo.subtitle2">@check.Name</MudText>
+                                                    <MudText Typo="Typo.body2">@check.Message</MudText>
+                                                </div>
+                                            </MudStack>
+                                        </MudPaper>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+
+                            @if (_validation.MemberView != null)
+                            {
+                                <MudPaper Outlined="true" Class="pa-4">
+                                    <MudText Typo="Typo.subtitle1" GutterBottom="true">Member view snapshot</MudText>
+                                    <MudGrid>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Benefit categories</MudText><MudText Typo="Typo.h6">@_validation.MemberView.Categories.Count</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Individual deductible</MudText><MudText Typo="Typo.h6">@FormatCurrency(_validation.MemberView.CostSharing.IndividualDeductible)</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Individual OOP max</MudText><MudText Typo="Typo.h6">@FormatCurrency(_validation.MemberView.CostSharing.IndividualOutOfPocketMax)</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Accumulator model</MudText><MudText Typo="Typo.h6">@_validation.MemberView.FamilyAccumulatorModel</MudText></MudItem>
+                                    </MudGrid>
+                                </MudPaper>
+                            }
+
+                            <MudDivider />
+                            <div>
+                                <MudText Typo="Typo.h6">Synthetic 837 proof</MudText>
+                                <MudText Typo="Typo.body2">
+                                    Ensures the plan's preferred network and test provider participation exist, creates an isolated synthetic member and coverage,
+                                    uploads one X12 837P, and reads the final claim projection. Fixture provisioning is limited to demo-enabled environments.
+                                </MudText>
+                            </div>
+
+                            @if (!BenefitPlanValidationService.SyntheticClaimsEnabled)
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                    Synthetic claim submission is off in this environment. It runs automatically in Development or LocalDemo, or when
+                                    <code>Features:BenefitPlanSyntheticValidationEnabled</code> is explicitly enabled.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudGrid>
+                                    <MudItem xs="12" sm="4">
+                                        <MudTextField Label="Provider NPI" @bind-Value="_syntheticRequest.ProviderNpi"
+                                                      Variant="Variant.Outlined" MaxLength="10" data-testid="plan-validation-provider-npi" />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="4">
+                                        <MudTextField Label="Procedure code" @bind-Value="_syntheticRequest.ProcedureCode"
+                                                      Variant="Variant.Outlined" data-testid="plan-validation-procedure-code" />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="4">
+                                        <MudNumericField T="decimal" Label="Charge amount" @bind-Value="_syntheticRequest.ChargeAmount"
+                                                         Variant="Variant.Outlined" Format="C" Min="0.01m" />
+                                    </MudItem>
+                                </MudGrid>
+                                <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                                           data-testid="run-synthetic-837"
+                                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                                           Disabled="@(_syntheticBusy || !_validation.IsValid)"
+                                           OnClick="RunSyntheticClaimAsync">
+                                    @(_syntheticBusy ? "Adjudicating…" : "Run synthetic 837")
+                                </MudButton>
+                                @if (_syntheticBusy)
+                                {
+                                    <MudProgressLinear Indeterminate="true" Color="Color.Secondary" />
+                                    <MudText Typo="Typo.caption">Submitting the 837 and waiting up to 60 seconds for the claim projection.</MudText>
+                                }
+                            }
+
+                            @if (_syntheticResult != null)
+                            {
+                                <MudAlert Severity="@(_syntheticResult.ExactPlanMatched ? Severity.Success : Severity.Error)"
+                                          Variant="Variant.Filled">
+                                    Claim @_syntheticResult.ClaimNumber resolved to <strong>@_syntheticResult.ResolvedPlanId</strong>
+                                    · @_syntheticResult.PlanVersion · @_syntheticResult.Status
+                                </MudAlert>
+                                <MudPaper Outlined="true" Class="pa-4">
+                                    <MudGrid>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Network tier</MudText><MudText Typo="Typo.h6">@(_syntheticResult.NetworkTier ?? "Not assigned")</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Billed</MudText><MudText Typo="Typo.h6">@FormatCurrency(_syntheticResult.ChargeAmount)</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Allowed</MudText><MudText Typo="Typo.h6">@FormatCurrency(_syntheticResult.AllowedAmount)</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Plan paid</MudText><MudText Typo="Typo.h6">@FormatCurrency(_syntheticResult.PaidAmount)</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Deductible</MudText><MudText Typo="Typo.h6">@FormatCurrency(_syntheticResult.DeductibleAmount)</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Copay</MudText><MudText Typo="Typo.h6">@FormatCurrency(_syntheticResult.CopayAmount)</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Coinsurance</MudText><MudText Typo="Typo.h6">@FormatCurrency(_syntheticResult.CoinsuranceAmount)</MudText></MudItem>
+                                        <MudItem xs="6" md="3"><MudText Typo="Typo.caption">Member responsibility</MudText><MudText Typo="Typo.h6">@FormatCurrency(_syntheticResult.PatientResponsibility)</MudText></MudItem>
+                                    </MudGrid>
+                                    @if (!string.IsNullOrWhiteSpace(_syntheticResult.OutcomeReason))
+                                    {
+                                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">@_syntheticResult.OutcomeReason</MudAlert>
+                                    }
+                                    <MudText Typo="Typo.caption" Class="mt-3">Claim ID: @_syntheticResult.ClaimId · elapsed @_syntheticResult.Elapsed.TotalSeconds.ToString("0.0")s</MudText>
+                                </MudPaper>
+                            }
+                        }
+                    </MudStack>
+                </MudTabPanel>
+
                 <!-- Members Tab -->
                 <MudTabPanel Text="Members" Icon="@Icons.Material.Filled.People" 
                             BadgeData="_plan.EnrolledMembers" 
@@ -368,6 +511,12 @@
 
     private BenefitPlanDetails? _plan;
     private string? _serviceError;
+    private DateTime? _validationServiceDate = DateTime.Today;
+    private BenefitPlanValidationResult? _validation;
+    private bool _validationBusy;
+    private bool _syntheticBusy;
+    private SyntheticClaimValidationRequest _syntheticRequest = new() { ServiceDate = DateTime.Today };
+    private SyntheticClaimValidationResult? _syntheticResult;
     private static readonly CultureInfo UsCulture = CultureInfo.GetCultureInfo("en-US");
 
     private static string FormatCurrency(decimal value) => value.ToString("C", UsCulture);
@@ -380,6 +529,14 @@
         try
         {
             _plan = await BenefitPlanService.GetBenefitPlanByIdAsync(PlanId);
+            if (_plan != null)
+            {
+                var today = DateTime.Today;
+                _validationServiceDate = today < _plan.EffectiveDate.Date ? _plan.EffectiveDate.Date : today;
+                if (_plan.TerminationDate.HasValue && _validationServiceDate > _plan.TerminationDate.Value.Date)
+                    _validationServiceDate = _plan.TerminationDate.Value.Date;
+                await RunConfigurationValidationAsync();
+            }
         }
         catch (ServiceUnavailableException ex)
         {
@@ -391,6 +548,62 @@
             _plan = null;
         }
     }
+
+    private async Task RunConfigurationValidationAsync()
+    {
+        if (_plan == null || !_validationServiceDate.HasValue) return;
+        _validationBusy = true;
+        _serviceError = null;
+        _syntheticResult = null;
+        try
+        {
+            _validation = await BenefitPlanValidationService.ValidateAsync(_plan, _validationServiceDate.Value);
+            _syntheticRequest.ServiceDate = _validationServiceDate.Value;
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"Plan validation could not be completed: {ex.Message}";
+        }
+        finally
+        {
+            _validationBusy = false;
+        }
+    }
+
+    private async Task RunSyntheticClaimAsync()
+    {
+        if (_plan == null || _validation == null) return;
+        _syntheticBusy = true;
+        _serviceError = null;
+        _syntheticResult = null;
+        _syntheticRequest.ServiceDate = _validation.ServiceDate;
+        try
+        {
+            _syntheticResult = await BenefitPlanValidationService.RunSynthetic837Async(_plan, _syntheticRequest);
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"Synthetic 837 validation failed: {ex.Message}";
+        }
+        finally
+        {
+            _syntheticBusy = false;
+        }
+    }
+
+    private static Color ValidationColor(string severity) => severity switch
+    {
+        "Error" => Color.Error,
+        "Warning" => Color.Warning,
+        _ => Color.Success
+    };
+
+    private static string ValidationIcon(string severity) => severity switch
+    {
+        "Error" => Icons.Material.Filled.Error,
+        "Warning" => Icons.Material.Filled.Warning,
+        _ => Icons.Material.Filled.CheckCircle
+    };
 
     private void Cancel()
     {
