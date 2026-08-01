@@ -245,6 +245,45 @@ public class BenefitPlansController : ControllerBase
     }
 
     /// <summary>
+    /// Replace a benefit rule. Creates and publishes a successor plan version
+    /// so the current Published version remains immutable.
+    /// </summary>
+    [HttpPut("{id}/benefits/{benefitId}")]
+    [ProducesResponseType(typeof(Benefit), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<Benefit>> UpdateBenefit(
+        string id,
+        string benefitId,
+        [FromBody] Benefit benefit)
+    {
+        try
+        {
+            var updated = await _service.UpdateBenefitAsync(
+                id, benefitId, TenantId, ResolveActorId(), benefit);
+            if (updated == null)
+            {
+                return NotFound(new { message = $"Benefit '{benefitId}' was not found on plan '{id}'" });
+            }
+
+            return Ok(updated);
+        }
+        catch (PlanLimitValidationException ex)
+        {
+            return BadRequest(PlanLimitValidationPayload(ex));
+        }
+        catch (PlanVersionStateException ex) when (ex.IsNotFound)
+        {
+            return NotFound(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId });
+        }
+        catch (PlanVersionStateException ex)
+        {
+            return Conflict(new { message = ex.Message, planId = ex.PlanId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
+        }
+    }
+
+    /// <summary>
     /// Get deductible and out-of-pocket accumulation data for a subscriber.
     /// Used by eligibility-service to populate the 271 response with
     /// deductible-met / OOP-met progress.

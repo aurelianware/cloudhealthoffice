@@ -16,6 +16,7 @@ public interface IBenefitPlanService
     Task<BenefitPlan?> UpdatePlanAsync(BenefitPlan plan, string tenantId);
     Task<bool> DeletePlanAsync(string id, string tenantId, string actorId);
     Task<Benefit?> AddBenefitAsync(string planId, string tenantId, string actorId, Benefit benefit);
+    Task<Benefit?> UpdateBenefitAsync(string planId, string benefitId, string tenantId, string actorId, Benefit benefit);
     Task<BenefitAppliedResult?> ApplyBenefitRules(string planId, string tenantId, string serviceCategory, string? cptCode, decimal chargeAmount);
     Task<bool> CheckPriorAuthRequirement(string planId, string tenantId, string serviceCategory, string? cptCode);
     Task<MemberCostSharingResult> CalculateMemberCostSharing(string planId, string tenantId, decimal allowedAmount, decimal deductibleAccumulation, decimal oopAccumulation, string serviceCategory, bool inNetwork);
@@ -188,6 +189,36 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         // "legacy create-and-go" contract for callers.
         var draft = await AmendPublishedPlanAsync(planId, tenantId, actorId);
         draft.Benefits.Add(benefit);
+        await _repository.UpdateDraftAsync(draft);
+        await PublishVersionAsync(planId, draft.VersionId, tenantId, actorId);
+        return benefit;
+    }
+
+    public async Task<Benefit?> UpdateBenefitAsync(
+        string planId,
+        string benefitId,
+        string tenantId,
+        string actorId,
+        Benefit benefit)
+    {
+        var plan = await _repository.GetByPlanIdAsync(planId, tenantId);
+        if (plan == null || plan.Benefits.All(existing => existing.Id != benefitId))
+        {
+            return null;
+        }
+
+        // Benefit rules are version-identity content. Replace the rule on a
+        // new draft and publish the successor instead of mutating the current
+        // Published document in place.
+        var draft = await AmendPublishedPlanAsync(planId, tenantId, actorId);
+        var index = draft.Benefits.FindIndex(existing => existing.Id == benefitId);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        benefit.Id = benefitId;
+        draft.Benefits[index] = benefit;
         await _repository.UpdateDraftAsync(draft);
         await PublishVersionAsync(planId, draft.VersionId, tenantId, actorId);
         return benefit;

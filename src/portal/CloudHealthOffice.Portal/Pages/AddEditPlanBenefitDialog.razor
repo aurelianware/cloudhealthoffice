@@ -1,0 +1,228 @@
+@using CloudHealthOffice.Portal.Services
+@using System.Globalization
+@inject IBenefitPlanService BenefitPlanService
+
+<MudDialog>
+    <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4"
+                      ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">
+                @_serviceError
+            </MudAlert>
+        }
+
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+            Saving this rule creates and publishes a new plan version. The current published version remains immutable.
+        </MudAlert>
+
+        <MudForm @ref="_form" @bind-IsValid="_formIsValid">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudSelect @bind-Value="_request.BenefitType" Label="Benefit Type"
+                               Variant="Variant.Outlined" Required="true" T="string">
+                        <MudSelectItem Value="@("medical")">Medical</MudSelectItem>
+                        <MudSelectItem Value="@("pharmacy")">Pharmacy</MudSelectItem>
+                        <MudSelectItem Value="@("dental")">Dental</MudSelectItem>
+                        <MudSelectItem Value="@("vision")">Vision</MudSelectItem>
+                        <MudSelectItem Value="@("behavioralHealth")">Behavioral Health</MudSelectItem>
+                        <MudSelectItem Value="@("dme")">Durable Medical Equipment</MudSelectItem>
+                        <MudSelectItem Value="@("maternity")">Maternity</MudSelectItem>
+                        <MudSelectItem Value="@("preventive")">Preventive</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_request.ServiceCategory" Label="Service Category"
+                                  Placeholder="98" Variant="Variant.Outlined" Required="true"
+                                  Immediate="true"
+                                  RequiredError="Service category is required" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_request.Description" Label="Service Description"
+                                  Placeholder="Professional Office Visit" Variant="Variant.Outlined"
+                                  Required="true" Immediate="true" RequiredError="Description is required" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_cptCodes" Label="CPT / HCPCS Codes"
+                                  Placeholder="99202, 99203, 99212" Variant="Variant.Outlined"
+                                  Immediate="true"
+                                  HelperText="Optional comma-separated codes. Leave blank for a category-wide rule." />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mt-2">Member Cost Sharing</MudText>
+                    <MudDivider Class="mb-3" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField @bind-Value="_request.InNetworkCopay" Label="In-Network Copay"
+                                     Variant="Variant.Outlined" Min="0" Format="C" Culture="@UsCulture"
+                                     T="decimal?" Clearable="true" Immediate="true" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField @bind-Value="_request.InNetworkCoinsurancePercent" Label="In-Network Coinsurance (%)"
+                                     Variant="Variant.Outlined" Min="0" Max="100" T="decimal?" Clearable="true" Immediate="true" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField @bind-Value="_request.OutNetworkCopay" Label="Out-of-Network Copay"
+                                     Variant="Variant.Outlined" Min="0" Format="C" Culture="@UsCulture"
+                                     T="decimal?" Clearable="true" Immediate="true" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField @bind-Value="_request.OutNetworkCoinsurancePercent" Label="Out-of-Network Coinsurance (%)"
+                                     Variant="Variant.Outlined" Min="0" Max="100" T="decimal?" Clearable="true" Immediate="true" />
+                </MudItem>
+
+                @if (HasMixedInNetworkCostSharing)
+                {
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Warning" Dense="true">
+                            This rule contains both an in-network copay and coinsurance. Confirm that the product intentionally applies both.
+                        </MudAlert>
+                    </MudItem>
+                }
+
+                <MudItem xs="12" md="4">
+                    <MudCheckBox @bind-Value="_request.DeductibleApplies" Label="Deductible applies" Color="Color.Primary" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudCheckBox @bind-Value="_request.OopApplies" Label="Counts toward OOP maximum" Color="Color.Primary" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudCheckBox @bind-Value="_request.PriorAuthRequired" Label="Prior authorization required" Color="Color.Primary" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mt-2">Utilization Limits</MudText>
+                    <MudDivider Class="mb-3" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_request.VisitLimit" Label="Visit / Unit Limit"
+                                     Variant="Variant.Outlined" Min="1" T="int?" Clearable="true" Immediate="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_request.VisitLimitPeriod" Label="Limit Period"
+                               Variant="Variant.Outlined" T="string" Clearable="true">
+                        <MudSelectItem Value="@("annual")">Annual</MudSelectItem>
+                        <MudSelectItem Value="@("planYear")">Plan Year</MudSelectItem>
+                        <MudSelectItem Value="@("lifetime")">Lifetime</MudSelectItem>
+                        <MudSelectItem Value="@("episode")">Episode</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save"
+                   Disabled="@(!_formIsValid || _isSaving)">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>@(ExistingBenefit == null ? "Add Benefit" : "Update Benefit")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string PlanId { get; set; } = string.Empty;
+    [Parameter] public PlanBenefit? ExistingBenefit { get; set; }
+
+    private MudForm _form = null!;
+    private bool _formIsValid;
+    private bool _isSaving;
+    private string? _serviceError;
+    private string _cptCodes = string.Empty;
+    private UpsertPlanBenefitRequest _request = new();
+    private static readonly CultureInfo UsCulture = CultureInfo.GetCultureInfo("en-US");
+
+    private bool HasMixedInNetworkCostSharing =>
+        _request.InNetworkCopay.HasValue && _request.InNetworkCoinsurancePercent.HasValue;
+
+    protected override void OnInitialized()
+    {
+        if (ExistingBenefit == null)
+        {
+            return;
+        }
+
+        _request = new UpsertPlanBenefitRequest
+        {
+            BenefitType = ExistingBenefit.BenefitType,
+            ServiceCategory = ExistingBenefit.ServiceCategory,
+            Description = ExistingBenefit.Description,
+            CptCodes = ExistingBenefit.CptCodes.ToList(),
+            InNetworkCopay = ExistingBenefit.Copay,
+            OutNetworkCopay = ExistingBenefit.OutNetworkCopay,
+            InNetworkCoinsurancePercent = ExistingBenefit.CoinsurancePercent,
+            OutNetworkCoinsurancePercent = ExistingBenefit.OutNetworkCoinsurancePercent,
+            DeductibleApplies = ExistingBenefit.DeductibleApplies,
+            OopApplies = ExistingBenefit.OopApplies,
+            PriorAuthRequired = ExistingBenefit.PriorAuthRequired,
+            VisitLimit = ExistingBenefit.AnnualLimit,
+            VisitLimitPeriod = ExistingBenefit.VisitLimitPeriod,
+        };
+        _cptCodes = string.Join(", ", ExistingBenefit.CptCodes);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && ExistingBenefit != null)
+        {
+            await _form.Validate();
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (!_formIsValid)
+        {
+            return;
+        }
+
+        _isSaving = true;
+        _serviceError = null;
+        _request.CptCodes = _cptCodes
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _request.VisitLimitPeriod = _request.VisitLimit.HasValue
+            ? _request.VisitLimitPeriod
+            : null;
+
+        try
+        {
+            if (ExistingBenefit == null)
+            {
+                await BenefitPlanService.AddBenefitAsync(PlanId, _request);
+            }
+            else
+            {
+                await BenefitPlanService.UpdateBenefitAsync(PlanId, ExistingBenefit.BenefitId, _request);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (Exception)
+        {
+            _serviceError = "The benefit rule could not be saved. Review the values and try again.";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

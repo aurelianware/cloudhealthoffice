@@ -199,6 +199,41 @@ public class BenefitPlansControllerVersionTests
     }
 
     [Fact]
+    public async Task UpdateBenefit_amends_and_returns_200()
+    {
+        var (controller, service, _) = Build();
+        var source = SamplePlan();
+        source.Benefits.Add(new Benefit { Id = "office", ServiceCategory = "Office Visit", InNetworkCopay = 25m });
+        var draft = await service.CreateDraftAsync(source, Tenant, "user");
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
+
+        var result = await controller.UpdateBenefit(
+            v1.PlanId,
+            "office",
+            new Benefit { ServiceCategory = "Office Visit", InNetworkCopay = 35m });
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var updated = ok.Value.Should().BeAssignableTo<Benefit>().Subject;
+        updated.Id.Should().Be("office");
+        updated.InNetworkCopay.Should().Be(35m);
+    }
+
+    [Fact]
+    public async Task UpdateBenefit_unknown_rule_returns_404()
+    {
+        var (controller, service, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, "user");
+        var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, "user");
+
+        var result = await controller.UpdateBenefit(
+            v1.PlanId,
+            "missing",
+            new Benefit { ServiceCategory = "X" });
+
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
     public async Task GetPlan_routes_through_adapter_factory()
     {
         RecordingChoAdapter? recording = null;

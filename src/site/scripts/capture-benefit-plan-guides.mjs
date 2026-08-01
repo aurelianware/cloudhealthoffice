@@ -66,6 +66,14 @@ try {
     path: path.join(outputDirectory, "benefits-tab.png"),
     fullPage: false
   });
+
+  await page.getByRole("button", { name: "Add Benefits" }).click();
+  await page.getByText("Add Benefit", { exact: true }).first().waitFor();
+  await page.screenshot({
+    path: path.join(outputDirectory, "add-benefit-rule.png"),
+    fullPage: false
+  });
+  await page.getByRole("button", { name: "Cancel" }).click();
 } finally {
   await browser.close();
 }
