@@ -179,6 +179,27 @@ public class ClaimVersionEventPublisherTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Resolved_event_is_distinct_and_records_examiner_disposition()
+    {
+        var version = Sample("V-REVIEW", state: ClaimVersionState.Adjudicated);
+        await _publisher.PublishVersionAdjudicatedAsync(version, "system", "corr-system");
+
+        var evt = await _publisher.PublishVersionResolvedAsync(
+            version,
+            "Approved",
+            "Documentation supports modifier 59",
+            "examiner-42",
+            "corr-review");
+
+        evt.EventType.Should().Be(ClaimVersionEventType.ClaimVersionResolved);
+        evt.EventId.Should().Be("resolved:V-REVIEW");
+        evt.Version.Should().Be(2);
+        evt.ActorId.Should().Be("examiner-42");
+        evt.Payload!["disposition"]!.GetValue<string>().Should().Be("Approved");
+        evt.Payload!["reason"]!.GetValue<string>().Should().Be("Documentation supports modifier 59");
+    }
+
+    [Fact]
     public async Task Document_id_is_tenant_scoped_for_dedup()
     {
         // The publisher sets Mongo _id = "{PartitionKey}:{EventId}" — i.e.

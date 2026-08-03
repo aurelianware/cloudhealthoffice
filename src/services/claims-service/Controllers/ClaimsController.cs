@@ -237,7 +237,12 @@ public class ClaimsController : ControllerBase
             ? Array.Empty<ClaimVersionEvent>()
             : await _versionEventReader.GetAsync(GetTenantId(), claim.ClaimVersionId, ct);
 
-        var timeline = events.Select(MapAuditEvent).ToList();
+        var timeline = events
+            .Where(evt => claim.PendDetails is null
+                          || evt.EventType != ClaimVersionEventType.ClaimVersionAdjudicated
+                          || evt.VersionId != claim.Id)
+            .Select(MapAuditEvent)
+            .ToList();
         if (claim.PendDetails is not null)
         {
             timeline.Add(new ClaimAuditTimelineEntry
@@ -253,8 +258,7 @@ public class ClaimsController : ControllerBase
             });
 
             foreach (var entry in timeline.Where(entry =>
-                         (entry.EventType == ClaimVersionEventType.ClaimVersionAdjudicated.ToString()
-                          || entry.EventType == ClaimVersionEventType.ClaimVersionDenied.ToString())
+                         entry.EventType == ClaimVersionEventType.ClaimVersionDenied.ToString()
                          && entry.Timestamp >= claim.PendDetails.PendedAt))
             {
                 entry.OldValue = "Pended";
@@ -275,6 +279,10 @@ public class ClaimsController : ControllerBase
             ClaimVersionEventType.ClaimVersionSuperseded => ("Claim version superseded", (string?)null, "Superseded"),
             ClaimVersionEventType.ClaimVersionVoided => ("Claim voided", (string?)null, "Voided"),
             ClaimVersionEventType.ClaimVersionReversed => ("Claim reversed", (string?)null, "Reversed"),
+            ClaimVersionEventType.ClaimVersionResolved => (
+                "Examiner disposition recorded",
+                "Pended",
+                evt.Payload?["disposition"]?.ToString()),
             _ => (evt.EventType.ToString(), (string?)null, (string?)null)
         };
 
@@ -1402,16 +1410,13 @@ public class ClaimsController : ControllerBase
 
         var examinerUserId = request.ExaminerUserId ?? "portal-examiner";
         var correlationId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier;
-        if (disposition == ClaimStatus.Denied)
-        {
-            await _versionEventPublisher.PublishVersionDeniedAsync(
-                updated, request.Reason, examinerUserId, correlationId, HttpContext.RequestAborted);
-        }
-        else
-        {
-            await _versionEventPublisher.PublishVersionAdjudicatedAsync(
-                updated, examinerUserId, correlationId, HttpContext.RequestAborted);
-        }
+        await _versionEventPublisher.PublishVersionResolvedAsync(
+            updated,
+            disposition.ToString(),
+            request.Reason,
+            examinerUserId,
+            correlationId,
+            HttpContext.RequestAborted);
 
         if (claim.AiExamination is not null && !string.IsNullOrWhiteSpace(request.AiExaminerAgreement))
         {

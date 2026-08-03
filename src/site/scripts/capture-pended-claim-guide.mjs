@@ -7,9 +7,9 @@ const portalUrl = (process.env.GUIDE_PORTAL_URL ?? "http://localhost:8080").repl
 const claimId = process.env.GUIDE_CLAIM_ID;
 const resolvedClaimId = process.env.GUIDE_RESOLVED_CLAIM_ID;
 
-if (!claimId) {
+if (!claimId && !resolvedClaimId) {
   throw new Error(
-    "GUIDE_CLAIM_ID is required. Use a synthetic claim whose status is Pended."
+    "GUIDE_CLAIM_ID or GUIDE_RESOLVED_CLAIM_ID is required. Use synthetic claims only."
   );
 }
 
@@ -35,27 +35,39 @@ try {
     waitUntil: "domcontentloaded"
   });
 
-  await page.goto(`${portalUrl}/work-queues`, { waitUntil: "domcontentloaded" });
-  await page.getByText("Claims Work Queues", { exact: true }).waitFor();
-  await page.getByText(claimId, { exact: true }).waitFor();
-  await page.screenshot({
-    path: path.join(outputDirectory, "work-queue.png"),
-    fullPage: false
-  });
+  if (claimId) {
+    await page.goto(`${portalUrl}/work-queues`, { waitUntil: "domcontentloaded" });
+    await page.getByText("Claims Work Queues", { exact: true }).waitFor();
+    await page.getByText(claimId, { exact: true }).waitFor();
+    await page.screenshot({
+      path: path.join(outputDirectory, "work-queue.png"),
+      fullPage: false
+    });
 
-  await page.goto(`${portalUrl}/claims/${claimId}`, { waitUntil: "domcontentloaded" });
-  await page.getByText("Manual Review Required", { exact: true }).waitFor();
-  await page.getByText("AI Claims Examiner Advisory", { exact: true }).waitFor();
-  await page.screenshot({
-    path: path.join(outputDirectory, "ai-advisory.png"),
-    fullPage: false
-  });
+    await page.goto(`${portalUrl}/claims/${claimId}`, { waitUntil: "domcontentloaded" });
+    await page.getByText("Manual Review Required", { exact: true }).waitFor();
+    await page.getByText("AI Claims Examiner Advisory", { exact: true }).waitFor();
+    await page.screenshot({
+      path: path.join(outputDirectory, "ai-advisory.png"),
+      fullPage: false
+    });
+  }
 
   if (resolvedClaimId) {
     await page.goto(`${portalUrl}/claims/${resolvedClaimId}`, { waitUntil: "domcontentloaded" });
     await page.getByText("Examiner Disposition Record", { exact: true }).waitFor();
+    if (claimId) {
+      await page.screenshot({
+        path: path.join(outputDirectory, "examiner-disposition.png"),
+        fullPage: false
+      });
+    }
+
+    const changeHistory = page.getByText("Change History", { exact: true });
+    await changeHistory.waitFor();
+    await changeHistory.scrollIntoViewIfNeeded();
     await page.screenshot({
-      path: path.join(outputDirectory, "examiner-disposition.png"),
+      path: path.join(outputDirectory, "audit-timeline.png"),
       fullPage: false
     });
   }

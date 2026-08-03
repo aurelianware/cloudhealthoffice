@@ -251,6 +251,10 @@
           <img src="/graphics/user-guides/pended-claim/examiner-disposition.png" alt="Resolved synthetic claim showing its final examiner disposition, original pend reason, examiner notes, pend code, and retained AI feedback." loading="lazy" />
           <figcaption>The resolved view keeps the human decision beside the original exception context, even after the claim leaves the active work queue.</figcaption>
         </figure>
+        <figure class="guide-screenshot">
+          <img src="/graphics/user-guides/pended-claim/audit-timeline.png" alt="Cloud Health Office Change History showing a synthetic claim submitted by the system, pended by the adjudication engine, and approved by a named human examiner with the decision reason retained." loading="lazy" />
+          <figcaption>The append-only history separates system intake, the deterministic review gate, and the examiner's final disposition so operators can see who made each decision and why.</figcaption>
+        </figure>
 
         <h2 id="enable-ai">Operate AI as an Explicit, Metered Capability</h2>
         <p>The local deployment and Million Claim Challenge leave the metered AI path off by default. Production and controlled demos can use best-effort examination, where an AI outage does not block deterministic adjudication or manual review.</p>
@@ -284,7 +288,7 @@ ANTHROPIC_API_KEY=&lt;your-api-key&gt;</code></pre>
         <div class="code-block-header"><span>Shell</span><span>src/site</span></div>
         <pre><code>npm install
 GUIDE_CLAIM_ID=&lt;synthetic-pended-claim-id&gt; npm run guides:capture:pended-claim</code></pre>
-        <p>The command uses a fixed desktop viewport, local demo sign-in, and writes the queue, advisory, and resolved-disposition images under <code>src/site/graphics/user-guides/pended-claim/</code>. Set <code>GUIDE_RESOLVED_CLAIM_ID</code> when the resolved fixture is a separate claim.</p>
+        <p>The command uses a fixed desktop viewport, local demo sign-in, and writes the queue, advisory, resolved-disposition, and audit-timeline images under <code>src/site/graphics/user-guides/pended-claim/</code>. Set <code>GUIDE_RESOLVED_CLAIM_ID</code> when the resolved fixture is a separate claim, or supply it alone to refresh only the resolved audit capture.</p>
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <table>

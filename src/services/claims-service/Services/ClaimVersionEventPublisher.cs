@@ -31,6 +31,7 @@ public interface IClaimVersionEventPublisher
     Task<ClaimVersionEvent> PublishVersionDeniedAsync(Claim version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
     Task<ClaimVersionEvent> PublishVersionSupersededAsync(Claim from, Claim to, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
     Task<ClaimVersionEvent> PublishVersionVoidedAsync(Claim version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
+    Task<ClaimVersionEvent> PublishVersionResolvedAsync(Claim version, string disposition, string? reason, string? actorId, string? correlationId, CancellationToken ct = default);
 
     /// <summary>
     /// Capability 5.12. Append a <c>ClaimVersionReversed</c> event for the
@@ -137,6 +138,7 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
         {
             ["versionId"] = version.Id,
             ["versionNumber"] = version.VersionNumber,
+            ["status"] = version.Status.ToString(),
             ["adjudicatedDate"] = version.AdjudicatedDate,
             ["allowedAmount"] = version.AdjudicationResult?.AllowedAmount,
             ["payerPayment"] = version.AdjudicationResult?.PayerPayment,
@@ -245,6 +247,37 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
         {
             EventId = $"voided:{version.Id}",
             EventType = ClaimVersionEventType.ClaimVersionVoided,
+            TenantId = version.TenantId,
+            ClaimVersionId = version.ClaimVersionId,
+            VersionId = version.Id,
+            ActorId = actorId,
+            CorrelationId = correlationId,
+            Payload = payload
+        };
+        return AppendAsync(evt, ct);
+    }
+
+    public Task<ClaimVersionEvent> PublishVersionResolvedAsync(
+        Claim version,
+        string disposition,
+        string? reason,
+        string? actorId,
+        string? correlationId,
+        CancellationToken ct = default)
+    {
+        var payload = new JsonObject
+        {
+            ["versionId"] = version.Id,
+            ["versionNumber"] = version.VersionNumber,
+            ["disposition"] = disposition,
+            ["reason"] = reason,
+            ["resolvedAt"] = version.AdjudicatedDate
+        };
+
+        var evt = new ClaimVersionEvent
+        {
+            EventId = $"resolved:{version.Id}",
+            EventType = ClaimVersionEventType.ClaimVersionResolved,
             TenantId = version.TenantId,
             ClaimVersionId = version.ClaimVersionId,
             VersionId = version.Id,
@@ -409,6 +442,9 @@ public sealed class NoopClaimVersionEventPublisher : IClaimVersionEventPublisher
 
     public Task<ClaimVersionEvent> PublishVersionVoidedAsync(Claim version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
         => DropAndReturn(version, $"voided:{version.Id}", ClaimVersionEventType.ClaimVersionVoided, actorId, correlationId);
+
+    public Task<ClaimVersionEvent> PublishVersionResolvedAsync(Claim version, string disposition, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
+        => DropAndReturn(version, $"resolved:{version.Id}", ClaimVersionEventType.ClaimVersionResolved, actorId, correlationId);
 
     public Task<ClaimVersionEvent> PublishVersionReversedAsync(
         Claim version,

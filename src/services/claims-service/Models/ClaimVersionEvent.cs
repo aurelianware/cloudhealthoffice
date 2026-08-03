@@ -12,20 +12,22 @@ namespace ClaimsService.Models;
 /// <see cref="EventId"/> for idempotency, monotonic per-aggregate
 /// <see cref="Version"/>, partition key <c>{TenantId}:{ClaimVersionId}</c>.
 ///
-/// Seven event types cover the lifecycle transitions of a claim version:
+/// Eight event types cover the lifecycle transitions of a claim version:
 /// <see cref="ClaimVersionEventType.ClaimVersionSubmitted"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionAdjudicated"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionPaid"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionDenied"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionSuperseded"/>,
 /// <see cref="ClaimVersionEventType.ClaimVersionVoided"/>,
-/// <see cref="ClaimVersionEventType.ClaimVersionReversed"/>.
+/// <see cref="ClaimVersionEventType.ClaimVersionReversed"/>,
+/// <see cref="ClaimVersionEventType.ClaimVersionResolved"/>.
 ///
 /// Notes:
 /// - <c>Pended</c> is not a version transition; pended claims remain in
 ///   <see cref="ClaimVersionState.Submitted"/> with structured
 ///   <see cref="PendDetails"/>. Pend/unpend is captured by the existing
-///   Kafka <c>claims.pended.v1</c> topic, not the version stream.
+///   Kafka <c>claims.pended.v1</c> topic, not the version stream. A human
+///   disposition that crosses that gate emits <c>ClaimVersionResolved</c>.
 /// - <c>Draft</c> creation is not an audit event; only state transitions
 ///   that affect downstream consumers emit version events.
 /// </summary>
@@ -110,5 +112,7 @@ public enum ClaimVersionEventType
     /// supersession marks the chain transition; <see cref="ClaimVersionReversed"/> signals downstream
     /// consumers (audit/lineage, future FHIR _history) that the prior accumulator state must be unwound.
     /// </summary>
-    ClaimVersionReversed = 7
+    ClaimVersionReversed = 7,
+    /// <summary>A human examiner crossed the pended-review gate with a final disposition.</summary>
+    ClaimVersionResolved = 8
 }
