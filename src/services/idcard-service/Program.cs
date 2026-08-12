@@ -12,7 +12,6 @@ using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Azure.Cosmos;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,9 +34,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Storage: Mongo if configured, else Cosmos if configured, else in-memory.
+// Storage: Mongo if configured, else in-memory (dev only).
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
 
 if (!string.IsNullOrEmpty(mongoConnectionString))
 {
@@ -55,24 +53,6 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IIdCardRecordRepository, MongoIdCardRecordRepository>();
     builder.Services.AddScoped<IIdCardTemplateRepository, MongoIdCardTemplateRepository>();
     Console.WriteLine("idcard-service: using MongoDB storage");
-}
-else if (!string.IsNullOrEmpty(cosmosConnectionString))
-{
-    builder.Services.AddSingleton(_ =>
-    {
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-        var options = new CosmosClientOptions { Serializer = new CosmosSystemTextJsonSerializer(jsonOptions) };
-        return new CosmosClient(cosmosConnectionString, options);
-    });
-
-    builder.Services.AddScoped<IIdCardOrderRepository, CosmosIdCardOrderRepository>();
-    builder.Services.AddScoped<IIdCardRecordRepository, CosmosIdCardRecordRepository>();
-    builder.Services.AddScoped<IIdCardTemplateRepository, CosmosIdCardTemplateRepository>();
-    Console.WriteLine("idcard-service: using Cosmos DB storage");
 }
 else
 {
@@ -239,7 +219,6 @@ builder.Services.AddCors(options =>
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
 });
 
 // Global-template check: surfaces missing-seed deployments as a readiness
