@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using CapitationService.Middleware;
@@ -32,7 +31,7 @@ builder.Services.AddSwaggerGen(c =>
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 
-// Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
+// Database Configuration — MongoDB
 if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
     builder.Services.AddSingleton<IMongoClient>(sp =>
@@ -50,29 +49,6 @@ if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
     builder.Services.AddScoped<ICapitationStatementRepository, CapitationStatementRepositoryMongo>();
     builder.Services.AddScoped<ICapitationDisbursementRepository, CapitationDisbursementRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
-}
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
-
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer()
-        });
-    });
-
-    builder.Services.AddScoped<ICapitationContractRepository, CapitationContractRepository>();
-    builder.Services.AddScoped<ICapitationRunRepository, CapitationRunRepository>();
-    builder.Services.AddScoped<ICapitationStatementRepository, CapitationStatementRepository>();
-    builder.Services.AddScoped<ICapitationDisbursementRepository, CapitationDisbursementRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
 }
 
 // Services
@@ -109,9 +85,6 @@ builder.Services.AddHttpClient("RiskAdjustmentService", client =>
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // CORS (for development)
