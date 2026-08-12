@@ -1,6 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
-using CloudHealthOffice.BenefitEngine.Domain;
+// Namespace alias for the benefit-engine domain: BenefitPlanService.Models
+// also defines a NetworkTier class (plan tier config) which would otherwise
+// shadow the engine's NetworkTier enum in this namespace, so we qualify it.
+using Engine = CloudHealthOffice.BenefitEngine.Domain;
 
 namespace BenefitPlanService.Models.Estimate;
 
@@ -70,7 +73,7 @@ public record PaymentEstimateRequest
 
     /// <summary>Network tier the provider falls in for this member. Defaults to in-network.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public NetworkTier NetworkTier { get; init; } = NetworkTier.InNetwork;
+    public Engine.NetworkTier NetworkTier { get; init; } = Engine.NetworkTier.InNetwork;
 
     /// <summary>State jurisdiction (e.g. "TX"). Used for prior-auth rule resolution.</summary>
     public string? StateCode { get; init; }
