@@ -33,7 +33,6 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var connectionString = configuration["MongoDb:ConnectionString"]
-        ?? configuration["CosmosDb:ConnectionString"]
         ?? throw new InvalidOperationException("MongoDb:ConnectionString must be configured");
     return new MongoClient(connectionString);
 });
@@ -58,8 +57,7 @@ builder.Services.AddScoped<ISftpProvisioningService, SftpProvisioningService>();
 // Health checks
 builder.Services.AddChoHealthChecks(options =>
 {
-    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"]
-        ?? builder.Configuration["CosmosDb:ConnectionString"];
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 });
 
 // CORS
