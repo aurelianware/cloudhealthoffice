@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using PaymentService.Middleware;
@@ -50,32 +49,6 @@ if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
     builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
-
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer()
-        });
-    });
-
-    builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
-    builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
-    builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepository>();
-    // EraEnvelope persistence on Cosmos-only deployments uses the
-    // in-memory fallback. payment-service's canonical store is Mongo;
-    // Cosmos paths are dev-only and don't need durable EraEnvelope storage.
-    builder.Services.AddSingleton<IEraEnvelopeRepository, InMemoryEraEnvelopeRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
 
 // Services
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
@@ -113,9 +86,6 @@ var claimsServiceHealthUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
     options.HttpDependencies["claims-service"] = $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 
