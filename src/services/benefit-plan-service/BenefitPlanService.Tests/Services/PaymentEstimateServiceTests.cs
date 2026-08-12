@@ -401,6 +401,22 @@ public class PaymentEstimateServiceTests
     }
 
     [Fact]
+    public async Task DuplicatePricingLineNumbers_DoNotThrow()
+    {
+        // Defense-in-depth: even if the pricing engine ever returns duplicate
+        // line numbers, the service must produce a response rather than 500.
+        var h = new Harness();
+        h.SetupPricing(Pricing(
+            (1, 275m, 210m, RateSource.ContractedRate),
+            (1, 100m, 80m, RateSource.ContractedRate)));
+        h.SetupBenefit(Benefit(true, PayableLine(1, 210m, coinsurance: 42m)));
+
+        var act = async () => await h.Build().EstimateAsync(Tenant, Request(Line(1, "D2392", 275m)));
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
     public async Task Disclaimer_AlwaysPresent()
     {
         var h = new Harness();

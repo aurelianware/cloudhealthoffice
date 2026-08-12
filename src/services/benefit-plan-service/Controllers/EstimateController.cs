@@ -66,6 +66,10 @@ public class EstimateController : ControllerBase
             return BadRequest(new { error = "ProviderNpi is required" });
         if (request.Lines is null || request.Lines.Count == 0)
             return BadRequest(new { error = "At least one service line is required" });
+        if (request.Lines.Any(l => l.LineNumber <= 0))
+            return BadRequest(new { error = "Each service line requires a positive LineNumber" });
+        if (request.Lines.Select(l => l.LineNumber).Distinct().Count() != request.Lines.Count)
+            return BadRequest(new { error = "Service line numbers must be unique" });
 
         using var span = ChoActivitySource.StartActivity(
             "adjudication.estimate",

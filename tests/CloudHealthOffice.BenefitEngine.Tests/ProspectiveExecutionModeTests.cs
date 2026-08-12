@@ -240,8 +240,10 @@ public class ProspectiveExecutionModeTests
 }
 
 /// <summary>
-/// Accumulator double that records whether/what was written, and seeds a
-/// standard embedded individual+family accumulator set.
+/// Accumulator double that records whether/what was written. It returns an
+/// empty starting accumulator set; the engine's <c>AccumulatorWorkingSet</c>
+/// seeds the standard embedded individual+family buckets from the plan config,
+/// so tests exercise the real cost-sharing waterfall without pre-seeded state.
 /// </summary>
 internal sealed class RecordingAccumulatorService : IAccumulatorService
 {

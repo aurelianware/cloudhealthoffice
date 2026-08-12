@@ -96,7 +96,13 @@ public class PaymentEstimateService : IPaymentEstimateService
         }).ToList();
 
         var pricing = await _rateEngine.ResolveBatchAsync(pricingRequests, ct);
-        var pricedByLine = pricing.LineResults.ToDictionary(p => p.LineNumber);
+
+        // Index priced lines by line number. Built defensively (last wins)
+        // rather than via ToDictionary so a pricing engine that ever returns
+        // duplicate line numbers can never surface as a 500 on a valid request.
+        var pricedByLine = new Dictionary<int, PricingResult>();
+        foreach (var priced in pricing.LineResults)
+            pricedByLine[priced.LineNumber] = priced;
 
         // ── Step 2: Benefit calculation in read-only PROSPECTIVE mode ──
         // Mirror the production adjudication seam: feed the priced allowed
@@ -132,7 +138,7 @@ public class PaymentEstimateService : IPaymentEstimateService
             ClaimType = claimTypeCode,
             ClaimId = request.RequestId ?? $"estimate-{Guid.NewGuid():N}",
             Lines = benefitLines,
-            AllowedAmounts = pricing.LineResults.ToDictionary(p => p.LineNumber, p => p.AllowedAmount),
+            AllowedAmounts = pricedByLine.ToDictionary(kv => kv.Key, kv => kv.Value.AllowedAmount),
             ExecutionMode = AdjudicationExecutionMode.Prospective
         };
 

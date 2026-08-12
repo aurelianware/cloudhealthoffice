@@ -66,8 +66,9 @@ public record PaymentEstimateRequest
 
     /// <summary>
     /// Line of business name (e.g. "Commercial", "Medicare", "Medicaid",
-    /// "CHIP", "Exchange", "Dental"). Optional; drives operating-mode routing
-    /// and LOB-specific rules.
+    /// "CHIP", "Exchange"). Optional; drives operating-mode routing and
+    /// LOB-specific rules. Note that dental is a <see cref="ClaimType"/>,
+    /// not a line of business.
     /// </summary>
     public string? LineOfBusiness { get; init; }
 
