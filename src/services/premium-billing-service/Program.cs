@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using PremiumBillingService.Middleware;
@@ -50,28 +49,6 @@ if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
     builder.Services.AddScoped<IEftDraftRepository, EftDraftRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
-
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer()
-        });
-    });
-
-    builder.Services.AddScoped<IPremiumInvoiceRepository, PremiumInvoiceRepository>();
-    builder.Services.AddScoped<IBillingRunRepository, BillingRunRepository>();
-    builder.Services.AddScoped<IEftDraftRepository, EftDraftRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
 
 // Services
 builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService.Services.PremiumBillingService>();
@@ -98,9 +75,6 @@ builder.Services.AddHttpClient("SponsorService", client =>
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // CORS (for development)
