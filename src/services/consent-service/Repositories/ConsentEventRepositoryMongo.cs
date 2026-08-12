@@ -20,9 +20,22 @@ public class ConsentEventRepositoryMongo : IConsentEventRepository, IConsentEven
         _collection = database.GetCollection<ConsentEvent>(ConsentEventsCollectionName);
     }
 
+    internal static void NormalizeEnvelope(ConsentEvent evt)
+    {
+        if (string.IsNullOrEmpty(evt.EventId))
+            throw new ArgumentException("EventId is required (client-supplied idempotency key)");
+        if (string.IsNullOrEmpty(evt.TenantId) || string.IsNullOrEmpty(evt.ConsentId))
+            throw new ArgumentException("TenantId and ConsentId are required");
+
+        if (string.IsNullOrEmpty(evt.Id))
+            evt.Id = evt.EventId;
+        if (string.IsNullOrEmpty(evt.PartitionKey))
+            evt.PartitionKey = ConsentEvent.BuildPartitionKey(evt.TenantId, evt.ConsentId);
+    }
+
     public async Task AppendAsync(ConsentEvent evt)
     {
-        ConsentEventRepository.NormalizeEnvelope(evt);
+        NormalizeEnvelope(evt);
         try
         {
             await _collection.InsertOneAsync(evt);

@@ -7,7 +7,6 @@ using ConsentService.HostedServices;
 using ConsentService.Middleware;
 using ConsentService.Repositories;
 using ConsentService.Services;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -52,44 +51,6 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddHostedService<ConsentIndexInitializer>();
 
     Console.WriteLine("[consent-service] Using MongoDB database provider");
-}
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"]
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"]
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        });
-    });
-
-    builder.Services.AddScoped<IConsentEventRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new ConsentEventRepository(cosmosClient, databaseName);
-    });
-    builder.Services.AddScoped<IConsentEventSink>(sp => (IConsentEventSink)sp.GetRequiredService<IConsentEventRepository>());
-    builder.Services.AddScoped<IConsentRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var sink = sp.GetRequiredService<IConsentEventSink>();
-        return new ConsentRepository(cosmosClient, databaseName, sink);
-    });
-
-    Console.WriteLine("[consent-service] Using Cosmos DB database provider");
 }
 
 // ── Consent body encryption ─────────────────────────────────────────
@@ -145,15 +106,12 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Health checks: Mongo / Cosmos via the shared bootstrap, plus the
+// Health checks: Mongo via the shared bootstrap, plus the
 // local consent-encryption-key readiness check. Local to consent-service
 // until a second service needs it.
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 })
 .AddCheck<ConsentEncryptionKeyHealthCheck>(
     "consent-encryption-key",
