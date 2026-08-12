@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -90,7 +89,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Database Configuration (Cosmos DB or MongoDB)
+// Database Configuration (MongoDB)
 if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
     // Use MongoDB
@@ -110,43 +109,14 @@ if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
     builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
-else
-{
-    // Use Cosmos DB (Default)
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"];
-        var key = configuration["CosmosDb:Key"];
-        
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-        
-        var options = new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
-        };
-        
-        return new CosmosClient(endpoint, key, options);
-    });
-
-    builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // Kafka consumer for RFAI docs received events
