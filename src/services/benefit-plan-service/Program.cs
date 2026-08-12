@@ -342,6 +342,15 @@ builder.Services.AddHttpClient(HttpProviderIntegrityGate.VerificationServiceClie
 });
 builder.Services.AddSingleton<IProviderIntegrityGate, HttpProviderIntegrityGate>();
 
+// ── Prospective Adjudication / Payment Estimate Service ──────────────────────
+// Provider-facing read-only claim payment estimate. Reuses the existing
+// fee-schedule pricing + benefit-calculation engines in a simulation mode
+// (AdjudicationExecutionMode.Prospective) so no accumulator, claim, payment,
+// or workflow state is ever mutated. Consumed by EstimateController's
+// POST /api/v1/adjudication/estimate. See
+// docs/architecture/prospective-adjudication.md.
+builder.Services.AddScoped<IPaymentEstimateService, PaymentEstimateService>();
+
 // ── FHIR InsurancePlan Projector (capability BP 5.8) ─────────────────────────
 // Stateless, hand-built JsonObject projector. Mirrors provider-service's
 // FhirPractitionerProjector / FhirOrganizationProjector — no Hl7.Fhir.R4

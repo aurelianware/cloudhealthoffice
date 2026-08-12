@@ -37,7 +37,7 @@
     <ProjectReference Include="..\shared\CloudHealthOffice.Appeals.Contracts\CloudHealthOffice.Appeals.Contracts.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.PriorAuthRuleEngine\CloudHealthOffice.PriorAuthRuleEngine.csproj" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.1" />
     <!-- StackExchange.Redis is pulled in transitively via
          CloudHealthOffice.Infrastructure. fhir-service has no direct
          IConnectionMultiplexer consumer after A.7.2 — the Redis client is

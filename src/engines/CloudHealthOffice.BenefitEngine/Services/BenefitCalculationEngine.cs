@@ -206,14 +206,21 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         var totals = MeasureStage("totals", () => ComputeTotals(lineResults));
 
         // ── Step 6: Persist accumulator updates ──
+        // Prospective (read-only) calculations skip the write entirely so no
+        // deductible/OOP/visit/dollar counter is ever mutated. The snapshot
+        // is still computed from the in-memory working set so callers can see
+        // the projected post-claim balances.
         var accumulatorSnapshot = MeasureStage("snapshot", workingAccumulators.GetSnapshot);
-        await MeasureTaskStageAsync(
-            "accumulatorWrite",
-            () => _accumulatorService.ApplyUpdatesAsync(
-                request.MemberId, request.SubscriberId,
-                request.BenefitPlanId, planYear,
-                request.ClaimId,
-                workingAccumulators.GetPendingUpdates(), ct));
+        if (request.ExecutionMode == AdjudicationExecutionMode.Production)
+        {
+            await MeasureTaskStageAsync(
+                "accumulatorWrite",
+                () => _accumulatorService.ApplyUpdatesAsync(
+                    request.MemberId, request.SubscriberId,
+                    request.BenefitPlanId, planYear,
+                    request.ClaimId,
+                    workingAccumulators.GetPendingUpdates(), ct));
+        }
 
         // ── Step 7: Determine overall claim outcome ──
         var allDenied = MeasureStage(
@@ -473,13 +480,16 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         var totals = ComputeTotals(lineResults);
 
-        // Persist accumulators
+        // Persist accumulators — skipped for prospective (read-only) estimates.
         var accumulatorSnapshot = workingAccumulators.GetSnapshot();
-        await _accumulatorService.ApplyUpdatesAsync(
-            request.MemberId, request.SubscriberId,
-            request.BenefitPlanId, planYear,
-            request.ClaimId,
-            workingAccumulators.GetPendingUpdates(), ct);
+        if (request.ExecutionMode == AdjudicationExecutionMode.Production)
+        {
+            await _accumulatorService.ApplyUpdatesAsync(
+                request.MemberId, request.SubscriberId,
+                request.BenefitPlanId, planYear,
+                request.ClaimId,
+                workingAccumulators.GetPendingUpdates(), ct);
+        }
 
         return new BenefitResolutionResult
         {

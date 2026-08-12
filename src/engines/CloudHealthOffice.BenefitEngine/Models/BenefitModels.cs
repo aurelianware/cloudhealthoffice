@@ -69,6 +69,19 @@ public record BenefitResolutionRequest
     /// <c>docs/architecture/adjudication-api-stabilization.md</c>.
     /// </summary>
     public MemberContext? Member { get; init; }
+
+    /// <summary>
+    /// Execution context for this calculation. Defaults to
+    /// <see cref="AdjudicationExecutionMode.Production"/> so real claim
+    /// adjudication persists accumulator updates exactly as before. Set to
+    /// <see cref="AdjudicationExecutionMode.Prospective"/> for a read-only
+    /// payment estimate: the same cost-sharing waterfall runs but the engine
+    /// skips the accumulator write, leaving all persistent financial state
+    /// untouched. See <c>docs/architecture/prospective-adjudication.md</c>.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AdjudicationExecutionMode ExecutionMode { get; init; }
+        = AdjudicationExecutionMode.Production;
 }
 
 /// <summary>

@@ -31,7 +31,7 @@
          on the class. See docs/architecture/shared-cache.md and Addendum A.7.2. -->
     <ProjectReference Include="..\..\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
 
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.1" />
     <PackageReference Include="MongoDB.Driver"                      Version="3.7.1" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />

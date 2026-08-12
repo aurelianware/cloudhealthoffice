@@ -156,12 +156,19 @@ public class RateResolutionService : IRateResolutionService
 
         foreach (var (request, result) in initialResults)
         {
+            // Phase 1 priced each line as a single-line request (LineNumber
+            // forced to 1 to suppress per-line MPPR), so restore the original
+            // line number here. Without this every batch result carries
+            // LineNumber = 1, which collapses/duplicates line identity for any
+            // caller that keys results by line number.
+            var rankedResult = result with { LineNumber = request.LineNumber };
+
             var rank = eligibleForReduction.FindIndex(e => e.Request.LineNumber == request.LineNumber);
 
             if (rank <= 0)
             {
                 // Rank 0 (highest paid) or not eligible — no reduction
-                finalResults.Add(result);
+                finalResults.Add(rankedResult);
                 continue;
             }
 
@@ -173,7 +180,7 @@ public class RateResolutionService : IRateResolutionService
 
             if (!isMultProcEligible)
             {
-                finalResults.Add(result);
+                finalResults.Add(rankedResult);
                 continue;
             }
 
@@ -193,7 +200,7 @@ public class RateResolutionService : IRateResolutionService
                 AdjustmentAmount = reductionAmount,
             });
 
-            finalResults.Add(result with
+            finalResults.Add(rankedResult with
             {
                 AllowedAmount = reducedAmount,
                 Adjustments = adjustments

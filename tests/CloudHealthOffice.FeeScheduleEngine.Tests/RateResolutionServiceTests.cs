@@ -377,6 +377,48 @@ public class RateResolutionServiceTests
         Assert.Equal(125m, resultSet.LineResults.Single().AllowedAmount);
     }
 
+    /// <summary>
+    /// Batch pricing must preserve each request's original LineNumber on the
+    /// corresponding result. Phase 1 prices every line as a single-line request
+    /// (LineNumber forced to 1 to suppress per-line MPPR); the engine must
+    /// restore the real line number so callers can key results by line.
+    /// </summary>
+    [Fact]
+    public async Task Batch_PreservesOriginalLineNumbers()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-lines", TenantId = Tenant, Name = "Commercial Lines",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m },
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var requests = new List<PricingRequest>
+        {
+            CreateRequest("20610", lineNumber: 1, totalLines: 3, billed: 300m),
+            CreateRequest("27447", lineNumber: 2, totalLines: 3, billed: 2000m),
+            CreateRequest("29881", lineNumber: 3, totalLines: 3, billed: 1000m),
+        };
+
+        var resultSet = await engine.ResolveBatchAsync(requests);
+
+        // Each result carries the line number of its originating request …
+        Assert.Equal(1, resultSet.LineResults.First(r => r.ProcedureCode == "20610").LineNumber);
+        Assert.Equal(2, resultSet.LineResults.First(r => r.ProcedureCode == "27447").LineNumber);
+        Assert.Equal(3, resultSet.LineResults.First(r => r.ProcedureCode == "29881").LineNumber);
+
+        // … so line numbers are unique and can safely key a dictionary.
+        var lineNumbers = resultSet.LineResults.Select(r => r.LineNumber).ToList();
+        Assert.Equal(lineNumbers.Count, lineNumbers.Distinct().Count());
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // PER DIEM
     // ═══════════════════════════════════════════════════════════════════
