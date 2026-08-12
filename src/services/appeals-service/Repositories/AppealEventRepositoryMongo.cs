@@ -20,9 +20,22 @@ public sealed class AppealEventRepositoryMongo : IAppealEventRepository, IAppeal
         _collection = database.GetCollection<AppealEvent>(AppealEventsCollectionName);
     }
 
+    internal static void NormalizeEnvelope(AppealEvent evt)
+    {
+        if (string.IsNullOrEmpty(evt.EventId))
+            throw new ArgumentException("EventId is required (client-supplied idempotency key)");
+        if (string.IsNullOrEmpty(evt.TenantId) || string.IsNullOrEmpty(evt.AppealId))
+            throw new ArgumentException("TenantId and AppealId are required");
+
+        if (string.IsNullOrEmpty(evt.Id))
+            evt.Id = evt.EventId;
+        if (string.IsNullOrEmpty(evt.PartitionKey))
+            evt.PartitionKey = AppealEvent.BuildPartitionKey(evt.TenantId, evt.AppealId);
+    }
+
     public async Task AppendAsync(AppealEvent evt, CancellationToken ct = default)
     {
-        AppealEventRepository.NormalizeEnvelope(evt);
+        NormalizeEnvelope(evt);
         try
         {
             await _collection.InsertOneAsync(evt, cancellationToken: ct);

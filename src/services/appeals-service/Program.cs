@@ -7,7 +7,6 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
 using MongoDB.Bson;
@@ -75,43 +74,6 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
 
     Console.WriteLine("[appeals-service] Using MongoDB database provider");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"]
-            ?? configuration["CosmosDb:AccountEndpoint"]
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"]
-            ?? configuration["CosmosDb:AccountKey"]
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer()
-        });
-    });
-
-    builder.Services.AddScoped<IAppealEventRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new AppealEventRepository(cosmosClient, databaseName);
-    });
-    builder.Services.AddScoped<IAppealEventSink>(sp => (IAppealEventSink)sp.GetRequiredService<IAppealEventRepository>());
-    builder.Services.AddScoped<IAppealRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var sink = sp.GetRequiredService<IAppealEventSink>();
-        return new AppealRepository(cosmosClient, databaseName, sink);
-    });
-
-    Console.WriteLine("[appeals-service] Using Cosmos DB database provider");
-}
 
 // ── Appeal body encryption ───────────────────────────────────────────
 // Non-dev startup guard: no AppealEncryption section = startup error.
@@ -173,14 +135,11 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Health checks: Mongo / Cosmos via the shared bootstrap, plus the
+// Health checks: Mongo via the shared bootstrap, plus the
 // local appeal-encryption-key readiness check.
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 })
 .AddCheck<AppealEncryptionKeyHealthCheck>(
     "appeal-encryption-key",
