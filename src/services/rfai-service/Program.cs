@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using RfaiService.Middleware;
 using RfaiService.Repositories;
@@ -48,19 +47,6 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IRfaiRepository, RfaiRepositoryMongo>();
     Console.WriteLine("Using MongoDB database provider");
 }
-else
-{
-    var endpoint = builder.Configuration["CosmosDb:Endpoint"]
-        ?? throw new InvalidOperationException("CosmosDb:Endpoint must be configured when MongoDb is not used.");
-    var key = builder.Configuration["CosmosDb:Key"]
-        ?? throw new InvalidOperationException("CosmosDb:Key must be configured when MongoDb is not used.");
-
-    builder.Services.AddSingleton<CosmosClient>(_ =>
-        new CosmosClient(endpoint, key));
-
-    builder.Services.AddScoped<IRfaiRepository, RfaiRepositoryCosmos>();
-    Console.WriteLine("Using Cosmos DB database provider");
-}
 
 // ── Kafka producer ───────────────────────────────────────────────────────────
 
@@ -78,9 +64,6 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 builder.Services.AddCors(options =>
 {
