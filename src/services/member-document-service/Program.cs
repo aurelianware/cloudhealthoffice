@@ -6,7 +6,6 @@ using CloudHealthOffice.Infrastructure.Observability;
 using MemberDocumentService.Middleware;
 using MemberDocumentService.Repositories;
 using MemberDocumentService.Services;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -53,33 +52,6 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
 
     builder.Services.AddScoped<IMemberDocumentRepository, MemberDocumentRepositoryMongo>();
 }
-else
-{
-    builder.Services.AddSingleton(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"]
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"]
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        });
-    });
-
-    builder.Services.AddScoped<IMemberDocumentRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new MemberDocumentRepository(cosmosClient, databaseName, configuration);
-    });
-}
 
 builder.Services.AddCors(options =>
 {
@@ -94,9 +66,6 @@ builder.Services.AddCors(options =>
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);
