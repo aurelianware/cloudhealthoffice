@@ -5,7 +5,6 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,7 +29,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ── Database ─────────────────────────────────────────────────────────
-// Mirrors eligibility-service's auto-detect pattern: Mongo if configured, else Cosmos.
+// MongoDB persistence.
 var mongoConnection = builder.Configuration["MongoDb:ConnectionString"];
 if (!string.IsNullOrWhiteSpace(mongoConnection))
 {
@@ -44,21 +43,6 @@ if (!string.IsNullOrWhiteSpace(mongoConnection))
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
     builder.Services.AddScoped<IProcessedClaimStore, ProcessedClaimStoreMongo>();
     Console.WriteLine("Using MongoDB database provider");
-}
-else
-{
-    var cosmosConnection = builder.Configuration["CosmosDb:ConnectionString"]
-        ?? throw new InvalidOperationException("Database connection not configured: set MongoDb:ConnectionString or CosmosDb:ConnectionString");
-
-    builder.Services.AddSingleton(_ => new CosmosClient(cosmosConnection, new CosmosClientOptions
-    {
-        SerializerOptions = new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-        }
-    }));
-    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
-    builder.Services.AddScoped<IProcessedClaimStore, ProcessedClaimStoreCosmos>();
 }
 
 // ── Domain service ───────────────────────────────────────────────────
@@ -77,9 +61,6 @@ builder.Services.AddCors(o => o.AddPolicy("AllowAll", p => p.AllowAnyOrigin().Al
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);
