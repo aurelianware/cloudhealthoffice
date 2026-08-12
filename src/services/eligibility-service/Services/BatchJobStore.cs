@@ -4,7 +4,6 @@ using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using EligibilityService.Models;
-using Microsoft.Azure.Cosmos;
 
 namespace EligibilityService.Services;
 
@@ -151,102 +150,6 @@ public interface IBatchBlobContainer
     Task<Stream> OpenReadAsync(string path, CancellationToken ct);
 }
 
-/// <summary>
-/// Production adapter over the Cosmos SDK. Stores the job doc itself and a
-/// side-car "payloads" dictionary on the doc for inline payloads or blob
-/// URIs. This keeps everything in a single document and a single partition
-/// read per lookup.
-/// </summary>
-public class CosmosContainerAdapter : IBatchJobContainer
-{
-    private readonly Container _container;
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
-
-    public CosmosContainerAdapter(Container container) { _container = container; }
-
-    private record PayloadSlot(string? Inline, string? BlobUri);
-
-    private class JobDoc
-    {
-        public BatchEligibilityJob Job { get; set; } = new();
-        public Dictionary<string, PayloadSlot> Payloads { get; set; } = new();
-    }
-
-    public async Task UpsertAsync(BatchEligibilityJob job, string partitionKey, CancellationToken ct)
-    {
-        var existing = await ReadDocAsync(job.Id, partitionKey, ct);
-        var doc = existing ?? new JobDoc();
-        doc.Job = job;
-        await _container.UpsertItemAsync(WrapAsCosmos(doc, job.Id, partitionKey),
-            new PartitionKey(partitionKey), cancellationToken: ct);
-    }
-
-    public async Task<BatchEligibilityJob?> ReadAsync(string id, string partitionKey, CancellationToken ct)
-    {
-        var doc = await ReadDocAsync(id, partitionKey, ct);
-        return doc?.Job;
-    }
-
-    public async Task WriteInlinePayloadAsync(
-        string id, string partitionKey, string payloadKey, byte[] bytes, CancellationToken ct)
-    {
-        var doc = (await ReadDocAsync(id, partitionKey, ct)) ?? new JobDoc();
-        doc.Payloads[payloadKey] = new PayloadSlot(Convert.ToBase64String(bytes), null);
-        await _container.UpsertItemAsync(WrapAsCosmos(doc, id, partitionKey),
-            new PartitionKey(partitionKey), cancellationToken: ct);
-    }
-
-    public async Task RecordBlobPayloadAsync(
-        string id, string partitionKey, string payloadKey, string blobUri, CancellationToken ct)
-    {
-        var doc = (await ReadDocAsync(id, partitionKey, ct)) ?? new JobDoc();
-        doc.Payloads[payloadKey] = new PayloadSlot(null, blobUri);
-        if (doc.Job != null)
-        {
-            doc.Job.StorageMode = BatchStorageMode.Blob;
-            if (payloadKey == "input") doc.Job.InputBlobUri = blobUri;
-            if (payloadKey == "result") doc.Job.ResultBlobUri = blobUri;
-        }
-        await _container.UpsertItemAsync(WrapAsCosmos(doc, id, partitionKey),
-            new PartitionKey(partitionKey), cancellationToken: ct);
-    }
-
-    public async Task<BatchPayloadRecord?> ReadPayloadAsync(
-        string id, string partitionKey, string payloadKey, CancellationToken ct)
-    {
-        var doc = await ReadDocAsync(id, partitionKey, ct);
-        if (doc == null || !doc.Payloads.TryGetValue(payloadKey, out var slot)) return null;
-        return new BatchPayloadRecord(
-            Inline: slot.Inline == null ? null : Convert.FromBase64String(slot.Inline),
-            BlobUri: slot.BlobUri);
-    }
-
-    private async Task<JobDoc?> ReadDocAsync(string id, string partitionKey, CancellationToken ct)
-    {
-        try
-        {
-            var response = await _container.ReadItemAsync<Dictionary<string, object>>(
-                id, new PartitionKey(partitionKey), cancellationToken: ct);
-            var raw = JsonSerializer.Serialize(response.Resource, JsonOpts);
-            return JsonSerializer.Deserialize<JobDoc>(raw, JsonOpts);
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-    }
-
-    private static Dictionary<string, object?> WrapAsCosmos(JobDoc doc, string id, string tenantId)
-    {
-        return new Dictionary<string, object?>
-        {
-            ["id"] = id,
-            ["tenantId"] = tenantId,
-            ["job"] = doc.Job,
-            ["payloads"] = doc.Payloads
-        };
-    }
-}
 
 public class BlobContainerAdapter : IBatchBlobContainer
 {

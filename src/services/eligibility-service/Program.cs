@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Azure.Cosmos;
 using EligibilityService;
 using EligibilityService.Adapters;
 using EligibilityService.Middleware;
@@ -53,29 +52,6 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
 
     builder.Services.AddScoped<IEligibilityRepository, EligibilityRepositoryMongo>();
     Console.WriteLine("Using MongoDB database provider");
-}
-else
-{
-    // Cosmos DB
-    var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"] 
-        ?? throw new InvalidOperationException("Cosmos DB connection string not configured");
-
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-        
-        var options = new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
-        };
-        return new CosmosClient(cosmosConnectionString, options);
-    });
-
-    builder.Services.AddScoped<IEligibilityRepository, EligibilityRepository>();
 }
 
 // HTTP Client for service calls (shared by adapters, factory, and eligibility service)
@@ -137,9 +113,6 @@ builder.Services.AddCors(options =>
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);

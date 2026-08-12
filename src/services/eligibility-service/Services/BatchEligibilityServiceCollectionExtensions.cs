@@ -1,6 +1,5 @@
 using Azure.Storage.Blobs;
 using CloudHealthOffice.Infrastructure.Messaging;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
 namespace EligibilityService.Services;
@@ -35,11 +34,10 @@ public static class BatchEligibilityServiceCollectionExtensions
     {
         var requestedMode = configuration["BatchEligibility:StorageMode"] ?? "Auto";
         var mongoCs = configuration["BatchEligibility:MongoDb:ConnectionString"];
-        var cosmosCs = configuration["BatchEligibility:CosmosDb:ConnectionString"];
         var blobCs = configuration["BatchEligibility:BlobStorage:ConnectionString"];
 
         var hasPersistentConfig =
-            (!string.IsNullOrWhiteSpace(mongoCs) || !string.IsNullOrWhiteSpace(cosmosCs)) &&
+            !string.IsNullOrWhiteSpace(mongoCs) &&
             !string.IsNullOrWhiteSpace(blobCs);
 
         var effectiveMode = ResolveMode(requestedMode, environment, hasPersistentConfig);
@@ -50,13 +48,13 @@ public static class BatchEligibilityServiceCollectionExtensions
             {
                 throw new InvalidOperationException(
                     "BatchEligibility:StorageMode resolved to InMemory outside Development. " +
-                    "Configure BatchEligibility:MongoDb or BatchEligibility:CosmosDb, plus " +
+                    "Configure BatchEligibility:MongoDb plus " +
                     "BatchEligibility:BlobStorage, or set StorageMode=Persistent explicitly.");
             }
 
             Console.WriteLine(
                 "[dev] BatchEligibility storage = InMemory. Jobs do NOT survive restarts " +
-                "and are not visible across replicas. Configure Mongo or Cosmos + Blob + a " +
+                "and are not visible across replicas. Configure Mongo + Blob + a " +
                 "Service Bus connection string under Messaging:ServiceBusConnectionString for " +
                 "production.");
 
@@ -73,39 +71,22 @@ public static class BatchEligibilityServiceCollectionExtensions
         var sbQueueName = configuration["BatchEligibility:ServiceBus:Queue"] ?? "batch-eligibility";
         var inlineMax = configuration.GetValue<int?>("BatchEligibility:InlineMaxBytes")
                         ?? BatchJobStore.DefaultInlineMaxBytes;
-        var useMongo = !string.IsNullOrWhiteSpace(mongoCs);
-
-        if (!useMongo)
-        {
-            RequireConfig(cosmosCs, "BatchEligibility:CosmosDb:ConnectionString");
-        }
+        RequireConfig(mongoCs, "BatchEligibility:MongoDb:ConnectionString");
 
         services.AddSingleton<IBatchJobStore>(sp =>
         {
             var blobService = new BlobServiceClient(blobCs);
             var blobContainer = blobService.GetBlobContainerClient(blobContainerName);
 
-            IBatchJobContainer jobContainer;
-            if (useMongo)
-            {
-                var mongoDb = configuration["BatchEligibility:MongoDb:Database"] ?? "cho";
-                var mongoCollection = configuration["BatchEligibility:MongoDb:Collection"] ?? "batch-jobs";
-                var database = new MongoClient(mongoCs).GetDatabase(mongoDb);
-                var collection = database.GetCollection<MongoContainerAdapter.JobDoc>(mongoCollection);
-                var adapter = new MongoContainerAdapter(collection);
-                adapter.EnsureIndexesAsync().GetAwaiter().GetResult();
-                jobContainer = adapter;
-            }
-            else
-            {
-                var cosmosDb = configuration["BatchEligibility:CosmosDb:Database"] ?? "cho";
-                var cosmosContainer = configuration["BatchEligibility:CosmosDb:Container"] ?? "batch-jobs";
-                var cosmos = new CosmosClient(cosmosCs);
-                jobContainer = new CosmosContainerAdapter(cosmos.GetContainer(cosmosDb, cosmosContainer));
-            }
+            var mongoDb = configuration["BatchEligibility:MongoDb:Database"] ?? "cho";
+            var mongoCollection = configuration["BatchEligibility:MongoDb:Collection"] ?? "batch-jobs";
+            var database = new MongoClient(mongoCs).GetDatabase(mongoDb);
+            var collection = database.GetCollection<MongoContainerAdapter.JobDoc>(mongoCollection);
+            var adapter = new MongoContainerAdapter(collection);
+            adapter.EnsureIndexesAsync().GetAwaiter().GetResult();
 
             return new BatchJobStore(
-                jobContainer,
+                adapter,
                 new BlobContainerAdapter(blobContainer),
                 inlineMax);
         });
