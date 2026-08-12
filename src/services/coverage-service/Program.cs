@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using CoverageService.Middleware;
 using CoverageService.Repositories;
 using CoverageService.Services;
@@ -47,41 +46,6 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IPcpAssignmentRepository, PcpAssignmentRepositoryMongo>();
     Console.WriteLine("Using MongoDB database provider");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"] 
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"] 
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-        
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        });
-    });
-
-    builder.Services.AddScoped<ICoverageRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new CoverageRepository(cosmosClient, databaseName);
-    });
-
-    builder.Services.AddScoped<IPcpAssignmentRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new PcpAssignmentRepository(cosmosClient, databaseName);
-    });
-}
 
 // PCP assignment + provider client + care team projector
 builder.Services.Configure<ProviderServiceOptions>(opts =>
@@ -124,9 +88,6 @@ builder.Services.AddCors(options =>
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);
