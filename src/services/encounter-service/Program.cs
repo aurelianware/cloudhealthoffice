@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using System.Text.Json.Serialization;
 using EncounterService;
@@ -51,34 +50,6 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IEncounterRepository, EncounterRepositoryMongo>();
     Console.WriteLine("Using MongoDB database provider");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
-
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-        {
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-        }
-
-        var serializerOptions = new System.Text.Json.JsonSerializerOptions
-        {
-            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters = { new JsonStringEnumConverter() }
-        };
-        var options = new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer(serializerOptions)
-        };
-        return new CosmosClient(endpoint, key, options);
-    });
-
-    builder.Services.AddScoped<IEncounterRepository, EncounterRepository>();
-}
 
 // 837 EDI generator
 builder.Services.AddScoped<IEncounter837Service, Encounter837Service>();
@@ -86,13 +57,10 @@ builder.Services.AddScoped<IEncounter837Service, Encounter837Service>();
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // CORS (for development)
