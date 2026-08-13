@@ -37,7 +37,7 @@
     <!-- Polly (resilience) -->
     <PackageReference Include="Polly.Extensions" Version="8.5.0" />
     <!-- SFTP for batch file pulls -->
-    <PackageReference Include="SSH.NET" Version="2024.2.0" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
   </ItemGroup>
 
 </Project>
