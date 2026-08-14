@@ -94,6 +94,16 @@ public enum FeeScheduleRateType
     PercentOfMedicare
 }
 
+/// <summary>Business origin of a fee schedule, independent of its calculation type.</summary>
+public enum FeeScheduleSourceType
+{
+    PracticeCharge,
+    PayerContract,
+    PublicGovernment,
+    Reference,
+    DevelopmentFixture
+}
+
 /// <summary>
 /// Provider's network status for a given plan on a given date.
 /// </summary>
