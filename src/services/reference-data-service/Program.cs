@@ -7,6 +7,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using ReferenceDataService.Repositories.Canonical;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -32,6 +33,7 @@ builder.Services.AddDbContext<ReferenceDataContext>(options =>
 
 // Add repositories
 builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
+builder.Services.AddScoped<CloudHealthOffice.ReferenceData.Persistence.IReferenceDataRepository, CanonicalReferenceDataRepository>();
 
 // Cosmos DB Client — hosts the ComplianceConfig container
 var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")

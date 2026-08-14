@@ -5,11 +5,13 @@ WORKDIR /repo
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/reference-data-service/reference-data-service.csproj src/services/reference-data-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
 RUN dotnet restore src/services/reference-data-service/reference-data-service.csproj
 
 # Copy source code and build
 COPY src/services/reference-data-service/ src/services/reference-data-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
 RUN dotnet build src/services/reference-data-service/reference-data-service.csproj -c Release --no-restore
 
 # Publish stage
