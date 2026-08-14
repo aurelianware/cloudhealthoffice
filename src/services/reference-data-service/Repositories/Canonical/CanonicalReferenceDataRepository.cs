@@ -24,11 +24,12 @@ public sealed class CanonicalReferenceDataRepository : CloudHealthOffice.Referen
     {
         var normalizedSystem = Normalize(codeSystem);
         var normalizedCode = Normalize(code);
+        var normalizedVersion = version is null ? null : Normalize(version);
 
         var entity = await VisibleRecords(tenantId)
-            .Where(x => x.CodeSystem.ToUpper() == normalizedSystem
-                && x.Code.ToUpper() == normalizedCode
-                && (version == null || x.Version == version)
+            .Where(x => x.CodeSystem == normalizedSystem
+                && x.Code == normalizedCode
+                && (normalizedVersion == null || x.Version == normalizedVersion)
                 && x.Active
                 && x.EffectiveFrom <= effectiveDate
                 && (x.EffectiveTo == null || x.EffectiveTo >= effectiveDate))
@@ -46,14 +47,17 @@ public sealed class CanonicalReferenceDataRepository : CloudHealthOffice.Referen
 
         var normalizedSystem = Normalize(query.CodeSystem);
         var records = VisibleRecords(query.TenantId)
-            .Where(x => x.CodeSystem.ToUpper() == normalizedSystem);
+            .Where(x => x.CodeSystem == normalizedSystem);
 
         if (query.Version is not null)
-            records = records.Where(x => x.Version == query.Version);
+        {
+            var version = Normalize(query.Version);
+            records = records.Where(x => x.Version == version);
+        }
         if (query.Category is not null)
         {
             var category = Normalize(query.Category);
-            records = records.Where(x => x.Category != null && x.Category.ToUpper() == category);
+            records = records.Where(x => x.Category == category);
         }
         if (query.Active is not null)
             records = records.Where(x => x.Active == query.Active);
@@ -69,9 +73,9 @@ public sealed class CanonicalReferenceDataRepository : CloudHealthOffice.Referen
             var term = Normalize(query.Search);
             records = query.SearchMode switch
             {
-                ReferenceSearchMode.Exact => records.Where(x => x.Code.ToUpper() == term),
-                ReferenceSearchMode.Prefix => records.Where(x => x.Code.ToUpper().StartsWith(term)),
-                _ => records.Where(x => x.Code.ToUpper().Contains(term)
+                ReferenceSearchMode.Exact => records.Where(x => x.Code == term),
+                ReferenceSearchMode.Prefix => records.Where(x => x.Code.StartsWith(term)),
+                _ => records.Where(x => x.Code.Contains(term)
                     || (x.Display != null && x.Display.ToUpper().Contains(term))
                     || (x.Description != null && x.Description.ToUpper().Contains(term)))
             };
@@ -126,8 +130,19 @@ public sealed class CanonicalReferenceDataRepository : CloudHealthOffice.Referen
             RecordCount = records.Count
         });
 
-        await _context.SaveChangesAsync(ct);
-        return new ImportResult(records.Count, false, first.Checksum);
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+            return new ImportResult(records.Count, false, first.Checksum);
+        }
+        catch (DbUpdateException)
+        {
+            _context.ChangeTracker.Clear();
+            if (await _context.CanonicalReferenceDataImports.AsNoTracking()
+                    .AnyAsync(x => x.ImportKey == importKey, ct))
+                return new ImportResult(0, true, first.Checksum);
+            throw;
+        }
     }
 
     private IQueryable<CanonicalReferenceCodeEntity> VisibleRecords(string? tenantId) =>
@@ -164,13 +179,13 @@ public sealed class CanonicalReferenceDataRepository : CloudHealthOffice.Referen
         StorageKey = StorageKey(record),
         Id = record.Id,
         TenantId = record.TenantId,
-        CodeSystem = record.Coding.CodeSystem,
+        CodeSystem = Normalize(record.Coding.CodeSystem),
         CodeSystemUri = record.Coding.CodeSystemUri,
-        Code = record.Coding.Code,
-        Version = record.Coding.Version,
+        Code = Normalize(record.Coding.Code),
+        Version = record.Coding.Version is null ? null : Normalize(record.Coding.Version),
         Display = record.Coding.Display,
         Description = record.Description,
-        Category = record.Category,
+        Category = record.Category is null ? null : Normalize(record.Category),
         EffectiveFrom = record.EffectiveFrom,
         EffectiveTo = record.EffectiveTo,
         Active = record.Active,

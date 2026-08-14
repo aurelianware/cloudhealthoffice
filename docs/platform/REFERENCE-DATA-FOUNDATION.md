@@ -99,4 +99,4 @@ tenant access from authenticated claims (or an authenticated service's
 display or description text. Anonymous tenant headers do not grant access.
 
 External retrieval and source-specific parsers remain a separate acquisition
-concern; this service integration does not make retrieval activate data.
+concern. Retrieved data is never activated implicitly.

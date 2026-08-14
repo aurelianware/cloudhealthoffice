@@ -73,6 +73,25 @@ public sealed class CanonicalReferenceDataControllerTests
         response.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task GroupSid_claim_resolves_tenant_context()
+    {
+        var repository = new InMemoryReferenceDataRepository();
+        await repository.ImportAsync([Code() with
+        {
+            TenantId = "tenant-a",
+            ExposureClassification = ExposureClassification.TenantRestricted
+        }]);
+        var controller = CreateController(repository, new Claim(ClaimTypes.GroupSid, "tenant-a"));
+
+        var response = await controller.Search("CPT", pageSize: 10);
+
+        var result = response.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<Page<ReferenceCode>>().Subject;
+        result.Items.Should().ContainSingle();
+        result.Items[0].Coding.Display.Should().Be("Licensed display");
+    }
+
     private static CanonicalReferenceDataController CreateController(
         CloudHealthOffice.ReferenceData.Persistence.IReferenceDataRepository repository,
         params Claim[] claims)

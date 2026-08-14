@@ -85,10 +85,82 @@ public sealed class CanonicalReferenceDataRepositoryTests
         (await context.CanonicalReferenceDataImports.CountAsync()).Should().Be(1);
     }
 
+    [Fact]
+    public async Task Import_normalizes_indexed_coding_fields()
+    {
+        await using var context = CreateContext();
+        var repository = new CanonicalReferenceDataRepository(context);
+        var record = Code("normalized", " v1 ", "normalize", new DateOnly(2026, 1, 1)) with
+        {
+            Category = " diagnosis ",
+            Coding = new ChoCoding { CodeSystem = " icd-10-cm ", Code = " e11.9 ", Version = " v1 " }
+        };
+
+        await repository.ImportAsync([record]);
+
+        var stored = await context.CanonicalReferenceCodes.SingleAsync();
+        stored.CodeSystem.Should().Be("ICD-10-CM");
+        stored.Code.Should().Be("E11.9");
+        stored.Version.Should().Be("V1");
+        stored.Category.Should().Be("DIAGNOSIS");
+        (await repository.GetAsync(" icd-10-cm ", "e11.9", new DateOnly(2026, 8, 14), "v1"))
+            .Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Concurrent_duplicate_import_is_reported_as_idempotent()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<ReferenceDataContext>()
+            .UseInMemoryDatabase(databaseName)
+            .Options;
+        await using var context = new ConcurrentImportContext(options);
+        var repository = new CanonicalReferenceDataRepository(context);
+
+        var result = await repository.ImportAsync([
+            Code("1", "2026", "concurrent", new DateOnly(2026, 1, 1))
+        ]);
+
+        result.AlreadyImported.Should().BeTrue();
+        result.ImportedCount.Should().Be(0);
+    }
+
     private static ReferenceDataContext CreateContext() => new(
         new DbContextOptionsBuilder<ReferenceDataContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
+
+    private sealed class ConcurrentImportContext : ReferenceDataContext
+    {
+        private readonly DbContextOptions<ReferenceDataContext> _options;
+        private bool _simulateRace = true;
+
+        public ConcurrentImportContext(DbContextOptions<ReferenceDataContext> options) : base(options)
+        {
+            _options = options;
+        }
+
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_simulateRace)
+                return await base.SaveChangesAsync(cancellationToken);
+
+            _simulateRace = false;
+            var pendingImport = ChangeTracker.Entries<CanonicalReferenceDataImportEntity>().Single().Entity;
+            await using var winner = new ReferenceDataContext(_options);
+            winner.CanonicalReferenceDataImports.Add(new CanonicalReferenceDataImportEntity
+            {
+                ImportKey = pendingImport.ImportKey,
+                SourceId = pendingImport.SourceId,
+                SourceVersion = pendingImport.SourceVersion,
+                Checksum = pendingImport.Checksum,
+                ImportedAt = pendingImport.ImportedAt,
+                RecordCount = pendingImport.RecordCount
+            });
+            await winner.SaveChangesAsync(cancellationToken);
+            throw new DbUpdateException("Simulated concurrent unique-key violation.");
+        }
+    }
 
     private static ReferenceCode Code(
         string id,

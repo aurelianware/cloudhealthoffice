@@ -122,7 +122,8 @@ public sealed class CanonicalReferenceDataController : ControllerBase
     {
         var tenantId = User.FindFirstValue("tenant_id")
             ?? User.FindFirstValue("extension_TenantId")
-            ?? User.FindFirstValue("http://schemas.microsoft.com/identity/claims/tenantid");
+            ?? User.FindFirstValue("http://schemas.microsoft.com/identity/claims/tenantid")
+            ?? User.FindFirstValue(ClaimTypes.GroupSid);
 
         if (string.IsNullOrWhiteSpace(tenantId) && User.Identity?.IsAuthenticated == true)
             tenantId = Request.Headers["X-Tenant-ID"].FirstOrDefault();
