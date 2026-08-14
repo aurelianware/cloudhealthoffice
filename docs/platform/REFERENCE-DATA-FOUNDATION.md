@@ -80,3 +80,23 @@ Reference Data Service change.
 The repository supports exact code, code prefix, code/display/description text,
 category, explicit version, effective date, active state, tenant isolation, and
 bounded pagination (maximum 500 records per page).
+
+## Reference Data Service integration
+
+The existing `reference-data-service` hosts the durable canonical repository in
+PostgreSQL alongside its legacy CPT, ICD-10, HCPCS, modifier, DRG, place-of-service,
+and revenue-code tables. Legacy endpoints remain compatible; canonical clients use:
+
+- `GET /api/reference-data/codes/{codeSystem}/{code}` for effective-date lookup.
+- `GET /api/reference-data/codes` for versioned, tenant-aware search.
+- `POST /api/reference-data/codes/import` for administrator-controlled imports.
+
+Canonical imports are recorded in `canonical_reference_data_imports` and are
+idempotent by source ID, source version, and checksum. Records are stored in
+`canonical_reference_codes` using a normalized logical key. The service derives
+tenant access from authenticated claims (or an authenticated service's
+`X-Tenant-ID` header) and applies `ReferenceDataExposurePolicy` before returning
+display or description text. Anonymous tenant headers do not grant access.
+
+External retrieval and source-specific parsers remain a separate acquisition
+concern. Retrieved data is never activated implicitly.
