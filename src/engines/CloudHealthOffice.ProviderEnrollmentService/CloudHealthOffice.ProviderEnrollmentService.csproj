@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <!-- Azure -->
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.1" />
     <!-- MongoDB -->
     <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
     <!-- HTTP resilience -->
@@ -37,7 +37,7 @@
     <!-- Polly (resilience) -->
     <PackageReference Include="Polly.Extensions" Version="8.5.0" />
     <!-- SFTP for batch file pulls -->
-    <PackageReference Include="SSH.NET" Version="2024.2.0" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
   </ItemGroup>
 
 </Project>
