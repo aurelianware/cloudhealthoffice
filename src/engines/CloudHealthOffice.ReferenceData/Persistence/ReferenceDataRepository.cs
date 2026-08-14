@@ -52,7 +52,10 @@ public sealed class InMemoryReferenceDataRepository : IReferenceDataRepository
 
     public Task<Page<ReferenceCode>> SearchAsync(ReferenceDataQuery query, CancellationToken ct = default)
     {
-        if (query.Page < 1 || query.PageSize is < 1 or > 500) throw new ArgumentOutOfRangeException(nameof(query));
+        if (query.Page < 1)
+            throw new ArgumentOutOfRangeException(nameof(query.Page), query.Page, "Page must be at least 1.");
+        if (query.PageSize is < 1 or > 500)
+            throw new ArgumentOutOfRangeException(nameof(query.PageSize), query.PageSize, "PageSize must be between 1 and 500.");
         lock (_gate)
         {
             IEnumerable<ReferenceCode> result = VisibleRecords(query.TenantId)
@@ -81,10 +84,20 @@ public sealed class InMemoryReferenceDataRepository : IReferenceDataRepository
     public Task<ImportResult> ImportAsync(IReadOnlyList<ReferenceCode> records, CancellationToken ct = default)
     {
         if (records.Count == 0) return Task.FromResult(new ImportResult(0, false, string.Empty));
-        var checksum = records[0].Checksum;
+        var first = records[0];
+        if (string.IsNullOrWhiteSpace(first.Checksum))
+            throw new ArgumentException("Every import record must have a checksum.", nameof(records));
+        if (records.Any(record =>
+                string.IsNullOrWhiteSpace(record.Checksum)
+                || !string.Equals(record.Checksum, first.Checksum, StringComparison.Ordinal)
+                || !string.Equals(record.SourceId, first.SourceId, StringComparison.Ordinal)
+                || !string.Equals(record.SourceVersion, first.SourceVersion, StringComparison.Ordinal)))
+            throw new ArgumentException("All import records must have the same source ID, source version, and checksum.", nameof(records));
+
+        var checksum = first.Checksum;
         lock (_gate)
         {
-            var alreadyImported = _records.Values.Any(x => x.Checksum == checksum && x.SourceId == records[0].SourceId && x.SourceVersion == records[0].SourceVersion);
+            var alreadyImported = _records.Values.Any(x => x.Checksum == checksum && x.SourceId == first.SourceId && x.SourceVersion == first.SourceVersion);
             if (alreadyImported) return Task.FromResult(new ImportResult(0, true, checksum));
             foreach (var record in records) _records[StorageKey(record)] = record;
             return Task.FromResult(new ImportResult(records.Count, false, checksum));
@@ -94,5 +107,10 @@ public sealed class InMemoryReferenceDataRepository : IReferenceDataRepository
     private IEnumerable<ReferenceCode> VisibleRecords(string? tenantId) =>
         _records.Values.Where(x => x.TenantId is null || (tenantId is not null && x.TenantId == tenantId));
 
-    private static string StorageKey(ReferenceCode x) => $"{x.TenantId ?? "global"}|{x.Coding.CodeSystem}|{x.Coding.Code}|{x.Coding.Version}|{x.EffectiveFrom:yyyyMMdd}";
+    private static string StorageKey(ReferenceCode x) => string.Join('|',
+        x.TenantId ?? "global",
+        x.Coding.CodeSystem.ToUpperInvariant(),
+        x.Coding.Code.ToUpperInvariant(),
+        x.Coding.Version?.ToUpperInvariant(),
+        x.EffectiveFrom.ToString("yyyyMMdd"));
 }
