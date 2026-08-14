@@ -8,6 +8,7 @@ COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infr
 COPY src/engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.OperatingMode/CloudHealthOffice.OperatingMode.csproj src/engines/CloudHealthOffice.OperatingMode/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
 COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/CloudHealthOffice.ClaimsScrubEngine.csproj src/engines/CloudHealthOffice.ClaimsScrubEngine/
 COPY src/engines/CloudHealthOffice.NcciEngine/CloudHealthOffice.NcciEngine.csproj src/engines/CloudHealthOffice.NcciEngine/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/CloudHealthOffice.ProviderEnrollmentService.csproj src/engines/CloudHealthOffice.ProviderEnrollmentService/
@@ -20,6 +21,7 @@ COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/C
 COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.OperatingMode/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
 COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/ src/engines/CloudHealthOffice.ClaimsScrubEngine/
 COPY src/engines/CloudHealthOffice.NcciEngine/ src/engines/CloudHealthOffice.NcciEngine/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/

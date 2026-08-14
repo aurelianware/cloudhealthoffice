@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using CloudHealthOffice.FeeScheduleEngine.Domain;
+using CloudHealthOffice.ReferenceData.Domain;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Models;
 
@@ -27,6 +28,18 @@ public class FeeSchedule
     public string Name { get; set; } = string.Empty;
 
     public FeeScheduleType Type { get; set; }
+
+    /// <summary>Import and licensing provenance; it does not affect rate calculation.</summary>
+    public FeeScheduleSourceType SourceType { get; set; } = FeeScheduleSourceType.PayerContract;
+    public string SourceId { get; set; } = string.Empty;
+    public string SourceVersion { get; set; } = string.Empty;
+    public string? PayerId { get; set; }
+    public string? NetworkId { get; set; }
+    public string? Jurisdiction { get; set; }
+    public string CodeSystem { get; set; } = "CPT";
+    public string Checksum { get; set; } = string.Empty;
+    public bool IsGlobal { get; set; }
+    public LicenseClassification LicenseClassification { get; set; } = LicenseClassification.Unknown;
 
     public DateTime EffectiveDate { get; set; }
     public DateTime? TermDate { get; set; }
