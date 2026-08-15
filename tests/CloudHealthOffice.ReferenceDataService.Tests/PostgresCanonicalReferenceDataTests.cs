@@ -15,7 +15,8 @@ public sealed class PostgresCanonicalReferenceDataTests
     [PostgresFact]
     public async Task Migration_and_repository_work_against_postgresql()
     {
-        var connectionString = Environment.GetEnvironmentVariable("REFERENCE_DATA_TEST_POSTGRES")!;
+        var connectionString = Environment.GetEnvironmentVariable("REFERENCE_DATA_TEST_POSTGRES")
+            ?? throw new InvalidOperationException("REFERENCE_DATA_TEST_POSTGRES is not configured.");
 
         var options = new DbContextOptionsBuilder<ReferenceDataContext>()
             .UseNpgsql(connectionString)
