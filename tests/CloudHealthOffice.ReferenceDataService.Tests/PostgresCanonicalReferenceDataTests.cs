@@ -12,12 +12,10 @@ namespace CloudHealthOffice.ReferenceDataService.Tests;
 
 public sealed class PostgresCanonicalReferenceDataTests
 {
-    [Fact]
+    [PostgresFact]
     public async Task Migration_and_repository_work_against_postgresql()
     {
-        var connectionString = Environment.GetEnvironmentVariable("REFERENCE_DATA_TEST_POSTGRES");
-        if (string.IsNullOrWhiteSpace(connectionString))
-            return;
+        var connectionString = Environment.GetEnvironmentVariable("REFERENCE_DATA_TEST_POSTGRES")!;
 
         var options = new DbContextOptionsBuilder<ReferenceDataContext>()
             .UseNpgsql(connectionString)
@@ -88,4 +86,13 @@ public sealed class PostgresCanonicalReferenceDataTests
         ImportedAt = DateTimeOffset.UtcNow,
         Checksum = suffix
     };
+}
+
+public sealed class PostgresFactAttribute : FactAttribute
+{
+    public PostgresFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("REFERENCE_DATA_TEST_POSTGRES")))
+            Skip = "REFERENCE_DATA_TEST_POSTGRES is not configured.";
+    }
 }
