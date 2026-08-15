@@ -110,6 +110,8 @@ spec:
         - secretRef:
             name: reference-data-service-secret
         env:
+        - name: ConnectionStrings__PostgreSQL
+          value: "Host=postgres-0.postgres-service;Port=5432;Database=referencedata;Username=postgres;Password=${POSTGRES_PASSWORD}"
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
@@ -133,7 +135,7 @@ spec:
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /health/live
+            path: /health/ready
             port: 8080
           initialDelaySeconds: 10
           timeoutSeconds: 5

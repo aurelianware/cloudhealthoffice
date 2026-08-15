@@ -351,7 +351,7 @@ services:
       - "5016:8080"
     environment:
       <<: *common-env
-      ConnectionString__PostgreSQL: Host=postgres;Port=5432;Database=referencedata;Username=cho;Password=chodevpass
+      ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=referencedata;Username=cho;Password=chodevpass
     depends_on:
       mongodb:
         condition: service_healthy
