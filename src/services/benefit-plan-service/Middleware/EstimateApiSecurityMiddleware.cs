@@ -10,6 +10,7 @@ public sealed class EstimateApiOptions
     public bool Enabled { get; set; }
     public bool EstimateOnly { get; set; }
     public string ApiKey { get; set; } = string.Empty;
+    public bool IsEstimateOnlyEnabled => Enabled && EstimateOnly;
 }
 
 /// <summary>
@@ -34,7 +35,7 @@ public sealed class EstimateApiSecurityMiddleware
             return;
         }
 
-        if (options.EstimateOnly && !context.Request.Path.Equals(EstimatePath))
+        if (options.IsEstimateOnlyEnabled && !context.Request.Path.Equals(EstimatePath))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;

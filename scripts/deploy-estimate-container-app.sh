@@ -67,17 +67,33 @@ get_or_create_secret() {
 
 estimate_api_key=$(get_or_create_secret estimate-api-key 48)
 redis_password=$(get_or_create_secret estimate-redis-password 36)
+umask 077
+parameters_file="$(mktemp /tmp/cho-estimate-deploy-parameters.XXXXXX.json)"
+trap 'rm -f "$parameters_file"' EXIT
+
+cat >"$parameters_file" <<EOF
+{
+  "benefitPlanImage": {
+    "value": "$benefit_image"
+  },
+  "redisImage": {
+    "value": "$redis_image"
+  },
+  "estimateApiKey": {
+    "value": "$estimate_api_key"
+  },
+  "redisPassword": {
+    "value": "$redis_password"
+  }
+}
+EOF
 
 echo "Deploying the estimate-only Container Apps slice..."
 az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
   --name "cho-estimate-$(date -u +%Y%m%d%H%M%S)" \
   --template-file "$TEMPLATE_FILE" \
-  --parameters \
-    benefitPlanImage="$benefit_image" \
-    redisImage="$redis_image" \
-    estimateApiKey="$estimate_api_key" \
-    redisPassword="$redis_password" \
+  --parameters "@$parameters_file" \
   --query properties.outputs \
   --output json
 

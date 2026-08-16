@@ -31,9 +31,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
+var estimateApiOptions = builder.Configuration
+    .GetSection(EstimateApiOptions.SectionName)
+    .Get<EstimateApiOptions>() ?? new EstimateApiOptions();
 builder.Services.Configure<EstimateApiOptions>(
     builder.Configuration.GetSection(EstimateApiOptions.SectionName));
-var estimateOnly = builder.Configuration.GetValue<bool>("EstimateApi:EstimateOnly");
+var estimateOnly = estimateApiOptions.IsEstimateOnlyEnabled;
 
 // ── Database backend ──────────────────────────────────────────────────────────
 var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);

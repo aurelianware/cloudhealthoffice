@@ -58,6 +58,18 @@ public sealed class EstimateApiSecurityMiddlewareTests
         Assert.True(called);
     }
 
+    [Fact]
+    public void EstimateOnlyMode_RequiresEnabledFlag()
+    {
+        var options = new EstimateApiOptions
+        {
+            Enabled = false,
+            EstimateOnly = true
+        };
+
+        Assert.False(options.IsEstimateOnlyEnabled);
+    }
+
     private static DefaultHttpContext Context(string path)
     {
         var context = new DefaultHttpContext();

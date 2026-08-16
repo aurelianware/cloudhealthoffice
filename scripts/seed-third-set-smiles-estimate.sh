@@ -15,6 +15,21 @@ headers=(
   -H 'Content-Type: application/json'
 )
 
+preflight_file="$(mktemp /tmp/cho-estimate-seed-preflight.XXXXXX)"
+trap 'rm -f "$preflight_file"' EXIT
+
+preflight_status=$(curl -sS -o "$preflight_file" -w '%{http_code}' \
+  "${BASE_URL%/}/api/v1/service-category-mappings?planId=$PLAN_ID" "${headers[@]}")
+if [[ "$preflight_status" == "404" ]]; then
+  echo "This script cannot seed the estimate-only Container App." >&2
+  echo "Use a full benefit-plan-service deployment where EstimateApi:EstimateOnly=false and ServiceCategoryMapping:AdminWriteEnabled=true." >&2
+  exit 1
+elif [[ "$preflight_status" != "200" ]]; then
+  echo "Unexpected service-category-mappings preflight status: $preflight_status" >&2
+  cat "$preflight_file" >&2
+  exit 1
+fi
+
 plan_status=$(curl -sS -o /dev/null -w '%{http_code}' \
   "${BASE_URL%/}/api/v1/plans/$PLAN_ID" "${headers[@]}")
 if [[ "$plan_status" == "404" ]]; then
