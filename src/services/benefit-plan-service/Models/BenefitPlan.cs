@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using BenefitPlanService.Models.Benefits;
+using MongoDB.Bson.Serialization.Attributes;
 using BenefitRulePredicate = CloudHealthOffice.BenefitEngine.Domain.BenefitRulePredicate;
 
 namespace BenefitPlanService.Models;
@@ -227,6 +228,16 @@ public class BenefitPlan
 /// resolution) arrive in subsequent capability prompts.
 /// </para>
 /// </summary>
+[BsonKnownTypes(
+    typeof(MedicalBenefit),
+    typeof(PharmacyBenefit),
+    typeof(BehavioralHealthBenefit),
+    typeof(PreventiveBenefit),
+    typeof(DentalBenefit),
+    typeof(VisionBenefit),
+    typeof(DMEBenefit),
+    typeof(MaternityBenefit))]
+[BsonIgnoreExtraElements]
 public class Benefit
 {
     [JsonPropertyName("id")]

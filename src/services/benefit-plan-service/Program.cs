@@ -31,6 +31,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
+var estimateApiOptions = builder.Configuration
+    .GetSection(EstimateApiOptions.SectionName)
+    .Get<EstimateApiOptions>() ?? new EstimateApiOptions();
+builder.Services.Configure<EstimateApiOptions>(
+    builder.Configuration.GetSection(EstimateApiOptions.SectionName));
+var estimateOnly = estimateApiOptions.IsEstimateOnlyEnabled;
 
 // ── Database backend ──────────────────────────────────────────────────────────
 var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);
@@ -168,7 +174,7 @@ builder.Services.AddHttpClient<IClaimsAccumulatorSource, ClaimsServiceAccumulato
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:ClaimsServiceUrl"]
-        ?? throw new InvalidOperationException("Services:ClaimsServiceUrl is required."));
+        ?? "http://claims-service/");
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 
@@ -409,8 +415,9 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbEndpoint         = builder.Configuration["CosmosDb:Endpoint"];
     options.CosmosDbKey              = builder.Configuration["CosmosDb:Key"];
     options.RedisConnectionString    = builder.Configuration["Redis:ConnectionString"];
-    options.HttpDependencies["claims-service"] =
-        $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
+    if (!estimateOnly)
+        options.HttpDependencies["claims-service"] =
+            $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 
 builder.Services.AddCors(options => options.AddPolicy("AllowAll",
@@ -424,8 +431,12 @@ app.UseChoObservability();
 
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
-app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+if (!estimateOnly)
+{
+    app.UseHttpsRedirection();
+    app.UseCors("AllowAll");
+}
+app.UseMiddleware<EstimateApiSecurityMiddleware>();
 app.UseMiddleware<TenantMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
