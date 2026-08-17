@@ -1,0 +1,68 @@
+{
+  "id": "3e8c59e8-47dd-4aa9-b318-9828fbdcb072",
+  "tenantId": "third-set-smiles",
+  "planId": "THIRD-SET-SMILES-DEMO-DENTAL-PPO-2026",
+  "planName": "Third Set Smiles Demo Dental PPO 2026",
+  "payer": "Demo Dental Payer",
+  "effectiveDate": "2026-01-01T00:00:00Z",
+  "terminationDate": "2026-12-31T23:59:59Z",
+  "planType": "PPO",
+  "lineOfBusiness": "Commercial",
+  "isActive": true,
+  "costSharing": {
+    "individualDeductible": 50.00,
+    "familyDeductible": 150.00,
+    "individualOutOfPocketMax": 2000.00,
+    "familyOutOfPocketMax": 4000.00,
+    "inNetworkDeductible": 50.00,
+    "outOfNetworkDeductible": 100.00,
+    "inNetworkOutOfPocketMax": 2000.00,
+    "outOfNetworkOutOfPocketMax": 5000.00
+  },
+  "benefits": [
+    {
+      "benefitType": "dental",
+      "serviceCategory": "Dental Preventive",
+      "description": "Diagnostic and preventive dental services",
+      "isCovered": true,
+      "inNetworkCoinsurance": 0.00,
+      "outNetworkCoinsurance": 0.20,
+      "deductibleApplies": false,
+      "annualMaximum": 1500.00
+    },
+    {
+      "benefitType": "dental",
+      "serviceCategory": "Dental Basic",
+      "description": "Basic restorative dental services",
+      "isCovered": true,
+      "inNetworkCoinsurance": 0.20,
+      "outNetworkCoinsurance": 0.40,
+      "deductibleApplies": true,
+      "annualMaximum": 1500.00
+    },
+    {
+      "benefitType": "dental",
+      "serviceCategory": "Dental Major",
+      "description": "Major restorative and prosthodontic services",
+      "isCovered": true,
+      "inNetworkCoinsurance": 0.50,
+      "outNetworkCoinsurance": 0.60,
+      "deductibleApplies": true,
+      "annualMaximum": 1500.00
+    },
+    {
+      "benefitType": "dental",
+      "serviceCategory": "Dental Orthodontic",
+      "description": "Orthodontic services",
+      "isCovered": true,
+      "inNetworkCoinsurance": 0.50,
+      "outNetworkCoinsurance": 0.50,
+      "deductibleApplies": false,
+      "lifetimeMaximum": 1500.00
+    }
+  ],
+  "networkTiers": [
+    { "tierName": "In-Network", "tierLevel": 1 },
+    { "tierName": "Out-of-Network", "tierLevel": 2 }
+  ]
+}

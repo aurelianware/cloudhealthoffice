@@ -1,0 +1,47 @@
+[
+  {
+    "planId": "3e8c59e8-47dd-4aa9-b318-9828fbdcb072",
+    "serviceTypeCode": "Dental Preventive",
+    "serviceTypeDescription": "CDT diagnostic and preventive services",
+    "rules": [
+      { "priority": 10, "codeType": "CDT", "codePattern": "D0100", "codeRangeEnd": "D1999" }
+    ],
+    "effectiveStart": "2026-01-01",
+    "effectiveEnd": "2026-12-31",
+    "isActive": true
+  },
+  {
+    "planId": "3e8c59e8-47dd-4aa9-b318-9828fbdcb072",
+    "serviceTypeCode": "Dental Basic",
+    "serviceTypeDescription": "CDT basic restorative, endodontic, and periodontal services",
+    "rules": [
+      { "priority": 10, "codeType": "CDT", "codePattern": "D2000", "codeRangeEnd": "D4999" }
+    ],
+    "effectiveStart": "2026-01-01",
+    "effectiveEnd": "2026-12-31",
+    "isActive": true
+  },
+  {
+    "planId": "3e8c59e8-47dd-4aa9-b318-9828fbdcb072",
+    "serviceTypeCode": "Dental Major",
+    "serviceTypeDescription": "CDT prosthodontic, implant, and oral surgery services",
+    "rules": [
+      { "priority": 10, "codeType": "CDT", "codePattern": "D5000", "codeRangeEnd": "D7999" },
+      { "priority": 20, "codeType": "CDT", "codePattern": "D9000", "codeRangeEnd": "D9999" }
+    ],
+    "effectiveStart": "2026-01-01",
+    "effectiveEnd": "2026-12-31",
+    "isActive": true
+  },
+  {
+    "planId": "3e8c59e8-47dd-4aa9-b318-9828fbdcb072",
+    "serviceTypeCode": "Dental Orthodontic",
+    "serviceTypeDescription": "CDT orthodontic services",
+    "rules": [
+      { "priority": 10, "codeType": "CDT", "codePattern": "D8000", "codeRangeEnd": "D8999" }
+    ],
+    "effectiveStart": "2026-01-01",
+    "effectiveEnd": "2026-12-31",
+    "isActive": true
+  }
+]

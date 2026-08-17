@@ -7,6 +7,8 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using ReferenceDataService.Repositories.Canonical;
+using ReferenceDataService.Migrations;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -29,9 +31,11 @@ if (string.IsNullOrWhiteSpace(postgresConnection))
 // Add PostgreSQL DbContext
 builder.Services.AddDbContext<ReferenceDataContext>(options =>
     options.UseNpgsql(postgresConnection));
+builder.Services.AddScoped<ReferenceDataSchemaMigrator>();
 
 // Add repositories
 builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
+builder.Services.AddScoped<CloudHealthOffice.ReferenceData.Persistence.IReferenceDataRepository, CanonicalReferenceDataRepository>();
 
 // Cosmos DB Client — hosts the ComplianceConfig container
 var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")
@@ -106,6 +110,11 @@ builder.Services.AddCors(options =>
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    await scope.ServiceProvider.GetRequiredService<ReferenceDataSchemaMigrator>().ApplyAsync();
+}
 
 app.UseChoObservability();
 

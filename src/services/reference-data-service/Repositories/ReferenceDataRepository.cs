@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ReferenceDataService.Models;
+using ReferenceDataService.Repositories.Canonical;
 
 namespace ReferenceDataService.Repositories;
 
@@ -286,6 +287,8 @@ public class ReferenceDataContext : DbContext
     public DbSet<DrgCode> DrgCodes { get; set; } = null!;
     public DbSet<PlaceOfService> PlacesOfService { get; set; } = null!;
     public DbSet<RevenueCode> RevenueCodes { get; set; } = null!;
+    public DbSet<CanonicalReferenceCodeEntity> CanonicalReferenceCodes { get; set; } = null!;
+    public DbSet<CanonicalReferenceDataImportEntity> CanonicalReferenceDataImports { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -316,5 +319,46 @@ public class ReferenceDataContext : DbContext
         
         modelBuilder.Entity<DrgCode>()
             .HasIndex(c => c.FiscalYear);
+
+        modelBuilder.Entity<CanonicalReferenceCodeEntity>(entity =>
+        {
+            entity.ToTable("canonical_reference_codes");
+            entity.HasKey(x => x.StorageKey);
+            entity.Property(x => x.StorageKey).HasColumnName("storage_key").HasMaxLength(700);
+            entity.Property(x => x.Id).HasColumnName("id").HasMaxLength(200).IsRequired();
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id").HasMaxLength(200);
+            entity.Property(x => x.CodeSystem).HasColumnName("code_system").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.CodeSystemUri).HasColumnName("code_system_uri").HasMaxLength(500);
+            entity.Property(x => x.Code).HasColumnName("code").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Version).HasColumnName("version").HasMaxLength(100);
+            entity.Property(x => x.Display).HasColumnName("display").HasMaxLength(500);
+            entity.Property(x => x.Description).HasColumnName("description");
+            entity.Property(x => x.Category).HasColumnName("category").HasMaxLength(200);
+            entity.Property(x => x.EffectiveFrom).HasColumnName("effective_from");
+            entity.Property(x => x.EffectiveTo).HasColumnName("effective_to");
+            entity.Property(x => x.Active).HasColumnName("active");
+            entity.Property(x => x.SourceId).HasColumnName("source_id").HasMaxLength(200).IsRequired();
+            entity.Property(x => x.SourceVersion).HasColumnName("source_version").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.LicenseClassification).HasColumnName("license_classification").HasConversion<string>().HasMaxLength(40);
+            entity.Property(x => x.ExposureClassification).HasColumnName("exposure_classification").HasConversion<string>().HasMaxLength(40);
+            entity.Property(x => x.ImportedAt).HasColumnName("imported_at");
+            entity.Property(x => x.Checksum).HasColumnName("checksum").HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.CodeSystem, x.Code, x.EffectiveFrom });
+            entity.HasIndex(x => new { x.SourceId, x.SourceVersion, x.Checksum });
+            entity.HasIndex(x => x.TenantId);
+        });
+
+        modelBuilder.Entity<CanonicalReferenceDataImportEntity>(entity =>
+        {
+            entity.ToTable("canonical_reference_data_imports");
+            entity.HasKey(x => x.ImportKey);
+            entity.Property(x => x.ImportKey).HasColumnName("import_key").HasMaxLength(600);
+            entity.Property(x => x.SourceId).HasColumnName("source_id").HasMaxLength(200).IsRequired();
+            entity.Property(x => x.SourceVersion).HasColumnName("source_version").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Checksum).HasColumnName("checksum").HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ImportedAt).HasColumnName("imported_at");
+            entity.Property(x => x.RecordCount).HasColumnName("record_count");
+            entity.HasIndex(x => new { x.SourceId, x.SourceVersion, x.Checksum }).IsUnique();
+        });
     }
 }
