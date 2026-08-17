@@ -140,7 +140,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.FactCheck" Color="Color.Success" Size="Size.Large" />
                             <div>
                                 <MudText Typo="Typo.h6">Examiner Disposition Record</MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="display: block;">
                                     Human review completed; the original pend evidence remains attached to this claim.
                                 </MudText>
                             </div>
@@ -620,10 +620,10 @@
                                 </MudText>
                                 @if (!string.IsNullOrEmpty(audit.OldValue) || !string.IsNullOrEmpty(audit.NewValue))
                                 {
-                                    <MudText Typo="Typo.caption" Class="mt-1">
+                                    <MudText Typo="Typo.caption" Class="mt-1" Style="display: block;">
                                         @if (!string.IsNullOrEmpty(audit.OldValue))
                                         {
-                                            <span>From: <code>@audit.OldValue</code></span>
+                                            <span class="mr-3">From: <code>@audit.OldValue</code></span>
                                         }
                                         @if (!string.IsNullOrEmpty(audit.NewValue))
                                         {
@@ -633,7 +633,7 @@
                                 }
                                 @if (!string.IsNullOrEmpty(audit.Notes))
                                 {
-                                    <MudText Typo="Typo.caption" Class="mt-1"><em>@audit.Notes</em></MudText>
+                                    <MudText Typo="Typo.caption" Class="mt-1" Style="display: block;"><em>@audit.Notes</em></MudText>
                                 }
                             </ItemContent>
                         </MudTimelineItem>
