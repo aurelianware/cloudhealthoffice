@@ -183,8 +183,10 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
             && saved.VersionState == ClaimVersionState.Adjudicated
             && saved.AiExamination!.ExaminerAgreement == "Overridden"
             && saved.AiExamination.ExaminerUserId == "examiner-1"));
-        await _versionPublisher.Received(1).PublishVersionAdjudicatedAsync(
+        await _versionPublisher.Received(1).PublishVersionResolvedAsync(
             Arg.Is<Claim>(saved => saved.Id == claim.Id),
+            "Approved",
+            "Documentation supports modifier 59",
             "examiner-1",
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -205,6 +207,14 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
                     OccurredAt = claim.PendDetails!.PendedAt.AddMinutes(-1),
                     ActorId = "837-ingress",
                     Version = 1
+                },
+                new ClaimVersionEvent
+                {
+                    EventType = ClaimVersionEventType.ClaimVersionAdjudicated,
+                    VersionId = claim.Id,
+                    OccurredAt = claim.PendDetails!.PendedAt.AddSeconds(1),
+                    ActorId = "system",
+                    Version = 2
                 }
             });
 
