@@ -56,12 +56,10 @@ try {
   if (resolvedClaimId) {
     await page.goto(`${portalUrl}/claims/${resolvedClaimId}`, { waitUntil: "domcontentloaded" });
     await page.getByText("Examiner Disposition Record", { exact: true }).waitFor();
-    if (claimId) {
-      await page.screenshot({
-        path: path.join(outputDirectory, "examiner-disposition.png"),
-        fullPage: false
-      });
-    }
+    await page.screenshot({
+      path: path.join(outputDirectory, "examiner-disposition.png"),
+      fullPage: false
+    });
 
     const changeHistory = page.getByText("Change History", { exact: true });
     await changeHistory.waitFor();

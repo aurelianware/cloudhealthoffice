@@ -287,8 +287,8 @@ ANTHROPIC_API_KEY=&lt;your-api-key&gt;</code></pre>
         <p>The checked-in capture workflow keeps documentation images repeatable after intentional portal changes. Use a synthetic pended claim that already contains the evidence and advisory fields you want to demonstrate.</p>
         <div class="code-block-header"><span>Shell</span><span>src/site</span></div>
         <pre><code>npm install
-GUIDE_CLAIM_ID=&lt;synthetic-pended-claim-id&gt; npm run guides:capture:pended-claim</code></pre>
-        <p>The command uses a fixed desktop viewport, local demo sign-in, and writes the queue, advisory, resolved-disposition, and audit-timeline images under <code>src/site/graphics/user-guides/pended-claim/</code>. Set <code>GUIDE_RESOLVED_CLAIM_ID</code> when the resolved fixture is a separate claim, or supply it alone to refresh only the resolved audit capture.</p>
+GUIDE_CLAIM_ID=&lt;synthetic-pended-claim-id&gt; GUIDE_RESOLVED_CLAIM_ID=&lt;synthetic-resolved-claim-id&gt; npm run guides:capture:pended-claim</code></pre>
+        <p>The command uses a fixed desktop viewport and local demo sign-in, writing all images under <code>src/site/graphics/user-guides/pended-claim/</code>. <code>GUIDE_CLAIM_ID</code> (a still-pended claim) drives the queue and advisory images; <code>GUIDE_RESOLVED_CLAIM_ID</code> (a separate, already-resolved claim) drives the resolved-disposition and audit-timeline images. Supply <code>GUIDE_RESOLVED_CLAIM_ID</code> alone to refresh only the resolved-disposition and audit-timeline captures.</p>
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <table>
