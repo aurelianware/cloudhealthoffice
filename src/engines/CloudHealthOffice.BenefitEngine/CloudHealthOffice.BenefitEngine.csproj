@@ -10,7 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
-    <PackageReference Include="MongoDB.Driver" Version="3.10.0" />
+    <PackageReference Include="MongoDB.Driver" Version="3.11.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.1" />
   <PackageReference Include="SharpCompress" Version="0.50.4" />
     <PackageReference Include="StackExchange.Redis" Version="2.13.17" />
