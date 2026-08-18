@@ -12,7 +12,7 @@
          here to match the floor System.Security.Cryptography.Xml 9.0.18 (Portal, PR 953)
          already requires transitively; both satisfy the CVE fix, and NuGet treated the
          8.0.1 floor as a downgrade against that transitive requirement otherwise. -->
-    <PackageReference Include="System.Formats.Asn1" Version="9.0.18" />
+    <PackageReference Include="System.Formats.Asn1" Version="9.0.19" />
     
     <!-- Fix CVE-2024-21907: Newtonsoft.Json Improper Handling vulnerability -->
     <!-- Severity: High | Advisory: GHSA-5crp-9r3c-p9vr -->
