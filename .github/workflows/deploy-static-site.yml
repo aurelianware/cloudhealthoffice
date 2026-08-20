@@ -288,7 +288,7 @@ jobs:
           fi
 
       - name: Download latest test metrics
-        uses: dawidd6/action-download-artifact@v21
+        uses: dawidd6/action-download-artifact@v23
         with:
           workflow: test-metrics.yml
           name: test-metrics
