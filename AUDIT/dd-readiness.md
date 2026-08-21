@@ -18,7 +18,7 @@ The audit is **yellow, not green**, because a handful of items visibly contradic
 
 1. **One marketing page overclaims hard** where the rest of the repo is careful (`src/site/assessment.html`: "99.9% uptime SLA," "unlimited multi-payer scale," "100% elimination," "resistance to adoption is futile") — directly contradicting the README's own "local Kubernetes evidence, not a production cloud capacity claim."
 2. **Multi-tenant isolation is header-trusted, and most services have no authentication.** Tenant identity falls back to an attacker-settable `X-Tenant-ID` header, and 28 of 35 services (including claims, member, eligibility, coverage, payment) wire no auth at all. This is *defensible* as an internal-trust-boundary design but is not currently enforced or documented as one — and "one tenant could read another tenant's PHI" is the single scariest sentence in healthcare DD.
-3. **A hardcoded database password sits in a Production-labeled manifest** (`reference-data-service`), inconsistent with the clean `REPLACE_WITH_*` discipline used everywhere else.
+3. **Hardcoded default database passwords sit in several manifests** — `securepassword123` in four PHI-service k8s manifests (member, coverage, attachment, sponsor) and `CloudHealthOffice2026!` in a Production-labeled reference-data manifest — all bypassing the clean `REPLACE_WITH_*` secret template the repo already ships. They target self-hosted in-cluster datastores (not cloud/PHI leaks), but they're exactly what a security reviewer greps for first.
 4. **Benchmark framing drifts across documents** — the headline 1M-claim result is simultaneously presented as achieved (README, episode 15) and as a "Stretch Goal" (roadmap), and a third doc cites episode 16 with different numbers.
 5. **A stray source `.zip` and Cosmos-vs-Mongo parity gaps** muddy the otherwise clean architecture story.
 
@@ -29,7 +29,7 @@ None of these is a fraud or a fatal flaw. All five are the kind of thing that, l
 | # | Fix | Why it matters | Effort |
 | --- | --- | --- | --- |
 | 1 | Rewrite or remove `src/site/assessment.html`. Delete the "99.9% SLA," "unlimited scale," "100% elimination," and "resistance… is futile" language; align it to the README's hedged, evidence-first tone. | It's the one asset that reads as vaporware and undercuts the entire "we don't overclaim" thesis. | Low |
-| 2 | Rotate and remove the hardcoded `POSTGRES_PASSWORD: "CloudHealthOffice2026!"` from `src/services/reference-data-service/k8s/reference-data-service-deployment.yaml`; replace with a `REPLACE_WITH_*` template like the other secrets. Run TruffleHog/Gitleaks against **full origin history** (this checkout is a 50-commit shallow clone). | A committed credential in a "Production" manifest is a red flag a security reviewer will find in five minutes. | Low |
+| 2 | Rotate and move **all five** hardcoded DB passwords to `secretKeyRef`: `securepassword123` in `coverage-service-deployment.yaml`, `member-service-deployment.yaml`, `sponsor-service-deployment.yaml`, `services/attachment-service.yaml`, and `CloudHealthOffice2026!` in `reference-data-service-deployment.yaml`. (Full 2,742-commit history was scanned — see §3; no keys/PHI, but these default creds are live at HEAD.) | Committed credentials in production-style manifests for PHI services are the first thing a security reviewer greps for. | Low |
 | 3 | Write a one-page **security trust-boundary/threat model** and set `RequireTenantId = true` for production; make explicit that internal services assume an authenticating gateway, or add authn to them. | Turns a scary implicit posture into a defensible documented one. | Medium |
 | 4 | Reconcile benchmark claims to a single source of truth (README, `docs/benchmarks/README.md`, `docs/POSITIONING.md`, `docs/roadmap/README.md` all disagree on the current top result). | Inconsistent numbers on your flagship proof point is the worst place to be inconsistent. | Low |
 | 5 | Remove `CHO-ProviderEnrollment-PriorAuthRuleEngine.zip` from the repo root; correct the README architecture diagram's X12 claim (276/277/278 are not parsed); add a short "Cosmos vs MongoDB parity" note. | Small hygiene items that each read as sloppiness in a DD data room. | Low |
@@ -79,27 +79,30 @@ Legend: **IMPLEMENTED** = real and exercised · **PARTIAL** = happy-path / limit
 
 ---
 
-## 3. 🔴 SECRETS & PHI ACROSS GIT HISTORY (highest severity — read first)
+## 3. 🟠 SECRETS & PHI ACROSS GIT HISTORY (highest severity)
 
-**Bottom line: one real committed credential; no real PHI found. But the scan window was limited — see the caveat.**
+**Bottom line: several hardcoded *default database passwords* (all for self-hosted, in-cluster datastores — not cloud credentials), still live at HEAD, bypassing the project's own secret template. No real private keys, cloud API keys, committed `.env` secrets, or real PHI anywhere in history.**
+
+**Scan scope (now full):** the full history was fetched and scanned — **2,742 commits on HEAD (4,257 across all refs), back to 2025-09-04**. (My initial pass ran against a 50-commit shallow checkout and under-reported the credentials below; this section supersedes it.) Every `+`-added line across all refs was scanned for private keys, AWS/Anthropic/Stripe/GitHub/Slack keys, JWTs, `.env` files, embedded-password connection strings, and PHI patterns.
 
 ### Findings
 
-| Severity | What | Location | Still reachable? | Notes |
+| Severity | What | Location(s) | Still reachable? | Notes |
 |---|---|---|---|---|
-| 🟠 **Medium** | Hardcoded DB password `CloudHealthOffice2026!` | `src/services/reference-data-service/k8s/reference-data-service-deployment.yaml:18` (a `Secret` with `stringData.POSTGRES_PASSWORD`) in a ConfigMap block set to `ASPNETCORE_ENVIRONMENT: "Production"` | **Yes — live at HEAD and present since the first commit** (`git log -S` → introduced in `3ebdc41`). | It's a self-hosted default for the reference-data Postgres, not a real cloud credential — but it's a literal secret in a "Production"-labeled manifest, contradicting the `REPLACE_WITH_*` discipline used in `infrastructure/k8s/secrets/*`. Rotate + template it. |
-| 🟢 Info | k8s secret manifests | `infrastructure/k8s/secrets/{database,backend-api,clearinghouse-sftp,kafka-sasl,s3-credentials}-secret.yaml` | n/a | All values are `REPLACE_WITH_*` placeholders. Clean. |
-| 🟢 Info | SSN/MRN/member-like values | `member-service/.../PiiIdentifierDedupeTests.cs` (`111-22-3333`, `444-55-6666`), `src/fhir/examples.ts` (`456-78-9012`) | n/a | All obviously synthetic test values. No real PHI. |
-| 🟢 Info | Connection strings / keys in tests & docs | `HealthCheckExtensionsTests.cs`, `PricingApiServiceTests.cs`, `payer-to-payer-api.test.ts`, site HTML examples | n/a | Fake fixtures (`AccountKey=dGVzdA==` = base64 "test"), `key-abc`, `UseDevelopmentStorage=true`. Clean. |
-| 🟢 Info | `appsettings*.json`, `docker-compose*.yml` | repo-wide | n/a | No real API keys, Anthropic keys, or DB passwords; env-var substitution used. Clean. |
+| 🟠 **Medium** | Hardcoded MongoDB password `securepassword123` | **Live at HEAD in 4 service manifests:** `infrastructure/k8s/coverage-service-deployment.yaml:16`, `infrastructure/k8s/member-service-deployment.yaml:16`, `infrastructure/k8s/sponsor-service-deployment.yaml:17`, `infrastructure/k8s/services/attachment-service.yaml:17` (plus expected dev spots: `.env.example`, `docker-compose.development.yml`, `appsettings.Development.json`). | **Yes — HEAD + long history.** | Connection targets are all in-cluster (`@mongodb:27017`), i.e. a **self-hosted cluster Mongo default**, not an internet-facing/cloud credential — which tempers severity. But it's a real literal in *production-style* manifests for **PHI-bearing services (member, coverage, attachment, sponsor)**, and it **bypasses the proper `infrastructure/k8s/secrets/database-secret.yaml` template that already exists**. History shows the team knows this (`75852a18 "Address PR review: fix MongoDB secret conflict, remove hardcoded creds"`, `b170a8fe "consolidate database secrets"`) — the cleanup is incomplete. Rotate + move all four to `secretKeyRef`. |
+| 🟠 **Medium** | Hardcoded Postgres password `CloudHealthOffice2026!` | `src/services/reference-data-service/k8s/reference-data-service-deployment.yaml:18` — a `Secret` `stringData.POSTGRES_PASSWORD` in a block labeled `ASPNETCORE_ENVIRONMENT: "Production"` | **Yes — HEAD**, introduced with the reference-data-service (`449cc8d8`). | Same theme: self-hosted Postgres default, but a literal in a "Production"-labeled manifest. Template it like the others. |
+| 🟡 Low | Real MongoDB **Atlas cluster endpoint + username** exposed (password templated) | `mongodb+srv://cho-user:{{PASSWORD}}@cho-mongodb-cluster.mongodb.net/...` — introduced in `2abd8c40` (multi-cloud infra abstraction); **history only, not at HEAD**. | History only. | No password leaked (`{{PASSWORD}}` placeholder), but a real Atlas cluster name + DB username sit in history. Low risk; note it and ensure that cluster's creds are unrelated/rotated. |
+| 🟡 Low | Other dev password literals in history | `mongodb://admin:localdev123@...`, `mongodb://admin:CHANGE_ME@...` | History / dev configs. | Dev-stack defaults. `CHANGE_ME` is a placeholder. Acceptable for local dev, but keep them out of anything but `*.Development.*`/`.env.example`. |
+| 🟢 Info | No private keys / cloud API keys | full history | n/a | Only two `BEGIN … PRIVATE KEY` matches exist and both are **documentation** (a comment and a security-doc table showing the *format*) — no base64 key body was ever committed. No `AKIA…`, `sk-ant-…`, `sk_live_…`, `ghp_…`, `xox…`, or JWTs found. |
+| 🟢 Info | No committed `.env` (non-example) files | full history | n/a | Only `.env.example` / `.env.local.example` templates exist. |
+| 🟢 Info | No real PHI | full history | n/a | All SSNs (`111-22-3333`, `456-78-9012`) and DOBs (round dates like `1980-01-01`, `1985-03-15`; plus Logic App template bindings like `@triggerBody()?['dateOfBirth']`) are synthetic fixtures/placeholders. No real member/patient records. |
+| 🟢 Info | k8s **secrets/** manifests, appsettings, argo-workflows | `infrastructure/k8s/secrets/*`, `appsettings*.json`, `infrastructure/argo-workflows/*` | n/a | `REPLACE_WITH_*` placeholders; env-var substitution; the `password=password`/`$PASSWORD` argo matches are variable references, not literals. Clean. |
 
-The `password=password` / `$PASSWORD` matches in `infrastructure/argo-workflows/*.yaml` are variable references (SFTP creds injected from env/params), **not** hardcoded secrets.
+### Reassuring controls
 
-### ⚠️ Scan-coverage caveat (important, state this honestly to investors)
+CI already runs **TruffleHog + Gitleaks** (`.github/workflows/security-scan.yml`, `pre-approval-checks.yml`, `pr-lint.yml`) and a dedicated **`phi-validation.yml`** workflow. The secret-hygiene control exists; the gap is that a handful of pre-existing hardcoded default DB passwords predate/slip the gate.
 
-This working checkout is a **shallow clone (50 commits, oldest 2026-07-30)** whose first commit is a single 3,270-file / 652K-line bulk import — i.e., the pre-July-2026 history is **not present in this checkout**. The scan above is definitive for the 50 commits available and for HEAD, but a **full-history** secret scan must be run against origin to be conclusive. Reassuringly, CI already runs TruffleHog and Gitleaks (`.github/workflows/security-scan.yml`, `pre-approval-checks.yml`, `pr-lint.yml`) and there is a dedicated `phi-validation.yml` workflow — so the control exists; confirm it runs `--since-commit`/full-history mode and review its historical results.
-
-**Actions:** (1) rotate + template the Postgres password; (2) run `trufflehog git file://. --since-commit <root>` and `gitleaks detect` against full origin history and attach the clean report to the data room; (3) keep the PHI-validation CI gate.
+**Actions:** (1) rotate the Mongo + Postgres defaults and move all five manifests to `secretKeyRef` pointing at the existing `database-secret.yaml`; (2) confirm the Gitleaks/TruffleHog CI runs in full-history mode and add a rule for `admin:.*@` connection-string literals so this can't recur; (3) verify the `cho-mongodb-cluster` Atlas credentials are rotated/decommissioned; (4) keep the PHI-validation gate. Note for investors: this is **hardcoded self-hosted default passwords**, not leaked production cloud secrets or PHI — a hygiene fix, not a breach.
 
 ---
 
@@ -178,10 +181,11 @@ Nits:
 
 - **Breadth is real:** 51 test `.csproj`, ~509 test files. Auto-refreshed metric (`docs/guides/FEATURES.md:18`) claims **"5,515 automated tests across 44 test projects."** The test **count** is machine-generated by CI (honest mechanism); the **44 vs 51 project count** is a minor inconsistency worth reconciling. `FEATURES.md:357-358` also states "100% coverage (FHIR module)" / "19/19 tests" — true but a small, module-scoped sample; don't let it imply repo-wide 100%.
 
-### Commit-history story
+### Commit-history story — 🟢 coherent and credible
 
-- The visible history is **50 commits (from 2026-07-30), fronted by a single 3,270-file / 652K-insertion bulk import** — so the git graph itself does **not** narrate an incremental build. This is either a squashed/re-homed history or the boundary of a shallow clone.
-- **Mitigant:** the *narrative* exists elsewhere — a detailed 45 KB `CHANGELOG.md`, ADRs, and 13 dated "Million Claim Challenge" episodes (005–017) documenting incremental evolution and even *failures found and fixed* (episode 15's 23-platform-failure investigation). That episodic, evidence-first trail is more credible than most git logs — but a DD reviewer will still note the "big-bang" initial commit. Be ready to explain the history's provenance.
+- **The git graph tells a real, incremental ~11-month story:** **2,742 commits on `main` (4,257 across all refs), oldest 2025-09-04**, with release tags `v1.0.0`→`v4.0.0`. *(An earlier note in this report about a "50-commit big-bang import" was an artifact of the audit's shallow clone; the full history was fetched and this supersedes it.)*
+- Commit messages narrate genuine engineering: `infra: migrate to Azure from DigitalOcean`, `Address PR review: fix MongoDB secret conflict, remove hardcoded creds`, feature PRs with numbers (`feat: add capitation-service … (#534)`), and a documented reference-data/Postgres addition. This is the kind of history that survives DD scrutiny.
+- Reinforced by out-of-band narrative: a detailed 45 KB `CHANGELOG.md`, ADRs, and 13 dated "Million Claim Challenge" episodes (005–017) documenting incremental evolution and even *failures found and fixed* (episode 15's 23-platform-failure investigation). **Net: the build story is a strength, not a concern.**
 
 ---
 
@@ -218,9 +222,9 @@ Having your flagship proof point simultaneously "done (ep15)," "done differently
 
 | Item | Severity | Effort | Section |
 |---|---|---|---|
-| Rotate + template the `CloudHealthOffice2026!` Postgres password | High | Low | §3 |
+| Rotate + `secretKeyRef` the 5 hardcoded DB passwords (`securepassword123` ×4, `CloudHealthOffice2026!` ×1) | High | Low | §3 |
 | Rewrite/remove `assessment.html` overclaims (SLA/unlimited/100%/"resistance is futile") | High (credibility) | Low | §2 #20, §8 |
-| Run full-history TruffleHog/Gitleaks on origin; attach clean report | High | Low | §3 |
+| Confirm Gitleaks/TruffleHog CI runs full-history + add `admin:.*@` rule; verify Atlas creds rotated; attach clean report | High | Low | §3 |
 | Reconcile benchmark result across README/benchmarks/POSITIONING/roadmap | High (credibility) | Low | §7 |
 | Correct README architecture diagram X12 claim (276/277/278 not parsed) | Medium (credibility) | Low | §2 #12 |
 | Remove stray `CHO-ProviderEnrollment-PriorAuthRuleEngine.zip` | Low | Low | §5 |
@@ -280,4 +284,4 @@ Having your flagship proof point simultaneously "done (ep15)," "done differently
 
 ---
 
-*End of audit. Findings only — no repository files were modified. Re-run the full-history secret scan and a clean-checkout build to close the two items this environment could not execute directly (§3 caveat, §6 build).*
+*End of audit. Findings only — no repository code/docs were modified (this report is the sole added file). The full 2,742-commit history was scanned for §3. The one item this environment could not execute directly is a clean-checkout .NET build (no SDK available) — confirm that and attach a green full-CI link before DD (§6).*
