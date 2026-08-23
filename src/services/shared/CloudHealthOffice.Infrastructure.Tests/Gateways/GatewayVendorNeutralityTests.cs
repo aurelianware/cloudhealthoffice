@@ -61,7 +61,11 @@ public class GatewayVendorNeutralityTests
         {
             typeof(GatewayEligibilityRequest),
             typeof(GatewayEligibilityResponse),
-            typeof(GatewayEligibilityPerson)
+            typeof(GatewayEligibilityPerson),
+            typeof(GatewayClaimSubmissionRequest),
+            typeof(GatewayClaimSubmissionResult),
+            typeof(GatewayClaimLine),
+            typeof(GatewayClaimProvider)
         };
 
         foreach (var model in models)

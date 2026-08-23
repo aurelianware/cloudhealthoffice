@@ -80,12 +80,12 @@ public class StediHealthcareGatewayTests
     }
 
     [Fact]
-    public void Capabilities_OnlyEligibilityIsSupported()
+    public void Capabilities_EligibilityAndClaimSubmissionAreSupported()
     {
         IHealthcareTransactionGateway gateway = NewGateway(new StubHttpMessageHandler());
 
         gateway.Supports(GatewayCapability.Eligibility).Should().BeTrue();
-        gateway.Supports(GatewayCapability.ClaimSubmission).Should().BeFalse();
+        gateway.Supports(GatewayCapability.ClaimSubmission).Should().BeTrue();
         gateway.Supports(GatewayCapability.ClaimStatus).Should().BeFalse();
         gateway.Supports(GatewayCapability.ClaimAcknowledgment).Should().BeFalse();
         gateway.Supports(GatewayCapability.ClaimAttachment).Should().BeFalse();

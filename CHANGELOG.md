@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Outbound 837 claim submission through Stedi
+
+`IClaimSubmissionGateway.SubmitClaimAsync` is a real capability. Mock and
+Stedi implement 837P / 837I / 837D against Stedi's documented JSON APIs
+(`professionalclaims/v3`, `institutionalclaims/v1`, `dental-claims`).
+Canonical `GatewayClaimSubmissionRequest` stays vendor-neutral. Payer
+readiness reuses `IPayerReferenceService`. Durable
+`IClaimTransmissionStore` records transmission state separately from
+adjudication/payment. Idempotency is tenant+claim+version+type+frequency.
+
+Synchronous gateway acceptance is not 277CA, adjudication, or payment.
+Live 837 calls are not claimed for sandbox accounts (Stedi test claims
+require a production-account test key). Development:
+`POST /api/dev/gateway/claims`.
+
 ### Payer-side eligibility responder (inbound 270/271)
 
 Vendor-neutral `IEligibilityResponder` so Cloud Health Office can act as the

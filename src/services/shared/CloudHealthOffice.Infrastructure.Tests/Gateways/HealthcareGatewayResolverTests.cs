@@ -59,8 +59,17 @@ public class HealthcareGatewayResolverTests
         eligibility.Should().BeAssignableTo<IEligibilityGateway>();
     }
 
+    [Fact]
+    public void ClaimSubmissionCapability_IsDiscoverable()
+    {
+        var resolver = BuildResolver();
+        var gateway = resolver.Resolve();
+
+        gateway.Supports(GatewayCapability.ClaimSubmission).Should().BeTrue();
+        resolver.ResolveCapability<IClaimSubmissionGateway>().Should().BeAssignableTo<IClaimSubmissionGateway>();
+    }
+
     [Theory]
-    [InlineData(GatewayCapability.ClaimSubmission)]
     [InlineData(GatewayCapability.ClaimStatus)]
     [InlineData(GatewayCapability.ClaimAcknowledgment)]
     [InlineData(GatewayCapability.ClaimAttachment)]
@@ -88,7 +97,7 @@ public class HealthcareGatewayResolverTests
     {
         var resolver = BuildResolver();
 
-        var act = () => resolver.ResolveCapability<IClaimSubmissionGateway>();
+        var act = () => resolver.ResolveCapability<IClaimStatusGateway>();
 
         act.Should().Throw<GatewayCapabilityNotSupportedException>()
             .Which.GatewayName.Should().Be(MockHealthcareGateway.GatewayName);
