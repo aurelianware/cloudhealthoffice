@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Payer-side eligibility responder (inbound 270/271)
+
+Vendor-neutral `IEligibilityResponder` so Cloud Health Office can act as the
+payer/information source for an inbound eligibility inquiry. Canonical
+`PayerEligibilityInquiry` / `PayerEligibilityResponse`, exact-match member
+and dependent resolution, read-only coverage / benefit / accumulator access,
+and a Development-only `POST /api/dev/payer/eligibility` ingress.
+
+Stedi does not currently document a self-service inbound 270 payer-hosting
+API. The Stedi inbound adapter is **adapter-ready / pending Stedi payer-side
+connectivity**, not implemented. Existing outbound `IEligibilityGateway` /
+Stedi eligibility is unchanged.
+
 ### Stedi dependent eligibility (270/271)
 
 Canonical `GatewayEligibilityPerson` subscriber/patient model. Dependent
