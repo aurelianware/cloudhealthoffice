@@ -4,7 +4,7 @@ Date: 2026-08-23 UTC
 
 Branch: `feat/stedi-claim-submission`
 
-Commit: pending (implementation commit on this branch)
+Commit: `a96503d1`
 
 ## Stedi API
 
