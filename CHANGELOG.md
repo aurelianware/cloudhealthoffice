@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Stedi payer reference directory
+
+Canonical, vendor-neutral payer identity for Cloud Health Office. Stedi List
+Payers JSON (`GET https://payers.us.stedi.com/2024-04-01/payers`) synchronizes
+into `IPayerReferenceService`. `StediHealthcareGateway` resolves eligibility
+payers through that service; `PayerMap`/`TenantPayerMap` are deprecated
+fallbacks. Arbitrary payer ids are no longer passed through to Stedi.
+
 ### v5.0 - Planned
 
 **Enhanced Provider Management & Multi-Market Expansion**

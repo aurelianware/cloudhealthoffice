@@ -15,9 +15,10 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 ///       BaseUrl: https://healthcare.us.stedi.com
 ///       ApiKey: ""            # supplied via env/secret provider, never source control
 ///       Environment: sandbox  # sandbox | production
-///       PayerMap:             # canonical payer id -> Stedi tradingPartnerServiceId
+///       PayerDirectoryBaseUrl: https://payers.us.stedi.com
+///       PayerMap:             # deprecated fallback
 ///         AETNA: "60054"
-///       TenantPayerMap:       # per-tenant overrides (win over PayerMap)
+///       TenantPayerMap:       # deprecated tenant-scoped fallback
 ///         tenant-alpha:
 ///           AETNA: "60055"
 /// </code>
@@ -56,6 +57,19 @@ public sealed class StediGatewayOptions
     /// </summary>
     public string EligibilityPath { get; set; } = "/2024-04-01/change/medicalnetwork/eligibility/v3";
 
+    /// <summary>
+    /// Base URL of Stedi's Payers API. Defaults to the host documented for
+    /// <c>GET /2024-04-01/payers</c>. Separate from <see cref="BaseUrl"/>
+    /// because eligibility and the payer directory are published on different
+    /// hosts.
+    /// </summary>
+    public string PayerDirectoryBaseUrl { get; set; } = "https://payers.us.stedi.com";
+
+    /// <summary>
+    /// Relative path of the List Payers JSON endpoint (API version 2024-04-01).
+    /// </summary>
+    public string PayerDirectoryPath { get; set; } = "/2024-04-01/payers";
+
     /// <summary>Per-request timeout in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 30;
 
@@ -66,15 +80,17 @@ public sealed class StediGatewayOptions
     public int MaxRetries { get; set; } = 2;
 
     /// <summary>
-    /// Global mapping of Cloud Health Office canonical payer id to Stedi
-    /// <c>tradingPartnerServiceId</c>. Case-insensitive keys.
+    /// Deprecated fallback: global mapping of Cloud Health Office canonical
+    /// payer id to Stedi <c>tradingPartnerServiceId</c>. The canonical payer
+    /// reference service is the primary resolver; this map is consulted only
+    /// when the directory has no match. Case-insensitive keys.
     /// </summary>
     public Dictionary<string, string> PayerMap { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Per-tenant payer maps, keyed by tenant id. A tenant's entries take
-    /// precedence over <see cref="PayerMap"/> and are only ever consulted for
-    /// that tenant, so one tenant's mapping can never resolve another tenant's.
+    /// Deprecated fallback: per-tenant payer maps, keyed by tenant id. Prefer
+    /// <c>PayerTenantOverride</c> records. A tenant's entries are only ever
+    /// consulted for that tenant.
     /// </summary>
     public Dictionary<string, Dictionary<string, string>> TenantPayerMap { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);

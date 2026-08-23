@@ -2,6 +2,7 @@ using System.Net;
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
+using CloudHealthOffice.Infrastructure.Tests.ReferenceData.Payers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -41,7 +42,7 @@ public class StediHealthcareGatewayTests
             NullLogger<StediEligibilityApiClient>.Instance,
             delay: (_, _) => Task.CompletedTask);
         return new StediHealthcareGateway(
-            apiClient, new StediPayerResolver(opts), opts,
+            apiClient, PayerTestHarness.CreateResolver(opts), opts,
             NullLogger<StediHealthcareGateway>.Instance);
     }
 
@@ -122,14 +123,79 @@ public class StediHealthcareGatewayTests
     }
 
     [Fact]
-    public async Task MissingPayer_FailsValidation()
+    public async Task MissingPayer_FailsPayerNotFound()
     {
         var gateway = NewGateway(new StubHttpMessageHandler());
 
         var response = await gateway.CheckEligibilityAsync(Request(payerId: null));
 
         response.IsSuccess.Should().BeFalse();
-        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.Validation);
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.PayerNotFound);
+    }
+
+    [Fact]
+    public async Task UnknownPayer_FailsPayerNotFound_NoHttpCall()
+    {
+        var handler = new StubHttpMessageHandler();
+        var gateway = NewGateway(handler);
+
+        var response = await gateway.CheckEligibilityAsync(Request(payerId: "NOT-A-PAYER"));
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.PayerNotFound);
+        handler.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task UnsupportedEligibilityPayer_FailsNotSupported()
+    {
+        var handler = new StubHttpMessageHandler();
+        var gateway = NewGateway(handler);
+
+        var response = await gateway.CheckEligibilityAsync(Request(payerId: "SYNTH-UNSUPPORTED"));
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.NotSupported);
+        handler.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task EnrollmentRequiredPayer_FailsEnrollmentRequired()
+    {
+        var handler = new StubHttpMessageHandler();
+        var gateway = NewGateway(handler);
+
+        var response = await gateway.CheckEligibilityAsync(Request(payerId: "SYNTH-ENROLL"));
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.EnrollmentRequired);
+        handler.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task MissingStediIdentifier_FailsExplicitly()
+    {
+        var handler = new StubHttpMessageHandler();
+        var gateway = NewGateway(handler);
+
+        var response = await gateway.CheckEligibilityAsync(Request(payerId: "SYNTH-NO-EXTERNAL"));
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.ExternalIdentifierMissing);
+        handler.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AmbiguousPayer_FailsExplicitly()
+    {
+        var handler = new StubHttpMessageHandler();
+        var gateway = NewGateway(handler);
+
+        var response = await gateway.CheckEligibilityAsync(Request(payerId: "SYNTH-DUP"));
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.AmbiguousPayer);
+        handler.CallCount.Should().Be(0);
     }
 
     [Fact]

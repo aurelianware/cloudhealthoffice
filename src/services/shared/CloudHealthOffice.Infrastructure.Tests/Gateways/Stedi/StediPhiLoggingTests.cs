@@ -2,6 +2,7 @@ using System.Net;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
 using CloudHealthOffice.Infrastructure.Tests.Gateways;
+using CloudHealthOffice.Infrastructure.Tests.ReferenceData.Payers;
 using Microsoft.Extensions.Options;
 
 namespace CloudHealthOffice.Infrastructure.Tests.Gateways.Stedi;
@@ -45,7 +46,7 @@ public class StediPhiLoggingTests
         var apiClient = new StediEligibilityApiClient(
             new StubHttpClientFactory(handler), options, apiLogger, delay: (_, _) => Task.CompletedTask);
         var gateway = new StediHealthcareGateway(
-            apiClient, new StediPayerResolver(options), options, gatewayLogger);
+            apiClient, PayerTestHarness.CreateResolver(options), options, gatewayLogger);
 
         await gateway.CheckEligibilityAsync(new GatewayEligibilityRequest
         {
@@ -89,7 +90,7 @@ public class StediPhiLoggingTests
             new StubHttpClientFactory(handler), options,
             new CapturingLogger<StediEligibilityApiClient>(), delay: (_, _) => Task.CompletedTask);
         var gateway = new StediHealthcareGateway(
-            apiClient, new StediPayerResolver(options), options, logger);
+            apiClient, PayerTestHarness.CreateResolver(options), options, logger);
 
         await gateway.CheckEligibilityAsync(new GatewayEligibilityRequest
         {

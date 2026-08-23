@@ -2,6 +2,7 @@ using System.Diagnostics;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi.Mapping;
+using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -77,14 +78,20 @@ public sealed class StediHealthcareGateway : IEligibilityGateway
                 GatewayErrorCategory.Validation, "TenantId and SubscriberId are required.");
         }
 
-        // 3. Resolve the payer to a Stedi trading-partner id (tenant-scoped).
-        var stediPayerId = _payerResolver.Resolve(request.TenantId, request.PayerId);
-        if (string.IsNullOrWhiteSpace(stediPayerId))
+        // 3. Resolve the payer through the canonical payer reference service
+        //    (tenant-scoped). Arbitrary payer ids are never passed through.
+        var resolution = await _payerResolver
+            .ResolveAsync(request.TenantId, request.PayerId, ct)
+            .ConfigureAwait(false);
+        if (resolution.Status != PayerResolutionStatus.Found ||
+            string.IsNullOrWhiteSpace(resolution.ExternalIdentifierValue))
         {
             return Fail(request, startedAt, stopwatch, 0,
-                GatewayErrorCategory.Validation,
-                "No payer identifier could be resolved for the request (PayerId is missing and no mapping applied).");
+                MapResolution(resolution.Status),
+                resolution.Message ?? "Payer could not be resolved for this request.");
         }
+
+        var stediPayerId = resolution.ExternalIdentifierValue;
 
         // 4. Map, call, normalize.
         var stediRequest = StediEligibilityMapper.ToStediRequest(request, stediPayerId);
@@ -193,6 +200,18 @@ public sealed class StediHealthcareGateway : IEligibilityGateway
     // tenant id, correlation id, or vendor transaction id.
     private static string? SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+
+    private static GatewayErrorCategory MapResolution(PayerResolutionStatus status) => status switch
+    {
+        PayerResolutionStatus.PayerNotFound => GatewayErrorCategory.PayerNotFound,
+        PayerResolutionStatus.AmbiguousPayer => GatewayErrorCategory.AmbiguousPayer,
+        PayerResolutionStatus.ExternalIdentifierMissing => GatewayErrorCategory.ExternalIdentifierMissing,
+        PayerResolutionStatus.TransactionUnsupported => GatewayErrorCategory.NotSupported,
+        PayerResolutionStatus.EnrollmentRequired => GatewayErrorCategory.EnrollmentRequired,
+        PayerResolutionStatus.PayerDisabled => GatewayErrorCategory.Configuration,
+        PayerResolutionStatus.ReferenceDataUnavailable => GatewayErrorCategory.ReferenceDataUnavailable,
+        _ => GatewayErrorCategory.Validation
+    };
 
     private TimeSpan GetElapsed(long start) => Stopwatch.GetElapsedTime(start);
 }
