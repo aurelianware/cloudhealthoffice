@@ -133,5 +133,11 @@ public enum GatewayErrorCategory
     ReferenceDataUnavailable,
 
     /// <summary>An unexpected internal error occurred.</summary>
-    Internal
+    Internal,
+
+    /// <summary>The same claim version was already transmitted through this gateway.</summary>
+    DuplicateSubmission,
+
+    /// <summary>The claim type cannot be represented from the available CHO data.</summary>
+    ClaimTypeNotReady
 }

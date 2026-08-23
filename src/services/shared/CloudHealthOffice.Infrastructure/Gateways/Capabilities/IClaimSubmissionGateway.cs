@@ -1,17 +1,18 @@
+using CloudHealthOffice.Infrastructure.Gateways.Models;
+
 namespace CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 
 /// <summary>
-/// Gateway capability for 837 claim submission (837P professional, 837I
-/// institutional, 837D dental).
+/// Gateway capability for outbound 837 claim submission (837P professional,
+/// 837I institutional, 837D dental).
 ///
-/// <b>Foundation only.</b> The transaction method and its canonical
-/// request/response models are intentionally not defined in this release —
-/// claim submission is out of scope and will be added in a later PR. The
-/// interface exists so a gateway can advertise
-/// <see cref="GatewayCapability.ClaimSubmission"/> and so the capability
-/// surface is discoverable now. It is deliberately left without members
-/// rather than carrying a no-op method.
+/// Cloud Health Office owns claim/adjudication business logic. This gateway
+/// carries a canonical submission projection to an external payer/clearinghouse
+/// and returns a transmission result. A successful HTTP submission is
+/// <b>not</b> a 277CA, adjudication, or payment.
 /// </summary>
 public interface IClaimSubmissionGateway : IHealthcareTransactionGateway
 {
+    Task<GatewayResponse<GatewayClaimSubmissionResult>> SubmitClaimAsync(
+        GatewayClaimSubmissionRequest request, CancellationToken ct = default);
 }

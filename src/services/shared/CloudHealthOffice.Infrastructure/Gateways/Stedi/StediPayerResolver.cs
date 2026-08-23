@@ -16,6 +16,9 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 internal interface IStediPayerResolver
 {
     Task<PayerResolution> ResolveAsync(string tenantId, string? payerId, CancellationToken ct);
+
+    Task<PayerResolution> ResolveAsync(
+        string tenantId, string? payerId, HealthcareTransactionType transaction, CancellationToken ct);
 }
 
 internal sealed class StediPayerResolver : IStediPayerResolver
@@ -34,13 +37,16 @@ internal sealed class StediPayerResolver : IStediPayerResolver
         _logger = logger;
     }
 
+    public Task<PayerResolution> ResolveAsync(string tenantId, string? payerId, CancellationToken ct) =>
+        ResolveAsync(tenantId, payerId, HealthcareTransactionType.Eligibility270271, ct);
+
     public async Task<PayerResolution> ResolveAsync(
-        string tenantId, string? payerId, CancellationToken ct)
+        string tenantId, string? payerId, HealthcareTransactionType transaction, CancellationToken ct)
     {
         var resolution = await _payers.ResolveForTransactionAsync(
             tenantId,
             payerId,
-            HealthcareTransactionType.Eligibility270271,
+            transaction,
             StediPayerIdentifiers.System,
             StediPayerIdentifiers.TradingPartnerServiceIdType,
             ct).ConfigureAwait(false);

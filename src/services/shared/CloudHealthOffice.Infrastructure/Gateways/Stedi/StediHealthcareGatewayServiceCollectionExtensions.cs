@@ -52,6 +52,12 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<ILogger<StediEligibilityApiClient>>(),
             sp.GetService<TimeProvider>()));
 
+        services.TryAddSingleton(sp => new StediClaimApiClient(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptions<StediGatewayOptions>>(),
+            sp.GetRequiredService<ILogger<StediClaimApiClient>>(),
+            sp.GetService<TimeProvider>()));
+
         // Build the gateway once (its constructor is internal — a transport
         // detail — and takes an optional TimeProvider), then expose it as an
         // IHealthcareTransactionGateway so the resolver can select it by name.
@@ -62,7 +68,9 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<IStediPayerResolver>(),
             sp.GetRequiredService<IOptions<StediGatewayOptions>>(),
             sp.GetRequiredService<ILogger<StediHealthcareGateway>>(),
-            sp.GetService<TimeProvider>()));
+            sp.GetService<TimeProvider>(),
+            sp.GetRequiredService<StediClaimApiClient>(),
+            sp.GetRequiredService<IClaimTransmissionStore>()));
 
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IHealthcareTransactionGateway, StediHealthcareGateway>(

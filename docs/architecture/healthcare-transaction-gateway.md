@@ -92,7 +92,7 @@ transactions are **rejected explicitly** rather than returning a no-op result.
 | Capability | Interface | Transaction | Status |
 |------------|-----------|-------------|--------|
 | `Eligibility` | `IEligibilityGateway` | 270/271 | **Implemented (Mock + Stedi)** |
-| `ClaimSubmission` | `IClaimSubmissionGateway` | 837P/837I/837D | Contract only |
+| `ClaimSubmission` | `IClaimSubmissionGateway` | 837P/837I/837D | **Implemented (Mock + Stedi)** |
 | `ClaimStatus` | `IClaimStatusGateway` | 276/277 | Contract only |
 | `ClaimAcknowledgment` | `IClaimAcknowledgmentGateway` | 277CA | Contract only |
 | `ClaimAttachment` | `IClaimAttachmentGateway` | 275 | Contract only |
@@ -107,8 +107,8 @@ so those gateways do not advertise them.
 
 | Gateway | Eligibility (270/271) | 837 | 276/277 | 277CA | 275 | 835 |
 |---------|:---:|:---:|:---:|:---:|:---:|:---:|
-| Mock  | Yes | No | No | No | No | No |
-| Stedi | Yes | No | No | No | No | No |
+| Mock  | Yes | Yes | No | No | No | No |
+| Stedi | Yes | Yes | No | No | No | No |
 
 The "contract only" interfaces are intentionally member-less: they let a
 gateway advertise a future capability and let callers discover it, without a
@@ -289,6 +289,56 @@ Dependent  Jane Doe / DOB 1952-11-21
 Service type 30
 → HTTP 200, Active Coverage, benefits present
 ```
+
+### Outbound 837 claim submission
+
+```
+CHO Claim
+   ↓
+GatewayClaimSubmissionRequest
+   ↓
+IClaimSubmissionGateway
+   ↓
+StediHealthcareGateway
+   ↓
+Stedi JSON 837P / 837I / 837D
+   ↓
+Payer
+```
+
+Stedi endpoints (API version `2024-04-01` on `https://healthcare.us.stedi.com`):
+
+| Claim type | Path |
+|------------|------|
+| 837P | `POST /2024-04-01/change/medicalnetwork/professionalclaims/v3/submission` |
+| 837I | `POST /2024-04-01/change/medicalnetwork/institutionalclaims/v1/submission` |
+| 837D | `POST /2024-04-01/dental-claims/submission` |
+
+Synchronous HTTP 200/`status=SUCCESS` means **the clearinghouse accepted the
+submission for processing**. It is not a 277CA, payer acceptance,
+adjudication, or payment. 277CA remains a follow-up PR.
+
+Payer readiness uses `IPayerReferenceService` for the matching 837
+transaction type (external Stedi id, payer support, enrollment). Arbitrary
+payer ids are never passed through.
+
+Idempotency key: `tenant|claimId|claimVersion|claimType|frequency`. Repeat
+calls return the existing accepted transmission. Frequency `7`/`8` and a new
+`ClaimVersion` are intentional resubmissions. The same key is sent as Stedi's
+`Idempotency-Key` header.
+
+Retries: 429 / 5xx / network / timeout only. 400 / 401 / 403 / validation
+are not retried.
+
+Institutional claims without type of bill or revenue codes fail
+`ClaimTypeNotReady` rather than inventing 837I fields. Dental tooth/surface
+are mapped when present on the canonical line.
+
+Development: `POST /api/dev/gateway/claims` (404 outside Development).
+
+Live 837 validation: Stedi sandbox accounts cannot submit test claims.
+Contract tests cover the documented JSON/HTTP. Opt-in
+`CHO_STEDI_LIVE_CLAIM_TESTS` requires a production-account test API key.
 
 A subscriber-only request for that same UHC fixture returns AAA 73
 (Invalid/Missing Subscriber/Insured Name) — a payer business rejection, not a
