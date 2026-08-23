@@ -31,7 +31,8 @@ public class StediLiveSmokeTests
                 StringComparison.OrdinalIgnoreCase),
             "Set CHO_STEDI_LIVE_TESTS=true to run the live Stedi smoke test.");
 
-        var apiKey = Environment.GetEnvironmentVariable("STEDI_API_KEY");
+        var apiKey = Environment.GetEnvironmentVariable("STEDI_API_KEY")
+            ?? Environment.GetEnvironmentVariable("HealthcareTransactions__Gateways__Stedi__ApiKey");
         Skip.If(string.IsNullOrWhiteSpace(apiKey), "STEDI_API_KEY is not set.");
 
         var payerId = Environment.GetEnvironmentVariable("STEDI_TEST_PAYER_ID") ?? "00007";
@@ -42,7 +43,10 @@ public class StediLiveSmokeTests
             ["HealthcareTransactions:DefaultGateway"] = "Stedi",
             ["HealthcareTransactions:Gateways:Stedi:ApiKey"] = apiKey,
             ["HealthcareTransactions:Gateways:Stedi:BaseUrl"] = "https://healthcare.us.stedi.com",
-            ["HealthcareTransactions:Gateways:Stedi:Environment"] = "sandbox"
+            ["HealthcareTransactions:Gateways:Stedi:Environment"] = "sandbox",
+            // Explicit test mapping — live smoke does not start hosted seed
+            // and must not rely on implicit payer-id pass-through.
+            [$"HealthcareTransactions:Gateways:Stedi:PayerMap:{payerId}"] = payerId
         }).Build();
 
         var services = new ServiceCollection();
@@ -69,5 +73,7 @@ public class StediLiveSmokeTests
         response.Should().NotBeNull();
         response.Metadata.GatewayName.Should().Be("Stedi");
         response.Metadata.TransactionType.Should().Be(HealthcareTransactionType.Eligibility270271);
+        response.Metadata.ErrorCategory.Should().NotBe(GatewayErrorCategory.PayerNotFound);
+        response.Metadata.ErrorCategory.Should().NotBe(GatewayErrorCategory.Configuration);
     }
 }
