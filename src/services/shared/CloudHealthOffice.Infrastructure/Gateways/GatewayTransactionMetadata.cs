@@ -87,17 +87,32 @@ public enum GatewayErrorCategory
     /// <summary>The request failed local/gateway validation before transport.</summary>
     Validation,
 
-    /// <summary>Authentication or authorization against the gateway failed.</summary>
+    /// <summary>Authentication against the gateway failed (e.g. bad/expired API key).</summary>
     Authentication,
+
+    /// <summary>The gateway credential is valid but not authorized for the operation.</summary>
+    Authorization,
 
     /// <summary>Network/connectivity failure reaching the gateway or payer.</summary>
     Connectivity,
 
+    /// <summary>The gateway signalled rate limiting (e.g. HTTP 429).</summary>
+    RateLimited,
+
     /// <summary>The transaction exceeded its time budget.</summary>
     Timeout,
 
+    /// <summary>The gateway or an upstream dependency was temporarily unavailable (e.g. HTTP 5xx).</summary>
+    ServiceUnavailable,
+
     /// <summary>The payer/clearinghouse returned a business-level rejection.</summary>
     PayerRejected,
+
+    /// <summary>The gateway returned a response that could not be parsed into the canonical model.</summary>
+    MalformedResponse,
+
+    /// <summary>The gateway is misconfigured (missing/invalid credentials, base URL, environment).</summary>
+    Configuration,
 
     /// <summary>The gateway does not support the requested transaction.</summary>
     NotSupported,

@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Gateways.Mock;
+using CloudHealthOffice.Infrastructure.Gateways.Stedi;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -37,6 +38,18 @@ public static class HealthcareGatewayServiceCollectionExtensions
         // development and test even when no vendor is configured. It is the
         // default target of HealthcareTransactions:DefaultGateway.
         services.AddHealthcareGateway<MockHealthcareGateway>();
+
+        // Register the Stedi gateway whenever it is configured or explicitly
+        // selected as the default. When Stedi is selected but its configuration
+        // is incomplete, the Stedi gateway (not Mock) is resolved and returns a
+        // clear Configuration error — there is no silent fallback to Mock.
+        var defaultGateway = configuration[$"{HealthcareTransactionOptions.SectionName}:DefaultGateway"];
+        var stediConfigured = configuration.GetSection(StediGatewayOptions.SectionPath).Exists();
+        var stediIsDefault = string.Equals(defaultGateway, StediHealthcareGateway.GatewayName, StringComparison.OrdinalIgnoreCase);
+        if (stediConfigured || stediIsDefault)
+        {
+            services.AddStediHealthcareGateway(configuration);
+        }
 
         return services;
     }

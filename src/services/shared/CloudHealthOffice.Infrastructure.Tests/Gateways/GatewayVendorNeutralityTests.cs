@@ -17,13 +17,23 @@ public class GatewayVendorNeutralityTests
         "stedi", "availity", "changehealthcare", "optum", "waystar"
     };
 
+    // The vendor-neutral abstraction lives in these namespaces. Vendor adapters
+    // legitimately live in vendor-named implementation sub-namespaces (e.g.
+    // ...Gateways.Stedi) — those are excluded from the "no vendor name" rule,
+    // which protects only the shared contracts and canonical models.
+    private static readonly string[] CoreAbstractionNamespaces =
+    {
+        "CloudHealthOffice.Infrastructure.Gateways",
+        "CloudHealthOffice.Infrastructure.Gateways.Capabilities",
+        "CloudHealthOffice.Infrastructure.Gateways.Models"
+    };
+
     [Fact]
     public void GatewayAbstractionTypes_DoNotNameAnyVendor()
     {
         var gatewayTypes = typeof(IHealthcareTransactionGateway).Assembly
             .GetTypes()
-            .Where(t => t.Namespace is { } ns &&
-                        ns.StartsWith("CloudHealthOffice.Infrastructure.Gateways", StringComparison.Ordinal))
+            .Where(t => t.Namespace is { } ns && CoreAbstractionNamespaces.Contains(ns))
             .ToList();
 
         gatewayTypes.Should().NotBeEmpty();
