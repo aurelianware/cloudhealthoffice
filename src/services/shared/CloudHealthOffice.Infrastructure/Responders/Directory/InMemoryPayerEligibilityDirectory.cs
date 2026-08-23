@@ -88,10 +88,46 @@ public sealed class InMemoryPayerEligibilityDirectory : IPayerEligibilityDirecto
     public Task<PayerDirectoryCoverage?> GetCoverageAsync(
         string tenantId, string memberId, DateOnly serviceDate, CancellationToken ct = default)
     {
-        var coverage = _coverages.FirstOrDefault(c =>
-            TenantEquals(c.TenantId, tenantId) &&
-            string.Equals(c.MemberId, memberId, StringComparison.OrdinalIgnoreCase));
-        return Task.FromResult(coverage);
+        var matches = _coverages
+            .Where(c =>
+                TenantEquals(c.TenantId, tenantId) &&
+                string.Equals(c.MemberId, memberId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            return Task.FromResult<PayerDirectoryCoverage?>(null);
+        }
+
+        var active = matches.FirstOrDefault(c =>
+            c.Evaluate(serviceDate) == PayerEligibilityCoverageStatus.Active);
+        if (active is not null)
+        {
+            return Task.FromResult<PayerDirectoryCoverage?>(active);
+        }
+
+        // No active period: pick the coverage whose dates are closest to the
+        // service date so the responder can still report Future/Terminated.
+        var closest = matches
+            .OrderBy(c => DistanceFromServiceDate(c, serviceDate))
+            .ThenByDescending(c => c.EffectiveDate)
+            .First();
+        return Task.FromResult<PayerDirectoryCoverage?>(closest);
+    }
+
+    private static int DistanceFromServiceDate(PayerDirectoryCoverage coverage, DateOnly serviceDate)
+    {
+        if (serviceDate < coverage.EffectiveDate)
+        {
+            return coverage.EffectiveDate.DayNumber - serviceDate.DayNumber;
+        }
+
+        if (coverage.TerminationDate is { } end && serviceDate > end)
+        {
+            return serviceDate.DayNumber - end.DayNumber;
+        }
+
+        return 0;
     }
 
     public Task<PayerDirectoryPlan?> GetPlanAsync(

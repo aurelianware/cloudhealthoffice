@@ -92,4 +92,29 @@ public class PayerEligibilityDevControllerTests : IClassFixture<EligibilityApiFa
             nameof(GatewayTransactionStatus.Rejected),
             doc.RootElement.GetProperty("metadata").GetProperty("status").GetString());
     }
+
+    [Fact]
+    public async Task OmittedDateOfService_ReturnsInvalidDate()
+    {
+        var inquiry = new
+        {
+            payerId = ChoDemoEligibilitySeed.ExternalPayerId,
+            subscriber = new
+            {
+                memberId = ChoDemoEligibilitySeed.SubscriberMemberId,
+                firstName = ChoDemoEligibilitySeed.SubscriberFirstName,
+                lastName = ChoDemoEligibilitySeed.SubscriberLastName,
+                dateOfBirth = "1980-01-15"
+            },
+            serviceTypeCodes = new[] { "30" }
+        };
+
+        var response = await _client.PostAsJsonAsync("/api/dev/payer/eligibility", inquiry, Json);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(
+            nameof(EligibilityBusinessStatus.InvalidDate),
+            doc.RootElement.GetProperty("result").GetProperty("businessStatus").GetString());
+    }
 }

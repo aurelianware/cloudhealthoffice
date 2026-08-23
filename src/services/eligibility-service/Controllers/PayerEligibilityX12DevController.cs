@@ -93,15 +93,12 @@ public sealed class PayerEligibilityX12DevController : ControllerBase
             isaReceiverId: parsed.InterchangeSenderId);
 
         _logger.LogInformation(
-            "Dev X12 payer eligibility completed. Transaction={TransactionType} CorrelationId={CorrelationId} Business={Business} Adapter={Adapter}",
+            "Dev X12 payer eligibility completed. Transaction={TransactionType} ChoTransactionId={ChoTransactionId} Business={Business} Adapter={Adapter}",
             "Eligibility270271",
-            SanitizeForLog(inquiry.CorrelationId ?? inquiry.TransactionId),
+            envelope.Result.ChoTransactionId,
             envelope.Result.BusinessStatus,
             "x12");
 
         return Content(edi271, "text/plain");
     }
-
-    private static string? SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

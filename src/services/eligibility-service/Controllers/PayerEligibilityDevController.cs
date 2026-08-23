@@ -51,9 +51,9 @@ public sealed class PayerEligibilityDevController : ControllerBase
         var envelope = await _adapter.ProcessAsync(inquiry, ct);
 
         _logger.LogInformation(
-            "Dev payer eligibility completed. Transaction={TransactionType} CorrelationId={CorrelationId} TransportSuccess={TransportSuccess} Adapter={Adapter}",
+            "Dev payer eligibility completed. Transaction={TransactionType} ChoTransactionId={ChoTransactionId} TransportSuccess={TransportSuccess} Adapter={Adapter}",
             "Eligibility270271",
-            SanitizeForLog(inquiry.CorrelationId ?? inquiry.TransactionId),
+            envelope.Result?.ChoTransactionId,
             envelope.IsSuccess,
             _adapter.Name);
 
@@ -64,7 +64,4 @@ public sealed class PayerEligibilityDevController : ControllerBase
 
         return Ok(envelope);
     }
-
-    private static string? SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

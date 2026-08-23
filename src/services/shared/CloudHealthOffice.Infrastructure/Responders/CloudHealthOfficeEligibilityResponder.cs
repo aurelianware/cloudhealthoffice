@@ -41,9 +41,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
     {
         var started = _clock.GetUtcNow();
         var choTransactionId = Guid.NewGuid().ToString("N");
-        var adapter = string.IsNullOrWhiteSpace(inquiry.AdapterName)
-            ? AdapterName
-            : inquiry.AdapterName.Trim();
+        var adapter = NormalizeAdapter(inquiry.AdapterName);
         var correlationId = FirstNonBlank(inquiry.CorrelationId, inquiry.TransactionId, choTransactionId);
 
         try
@@ -56,7 +54,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
                         EligibilityBusinessStatus.InvalidDate,
                         tenantId: null,
                         "A date of service is required."),
-                    started, adapter, correlationId);
+                    started, adapter, choTransactionId);
             }
 
             var route = _router.Resolve(inquiry);
@@ -70,7 +68,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
                         inquiry, choTransactionId, correlationId, adapter, status,
                         tenantId: null,
                         route.Message ?? "Payer could not be resolved."),
-                    started, adapter, correlationId);
+                    started, adapter, choTransactionId);
             }
 
             var subscriberLookup = await _directory.FindSubscriberAsync(
@@ -86,7 +84,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
                         SubscriberMessage(subscriberLookup.Status),
                         canonicalPayerId: route.CanonicalPayerId,
                         payerName: route.PayerName),
-                    started, adapter, correlationId);
+                    started, adapter, choTransactionId);
             }
 
             var subscriber = subscriberLookup.Member!;
@@ -112,7 +110,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
                             canonicalPayerId: route.CanonicalPayerId,
                             payerName: route.PayerName,
                             subscriber: ToPerson(subscriber)),
-                        started, adapter, correlationId);
+                        started, adapter, choTransactionId);
                 }
 
                 patientMember = dependentLookup.Member!;
@@ -134,7 +132,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
                         subscriber: ToPerson(subscriber),
                         patient: dependentInquiry ? ToPerson(patientMember) : ToPerson(subscriber),
                         coverageStatus: PayerEligibilityCoverageStatus.Inactive),
-                    started, adapter, correlationId);
+                    started, adapter, choTransactionId);
             }
 
             var coverageStatus = coverage.Evaluate(inquiry.DateOfService);
@@ -203,17 +201,17 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
                 response.Messages.Add(CoverageMessage(coverageStatus));
             }
 
-            return Complete(response, started, adapter, correlationId);
+            return Complete(response, started, adapter, choTransactionId);
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Inbound eligibility failed. Tenant={TenantId} Transaction={TransactionType} CorrelationId={CorrelationId} Adapter={Adapter} ErrorCategory={ErrorCategory}",
+                "Inbound eligibility failed. Tenant={TenantId} Transaction={TransactionType} ChoTransactionId={ChoTransactionId} Adapter={Adapter} ErrorCategory={ErrorCategory}",
                 null,
                 HealthcareTransactionType.Eligibility270271,
-                SanitizeForLog(correlationId),
-                SanitizeForLog(adapter),
+                choTransactionId,
+                adapter,
                 GatewayErrorCategory.Internal);
 
             var failed = new PayerEligibilityResponse
@@ -231,7 +229,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
 
             return GatewayResponse<PayerEligibilityResponse>.Failure(
                 "Unable to respond to the eligibility inquiry.",
-                Metadata(inquiry, failed, started, adapter, correlationId, GatewayTransactionStatus.Failed, GatewayErrorCategory.Internal));
+                Metadata(inquiry, failed, started, adapter, choTransactionId, GatewayTransactionStatus.Failed, GatewayErrorCategory.Internal));
         }
     }
 
@@ -239,7 +237,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
         PayerEligibilityResponse response,
         DateTimeOffset started,
         string adapter,
-        string? correlationId)
+        string choTransactionId)
     {
         var latency = _clock.GetUtcNow() - started;
         var business = response.BusinessStatus.ToString();
@@ -268,15 +266,15 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
                 : GatewayTransactionStatus.Rejected;
 
         _logger.LogInformation(
-            "Inbound eligibility completed. Tenant={TenantId} Transaction={TransactionType} CorrelationId={CorrelationId} Transport={Transport} Business={Business} Coverage={Coverage} LatencyMs={LatencyMs} Adapter={Adapter} ErrorCategory={ErrorCategory}",
+            "Inbound eligibility completed. Tenant={TenantId} Transaction={TransactionType} ChoTransactionId={ChoTransactionId} Transport={Transport} Business={Business} Coverage={Coverage} LatencyMs={LatencyMs} Adapter={Adapter} ErrorCategory={ErrorCategory}",
             SanitizeForLog(response.TenantId),
             HealthcareTransactionType.Eligibility270271,
-            SanitizeForLog(correlationId),
+            choTransactionId,
             transport,
             business,
             coverage,
             (int)latency.TotalMilliseconds,
-            SanitizeForLog(adapter),
+            adapter,
             errorCategory);
 
         return GatewayResponse<PayerEligibilityResponse>.Success(
@@ -286,7 +284,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
                 response,
                 started,
                 adapter,
-                correlationId,
+                response.CorrelationId,
                 txStatus,
                 errorCategory));
     }
@@ -479,6 +477,21 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
             DateOfBirth = member.DateOfBirth,
             RelationshipToSubscriber = member.RelationshipToSubscriber
         };
+
+    private static string NormalizeAdapter(string? name)
+    {
+        if (string.Equals(name, "x12", StringComparison.OrdinalIgnoreCase))
+        {
+            return "x12";
+        }
+
+        if (string.Equals(name, "stedi-planned", StringComparison.OrdinalIgnoreCase))
+        {
+            return "stedi-planned";
+        }
+
+        return AdapterName;
+    }
 
     private static string? SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);

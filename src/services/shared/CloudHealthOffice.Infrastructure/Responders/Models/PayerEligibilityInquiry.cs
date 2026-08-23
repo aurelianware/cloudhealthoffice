@@ -62,8 +62,12 @@ public sealed class PayerEligibilityInquiry
     /// <summary>X12 service type codes. Default is 30 (health benefit plan coverage).</summary>
     public List<string> ServiceTypeCodes { get; set; } = new() { ServiceTypeCode.HealthBenefitPlanCoverage };
 
-    /// <summary>Date of service the eligibility is evaluated against.</summary>
-    public DateOnly DateOfService { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
+    /// <summary>
+    /// Date of service the eligibility is evaluated against. Required; left
+    /// at <c>default</c> when omitted so the responder can reject a missing
+    /// date rather than silently substituting today.
+    /// </summary>
+    public DateOnly DateOfService { get; set; }
 
     public PayerEligibilitySourceMetadata? SourceMetadata { get; set; }
 

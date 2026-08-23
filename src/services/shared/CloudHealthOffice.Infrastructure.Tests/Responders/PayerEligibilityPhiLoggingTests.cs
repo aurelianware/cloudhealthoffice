@@ -48,7 +48,8 @@ public class PayerEligibilityPhiLoggingTests
         allLogs.Should().NotContain(ChoDemoEligibilitySeed.SubscriberMemberId);
 
         allLogs.Should().Contain("Eligibility270271");
-        allLogs.Should().Contain("corr-phi-safe");
+        allLogs.Should().NotContain("corr-phi-safe");
+        allLogs.Should().NotContain("txn-phi-001");
         allLogs.Should().Contain("canonical");
         allLogs.Should().Contain(ChoDemoEligibilitySeed.TenantId);
     }

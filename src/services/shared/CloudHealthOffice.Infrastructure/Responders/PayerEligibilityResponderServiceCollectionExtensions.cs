@@ -22,7 +22,19 @@ public static class PayerEligibilityResponderServiceCollectionExtensions
             .Bind(configuration.GetSection(PayerEligibilityResponderOptions.SectionName));
 
         services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
-        services.TryAddSingleton<IPayerEligibilityDirectory, InMemoryPayerEligibilityDirectory>();
+
+        var options = new PayerEligibilityResponderOptions();
+        configuration.GetSection(PayerEligibilityResponderOptions.SectionName).Bind(options);
+        if (options.UseInMemoryDirectory)
+        {
+            services.TryAddSingleton<IPayerEligibilityDirectory, InMemoryPayerEligibilityDirectory>();
+        }
+        else
+        {
+            // Keeps DI constructable when no production directory is registered
+            // yet, without answering inquiries from the synthetic demo seed.
+            services.TryAddSingleton<IPayerEligibilityDirectory, UnconfiguredPayerEligibilityDirectory>();
+        }
         services.TryAddSingleton<IPayerEligibilityRouter, PayerEligibilityRouter>();
         services.TryAddSingleton<IEligibilityResponder, CloudHealthOfficeEligibilityResponder>();
         services.TryAddSingleton<ICanonicalInboundEligibilityAdapter, CanonicalInboundEligibilityAdapter>();

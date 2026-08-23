@@ -9,10 +9,12 @@ public sealed class PayerEligibilityResponderOptions
     public const string SectionName = "PayerEligibilityResponder";
 
     /// <summary>
-    /// When true (the Development default), the in-memory CHO Demo Health
-    /// Plan directory is used. Production hosts should set this false and
-    /// register a directory backed by member / coverage / benefit /
-    /// accumulator services.
+    /// When true, <c>AddChoPayerEligibilityResponder</c> registers the
+    /// in-memory CHO Demo Health Plan directory. Production hosts should
+    /// leave this false (the appsettings default) and register an
+    /// <c>IPayerEligibilityDirectory</c> backed by member / coverage /
+    /// benefit / accumulator services. Development sets this true via
+    /// <c>appsettings.Development.json</c>.
     /// </summary>
-    public bool UseInMemoryDirectory { get; set; } = true;
+    public bool UseInMemoryDirectory { get; set; }
 }

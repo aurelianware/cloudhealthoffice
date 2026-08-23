@@ -1,7 +1,10 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Responders;
 using CloudHealthOffice.Infrastructure.Responders.Directory;
 using CloudHealthOffice.Infrastructure.Responders.Models;
+using CloudHealthOffice.Infrastructure.Responders.Routing;
+using CloudHealthOffice.Infrastructure.Tests.Gateways;
 
 namespace CloudHealthOffice.Infrastructure.Tests.Responders;
 
@@ -170,7 +173,7 @@ public class PayerEligibilityResponderTests
     }
 
     [Fact]
-    public async Task InactiveCoverage_ReturnsInactiveNotException()
+    public async Task InactiveMember_AfterTermination_ReturnsTerminatedNotException()
     {
         var inquiry = PayerEligibilityTestHarness.SelfInquiry(
             memberId: ChoDemoEligibilitySeed.InactiveMemberId,
@@ -358,6 +361,58 @@ public class PayerEligibilityResponderTests
         second.Result.Deductible!.IndividualRemaining.Should().Be(remaining);
         _harness.Directory.MutationProbe.AccumulatorWrites.Should().Be(probe.AccumulatorWrites);
         _harness.Directory.MutationProbe.IsUnchanged.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CoverageLookup_SelectsPeriodContainingServiceDate()
+    {
+        var early = new PayerDirectoryCoverage
+        {
+            TenantId = ChoDemoEligibilitySeed.TenantId,
+            CoverageId = "COV-EARLY",
+            SubscriberMemberId = ChoDemoEligibilitySeed.SubscriberMemberId,
+            MemberId = ChoDemoEligibilitySeed.SubscriberMemberId,
+            PlanId = ChoDemoEligibilitySeed.PlanId,
+            PlanName = ChoDemoEligibilitySeed.PlanName,
+            GroupNumber = ChoDemoEligibilitySeed.GroupNumber,
+            EffectiveDate = new DateOnly(2020, 1, 1),
+            TerminationDate = new DateOnly(2022, 12, 31)
+        };
+        var later = new PayerDirectoryCoverage
+        {
+            TenantId = ChoDemoEligibilitySeed.TenantId,
+            CoverageId = "COV-LATER",
+            SubscriberMemberId = ChoDemoEligibilitySeed.SubscriberMemberId,
+            MemberId = ChoDemoEligibilitySeed.SubscriberMemberId,
+            PlanId = ChoDemoEligibilitySeed.PlanId,
+            PlanName = ChoDemoEligibilitySeed.PlanName,
+            GroupNumber = ChoDemoEligibilitySeed.GroupNumber,
+            EffectiveDate = new DateOnly(2023, 1, 1),
+            TerminationDate = new DateOnly(2029, 12, 31)
+        };
+        var directory = new InMemoryPayerEligibilityDirectory(
+            ChoDemoEligibilitySeed.Routes,
+            ChoDemoEligibilitySeed.Members,
+            new[] { early, later },
+            ChoDemoEligibilitySeed.Plans,
+            ChoDemoEligibilitySeed.Accumulators,
+            ChoDemoEligibilitySeed.Providers);
+        var responder = new CloudHealthOfficeEligibilityResponder(
+            new PayerEligibilityRouter(directory),
+            directory,
+            new CapturingLogger<CloudHealthOfficeEligibilityResponder>());
+
+        var inEarly = await responder.RespondAsync(
+            PayerEligibilityTestHarness.SelfInquiry(serviceDate: new DateOnly(2021, 6, 1)));
+        inEarly.Result!.CoverageStatus.Should().Be(PayerEligibilityCoverageStatus.Active);
+        inEarly.Result.CoverageEffectiveDate.Should().Be(early.EffectiveDate);
+        inEarly.Result.CoverageTerminationDate.Should().Be(early.TerminationDate);
+
+        var inLater = await responder.RespondAsync(
+            PayerEligibilityTestHarness.SelfInquiry(serviceDate: new DateOnly(2025, 6, 1)));
+        inLater.Result!.CoverageStatus.Should().Be(PayerEligibilityCoverageStatus.Active);
+        inLater.Result.CoverageEffectiveDate.Should().Be(later.EffectiveDate);
+        inLater.Result.CoverageTerminationDate.Should().Be(later.TerminationDate);
     }
 
     [Fact]
