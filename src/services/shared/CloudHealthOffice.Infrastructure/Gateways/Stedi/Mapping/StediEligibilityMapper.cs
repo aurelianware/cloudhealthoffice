@@ -27,17 +27,19 @@ internal static class StediEligibilityMapper
             TradingPartnerServiceId = stediPayerId,
             Provider = new StediProviderDto
             {
-                Npi = NullIfBlank(request.ProviderNpi)
+                Npi = NullIfBlank(request.ProviderNpi),
+                OrganizationName = NullIfBlank(request.ProviderOrganizationName)
             },
             Subscriber = new StediSubscriberDto
             {
-                MemberId = NullIfBlank(request.SubscriberId),
-                FirstName = NullIfBlank(request.SubscriberFirstName),
-                LastName = NullIfBlank(request.SubscriberLastName),
-                DateOfBirth = FormatStediDate(request.SubscriberDateOfBirth),
+                MemberId = NullIfBlank(request.ResolveSubscriberMemberId()),
+                FirstName = NullIfBlank(request.ResolveSubscriberFirstName()),
+                LastName = NullIfBlank(request.ResolveSubscriberLastName()),
+                DateOfBirth = FormatStediDate(request.ResolveSubscriberDateOfBirth()),
                 GroupNumber = NullIfBlank(request.GroupNumber)
             },
-            ExternalPatientId = NullIfBlank(request.CorrelationId)
+            ExternalPatientId = NullIfBlank(request.CorrelationId),
+            Dependents = MapDependents(request)
         };
 
         var encounter = new StediEncounterDto();
@@ -77,6 +79,8 @@ internal static class StediEligibilityMapper
                 : "Payer rejected the eligibility inquiry.";
             response.CoverageStatus = GatewayCoverageStatus.Unknown;
             response.IsEligible = false;
+            response.Subscriber = MapParty(stedi.Subscriber);
+            response.Patient = MapParty(stedi.Dependents?.FirstOrDefault());
             return response;
         }
 
@@ -105,7 +109,57 @@ internal static class StediEligibilityMapper
             ?? ParseStediDate(planDates?.PlanEnd);
 
         response.Benefits = benefits.Select(ToBenefit).ToList();
+        response.Subscriber = MapParty(stedi.Subscriber);
+        response.Patient = MapParty(stedi.Dependents?.FirstOrDefault());
         return response;
+    }
+
+    private static List<StediDependentDto>? MapDependents(GatewayEligibilityRequest request)
+    {
+        if (!request.IsDependentInquiry() || request.Patient is null)
+        {
+            return null;
+        }
+
+        var patient = request.Patient;
+        var subscriberId = request.ResolveSubscriberMemberId();
+        var dependentMemberId = NullIfBlank(patient.MemberId);
+        if (string.Equals(dependentMemberId, subscriberId, StringComparison.OrdinalIgnoreCase))
+        {
+            // Stedi: if the dependent shares the subscriber member id, it stays
+            // on the subscriber object — do not duplicate it on dependents[].
+            dependentMemberId = null;
+        }
+
+        return new List<StediDependentDto>
+        {
+            new()
+            {
+                MemberId = dependentMemberId,
+                FirstName = NullIfBlank(patient.FirstName),
+                LastName = NullIfBlank(patient.LastName),
+                DateOfBirth = FormatStediDate(patient.DateOfBirth)
+            }
+        };
+    }
+
+    private static GatewayEligibilityPerson? MapParty(StediEligibilityPartyDto? party)
+    {
+        if (party is null)
+        {
+            return null;
+        }
+
+        var person = new GatewayEligibilityPerson
+        {
+            MemberId = NullIfBlank(party.MemberId),
+            FirstName = NullIfBlank(party.FirstName),
+            LastName = NullIfBlank(party.LastName),
+            DateOfBirth = ParseStediDate(party.DateOfBirth),
+            RelationshipToSubscriber = NullIfBlank(party.RelationToSubscriber)
+        };
+
+        return person.HasIdentity ? person : null;
     }
 
     private static GatewayEligibilityBenefit ToBenefit(StediBenefitInformationDto b)

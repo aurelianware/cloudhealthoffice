@@ -76,6 +76,61 @@ public class StediPhiLoggingTests
     }
 
     [Fact]
+    public async Task DependentEligibility_DoesNotLogDependentPhi()
+    {
+        const string apiKey = "SUPER-SECRET-KEY";
+        const string dependentFirst = "Qqdependentphi";
+        const string dependentLast = "Zzyphidependent";
+        const string memberId = "SECRETMEMBER123";
+
+        var options = Options.Create(new StediGatewayOptions
+        {
+            ApiKey = apiKey,
+            BaseUrl = "https://healthcare.test",
+            Environment = "sandbox",
+            EligibilityPath = "/eligibility/v3",
+            MaxRetries = 1
+        });
+
+        var handler = new StubHttpMessageHandler()
+            .EnqueueStatus(HttpStatusCode.InternalServerError)
+            .EnqueueJson(HttpStatusCode.OK, ActiveJson);
+
+        var apiLogger = new CapturingLogger<StediEligibilityApiClient>();
+        var gatewayLogger = new CapturingLogger<StediHealthcareGateway>();
+        var apiClient = new StediEligibilityApiClient(
+            new StubHttpClientFactory(handler), options, apiLogger, delay: (_, _) => Task.CompletedTask);
+        var gateway = new StediHealthcareGateway(
+            apiClient, PayerTestHarness.CreateResolver(options), options, gatewayLogger);
+
+        await gateway.CheckEligibilityAsync(new GatewayEligibilityRequest
+        {
+            TenantId = "tenant-alpha",
+            SubscriberId = memberId,
+            SubscriberFirstName = "John",
+            SubscriberLastName = "Doe",
+            ProviderNpi = "1234567890",
+            PayerId = "60054",
+            Patient = new GatewayEligibilityPerson
+            {
+                FirstName = dependentFirst,
+                LastName = dependentLast,
+                DateOfBirth = new DateOnly(1952, 11, 21)
+            }
+        });
+
+        var logs = string.Join("\n", apiLogger.Messages.Concat(gatewayLogger.Messages));
+        logs.Should().NotBeEmpty();
+        logs.Should().NotContain(apiKey);
+        logs.Should().NotContain(memberId);
+        logs.Should().NotContain(dependentFirst);
+        logs.Should().NotContain(dependentLast);
+        logs.Should().NotContain("19521121");
+        logs.Should().NotMatchRegex(@"\b1952\b");
+        logs.Should().NotContain("dependents");
+    }
+
+    [Fact]
     public async Task Logging_StripsNewlinesFromUserInfluencedValues()
     {
         var options = Options.Create(new StediGatewayOptions

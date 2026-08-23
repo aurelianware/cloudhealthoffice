@@ -214,6 +214,62 @@ public class StediHealthcareGatewayTests
     }
 
     [Fact]
+    public async Task Aaa73_IsPayerRejected_NotTransportFailure()
+    {
+        const string aaa73 =
+            "{\"errors\":[{\"code\":\"73\",\"description\":\"Invalid/Missing Subscriber/Insured Name\"," +
+            "\"followupAction\":\"Please Correct and Resubmit\"}]}";
+        var handler = new StubHttpMessageHandler().EnqueueJson(HttpStatusCode.OK, aaa73);
+        var gateway = NewGateway(handler);
+
+        var response = await gateway.CheckEligibilityAsync(Request());
+
+        response.IsSuccess.Should().BeTrue();
+        response.Metadata.Status.Should().Be(GatewayTransactionStatus.Rejected);
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.PayerRejected);
+        response.Result!.IsEligible.Should().BeFalse();
+        response.Result.CoverageStatus.Should().Be(GatewayCoverageStatus.Unknown);
+        response.Result.RejectionReason.Should().Contain("Invalid/Missing Subscriber/Insured Name");
+    }
+
+    [Fact]
+    public async Task DependentInquiry_SendsDependentsArray_AndNormalizesActiveCoverage()
+    {
+        const string activeDependentJson =
+            "{\"meta\":{\"traceId\":\"trace-dep\",\"applicationMode\":\"test\"}," +
+            "\"planStatus\":[{\"statusCode\":\"1\",\"status\":\"Active Coverage\",\"planDetails\":\"CHOICE PLUS\"}]," +
+            "\"planInformation\":{\"planNumber\":\"P1\",\"groupNumber\":\"186084\"}," +
+            "\"benefitsInformation\":[{\"code\":\"1\",\"name\":\"Health Benefit Plan Coverage\",\"serviceTypeCodes\":[\"30\"]}]," +
+            "\"subscriber\":{\"memberId\":\"UHC202649\",\"firstName\":\"John\",\"lastName\":\"Doe\"}," +
+            "\"dependents\":[{\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"dateOfBirth\":\"19521121\",\"relationToSubscriber\":\"Spouse\"}]}";
+        var handler = new StubHttpMessageHandler().EnqueueJson(HttpStatusCode.OK, activeDependentJson);
+        var gateway = NewGateway(handler);
+
+        var request = Request("60054");
+        request.SubscriberId = "UHC202649";
+        request.SubscriberFirstName = "John";
+        request.SubscriberLastName = "Doe";
+        request.Patient = new GatewayEligibilityPerson
+        {
+            FirstName = "Jane",
+            LastName = "Doe",
+            DateOfBirth = new DateOnly(1952, 11, 21)
+        };
+
+        var response = await gateway.CheckEligibilityAsync(request);
+
+        response.IsSuccess.Should().BeTrue();
+        response.Metadata.Status.Should().Be(GatewayTransactionStatus.Completed);
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.None);
+        response.Result!.CoverageStatus.Should().Be(GatewayCoverageStatus.Active);
+        response.Result.Patient!.FirstName.Should().Be("Jane");
+        handler.RequestBodies[0].Should().Contain("\"dependents\"");
+        handler.RequestBodies[0].Should().Contain("Jane");
+        handler.RequestBodies[0].Should().Contain("19521121");
+        handler.RequestBodies[0].Should().Contain("UHC202649");
+    }
+
+    [Fact]
     public async Task HttpAuthFailure_IsNormalizedToAuthenticationCategory()
     {
         var handler = new StubHttpMessageHandler().EnqueueStatus(HttpStatusCode.Unauthorized);

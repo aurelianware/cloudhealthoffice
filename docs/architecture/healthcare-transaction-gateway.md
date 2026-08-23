@@ -208,6 +208,72 @@ infrastructure assembly — an architecture test fails the build if any of them
 becomes public. Only `StediHealthcareGateway`, `StediGatewayOptions`, and the DI
 extension are public.
 
+### Subscriber vs patient
+
+Canonical eligibility distinguishes the **subscriber** (policyholder / insured)
+from the **patient** (person receiving services). They are the same person for
+self coverage and different people for a dependent inquiry.
+
+```
+Subscriber = insured / policyholder
+Patient    = person receiving services
+```
+
+Existing flat fields (`SubscriberId`, `SubscriberFirstName`, …) remain valid.
+New callers should set `Subscriber` and, when needed, `Patient` as
+`GatewayEligibilityPerson`. `MemberId` on the request is **not** a dependent
+inquiry by itself — populate `Patient` for that.
+
+#### Subscriber inquiry
+
+```
+Provider
+   ↓
+CHO
+   ↓
+Subscriber eligibility request
+   ↓
+Stedi subscriber object (no dependents[])
+   ↓
+271
+```
+
+#### Dependent inquiry
+
+```
+Provider
+   ↓
+CHO
+   ↓
+Subscriber + Patient
+   ↓
+Stedi subscriber + dependents[]
+   ↓
+271
+```
+
+CHO `Patient` maps to Stedi `dependents[]` (at most one). Stedi's request
+schema does not require a relationship on `dependents[]`; CHO only sends
+first name, last name, DOB, and an optional dependent member id. Payer-returned
+`relationToSubscriber` is preserved on the canonical response `Patient`.
+Date of birth is `YYYYMMDD`. The subscriber member id stays on Stedi
+`subscriber.memberId`.
+
+Verified sandbox evidence (Stedi `applicationMode = test`):
+
+```
+Trading partner 87726 (UnitedHealthcare)
+Subscriber John Doe / UHC202649
+Dependent  Jane Doe / DOB 1952-11-21
+Service type 30
+→ HTTP 200, Active Coverage, benefits present
+```
+
+A subscriber-only request for that same UHC fixture returns AAA 73
+(Invalid/Missing Subscriber/Insured Name) — a payer business rejection, not a
+transport failure (`GatewayTransactionStatus.Rejected` /
+`GatewayErrorCategory.PayerRejected`).
+
 ### Architectural boundary
 
 Stedi = network / transport / transaction translation.
