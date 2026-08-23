@@ -30,9 +30,13 @@ public class GatewayVendorNeutralityTests
 
         foreach (var type in gatewayTypes)
         {
+            // Check the full name (namespace + nested type path), not just the
+            // simple name, so a vendor marker cannot slip in via a namespace or
+            // nested type without failing this guard.
+            var identifier = (type.FullName ?? type.Name).ToLowerInvariant();
             foreach (var marker in VendorMarkers)
             {
-                type.Name.ToLowerInvariant().Should().NotContain(marker,
+                identifier.Should().NotContain(marker,
                     $"gateway abstraction type '{type.FullName}' must be vendor-neutral");
             }
         }

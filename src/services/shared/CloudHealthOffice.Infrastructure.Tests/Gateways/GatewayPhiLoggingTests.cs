@@ -34,7 +34,10 @@ public class GatewayPhiLoggingTests
         var allLogs = string.Join("\n", logger.Messages);
         allLogs.Should().NotContain(phiSubscriberId);
         allLogs.Should().NotContain(phiLastName);
-        allLogs.Should().NotContain("1980");
+        // Word-boundary match so a random GUID (ExternalTransactionId) that
+        // happens to contain the digits 1980 does not trip the assertion —
+        // only the year appearing as its own token (e.g. a rendered date) fails.
+        allLogs.Should().NotMatchRegex(@"\b1980\b");
         // Non-PHI metadata is expected to be present.
         allLogs.Should().Contain("tenant-alpha");
         allLogs.Should().Contain("Eligibility270271");

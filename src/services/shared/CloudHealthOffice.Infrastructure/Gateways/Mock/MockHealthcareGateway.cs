@@ -75,12 +75,10 @@ public sealed class MockHealthcareGateway : IEligibilityGateway
 
         var response = Evaluate(request);
 
-        var status = response.CoverageStatus == GatewayCoverageStatus.Active
-            ? GatewayTransactionStatus.Completed
-            : GatewayTransactionStatus.Completed; // A found "inactive" is still a completed transaction.
-
+        // Both an active and an "inactive/not-on-file" result are completed
+        // transactions — the inquiry ran and produced a normalized answer.
         var metadata = BuildMetadata(
-            request, startedAt, status, GatewayErrorCategory.None,
+            request, startedAt, GatewayTransactionStatus.Completed, GatewayErrorCategory.None,
             Stopwatch.GetElapsedTime(timestamp));
 
         Log(metadata);
