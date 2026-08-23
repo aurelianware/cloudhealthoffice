@@ -200,6 +200,28 @@ public class StediEligibilityMapperTests
         result.Benefits.Single().InNetwork.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("Y", true)]
+    [InlineData(null, true)]
+    [InlineData("N", false)]
+    [InlineData("W", false)]
+    [InlineData("U", false)]
+    public void ToCanonical_NetworkIndicator_OnlyYOrOmittedIsInNetwork(string? indicator, bool expectedInNetwork)
+    {
+        var stedi = new StediEligibilityResponseDto
+        {
+            PlanStatus = new() { new StediPlanStatusDto { StatusCode = "1" } },
+            BenefitsInformation = new()
+            {
+                new StediBenefitInformationDto { Code = "B", InPlanNetworkIndicatorCode = indicator, BenefitAmount = "50" }
+            }
+        };
+
+        var result = StediEligibilityMapper.ToCanonicalResponse(stedi);
+
+        result.Benefits.Single().InNetwork.Should().Be(expectedInNetwork);
+    }
+
     [Fact]
     public void ToCanonical_PayerRejection_IsSurfacedAsUnknownWithReason()
     {

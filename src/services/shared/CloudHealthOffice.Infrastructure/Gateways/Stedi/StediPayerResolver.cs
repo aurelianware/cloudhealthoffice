@@ -42,15 +42,19 @@ internal sealed class StediPayerResolver : IStediPayerResolver
         var opts = _options.Value;
 
         // 1. Tenant-scoped map — only ever the requesting tenant's own entries.
+        //    A case-insensitive scan avoids allocating a dictionary per call and
+        //    tolerates config keys that differ only by case.
         if (!string.IsNullOrWhiteSpace(tenantId) &&
             opts.TenantPayerMap.TryGetValue(tenantId, out var tenantMap) &&
             tenantMap is not null)
         {
-            var caseInsensitive = new Dictionary<string, string>(tenantMap, StringComparer.OrdinalIgnoreCase);
-            if (caseInsensitive.TryGetValue(canonicalPayerId, out var tenantMapped) &&
-                !string.IsNullOrWhiteSpace(tenantMapped))
+            foreach (var entry in tenantMap)
             {
-                return tenantMapped;
+                if (string.Equals(entry.Key, canonicalPayerId, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(entry.Value))
+                {
+                    return entry.Value;
+                }
             }
         }
 

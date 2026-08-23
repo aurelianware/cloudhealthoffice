@@ -287,7 +287,7 @@ HealthcareTransactions:
 ```
 
 In Development, eligibility-service exposes a dev-only demo endpoint
-(`POST /api/v1/gateway-demo/eligibility`) that runs a request through the
+(`POST /api/gateway-demo/eligibility`) that runs a request through the
 configured gateway, so the same request can be pointed at Mock or Stedi.
 
 ## Relationship to the existing eligibility adapters (consolidation path)

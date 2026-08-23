@@ -44,6 +44,15 @@ public class StediTenantSafetyTests
     }
 
     [Fact]
+    public void PayerResolver_TenantMapping_IsCaseInsensitive()
+    {
+        var resolver = new StediPayerResolver(Options.Create(OptionsWithMaps()));
+
+        // Tenant map key is "AETNA"; a differently-cased canonical id still resolves.
+        resolver.Resolve("tenant-alpha", "aetna").Should().Be("111");
+    }
+
+    [Fact]
     public void PayerResolver_UnknownPayer_PassesThrough()
     {
         var resolver = new StediPayerResolver(Options.Create(OptionsWithMaps()));

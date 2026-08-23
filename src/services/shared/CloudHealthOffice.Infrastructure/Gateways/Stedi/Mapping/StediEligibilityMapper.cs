@@ -178,10 +178,11 @@ internal static class StediEligibilityMapper
     }
 
     private static bool MapNetwork(string? indicator) =>
-        // Y = in-network, N = out-of-network, W = not-applicable. Default to
-        // in-network only when the payer says so or omits the field.
-        !string.Equals(indicator, "N", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(indicator, "W", StringComparison.OrdinalIgnoreCase);
+        // In-network only when the payer explicitly says so (EB12 = "Y") or
+        // omits the field. Any other value (N out-of-network, W not-applicable,
+        // U unknown, or anything unrecognized) is treated as not in-network.
+        string.IsNullOrWhiteSpace(indicator) ||
+        string.Equals(indicator, "Y", StringComparison.OrdinalIgnoreCase);
 
     private static bool? MapAuthIndicator(string? indicator) => indicator?.ToUpperInvariant() switch
     {
