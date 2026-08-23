@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Tests.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,69 @@ namespace CloudHealthOffice.Infrastructure.Tests.Gateways.Stedi;
 public class StediLiveSmokeTests
 {
     private const string DocumentedTradingPartnerId = "87726";
+
+    /// <summary>
+    /// Stedi's documented claim test mode uses a <b>test API key on a production
+    /// account</b>. Sandbox accounts cannot submit 837s
+    /// (https://www.stedi.com/docs/healthcare/test-claims-workflow).
+    /// This smoke is opt-in via CHO_STEDI_LIVE_CLAIM_TESTS and is skipped in CI.
+    /// </summary>
+    [SkippableFact]
+    public async Task Sandbox_ClaimSubmission_IsDocumentedAsUnavailableOnSandboxAccounts()
+    {
+        Skip.If(
+            !string.Equals(Environment.GetEnvironmentVariable("CHO_STEDI_LIVE_CLAIM_TESTS"), "true",
+                StringComparison.OrdinalIgnoreCase),
+            "CHO_STEDI_LIVE_CLAIM_TESTS is not set. Stedi sandbox accounts cannot submit 837s; " +
+            "live claim tests require a production-account test API key.");
+
+        var eligibility = CreateLiveGateway(out var apiKey, DocumentedTradingPartnerId);
+        Skip.If(string.IsNullOrWhiteSpace(apiKey), "STEDI_API_KEY is not set.");
+
+        var claims = eligibility as IClaimSubmissionGateway;
+        Skip.If(claims is null, "Live Stedi gateway does not implement claim submission.");
+
+        var response = await claims!.SubmitClaimAsync(new GatewayClaimSubmissionRequest
+        {
+            TenantId = "live-smoke",
+            ClaimId = "CLM-LIVE-1",
+            PayerId = DocumentedTradingPartnerId,
+            PlaceOfServiceCode = "11",
+            TotalCharge = 109.20m,
+            BillingProvider = new GatewayClaimProvider
+            {
+                Npi = "1999999984",
+                OrganizationName = "Therapy Associates",
+                EmployerId = "123456789",
+                Address1 = "123 Some St",
+                City = "A City",
+                State = "NY",
+                PostalCode = "123450000"
+            },
+            Subscriber = new GatewayEligibilityPerson
+            {
+                MemberId = "U7777788888",
+                FirstName = "John",
+                LastName = "Anon",
+                DateOfBirth = new DateOnly(2000, 1, 1)
+            },
+            ServiceLines =
+            {
+                new GatewayClaimLine
+                {
+                    LineNumber = 1,
+                    ProcedureCode = "90837",
+                    Units = 1,
+                    ChargeAmount = 109.20m,
+                    ServiceDateFrom = DateOnly.FromDateTime(DateTime.UtcNow)
+                }
+            }
+        });
+
+        response.Should().NotBeNull();
+        response.Metadata.GatewayName.Should().Be("Stedi");
+        response.Metadata.ErrorCategory.Should().NotBe(GatewayErrorCategory.Configuration);
+    }
 
     [SkippableFact]
     public async Task Sandbox_Eligibility_ReturnsNormalizedResponse()

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi.Mapping;
+using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,10 +13,10 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 /// Real external eligibility gateway backed by the Stedi Healthcare real-time
 /// eligibility (270/271) JSON API.
 ///
-/// It advertises only the <see cref="GatewayCapability.Eligibility"/> capability
-/// — claim submission, status, acknowledgment, attachments, and remittance stay
-/// explicitly unsupported even though Stedi offers some of them, because the
-/// capability surface describes what Cloud Health Office currently implements.
+/// It advertises <see cref="GatewayCapability.Eligibility"/> and
+/// <see cref="GatewayCapability.ClaimSubmission"/>. Claim status,
+/// acknowledgment, attachments, and remittance stay explicitly unsupported
+/// even though Stedi offers some of them.
 ///
 /// The gateway is pure transport + translation: it maps the canonical request to
 /// Stedi's JSON, executes the call, and normalizes the payer's response back into
@@ -23,16 +24,18 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 /// accumulator, or adjudication logic — the response is an external payer
 /// eligibility statement, not a Cloud Health Office calculation.
 /// </summary>
-public sealed class StediHealthcareGateway : IEligibilityGateway
+public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway
 {
     /// <summary>The name this gateway registers under and is resolved by.</summary>
     public const string GatewayName = "Stedi";
 
     private static readonly IReadOnlySet<GatewayCapability> SupportedCapabilities =
-        new HashSet<GatewayCapability> { GatewayCapability.Eligibility };
+        new HashSet<GatewayCapability> { GatewayCapability.Eligibility, GatewayCapability.ClaimSubmission };
 
     private readonly StediEligibilityApiClient _apiClient;
+    private readonly StediClaimApiClient? _claimClient;
     private readonly IStediPayerResolver _payerResolver;
+    private readonly IClaimTransmissionStore _transmissions;
     private readonly IOptions<StediGatewayOptions> _options;
     private readonly ILogger<StediHealthcareGateway> _logger;
     private readonly TimeProvider _timeProvider;
@@ -42,10 +45,14 @@ public sealed class StediHealthcareGateway : IEligibilityGateway
         IStediPayerResolver payerResolver,
         IOptions<StediGatewayOptions> options,
         ILogger<StediHealthcareGateway> logger,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        StediClaimApiClient? claimClient = null,
+        IClaimTransmissionStore? transmissions = null)
     {
         _apiClient = apiClient;
+        _claimClient = claimClient;
         _payerResolver = payerResolver;
+        _transmissions = transmissions ?? new InMemoryClaimTransmissionStore();
         _options = options;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -135,6 +142,212 @@ public sealed class StediHealthcareGateway : IEligibilityGateway
 
         Log(metadata);
         return GatewayResponse<GatewayEligibilityResponse>.Success(canonical, metadata);
+    }
+
+    public async Task<GatewayResponse<GatewayClaimSubmissionResult>> SubmitClaimAsync(
+        GatewayClaimSubmissionRequest request, CancellationToken ct = default)
+    {
+        var startedAt = _timeProvider.GetUtcNow();
+        var stopwatch = Stopwatch.GetTimestamp();
+        var key = request.ResolveIdempotencyKey();
+
+        var configErrors = _options.Value.Validate();
+        if (configErrors.Count > 0)
+        {
+            return ClaimFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Configuration,
+                "Stedi gateway is not configured correctly: " + string.Join(" ", configErrors));
+        }
+
+        if (_claimClient is null)
+        {
+            return ClaimFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Configuration,
+                "Stedi claim submission client is not registered.");
+        }
+
+        var validation = GatewayClaimSubmissionValidator.Validate(request);
+        if (validation is not null)
+        {
+            var category = validation.Contains("TypeOfBill", StringComparison.Ordinal)
+                || validation.Contains("revenue code", StringComparison.OrdinalIgnoreCase)
+                ? GatewayErrorCategory.ClaimTypeNotReady
+                : GatewayErrorCategory.Validation;
+            return ClaimFail(request, startedAt, stopwatch, 0, category, validation);
+        }
+
+        var existing = await _transmissions.GetByIdempotencyKeyAsync(request.TenantId, key, ct)
+            .ConfigureAwait(false);
+        if (existing is not null &&
+            existing.Status is GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway
+                or GatewayClaimTransmissionStatus.Transmitted)
+        {
+            RecordClaimMetric(request, existing.Status, GatewayErrorCategory.None, GetElapsed(stopwatch));
+            var replayMeta = ClaimMetadata(request, startedAt, GetElapsed(stopwatch),
+                GatewayTransactionStatus.Completed, GatewayErrorCategory.None, existing.RetryCount,
+                existing.ExternalTransactionId);
+            Log(replayMeta);
+            return GatewayResponse<GatewayClaimSubmissionResult>.Success(
+                new GatewayClaimSubmissionResult
+                {
+                    ClaimId = existing.ClaimId,
+                    ClaimVersion = existing.ClaimVersion,
+                    ClaimType = existing.ClaimType,
+                    TransmissionStatus = existing.Status,
+                    TransmissionId = existing.TransmissionId,
+                    SubmissionId = existing.SubmissionId,
+                    ExternalTransactionId = existing.ExternalTransactionId,
+                    IdempotencyKey = existing.IdempotencyKey,
+                    AcceptedForProcessing = true,
+                    ReplayOfExistingTransmission = true
+                },
+                replayMeta);
+        }
+
+        var resolution = await _payerResolver
+            .ResolveAsync(request.TenantId, request.PayerId, request.TransactionType(), ct)
+            .ConfigureAwait(false);
+        if (resolution.Status != PayerResolutionStatus.Found ||
+            string.IsNullOrWhiteSpace(resolution.ExternalIdentifierValue))
+        {
+            return ClaimFail(request, startedAt, stopwatch, 0,
+                MapResolution(resolution.Status),
+                resolution.Message ?? "Payer could not be resolved for this claim.");
+        }
+
+        var record = existing ?? new ClaimTransmissionRecord
+        {
+            TenantId = request.TenantId,
+            ClaimId = request.ClaimId,
+            ClaimVersion = request.ClaimVersion,
+            GatewayName = GatewayName,
+            ClaimType = request.ClaimType,
+            TransactionType = request.TransactionType(),
+            IdempotencyKey = key,
+            CorrelationId = request.CorrelationId,
+            SubmittedAtUtc = startedAt
+        };
+        record.Status = GatewayClaimTransmissionStatus.Transmitting;
+        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+
+        var usage = _options.Value.IsProduction ? "P" : "T";
+        var stediRequest = StediClaimMapper.ToStediRequest(request, resolution.ExternalIdentifierValue, usage);
+
+        StediClaimApiResult apiResult;
+        try
+        {
+            apiResult = await _claimClient.SubmitAsync(request.ClaimType, stediRequest, key, ct)
+                .ConfigureAwait(false);
+        }
+        catch (StediApiException ex)
+        {
+            record.Status = GatewayClaimTransmissionStatus.Failed;
+            record.CompletedAtUtc = _timeProvider.GetUtcNow();
+            record.RetryCount = ex.RetryCount;
+            record.ErrorCategory = ex.Category;
+            record.ErrorMessage = ex.Message;
+            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+            return ClaimFail(request, startedAt, stopwatch, ex.RetryCount, ex.Category, ex.Message);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error in Stedi claim submission for tenant {TenantId} claimType={ClaimType}",
+                SanitizeForLog(request.TenantId), request.ClaimType);
+            record.Status = GatewayClaimTransmissionStatus.Failed;
+            record.ErrorCategory = GatewayErrorCategory.Internal;
+            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+            return ClaimFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Internal,
+                "Unexpected error executing the Stedi claim submission.");
+        }
+
+        var result = StediClaimMapper.ToCanonical(
+            request, apiResult.Response, record.TransmissionId, key, replay: false);
+        record.Status = result.TransmissionStatus;
+        record.SubmissionId = result.SubmissionId;
+        record.ExternalTransactionId = result.ExternalTransactionId ?? apiResult.ExternalTransactionId;
+        record.CompletedAtUtc = _timeProvider.GetUtcNow();
+        record.RetryCount = apiResult.RetryCount;
+        record.ErrorCategory = result.AcceptedForProcessing
+            ? GatewayErrorCategory.None
+            : GatewayErrorCategory.PayerRejected;
+        if (!result.AcceptedForProcessing)
+        {
+            record.ErrorMessage = result.Errors.FirstOrDefault();
+        }
+
+        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+
+        var txStatus = result.AcceptedForProcessing
+            ? GatewayTransactionStatus.Completed
+            : GatewayTransactionStatus.Rejected;
+        var metadata = ClaimMetadata(
+            request, startedAt, GetElapsed(stopwatch), txStatus, record.ErrorCategory,
+            apiResult.RetryCount, record.ExternalTransactionId);
+        Log(metadata);
+        RecordClaimMetric(request, record.Status, record.ErrorCategory, metadata.Latency);
+        return GatewayResponse<GatewayClaimSubmissionResult>.Success(result, metadata);
+    }
+
+    private GatewayResponse<GatewayClaimSubmissionResult> ClaimFail(
+        GatewayClaimSubmissionRequest request,
+        DateTimeOffset startedAt,
+        long stopwatchStart,
+        int retryCount,
+        GatewayErrorCategory category,
+        string message)
+    {
+        var status = category switch
+        {
+            GatewayErrorCategory.Timeout => GatewayTransactionStatus.TimedOut,
+            GatewayErrorCategory.PayerRejected => GatewayTransactionStatus.Rejected,
+            _ => GatewayTransactionStatus.Failed
+        };
+        var metadata = ClaimMetadata(
+            request, startedAt, GetElapsed(stopwatchStart), status, category, retryCount, null);
+        Log(metadata);
+        RecordClaimMetric(request, GatewayClaimTransmissionStatus.Failed, category, metadata.Latency);
+        return GatewayResponse<GatewayClaimSubmissionResult>.Failure(message, metadata);
+    }
+
+    private GatewayTransactionMetadata ClaimMetadata(
+        GatewayClaimSubmissionRequest request,
+        DateTimeOffset startedAt,
+        TimeSpan latency,
+        GatewayTransactionStatus status,
+        GatewayErrorCategory category,
+        int retryCount,
+        string? externalTransactionId) =>
+        new()
+        {
+            GatewayName = GatewayName,
+            TransactionType = request.TransactionType(),
+            SubmittedAtUtc = startedAt,
+            CompletedAtUtc = startedAt + latency,
+            Status = status,
+            ExternalTransactionId = externalTransactionId,
+            CorrelationId = request.CorrelationId,
+            TenantId = request.TenantId,
+            Latency = latency,
+            RetryCount = retryCount,
+            ErrorCategory = category
+        };
+
+    private static void RecordClaimMetric(
+        GatewayClaimSubmissionRequest request,
+        GatewayClaimTransmissionStatus status,
+        GatewayErrorCategory category,
+        TimeSpan latency)
+    {
+        ChoMetrics.ClaimSubmissions.Add(1,
+            new KeyValuePair<string, object?>("cho.gateway", GatewayName),
+            new KeyValuePair<string, object?>("cho.claim_type", request.ClaimType.ToString()),
+            new KeyValuePair<string, object?>("cho.status", status.ToString()),
+            new KeyValuePair<string, object?>("cho.error_category", category.ToString()));
+        ChoMetrics.ClaimSubmissionDuration.Record(latency.TotalSeconds,
+            new KeyValuePair<string, object?>("cho.gateway", GatewayName),
+            new KeyValuePair<string, object?>("cho.claim_type", request.ClaimType.ToString()));
     }
 
     private GatewayResponse<GatewayEligibilityResponse> Fail(

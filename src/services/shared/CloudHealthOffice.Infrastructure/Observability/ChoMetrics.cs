@@ -358,6 +358,27 @@ public static class ChoMetrics
             unit: "s",
             description: "Inbound payer-side eligibility inquiry duration in seconds");
 
+    /// <summary>
+    /// Counter tracking outbound claim transmissions.
+    /// Dimensions: cho.gateway, cho.claim_type, cho.status, cho.error_category.
+    /// Never labeled with member/payer/provider identity.
+    /// </summary>
+    public static readonly Counter<long> ClaimSubmissions =
+        Meter.CreateCounter<long>(
+            "cho.claim_submission.transmissions.total",
+            unit: "{claim}",
+            description: "Outbound claim transmissions by gateway, claim type, and status");
+
+    /// <summary>
+    /// Histogram tracking outbound claim submission latency (seconds).
+    /// Dimensions: cho.gateway, cho.claim_type.
+    /// </summary>
+    public static readonly Histogram<double> ClaimSubmissionDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_submission.duration",
+            unit: "s",
+            description: "Outbound claim submission duration in seconds");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

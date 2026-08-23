@@ -123,6 +123,21 @@ internal static class SyntheticPayerSeed
                 {
                     Transaction = HealthcareTransactionType.Eligibility270271,
                     Support = eligibility
+                },
+                new PayerTransactionCapability
+                {
+                    Transaction = HealthcareTransactionType.ProfessionalClaim837P,
+                    Support = eligibility
+                },
+                new PayerTransactionCapability
+                {
+                    Transaction = HealthcareTransactionType.InstitutionalClaim837I,
+                    Support = eligibility
+                },
+                new PayerTransactionCapability
+                {
+                    Transaction = HealthcareTransactionType.DentalClaim837D,
+                    Support = eligibility
                 }
             },
             EnrollmentRequirements = enrollmentRequired
@@ -131,6 +146,11 @@ internal static class SyntheticPayerSeed
                     new()
                     {
                         Transaction = HealthcareTransactionType.Eligibility270271,
+                        Required = true
+                    },
+                    new()
+                    {
+                        Transaction = HealthcareTransactionType.ProfessionalClaim837P,
                         Required = true
                     }
                 }

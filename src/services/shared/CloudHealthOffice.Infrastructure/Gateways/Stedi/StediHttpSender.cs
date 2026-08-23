@@ -48,7 +48,8 @@ internal sealed class StediHttpSender
         string path,
         Func<HttpContent?>? contentFactory,
         string operation,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string>? extraHeaders = null)
     {
         var opts = _options.Value;
         var maxAttempts = Math.Max(1, opts.MaxRetries + 1);
@@ -59,7 +60,7 @@ internal sealed class StediHttpSender
             try
             {
                 return await AttemptAsync(
-                    httpClientName, method, path, contentFactory, opts.ApiKey, retryCount, ct)
+                    httpClientName, method, path, contentFactory, opts.ApiKey, retryCount, ct, extraHeaders)
                     .ConfigureAwait(false);
             }
             catch (StediApiException ex)
@@ -92,7 +93,8 @@ internal sealed class StediHttpSender
         Func<HttpContent?>? contentFactory,
         string? apiKey,
         int retryCount,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string>? extraHeaders)
     {
         var client = _httpClientFactory.CreateClient(httpClientName);
 
@@ -105,6 +107,13 @@ internal sealed class StediHttpSender
 
         // Stedi authenticates with the raw API key in the Authorization header.
         httpRequest.Headers.TryAddWithoutValidation("Authorization", apiKey);
+        if (extraHeaders is not null)
+        {
+            foreach (var header in extraHeaders)
+            {
+                httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+        }
 
         HttpResponseMessage httpResponse;
         try

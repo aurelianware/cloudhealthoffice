@@ -34,6 +34,7 @@ public static class HealthcareGatewayServiceCollectionExtensions
             .Bind(configuration.GetSection(HealthcareTransactionOptions.SectionName));
 
         services.TryAddSingleton<IHealthcareGatewayResolver, HealthcareGatewayResolver>();
+        services.TryAddSingleton<IClaimTransmissionStore, InMemoryClaimTransmissionStore>();
 
         // Canonical payer identity is shared by every gateway implementation.
         services.AddChoPayerReference(configuration);

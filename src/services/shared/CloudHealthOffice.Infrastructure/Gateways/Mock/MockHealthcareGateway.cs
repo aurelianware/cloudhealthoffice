@@ -20,35 +20,41 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Mock;
 /// is logged. Subscriber identifiers, names, and dates of birth are never
 /// written to logs.
 /// </summary>
-public sealed class MockHealthcareGateway : IEligibilityGateway
+public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway
 {
     /// <summary>The name this gateway registers under and is resolved by.</summary>
     public const string GatewayName = "Mock";
 
     private static readonly IReadOnlySet<GatewayCapability> SupportedCapabilities =
-        new HashSet<GatewayCapability> { GatewayCapability.Eligibility };
+        new HashSet<GatewayCapability> { GatewayCapability.Eligibility, GatewayCapability.ClaimSubmission };
 
     private readonly ILogger<MockHealthcareGateway> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly IClaimTransmissionStore _transmissions;
 
     // Tenant-scoped roster: tenantId -> (subscriberId -> seeded member).
     // A member is only visible within the tenant it was seeded under, which is
     // what enforces tenant isolation for the mock.
     private readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, MockMember>> _roster;
 
-    public MockHealthcareGateway(ILogger<MockHealthcareGateway> logger, TimeProvider? timeProvider = null)
-        : this(logger, DefaultRoster(), timeProvider)
+    public MockHealthcareGateway(
+        ILogger<MockHealthcareGateway> logger,
+        TimeProvider? timeProvider = null,
+        IClaimTransmissionStore? transmissions = null)
+        : this(logger, DefaultRoster(), timeProvider, transmissions)
     {
     }
 
     internal MockHealthcareGateway(
         ILogger<MockHealthcareGateway> logger,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, MockMember>> roster,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IClaimTransmissionStore? transmissions = null)
     {
         _logger = logger;
         _roster = roster;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _transmissions = transmissions ?? new InMemoryClaimTransmissionStore();
     }
 
     public string Name => GatewayName;
@@ -86,6 +92,114 @@ public sealed class MockHealthcareGateway : IEligibilityGateway
 
         return Task.FromResult(GatewayResponse<GatewayEligibilityResponse>.Success(response, metadata));
     }
+
+    public async Task<GatewayResponse<GatewayClaimSubmissionResult>> SubmitClaimAsync(
+        GatewayClaimSubmissionRequest request, CancellationToken ct = default)
+    {
+        var startedAt = _timeProvider.GetUtcNow();
+        var timestamp = Stopwatch.GetTimestamp();
+        var key = request.ResolveIdempotencyKey();
+
+        var validation = GatewayClaimSubmissionValidator.Validate(request);
+        if (validation is not null)
+        {
+            return ClaimFail(request, startedAt, timestamp, GatewayErrorCategory.Validation, validation);
+        }
+
+        var existing = await _transmissions.GetByIdempotencyKeyAsync(request.TenantId, key, ct)
+            .ConfigureAwait(false);
+        if (existing is not null &&
+            existing.Status is GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway
+                or GatewayClaimTransmissionStatus.Transmitted)
+        {
+            var replay = ToResult(existing, replay: true);
+            var meta = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
+                GatewayErrorCategory.None, Stopwatch.GetElapsedTime(timestamp), existing);
+            Log(meta);
+            return GatewayResponse<GatewayClaimSubmissionResult>.Success(replay, meta);
+        }
+
+        var record = existing ?? new ClaimTransmissionRecord
+        {
+            TenantId = request.TenantId,
+            ClaimId = request.ClaimId,
+            ClaimVersion = request.ClaimVersion,
+            GatewayName = GatewayName,
+            ClaimType = request.ClaimType,
+            TransactionType = request.TransactionType(),
+            IdempotencyKey = key,
+            CorrelationId = request.CorrelationId,
+            SubmittedAtUtc = startedAt
+        };
+        record.Status = GatewayClaimTransmissionStatus.Transmitting;
+        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+
+        var completed = _timeProvider.GetUtcNow();
+        record.Status = GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway;
+        record.CompletedAtUtc = completed;
+        record.SubmissionId = $"mock-{record.TransmissionId}";
+        record.ExternalTransactionId = record.SubmissionId;
+        record.ErrorCategory = GatewayErrorCategory.None;
+        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+
+        var metadata = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
+            GatewayErrorCategory.None, Stopwatch.GetElapsedTime(timestamp), record);
+        Log(metadata);
+        return GatewayResponse<GatewayClaimSubmissionResult>.Success(ToResult(record, replay: false), metadata);
+    }
+
+    private GatewayResponse<GatewayClaimSubmissionResult> ClaimFail(
+        GatewayClaimSubmissionRequest request,
+        DateTimeOffset startedAt,
+        long timestamp,
+        GatewayErrorCategory category,
+        string message)
+    {
+        var metadata = ClaimMetadata(
+            request, startedAt, GatewayTransactionStatus.Failed, category,
+            Stopwatch.GetElapsedTime(timestamp), record: null);
+        Log(metadata);
+        return GatewayResponse<GatewayClaimSubmissionResult>.Failure(message, metadata);
+    }
+
+    private static GatewayClaimSubmissionResult ToResult(ClaimTransmissionRecord record, bool replay) =>
+        new()
+        {
+            ClaimId = record.ClaimId,
+            ClaimVersion = record.ClaimVersion,
+            ClaimType = record.ClaimType,
+            TransmissionStatus = record.Status,
+            TransmissionId = record.TransmissionId,
+            SubmissionId = record.SubmissionId,
+            ExternalTransactionId = record.ExternalTransactionId,
+            IdempotencyKey = record.IdempotencyKey,
+            AcceptedForProcessing = record.Status is
+                GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway or
+                GatewayClaimTransmissionStatus.Transmitted,
+            ReplayOfExistingTransmission = replay
+        };
+
+    private GatewayTransactionMetadata ClaimMetadata(
+        GatewayClaimSubmissionRequest request,
+        DateTimeOffset startedAt,
+        GatewayTransactionStatus status,
+        GatewayErrorCategory errorCategory,
+        TimeSpan latency,
+        ClaimTransmissionRecord? record) =>
+        new()
+        {
+            GatewayName = GatewayName,
+            TransactionType = request.TransactionType(),
+            SubmittedAtUtc = startedAt,
+            CompletedAtUtc = startedAt + latency,
+            Status = status,
+            ExternalTransactionId = record?.ExternalTransactionId,
+            CorrelationId = request.CorrelationId,
+            TenantId = request.TenantId,
+            Latency = latency,
+            RetryCount = record?.RetryCount ?? 0,
+            ErrorCategory = errorCategory
+        };
 
     private GatewayEligibilityResponse Evaluate(GatewayEligibilityRequest request)
     {

@@ -57,6 +57,17 @@ public sealed class StediGatewayOptions
     /// </summary>
     public string EligibilityPath { get; set; } = "/2024-04-01/change/medicalnetwork/eligibility/v3";
 
+    /// <summary>837P JSON submission path (API version 2024-04-01 / v3).</summary>
+    public string ProfessionalClaimPath { get; set; } =
+        "/2024-04-01/change/medicalnetwork/professionalclaims/v3/submission";
+
+    /// <summary>837I JSON submission path (API version 2024-04-01 / v1).</summary>
+    public string InstitutionalClaimPath { get; set; } =
+        "/2024-04-01/change/medicalnetwork/institutionalclaims/v1/submission";
+
+    /// <summary>837D JSON submission path (API version 2024-04-01).</summary>
+    public string DentalClaimPath { get; set; } = "/2024-04-01/dental-claims/submission";
+
     /// <summary>
     /// Base URL of Stedi's Payers API. Defaults to the host documented for
     /// <c>GET /2024-04-01/payers</c>. Separate from <see cref="BaseUrl"/>
