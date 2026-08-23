@@ -17,6 +17,21 @@ public class PayerReferenceServiceTests
     }
 
     [Fact]
+    public async Task GetById_ReturnsIsolatedCopy_SoMutationsDoNotCorruptTheStore()
+    {
+        var store = PayerTestHarness.CreateStore();
+
+        var first = await store.GetByIdAsync(SyntheticPayerSeed.EligibleId, CancellationToken.None);
+        first.Should().NotBeNull();
+        first!.Name = "MUTATED";
+        first.Aliases.Add("MUTATED-ALIAS");
+
+        var second = await store.GetByIdAsync(SyntheticPayerSeed.EligibleId, CancellationToken.None);
+        second!.Name.Should().Be("Synthetic Eligible Payer");
+        second.Aliases.Should().NotContain("MUTATED-ALIAS");
+    }
+
+    [Fact]
     public async Task Search_ByAlias_ReturnsMatchesWithoutPickingAWinner()
     {
         var service = PayerTestHarness.CreateService();

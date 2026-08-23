@@ -11,7 +11,9 @@ namespace CloudHealthOffice.Infrastructure.ReferenceData.Payers.Stedi;
 /// <summary>
 /// Stedi List Payers JSON client. Endpoint:
 /// <c>GET https://payers.us.stedi.com/2024-04-01/payers</c> (version
-/// <c>2024-04-01</c>), paginated with <c>pageSize</c> / <c>nextPageToken</c>.
+/// <c>2024-04-01</c>). Pagination request query parameters are
+/// <c>pageSize</c> and <c>pageToken</c>; the response field
+/// <c>nextPageToken</c> is sent back as the next request's <c>pageToken</c>.
 /// Authentication reuses the shared Stedi HTTP sender.
 /// </summary>
 internal sealed class StediPayerDirectoryClient

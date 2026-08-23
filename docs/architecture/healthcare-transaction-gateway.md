@@ -288,8 +288,9 @@ GET https://payers.us.stedi.com/2024-04-01/payers?pageSize=100
 Authorization: <api-key>
 ```
 
-API version: **2024-04-01**. Pagination uses `pageSize` (minimum 10) and
-`nextPageToken`. The mapper copies only fields Stedi documents (stediId,
+API version: **2024-04-01**. Pagination request query parameters are `pageSize`
+(minimum 10) and `pageToken`. The response field `nextPageToken` is supplied as
+the next request's `pageToken`. The mapper copies only fields Stedi documents (stediId,
 displayName, primaryPayerId, aliases, names, transactionSupport, enrollment
 process metadata, coverage types, etc.). Stedi transport DTOs stay internal.
 

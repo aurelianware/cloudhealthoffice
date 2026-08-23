@@ -49,7 +49,6 @@ internal sealed class StediPayerDirectorySynchronizer : IPayerDirectorySynchroni
         try
         {
             var dtos = await _client.ListAllAsync(ct).ConfigureAwait(false);
-            var existingById = new Dictionary<string, PayerReference>(StringComparer.OrdinalIgnoreCase);
             var mapped = new List<PayerReference>();
             var malformed = 0;
 
@@ -65,26 +64,15 @@ internal sealed class StediPayerDirectorySynchronizer : IPayerDirectorySynchroni
                 mapped.Add(canonical);
             }
 
-            var added = 0;
-            var updated = 0;
-            foreach (var payer in mapped)
-            {
-                var previous = await _store.GetByIdAsync(payer.Id, ct).ConfigureAwait(false);
-                if (previous is null)
-                {
-                    added++;
-                }
-                else
-                {
-                    updated++;
-                }
-
-                existingById[payer.Id] = payer;
-            }
+            var presentIds = mapped.Select(p => p.Id).ToList();
+            var existing = await _store.GetByIdsAsync(presentIds, ct).ConfigureAwait(false);
+            var existingIds = new HashSet<string>(existing.Select(p => p.Id), StringComparer.OrdinalIgnoreCase);
+            var added = mapped.Count(p => !existingIds.Contains(p.Id));
+            var updated = mapped.Count - added;
 
             await _store.UpsertManyAsync(mapped, ct).ConfigureAwait(false);
             var disabled = await _store
-                .DisableMissingFromSourceAsync(source, existingById.Keys.ToList(), started, ct)
+                .DisableMissingFromSourceAsync(source, presentIds, started, ct)
                 .ConfigureAwait(false);
 
             var completed = _timeProvider.GetUtcNow();

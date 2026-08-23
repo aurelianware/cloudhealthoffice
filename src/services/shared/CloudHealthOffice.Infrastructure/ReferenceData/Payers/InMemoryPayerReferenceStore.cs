@@ -21,7 +21,7 @@ internal sealed class InMemoryPayerReferenceStore : IPayerReferenceStore
     public Task<PayerReference?> GetByIdAsync(string id, CancellationToken ct)
     {
         _payers.TryGetValue(id, out var payer);
-        return Task.FromResult(payer);
+        return Task.FromResult(payer is null ? null : Clone(payer));
     }
 
     public Task<IReadOnlyList<PayerReference>> GetByIdsAsync(IEnumerable<string> ids, CancellationToken ct)
