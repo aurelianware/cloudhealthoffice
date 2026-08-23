@@ -9,6 +9,12 @@ This is the **foundation** layer. The mock gateway, the Stedi eligibility
 (270/271) adapter, and the canonical payer reference service are implemented
 today. Additional transactions (837, 276/277, 275, 835) stay contract-only.
 
+Payer-side inbound eligibility (CHO as the 271 information source) is a
+**separate** capability: [`payer-eligibility-responder.md`](payer-eligibility-responder.md).
+It uses `IEligibilityResponder`, not `IEligibilityGateway`. Stedi inbound 270
+routing is adapter-ready / pending Stedi payer-side connectivity — it is not
+implemented.
+
 ## Where the boundary sits
 
 ```
@@ -21,6 +27,21 @@ today. Additional transactions (837, 276/277, 275, 835) stay contract-only.
             Stedi          Availity         Direct
                                         (payer / X12 / FHIR)
 ```
+
+Outbound (client) mode — implemented, including Stedi:
+
+```
+CHO  →  Stedi  →  External Payer
+```
+
+Inbound (payer) mode — CHO responder implemented; Stedi routing pending:
+
+```
+Provider  →  Network / Clearinghouse  →  CHO
+```
+
+See [`payer-eligibility-responder.md`](payer-eligibility-responder.md) for the
+inbound pipeline, the Stedi capability finding, and the planned adapter seam.
 
 **Cloud Health Office owns the business.** Eligibility and benefit
 interpretation, member coverage, provider / network logic, claims
