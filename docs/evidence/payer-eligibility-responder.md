@@ -4,7 +4,7 @@ Date: 2026-08-23 UTC
 
 Branch: `feat/payer-eligibility-responder`
 
-Commit: `20bbc77f`
+Commit: `7dc4fcc8`
 
 Stedi inbound test: **not executed**. Stedi does not currently document a
 public inbound 270 payer-hosting API. This record covers the vendor-neutral
