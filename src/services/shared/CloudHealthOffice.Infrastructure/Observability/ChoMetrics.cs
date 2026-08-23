@@ -337,6 +337,27 @@ public static class ChoMetrics
             unit: "{resolution}",
             description: "Canonical payer resolution outcomes");
 
+    /// <summary>
+    /// Counter tracking inbound payer-side eligibility inquiries.
+    /// Dimensions: cho.adapter, cho.business_status, cho.coverage_status,
+    /// cho.transport_status. Never labeled with member identity.
+    /// </summary>
+    public static readonly Counter<long> PayerEligibilityInquiries =
+        Meter.CreateCounter<long>(
+            "cho.payer_eligibility.inquiries.total",
+            unit: "{inquiry}",
+            description: "Inbound payer-side eligibility inquiries by business and coverage outcome");
+
+    /// <summary>
+    /// Histogram tracking inbound payer-side eligibility latency (seconds).
+    /// Dimensions: cho.adapter, cho.business_status.
+    /// </summary>
+    public static readonly Histogram<double> PayerEligibilityDuration =
+        Meter.CreateHistogram<double>(
+            "cho.payer_eligibility.duration",
+            unit: "s",
+            description: "Inbound payer-side eligibility inquiry duration in seconds");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly
