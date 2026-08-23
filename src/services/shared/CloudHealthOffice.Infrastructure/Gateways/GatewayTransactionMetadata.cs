@@ -1,0 +1,107 @@
+namespace CloudHealthOffice.Infrastructure.Gateways;
+
+/// <summary>
+/// Non-PHI metadata describing a single transaction routed through a
+/// healthcare transaction gateway.
+///
+/// This type is deliberately free of PHI: it carries routing, timing, and
+/// outcome information suitable for structured logs, metrics, and audit
+/// records. Raw 270/271 (or any X12 / vendor JSON) request and response
+/// payloads must <b>never</b> be placed on this object or written to normal
+/// application logs.
+/// </summary>
+public sealed class GatewayTransactionMetadata
+{
+    /// <summary>Logical gateway/provider name (e.g. "Mock", "Stedi", "Availity").</summary>
+    public string GatewayName { get; init; } = string.Empty;
+
+    /// <summary>The HIPAA/X12 transaction type this metadata describes.</summary>
+    public HealthcareTransactionType TransactionType { get; init; }
+
+    /// <summary>UTC timestamp when the transaction was submitted to the gateway.</summary>
+    public DateTimeOffset SubmittedAtUtc { get; init; }
+
+    /// <summary>UTC timestamp when the gateway completed the transaction, if it did.</summary>
+    public DateTimeOffset? CompletedAtUtc { get; init; }
+
+    /// <summary>Terminal or in-flight status of the transaction.</summary>
+    public GatewayTransactionStatus Status { get; init; } = GatewayTransactionStatus.Pending;
+
+    /// <summary>
+    /// Vendor-assigned transaction identifier (e.g. a Stedi transaction id),
+    /// useful for correlating with the external system. Non-PHI.
+    /// </summary>
+    public string? ExternalTransactionId { get; init; }
+
+    /// <summary>
+    /// Cloud Health Office correlation id that ties this transaction to the
+    /// originating request/trace across services.
+    /// </summary>
+    public string? CorrelationId { get; init; }
+
+    /// <summary>Tenant the transaction was executed on behalf of.</summary>
+    public string TenantId { get; init; } = string.Empty;
+
+    /// <summary>Wall-clock time the gateway spent on the transaction.</summary>
+    public TimeSpan Latency { get; init; }
+
+    /// <summary>Number of retries performed before the recorded outcome.</summary>
+    public int RetryCount { get; init; }
+
+    /// <summary>Category of failure when <see cref="Status"/> is not successful.</summary>
+    public GatewayErrorCategory ErrorCategory { get; init; } = GatewayErrorCategory.None;
+}
+
+/// <summary>Lifecycle status of a gateway transaction.</summary>
+public enum GatewayTransactionStatus
+{
+    /// <summary>Created but not yet submitted.</summary>
+    Pending,
+
+    /// <summary>Submitted to the gateway; awaiting a response.</summary>
+    Submitted,
+
+    /// <summary>Completed successfully with a usable response.</summary>
+    Completed,
+
+    /// <summary>The payer/clearinghouse rejected the transaction (business rejection).</summary>
+    Rejected,
+
+    /// <summary>The transaction failed before a business response was obtained.</summary>
+    Failed,
+
+    /// <summary>The transaction did not complete within the allotted time.</summary>
+    TimedOut
+}
+
+/// <summary>
+/// Coarse error taxonomy for non-successful gateway transactions. Categories
+/// are chosen to be actionable (retry vs. fix request vs. escalate) without
+/// carrying vendor-specific error codes into the domain.
+/// </summary>
+public enum GatewayErrorCategory
+{
+    /// <summary>No error — the transaction succeeded.</summary>
+    None,
+
+    /// <summary>The request failed local/gateway validation before transport.</summary>
+    Validation,
+
+    /// <summary>Authentication or authorization against the gateway failed.</summary>
+    Authentication,
+
+    /// <summary>Network/connectivity failure reaching the gateway or payer.</summary>
+    Connectivity,
+
+    /// <summary>The transaction exceeded its time budget.</summary>
+    Timeout,
+
+    /// <summary>The payer/clearinghouse returned a business-level rejection.</summary>
+    PayerRejected,
+
+    /// <summary>The gateway does not support the requested transaction.</summary>
+    NotSupported,
+
+    /// <summary>An unexpected internal error occurred.</summary>
+    Internal
+}
