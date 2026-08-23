@@ -57,17 +57,25 @@ public class GatewayVendorNeutralityTests
     {
         // Every property on the canonical request/response resolves to a BCL or
         // CHO gateway type — never a vendor DTO namespace.
-        var models = new[] { typeof(GatewayEligibilityRequest), typeof(GatewayEligibilityResponse) };
+        var models = new[]
+        {
+            typeof(GatewayEligibilityRequest),
+            typeof(GatewayEligibilityResponse),
+            typeof(GatewayEligibilityPerson)
+        };
 
         foreach (var model in models)
         {
             foreach (var prop in model.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
                 var ns = (prop.PropertyType.Namespace ?? string.Empty).ToLowerInvariant();
+                var propName = prop.Name.ToLowerInvariant();
                 foreach (var marker in VendorMarkers)
                 {
                     ns.Should().NotContain(marker,
                         $"property '{model.Name}.{prop.Name}' must not expose a vendor type");
+                    propName.Should().NotContain(marker,
+                        $"property '{model.Name}.{prop.Name}' must not have a vendor-specific name");
                 }
             }
         }

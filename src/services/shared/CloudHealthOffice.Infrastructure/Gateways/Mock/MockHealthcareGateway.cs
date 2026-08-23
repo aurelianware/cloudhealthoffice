@@ -63,7 +63,8 @@ public sealed class MockHealthcareGateway : IEligibilityGateway
 
         // Validation — reject missing tenant/subscriber explicitly. Tenant is
         // mandatory so a caller can never accidentally query across tenants.
-        if (string.IsNullOrWhiteSpace(request.TenantId) || string.IsNullOrWhiteSpace(request.SubscriberId))
+        if (string.IsNullOrWhiteSpace(request.TenantId) ||
+            string.IsNullOrWhiteSpace(request.ResolveSubscriberMemberId()))
         {
             var invalid = BuildMetadata(
                 request, startedAt, GatewayTransactionStatus.Failed,
@@ -90,7 +91,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway
     {
         // Only members seeded under the request's tenant are visible.
         if (_roster.TryGetValue(request.TenantId, out var members) &&
-            members.TryGetValue(request.SubscriberId, out var member))
+            members.TryGetValue(request.ResolveSubscriberMemberId(), out var member))
         {
             return new GatewayEligibilityResponse
             {

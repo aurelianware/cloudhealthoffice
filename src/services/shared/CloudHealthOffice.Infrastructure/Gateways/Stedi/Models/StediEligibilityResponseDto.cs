@@ -39,6 +39,31 @@ internal sealed class StediEligibilityResponseDto
 
     [JsonPropertyName("errors")]
     public List<StediErrorDto>? Errors { get; set; }
+
+    [JsonPropertyName("subscriber")]
+    public StediEligibilityPartyDto? Subscriber { get; set; }
+
+    [JsonPropertyName("dependents")]
+    public List<StediEligibilityPartyDto>? Dependents { get; set; }
+}
+
+/// <summary>Subscriber or dependent identity as returned on a 271 JSON body.</summary>
+internal sealed class StediEligibilityPartyDto
+{
+    [JsonPropertyName("memberId")]
+    public string? MemberId { get; set; }
+
+    [JsonPropertyName("firstName")]
+    public string? FirstName { get; set; }
+
+    [JsonPropertyName("lastName")]
+    public string? LastName { get; set; }
+
+    [JsonPropertyName("dateOfBirth")]
+    public string? DateOfBirth { get; set; }
+
+    [JsonPropertyName("relationToSubscriber")]
+    public string? RelationToSubscriber { get; set; }
 }
 
 internal sealed class StediMetaDto

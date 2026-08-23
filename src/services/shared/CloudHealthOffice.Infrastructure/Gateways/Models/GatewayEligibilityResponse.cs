@@ -36,6 +36,15 @@ public sealed class GatewayEligibilityResponse
 
     /// <summary>Normalized benefit lines returned by the payer.</summary>
     public List<GatewayEligibilityBenefit> Benefits { get; set; } = new();
+
+    /// <summary>Payer-returned subscriber (policyholder), when present.</summary>
+    public GatewayEligibilityPerson? Subscriber { get; set; }
+
+    /// <summary>
+    /// Payer-returned patient / dependent, when the 271 distinguishes them
+    /// from the subscriber. Null when the payer did not return a dependent.
+    /// </summary>
+    public GatewayEligibilityPerson? Patient { get; set; }
 }
 
 /// <summary>Normalized coverage status independent of any vendor coding.</summary>

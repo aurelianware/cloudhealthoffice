@@ -35,6 +35,15 @@ internal sealed class StediEligibilityRequestDto
     [JsonPropertyName("externalPatientId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ExternalPatientId { get; set; }
+
+    /// <summary>
+    /// Dependent/patient when the inquiry is not for the subscriber.
+    /// Stedi accepts at most one dependent per check. Omitted (not empty)
+    /// for subscriber-only requests.
+    /// </summary>
+    [JsonPropertyName("dependents")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<StediDependentDto>? Dependents { get; set; }
 }
 
 internal sealed class StediProviderDto
@@ -78,6 +87,26 @@ internal sealed class StediSubscriberDto
     [JsonPropertyName("groupNumber")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? GroupNumber { get; set; }
+}
+
+internal sealed class StediDependentDto
+{
+    [JsonPropertyName("memberId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MemberId { get; set; }
+
+    [JsonPropertyName("firstName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FirstName { get; set; }
+
+    [JsonPropertyName("lastName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LastName { get; set; }
+
+    /// <summary>Date of birth in Stedi's YYYYMMDD format.</summary>
+    [JsonPropertyName("dateOfBirth")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DateOfBirth { get; set; }
 }
 
 internal sealed class StediEncounterDto

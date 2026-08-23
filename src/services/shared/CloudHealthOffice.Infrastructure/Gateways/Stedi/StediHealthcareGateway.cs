@@ -72,7 +72,8 @@ public sealed class StediHealthcareGateway : IEligibilityGateway
         }
 
         // 2. Request must carry tenant + subscriber.
-        if (string.IsNullOrWhiteSpace(request.TenantId) || string.IsNullOrWhiteSpace(request.SubscriberId))
+        if (string.IsNullOrWhiteSpace(request.TenantId) ||
+            string.IsNullOrWhiteSpace(request.ResolveSubscriberMemberId()))
         {
             return Fail(request, startedAt, stopwatch, 0,
                 GatewayErrorCategory.Validation, "TenantId and SubscriberId are required.");
