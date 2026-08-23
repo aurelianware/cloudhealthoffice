@@ -73,4 +73,37 @@ public class StediPhiLoggingTests
         logs.Should().Contain("tenant-alpha");
         logs.Should().Contain("Stedi");
     }
+
+    [Fact]
+    public async Task Logging_StripsNewlinesFromUserInfluencedValues()
+    {
+        var options = Options.Create(new StediGatewayOptions
+        {
+            ApiKey = "k", BaseUrl = "https://healthcare.test", Environment = "sandbox",
+            EligibilityPath = "/eligibility/v3", MaxRetries = 0
+        });
+        var handler = new StubHttpMessageHandler().EnqueueJson(
+            System.Net.HttpStatusCode.OK, "{\"planStatus\":[{\"statusCode\":\"1\"}]}");
+        var logger = new CapturingLogger<StediHealthcareGateway>();
+        var apiClient = new StediEligibilityApiClient(
+            new StubHttpClientFactory(handler), options,
+            new CapturingLogger<StediEligibilityApiClient>(), delay: (_, _) => Task.CompletedTask);
+        var gateway = new StediHealthcareGateway(
+            apiClient, new StediPayerResolver(options), options, logger);
+
+        await gateway.CheckEligibilityAsync(new GatewayEligibilityRequest
+        {
+            TenantId = "tenant-alpha\r\nINJECTED forged log line",
+            SubscriberId = "M1",
+            ProviderNpi = "1",
+            PayerId = "60054",
+            CorrelationId = "corr\r\nALSO-INJECTED"
+        });
+
+        foreach (var message in logger.Messages)
+        {
+            message.Should().NotContain("\n");
+            message.Should().NotContain("\r");
+        }
+    }
 }

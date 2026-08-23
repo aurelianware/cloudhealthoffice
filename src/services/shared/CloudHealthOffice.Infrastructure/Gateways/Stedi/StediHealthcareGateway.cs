@@ -104,7 +104,8 @@ public sealed class StediHealthcareGateway : IEligibilityGateway
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error in Stedi eligibility for tenant {TenantId}", request.TenantId);
+            _logger.LogError(ex, "Unexpected error in Stedi eligibility for tenant {TenantId}",
+                SanitizeForLog(request.TenantId));
             return Fail(request, startedAt, stopwatch, 0,
                 GatewayErrorCategory.Internal, "Unexpected error executing the Stedi eligibility request.");
         }
@@ -172,20 +173,26 @@ public sealed class StediHealthcareGateway : IEligibilityGateway
         };
 
     // Logs ONLY non-PHI transaction metadata — never subscriber/member data or
-    // any request/response body.
+    // any request/response body. User-influenced values (tenant, correlation,
+    // external id) are stripped of newlines to prevent log-entry forging.
     private void Log(GatewayTransactionMetadata metadata) =>
         _logger.LogInformation(
             "Gateway transaction {Gateway} {TransactionType} tenant={TenantId} status={Status} " +
             "category={ErrorCategory} correlation={CorrelationId} latencyMs={LatencyMs} retries={RetryCount} extId={ExternalTransactionId}",
             metadata.GatewayName,
             metadata.TransactionType,
-            metadata.TenantId,
+            SanitizeForLog(metadata.TenantId),
             metadata.Status,
             metadata.ErrorCategory,
-            metadata.CorrelationId,
+            SanitizeForLog(metadata.CorrelationId),
             metadata.Latency.TotalMilliseconds,
             metadata.RetryCount,
-            metadata.ExternalTransactionId);
+            SanitizeForLog(metadata.ExternalTransactionId));
+
+    // Remove CR/LF so an attacker cannot forge additional log lines through a
+    // tenant id, correlation id, or vendor transaction id.
+    private static string? SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     private TimeSpan GetElapsed(long start) => Stopwatch.GetElapsedTime(start);
 }
