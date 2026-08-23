@@ -1,71 +1,151 @@
+using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
+using CloudHealthOffice.Infrastructure.ReferenceData.Payers.Stedi;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 
 /// <summary>
-/// Resolves a Cloud Health Office canonical payer identifier to the Stedi
+/// Resolves a Cloud Health Office payer identifier to a Stedi
 /// <c>tradingPartnerServiceId</c> for a given tenant.
 ///
-/// Resolution order:
-/// <list type="number">
-///   <item>the requesting tenant's entry in <c>TenantPayerMap</c>;</item>
-///   <item>the global <c>PayerMap</c>;</item>
-///   <item>pass-through of the canonical id when no mapping matches
-///         (many deployments store the Stedi id as the payer's external id).</item>
-/// </list>
-///
-/// Tenant safety: only the requesting tenant's sub-map is consulted, so one
-/// tenant's payer mapping can never resolve another tenant's identifiers.
+/// Primary path: <see cref="IPayerReferenceService"/>. Deprecated
+/// <c>TenantPayerMap</c>/<c>PayerMap</c> are a fallback only. Arbitrary
+/// payer ids are never passed through to Stedi.
 /// </summary>
 internal interface IStediPayerResolver
 {
-    /// <summary>
-    /// Resolve the Stedi payer id for <paramref name="canonicalPayerId"/> under
-    /// <paramref name="tenantId"/>. Returns null when no id can be determined.
-    /// </summary>
-    string? Resolve(string tenantId, string? canonicalPayerId);
+    Task<PayerResolution> ResolveAsync(string tenantId, string? payerId, CancellationToken ct);
 }
 
 internal sealed class StediPayerResolver : IStediPayerResolver
 {
+    private readonly IPayerReferenceService _payers;
     private readonly IOptions<StediGatewayOptions> _options;
+    private readonly ILogger<StediPayerResolver> _logger;
 
-    public StediPayerResolver(IOptions<StediGatewayOptions> options) => _options = options;
-
-    public string? Resolve(string tenantId, string? canonicalPayerId)
+    public StediPayerResolver(
+        IPayerReferenceService payers,
+        IOptions<StediGatewayOptions> options,
+        ILogger<StediPayerResolver> logger)
     {
-        if (string.IsNullOrWhiteSpace(canonicalPayerId))
+        _payers = payers;
+        _options = options;
+        _logger = logger;
+    }
+
+    public async Task<PayerResolution> ResolveAsync(
+        string tenantId, string? payerId, CancellationToken ct)
+    {
+        var resolution = await _payers.ResolveForTransactionAsync(
+            tenantId,
+            payerId,
+            HealthcareTransactionType.Eligibility270271,
+            StediPayerIdentifiers.System,
+            StediPayerIdentifiers.TradingPartnerServiceIdType,
+            ct).ConfigureAwait(false);
+
+        if (resolution.Status == PayerResolutionStatus.Found && resolution.Payer is not null)
+        {
+            var tenantMapped = DeprecatedTenantMap(tenantId, payerId);
+            if (!string.IsNullOrWhiteSpace(tenantMapped))
+            {
+                _logger.LogWarning(
+                    "Deprecated TenantPayerMap override used for tenant {TenantId}",
+                    Sanitize(tenantId));
+                return PayerResolution.Found(resolution.Payer, tenantMapped, usedDeprecatedFallback: true);
+            }
+
+            var stediId = resolution.ExternalIdentifierValue ?? SelectStediIdentifier(resolution.Payer);
+            if (string.IsNullOrWhiteSpace(stediId))
+            {
+                return PayerResolution.Fail(
+                    PayerResolutionStatus.ExternalIdentifierMissing,
+                    $"Payer '{resolution.Payer.Id}' has no Stedi trading-partner identifier.");
+            }
+
+            return PayerResolution.Found(resolution.Payer, stediId);
+        }
+
+        if (resolution.Status != PayerResolutionStatus.PayerNotFound)
+        {
+            return resolution;
+        }
+
+        var fallback = DeprecatedTenantMap(tenantId, payerId) ?? DeprecatedGlobalMap(payerId);
+        if (!string.IsNullOrWhiteSpace(fallback))
+        {
+            _logger.LogWarning(
+                "Deprecated PayerMap/TenantPayerMap fallback used for tenant {TenantId}",
+                Sanitize(tenantId));
+            return PayerResolution.Found(
+                new PayerReference
+                {
+                    Id = payerId!.Trim(),
+                    Name = payerId.Trim(),
+                    Active = true
+                },
+                fallback,
+                usedDeprecatedFallback: true);
+        }
+
+        return resolution;
+    }
+
+    private string? DeprecatedTenantMap(string tenantId, string? payerId)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(payerId))
         {
             return null;
         }
 
         var opts = _options.Value;
-
-        // 1. Tenant-scoped map — only ever the requesting tenant's own entries.
-        //    A case-insensitive scan avoids allocating a dictionary per call and
-        //    tolerates config keys that differ only by case.
-        if (!string.IsNullOrWhiteSpace(tenantId) &&
-            opts.TenantPayerMap.TryGetValue(tenantId, out var tenantMap) &&
-            tenantMap is not null)
+        if (!opts.TenantPayerMap.TryGetValue(tenantId, out var tenantMap) || tenantMap is null)
         {
-            foreach (var entry in tenantMap)
+            return null;
+        }
+
+        foreach (var entry in tenantMap)
+        {
+            if (string.Equals(entry.Key, payerId, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(entry.Value))
             {
-                if (string.Equals(entry.Key, canonicalPayerId, StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(entry.Value))
-                {
-                    return entry.Value;
-                }
+                return entry.Value;
             }
         }
 
-        // 2. Global map.
-        if (opts.PayerMap.TryGetValue(canonicalPayerId, out var mapped) &&
-            !string.IsNullOrWhiteSpace(mapped))
+        return null;
+    }
+
+    private string? DeprecatedGlobalMap(string? payerId)
+    {
+        if (string.IsNullOrWhiteSpace(payerId))
         {
-            return mapped;
+            return null;
         }
 
-        // 3. Pass-through: the canonical id is already a Stedi trading-partner id.
-        return canonicalPayerId;
+        return _options.Value.PayerMap.TryGetValue(payerId, out var mapped) &&
+               !string.IsNullOrWhiteSpace(mapped)
+            ? mapped
+            : null;
     }
+
+    private static string? SelectStediIdentifier(PayerReference payer)
+    {
+        string? Find(string type) =>
+            payer.ExternalIdentifiers.FirstOrDefault(id =>
+                PayerLookup.EqualsNormalized(id.System, StediPayerIdentifiers.System) &&
+                PayerLookup.EqualsNormalized(id.Type, type))?.Value;
+
+        return FirstNonEmpty(
+            Find(StediPayerIdentifiers.TradingPartnerServiceIdType),
+            Find(StediPayerIdentifiers.PrimaryPayerIdType),
+            Find(StediPayerIdentifiers.IdType));
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
+    private static string Sanitize(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

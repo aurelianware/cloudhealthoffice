@@ -95,10 +95,9 @@ builder.Services.AddSingleton<IEligibilityAdapter, AvailityEligibilityAdapter>()
 builder.Services.AddSingleton<IEligibilityAdapter, ChangeHealthcareEligibilityAdapter>();
 builder.Services.AddSingleton<EligibilityAdapterFactory>();
 
-// Vendor-neutral healthcare transaction gateway abstraction (foundation).
-// Registers the mock gateway + resolver so eligibility can be routed through
-// the gateway abstraction. The existing EligibilityAdapterFactory flow above
-// is unchanged; live vendor gateways (Stedi, etc.) are added in later PRs.
+// Vendor-neutral healthcare transaction gateway + canonical payer reference.
+// Registers Mock, Stedi (when configured), and IPayerReferenceService.
+// The existing EligibilityAdapterFactory flow above is unchanged.
 builder.Services.AddChoHealthcareGateways(builder.Configuration);
 
 builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
