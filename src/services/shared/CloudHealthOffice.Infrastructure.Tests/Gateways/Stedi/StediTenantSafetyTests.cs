@@ -1,14 +1,17 @@
 using System.Net;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
+using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
+using CloudHealthOffice.Infrastructure.ReferenceData.Payers.Stedi;
+using CloudHealthOffice.Infrastructure.Tests.ReferenceData.Payers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CloudHealthOffice.Infrastructure.Tests.Gateways.Stedi;
 
 /// <summary>
-/// Covers task section 9 and the tenant-safety acceptance criteria: payer
-/// mapping is tenant-scoped, and the tenant context survives the transaction.
+/// Tenant-safety: overlays and deprecated maps are scoped to the requesting
+/// tenant, and one tenant cannot resolve another tenant's identifiers.
 /// </summary>
 public class StediTenantSafetyTests
 {
@@ -20,52 +23,118 @@ public class StediTenantSafetyTests
             BaseUrl = "https://healthcare.test",
             Environment = "sandbox"
         };
-        o.PayerMap["AETNA"] = "999";
+        o.PayerMap["UNKNOWN-PAYER"] = "999";
         o.TenantPayerMap["tenant-alpha"] = new Dictionary<string, string> { ["AETNA"] = "111" };
         return o;
     }
 
     [Fact]
-    public void PayerResolver_UsesTenantSpecificMapping_First()
+    public async Task PayerResolver_UsesTenantSpecificDeprecatedMap_OverDirectory()
     {
-        var resolver = new StediPayerResolver(Options.Create(OptionsWithMaps()));
+        var resolver = PayerTestHarness.CreateResolver(Options.Create(OptionsWithMaps()));
 
-        resolver.Resolve("tenant-alpha", "AETNA").Should().Be("111");
+        var result = await resolver.ResolveAsync("tenant-alpha", "AETNA", CancellationToken.None);
+
+        result.Status.Should().Be(PayerResolutionStatus.Found);
+        result.ExternalIdentifierValue.Should().Be("111");
+        result.UsedDeprecatedFallback.Should().BeTrue();
     }
 
     [Fact]
-    public void PayerResolver_OtherTenant_CannotSeeAnotherTenantsMapping()
+    public async Task PayerResolver_OtherTenant_CannotSeeAnotherTenantsMapping()
     {
-        var resolver = new StediPayerResolver(Options.Create(OptionsWithMaps()));
+        var resolver = PayerTestHarness.CreateResolver(Options.Create(OptionsWithMaps()));
 
-        // tenant-beta has no map of its own, so it falls back to the global map
-        // (999) and never resolves tenant-alpha's private value (111).
-        resolver.Resolve("tenant-beta", "AETNA").Should().Be("999");
+        var result = await resolver.ResolveAsync("tenant-beta", "AETNA", CancellationToken.None);
+
+        result.Status.Should().Be(PayerResolutionStatus.Found);
+        result.ExternalIdentifierValue.Should().Be(SyntheticPayerSeed.EligibleTradingPartnerId);
+        result.ExternalIdentifierValue.Should().NotBe("111");
     }
 
     [Fact]
-    public void PayerResolver_TenantMapping_IsCaseInsensitive()
+    public async Task PayerResolver_TenantMapping_IsCaseInsensitive()
     {
-        var resolver = new StediPayerResolver(Options.Create(OptionsWithMaps()));
+        var resolver = PayerTestHarness.CreateResolver(Options.Create(OptionsWithMaps()));
 
-        // Tenant map key is "AETNA"; a differently-cased canonical id still resolves.
-        resolver.Resolve("tenant-alpha", "aetna").Should().Be("111");
+        var result = await resolver.ResolveAsync("tenant-alpha", "aetna", CancellationToken.None);
+
+        result.ExternalIdentifierValue.Should().Be("111");
     }
 
     [Fact]
-    public void PayerResolver_UnknownPayer_PassesThrough()
+    public async Task PayerResolver_UnknownPayer_DoesNotPassThrough()
     {
-        var resolver = new StediPayerResolver(Options.Create(OptionsWithMaps()));
+        var resolver = PayerTestHarness.CreateResolver(Options.Create(OptionsWithMaps()));
 
-        resolver.Resolve("tenant-beta", "CIGNA-DIRECT").Should().Be("CIGNA-DIRECT");
+        var result = await resolver.ResolveAsync("tenant-beta", "CIGNA-DIRECT", CancellationToken.None);
+
+        result.Status.Should().Be(PayerResolutionStatus.PayerNotFound);
+        result.ExternalIdentifierValue.Should().BeNull();
     }
 
     [Fact]
-    public void PayerResolver_NullPayer_ReturnsNull()
+    public async Task PayerResolver_DeprecatedGlobalMap_IsFallbackWhenDirectoryMisses()
     {
-        var resolver = new StediPayerResolver(Options.Create(OptionsWithMaps()));
+        var resolver = PayerTestHarness.CreateResolver(Options.Create(OptionsWithMaps()));
 
-        resolver.Resolve("tenant-alpha", null).Should().BeNull();
+        var result = await resolver.ResolveAsync("tenant-beta", "UNKNOWN-PAYER", CancellationToken.None);
+
+        result.Status.Should().Be(PayerResolutionStatus.Found);
+        result.ExternalIdentifierValue.Should().Be("999");
+        result.UsedDeprecatedFallback.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task PayerResolver_NullPayer_ReturnsNotFound()
+    {
+        var resolver = PayerTestHarness.CreateResolver(Options.Create(OptionsWithMaps()));
+
+        var result = await resolver.ResolveAsync("tenant-alpha", null, CancellationToken.None);
+
+        result.Status.Should().Be(PayerResolutionStatus.PayerNotFound);
+    }
+
+    [Fact]
+    public async Task TenantOverride_IsIsolatedPerTenant()
+    {
+        var store = PayerTestHarness.CreateStore();
+        var service = PayerTestHarness.CreateService(store);
+        await service.SaveTenantOverrideAsync(new PayerTenantOverride
+        {
+            TenantId = "tenant-alpha",
+            PayerId = SyntheticPayerSeed.EligibleId,
+            Enabled = true,
+            ExternalIdentifiers =
+            {
+                new PayerExternalIdentifier
+                {
+                    System = StediPayerIdentifiers.System,
+                    Type = StediPayerIdentifiers.TradingPartnerServiceIdType,
+                    Value = "OVERRIDE-ALPHA"
+                }
+            }
+        });
+
+        var alpha = await service.ResolveForTransactionAsync(
+            "tenant-alpha",
+            SyntheticPayerSeed.EligibleId,
+            CloudHealthOffice.Infrastructure.Gateways.HealthcareTransactionType.Eligibility270271,
+            StediPayerIdentifiers.System,
+            StediPayerIdentifiers.TradingPartnerServiceIdType);
+
+        var beta = await service.ResolveForTransactionAsync(
+            "tenant-beta",
+            SyntheticPayerSeed.EligibleId,
+            CloudHealthOffice.Infrastructure.Gateways.HealthcareTransactionType.Eligibility270271,
+            StediPayerIdentifiers.System,
+            StediPayerIdentifiers.TradingPartnerServiceIdType);
+
+        alpha.ExternalIdentifierValue.Should().Be("OVERRIDE-ALPHA");
+        beta.ExternalIdentifierValue.Should().Be(SyntheticPayerSeed.EligibleTradingPartnerId);
+
+        var leaked = await service.GetTenantOverrideAsync("tenant-beta", SyntheticPayerSeed.EligibleId);
+        leaked.Should().BeNull();
     }
 
     [Fact]
@@ -78,7 +147,7 @@ public class StediTenantSafetyTests
             new StubHttpClientFactory(handler), options,
             NullLogger<StediEligibilityApiClient>.Instance, delay: (_, _) => Task.CompletedTask);
         var gateway = new StediHealthcareGateway(
-            apiClient, new StediPayerResolver(options), options,
+            apiClient, PayerTestHarness.CreateResolver(options), options,
             NullLogger<StediHealthcareGateway>.Instance);
 
         var response = await gateway.CheckEligibilityAsync(new GatewayEligibilityRequest
@@ -90,7 +159,6 @@ public class StediTenantSafetyTests
         });
 
         response.Metadata.TenantId.Should().Be("tenant-alpha");
-        // The tenant-scoped payer mapping (111) was applied for this tenant.
         handler.RequestBodies[0].Should().Contain("111");
     }
 }

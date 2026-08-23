@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Gateways.Mock;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
+using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -33,6 +34,9 @@ public static class HealthcareGatewayServiceCollectionExtensions
             .Bind(configuration.GetSection(HealthcareTransactionOptions.SectionName));
 
         services.TryAddSingleton<IHealthcareGatewayResolver, HealthcareGatewayResolver>();
+
+        // Canonical payer identity is shared by every gateway implementation.
+        services.AddChoPayerReference(configuration);
 
         // The mock gateway is always available so the abstraction resolves in
         // development and test even when no vendor is configured. It is the

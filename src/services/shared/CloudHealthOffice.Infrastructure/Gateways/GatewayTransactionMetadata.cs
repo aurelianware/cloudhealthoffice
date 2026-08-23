@@ -117,6 +117,21 @@ public enum GatewayErrorCategory
     /// <summary>The gateway does not support the requested transaction.</summary>
     NotSupported,
 
+    /// <summary>No payer matched the supplied identifier.</summary>
+    PayerNotFound,
+
+    /// <summary>More than one payer matched; the caller must disambiguate.</summary>
+    AmbiguousPayer,
+
+    /// <summary>The canonical payer has no identifier for the selected clearinghouse.</summary>
+    ExternalIdentifierMissing,
+
+    /// <summary>The payer supports the transaction only after enrollment, which is not complete.</summary>
+    EnrollmentRequired,
+
+    /// <summary>Local payer reference data could not be read.</summary>
+    ReferenceDataUnavailable,
+
     /// <summary>An unexpected internal error occurred.</summary>
     Internal
 }

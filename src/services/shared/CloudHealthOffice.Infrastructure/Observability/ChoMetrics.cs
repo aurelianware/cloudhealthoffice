@@ -296,6 +296,47 @@ public static class ChoMetrics
             unit: "s",
             description: "Cosmos partition-key migration run duration in seconds (5.1b)");
 
+    /// <summary>
+    /// Histogram tracking payer-directory synchronization duration (seconds).
+    /// Dimensions: cho.outcome (success | failed).
+    /// </summary>
+    public static readonly Histogram<double> PayerSyncDuration =
+        Meter.CreateHistogram<double>(
+            "cho.payer_reference.sync.duration",
+            unit: "s",
+            description: "Payer directory synchronization duration in seconds");
+
+    /// <summary>
+    /// Counter tracking payer-directory record outcomes.
+    /// Dimensions: cho.outcome (received | added | updated | disabled).
+    /// </summary>
+    public static readonly Counter<long> PayerSyncRecords =
+        Meter.CreateCounter<long>(
+            "cho.payer_reference.sync.records.total",
+            unit: "{record}",
+            description: "Payer directory records processed during synchronization");
+
+    /// <summary>
+    /// Counter tracking payer-directory sync failures.
+    /// Dimensions: cho.category.
+    /// </summary>
+    public static readonly Counter<long> PayerSyncFailures =
+        Meter.CreateCounter<long>(
+            "cho.payer_reference.sync.failures.total",
+            unit: "{failure}",
+            description: "Payer directory synchronization failures");
+
+    /// <summary>
+    /// Counter tracking payer resolution outcomes.
+    /// Dimensions: cho.result (success | not_found | ambiguous | missing_identifier |
+    /// unsupported | enrollment_required | disabled | unavailable).
+    /// </summary>
+    public static readonly Counter<long> PayerResolutionTotal =
+        Meter.CreateCounter<long>(
+            "cho.payer_reference.resolution.total",
+            unit: "{resolution}",
+            description: "Canonical payer resolution outcomes");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

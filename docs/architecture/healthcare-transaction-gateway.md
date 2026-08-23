@@ -5,9 +5,9 @@ abstraction for external payer / clearinghouse connectivity. One capability
 model, many interchangeable vendor implementations, living in
 [`CloudHealthOffice.Infrastructure.Gateways`](../../src/services/shared/CloudHealthOffice.Infrastructure/Gateways/).
 
-This is the **foundation** layer. Only the mock gateway and the eligibility
-(270/271) capability contract are implemented today; live vendor adapters
-(Stedi first) are added in later PRs without architectural rework.
+This is the **foundation** layer. The mock gateway, the Stedi eligibility
+(270/271) adapter, and the canonical payer reference service are implemented
+today. Additional transactions (837, 276/277, 275, 835) stay contract-only.
 
 ## Where the boundary sits
 
@@ -221,19 +221,103 @@ accumulators, or adjudicates.
 
 ### Payer identifier mapping
 
-Cloud Health Office canonical payer ids are translated to Stedi
-`tradingPartnerServiceId` values by `StediPayerResolver`, tenant-safely:
+Payer identity is a first-class Cloud Health Office platform concept, not a
+Stedi configuration map. Canonical payer records live in
+[`ReferenceData/Payers`](../../src/services/shared/CloudHealthOffice.Infrastructure/ReferenceData/Payers/)
+and are reused across eligibility, and later claims, attachments, claim status,
+and remittance.
+
+```
+                  CloudHealthOffice
+                         |
+                  Canonical Payer
+                         |
+                 Payer Reference Data
+                    /           \
+                   /             \
+             Stedi ID         Other IDs
+                |                |
+                v                v
+              Stedi          Availity/etc.
+```
+
+Three distinct concepts:
+
+| Concept | What it answers |
+|---------|-----------------|
+| **Gateway capability** | Does this CHO gateway implementation send 270/271 (or 837, …)? |
+| **Payer capability** | Does *this payer/network* support that transaction? |
+| **Tenant enrollment/configuration** | Has *this tenant* completed any required enrollment, and do they override routing? |
+
+A transaction is attempted only when the gateway implements it **and** the
+payer supports it **and** tenant enrollment (when required) is complete.
 
 ```
 GatewayEligibilityRequest.PayerId
         |
-TenantPayerMap[tenantId]  →  PayerMap  →  pass-through
+        v
+IPayerReferenceService
         |
-Stedi tradingPartnerServiceId
+        v
+Canonical payer
+        |
+        v
+External identifier
+  System = "stedi"
+  Type   = "tradingPartnerServiceId"
+        |
+        v
+StediHealthcareGateway
 ```
 
-Only the requesting tenant's sub-map is consulted, so one tenant's mapping can
-never resolve another tenant's payer id.
+Resolution is exact-match only (canonical id, alias, or external identifier
+value). Multiple matches return `AmbiguousPayer`; zero matches return
+`PayerNotFound`. Arbitrary payer ids are **never** passed through to Stedi.
+
+Hand-maintained `PayerMap` / `TenantPayerMap` remain as a **deprecated
+fallback** for environments that have not yet synchronized a directory. They
+are not the primary architecture. `TenantPayerMap` is still consulted only for
+the requesting tenant.
+
+### Payer directory synchronization
+
+Stedi's List Payers JSON API is the source of directory data:
+
+```
+GET https://payers.us.stedi.com/2024-04-01/payers?pageSize=100
+Authorization: <api-key>
+```
+
+API version: **2024-04-01**. Pagination request query parameters are `pageSize`
+(minimum 10) and `pageToken`. The response field `nextPageToken` is supplied as
+the next request's `pageToken`. The mapper copies only fields Stedi documents (stediId,
+displayName, primaryPayerId, aliases, names, transactionSupport, enrollment
+process metadata, coverage types, etc.). Stedi transport DTOs stay internal.
+
+Synchronization is opt-in (`PayerReference:Sync:Enabled`, default `false`) so
+hosts start without live Stedi credentials. When enabled, a hosted service
+refreshes on a configurable interval (default 24h) and optionally on startup.
+An on-demand `POST /api/payer-references/sync` is available in Development
+(or when `AllowOnDemandSync` is true).
+
+Records are stored in the configured `PayerReference:Store` (`InMemory` by
+default; `Mongo` when an `IMongoClient` is registered). CI uses deterministic
+synthetic seed payers — no live Stedi credentials required.
+
+Payers present in a previous Stedi sync but missing from the latest run are
+**disabled**, not deleted. Seed records (`Source = seed`) are left untouched.
+
+### Tenant overlays
+
+Global payer records are shared. A `PayerTenantOverride` keyed by
+`(tenantId, payerId)` may:
+
+- enable/disable the payer for that tenant
+- supply a preferred alias
+- replace the clearinghouse identifier
+- record which transactions the tenant has enrolled
+
+One tenant cannot read or modify another tenant's overlays.
 
 ### Configuration (no secrets in source control)
 
@@ -245,11 +329,21 @@ HealthcareTransactions:
       BaseUrl: https://healthcare.us.stedi.com
       ApiKey: ""                 # supply via env var or secret provider / Key Vault
       Environment: sandbox       # sandbox | test | production
-      PayerMap:                  # optional canonical id -> Stedi payer id
+      PayerDirectoryBaseUrl: https://payers.us.stedi.com
+      PayerDirectoryPath: /2024-04-01/payers
+      PayerMap:                  # deprecated fallback only
         AETNA: "60054"
-      TenantPayerMap:            # optional per-tenant overrides
+      TenantPayerMap:            # deprecated fallback; tenant-scoped
         tenant-alpha:
           AETNA: "60055"
+
+PayerReference:
+  Store: InMemory                # InMemory | Mongo
+  SeedSyntheticPayers: true      # CI/dev seed; no live Stedi required
+  Sync:
+    Enabled: false               # opt-in; application starts without Stedi
+    OnStartup: false
+    IntervalHours: 24
 ```
 
 Supply the API key out of band, e.g.:
@@ -305,9 +399,13 @@ consolidation should be its own PR.
 
 ## Next Stedi integration
 
-Recommended next step: **Stedi payer / reference-data integration** — replace
-the hand-maintained `PayerMap`/`TenantPayerMap` with a synchronized payer
-directory (Cloud Health Office payer ↔ Stedi `tradingPartnerServiceId`), so
-eligibility routing scales beyond configuration. Claim submission (837P) + the
-277CA acknowledgment lifecycle is the larger follow-on once payer identity is
-managed centrally.
+Payer identity is now a shared platform service. Recommended next step:
+**inbound payer-side 270/271 support** —
+
+```
+Stedi → CloudHealthOffice → eligibility/benefit logic → 271 → Stedi
+```
+
+so Cloud Health Office can act as the payer endpoint, not only as an outbound
+eligibility client. Claim submission (837P) and the 277CA acknowledgment
+lifecycle remain follow-on work after inbound eligibility.
