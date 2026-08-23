@@ -37,7 +37,10 @@ public class GatewayEligibilityDemoController : ControllerBase
     /// <summary>
     /// Run an eligibility check through the configured (or named) gateway.
     /// </summary>
-    /// <param name="request">Canonical eligibility request.</param>
+    /// <param name="request">
+    /// Canonical eligibility request. For a dependent inquiry set
+    /// <c>Subscriber</c> (or the flat subscriber fields) and <c>Patient</c>.
+    /// </param>
     /// <param name="gateway">Optional gateway name (e.g. "Mock" or "Stedi").</param>
     [HttpPost("eligibility")]
     public async Task<IActionResult> CheckEligibility(

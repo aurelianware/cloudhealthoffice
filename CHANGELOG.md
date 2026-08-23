@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Stedi dependent eligibility (270/271)
+
+Canonical `GatewayEligibilityPerson` subscriber/patient model. Dependent
+inquiries emit Stedi `dependents[]`; subscriber-only requests do not. Opt-in
+live sandbox smoke covers the documented UHC 87726 John/Jane Doe Active
+Coverage path.
+
 ### Stedi payer reference directory
 
 Canonical, vendor-neutral payer identity for Cloud Health Office. Stedi List

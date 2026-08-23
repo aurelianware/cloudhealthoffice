@@ -40,6 +40,102 @@ public class StediEligibilityMapperTests
         dto.Encounter!.ServiceTypeCodes.Should().ContainSingle().Which.Should().Be("30");
         dto.Encounter.DateOfService.Should().Be("20260601");
         dto.ExternalPatientId.Should().Be("corr-1");
+        dto.Dependents.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToStediRequest_SubscriberOnly_DoesNotEmitDependents()
+    {
+        var request = new GatewayEligibilityRequest
+        {
+            TenantId = "t",
+            SubscriberId = "UHC202649",
+            SubscriberFirstName = "John",
+            SubscriberLastName = "Doe",
+            ProviderNpi = "1999999984",
+            MemberId = "SOME-OTHER-ID"
+        };
+
+        var dto = StediEligibilityMapper.ToStediRequest(request, "87726");
+
+        dto.Dependents.Should().BeNull();
+        dto.Subscriber.MemberId.Should().Be("UHC202649");
+    }
+
+    [Fact]
+    public void ToStediRequest_SelfPatient_DoesNotEmitDependents()
+    {
+        var request = new GatewayEligibilityRequest
+        {
+            TenantId = "t",
+            SubscriberId = "UHC202649",
+            Patient = new GatewayEligibilityPerson
+            {
+                MemberId = "UHC202649",
+                RelationshipToSubscriber = GatewayEligibilityPerson.Relationship.Self
+            },
+            ProviderNpi = "1"
+        };
+
+        StediEligibilityMapper.ToStediRequest(request, "87726").Dependents.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToStediRequest_DependentInquiry_EmitsDependentsArray()
+    {
+        var request = new GatewayEligibilityRequest
+        {
+            TenantId = "t",
+            SubscriberId = "UHC202649",
+            SubscriberFirstName = "John",
+            SubscriberLastName = "Doe",
+            ProviderNpi = "1999999984",
+            ProviderOrganizationName = "Provider Name",
+            Patient = new GatewayEligibilityPerson
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                DateOfBirth = new DateOnly(1952, 11, 21)
+            }
+        };
+
+        var dto = StediEligibilityMapper.ToStediRequest(request, "87726");
+
+        dto.Subscriber.MemberId.Should().Be("UHC202649");
+        dto.Subscriber.FirstName.Should().Be("John");
+        dto.Subscriber.LastName.Should().Be("Doe");
+        dto.Provider.OrganizationName.Should().Be("Provider Name");
+        dto.Dependents.Should().ContainSingle();
+        dto.Dependents![0].FirstName.Should().Be("Jane");
+        dto.Dependents[0].LastName.Should().Be("Doe");
+        dto.Dependents[0].DateOfBirth.Should().Be("19521121");
+        dto.Dependents[0].MemberId.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToStediRequest_NestedSubscriber_TakesPrecedenceOverFlatFields()
+    {
+        var request = new GatewayEligibilityRequest
+        {
+            TenantId = "t",
+            SubscriberId = "FLAT",
+            SubscriberFirstName = "Flat",
+            Subscriber = new GatewayEligibilityPerson
+            {
+                MemberId = "NESTED",
+                FirstName = "Nested",
+                LastName = "Person",
+                DateOfBirth = new DateOnly(1976, 2, 14)
+            },
+            ProviderNpi = "1"
+        };
+
+        var dto = StediEligibilityMapper.ToStediRequest(request, "87726");
+
+        dto.Subscriber.MemberId.Should().Be("NESTED");
+        dto.Subscriber.FirstName.Should().Be("Nested");
+        dto.Subscriber.DateOfBirth.Should().Be("19760214");
+        dto.Dependents.Should().BeNull();
     }
 
     [Fact]
@@ -238,6 +334,78 @@ public class StediEligibilityMapperTests
         result.IsEligible.Should().BeFalse();
         result.CoverageStatus.Should().Be(GatewayCoverageStatus.Unknown);
         result.RejectionReason.Should().Contain("Invalid/Missing Subscriber ID");
+        result.Benefits.Should().BeEmpty();
+        result.CoverageStatus.Should().Be(GatewayCoverageStatus.Unknown);
+    }
+
+    [Fact]
+    public void ToCanonical_Aaa73_IsPayerRejectionWithoutInventedCoverage()
+    {
+        var stedi = new StediEligibilityResponseDto
+        {
+            Errors = new()
+            {
+                new StediErrorDto
+                {
+                    Code = "73",
+                    Description = "Invalid/Missing Subscriber/Insured Name",
+                    FollowupAction = "Please Correct and Resubmit"
+                }
+            },
+            Subscriber = new StediEligibilityPartyDto
+            {
+                MemberId = "UHC202649", FirstName = "John", LastName = "Doe"
+            }
+        };
+
+        var result = StediEligibilityMapper.ToCanonicalResponse(stedi);
+
+        result.IsEligible.Should().BeFalse();
+        result.CoverageStatus.Should().Be(GatewayCoverageStatus.Unknown);
+        result.RejectionReason.Should().Contain("Invalid/Missing Subscriber/Insured Name");
+        result.PlanId.Should().BeNull();
+        result.Benefits.Should().BeEmpty();
+        result.Subscriber!.MemberId.Should().Be("UHC202649");
+        result.Patient.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToCanonical_DependentActiveCoverage_PreservesSubscriberAndPatient()
+    {
+        var stedi = new StediEligibilityResponseDto
+        {
+            PlanStatus = new() { new StediPlanStatusDto { StatusCode = "1", Status = "Active Coverage", PlanDetails = "CHOICE PLUS" } },
+            PlanInformation = new StediPlanInformationDto { PlanNumber = "UVdQAC5j6f", GroupNumber = "186084" },
+            BenefitsInformation = new()
+            {
+                new StediBenefitInformationDto { Code = "1", Name = "Health Benefit Plan Coverage", ServiceTypeCodes = new() { "30" } }
+            },
+            Subscriber = new StediEligibilityPartyDto
+            {
+                MemberId = "UHC202649", FirstName = "John", LastName = "Doe", DateOfBirth = "19760214"
+            },
+            Dependents = new()
+            {
+                new StediEligibilityPartyDto
+                {
+                    FirstName = "Jane", LastName = "Doe", DateOfBirth = "19521121",
+                    RelationToSubscriber = "Spouse"
+                }
+            }
+        };
+
+        var result = StediEligibilityMapper.ToCanonicalResponse(stedi);
+
+        result.IsEligible.Should().BeTrue();
+        result.CoverageStatus.Should().Be(GatewayCoverageStatus.Active);
+        result.PlanId.Should().Be("UVdQAC5j6f");
+        result.Benefits.Should().NotBeEmpty();
+        result.Subscriber!.MemberId.Should().Be("UHC202649");
+        result.Subscriber.FirstName.Should().Be("John");
+        result.Patient!.FirstName.Should().Be("Jane");
+        result.Patient.LastName.Should().Be("Doe");
+        result.Patient.DateOfBirth.Should().Be(new DateOnly(1952, 11, 21));
+        result.Patient.RelationshipToSubscriber.Should().Be("Spouse");
     }
 
     [Fact]
