@@ -4,7 +4,7 @@ Date: 2026-08-24 UTC
 
 Branch: `feat/stedi-835`
 
-Commit: `pending`
+Commit: `b2e3e462`
 
 ## Stedi 835 API
 
