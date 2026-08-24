@@ -4,7 +4,7 @@ Date: 2026-08-24 UTC
 
 Branch: `feat/payer-claim-attachment-receiver`
 
-Commit: *(filled at commit time)*
+Commit: `46cb7166`
 
 ## Stedi inbound payer-side 275
 
