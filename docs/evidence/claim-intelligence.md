@@ -4,7 +4,7 @@ Date: 2026-08-24 UTC
 
 Branch: `feat/claim-intelligence`
 
-Commit: `26559038`
+Commit: `7ec9a739`
 
 ## Synthetic claim
 
