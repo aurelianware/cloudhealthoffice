@@ -262,8 +262,14 @@ public class StediClaimAcknowledgmentTests
         var ingress = new ClaimAcknowledgmentIngress(
             resolver, processor, NullLogger<ClaimAcknowledgmentIngress>.Instance);
         var cursors = new InMemoryClaimAcknowledgmentCursorStore();
+        var remittanceIngress = new RemittanceIngress(
+            resolver,
+            new RemittanceProcessor(
+                new InMemoryRemittanceStore(), store, NullLogger<RemittanceProcessor>.Instance),
+            NullLogger<RemittanceIngress>.Instance);
         var poller = new StediClaimAcknowledgmentPoller(
-            client, ingress, cursors, opts, NullLogger<StediClaimAcknowledgmentPoller>.Instance);
+            client, ingress, remittanceIngress, cursors, opts,
+            NullLogger<StediClaimAcknowledgmentPoller>.Instance);
 
         await poller.RunOnce(CancellationToken.None);
 

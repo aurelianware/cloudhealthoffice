@@ -113,6 +113,12 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<ILogger<StediClaimStatusApiClient>>(),
             sp.GetService<TimeProvider>()));
 
+        services.TryAddSingleton(sp => new StediRemittanceApiClient(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptions<StediGatewayOptions>>(),
+            sp.GetRequiredService<ILogger<StediRemittanceApiClient>>(),
+            sp.GetService<TimeProvider>()));
+
         services.TryAddSingleton(sp => new StediHealthcareGateway(
             sp.GetRequiredService<StediEligibilityApiClient>(),
             sp.GetRequiredService<IStediPayerResolver>(),
@@ -129,7 +135,8 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             sp.GetService<CloudHealthOffice.Infrastructure.Messaging.IMessageBus>(),
             sp.GetRequiredService<IClaimAcknowledgmentStore>(),
             sp.GetRequiredService<IClaimStatusInquiryStore>(),
-            sp.GetRequiredService<StediClaimStatusApiClient>()));
+            sp.GetRequiredService<StediClaimStatusApiClient>(),
+            sp.GetRequiredService<StediRemittanceApiClient>()));
 
         services.AddHostedService<StediClaimAcknowledgmentPoller>();
 

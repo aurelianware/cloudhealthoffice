@@ -457,6 +457,28 @@ public static class ChoMetrics
             unit: "s",
             description: "Outbound 276/277 claim status inquiry duration in seconds");
 
+    /// <summary>
+    /// Counter tracking inbound 835 remittance receipts.
+    /// Dimensions: cho.gateway, cho.status, cho.error_category.
+    /// </summary>
+    public static readonly Counter<long> Remittances =
+        Meter.CreateCounter<long>(
+            "cho.remittance.received.total",
+            unit: "{remittance}",
+            description: "Inbound 835 remittances by gateway and lifecycle status");
+
+    public static readonly Histogram<double> RemittanceDuration =
+        Meter.CreateHistogram<double>(
+            "cho.remittance.duration",
+            unit: "s",
+            description: "Inbound 835 remittance processing duration in seconds");
+
+    public static readonly Counter<long> RemittedClaims =
+        Meter.CreateCounter<long>(
+            "cho.remittance.claims.total",
+            unit: "{claim}",
+            description: "Claims included on inbound 835 remittances by match outcome");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

@@ -167,6 +167,39 @@ public class StediLiveSmokeTests
         await Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Live 835 retrieve needs a production ERA transaction id. Stedi sandbox
+    /// accounts do not produce test ERAs for this workflow. Opt-in only.
+    /// </summary>
+    [SkippableFact]
+    public async Task Sandbox_Remittance_IsDocumentedAsUnavailableOnSandboxAccounts()
+    {
+        Skip.If(
+            !string.Equals(Environment.GetEnvironmentVariable("CHO_STEDI_LIVE_CLAIM_TESTS"), "true",
+                StringComparison.OrdinalIgnoreCase),
+            "CHO_STEDI_LIVE_CLAIM_TESTS is not set. Live 835 retrieve needs a production-account ERA transaction id.");
+
+        var transactionId = Environment.GetEnvironmentVariable("CHO_STEDI_835_TRANSACTION_ID");
+        Skip.If(string.IsNullOrWhiteSpace(transactionId),
+            "CHO_STEDI_835_TRANSACTION_ID is not set. Contract tests cover the documented 835 ERA Report.");
+
+        var eligibility = CreateLiveGateway(out var apiKey, DocumentedTradingPartnerId);
+        Skip.If(string.IsNullOrWhiteSpace(apiKey), "STEDI_API_KEY is not set.");
+
+        var remittance = eligibility as IRemittanceGateway;
+        Skip.If(remittance is null, "Live Stedi gateway does not implement remittance.");
+
+        var response = await remittance!.RetrieveRemittanceAsync(new RemittanceRetrievalRequest
+        {
+            ExternalRemittanceId = transactionId!
+        });
+
+        response.Should().NotBeNull();
+        response.Metadata.GatewayName.Should().Be("Stedi");
+        response.Metadata.TransactionType.Should().Be(HealthcareTransactionType.Remittance835);
+        response.Metadata.ErrorCategory.Should().NotBe(GatewayErrorCategory.Configuration);
+    }
+
     [SkippableFact]
     public async Task Sandbox_Eligibility_ReturnsNormalizedResponse()
     {

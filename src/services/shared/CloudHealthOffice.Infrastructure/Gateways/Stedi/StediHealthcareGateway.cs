@@ -14,8 +14,7 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 /// eligibility (270/271) JSON API.
 ///
 /// It advertises eligibility, claim submission, 277CA acknowledgment,
-/// 275 claim attachments, and 276/277 claim status. Remittance stays
-/// explicitly unsupported.
+/// 275 claim attachments, 276/277 claim status, and 835 remittance retrieve.
 ///
 /// The gateway is pure transport + translation: it maps the canonical request to
 /// Stedi's JSON, executes the call, and normalizes the payer's response back into
@@ -23,7 +22,7 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 /// accumulator, or adjudication logic — the response is an external payer
 /// eligibility statement, not a Cloud Health Office calculation.
 /// </summary>
-public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway, IClaimAcknowledgmentGateway, IClaimAttachmentGateway, IClaimStatusGateway
+public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway, IClaimAcknowledgmentGateway, IClaimAttachmentGateway, IClaimStatusGateway, IRemittanceGateway
 {
     /// <summary>The name this gateway registers under and is resolved by.</summary>
     public const string GatewayName = "Stedi";
@@ -35,7 +34,8 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             GatewayCapability.ClaimSubmission,
             GatewayCapability.ClaimAcknowledgment,
             GatewayCapability.ClaimAttachment,
-            GatewayCapability.ClaimStatus
+            GatewayCapability.ClaimStatus,
+            GatewayCapability.Remittance
         };
 
     private readonly StediEligibilityApiClient _apiClient;
@@ -43,6 +43,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
     private readonly StediClaimAcknowledgmentApiClient? _acknowledgmentClient;
     private readonly StediClaimAttachmentApiClient? _attachmentClient;
     private readonly StediClaimStatusApiClient? _statusClient;
+    private readonly StediRemittanceApiClient? _remittanceClient;
     private readonly IStediPayerResolver _payerResolver;
     private readonly IClaimTransmissionStore _transmissions;
     private readonly ClaimAttachmentCoordinator _attachments;
@@ -67,13 +68,15 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         CloudHealthOffice.Infrastructure.Messaging.IMessageBus? messageBus = null,
         IClaimAcknowledgmentStore? acknowledgments = null,
         IClaimStatusInquiryStore? statusInquiries = null,
-        StediClaimStatusApiClient? statusClient = null)
+        StediClaimStatusApiClient? statusClient = null,
+        StediRemittanceApiClient? remittanceClient = null)
     {
         _apiClient = apiClient;
         _claimClient = claimClient;
         _acknowledgmentClient = acknowledgmentClient;
         _attachmentClient = attachmentClient;
         _statusClient = statusClient;
+        _remittanceClient = remittanceClient;
         _payerResolver = payerResolver;
         _transmissions = transmissions ?? new InMemoryClaimTransmissionStore();
         _options = options;
@@ -606,6 +609,109 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             GatewayErrorCategory.None, apiResult.RetryCount, canonical.ExternalTransactionId);
         Log(metadata);
         return GatewayResponse<GatewayClaimAcknowledgment>.Success(canonical, metadata);
+    }
+
+    public async Task<GatewayResponse<GatewayRemittance>> RetrieveRemittanceAsync(
+        RemittanceRetrievalRequest request, CancellationToken cancellationToken = default)
+    {
+        var startedAt = _timeProvider.GetUtcNow();
+        var stopwatch = Stopwatch.GetTimestamp();
+
+        var configErrors = _options.Value.Validate();
+        if (configErrors.Count > 0)
+        {
+            return RemittanceFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Configuration,
+                "Stedi gateway is not configured correctly: " + string.Join(" ", configErrors));
+        }
+
+        if (_remittanceClient is null)
+        {
+            return RemittanceFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Configuration,
+                "Stedi remittance client is not registered.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ExternalRemittanceId))
+        {
+            return RemittanceFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Validation,
+                "ExternalRemittanceId is required.");
+        }
+
+        Stedi835ReportApiResult apiResult;
+        try
+        {
+            apiResult = await _remittanceClient
+                .GetReportAsync(request.ExternalRemittanceId.Trim(), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (StediApiException ex)
+        {
+            return RemittanceFail(request, startedAt, stopwatch, ex.RetryCount, ex.Category, ex.Message);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error retrieving Stedi 835 for id={RemittanceId}",
+                SanitizeForLog(request.ExternalRemittanceId));
+            return RemittanceFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Internal,
+                "Unexpected error retrieving the Stedi remittance.");
+        }
+
+        var canonical = StediRemittanceMapper.ToCanonical(
+            apiResult.Report, startedAt, request.EventId);
+        canonical.CorrelationId = request.CorrelationId;
+        canonical.ExternalTransactionId ??= apiResult.ExternalTransactionId;
+        if (string.IsNullOrWhiteSpace(canonical.RemittanceId))
+        {
+            canonical.RemittanceId = request.ExternalRemittanceId.Trim();
+        }
+
+        var metadata = new GatewayTransactionMetadata
+        {
+            GatewayName = GatewayName,
+            TransactionType = HealthcareTransactionType.Remittance835,
+            SubmittedAtUtc = startedAt,
+            CompletedAtUtc = startedAt + GetElapsed(stopwatch),
+            Status = GatewayTransactionStatus.Completed,
+            ExternalTransactionId = canonical.ExternalTransactionId,
+            CorrelationId = request.CorrelationId,
+            Latency = GetElapsed(stopwatch),
+            RetryCount = apiResult.RetryCount,
+            ErrorCategory = GatewayErrorCategory.None
+        };
+        Log(metadata);
+        return GatewayResponse<GatewayRemittance>.Success(canonical, metadata);
+    }
+
+    private GatewayResponse<GatewayRemittance> RemittanceFail(
+        RemittanceRetrievalRequest request,
+        DateTimeOffset startedAt,
+        long stopwatchStart,
+        int retryCount,
+        GatewayErrorCategory category,
+        string message)
+    {
+        var status = category switch
+        {
+            GatewayErrorCategory.Timeout => GatewayTransactionStatus.TimedOut,
+            _ => GatewayTransactionStatus.Failed
+        };
+        var metadata = new GatewayTransactionMetadata
+        {
+            GatewayName = GatewayName,
+            TransactionType = HealthcareTransactionType.Remittance835,
+            SubmittedAtUtc = startedAt,
+            CompletedAtUtc = startedAt + GetElapsed(stopwatchStart),
+            Status = status,
+            CorrelationId = request.CorrelationId,
+            Latency = GetElapsed(stopwatchStart),
+            RetryCount = retryCount,
+            ErrorCategory = category
+        };
+        Log(metadata);
+        return GatewayResponse<GatewayRemittance>.Failure(message, metadata);
     }
 
     /// <summary>
