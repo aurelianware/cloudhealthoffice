@@ -69,10 +69,19 @@ public class HealthcareGatewayResolverTests
         resolver.ResolveCapability<IClaimSubmissionGateway>().Should().BeAssignableTo<IClaimSubmissionGateway>();
     }
 
+    [Fact]
+    public void ClaimAttachmentCapability_IsDiscoverable()
+    {
+        var resolver = BuildResolver();
+        var gateway = resolver.Resolve();
+
+        gateway.Supports(GatewayCapability.ClaimAttachment).Should().BeTrue();
+        resolver.ResolveCapability<IClaimAttachmentGateway>().Should().BeAssignableTo<IClaimAttachmentGateway>();
+    }
+
     [Theory]
     [InlineData(GatewayCapability.ClaimStatus)]
     [InlineData(GatewayCapability.ClaimAcknowledgment)]
-    [InlineData(GatewayCapability.ClaimAttachment)]
     [InlineData(GatewayCapability.Remittance)]
     public void UnsupportedCapabilities_AreNotAdvertised(GatewayCapability capability)
     {

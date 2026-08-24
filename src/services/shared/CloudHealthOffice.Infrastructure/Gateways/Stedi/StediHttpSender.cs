@@ -157,6 +157,10 @@ internal sealed class StediHttpSender
                 GatewayErrorCategory.Authentication, "Stedi authentication failed (HTTP 401)."),
             HttpStatusCode.Forbidden => new StediApiException(
                 GatewayErrorCategory.Authorization, "Stedi authorization failed (HTTP 403)."),
+            HttpStatusCode.NotFound => new StediApiException(
+                GatewayErrorCategory.Validation, $"Stedi resource was not found (HTTP {status})."),
+            HttpStatusCode.RequestEntityTooLarge => new StediApiException(
+                GatewayErrorCategory.AttachmentTooLarge, $"Attachment exceeds Stedi size limits (HTTP {status})."),
             HttpStatusCode.TooManyRequests => new StediApiException(
                 GatewayErrorCategory.RateLimited, "Stedi rate limit reached (HTTP 429).",
                 isTransient: true, retryAfter: ReadRetryAfter(response)),

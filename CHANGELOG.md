@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 275 claim attachment submission through Stedi
+
+Vendor-neutral `IClaimAttachmentGateway.SubmitAttachmentAsync` with canonical
+`ClaimAttachmentSubmissionRequest`. Bytes live in `IClaimAttachmentContentStore`
+(existing `IDocumentStore` / Azure Blob when configured) as a content
+reference plus SHA-256 — never on the claim aggregate. Attachments associate
+deterministically to an existing 837 transmission (optional service line).
+Stedi transport is Create Claim Attachment JSON
+`POST https://claims.us.stedi.com/2025-03-07/claim-attachments/file` plus PUT
+to the pre-signed URL. Unsolicited 275 only. MIME/size validated before
+send. Attachment lifecycle is independent of 837 / 277CA / adjudication /
+payment. Idempotency is
+tenant+transmission+attachment+checksum+type+line+version.
+
+Synchronous gateway acceptance is not payer review or claim payment. Live
+275 is not claimed for sandbox accounts. Development:
+`POST /api/dev/gateway/claims/{transmissionId}/attachments`.
+
 ### 277CA acknowledgment production hardening
 
 Durable Mongo persistence for transmissions, 277CA acknowledgments, outbox,

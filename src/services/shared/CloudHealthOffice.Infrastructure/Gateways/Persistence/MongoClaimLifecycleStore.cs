@@ -11,17 +11,20 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Persistence;
 internal sealed class MongoClaimLifecycleStore :
     IClaimTransmissionStore,
     IClaimAcknowledgmentStore,
-    IClaimAcknowledgmentCursorStore
+    IClaimAcknowledgmentCursorStore,
+    IClaimAttachmentTransmissionStore
 {
     private readonly IMongoCollection<ClaimTransmissionDocument> _transmissions;
     private readonly IMongoCollection<ClaimAcknowledgmentDocument> _acknowledgments;
     private readonly IMongoCollection<ClaimAcknowledgmentCursor> _cursors;
+    private readonly IMongoCollection<ClaimAttachmentTransmissionDocument> _attachments;
 
     public MongoClaimLifecycleStore(IMongoDatabase database, ClaimLifecycleOptions options)
     {
         _transmissions = database.GetCollection<ClaimTransmissionDocument>(options.TransmissionsCollection);
         _acknowledgments = database.GetCollection<ClaimAcknowledgmentDocument>(options.AcknowledgmentsCollection);
         _cursors = database.GetCollection<ClaimAcknowledgmentCursor>(options.CursorsCollection);
+        _attachments = database.GetCollection<ClaimAttachmentTransmissionDocument>(options.AttachmentsCollection);
     }
 
     public async Task EnsureIndexesAsync(CancellationToken ct)
@@ -75,6 +78,24 @@ internal sealed class MongoClaimLifecycleStore :
                 Builders<ClaimAcknowledgmentCursor>.IndexKeys.Ascending(d => d.GatewayName),
                 new CreateIndexOptions { Unique = true }),
             cancellationToken: ct).ConfigureAwait(false);
+
+        await _attachments.Indexes.CreateManyAsync(new[]
+        {
+            new CreateIndexModel<ClaimAttachmentTransmissionDocument>(
+                Builders<ClaimAttachmentTransmissionDocument>.IndexKeys.Ascending(d => d.Id),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<ClaimAttachmentTransmissionDocument>(
+                Builders<ClaimAttachmentTransmissionDocument>.IndexKeys
+                    .Ascending(d => d.TenantId)
+                    .Ascending(d => d.IdempotencyKey),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<ClaimAttachmentTransmissionDocument>(
+                Builders<ClaimAttachmentTransmissionDocument>.IndexKeys.Ascending(d => d.ClaimTransmissionId)),
+            new CreateIndexModel<ClaimAttachmentTransmissionDocument>(
+                Builders<ClaimAttachmentTransmissionDocument>.IndexKeys
+                    .Ascending(d => d.TenantId)
+                    .Ascending(d => d.ChecksumSha256))
+        }, ct).ConfigureAwait(false);
     }
 
     async Task<ClaimTransmissionRecord?> IClaimTransmissionStore.GetByIdempotencyKeyAsync(
@@ -240,6 +261,67 @@ internal sealed class MongoClaimLifecycleStore :
             new ReplaceOptions { IsUpsert = true },
             ct);
 
+    async Task<ClaimAttachmentTransmissionRecord?> IClaimAttachmentTransmissionStore.GetByIdempotencyKeyAsync(
+        string tenantId, string idempotencyKey, CancellationToken ct)
+    {
+        var doc = await _attachments
+            .Find(d => d.TenantId == tenantId && d.IdempotencyKey == idempotencyKey)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.ToModel();
+    }
+
+    async Task<ClaimAttachmentTransmissionRecord?> IClaimAttachmentTransmissionStore.GetByIdAsync(
+        string attachmentTransmissionId, CancellationToken ct)
+    {
+        var doc = await _attachments.Find(d => d.Id == attachmentTransmissionId)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.ToModel();
+    }
+
+    public async Task<IReadOnlyList<ClaimAttachmentTransmissionRecord>> ListByClaimTransmissionIdAsync(
+        string claimTransmissionId, CancellationToken ct = default)
+    {
+        var docs = await _attachments
+            .Find(d => d.ClaimTransmissionId == claimTransmissionId)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.ToModel()).ToList();
+    }
+
+    public async Task<IReadOnlyList<ClaimAttachmentTransmissionRecord>> FindByChecksumAsync(
+        string tenantId, string checksumSha256, CancellationToken ct = default)
+    {
+        var docs = await _attachments
+            .Find(d => d.TenantId == tenantId && d.ChecksumSha256 == checksumSha256)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.ToModel()).ToList();
+    }
+
+    public Task SaveAsync(ClaimAttachmentTransmissionRecord record, CancellationToken ct = default) =>
+        _attachments.ReplaceOneAsync(
+            d => d.Id == record.AttachmentTransmissionId,
+            ClaimAttachmentTransmissionDocument.FromModel(record),
+            new ReplaceOptions { IsUpsert = true },
+            ct);
+
+    public async Task<(bool Created, ClaimAttachmentTransmissionRecord Record)> TryCreateAsync(
+        ClaimAttachmentTransmissionRecord record, CancellationToken ct = default)
+    {
+        try
+        {
+            await _attachments
+                .InsertOneAsync(ClaimAttachmentTransmissionDocument.FromModel(record), cancellationToken: ct)
+                .ConfigureAwait(false);
+            return (true, record);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            var existing = await ((IClaimAttachmentTransmissionStore)this)
+                .GetByIdempotencyKeyAsync(record.TenantId, record.IdempotencyKey, ct)
+                .ConfigureAwait(false);
+            return (false, existing ?? record);
+        }
+    }
+
     private async Task<IReadOnlyList<ClaimTransmissionRecord>> FindTransmissionsAsync(
         System.Linq.Expressions.Expression<Func<ClaimTransmissionDocument, bool>> filter,
         CancellationToken ct)
@@ -307,4 +389,32 @@ internal sealed class ClaimAcknowledgmentDocument
         HasPendingOutbox = r.HasPendingOutbox,
         Payload = r
     };
+}
+
+internal sealed class ClaimAttachmentTransmissionDocument
+{
+    [BsonId]
+    public string Id { get; set; } = string.Empty;
+
+    public string TenantId { get; set; } = string.Empty;
+
+    public string IdempotencyKey { get; set; } = string.Empty;
+
+    public string ClaimTransmissionId { get; set; } = string.Empty;
+
+    public string? ChecksumSha256 { get; set; }
+
+    public ClaimAttachmentTransmissionRecord Payload { get; set; } = new();
+
+    public static ClaimAttachmentTransmissionDocument FromModel(ClaimAttachmentTransmissionRecord r) => new()
+    {
+        Id = r.AttachmentTransmissionId,
+        TenantId = r.TenantId,
+        IdempotencyKey = r.IdempotencyKey,
+        ClaimTransmissionId = r.ClaimTransmissionId,
+        ChecksumSha256 = r.ChecksumSha256,
+        Payload = r
+    };
+
+    public ClaimAttachmentTransmissionRecord ToModel() => Payload;
 }

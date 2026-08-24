@@ -58,6 +58,32 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<ILogger<StediClaimApiClient>>(),
             sp.GetService<TimeProvider>()));
 
+        services.AddHttpClient(StediClaimAttachmentApiClient.HttpClientName, (sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<StediGatewayOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(opts.ClaimsBaseUrl) &&
+                Uri.TryCreate(opts.ClaimsBaseUrl, UriKind.Absolute, out var claimsUri))
+            {
+                client.BaseAddress = claimsUri;
+            }
+            client.Timeout = TimeSpan.FromSeconds(opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("CloudHealthOffice-HealthcareGateway/1.0");
+        });
+
+        services.AddHttpClient(StediClaimAttachmentApiClient.UploadHttpClientName, (sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<StediGatewayOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 120);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("CloudHealthOffice-HealthcareGateway/1.0");
+        });
+
+        services.TryAddSingleton(sp => new StediClaimAttachmentApiClient(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptions<StediGatewayOptions>>(),
+            sp.GetRequiredService<IClaimAttachmentContentStore>(),
+            sp.GetRequiredService<ILogger<StediClaimAttachmentApiClient>>(),
+            sp.GetService<TimeProvider>()));
+
         services.AddHttpClient(StediClaimAcknowledgmentApiClient.CoreHttpClientName, (sp, client) =>
         {
             var opts = sp.GetRequiredService<IOptions<StediGatewayOptions>>().Value;
@@ -89,7 +115,12 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             sp.GetService<TimeProvider>(),
             sp.GetRequiredService<StediClaimApiClient>(),
             sp.GetRequiredService<IClaimTransmissionStore>(),
-            sp.GetRequiredService<StediClaimAcknowledgmentApiClient>()));
+            sp.GetRequiredService<StediClaimAcknowledgmentApiClient>(),
+            sp.GetRequiredService<StediClaimAttachmentApiClient>(),
+            sp.GetRequiredService<IClaimAttachmentTransmissionStore>(),
+            sp.GetRequiredService<IClaimAttachmentContentStore>(),
+            sp.GetRequiredService<IOptions<HealthcareTransactionOptions>>(),
+            sp.GetService<CloudHealthOffice.Infrastructure.Messaging.IMessageBus>()));
 
         services.AddHostedService<StediClaimAcknowledgmentPoller>();
 

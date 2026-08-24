@@ -40,6 +40,9 @@ public sealed class HealthcareTransactionOptions
 
     /// <summary>Persistence for 837 transmissions, 277CA acknowledgments, and poll cursors.</summary>
     public ClaimLifecycleOptions ClaimLifecycle { get; set; } = new();
+
+    /// <summary>275 attachment MIME/size limits and content-store settings.</summary>
+    public ClaimAttachmentOptions ClaimAttachments { get; set; } = new();
 }
 
 /// <summary>
