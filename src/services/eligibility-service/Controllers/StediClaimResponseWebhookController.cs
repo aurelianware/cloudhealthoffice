@@ -69,7 +69,7 @@ public sealed class StediClaimResponseWebhookController : ControllerBase
         }
 
         var result = await _ingress.IngestDiscoveredAsync(discovery, ct);
-        if (result.TransientFailure)
+        if (result.TransientFailure || (!result.Ignored && !result.Processed && !result.Replay))
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new
             {

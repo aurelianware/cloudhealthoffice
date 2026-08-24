@@ -96,7 +96,14 @@ internal sealed class StediClaimAcknowledgmentApiClient
                 isTransient: false, inner: ex);
         }
 
-        return new StediPollApiResult(dto ?? new StediPollTransactionsDto(), http.RetryCount);
+        if (dto is null)
+        {
+            throw new StediApiException(
+                GatewayErrorCategory.MalformedResponse,
+                "Stedi returned an empty poll-transactions response.");
+        }
+
+        return new StediPollApiResult(dto, http.RetryCount);
     }
 
     internal string BuildPollPath(string? startDateTime, string? pageToken)

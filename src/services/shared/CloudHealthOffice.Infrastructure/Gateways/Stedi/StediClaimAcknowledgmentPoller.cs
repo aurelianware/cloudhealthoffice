@@ -95,14 +95,30 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
                         Sanitize(item.TransactionId), result.ErrorCategory);
                     return;
                 }
+
+                if (!result.Ignored && !result.Processed && !result.Replay)
+                {
+                    _logger.LogWarning(
+                        "277CA poll ingest did not complete for transaction {TransactionId} category={Category}",
+                        Sanitize(item.TransactionId), result.ErrorCategory);
+                    return;
+                }
+            }
+
+            var nextToken = page.Page.NextPageToken;
+            var nextWindow = windowStart;
+            if (string.IsNullOrWhiteSpace(nextToken))
+            {
+                nextToken = null;
+                nextWindow = now.AddDays(-1);
             }
 
             await _cursors.SaveAsync(new ClaimAcknowledgmentCursor
             {
                 GatewayName = StediHealthcareGateway.GatewayName,
-                PageToken = page.Page.NextPageToken,
+                PageToken = nextToken,
                 LastSuccessAtUtc = now,
-                WindowStartUtc = windowStart
+                WindowStartUtc = nextWindow
             }, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

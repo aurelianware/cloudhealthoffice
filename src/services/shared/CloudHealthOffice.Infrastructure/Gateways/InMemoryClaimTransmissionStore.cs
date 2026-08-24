@@ -43,6 +43,13 @@ public sealed class InMemoryClaimTransmissionStore : IClaimTransmissionStore
             NamesEqual(r.GatewayName, gatewayName) &&
             ValuesEqual(r.ExternalTransactionId, externalTransactionId)));
 
+    public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByCorrelationIdAsync(
+        string gatewayName, string correlationId, CancellationToken ct = default) =>
+        Task.FromResult(Find(r =>
+            NamesEqual(r.GatewayName, gatewayName) &&
+            !string.IsNullOrWhiteSpace(r.CorrelationId) &&
+            string.Equals(r.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase)));
+
     public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPatientControlNumberAsync(
         string gatewayName, string patientControlNumber, CancellationToken ct = default)
     {

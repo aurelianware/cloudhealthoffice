@@ -177,6 +177,39 @@ public class StediClaimAcknowledgmentTests
             TransactionSetIdentifier = "277",
             Direction = "OUTBOUND"
         }, out _).Should().BeFalse();
+
+        ClaimAcknowledgmentIngress.IsInbound277(new ClaimAcknowledgmentDiscovery
+        {
+            ExternalAcknowledgmentId = "only-id"
+        }, out var missing).Should().BeFalse();
+        missing.Should().Be("unsupported-transaction-set");
+    }
+
+    [Fact]
+    public void ParseWebhook_NonObjectJson_IsFalse()
+    {
+        StediHealthcareGateway.TryParseClaimResponseEvent("null", out _).Should().BeFalse();
+        StediHealthcareGateway.TryParseClaimResponseEvent("[]", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseWebhook_NonProcessedEvent_IsIgnored()
+    {
+        const string json = """
+            {
+              "id": "evt-failed",
+              "detail-type": "file.failed.v2",
+              "detail": {
+                "transactionId": "71716ec5-0e96-462f-bb77-869941bb27ab",
+                "direction": "INBOUND",
+                "x12": { "metadata": { "transaction": { "transactionSetIdentifier": "277" } } }
+              }
+            }
+            """;
+
+        StediHealthcareGateway.TryParseClaimResponseEvent(json, out var discovery).Should().BeTrue();
+        discovery.TransactionSetIdentifier.Should().Be("ignored");
+        ClaimAcknowledgmentIngress.IsInbound277(discovery, out _).Should().BeFalse();
     }
 
     [Fact]

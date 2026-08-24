@@ -60,6 +60,18 @@ internal static class ClaimAcknowledgmentMatcher
             return submissionMatch;
         }
 
+        if (!string.IsNullOrWhiteSpace(acknowledgment.CorrelationId))
+        {
+            var byCorrelation = await store
+                .FindByCorrelationIdAsync(gateway, acknowledgment.CorrelationId.Trim(), ct)
+                .ConfigureAwait(false);
+            var decided = Decide(byCorrelation, "correlation-id");
+            if (decided.Ambiguous || decided.Transmission is not null)
+            {
+                return decided;
+            }
+        }
+
         var pcnCandidates = DistinctIdentifiers(
             acknowledgment.PatientControlNumber,
             acknowledgment.ClaimLevelResults.Select(r => r.PatientControlNumber));

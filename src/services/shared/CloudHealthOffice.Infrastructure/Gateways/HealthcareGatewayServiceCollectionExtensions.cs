@@ -36,6 +36,8 @@ public static class HealthcareGatewayServiceCollectionExtensions
             .Bind(configuration.GetSection(HealthcareTransactionOptions.SectionName));
 
         services.TryAddSingleton<IHealthcareGatewayResolver, HealthcareGatewayResolver>();
+        // In-memory defaults for Development/tests. Production hosts register a
+        // durable store before this call; TryAdd leaves that implementation in place.
         services.TryAddSingleton<IClaimTransmissionStore, InMemoryClaimTransmissionStore>();
         services.TryAddSingleton<IClaimAcknowledgmentStore, InMemoryClaimAcknowledgmentStore>();
         services.TryAddSingleton<IClaimAcknowledgmentCursorStore, InMemoryClaimAcknowledgmentCursorStore>();

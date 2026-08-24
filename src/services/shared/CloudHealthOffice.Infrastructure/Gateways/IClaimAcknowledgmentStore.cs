@@ -20,6 +20,13 @@ public interface IClaimAcknowledgmentStore
         string transmissionId, CancellationToken ct = default);
 
     Task SaveAsync(ClaimAcknowledgmentRecord record, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically create the record if the idempotency key is new. Returns
+    /// <c>false</c> with the existing record when a concurrent delivery won.
+    /// </summary>
+    Task<(bool Created, ClaimAcknowledgmentRecord Record)> TryCreateAsync(
+        ClaimAcknowledgmentRecord record, CancellationToken ct = default);
 }
 
 public sealed class ClaimAcknowledgmentRecord

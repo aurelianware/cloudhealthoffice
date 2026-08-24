@@ -184,8 +184,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         var existing = await _transmissions.GetByIdempotencyKeyAsync(request.TenantId, key, ct)
             .ConfigureAwait(false);
         if (existing is not null &&
-            existing.Status is GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway
-                or GatewayClaimTransmissionStatus.Transmitted)
+            GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(existing.Status))
         {
             RecordClaimMetric(request, existing.Status, GatewayErrorCategory.None, GetElapsed(stopwatch));
             var replayMeta = ClaimMetadata(request, startedAt, GetElapsed(stopwatch),

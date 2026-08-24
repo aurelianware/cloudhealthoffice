@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Gateways.Mock;
+using CloudHealthOffice.Infrastructure.Messaging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CloudHealthOffice.Infrastructure.Tests.Gateways;
@@ -53,7 +54,7 @@ public class ClaimAcknowledgmentProcessorTests
     private static ClaimAcknowledgmentProcessor Processor(
         IClaimTransmissionStore store,
         IClaimAcknowledgmentStore acks,
-        CapturingMessageBus? bus = null) =>
+        IMessageBus? bus = null) =>
         new(acks, store, NullLogger<ClaimAcknowledgmentProcessor>.Instance, bus);
 
     [Fact]
@@ -339,5 +340,47 @@ public class ClaimAcknowledgmentProcessorTests
         result.TransmissionId.Should().Be(tx.TransmissionId);
         result.TenantId.Should().Be("tenant-alpha");
         result.Status.Should().Be(ClaimAcknowledgmentStatus.Accepted);
+    }
+
+    [Fact]
+    public async Task MatchesByCorrelationId_WhenSubmissionIdAbsent()
+    {
+        var store = new InMemoryClaimTransmissionStore();
+        var acks = new InMemoryClaimAcknowledgmentStore();
+        var tx = Seed(store);
+        tx.CorrelationId = "corr-claim-1";
+        await store.SaveAsync(tx);
+
+        var result = await Processor(store, acks).ProcessAsync(new GatewayClaimAcknowledgment
+        {
+            AcknowledgmentId = "ack-corr",
+            Gateway = "Stedi",
+            CorrelationId = "corr-claim-1",
+            Status = ClaimAcknowledgmentStatus.Accepted,
+            ReceivedAt = DateTimeOffset.UtcNow
+        });
+
+        result.TransmissionId.Should().Be(tx.TransmissionId);
+        result.Status.Should().Be(ClaimAcknowledgmentStatus.Accepted);
+    }
+
+    [Fact]
+    public async Task Replay_RetriesUnpublishedEvents()
+    {
+        var store = new InMemoryClaimTransmissionStore();
+        var acks = new InMemoryClaimAcknowledgmentStore();
+        var bus = new FailThenCaptureMessageBus(failFirstSends: 1);
+        var tx = Seed(store);
+        var processor = Processor(store, acks, bus);
+
+        var first = await processor.ProcessAsync(Accepted(tx));
+        first.EventsPublished.Should().BeFalse();
+        bus.Sent.Should().BeEmpty();
+
+        var second = await processor.ProcessAsync(Accepted(tx));
+        second.Replay.Should().BeTrue();
+        bus.Sent.Should().NotBeEmpty();
+        (await acks.GetByIdempotencyKeyAsync("Stedi", "synthetic-ack-001"))!
+            .EventsPublished.Should().BeTrue();
     }
 }

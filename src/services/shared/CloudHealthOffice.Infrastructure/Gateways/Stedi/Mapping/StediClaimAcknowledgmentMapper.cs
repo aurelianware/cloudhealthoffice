@@ -79,10 +79,13 @@ internal static class StediClaimAcknowledgmentMapper
             }
         }
 
+        var providerIssues = providerStatuses.Select(s => MapIssue(s, null)).ToList();
+        allIssues.AddRange(providerIssues);
+
         ack.ClaimLevelResults = claimResults;
         ack.ServiceLineResults = lineResults;
-        ack.Errors = allIssues.Where(i => IsRejection(i)).ToList();
-        ack.Warnings = allIssues.Where(i => !IsRejection(i)).ToList();
+        ack.Errors = allIssues.Where(IsRejection).ToList();
+        ack.Warnings = allIssues.Where(IsInformationalWarning).ToList();
         ack.Status = Rollup(
             claimResults.Select(c => c.Status).ToList(),
             providerStatuses,
@@ -95,11 +98,20 @@ internal static class StediClaimAcknowledgmentMapper
         Stedi277ClaimDto claim, string? batchNumber)
     {
         var status = claim.ClaimStatus;
-        var issues = (status?.InformationClaimStatuses ?? new())
+        if (status is null)
+        {
+            return new GatewayClaimAcknowledgmentClaimResult
+            {
+                Status = ClaimAcknowledgmentStatus.Malformed,
+                OriginalSubmissionId = NullIfBlank(batchNumber)
+            };
+        }
+
+        var issues = (status.InformationClaimStatuses ?? new())
             .SelectMany(ics => (ics.InformationStatuses ?? new()).Select(s => MapIssue(s, ics.StatusInformationActionCode)))
             .ToList();
 
-        var actionCodes = (status?.InformationClaimStatuses ?? new())
+        var actionCodes = (status.InformationClaimStatuses ?? new())
             .Select(ics => ics.StatusInformationActionCode)
             .Where(a => !string.IsNullOrWhiteSpace(a))
             .ToList();
@@ -107,13 +119,13 @@ internal static class StediClaimAcknowledgmentMapper
         var result = new GatewayClaimAcknowledgmentClaimResult
         {
             PatientControlNumber = FirstNonBlank(
-                status?.ReferencedTransactionTraceNumber, status?.PatientAccountNumber),
-            ClaimControlNumber = NullIfBlank(status?.TradingPartnerClaimNumber),
-            OriginalSubmissionId = FirstNonBlank(batchNumber, status?.ClearinghouseTraceNumber),
+                status.ReferencedTransactionTraceNumber, status.PatientAccountNumber),
+            ClaimControlNumber = NullIfBlank(status.TradingPartnerClaimNumber),
+            OriginalSubmissionId = FirstNonBlank(batchNumber, status.ClearinghouseTraceNumber),
             Errors = issues.Where(IsRejection).ToList(),
-            Warnings = issues.Where(i => !IsRejection(i)).ToList()
+            Warnings = issues.Where(IsInformationalWarning).ToList()
         };
-        result.Status = StatusFrom(issues, actionCodes, fallbackRejected: result.Errors.Count > 0);
+        result.Status = StatusFrom(issues, actionCodes);
         return result;
     }
 
@@ -124,11 +136,21 @@ internal static class StediClaimAcknowledgmentMapper
             .Select(s => MapIssue(s, actionCode: null))
             .ToList();
 
-        var lineStatus = issues.Count == 0
-            ? ClaimAcknowledgmentLineStatus.LineAccepted
-            : issues.Any(IsRejection)
+        ClaimAcknowledgmentLineStatus lineStatus;
+        if (issues.Count == 0 || issues.All(i => IsAcceptedCategory(i.CategoryCode)))
+        {
+            lineStatus = issues.Any(IsRejection)
                 ? ClaimAcknowledgmentLineStatus.LineRejected
-                : ClaimAcknowledgmentLineStatus.LineWarning;
+                : ClaimAcknowledgmentLineStatus.LineAccepted;
+        }
+        else if (issues.Any(IsRejection))
+        {
+            lineStatus = ClaimAcknowledgmentLineStatus.LineRejected;
+        }
+        else
+        {
+            lineStatus = ClaimAcknowledgmentLineStatus.LineWarning;
+        }
 
         int? lineNumber = null;
         if (int.TryParse(line.LineItemControlNumber, out var parsed))
@@ -211,18 +233,33 @@ internal static class StediClaimAcknowledgmentMapper
 
         var statuses = claimStatuses.Count > 0
             ? claimStatuses
-            : new[] { StatusFrom(providerStatuses.Select(s => MapIssue(s, null)).ToList(), Array.Empty<string>(), false) };
+            : new[] { StatusFrom(providerStatuses.Select(s => MapIssue(s, null)).ToList(), Array.Empty<string>()) };
 
-        var accepted = statuses.Count(s =>
-            s is ClaimAcknowledgmentStatus.Accepted or ClaimAcknowledgmentStatus.AcceptedWithWarnings);
-        var rejected = statuses.Count(s => s == ClaimAcknowledgmentStatus.Rejected);
-
-        if (accepted > 0 && rejected > 0)
+        if (statuses.Any(s => s == ClaimAcknowledgmentStatus.Partial))
         {
             return ClaimAcknowledgmentStatus.Partial;
         }
 
-        if (rejected > 0 && accepted == 0)
+        if (statuses.All(s => s == ClaimAcknowledgmentStatus.Malformed))
+        {
+            return ClaimAcknowledgmentStatus.Malformed;
+        }
+
+        var accepted = statuses.Count(s =>
+            s is ClaimAcknowledgmentStatus.Accepted or ClaimAcknowledgmentStatus.AcceptedWithWarnings);
+        var rejected = statuses.Count(s => s == ClaimAcknowledgmentStatus.Rejected);
+        var lineRejected = lines.Any(l => l.Status == ClaimAcknowledgmentLineStatus.LineRejected);
+        var lineAccepted = lines.Any(l => l.Status == ClaimAcknowledgmentLineStatus.LineAccepted);
+
+        if ((accepted > 0 && rejected > 0) ||
+            (accepted > 0 && lineRejected) ||
+            (lineAccepted && lineRejected) ||
+            statuses.Any(s => s == ClaimAcknowledgmentStatus.Malformed))
+        {
+            return ClaimAcknowledgmentStatus.Partial;
+        }
+
+        if (rejected > 0 || (lineRejected && accepted == 0))
         {
             return ClaimAcknowledgmentStatus.Rejected;
         }
@@ -238,14 +275,12 @@ internal static class StediClaimAcknowledgmentMapper
 
         return StatusFrom(
             providerStatuses.Select(s => MapIssue(s, null)).ToList(),
-            Array.Empty<string>(),
-            fallbackRejected: false);
+            Array.Empty<string>());
     }
 
     private static ClaimAcknowledgmentStatus StatusFrom(
         IReadOnlyList<GatewayClaimAcknowledgmentIssue> issues,
-        IReadOnlyList<string?> actionCodes,
-        bool fallbackRejected)
+        IReadOnlyList<string?> actionCodes)
     {
         if (actionCodes.Any(a => string.Equals(a, "U", StringComparison.OrdinalIgnoreCase)))
         {
@@ -267,7 +302,7 @@ internal static class StediClaimAcknowledgmentMapper
 
         if (categories.Count == 0)
         {
-            return fallbackRejected ? ClaimAcknowledgmentStatus.Rejected : ClaimAcknowledgmentStatus.Accepted;
+            return ClaimAcknowledgmentStatus.Malformed;
         }
 
         var rejected = categories.Any(IsRejectedCategory);
@@ -284,17 +319,19 @@ internal static class StediClaimAcknowledgmentMapper
 
         if (accepted)
         {
-            return issues.Any(i => !IsRejection(i) && !string.IsNullOrWhiteSpace(i.Description)) &&
-                   issues.Count > 1
+            return issues.Any(IsInformationalWarning)
                 ? ClaimAcknowledgmentStatus.AcceptedWithWarnings
                 : ClaimAcknowledgmentStatus.Accepted;
         }
 
-        return fallbackRejected ? ClaimAcknowledgmentStatus.Rejected : ClaimAcknowledgmentStatus.Accepted;
+        return ClaimAcknowledgmentStatus.Malformed;
     }
 
     private static bool IsRejection(GatewayClaimAcknowledgmentIssue issue) =>
         IsRejectedCategory(issue.CategoryCode);
+
+    private static bool IsInformationalWarning(GatewayClaimAcknowledgmentIssue issue) =>
+        !IsRejection(issue) && !IsAcceptedCategory(issue.CategoryCode);
 
     internal static bool IsAcceptedCategory(string? code)
     {

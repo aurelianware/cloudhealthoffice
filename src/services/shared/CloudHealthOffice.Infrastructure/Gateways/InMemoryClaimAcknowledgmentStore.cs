@@ -58,12 +58,32 @@ public sealed class InMemoryClaimAcknowledgmentStore : IClaimAcknowledgmentStore
         var clone = Clone(record)!;
         _byId[clone.RecordId] = clone;
         _idempotencyToId[clone.IdempotencyKey] = clone.RecordId;
-        if (!string.IsNullOrWhiteSpace(clone.EventId))
+        IndexEvent(clone);
+        return Task.CompletedTask;
+    }
+
+    public Task<(bool Created, ClaimAcknowledgmentRecord Record)> TryCreateAsync(
+        ClaimAcknowledgmentRecord record, CancellationToken ct = default)
+    {
+        var clone = Clone(record)!;
+        if (!_idempotencyToId.TryAdd(clone.IdempotencyKey, clone.RecordId))
         {
-            _eventToId[$"{clone.Gateway}|{clone.EventId}"] = clone.RecordId;
+            var existingId = _idempotencyToId[clone.IdempotencyKey];
+            _byId.TryGetValue(existingId, out var existing);
+            return Task.FromResult((false, Clone(existing) ?? clone));
         }
 
-        return Task.CompletedTask;
+        _byId[clone.RecordId] = clone;
+        IndexEvent(clone);
+        return Task.FromResult((true, Clone(clone)!));
+    }
+
+    private void IndexEvent(ClaimAcknowledgmentRecord clone)
+    {
+        if (!string.IsNullOrWhiteSpace(clone.EventId))
+        {
+            _eventToId.TryAdd($"{clone.Gateway}|{clone.EventId}", clone.RecordId);
+        }
     }
 
     private static ClaimAcknowledgmentRecord? Clone(ClaimAcknowledgmentRecord? source)

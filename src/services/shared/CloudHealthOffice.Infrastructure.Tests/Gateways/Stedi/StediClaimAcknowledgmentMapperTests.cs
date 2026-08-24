@@ -146,4 +146,136 @@ public class StediClaimAcknowledgmentMapperTests
         json.Should().NotContain("ANON");
         json.Should().NotContain("SECRETMEMBER123");
     }
+
+    [Fact]
+    public void AcceptedReport_DoesNotTreatA1AsWarning()
+    {
+        var dto = JsonSerializer.Deserialize<Stedi277ReportDto>(AcceptedJson, StediHttpSender.JsonOptions);
+        var ack = StediClaimAcknowledgmentMapper.ToCanonical(dto, DateTimeOffset.UtcNow, null);
+        ack.Status.Should().Be(ClaimAcknowledgmentStatus.Accepted);
+        ack.Warnings.Should().BeEmpty();
+        ack.Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ProviderOnlyRejection_SurfacesDiagnosticIssue()
+    {
+        const string json = """
+            {
+              "meta": { "transactionId": "prov-1" },
+              "transactions": [{
+                "payers": [{
+                  "claimStatusTransactions": [{
+                    "providerClaimStatuses": [{
+                      "providerStatuses": [{
+                        "healthCareClaimStatusCategoryCode": "A3",
+                        "statusCode": "21",
+                        "statusCodeValue": "Missing or invalid information."
+                      }]
+                    }]
+                  }]
+                }]
+              }]
+            }
+            """;
+        var dto = JsonSerializer.Deserialize<Stedi277ReportDto>(json, StediHttpSender.JsonOptions);
+        var ack = StediClaimAcknowledgmentMapper.ToCanonical(dto, DateTimeOffset.UtcNow, null);
+        ack.Status.Should().Be(ClaimAcknowledgmentStatus.Rejected);
+        ack.Errors.Should().Contain(e => e.StatusCode == "21");
+    }
+
+    [Fact]
+    public void MissingClaimStatus_IsMalformedNotAccepted()
+    {
+        const string json = """
+            {
+              "meta": { "transactionId": "bad-1" },
+              "transactions": [{
+                "payers": [{
+                  "claimStatusTransactions": [{
+                    "claimStatusDetails": [{
+                      "patientClaimStatusDetails": [{ "claims": [{}] }]
+                    }]
+                  }]
+                }]
+              }]
+            }
+            """;
+        var dto = JsonSerializer.Deserialize<Stedi277ReportDto>(json, StediHttpSender.JsonOptions);
+        var ack = StediClaimAcknowledgmentMapper.ToCanonical(dto, DateTimeOffset.UtcNow, null);
+        ack.Status.Should().Be(ClaimAcknowledgmentStatus.Malformed);
+        ack.ClaimLevelResults.Should().ContainSingle(c => c.Status == ClaimAcknowledgmentStatus.Malformed);
+    }
+
+    [Fact]
+    public void MixedClaimResults_ArePartial()
+    {
+        var statuses = new[] { ClaimAcknowledgmentStatus.Accepted, ClaimAcknowledgmentStatus.Rejected };
+        StediClaimAcknowledgmentMapper.Rollup(
+            statuses, Array.Empty<Stedi277StatusDto>(), Array.Empty<GatewayClaimAcknowledgmentLineResult>(),
+            hadStructure: true).Should().Be(ClaimAcknowledgmentStatus.Partial);
+    }
+
+    [Fact]
+    public void AcceptedClaimWithRejectedLine_IsPartial()
+    {
+        StediClaimAcknowledgmentMapper.Rollup(
+            new[] { ClaimAcknowledgmentStatus.Accepted },
+            Array.Empty<Stedi277StatusDto>(),
+            new[]
+            {
+                new GatewayClaimAcknowledgmentLineResult
+                {
+                    Status = ClaimAcknowledgmentLineStatus.LineRejected,
+                    LineItemControlNumber = "1"
+                }
+            },
+            hadStructure: true).Should().Be(ClaimAcknowledgmentStatus.Partial);
+    }
+
+    [Fact]
+    public void AcceptedLineStatuses_AreLineAccepted()
+    {
+        const string json = """
+            {
+              "meta": { "transactionId": "line-ok" },
+              "transactions": [{
+                "payers": [{
+                  "claimStatusTransactions": [{
+                    "claimStatusDetails": [{
+                      "patientClaimStatusDetails": [{
+                        "claims": [{
+                          "claimStatus": {
+                            "informationClaimStatuses": [{
+                              "statusInformationActionCode": "WQ",
+                              "informationStatuses": [{
+                                "healthCareClaimStatusCategoryCode": "A1",
+                                "statusCode": "20"
+                              }]
+                            }]
+                          },
+                          "serviceLines": [{
+                            "lineItemControlNumber": "1",
+                            "serviceClaimStatuses": [{
+                              "serviceStatuses": [{
+                                "healthCareClaimStatusCategoryCode": "A1",
+                                "statusCode": "20",
+                                "statusCodeValue": "Accepted for processing."
+                              }]
+                            }]
+                          }]
+                        }]
+                      }]
+                    }]
+                  }]
+                }]
+              }]
+            }
+            """;
+        var dto = JsonSerializer.Deserialize<Stedi277ReportDto>(json, StediHttpSender.JsonOptions);
+        var ack = StediClaimAcknowledgmentMapper.ToCanonical(dto, DateTimeOffset.UtcNow, null);
+        ack.ServiceLineResults.Should().ContainSingle();
+        ack.ServiceLineResults[0].Status.Should().Be(ClaimAcknowledgmentLineStatus.LineAccepted);
+        ack.Status.Should().Be(ClaimAcknowledgmentStatus.Accepted);
+    }
 }

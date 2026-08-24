@@ -98,9 +98,30 @@ public sealed class ClaimAcknowledgmentIngress : IClaimAcknowledgmentIngress
                 Sanitize(discovery.ExternalAcknowledgmentId),
                 category);
 
+            var quarantined = await _processor.ProcessAsync(
+                new GatewayClaimAcknowledgment
+                {
+                    AcknowledgmentId = discovery.ExternalAcknowledgmentId.Trim(),
+                    Gateway = string.IsNullOrWhiteSpace(discovery.GatewayName)
+                        ? "unknown"
+                        : discovery.GatewayName,
+                    EventId = discovery.EventId,
+                    CorrelationId = discovery.CorrelationId,
+                    ReceivedAt = DateTimeOffset.UtcNow,
+                    Status = ClaimAcknowledgmentStatus.Malformed,
+                    RawSourceReference = discovery.ExternalAcknowledgmentId,
+                    ExternalTransactionId = discovery.ExternalAcknowledgmentId
+                },
+                cancellationToken).ConfigureAwait(false);
+
             return new ClaimAcknowledgmentIngestResult
             {
-                Processed = false,
+                Processed = true,
+                Replay = quarantined.Replay,
+                Status = quarantined.Status,
+                AcknowledgmentId = quarantined.AcknowledgmentId,
+                TransmissionId = quarantined.TransmissionId,
+                TenantId = quarantined.TenantId,
                 ErrorCategory = category,
                 ErrorMessage = retrieved.ErrorMessage
             };
@@ -127,16 +148,16 @@ public sealed class ClaimAcknowledgmentIngress : IClaimAcknowledgmentIngress
     internal static bool IsInbound277(ClaimAcknowledgmentDiscovery discovery, out string? reason)
     {
         var tx = discovery.TransactionSetIdentifier?.Trim();
-        if (!string.IsNullOrEmpty(tx) &&
-            !string.Equals(tx, "277", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(tx, "277CA", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(tx) ||
+            (!string.Equals(tx, "277", StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(tx, "277CA", StringComparison.OrdinalIgnoreCase)))
         {
             reason = "unsupported-transaction-set";
             return false;
         }
 
         var direction = discovery.Direction?.Trim();
-        if (!string.IsNullOrEmpty(direction) &&
+        if (string.IsNullOrEmpty(direction) ||
             !string.Equals(direction, "INBOUND", StringComparison.OrdinalIgnoreCase))
         {
             reason = "not-inbound";

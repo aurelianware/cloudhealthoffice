@@ -109,8 +109,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         var existing = await _transmissions.GetByIdempotencyKeyAsync(request.TenantId, key, ct)
             .ConfigureAwait(false);
         if (existing is not null &&
-            existing.Status is GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway
-                or GatewayClaimTransmissionStatus.Transmitted)
+            GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(existing.Status))
         {
             var replay = ToResult(existing, replay: true);
             var meta = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
@@ -177,9 +176,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
             SubmissionId = record.SubmissionId,
             ExternalTransactionId = record.ExternalTransactionId,
             IdempotencyKey = record.IdempotencyKey,
-            AcceptedForProcessing = record.Status is
-                GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway or
-                GatewayClaimTransmissionStatus.Transmitted,
+            AcceptedForProcessing = GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(record.Status),
             ReplayOfExistingTransmission = replay
         };
 

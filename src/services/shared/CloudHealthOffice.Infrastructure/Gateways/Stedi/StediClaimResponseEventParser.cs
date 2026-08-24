@@ -21,12 +21,18 @@ internal static class StediClaimResponseEventParser
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
             discovery.EventId = GetString(root, "id");
             var detailType = GetString(root, "detail-type") ?? GetString(root, "detailType");
             if (!string.IsNullOrEmpty(detailType) &&
                 !detailType.Contains("transaction.processed", StringComparison.OrdinalIgnoreCase))
             {
                 discovery.TransactionSetIdentifier = "ignored";
+                return true;
             }
 
             if (!root.TryGetProperty("detail", out var detail) || detail.ValueKind != JsonValueKind.Object)

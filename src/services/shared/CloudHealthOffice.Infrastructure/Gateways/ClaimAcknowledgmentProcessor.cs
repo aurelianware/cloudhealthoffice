@@ -56,7 +56,7 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
                 .ConfigureAwait(false);
             if (byEvent is not null)
             {
-                return Replay(byEvent);
+                return await ReplayAsync(byEvent, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -66,16 +66,16 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             .ConfigureAwait(false);
         if (existing is not null)
         {
-            return Replay(existing);
+            return await ReplayAsync(existing, cancellationToken).ConfigureAwait(false);
         }
 
         if (acknowledgment.Status == ClaimAcknowledgmentStatus.Malformed)
         {
-            var malformed = await PersistUnmatched(
-                acknowledgment, null, "malformed", cancellationToken).ConfigureAwait(false);
-            Log(malformed, replay: false);
-            RecordMetric(malformed.Status, started);
-            return ToResult(malformed, replay: false, events: false);
+            var malformed = ToRecord(acknowledgment, transmission: null);
+            malformed.UnmatchedReason = "malformed";
+            malformed.Status = ClaimAcknowledgmentStatus.Malformed;
+            return await CommitNewAsync(malformed, transmission: null, started, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var match = await ClaimAcknowledgmentMatcher
@@ -85,70 +85,46 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
         if (match.Ambiguous || match.Transmission is null)
         {
             acknowledgment.Status = ClaimAcknowledgmentStatus.UnableToMatch;
-            var unmatched = await PersistUnmatched(
-                acknowledgment,
-                match.Ambiguous ? "ambiguous-match" : match.Reason,
-                match.Ambiguous ? "ambiguous-match" : match.Reason ?? "unmatched",
-                cancellationToken).ConfigureAwait(false);
-            var unmatchedEvents = await PublishAsync(unmatched, transmission: null, cancellationToken)
+            var unmatched = ToRecord(acknowledgment, transmission: null);
+            unmatched.UnmatchedReason = match.Ambiguous ? "ambiguous-match" : match.Reason ?? "unmatched";
+            unmatched.Status = ClaimAcknowledgmentStatus.UnableToMatch;
+            unmatched.TenantId = string.Empty;
+            return await CommitNewAsync(unmatched, transmission: null, started, cancellationToken)
                 .ConfigureAwait(false);
-            unmatched.EventsPublished = unmatchedEvents;
-            await _acknowledgments.SaveAsync(unmatched, cancellationToken).ConfigureAwait(false);
-            Log(unmatched, replay: false);
-            RecordMetric(unmatched.Status, started);
-            return ToResult(unmatched, replay: false, events: unmatchedEvents);
         }
 
         var transmission = match.Transmission;
-        var submittedAt = transmission.SubmittedAtUtc;
-        var originalStatus = transmission.Status;
-        var nextStatus = MapTransmissionStatus(acknowledgment.Status, originalStatus);
-        if (nextStatus is not null)
-        {
-            transmission.Status = nextStatus.Value;
-            transmission.AcknowledgedAtUtc = acknowledgment.ReceivedAt == default
-                ? started
-                : acknowledgment.ReceivedAt;
-        }
-
-        await _transmissions.SaveAsync(transmission, cancellationToken).ConfigureAwait(false);
-        if (transmission.SubmittedAtUtc != submittedAt)
-        {
-            transmission.SubmittedAtUtc = submittedAt;
-            await _transmissions.SaveAsync(transmission, cancellationToken).ConfigureAwait(false);
-        }
-
         var record = ToRecord(acknowledgment, transmission);
         record.TenantId = transmission.TenantId;
         record.ClaimId = transmission.ClaimId;
         record.ClaimType = transmission.ClaimType;
         record.TransmissionId = transmission.TransmissionId;
-        await _acknowledgments.SaveAsync(record, cancellationToken).ConfigureAwait(false);
-
-        var published = await PublishAsync(record, transmission, cancellationToken).ConfigureAwait(false);
-        record.EventsPublished = published;
-        await _acknowledgments.SaveAsync(record, cancellationToken).ConfigureAwait(false);
-
-        Log(record, replay: false);
-        RecordMetric(record.Status, started);
-        return ToResult(record, replay: false, events: published, transmission.Status);
+        return await CommitNewAsync(record, transmission, started, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<ClaimAcknowledgmentRecord> PersistUnmatched(
-        GatewayClaimAcknowledgment acknowledgment,
-        string? reason,
-        string unmatchedReason,
+    private async Task<ClaimAcknowledgmentProcessResult> CommitNewAsync(
+        ClaimAcknowledgmentRecord record,
+        ClaimTransmissionRecord? transmission,
+        DateTimeOffset started,
         CancellationToken ct)
     {
-        var record = ToRecord(acknowledgment, transmission: null);
-        record.UnmatchedReason = unmatchedReason;
-        record.Status = acknowledgment.Status == ClaimAcknowledgmentStatus.Malformed
-            ? ClaimAcknowledgmentStatus.Malformed
-            : ClaimAcknowledgmentStatus.UnableToMatch;
-        record.TenantId = string.Empty;
-        await _acknowledgments.SaveAsync(record, ct).ConfigureAwait(false);
-        _ = reason;
-        return record;
+        var (created, stored) = await _acknowledgments.TryCreateAsync(record, ct).ConfigureAwait(false);
+        if (!created)
+        {
+            return await ReplayAsync(stored, ct).ConfigureAwait(false);
+        }
+
+        if (transmission is not null)
+        {
+            await ApplyTransmissionAsync(stored, transmission, ct).ConfigureAwait(false);
+        }
+
+        var published = await PublishAsync(stored, transmission, ct).ConfigureAwait(false);
+        stored.EventsPublished = published;
+        await _acknowledgments.SaveAsync(stored, ct).ConfigureAwait(false);
+        Log(stored, replay: false);
+        RecordMetric(stored.Status, started);
+        return ToResult(stored, replay: false, events: published, transmission?.Status);
     }
 
     private static ClaimAcknowledgmentRecord ToRecord(
@@ -199,10 +175,50 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             _ => null
         };
 
-    private ClaimAcknowledgmentProcessResult Replay(ClaimAcknowledgmentRecord existing)
+    private async Task ApplyTransmissionAsync(
+        ClaimAcknowledgmentRecord record,
+        ClaimTransmissionRecord transmission,
+        CancellationToken ct)
     {
+        var submittedAt = transmission.SubmittedAtUtc;
+        var nextStatus = MapTransmissionStatus(record.Status, transmission.Status);
+        if (nextStatus is null)
+        {
+            return;
+        }
+
+        transmission.Status = nextStatus.Value;
+        transmission.AcknowledgedAtUtc = record.ReceivedAtUtc;
+        transmission.SubmittedAtUtc = submittedAt;
+        await _transmissions.SaveAsync(transmission, ct).ConfigureAwait(false);
+    }
+
+    private async Task<ClaimAcknowledgmentProcessResult> ReplayAsync(
+        ClaimAcknowledgmentRecord existing, CancellationToken ct)
+    {
+        ClaimTransmissionRecord? transmission = null;
+        if (!string.IsNullOrWhiteSpace(existing.TransmissionId))
+        {
+            transmission = await _transmissions.GetByIdAsync(existing.TransmissionId, ct).ConfigureAwait(false);
+            if (transmission is not null)
+            {
+                await ApplyTransmissionAsync(existing, transmission, ct).ConfigureAwait(false);
+            }
+        }
+
+        var published = existing.EventsPublished;
+        if (!published)
+        {
+            published = await PublishAsync(existing, transmission, ct).ConfigureAwait(false);
+            if (published)
+            {
+                existing.EventsPublished = true;
+                await _acknowledgments.SaveAsync(existing, ct).ConfigureAwait(false);
+            }
+        }
+
         Log(existing, replay: true);
-        return ToResult(existing, replay: true, events: false);
+        return ToResult(existing, replay: true, events: published, transmission?.Status);
     }
 
     private static ClaimAcknowledgmentProcessResult ToResult(
@@ -306,6 +322,17 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             new KeyValuePair<string, object?>("cho.status", status.ToString()));
     }
 
-    private static string? Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    private static string Sanitize(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        // Strip control characters and anything that is not a safe identifier
+        // token so log forging from inbound 277CA ids is not possible.
+        var chars = value.Where(static c =>
+            char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '|').ToArray();
+        return new string(chars);
+    }
 }
