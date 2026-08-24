@@ -179,6 +179,40 @@ public class ClaimStatusTests
     }
 
     [Fact]
+    public async Task ServiceLineNumberWithoutLineDetails_DoesNotWidenToClaimLevel()
+    {
+        var transmissions = new InMemoryClaimTransmissionStore();
+        var gateway = new MockHealthcareGateway(
+            NullLogger<MockHealthcareGateway>.Instance, transmissions: transmissions);
+        var source = GatewayClaimFixtures.Professional();
+        source.ServiceLines.Clear();
+        var tx = new ClaimTransmissionRecord
+        {
+            TenantId = "tenant-alpha",
+            ClaimId = "CLM-P-1001",
+            GatewayName = MockHealthcareGateway.GatewayName,
+            PayerId = "60054",
+            PatientControlNumber = "CLM-P-1001",
+            ServiceDateFrom = new DateOnly(2026, 1, 15),
+            ServiceLineNumbers = { 1 },
+            InquirySource = ClaimStatusInquirySource.FromSubmission(source),
+            Status = GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway
+        };
+        await transmissions.SaveAsync(tx);
+
+        var response = await gateway.CheckClaimStatusAsync(new ClaimStatusRequest
+        {
+            TenantId = "tenant-alpha",
+            TransmissionId = tx.TransmissionId,
+            ServiceLineNumber = 1
+        });
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.ServiceLineNotFound);
+        response.ErrorMessage.Should().Contain("line details");
+    }
+
+    [Fact]
     public async Task PaidClaimStatus_DoesNotChangeAcknowledgmentOrTransmission()
     {
         var request = GatewayClaimFixtures.Professional(claimId: "CLM-PAID-1");

@@ -33,13 +33,16 @@ internal static class StediClaimStatusMapper
         if (request.ServiceLineNumber is int lineNumber)
         {
             var line = request.ServiceLines.FirstOrDefault(l => l.LineNumber == lineNumber);
-            if (line is not null)
+            if (line is null)
             {
-                dto.ServiceLinesInformation = new List<StediClaimStatusServiceLineDto>
-                {
-                    ToServiceLine(line, request.ClaimType)
-                };
+                throw new InvalidOperationException(
+                    "Service-line inquiry is missing original line details and cannot be sent as claim-level status.");
             }
+
+            dto.ServiceLinesInformation = new List<StediClaimStatusServiceLineDto>
+            {
+                ToServiceLine(line, request.ClaimType)
+            };
         }
 
         return dto;

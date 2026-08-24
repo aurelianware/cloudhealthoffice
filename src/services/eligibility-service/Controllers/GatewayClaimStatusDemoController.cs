@@ -44,17 +44,10 @@ public sealed class GatewayClaimStatusDemoController : ControllerBase
             return NotFound();
         }
 
-        var transmission = await _transmissions.GetByIdAsync(transmissionId, ct);
-        if (transmission is null)
+        var transmission = await LoadTransmissionForTenantAsync(transmissionId, ct);
+        if (transmission.Error is not null)
         {
-            return NotFound(new { error = "Transmission not found." });
-        }
-
-        var contextTenant = HttpContext.Items["TenantId"]?.ToString();
-        if (!string.IsNullOrWhiteSpace(contextTenant) &&
-            !string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
-        {
-            return BadRequest(new { error = "Tenant does not match the claim transmission." });
+            return transmission.Error;
         }
 
         IClaimStatusGateway status;
@@ -71,15 +64,16 @@ public sealed class GatewayClaimStatusDemoController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
 
+        var record = transmission.Record!;
         var result = await status.CheckClaimStatusAsync(
             new ClaimStatusRequest
             {
-                TenantId = transmission.TenantId,
-                ClaimId = transmission.ClaimId,
-                TransmissionId = transmission.TransmissionId,
-                PayerId = transmission.PayerId,
+                TenantId = record.TenantId,
+                ClaimId = record.ClaimId,
+                TransmissionId = record.TransmissionId,
+                PayerId = record.PayerId,
                 ServiceLineNumber = serviceLineNumber,
-                CorrelationId = transmission.CorrelationId
+                CorrelationId = record.CorrelationId
             },
             ct);
         return Ok(result);
@@ -93,7 +87,32 @@ public sealed class GatewayClaimStatusDemoController : ControllerBase
             return NotFound();
         }
 
-        var list = await _inquiries.ListByTransmissionIdAsync(transmissionId, ct);
+        var transmission = await LoadTransmissionForTenantAsync(transmissionId, ct);
+        if (transmission.Error is not null)
+        {
+            return transmission.Error;
+        }
+
+        var list = await _inquiries.ListByTransmissionIdAsync(transmission.Record!.TransmissionId, ct);
         return Ok(list);
+    }
+
+    private async Task<(ClaimTransmissionRecord? Record, IActionResult? Error)> LoadTransmissionForTenantAsync(
+        string transmissionId, CancellationToken ct)
+    {
+        var transmission = await _transmissions.GetByIdAsync(transmissionId, ct);
+        if (transmission is null)
+        {
+            return (null, NotFound(new { error = "Transmission not found." }));
+        }
+
+        var contextTenant = HttpContext.Items["TenantId"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(contextTenant) &&
+            !string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
+        {
+            return (null, BadRequest(new { error = "Tenant does not match the claim transmission." }));
+        }
+
+        return (transmission, null);
     }
 }

@@ -94,12 +94,19 @@ internal static class ClaimStatusRules
                 return (GatewayErrorCategory.Validation, "ServiceLineNumber must be a positive line number.");
             }
 
-            var known = request.ServiceLines.Any(l => l.LineNumber == line) ||
-                        (transmission?.ServiceLineNumbers.Contains(line) ?? false);
-            if (!known)
+            if (transmission is not null && !OriginalClaimHasLine(transmission, line))
             {
                 return (GatewayErrorCategory.ServiceLineNotFound,
                     "Service line was not present on the original submitted claim.");
+            }
+
+            // Line-level 276 requires original line details (procedure, charge,
+            // dates). Knowing only the line number is not enough — omitting
+            // serviceLinesInformation would silently widen to claim-level status.
+            if (!request.ServiceLines.Any(l => l.LineNumber == line))
+            {
+                return (GatewayErrorCategory.ServiceLineNotFound,
+                    "Service line details from the original submitted claim are required for a line-level inquiry.");
             }
         }
 
@@ -205,6 +212,10 @@ internal static class ClaimStatusRules
             GatewayClaimStatus.Finalized or
             GatewayClaimStatus.Rejected);
     }
+
+    private static bool OriginalClaimHasLine(ClaimTransmissionRecord transmission, int line) =>
+        transmission.ServiceLineNumbers.Contains(line) ||
+        (transmission.InquirySource?.ServiceLines.Any(l => l.LineNumber == line) ?? false);
 
     public static string? FirstNonBlank(params string?[] values)
     {

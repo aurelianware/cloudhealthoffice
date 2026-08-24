@@ -222,6 +222,25 @@ public class StediClaimStatusTests
     }
 
     [Fact]
+    public void Mapper_ServiceLineWithoutDetails_ThrowsInsteadOfWidening()
+    {
+        var request = new ClaimStatusRequest
+        {
+            ServiceDateFrom = new DateOnly(2026, 1, 15),
+            Provider = new GatewayClaimProvider { Npi = "1999999984", OrganizationName = "Therapy Associates" },
+            Subscriber = new GatewayEligibilityPerson
+            {
+                MemberId = "U7777788888", FirstName = "John", LastName = "Anon"
+            },
+            ServiceLineNumber = 1
+        };
+
+        var act = () => StediClaimStatusMapper.ToStediRequest(request, "60054");
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*line details*");
+    }
+
+    [Fact]
     public void Mapper_DentalLine_UsesAdQualifier()
     {
         var request = new ClaimStatusRequest
