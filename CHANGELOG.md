@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 835 ERA remittance ingestion through Stedi
+
+Vendor-neutral `IRemittanceGateway.RetrieveRemittanceAsync` with canonical
+`GatewayRemittance`. Stedi transport is the 835 ERA Report
+`GET https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/835`
+after webhook or poll discovery. `IRemittanceProcessor` matches claims
+deterministically (payer claim control number, then patient control number),
+persists receipts, and emits identifier-only events. It does not post
+payment, change 277CA, or overwrite 276/277 status. Development:
+`POST /api/dev/gateway/remittance`.
+
+Contract-tested against Stedi's documented 835 API; live ERA retrieve pending
+production/test capability.
+
 ### 276/277 claim status inquiry through Stedi
 
 Vendor-neutral `IClaimStatusGateway.CheckClaimStatusAsync` with canonical

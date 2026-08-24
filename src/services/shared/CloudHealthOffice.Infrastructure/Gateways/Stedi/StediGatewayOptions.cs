@@ -101,6 +101,13 @@ public sealed class StediGatewayOptions
     public string ClaimAcknowledgmentReportPath { get; set; } =
         "/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/277";
 
+    /// <summary>
+    /// 835 ERA Report path template. API version 2024-04-01. Placeholder
+    /// <c>{transactionId}</c> is replaced with the Stedi transaction UUID.
+    /// </summary>
+    public string RemittanceReportPath { get; set; } =
+        "/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/835";
+
     /// <summary>Poll Transactions path (Core API 2023-08-01).</summary>
     public string PollTransactionsPath { get; set; } = "/2023-08-01/polling/transactions";
 
@@ -224,6 +231,14 @@ public sealed class StediGatewayOptions
         var template = string.IsNullOrWhiteSpace(ClaimAcknowledgmentReportPath)
             ? "/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/277"
             : ClaimAcknowledgmentReportPath;
+        return template.Replace("{transactionId}", Uri.EscapeDataString(transactionId), StringComparison.Ordinal);
+    }
+
+    public string ResolveRemittanceReportPath(string transactionId)
+    {
+        var template = string.IsNullOrWhiteSpace(RemittanceReportPath)
+            ? "/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/835"
+            : RemittanceReportPath;
         return template.Replace("{transactionId}", Uri.EscapeDataString(transactionId), StringComparison.Ordinal);
     }
 

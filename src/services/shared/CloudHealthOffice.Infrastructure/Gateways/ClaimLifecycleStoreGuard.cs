@@ -18,6 +18,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
     private readonly IClaimAttachmentTransmissionStore _attachments;
     private readonly IInboundClaimAttachmentReceiptStore _inboundAttachments;
     private readonly IClaimStatusInquiryStore _statusInquiries;
+    private readonly IRemittanceStore _remittances;
     private readonly IClaimAttachmentContentStore _content;
     private readonly IOptions<HealthcareTransactionOptions> _options;
     private readonly IHostEnvironment? _environment;
@@ -30,6 +31,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
         IClaimAttachmentTransmissionStore attachments,
         IInboundClaimAttachmentReceiptStore inboundAttachments,
         IClaimStatusInquiryStore statusInquiries,
+        IRemittanceStore remittances,
         IClaimAttachmentContentStore content,
         IOptions<HealthcareTransactionOptions> options,
         ILogger<ClaimLifecycleStoreGuard> logger,
@@ -41,6 +43,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
         _attachments = attachments;
         _inboundAttachments = inboundAttachments;
         _statusInquiries = statusInquiries;
+        _remittances = remittances;
         _content = content;
         _options = options;
         _logger = logger;
@@ -55,6 +58,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
                         _attachments is InMemoryClaimAttachmentTransmissionStore ||
                         _inboundAttachments is InMemoryInboundClaimAttachmentReceiptStore ||
                         _statusInquiries is InMemoryClaimStatusInquiryStore ||
+                        _remittances is InMemoryRemittanceStore ||
                         _content is InMemoryClaimAttachmentContentStore;
         var allowed = ClaimLifecycleStoreResolver.AllowsEphemeral(_options.Value.ClaimLifecycle, _environment);
 
@@ -146,6 +150,50 @@ internal sealed class ClaimAcknowledgmentOutboxPublisher : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Claim acknowledgment outbox dispatch failed");
+            }
+        }
+    }
+}
+
+internal sealed class RemittanceOutboxPublisher : BackgroundService
+{
+    private readonly IRemittanceProcessor _processor;
+    private readonly IOptions<HealthcareTransactionOptions> _options;
+    private readonly ILogger<RemittanceOutboxPublisher> _logger;
+
+    public RemittanceOutboxPublisher(
+        IRemittanceProcessor processor,
+        IOptions<HealthcareTransactionOptions> options,
+        ILogger<RemittanceOutboxPublisher> logger)
+    {
+        _processor = processor;
+        _options = options;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var seconds = _options.Value.ClaimLifecycle.OutboxIntervalSeconds;
+        if (seconds <= 0)
+        {
+            _logger.LogInformation("Remittance outbox publisher is disabled.");
+            return;
+        }
+
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(seconds));
+        while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+        {
+            try
+            {
+                await _processor.DispatchPendingAsync(stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Remittance outbox dispatch failed");
             }
         }
     }

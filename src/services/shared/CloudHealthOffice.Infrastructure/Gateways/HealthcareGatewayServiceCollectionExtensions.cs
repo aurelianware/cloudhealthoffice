@@ -54,6 +54,15 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 sp.GetService<IMessageBus>(),
                 sp.GetService<TimeProvider>()));
         services.TryAddSingleton<IClaimAcknowledgmentIngress, ClaimAcknowledgmentIngress>();
+        services.TryAddSingleton<IRemittanceProcessor>(sp =>
+            new RemittanceProcessor(
+                sp.GetRequiredService<IRemittanceStore>(),
+                sp.GetRequiredService<IClaimTransmissionStore>(),
+                sp.GetRequiredService<ILogger<RemittanceProcessor>>(),
+                sp.GetService<IMessageBus>(),
+                sp.GetService<TimeProvider>()));
+        services.TryAddSingleton<IRemittanceIngress, RemittanceIngress>();
+        services.AddHostedService<RemittanceOutboxPublisher>();
         services.AddHostedService<ClaimLifecycleIndexHostedService>();
         services.AddHostedService<ClaimLifecycleStoreGuard>();
         services.AddHostedService<ClaimAcknowledgmentOutboxPublisher>();
@@ -108,6 +117,8 @@ public static class HealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<ClaimLifecycleStoreBox>().InboundAttachments);
         services.TryAddSingleton<IClaimStatusInquiryStore>(sp =>
             sp.GetRequiredService<ClaimLifecycleStoreBox>().StatusInquiries);
+        services.TryAddSingleton<IRemittanceStore>(sp =>
+            sp.GetRequiredService<ClaimLifecycleStoreBox>().Remittances);
     }
 
     private static ClaimLifecycleStoreBox CreateLifecycleBox(IServiceProvider sp, IConfiguration configuration)
@@ -133,7 +144,7 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 ? configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice"
                 : options.MongoDatabaseName;
             var mongo = new MongoClaimLifecycleStore(mongoClient.GetDatabase(databaseName), options);
-            return new ClaimLifecycleStoreBox(mongo, mongo, mongo, mongo, mongo, mongo);
+            return new ClaimLifecycleStoreBox(mongo, mongo, mongo, mongo, mongo, mongo, mongo);
         }
 
         return new ClaimLifecycleStoreBox(
@@ -142,7 +153,8 @@ public static class HealthcareGatewayServiceCollectionExtensions
             new InMemoryClaimAcknowledgmentCursorStore(),
             new InMemoryClaimAttachmentTransmissionStore(),
             new CloudHealthOffice.Infrastructure.Responders.InMemoryInboundClaimAttachmentReceiptStore(),
-            new InMemoryClaimStatusInquiryStore());
+            new InMemoryClaimStatusInquiryStore(),
+            new InMemoryRemittanceStore());
     }
 
     internal sealed class ClaimLifecycleStoreBox
@@ -153,7 +165,8 @@ public static class HealthcareGatewayServiceCollectionExtensions
             IClaimAcknowledgmentCursorStore cursors,
             IClaimAttachmentTransmissionStore attachments,
             CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore inboundAttachments,
-            IClaimStatusInquiryStore statusInquiries)
+            IClaimStatusInquiryStore statusInquiries,
+            IRemittanceStore remittances)
         {
             Transmissions = transmissions;
             Acknowledgments = acknowledgments;
@@ -161,6 +174,7 @@ public static class HealthcareGatewayServiceCollectionExtensions
             Attachments = attachments;
             InboundAttachments = inboundAttachments;
             StatusInquiries = statusInquiries;
+            Remittances = remittances;
         }
 
         public IClaimTransmissionStore Transmissions { get; }
@@ -169,5 +183,6 @@ public static class HealthcareGatewayServiceCollectionExtensions
         public IClaimAttachmentTransmissionStore Attachments { get; }
         public CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore InboundAttachments { get; }
         public IClaimStatusInquiryStore StatusInquiries { get; }
+        public IRemittanceStore Remittances { get; }
     }
 }

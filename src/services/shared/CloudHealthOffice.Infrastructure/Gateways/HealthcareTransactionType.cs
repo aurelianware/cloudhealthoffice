@@ -4,8 +4,8 @@ namespace CloudHealthOffice.Infrastructure.Gateways;
 /// HIPAA / X12 transaction sets that a healthcare transaction gateway may
 /// carry between Cloud Health Office and an external payer or clearinghouse.
 ///
-/// Eligibility, claim submission, 277CA acknowledgment, 275 attachments, and
-/// 276/277 claim status are exercised today. Remittance stays contract-only.
+/// Eligibility, claim submission, 277CA acknowledgment, 275 attachments,
+/// 276/277 claim status, and 835 remittance retrieve are exercised today.
 /// </summary>
 public enum HealthcareTransactionType
 {

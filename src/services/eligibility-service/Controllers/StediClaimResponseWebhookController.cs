@@ -18,15 +18,18 @@ namespace EligibilityService.Controllers;
 public sealed class StediClaimResponseWebhookController : ControllerBase
 {
     private readonly IClaimAcknowledgmentIngress _ingress;
+    private readonly IRemittanceIngress _remittanceIngress;
     private readonly IOptions<StediGatewayOptions> _options;
     private readonly ILogger<StediClaimResponseWebhookController> _logger;
 
     public StediClaimResponseWebhookController(
         IClaimAcknowledgmentIngress ingress,
+        IRemittanceIngress remittanceIngress,
         IOptions<StediGatewayOptions> options,
         ILogger<StediClaimResponseWebhookController> logger)
     {
         _ingress = ingress;
+        _remittanceIngress = remittanceIngress;
         _options = options;
         _logger = logger;
     }
@@ -66,6 +69,30 @@ public sealed class StediClaimResponseWebhookController : ControllerBase
         {
             _logger.LogWarning("Stedi claim-response webhook body could not be parsed");
             return BadRequest(new { error = "Malformed webhook event." });
+        }
+
+        if (RemittanceIngress.IsInbound835(discovery, out _))
+        {
+            var remittance = await _remittanceIngress.IngestDiscoveredAsync(discovery, ct);
+            if (remittance.TransientFailure ||
+                (!remittance.Ignored && !remittance.Processed && !remittance.Replay))
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    error = remittance.ErrorMessage,
+                    category = remittance.ErrorCategory.ToString()
+                });
+            }
+
+            return Ok(new
+            {
+                ignored = remittance.Ignored,
+                replay = remittance.Replay,
+                processed = remittance.Processed,
+                status = remittance.Status?.ToString(),
+                remittanceId = remittance.RemittanceId,
+                transactionSet = "835"
+            });
         }
 
         var result = await _ingress.IngestDiscoveredAsync(discovery, ct);

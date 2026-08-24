@@ -60,6 +60,13 @@ public sealed class InMemoryClaimTransmissionStore : IClaimTransmissionStore
         return Task.FromResult(matches);
     }
 
+    public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPayerClaimControlNumberAsync(
+        string gatewayName, string payerClaimControlNumber, CancellationToken ct = default) =>
+        Task.FromResult(Find(r =>
+            NamesEqual(r.GatewayName, gatewayName) &&
+            !string.IsNullOrWhiteSpace(r.PayerClaimControlNumber) &&
+            string.Equals(r.PayerClaimControlNumber, payerClaimControlNumber, StringComparison.OrdinalIgnoreCase)));
+
     public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByTenantAndClaimIdAsync(
         string tenantId, string claimId, CancellationToken ct = default) =>
         Task.FromResult(Find(r =>

@@ -81,7 +81,12 @@ public class GatewayVendorNeutralityTests
             typeof(ClaimStatusLineResult),
             typeof(ClaimStatusLineSource),
             typeof(ClaimStatusInquirySource),
-            typeof(ClaimStatusInquiryRecord)
+            typeof(ClaimStatusInquiryRecord),
+            typeof(GatewayRemittance),
+            typeof(RemittedClaim),
+            typeof(RemittedServiceLine),
+            typeof(RemittanceAdjustment),
+            typeof(RemittanceReceipt)
         };
 
         foreach (var model in models)
