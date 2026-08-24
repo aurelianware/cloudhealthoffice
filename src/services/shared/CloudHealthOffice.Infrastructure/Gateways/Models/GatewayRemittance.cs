@@ -41,6 +41,15 @@ public sealed class GatewayRemittance
 
     public string? RawSourceReference { get; set; }
 
+    /// <summary>
+    /// Retrieve/normalize failure when no usable remittance body exists.
+    /// Processor persists this category instead of treating empty claims as
+    /// <see cref="GatewayErrorCategory.MalformedResponse"/>.
+    /// </summary>
+    public GatewayErrorCategory ErrorCategory { get; set; }
+
+    public string? ErrorMessage { get; set; }
+
     public List<RemittedClaim> Claims { get; set; } = new();
 }
 

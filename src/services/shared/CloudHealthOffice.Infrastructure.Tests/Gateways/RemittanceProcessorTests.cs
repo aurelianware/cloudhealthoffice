@@ -1,6 +1,8 @@
 using CloudHealthOffice.Infrastructure.Gateways;
+using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace CloudHealthOffice.Infrastructure.Tests.Gateways;
 
@@ -118,6 +120,171 @@ public class RemittanceProcessorTests
         result.ErrorCategory.Should().Be(GatewayErrorCategory.MalformedResponse);
     }
 
+    [Fact]
+    public async Task ClaimIdOnly_DoesNotMatchPatientControlNumber()
+    {
+        var (processor, transmissions, _, _) = Create();
+        await SeedTransmissionAsync(transmissions, claimId: "CLM-P-1001", pcn: "CLM-P-1001");
+        var result = await processor.ProcessAsync(new GatewayRemittance
+        {
+            RemittanceId = "era-claim-id-only",
+            Gateway = "Stedi",
+            ReceivedAt = DateTimeOffset.UtcNow,
+            Claims =
+            {
+                new RemittedClaim { ClaimId = "CLM-P-1001", ChargedAmount = 10, PaidAmount = 8 }
+            }
+        });
+        result.Status.Should().Be(RemittanceLifecycleStatus.Unmatched);
+        result.MatchedClaimCount.Should().Be(0);
+        result.ErrorCategory.Should().Be(GatewayErrorCategory.UnableToMatch);
+    }
+
+    [Fact]
+    public async Task RetrieveFailure_PersistsOriginalErrorCategory()
+    {
+        var (processor, _, _, receipts) = Create();
+        var result = await processor.ProcessAsync(new GatewayRemittance
+        {
+            RemittanceId = "era-auth",
+            Gateway = "Stedi",
+            ReceivedAt = DateTimeOffset.UtcNow,
+            ErrorCategory = GatewayErrorCategory.Authentication,
+            ErrorMessage = "api-key-rejected"
+        });
+        result.Status.Should().Be(RemittanceLifecycleStatus.Failed);
+        result.ErrorCategory.Should().Be(GatewayErrorCategory.Authentication);
+        result.ErrorMessage.Should().Be("api-key-rejected");
+        var stored = await receipts.GetByIdempotencyKeyAsync("Stedi", "era-auth");
+        stored!.LastErrorCategory.Should().Be(GatewayErrorCategory.Authentication);
+        stored.UnmatchedReason.Should().Be("retrieve-failed");
+    }
+
+    [Fact]
+    public async Task Clone_IsolatesNestedClaimMutations()
+    {
+        var store = new InMemoryRemittanceStore();
+        var receipt = new RemittanceReceipt
+        {
+            Gateway = "Stedi",
+            RemittanceId = "era-clone",
+            Claims =
+            {
+                new RemittedClaim
+                {
+                    PaidAmount = 10m,
+                    Adjustments = { new RemittanceAdjustment { Amount = 1m } },
+                    ServiceLines =
+                    {
+                        new RemittedServiceLine
+                        {
+                            PaidAmount = 10m,
+                            Adjustments = { new RemittanceAdjustment { Amount = 2m } }
+                        }
+                    }
+                }
+            }
+        };
+        await store.SaveAsync(receipt);
+        receipt.Claims[0].PaidAmount = 999m;
+        receipt.Claims[0].Adjustments[0].Amount = 999m;
+        receipt.Claims[0].ServiceLines[0].PaidAmount = 999m;
+        receipt.Claims[0].ServiceLines[0].Adjustments[0].Amount = 999m;
+
+        var loaded = await store.GetByIdAsync(receipt.ReceiptId);
+        loaded!.Claims[0].PaidAmount.Should().Be(10m);
+        loaded.Claims[0].Adjustments[0].Amount.Should().Be(1m);
+        loaded.Claims[0].ServiceLines[0].PaidAmount.Should().Be(10m);
+        loaded.Claims[0].ServiceLines[0].Adjustments[0].Amount.Should().Be(2m);
+
+        loaded.Claims[0].PaidAmount = 50m;
+        var reloaded = await store.GetByIdAsync(receipt.ReceiptId);
+        reloaded!.Claims[0].PaidAmount.Should().Be(10m);
+    }
+
+    [Fact]
+    public async Task Outbox_FirstPublish_SetsReplayFalse()
+    {
+        var transmissions = new InMemoryClaimTransmissionStore();
+        await SeedTransmissionAsync(transmissions, payerCcn: "PAYER-CCN-9");
+        var receipts = new InMemoryRemittanceStore();
+        var bus = new CapturingMessageBus();
+        var processor = new RemittanceProcessor(
+            receipts, transmissions, NullLogger<RemittanceProcessor>.Instance, bus);
+
+        var result = await processor.ProcessAsync(PaidRemittance(payerCcn: "PAYER-CCN-9"));
+        result.Replay.Should().BeFalse();
+        bus.Sent.Should().NotBeEmpty();
+        bus.Sent.Select(s => ((RemittanceReceivedMessage)s.Message).Replay)
+            .Should().OnlyContain(replay => !replay);
+    }
+
+    [Fact]
+    public async Task Outbox_SetsReplayFalseOnFirstPublishAndTrueOnRetry()
+    {
+        var transmissions = new InMemoryClaimTransmissionStore();
+        await SeedTransmissionAsync(transmissions, payerCcn: "PAYER-CCN-9");
+        var receipts = new InMemoryRemittanceStore();
+        var bus = new FailThenCaptureMessageBus(failFirstSends: 2);
+        var processor = new RemittanceProcessor(
+            receipts, transmissions, NullLogger<RemittanceProcessor>.Instance, bus);
+
+        var first = await processor.ProcessAsync(PaidRemittance(payerCcn: "PAYER-CCN-9"));
+        first.Replay.Should().BeFalse();
+        first.EventsPublished.Should().BeFalse();
+        bus.Sent.Should().BeEmpty();
+
+        var second = await processor.ProcessAsync(PaidRemittance(payerCcn: "PAYER-CCN-9"));
+        second.Replay.Should().BeTrue();
+        bus.Sent.Should().NotBeEmpty();
+        bus.Sent.Select(s => s.Message).Should().AllBeOfType<RemittanceReceivedMessage>();
+        bus.Sent.Select(s => ((RemittanceReceivedMessage)s.Message).Replay)
+            .Should().OnlyContain(replay => replay);
+    }
+
+    [Fact]
+    public async Task Ingress_NonTransientRetrieveFailure_StoresOriginalCategory()
+    {
+        var transmissions = new InMemoryClaimTransmissionStore();
+        var receipts = new InMemoryRemittanceStore();
+        var processor = new RemittanceProcessor(
+            receipts, transmissions, NullLogger<RemittanceProcessor>.Instance);
+        var gateway = new StubRemittanceGateway
+        {
+            Next = GatewayResponse<GatewayRemittance>.Failure(
+                "api-key-rejected",
+                new GatewayTransactionMetadata
+                {
+                    GatewayName = "Stedi",
+                    TransactionType = HealthcareTransactionType.Remittance835,
+                    ErrorCategory = GatewayErrorCategory.Authentication
+                })
+        };
+        var ingress = new RemittanceIngress(
+            new HealthcareGatewayResolver(
+                new IHealthcareTransactionGateway[] { gateway },
+                Options.Create(new HealthcareTransactionOptions { DefaultGateway = "Stedi" }),
+                NullLogger<HealthcareGatewayResolver>.Instance),
+            processor,
+            NullLogger<RemittanceIngress>.Instance);
+
+        var result = await ingress.IngestDiscoveredAsync(new ClaimAcknowledgmentDiscovery
+        {
+            GatewayName = "Stedi",
+            ExternalAcknowledgmentId = "era-txn-auth",
+            EventId = "evt-auth",
+            TransactionSetIdentifier = "835",
+            Direction = "INBOUND"
+        });
+
+        result.Processed.Should().BeTrue();
+        result.ErrorCategory.Should().Be(GatewayErrorCategory.Authentication);
+        var stored = await receipts.GetByIdempotencyKeyAsync("Stedi", "era-txn-auth");
+        stored!.Status.Should().Be(RemittanceLifecycleStatus.Failed);
+        stored.LastErrorCategory.Should().Be(GatewayErrorCategory.Authentication);
+        stored.LastError.Should().Be("api-key-rejected");
+    }
+
     private static (RemittanceProcessor Processor,
         InMemoryClaimTransmissionStore Transmissions,
         InMemoryClaimAcknowledgmentStore Acks,
@@ -207,4 +374,19 @@ public class RemittanceProcessorTests
                 }
             }
         };
+
+    private sealed class StubRemittanceGateway : IRemittanceGateway
+    {
+        public string Name => "Stedi";
+
+        public IReadOnlySet<GatewayCapability> Capabilities { get; } =
+            new HashSet<GatewayCapability> { GatewayCapability.Remittance };
+
+        public GatewayResponse<GatewayRemittance>? Next { get; init; }
+
+        public Task<GatewayResponse<GatewayRemittance>> RetrieveRemittanceAsync(
+            RemittanceRetrievalRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Next!);
+    }
 }

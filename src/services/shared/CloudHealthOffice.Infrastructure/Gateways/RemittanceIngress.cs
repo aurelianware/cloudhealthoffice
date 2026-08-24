@@ -109,7 +109,9 @@ public sealed class RemittanceIngress : IRemittanceIngress
                     CorrelationId = discovery.CorrelationId,
                     ReceivedAt = DateTimeOffset.UtcNow,
                     ExternalTransactionId = discovery.ExternalAcknowledgmentId,
-                    RawSourceReference = discovery.ExternalAcknowledgmentId
+                    RawSourceReference = discovery.ExternalAcknowledgmentId,
+                    ErrorCategory = category,
+                    ErrorMessage = retrieved.ErrorMessage
                 },
                 cancellationToken).ConfigureAwait(false);
 

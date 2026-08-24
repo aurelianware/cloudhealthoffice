@@ -54,18 +54,8 @@ internal static class RemittanceMatcher
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(claim.ClaimId))
-        {
-            var byClaim = await store
-                .FindByPatientControlNumberAsync(gatewayName, claim.ClaimId, ct)
-                .ConfigureAwait(false);
-            var decided = Decide(byClaim, "claim-id");
-            if (decided.Ambiguous || decided.Transmission is not null)
-            {
-                return decided;
-            }
-        }
-
+        // ClaimId is filled after a successful match from the transmission.
+        // Never treat it as a patient-control-number lookup key.
         return new Result(null, false, "no-deterministic-identifier");
     }
 

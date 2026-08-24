@@ -88,6 +88,15 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
         CancellationToken ct)
     {
         var receipt = ToRecord(remittance);
+        if (remittance.ErrorCategory != GatewayErrorCategory.None)
+        {
+            receipt.Status = RemittanceLifecycleStatus.Failed;
+            receipt.UnmatchedReason = "retrieve-failed";
+            receipt.LastErrorCategory = remittance.ErrorCategory;
+            receipt.LastError = remittance.ErrorMessage ?? remittance.ErrorCategory.ToString();
+            return receipt;
+        }
+
         var tenants = new HashSet<string>(StringComparer.Ordinal);
         var matched = 0;
         var ambiguous = 0;
@@ -183,7 +192,7 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
             return await ReplayAsync(stored, ct).ConfigureAwait(false);
         }
 
-        var published = await PublishPendingAsync(stored, ct).ConfigureAwait(false);
+        var published = await PublishPendingAsync(stored, replay: false, ct).ConfigureAwait(false);
         await _receipts.SaveAsync(stored, ct).ConfigureAwait(false);
         Log(stored, replay: false);
         RecordMetric(stored, _timeProvider.GetUtcNow() - started);
@@ -194,7 +203,7 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
         RemittanceReceipt existing, CancellationToken ct)
     {
         existing.ProcessingAttempts++;
-        var published = await PublishPendingAsync(existing, ct).ConfigureAwait(false);
+        var published = await PublishPendingAsync(existing, replay: true, ct).ConfigureAwait(false);
         await _receipts.SaveAsync(existing, ct).ConfigureAwait(false);
         Log(existing, replay: true);
         return ToResult(existing, replay: true, events: published);
@@ -256,7 +265,8 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
     private static RemittanceOutboxEntry Entry(string type, DateTimeOffset now) =>
         new() { EventType = type, CreatedAtUtc = now };
 
-    private async Task<bool> PublishPendingAsync(RemittanceReceipt record, CancellationToken ct)
+    private async Task<bool> PublishPendingAsync(
+        RemittanceReceipt record, bool replay, CancellationToken ct)
     {
         EnsureOutbox(record, _timeProvider.GetUtcNow());
         if (_messageBus is null)
@@ -278,7 +288,8 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
             ClaimCount = record.Claims.Count,
             MatchedClaimCount = record.Claims.Count(c => c.MatchStatus == RemittanceClaimMatchStatus.Matched),
             PaymentAmount = record.PaymentAmount,
-            CorrelationId = record.CorrelationId
+            CorrelationId = record.CorrelationId,
+            Replay = replay
         };
 
         var allPublished = true;

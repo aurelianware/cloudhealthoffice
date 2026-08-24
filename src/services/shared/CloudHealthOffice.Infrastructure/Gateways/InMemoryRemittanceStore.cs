@@ -146,18 +146,63 @@ public sealed class InMemoryRemittanceStore : IRemittanceStore
             CorrelationId = source.CorrelationId,
             RawSourceReference = source.RawSourceReference,
             UnmatchedReason = source.UnmatchedReason,
-            Claims = source.Claims.ToList(),
-            Outbox = source.Outbox.Select(o => new RemittanceOutboxEntry
-            {
-                EventType = o.EventType,
-                CreatedAtUtc = o.CreatedAtUtc,
-                PublishedAtUtc = o.PublishedAtUtc,
-                AttemptCount = o.AttemptCount,
-                LastError = o.LastError
-            }).ToList(),
+            Claims = source.Claims.Select(CloneClaim).ToList(),
+            Outbox = source.Outbox.Select(CloneOutbox).ToList(),
             ProcessingAttempts = source.ProcessingAttempts,
             LastErrorCategory = source.LastErrorCategory,
             LastError = source.LastError
         };
     }
+
+    private static RemittedClaim CloneClaim(RemittedClaim source) =>
+        new()
+        {
+            ClaimId = source.ClaimId,
+            TransmissionId = source.TransmissionId,
+            PayerClaimControlNumber = source.PayerClaimControlNumber,
+            PatientControlNumber = source.PatientControlNumber,
+            ClaimStatusCode = source.ClaimStatusCode,
+            ChargedAmount = source.ChargedAmount,
+            AllowedAmount = source.AllowedAmount,
+            PaidAmount = source.PaidAmount,
+            PatientResponsibilityAmount = source.PatientResponsibilityAmount,
+            Adjustments = source.Adjustments.Select(CloneAdjustment).ToList(),
+            ServiceLines = source.ServiceLines.Select(CloneLine).ToList(),
+            MatchStatus = source.MatchStatus,
+            MatchReason = source.MatchReason
+        };
+
+    private static RemittedServiceLine CloneLine(RemittedServiceLine source) =>
+        new()
+        {
+            LineIdentifier = source.LineIdentifier,
+            LineNumber = source.LineNumber,
+            ProcedureCode = source.ProcedureCode,
+            ProcedureQualifier = source.ProcedureQualifier,
+            ToothNumber = source.ToothNumber,
+            ChargedAmount = source.ChargedAmount,
+            AllowedAmount = source.AllowedAmount,
+            PaidAmount = source.PaidAmount,
+            Adjustments = source.Adjustments.Select(CloneAdjustment).ToList()
+        };
+
+    private static RemittanceAdjustment CloneAdjustment(RemittanceAdjustment source) =>
+        new()
+        {
+            GroupCode = source.GroupCode,
+            ReasonCode = source.ReasonCode,
+            Amount = source.Amount,
+            Description = source.Description,
+            Kind = source.Kind
+        };
+
+    private static RemittanceOutboxEntry CloneOutbox(RemittanceOutboxEntry source) =>
+        new()
+        {
+            EventType = source.EventType,
+            CreatedAtUtc = source.CreatedAtUtc,
+            PublishedAtUtc = source.PublishedAtUtc,
+            AttemptCount = source.AttemptCount,
+            LastError = source.LastError
+        };
 }
