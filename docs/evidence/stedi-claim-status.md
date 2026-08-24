@@ -4,7 +4,7 @@ Date: 2026-08-24 UTC
 
 Branch: `feat/stedi-claim-status`
 
-Commit: `pending` (filled after commit)
+Commit: `05da9d31`
 
 ## Stedi 276/277 API
 
