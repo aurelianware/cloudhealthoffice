@@ -296,6 +296,146 @@ public static class ChoMetrics
             unit: "s",
             description: "Cosmos partition-key migration run duration in seconds (5.1b)");
 
+    /// <summary>
+    /// Histogram tracking payer-directory synchronization duration (seconds).
+    /// Dimensions: cho.outcome (success | failed).
+    /// </summary>
+    public static readonly Histogram<double> PayerSyncDuration =
+        Meter.CreateHistogram<double>(
+            "cho.payer_reference.sync.duration",
+            unit: "s",
+            description: "Payer directory synchronization duration in seconds");
+
+    /// <summary>
+    /// Counter tracking payer-directory record outcomes.
+    /// Dimensions: cho.outcome (received | added | updated | disabled).
+    /// </summary>
+    public static readonly Counter<long> PayerSyncRecords =
+        Meter.CreateCounter<long>(
+            "cho.payer_reference.sync.records.total",
+            unit: "{record}",
+            description: "Payer directory records processed during synchronization");
+
+    /// <summary>
+    /// Counter tracking payer-directory sync failures.
+    /// Dimensions: cho.category.
+    /// </summary>
+    public static readonly Counter<long> PayerSyncFailures =
+        Meter.CreateCounter<long>(
+            "cho.payer_reference.sync.failures.total",
+            unit: "{failure}",
+            description: "Payer directory synchronization failures");
+
+    /// <summary>
+    /// Counter tracking payer resolution outcomes.
+    /// Dimensions: cho.result (success | not_found | ambiguous | missing_identifier |
+    /// unsupported | enrollment_required | disabled | unavailable).
+    /// </summary>
+    public static readonly Counter<long> PayerResolutionTotal =
+        Meter.CreateCounter<long>(
+            "cho.payer_reference.resolution.total",
+            unit: "{resolution}",
+            description: "Canonical payer resolution outcomes");
+
+    /// <summary>
+    /// Counter tracking inbound payer-side eligibility inquiries.
+    /// Dimensions: cho.adapter, cho.business_status, cho.coverage_status,
+    /// cho.transport_status. Never labeled with member identity.
+    /// </summary>
+    public static readonly Counter<long> PayerEligibilityInquiries =
+        Meter.CreateCounter<long>(
+            "cho.payer_eligibility.inquiries.total",
+            unit: "{inquiry}",
+            description: "Inbound payer-side eligibility inquiries by business and coverage outcome");
+
+    /// <summary>
+    /// Histogram tracking inbound payer-side eligibility latency (seconds).
+    /// Dimensions: cho.adapter, cho.business_status.
+    /// </summary>
+    public static readonly Histogram<double> PayerEligibilityDuration =
+        Meter.CreateHistogram<double>(
+            "cho.payer_eligibility.duration",
+            unit: "s",
+            description: "Inbound payer-side eligibility inquiry duration in seconds");
+
+    /// <summary>
+    /// Counter tracking outbound claim transmissions.
+    /// Dimensions: cho.gateway, cho.claim_type, cho.status, cho.error_category.
+    /// Never labeled with member/payer/provider identity.
+    /// </summary>
+    public static readonly Counter<long> ClaimSubmissions =
+        Meter.CreateCounter<long>(
+            "cho.claim_submission.transmissions.total",
+            unit: "{claim}",
+            description: "Outbound claim transmissions by gateway, claim type, and status");
+
+    /// <summary>
+    /// Histogram tracking outbound claim submission latency (seconds).
+    /// Dimensions: cho.gateway, cho.claim_type.
+    /// </summary>
+    public static readonly Histogram<double> ClaimSubmissionDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_submission.duration",
+            unit: "s",
+            description: "Outbound claim submission duration in seconds");
+
+    /// <summary>
+    /// Counter tracking 277CA acknowledgment processing outcomes.
+    /// Dimensions: cho.status.
+    /// </summary>
+    public static readonly Counter<long> ClaimAcknowledgments =
+        Meter.CreateCounter<long>(
+            "cho.claim_acknowledgment.processed.total",
+            unit: "{acknowledgment}",
+            description: "Inbound 277CA acknowledgments by canonical status");
+
+    /// <summary>
+    /// Histogram tracking 277CA acknowledgment processing duration (seconds).
+    /// Dimensions: cho.status.
+    /// </summary>
+    public static readonly Histogram<double> ClaimAcknowledgmentDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_acknowledgment.duration",
+            unit: "s",
+            description: "Inbound 277CA acknowledgment processing duration in seconds");
+
+    /// <summary>
+    /// Counter tracking outbound 275 attachment transmissions.
+    /// Dimensions: cho.gateway, cho.status, cho.error_category.
+    /// Never labeled with member identity or file contents.
+    /// </summary>
+    public static readonly Counter<long> ClaimAttachments =
+        Meter.CreateCounter<long>(
+            "cho.claim_attachment.transmissions.total",
+            unit: "{attachment}",
+            description: "Outbound claim attachment transmissions by gateway and status");
+
+    /// <summary>
+    /// Histogram tracking outbound 275 attachment latency (seconds).
+    /// Dimensions: cho.gateway.
+    /// </summary>
+    public static readonly Histogram<double> ClaimAttachmentDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_attachment.duration",
+            unit: "s",
+            description: "Outbound claim attachment submission duration in seconds");
+
+    /// <summary>
+    /// Counter tracking inbound payer-side 275 receipts.
+    /// Dimensions: cho.adapter, cho.status, cho.error_category, cho.association.
+    /// </summary>
+    public static readonly Counter<long> InboundClaimAttachments =
+        Meter.CreateCounter<long>(
+            "cho.inbound_claim_attachment.received.total",
+            unit: "{attachment}",
+            description: "Inbound payer-side claim attachments by adapter and status");
+
+    public static readonly Histogram<double> InboundClaimAttachmentDuration =
+        Meter.CreateHistogram<double>(
+            "cho.inbound_claim_attachment.duration",
+            unit: "s",
+            description: "Inbound payer-side claim attachment processing duration in seconds");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

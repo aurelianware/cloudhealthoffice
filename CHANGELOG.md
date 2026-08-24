@@ -7,6 +7,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Payer-side inbound 275 claim attachment receiver
+
+Vendor-neutral `IClaimAttachmentReceiver` so Cloud Health Office can receive
+a 275-equivalent attachment as the payer. Distinct from outbound
+`IClaimAttachmentGateway`. Canonical `InboundClaimAttachment`, deterministic
+claim/service-line matching, SHA-256 content store, durable receipts with
+outbox, quarantine for unmatched attachments. Development:
+`POST /api/dev/payer/claims/{claimId}/attachments`.
+
+Stedi inbound payer-side 275 is **adapter-ready / pending Stedi payer
+connectivity**, not implemented. Raw X12 275 ingress is deferred. Receipt
+does not adjudicate or pay the claim.
+
+### 275 claim attachment submission through Stedi
+
+Vendor-neutral `IClaimAttachmentGateway.SubmitAttachmentAsync` with canonical
+`ClaimAttachmentSubmissionRequest`. Bytes live in `IClaimAttachmentContentStore`
+(existing `IDocumentStore` / Azure Blob when configured) as a content
+reference plus SHA-256 — never on the claim aggregate. Attachments associate
+deterministically to an existing 837 transmission (optional service line).
+Stedi transport is Create Claim Attachment JSON
+`POST https://claims.us.stedi.com/2025-03-07/claim-attachments/file` plus PUT
+to the pre-signed URL. Unsolicited 275 only. MIME/size validated before
+send. Attachment lifecycle is independent of 837 / 277CA / adjudication /
+payment. Idempotency is
+tenant+transmission+attachment+checksum+type+line+version.
+
+Synchronous gateway acceptance is not payer review or claim payment. Live
+275 is not claimed for sandbox accounts. Development:
+`POST /api/dev/gateway/claims/{transmissionId}/attachments`.
+
+### 277CA acknowledgment production hardening
+
+Durable Mongo persistence for transmissions, 277CA acknowledgments, outbox,
+and poll cursors. Non-Development hosts fail closed unless Mongo is
+configured. `TryCreateAsync` is unique-index atomic. Outbox publication is
+retried by a hosted dispatcher. Transmission state transitions are guarded
+so malformed/duplicate events cannot rewind or overwrite a completed 277CA
+outcome. Same-key 837 submit after 277CA is a replay.
+
+### 277CA claim acknowledgment lifecycle through Stedi
+
+Vendor-neutral `GatewayClaimAcknowledgment` plus `IClaimAcknowledgmentGateway`
+retrieve and `IClaimAcknowledgmentProcessor`. Stedi discovers 277CAs via
+`transaction.processed.v2` webhooks or Poll Transactions
+(`core.us.stedi.com/2023-08-01`) and retrieves JSON from
+`GET /2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/277`.
+Acknowledgments match deterministically to `#1111` transmission records.
+Tenant comes from the matched transmission. 277CA accepted/rejected stays
+separate from adjudication and payment. Duplicate webhooks are idempotent.
+
+Stedi does not HMAC-sign claim-response webhooks; CHO authenticates the
+configured credential-set header. Live 277CA testing is not claimed for
+sandbox accounts.
+
+Development: `POST /api/dev/gateway/claims/{transmissionId}/277ca`.
+Production webhook: `POST /api/integrations/stedi/claim-responses`.
+
+### Outbound 837 claim submission through Stedi
+
+`IClaimSubmissionGateway.SubmitClaimAsync` is a real capability. Mock and
+Stedi implement 837P / 837I / 837D against Stedi's documented JSON APIs
+(`professionalclaims/v3`, `institutionalclaims/v1`, `dental-claims`).
+Canonical `GatewayClaimSubmissionRequest` stays vendor-neutral. Payer
+readiness reuses `IPayerReferenceService`. Durable
+`IClaimTransmissionStore` records transmission state separately from
+adjudication/payment. Idempotency is tenant+claim+version+type+frequency.
+
+Synchronous gateway acceptance is not 277CA, adjudication, or payment.
+Live 837 calls are not claimed for sandbox accounts (Stedi test claims
+require a production-account test key). Development:
+`POST /api/dev/gateway/claims`.
+
+### Payer-side eligibility responder (inbound 270/271)
+
+Vendor-neutral `IEligibilityResponder` so Cloud Health Office can act as the
+payer/information source for an inbound eligibility inquiry. Canonical
+`PayerEligibilityInquiry` / `PayerEligibilityResponse`, exact-match member
+and dependent resolution, read-only coverage / benefit / accumulator access,
+and a Development-only `POST /api/dev/payer/eligibility` ingress.
+
+Stedi does not currently document a self-service inbound 270 payer-hosting
+API. The Stedi inbound adapter is **adapter-ready / pending Stedi payer-side
+connectivity**, not implemented. Existing outbound `IEligibilityGateway` /
+Stedi eligibility is unchanged.
+
+### Stedi dependent eligibility (270/271)
+
+Canonical `GatewayEligibilityPerson` subscriber/patient model. Dependent
+inquiries emit Stedi `dependents[]`; subscriber-only requests do not. Opt-in
+live sandbox smoke covers the documented UHC 87726 John/Jane Doe Active
+Coverage path.
+
+### Stedi payer reference directory
+
+Canonical, vendor-neutral payer identity for Cloud Health Office. Stedi List
+Payers JSON (`GET https://payers.us.stedi.com/2024-04-01/payers`) synchronizes
+into `IPayerReferenceService`. `StediHealthcareGateway` resolves eligibility
+payers through that service; `PayerMap`/`TenantPayerMap` are deprecated
+fallbacks. Arbitrary payer ids are no longer passed through to Stedi.
+
 ### v5.0 - Planned
 
 **Enhanced Provider Management & Multi-Market Expansion**

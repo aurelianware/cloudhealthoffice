@@ -6,7 +6,9 @@ using EligibilityService.Middleware;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.HealthChecks;
+using CloudHealthOffice.Infrastructure.Responders;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
@@ -93,6 +95,18 @@ builder.Services.AddSingleton<IEligibilityAdapter, ChoEligibilityAdapter>();
 builder.Services.AddSingleton<IEligibilityAdapter, AvailityEligibilityAdapter>();
 builder.Services.AddSingleton<IEligibilityAdapter, ChangeHealthcareEligibilityAdapter>();
 builder.Services.AddSingleton<EligibilityAdapterFactory>();
+
+// Vendor-neutral healthcare transaction gateway + canonical payer reference.
+// Registers Mock, Stedi (when configured), and IPayerReferenceService.
+// The existing EligibilityAdapterFactory flow above is unchanged.
+builder.Services.AddChoHealthcareGateways(builder.Configuration);
+
+// Payer-side eligibility responder (inbound 270-equivalent). Distinct from
+// IEligibilityGateway (CHO → external payer). Stedi inbound routing is
+// adapter-ready only; the canonical / X12 development routes exercise the
+// responder today.
+builder.Services.AddChoPayerEligibilityResponder(builder.Configuration);
+builder.Services.AddChoPayerClaimAttachmentReceiver(builder.Configuration);
 
 builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))

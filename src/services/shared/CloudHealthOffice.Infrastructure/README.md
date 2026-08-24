@@ -14,6 +14,8 @@ Shared infrastructure library that extracts common patterns duplicated across al
 | MongoDB Connection Factory | `Data/MongoDbConnectionFactory.cs` | Manual `IMongoDatabase` registration with inline config |
 | Cosmos Serializer | `Serialization/CosmosSystemTextJsonSerializer.cs` | 10 duplicate serializer files |
 | Service Extensions | `Extensions/ServiceCollectionExtensions.cs` | Duplicated Program.cs boilerplate |
+| Healthcare transaction gateway | `Gateways/` | Outbound 270/271 eligibility and 837 claim submission (Mock + Stedi) |
+| Payer eligibility responder | `Responders/` | Inbound 270-equivalent; CHO as payer. Stedi inbound pending |
 
 ## Migration Guide
 

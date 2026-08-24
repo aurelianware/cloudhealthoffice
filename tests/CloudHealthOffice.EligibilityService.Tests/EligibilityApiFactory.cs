@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using EligibilityService.Adapters;
@@ -21,6 +22,16 @@ public class EligibilityApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["HealthcareTransactions:Gateways:Stedi:WebhookCredentialValue"] = "test-webhook-secret",
+                ["HealthcareTransactions:Gateways:Stedi:WebhookCredentialHeaderName"] = "Authorization",
+                ["HealthcareTransactions:ClaimAttachments:MaxContentLengthBytes"] = "32"
+            });
+        });
 
         builder.ConfigureServices(services =>
         {
