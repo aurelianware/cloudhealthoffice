@@ -114,7 +114,9 @@ internal sealed class MongoClaimLifecycleStore :
                     .Ascending(d => d.TenantId)
                     .Ascending(d => d.ClaimId)),
             new CreateIndexModel<InboundClaimAttachmentReceiptDocument>(
-                Builders<InboundClaimAttachmentReceiptDocument>.IndexKeys.Ascending(d => d.HasPendingOutbox))
+                Builders<InboundClaimAttachmentReceiptDocument>.IndexKeys
+                    .Ascending(d => d.HasPendingOutbox)
+                    .Ascending("Payload.ReceivedAtUtc"))
         }, ct).ConfigureAwait(false);
     }
 

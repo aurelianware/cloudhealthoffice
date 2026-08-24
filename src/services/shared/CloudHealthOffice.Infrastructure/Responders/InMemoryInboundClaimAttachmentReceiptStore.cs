@@ -62,14 +62,19 @@ public sealed class InMemoryInboundClaimAttachmentReceiptStore : IInboundClaimAt
         InboundClaimAttachmentReceipt record, CancellationToken ct = default)
     {
         var clone = Clone(record)!;
+        if (!_byId.TryAdd(clone.ReceiptId, clone))
+        {
+            return Task.FromResult((false, Clone(_byId[clone.ReceiptId]) ?? clone));
+        }
+
         if (!_idempotencyToId.TryAdd(clone.IdempotencyKey, clone.ReceiptId))
         {
+            _byId.TryRemove(clone.ReceiptId, out _);
             var existingId = _idempotencyToId[clone.IdempotencyKey];
             _byId.TryGetValue(existingId, out var existing);
             return Task.FromResult((false, Clone(existing) ?? clone));
         }
 
-        _byId[clone.ReceiptId] = clone;
         return Task.FromResult((true, Clone(clone)!));
     }
 

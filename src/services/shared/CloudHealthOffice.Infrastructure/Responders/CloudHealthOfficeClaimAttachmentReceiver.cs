@@ -96,7 +96,7 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
 
         copy.Position = 0;
         var checksum = await ClaimAttachmentRules.ComputeSha256HexAsync(copy, cancellationToken).ConfigureAwait(false);
-        var key = IdempotencyKey(adapter, attachment, checksum);
+        var key = IdempotencyKey(route.TenantId!, route.CanonicalPayerId, adapter, attachment, checksum);
         var existing = await _receipts.GetByIdempotencyKeyAsync(key, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
@@ -113,9 +113,9 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
                     TenantId = route.TenantId!,
                     TransmissionId = "inbound",
                     AttachmentId = FirstNonBlank(
-                        attachment.InboundAttachmentId,
                         attachment.AttachmentControlNumber,
-                        checksum[..Math.Min(12, checksum.Length)]),
+                        checksum[..Math.Min(12, checksum.Length)],
+                        attachment.InboundAttachmentId ?? "att"),
                     ContentType = contentType,
                     DisplayName = attachment.FileName,
                     ScanStatus = attachment.Content?.ScanStatus ?? ClaimAttachmentScanStatus.Unknown
@@ -286,7 +286,7 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
         string? matching,
         CancellationToken ct)
     {
-        var key = IdempotencyKey(adapter, attachment, stored.ChecksumSha256);
+        var key = IdempotencyKey(route.TenantId ?? string.Empty, route.CanonicalPayerId, adapter, attachment, stored.ChecksumSha256);
         var existing = await _receipts.GetByIdempotencyKeyAsync(key, ct).ConfigureAwait(false);
         if (existing is not null)
         {
@@ -405,11 +405,15 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
     }
 
     private static string IdempotencyKey(
-        string adapter, InboundClaimAttachment attachment, string checksum)
+        string tenantId,
+        string? canonicalPayerId,
+        string adapter,
+        InboundClaimAttachment attachment,
+        string checksum)
     {
         var ext = attachment.ExternalTransactionId?.Trim() ?? string.Empty;
         var acn = attachment.AttachmentControlNumber?.Trim() ?? string.Empty;
-        return $"{adapter}|{ext}|{acn}|{checksum}";
+        return $"{tenantId}|{canonicalPayerId}|{adapter}|{ext}|{acn}|{checksum}";
     }
 
     private static InboundClaimAttachmentResult ToResult(
@@ -453,6 +457,7 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
             Status = InboundClaimAttachmentStatus.Rejected,
             TenantId = tenantId,
             CanonicalPayerId = canonicalPayerId,
+            AssociationLevel = ClaimAttachmentAssociationLevel.None,
             ErrorCategory = category,
             ErrorMessage = message
         };

@@ -173,6 +173,7 @@ public class ClaimAttachmentReceiverTests
         var response = await receiver.ReceiveAsync(Meta(payerId: "UNKNOWN-PAYER"), new MemoryStream(JpegBytes));
         response.Result!.ErrorCategory.Should().Be(GatewayErrorCategory.InvalidPayer);
         response.Result.TenantId.Should().BeNull();
+        response.Result.AssociationLevel.Should().Be(ClaimAttachmentAssociationLevel.None);
     }
 
     [Fact]
@@ -313,6 +314,27 @@ public class ClaimAttachmentReceiverTests
         await receiver.DispatchPendingAsync(50);
         fail.Sent.Count(s => s.Options?.Properties?[InboundClaimAttachmentEventTopics.MessageTypeProperty]
             == InboundClaimAttachmentMessageTypes.Received).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SameChecksum_DifferentTenant_DoesNotReplay()
+    {
+        var (receiver, _, receipts, _, _) = Harness();
+        var first = await receiver.ReceiveAsync(
+            Meta(ext: "shared-ext", acn: "shared-acn"),
+            new MemoryStream(JpegBytes));
+        var second = await receiver.ReceiveAsync(
+            Meta(
+                claimId: ChoDemoClaimAttachmentSeed.OtherTenantClaimId,
+                payerId: ChoDemoEligibilitySeed.OtherExternalPayerId,
+                ext: "shared-ext",
+                acn: "shared-acn"),
+            new MemoryStream(JpegBytes));
+        first.Result!.Replay.Should().BeFalse();
+        second.Result!.Replay.Should().BeFalse();
+        second.Result.ReceiptId.Should().NotBe(first.Result.ReceiptId);
+        second.Result.TenantId.Should().Be(ChoDemoEligibilitySeed.OtherTenantId);
+        (await receipts.GetByIdAsync(first.Result.ReceiptId))!.TenantId.Should().Be(ChoDemoEligibilitySeed.TenantId);
     }
 
     [Fact]

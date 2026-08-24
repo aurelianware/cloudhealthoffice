@@ -137,7 +137,7 @@ if the content store or inbound receipt store is in-memory.
 
 ## Idempotency
 
-Key: `adapter|externalTransactionId|attachmentControlNumber|checksum`.
+Key: `tenant|canonicalPayer|adapter|externalTransactionId|attachmentControlNumber|checksum`.
 
 `TryCreateAsync` is atomic (in-memory `TryAdd`, Mongo unique index). Sequential
 duplicates skip a second store. Concurrent duplicates yield one receipt and one
