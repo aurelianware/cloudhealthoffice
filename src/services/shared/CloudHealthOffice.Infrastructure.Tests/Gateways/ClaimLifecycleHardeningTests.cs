@@ -84,12 +84,34 @@ public class ClaimLifecycleHardeningTests
         var stored = await acks.GetByIdempotencyKeyAsync("Stedi", "ack-outbox");
         stored!.EventsPublished.Should().BeTrue();
         stored.Outbox.Should().OnlyContain(e => e.PublishedAtUtc.HasValue);
+        stored.LastError.Should().BeNull();
+        stored.LastErrorCategory.Should().Be(GatewayErrorCategory.None);
         bus.Sent.Select(s => s.Options?.Properties?[ClaimAcknowledgmentEventTopics.MessageTypeProperty])
             .Distinct().Should().BeEquivalentTo(new[]
             {
                 ClaimAcknowledgmentMessageTypes.Received,
                 ClaimAcknowledgmentMessageTypes.Accepted
             });
+    }
+
+    [Fact]
+    public async Task ConcurrentTransmissionTryCreate_OneWinner()
+    {
+        var store = new InMemoryClaimTransmissionStore();
+        var seed = () => new ClaimTransmissionRecord
+        {
+            TenantId = "tenant-alpha",
+            ClaimId = "CLM-P-1001",
+            GatewayName = "Stedi",
+            IdempotencyKey = "tenant-alpha|CLM-P-1001|1|Professional|1",
+            Status = GatewayClaimTransmissionStatus.Transmitting,
+            SubmittedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        var results = await Task.WhenAll(
+            Enumerable.Range(0, 12).Select(_ => store.TryCreateAsync(seed())));
+        results.Count(r => r.Created).Should().Be(1);
+        results.Select(r => r.Record.TransmissionId).Distinct().Should().ContainSingle();
     }
 
     [Fact]

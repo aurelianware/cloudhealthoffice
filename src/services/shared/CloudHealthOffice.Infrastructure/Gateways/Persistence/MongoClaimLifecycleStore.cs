@@ -120,6 +120,25 @@ internal sealed class MongoClaimLifecycleStore :
             new ReplaceOptions { IsUpsert = true },
             ct);
 
+    public async Task<(bool Created, ClaimTransmissionRecord Record)> TryCreateAsync(
+        ClaimTransmissionRecord record, CancellationToken ct = default)
+    {
+        try
+        {
+            await _transmissions
+                .InsertOneAsync(ClaimTransmissionDocument.FromModel(record), cancellationToken: ct)
+                .ConfigureAwait(false);
+            return (true, record);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            var existing = await ((IClaimTransmissionStore)this)
+                .GetByIdempotencyKeyAsync(record.TenantId, record.IdempotencyKey, ct)
+                .ConfigureAwait(false);
+            return (false, existing ?? record);
+        }
+    }
+
     async Task<ClaimAcknowledgmentRecord?> IClaimAcknowledgmentStore.GetByIdempotencyKeyAsync(
         string gateway, string acknowledgmentId, CancellationToken ct)
     {

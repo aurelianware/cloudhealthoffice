@@ -234,7 +234,42 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             SubmittedAtUtc = startedAt
         };
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
-        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+        if (existing is null)
+        {
+            var (created, stored) = await _transmissions.TryCreateAsync(record, ct).ConfigureAwait(false);
+            if (!created)
+            {
+                if (GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(stored.Status))
+                {
+                    RecordClaimMetric(request, stored.Status, GatewayErrorCategory.None, GetElapsed(stopwatch));
+                    var replayMeta = ClaimMetadata(request, startedAt, GetElapsed(stopwatch),
+                        GatewayTransactionStatus.Completed, GatewayErrorCategory.None, stored.RetryCount,
+                        stored.ExternalTransactionId);
+                    Log(replayMeta);
+                    return GatewayResponse<GatewayClaimSubmissionResult>.Success(
+                        new GatewayClaimSubmissionResult
+                        {
+                            ClaimId = stored.ClaimId,
+                            ClaimVersion = stored.ClaimVersion,
+                            ClaimType = stored.ClaimType,
+                            TransmissionStatus = stored.Status,
+                            TransmissionId = stored.TransmissionId,
+                            SubmissionId = stored.SubmissionId,
+                            ExternalTransactionId = stored.ExternalTransactionId,
+                            IdempotencyKey = stored.IdempotencyKey,
+                            AcceptedForProcessing = true,
+                            ReplayOfExistingTransmission = true
+                        },
+                        replayMeta);
+                }
+
+                record = stored;
+            }
+        }
+        else
+        {
+            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+        }
 
         var usage = _options.Value.IsProduction ? "P" : "T";
         var stediRequest = StediClaimMapper.ToStediRequest(request, resolution.ExternalIdentifierValue, usage);

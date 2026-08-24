@@ -324,6 +324,12 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             }
         }
 
+        if (allPublished && record.LastError == "outbox-publish-failed")
+        {
+            record.LastError = null;
+            record.LastErrorCategory = GatewayErrorCategory.None;
+        }
+
         return allPublished;
     }
 
