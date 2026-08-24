@@ -6,6 +6,8 @@ namespace CloudHealthOffice.Infrastructure.Gateways;
 ///
 /// Eligibility, claim submission, 277CA acknowledgment, 275 attachments,
 /// 276/277 claim status, and 835 remittance retrieve are exercised today.
+/// Claim intelligence is a read model over those transactions, not a new
+/// HIPAA transaction set.
 /// </summary>
 public enum HealthcareTransactionType
 {

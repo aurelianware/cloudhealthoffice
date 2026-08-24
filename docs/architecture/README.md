@@ -18,6 +18,7 @@ deployment guarantee.
 | X12 processing | [837 claims pipeline](../features/837-CLAIMS-PIPELINE.md), [834 enrollment](../features/834-IMPLEMENTATION-SUMMARY.md), [276/277 inbound/ECS](../features/276-277-IMPLEMENTATION-COMPLETE.md), outbound 276/277 via [healthcare-transaction-gateway.md](healthcare-transaction-gateway.md), [277 value-adds](../features/VALUEADDS277-README.md) |
 | Event flow | [shared-messagebus.md](shared-messagebus.md) |
 | Payer / clearinghouse connectivity | [healthcare-transaction-gateway.md](healthcare-transaction-gateway.md) |
+| Claim intelligence | [claim-intelligence.md](claim-intelligence.md) |
 | Authorization flow | [Prior Authorization API](../features/PRIOR-AUTHORIZATION-API.md), [authorization request](../features/AUTHORIZATION-REQUEST.md), [authorization inquiry](../features/AUTHORIZATION-INQUIRY.md) |
 | Sentinel and rules | [declarative-benefit-model.md](declarative-benefit-model.md), [claim-ai-examination.md](claim-ai-examination.md), [claim-scrubbing-pipeline.md](claim-scrubbing-pipeline.md) |
 | Benefit administration | [declarative-benefit-model.md](declarative-benefit-model.md), [benefit-plan-adapter-pattern.md](benefit-plan-adapter-pattern.md), [plan-versioning.md](plan-versioning.md) |

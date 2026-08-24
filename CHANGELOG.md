@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Claim intelligence API
+
+Vendor-neutral `IClaimIntelligenceComposer` composes 837 submission, 277CA
+acknowledgment, 276/277 claim status, 275 attachments, and 835 remittance
+into a tenant-scoped read model. Lifecycle status is derived without letting
+one transaction overwrite another (277CA accepted is not paid; 276/277 paid
+does not invent an 835). Financial and attachment summaries are
+informational. Timeline event ids are stable, so duplicate deliveries do not
+duplicate history. `GET /api/claims/{claimId}/intelligence`. The view is not
+the system of record and does not post payment.
+
 ### 835 ERA remittance ingestion through Stedi
 
 Vendor-neutral `IRemittanceGateway.RetrieveRemittanceAsync` with canonical

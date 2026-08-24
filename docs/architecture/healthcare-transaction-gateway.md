@@ -8,8 +8,8 @@ model, many interchangeable vendor implementations, living in
 This is the **foundation** layer. The mock gateway, the Stedi eligibility
 (270/271) adapter, outbound 837 submission, 277CA acknowledgment, 275 claim
 attachments, 276/277 claim status inquiry, 835 remittance ingestion, and the
-canonical payer reference service are implemented today. Payment posting
-from 835s is a later PR.
+canonical payer reference service, and the claim intelligence read model
+are implemented today. Payment posting from 835s is a later PR.
 
 Payer-side inbound eligibility (CHO as the 271 information source) is a
 **separate** capability: [`payer-eligibility-responder.md`](payer-eligibility-responder.md).
@@ -133,6 +133,9 @@ current status of a previously submitted claim (276/277).
 
 `IRemittanceGateway.RetrieveRemittanceAsync` fetches and normalizes an 835.
 Applying it to claims is `IRemittanceProcessor` — it does not post payment.
+
+`IClaimIntelligenceComposer` reads those stores and returns a unified
+workflow view. See [`claim-intelligence.md`](claim-intelligence.md).
 
 ### Discovering and rejecting capabilities
 
@@ -1026,9 +1029,45 @@ eligibility adapters delegate to (or be replaced by) capability gateways behind
 `IHealthcareGatewayResolver`, leaving one transport abstraction. That
 consolidation should be its own PR.
 
-## Next Stedi integration
+### Claim intelligence read model
 
-Recommended next step: a **provider portal / claim intelligence layer** that
-combines eligibility, claim status, attachments, remittance, patient
-responsibility, and claim explanations into a unified CHO/CDO workflow.
-Payment posting from stored 835s remains a separate follow-up.
+The transaction layer stays the system of record. Claim intelligence is a
+rebuildable projection:
+
+```
+Transaction Layer
+
+837
+ |
+277CA
+ |
+276/277
+ |
+275
+ |
+835
+
+        ↓
+
+Claim Intelligence Layer
+
+        ↓
+
+Applications
+
+CDO
+Provider Portal
+AI Services
+Operations
+```
+
+`GET /api/claims/{claimId}/intelligence` is tenant-scoped. It answers where
+the claim is, what happened, whether action is required, what was paid, and
+whether the payer needs information — without exposing raw HIPAA payloads.
+
+### Next application integration
+
+Recommended next step: **CloudDentalOffice integration** — a provider claim
+intelligence dashboard that consumes this API rather than duplicating payer
+transaction logic. Payment posting from stored 835s remains a separate
+follow-up.

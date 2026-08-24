@@ -62,6 +62,17 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 sp.GetService<IMessageBus>(),
                 sp.GetService<TimeProvider>()));
         services.TryAddSingleton<IRemittanceIngress, RemittanceIngress>();
+        services.TryAddSingleton<IClaimIntelligenceComposer>(sp =>
+            new ClaimIntelligenceComposer(
+                sp.GetRequiredService<IClaimTransmissionStore>(),
+                sp.GetRequiredService<IClaimAcknowledgmentStore>(),
+                sp.GetRequiredService<IClaimStatusInquiryStore>(),
+                sp.GetRequiredService<IClaimAttachmentTransmissionStore>(),
+                sp.GetRequiredService<CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore>(),
+                sp.GetRequiredService<IRemittanceStore>(),
+                sp.GetRequiredService<ILogger<ClaimIntelligenceComposer>>(),
+                sp.GetService<IPayerReferenceService>(),
+                sp.GetService<TimeProvider>()));
         services.AddHostedService<RemittanceOutboxPublisher>();
         services.AddHostedService<ClaimLifecycleIndexHostedService>();
         services.AddHostedService<ClaimLifecycleStoreGuard>();

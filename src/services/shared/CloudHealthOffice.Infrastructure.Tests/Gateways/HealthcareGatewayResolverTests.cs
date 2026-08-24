@@ -100,6 +100,22 @@ public class HealthcareGatewayResolverTests
     }
 
     [Fact]
+    public void ClaimIntelligenceComposer_IsRegistered()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["HealthcareTransactions:DefaultGateway"] = "Mock"
+            })
+            .Build();
+        services.AddChoHealthcareGateways(config);
+        var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<IClaimIntelligenceComposer>().Should().NotBeNull();
+    }
+
+    [Fact]
     public void ResolveCapability_ForUnsupportedTransaction_ThrowsExplicitly()
     {
         var resolver = BuildResolver();
