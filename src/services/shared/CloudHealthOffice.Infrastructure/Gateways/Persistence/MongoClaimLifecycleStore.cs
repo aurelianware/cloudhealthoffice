@@ -136,6 +136,7 @@ internal sealed class MongoClaimLifecycleStore :
                 new CreateIndexOptions { Unique = true }),
             new CreateIndexModel<ClaimStatusInquiryDocument>(
                 Builders<ClaimStatusInquiryDocument>.IndexKeys
+                    .Ascending(d => d.TenantId)
                     .Ascending(d => d.GatewayName)
                     .Ascending(d => d.ExternalTransactionId)),
             new CreateIndexModel<ClaimStatusInquiryDocument>(
@@ -447,7 +448,7 @@ internal sealed class MongoClaimLifecycleStore :
     }
 
     public async Task<ClaimStatusInquiryRecord?> GetByExternalTransactionIdAsync(
-        string gatewayName, string externalTransactionId, CancellationToken ct = default)
+        string tenantId, string gatewayName, string externalTransactionId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(externalTransactionId))
         {
@@ -455,7 +456,9 @@ internal sealed class MongoClaimLifecycleStore :
         }
 
         var doc = await _statusInquiries
-            .Find(d => d.GatewayName == gatewayName && d.ExternalTransactionId == externalTransactionId)
+            .Find(d => d.TenantId == tenantId &&
+                       d.GatewayName == gatewayName &&
+                       d.ExternalTransactionId == externalTransactionId)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         return doc?.ToModel();
     }
@@ -501,7 +504,8 @@ internal sealed class MongoClaimLifecycleStore :
         {
             var existing = string.IsNullOrWhiteSpace(record.ExternalTransactionId)
                 ? null
-                : await GetByExternalTransactionIdAsync(record.GatewayName, record.ExternalTransactionId, ct)
+                : await GetByExternalTransactionIdAsync(
+                    record.TenantId, record.GatewayName, record.ExternalTransactionId, ct)
                     .ConfigureAwait(false);
             existing ??= await ((IClaimStatusInquiryStore)this).GetByIdAsync(record.InquiryId, ct)
                 .ConfigureAwait(false);

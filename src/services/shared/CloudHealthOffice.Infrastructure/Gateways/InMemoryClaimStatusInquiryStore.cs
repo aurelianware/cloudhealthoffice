@@ -18,7 +18,7 @@ public sealed class InMemoryClaimStatusInquiryStore : IClaimStatusInquiryStore
     }
 
     public Task<ClaimStatusInquiryRecord?> GetByExternalTransactionIdAsync(
-        string gatewayName, string externalTransactionId, CancellationToken ct = default)
+        string tenantId, string gatewayName, string externalTransactionId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(externalTransactionId))
         {
@@ -26,6 +26,7 @@ public sealed class InMemoryClaimStatusInquiryStore : IClaimStatusInquiryStore
         }
 
         var match = _byId.Values.FirstOrDefault(r =>
+            string.Equals(r.TenantId, tenantId, StringComparison.Ordinal) &&
             string.Equals(r.GatewayName, gatewayName, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(r.ExternalTransactionId, externalTransactionId, StringComparison.Ordinal));
         return Task.FromResult(Clone(match));

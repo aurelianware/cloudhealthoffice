@@ -318,6 +318,68 @@ public class ClaimStatusTests
     }
 
     [Fact]
+    public async Task ReplayLookup_IsTenantScoped()
+    {
+        var store = new InMemoryClaimStatusInquiryStore();
+        var (created, alpha) = await store.TryCreateAsync(new ClaimStatusInquiryRecord
+        {
+            TenantId = "tenant-alpha",
+            ClaimId = "CLM-ALPHA",
+            GatewayName = MockHealthcareGateway.GatewayName,
+            ExternalTransactionId = "shared-ext-276",
+            NormalizedStatus = GatewayClaimStatus.InProcess
+        });
+        created.Should().BeTrue();
+
+        (await store.GetByExternalTransactionIdAsync(
+            "tenant-beta", MockHealthcareGateway.GatewayName, "shared-ext-276")).Should().BeNull();
+        var own = await store.GetByExternalTransactionIdAsync(
+            "tenant-alpha", MockHealthcareGateway.GatewayName, "shared-ext-276");
+        own.Should().NotBeNull();
+        own!.InquiryId.Should().Be(alpha.InquiryId);
+    }
+
+    [Fact]
+    public async Task SameExternalTransactionId_DoesNotReplayAcrossTenants()
+    {
+        var transmissions = new InMemoryClaimTransmissionStore();
+        var inquiries = new InMemoryClaimStatusInquiryStore();
+        var gateway = new MockHealthcareGateway(
+            NullLogger<MockHealthcareGateway>.Instance,
+            transmissions: transmissions,
+            statusInquiries: inquiries);
+
+        var alpha = GatewayClaimFixtures.Professional(claimId: "CLM-X-1");
+        var beta = GatewayClaimFixtures.Professional(claimId: "CLM-X-1");
+        beta.TenantId = "tenant-beta";
+        await gateway.SubmitClaimAsync(alpha);
+        await gateway.SubmitClaimAsync(beta);
+        var betaTx = (await transmissions.FindByTenantAndClaimIdAsync("tenant-beta", "CLM-X-1")).Single();
+
+        await inquiries.TryCreateAsync(new ClaimStatusInquiryRecord
+        {
+            TenantId = "tenant-alpha",
+            ClaimId = "CLM-X-1",
+            GatewayName = MockHealthcareGateway.GatewayName,
+            ExternalTransactionId = $"mock-276-{betaTx.TransmissionId}",
+            NormalizedStatus = GatewayClaimStatus.Paid
+        });
+
+        var response = await gateway.CheckClaimStatusAsync(new ClaimStatusRequest
+        {
+            TenantId = "tenant-beta",
+            TransmissionId = betaTx.TransmissionId
+        });
+
+        response.IsSuccess.Should().BeTrue();
+        response.Result!.ReplayOfExistingInquiry.Should().BeFalse();
+        response.Result.Status.Should().Be(GatewayClaimStatus.InProcess);
+        (await inquiries.ListByTenantAndClaimIdAsync("tenant-beta", "CLM-X-1")).Should().ContainSingle();
+        (await inquiries.ListByTenantAndClaimIdAsync("tenant-alpha", "CLM-X-1")).Should().ContainSingle(r =>
+            r.NormalizedStatus == GatewayClaimStatus.Paid);
+    }
+
+    [Fact]
     public async Task HistoryIsChronologicalAndTenantIsolated()
     {
         var transmissions = new InMemoryClaimTransmissionStore();

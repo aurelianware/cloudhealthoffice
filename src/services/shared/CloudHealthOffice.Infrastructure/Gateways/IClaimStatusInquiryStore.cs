@@ -16,7 +16,7 @@ public interface IClaimStatusInquiryStore
         string inquiryId, CancellationToken ct = default);
 
     Task<ClaimStatusInquiryRecord?> GetByExternalTransactionIdAsync(
-        string gatewayName, string externalTransactionId, CancellationToken ct = default);
+        string tenantId, string gatewayName, string externalTransactionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<ClaimStatusInquiryRecord>> ListByTransmissionIdAsync(
         string transmissionId, CancellationToken ct = default);

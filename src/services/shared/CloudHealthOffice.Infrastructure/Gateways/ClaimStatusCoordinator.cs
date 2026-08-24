@@ -230,7 +230,7 @@ internal sealed class ClaimStatusCoordinator
         if (!string.IsNullOrWhiteSpace(record.ExternalTransactionId))
         {
             var existing = await _inquiries
-                .GetByExternalTransactionIdAsync(gatewayName, record.ExternalTransactionId, ct)
+                .GetByExternalTransactionIdAsync(record.TenantId, gatewayName, record.ExternalTransactionId, ct)
                 .ConfigureAwait(false);
             if (existing is not null)
             {
