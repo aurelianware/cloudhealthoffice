@@ -196,5 +196,8 @@ public enum GatewayErrorCategory
     DuplicateAttachment,
 
     /// <summary>Inbound attachment could not be matched uniquely to a payer-side claim.</summary>
-    UnableToMatch
+    UnableToMatch,
+
+    /// <summary>The payer could not return claim status for an otherwise valid inquiry.</summary>
+    ClaimStatusUnavailable
 }

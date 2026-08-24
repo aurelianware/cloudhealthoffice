@@ -190,23 +190,30 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
         ClaimTransmissionRecord transmission,
         CancellationToken ct)
     {
-        var proposed = MapTransmissionStatus(record.Status);
-        if (proposed is null)
+        var changed = false;
+        if (string.IsNullOrWhiteSpace(transmission.PayerClaimControlNumber) &&
+            !string.IsNullOrWhiteSpace(record.ClaimControlNumber))
         {
-            return;
+            transmission.PayerClaimControlNumber = record.ClaimControlNumber;
+            changed = true;
         }
 
-        if (!ClaimTransmissionStateMachine.TryTransition(
+        var proposed = MapTransmissionStatus(record.Status);
+        if (proposed is not null &&
+            ClaimTransmissionStateMachine.TryTransition(
                 transmission.Status, proposed.Value, record.Status, out var next))
         {
-            return;
+            var submittedAt = transmission.SubmittedAtUtc;
+            transmission.Status = next;
+            transmission.AcknowledgedAtUtc = record.ReceivedAtUtc;
+            transmission.SubmittedAtUtc = submittedAt;
+            changed = true;
         }
 
-        var submittedAt = transmission.SubmittedAtUtc;
-        transmission.Status = next;
-        transmission.AcknowledgedAtUtc = record.ReceivedAtUtc;
-        transmission.SubmittedAtUtc = submittedAt;
-        await _transmissions.SaveAsync(transmission, ct).ConfigureAwait(false);
+        if (changed)
+        {
+            await _transmissions.SaveAsync(transmission, ct).ConfigureAwait(false);
+        }
     }
 
     private async Task<ClaimAcknowledgmentProcessResult> ReplayAsync(

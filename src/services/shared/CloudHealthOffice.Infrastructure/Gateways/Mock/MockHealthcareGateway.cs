@@ -15,14 +15,15 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Mock;
 ///
 /// Its purpose is to prove the gateway abstraction end to end and to give
 /// automated tests a real implementation to resolve. It supports eligibility,
-/// claim submission, and 275 attachments. 277CA retrieve is not advertised;
-/// development injection uses the shared canonical processor.
+/// claim submission, 275 attachments, and deterministic 276/277 claim status.
+/// 277CA retrieve is not advertised; development injection uses the shared
+/// canonical processor.
 ///
 /// Logging discipline: only non-PHI <see cref="GatewayTransactionMetadata"/>
 /// is logged. Subscriber identifiers, names, dates of birth, and attachment
 /// bytes are never written to logs.
 /// </summary>
-public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway, IClaimAttachmentGateway
+public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway, IClaimAttachmentGateway, IClaimStatusGateway
 {
     /// <summary>The name this gateway registers under and is resolved by.</summary>
     public const string GatewayName = "Mock";
@@ -32,13 +33,15 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         {
             GatewayCapability.Eligibility,
             GatewayCapability.ClaimSubmission,
-            GatewayCapability.ClaimAttachment
+            GatewayCapability.ClaimAttachment,
+            GatewayCapability.ClaimStatus
         };
 
     private readonly ILogger<MockHealthcareGateway> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly IClaimTransmissionStore _transmissions;
     private readonly ClaimAttachmentCoordinator _attachments;
+    private readonly ClaimStatusCoordinator _claimStatus;
 
     // Tenant-scoped roster: tenantId -> (subscriberId -> seeded member).
     // A member is only visible within the tenant it was seeded under, which is
@@ -52,8 +55,11 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         IClaimAttachmentTransmissionStore? attachments = null,
         IClaimAttachmentContentStore? content = null,
         IOptions<HealthcareTransactionOptions>? options = null,
-        IMessageBus? messageBus = null)
-        : this(logger, DefaultRoster(), timeProvider, transmissions, attachments, content, options, messageBus)
+        IMessageBus? messageBus = null,
+        IClaimAcknowledgmentStore? acknowledgments = null,
+        IClaimStatusInquiryStore? statusInquiries = null)
+        : this(logger, DefaultRoster(), timeProvider, transmissions, attachments, content, options, messageBus,
+            acknowledgments, statusInquiries)
     {
     }
 
@@ -65,7 +71,9 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         IClaimAttachmentTransmissionStore? attachments = null,
         IClaimAttachmentContentStore? content = null,
         IOptions<HealthcareTransactionOptions>? options = null,
-        IMessageBus? messageBus = null)
+        IMessageBus? messageBus = null,
+        IClaimAcknowledgmentStore? acknowledgments = null,
+        IClaimStatusInquiryStore? statusInquiries = null)
     {
         _logger = logger;
         _roster = roster;
@@ -80,6 +88,12 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
             logger,
             _timeProvider,
             messageBus);
+        _claimStatus = new ClaimStatusCoordinator(
+            _transmissions,
+            acknowledgments ?? new InMemoryClaimAcknowledgmentStore(),
+            statusInquiries ?? new InMemoryClaimStatusInquiryStore(),
+            logger,
+            _timeProvider);
     }
 
     public string Name => GatewayName;
@@ -160,6 +174,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
             ServiceLineNumbers = request.ServiceLines.Select(l => l.LineNumber).Where(n => n > 0).ToList(),
             SubmittedAtUtc = startedAt
         };
+        ClaimStatusRules.CaptureSource(record, request);
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
         if (existing is null)
         {
@@ -210,6 +225,105 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
                 GatewayErrorCategory.None,
                 null)),
             cancellationToken);
+
+    public Task<GatewayResponse<ClaimStatusResponse>> CheckClaimStatusAsync(
+        ClaimStatusRequest request,
+        CancellationToken cancellationToken = default) =>
+        _claimStatus.InquireAsync(
+            GatewayName,
+            request,
+            (filled, _) => Task.FromResult(EvaluateStatus(filled)),
+            cancellationToken);
+
+    private static ClaimStatusTransportResult EvaluateStatus(ClaimStatusRequest request)
+    {
+        var token = $"{request.ClaimId}|{request.PatientControlNumber}|{request.PayerClaimControlNumber}";
+        var (status, category, code, description) = ResolveMockStatus(token);
+        var lineStatuses = new List<ClaimStatusLineResult>();
+        if (request.ServiceLineNumber is int line)
+        {
+            var source = request.ServiceLines.FirstOrDefault(l => l.LineNumber == line);
+            lineStatuses.Add(new ClaimStatusLineResult
+            {
+                LineNumber = line,
+                LineItemControlNumber = source?.LineItemControlNumber ?? line.ToString(),
+                ProcedureCode = source?.ProcedureCode,
+                Status = status,
+                StatusCategoryCode = category,
+                StatusCode = code,
+                StatusDescription = description,
+                SubmittedAmount = source?.ChargeAmount
+            });
+        }
+
+        var response = new ClaimStatusResponse
+        {
+            ClaimId = request.ClaimId,
+            TransmissionId = request.TransmissionId,
+            Status = status,
+            StatusCategoryCode = category,
+            StatusCode = code,
+            StatusDescription = description,
+            PayerClaimControlNumber = request.PayerClaimControlNumber,
+            PatientControlNumber = request.PatientControlNumber,
+            StatusDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            ClaimAmount = request.ClaimAmount,
+            ExternalTransactionId = $"mock-276-{request.TransmissionId ?? request.ClaimId}",
+            MatchCount = status == GatewayClaimStatus.NoRecordFound ? 0 : 1,
+            ServiceLineStatuses = lineStatuses
+        };
+
+        return new ClaimStatusTransportResult(
+            true, response, 0, GatewayErrorCategory.None, null, response.ExternalTransactionId);
+    }
+
+    private static (GatewayClaimStatus Status, string Category, string Code, string Description)
+        ResolveMockStatus(string token)
+    {
+        var key = token.ToUpperInvariant();
+        if (key.Contains("NORECORD") || key.Contains("NONE"))
+        {
+            return (GatewayClaimStatus.NoRecordFound, "A4", "35", "Entity not found.");
+        }
+
+        if (key.Contains("DENIED") || key.Contains("DENY"))
+        {
+            return (GatewayClaimStatus.Denied, "F2", "27", "Claim/line has been denied.");
+        }
+
+        if (key.Contains("PAID"))
+        {
+            return (GatewayClaimStatus.Paid, "F1", "65", "Claim/line has been paid.");
+        }
+
+        if (key.Contains("PARTIAL"))
+        {
+            return (GatewayClaimStatus.PartiallyPaid, "F1", "65", "Claim/line has been paid.");
+        }
+
+        if (key.Contains("FINAL"))
+        {
+            return (GatewayClaimStatus.Finalized, "F4", "102", "Adjudication complete without payment.");
+        }
+
+        if (key.Contains("INFO") || key.Contains("RFAI"))
+        {
+            return (GatewayClaimStatus.AdditionalInformationRequested, "R3", "21",
+                "Additional information requested.");
+        }
+
+        if (key.Contains("PEND"))
+        {
+            return (GatewayClaimStatus.Pending, "P2", "20", "Accepted for processing.");
+        }
+
+        if (key.Contains("RECEIV"))
+        {
+            return (GatewayClaimStatus.Received, "A1", "20", "Accepted for processing.");
+        }
+
+        return (GatewayClaimStatus.InProcess, "P1", "20", "Accepted for processing.");
+    }
 
     private GatewayResponse<GatewayClaimSubmissionResult> ClaimFail(
         GatewayClaimSubmissionRequest request,

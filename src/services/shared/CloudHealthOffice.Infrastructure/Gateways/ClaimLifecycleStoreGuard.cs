@@ -17,6 +17,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
     private readonly IClaimAcknowledgmentCursorStore _cursors;
     private readonly IClaimAttachmentTransmissionStore _attachments;
     private readonly IInboundClaimAttachmentReceiptStore _inboundAttachments;
+    private readonly IClaimStatusInquiryStore _statusInquiries;
     private readonly IClaimAttachmentContentStore _content;
     private readonly IOptions<HealthcareTransactionOptions> _options;
     private readonly IHostEnvironment? _environment;
@@ -28,6 +29,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
         IClaimAcknowledgmentCursorStore cursors,
         IClaimAttachmentTransmissionStore attachments,
         IInboundClaimAttachmentReceiptStore inboundAttachments,
+        IClaimStatusInquiryStore statusInquiries,
         IClaimAttachmentContentStore content,
         IOptions<HealthcareTransactionOptions> options,
         ILogger<ClaimLifecycleStoreGuard> logger,
@@ -38,6 +40,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
         _cursors = cursors;
         _attachments = attachments;
         _inboundAttachments = inboundAttachments;
+        _statusInquiries = statusInquiries;
         _content = content;
         _options = options;
         _logger = logger;
@@ -51,6 +54,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
                         _cursors is InMemoryClaimAcknowledgmentCursorStore ||
                         _attachments is InMemoryClaimAttachmentTransmissionStore ||
                         _inboundAttachments is InMemoryInboundClaimAttachmentReceiptStore ||
+                        _statusInquiries is InMemoryClaimStatusInquiryStore ||
                         _content is InMemoryClaimAttachmentContentStore;
         var allowed = ClaimLifecycleStoreResolver.AllowsEphemeral(_options.Value.ClaimLifecycle, _environment);
 

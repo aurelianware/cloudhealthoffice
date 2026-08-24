@@ -26,6 +26,12 @@ public sealed class GatewayEligibilityPerson
     public DateOnly? DateOfBirth { get; set; }
 
     /// <summary>
+    /// Administrative sex when known (<c>M</c>/<c>F</c>). Omit rather than
+    /// send unknown — some 276 payers reject <c>U</c>.
+    /// </summary>
+    public string? Gender { get; set; }
+
+    /// <summary>
     /// Relationship of this person to the subscriber (e.g. self, spouse, child).
     /// Optional; omit rather than invent. <see cref="Relationship.Self"/> means
     /// this person is the subscriber.
