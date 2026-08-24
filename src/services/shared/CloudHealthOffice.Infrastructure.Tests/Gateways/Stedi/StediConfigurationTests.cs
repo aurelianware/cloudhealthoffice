@@ -71,6 +71,8 @@ public class StediConfigurationTests
         var gateway = resolver.Resolve();
         gateway.Name.Should().Be(StediHealthcareGateway.GatewayName);
         resolver.ResolveCapability<IEligibilityGateway>().Should().BeAssignableTo<IEligibilityGateway>();
+        resolver.ResolveCapability<IClaimAcknowledgmentGateway>().Should().BeAssignableTo<IClaimAcknowledgmentGateway>();
+        gateway.Supports(GatewayCapability.ClaimAcknowledgment).Should().BeTrue();
     }
 
     [Fact]

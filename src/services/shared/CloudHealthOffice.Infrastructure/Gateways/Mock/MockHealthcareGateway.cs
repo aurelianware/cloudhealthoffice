@@ -12,9 +12,9 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Mock;
 /// roster — it does <b>not</b> contact any external payer or clearinghouse.
 ///
 /// Its purpose is to prove the gateway abstraction end to end and to give
-/// automated tests a real implementation to resolve. It intentionally
-/// supports only eligibility; every other capability stays unsupported and is
-/// rejected explicitly by the resolver.
+/// automated tests a real implementation to resolve. It supports eligibility
+/// and claim submission. 277CA retrieve is not advertised; development
+/// injection uses the shared canonical processor.
 ///
 /// Logging discipline: only non-PHI <see cref="GatewayTransactionMetadata"/>
 /// is logged. Subscriber identifiers, names, and dates of birth are never
@@ -109,8 +109,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         var existing = await _transmissions.GetByIdempotencyKeyAsync(request.TenantId, key, ct)
             .ConfigureAwait(false);
         if (existing is not null &&
-            existing.Status is GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway
-                or GatewayClaimTransmissionStatus.Transmitted)
+            GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(existing.Status))
         {
             var replay = ToResult(existing, replay: true);
             var meta = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
@@ -129,6 +128,10 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
             TransactionType = request.TransactionType(),
             IdempotencyKey = key,
             CorrelationId = request.CorrelationId,
+            PayerId = request.PayerId,
+            PatientControlNumber = string.IsNullOrEmpty(request.ClaimId)
+                ? request.ClaimId
+                : request.ClaimId.Length <= 20 ? request.ClaimId : request.ClaimId[..20],
             SubmittedAtUtc = startedAt
         };
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
@@ -173,9 +176,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
             SubmissionId = record.SubmissionId,
             ExternalTransactionId = record.ExternalTransactionId,
             IdempotencyKey = record.IdempotencyKey,
-            AcceptedForProcessing = record.Status is
-                GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway or
-                GatewayClaimTransmissionStatus.Transmitted,
+            AcceptedForProcessing = GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(record.Status),
             ReplayOfExistingTransmission = replay
         };
 

@@ -52,6 +52,23 @@ public class MockClaimSubmissionTests
     }
 
     [Fact]
+    public async Task SubmissionAfter277CA_DoesNotResendSameIdempotencyKey()
+    {
+        var store = new InMemoryClaimTransmissionStore();
+        var gateway = Create(store);
+        var submitted = await gateway.SubmitClaimAsync(GatewayClaimFixtures.Professional());
+        var tx = await store.GetByIdAsync(submitted.Result!.TransmissionId);
+        tx!.Status = GatewayClaimTransmissionStatus.AcknowledgmentAccepted;
+        await store.SaveAsync(tx);
+
+        var replay = await gateway.SubmitClaimAsync(GatewayClaimFixtures.Professional());
+        replay.Result!.ReplayOfExistingTransmission.Should().BeTrue();
+        replay.Result.TransmissionId.Should().Be(submitted.Result.TransmissionId);
+        (await store.GetByIdAsync(tx.TransmissionId))!.Status
+            .Should().Be(GatewayClaimTransmissionStatus.AcknowledgmentAccepted);
+    }
+
+    [Fact]
     public async Task UnbalancedTotals_AreRejectedBeforeTransmission()
     {
         var request = GatewayClaimFixtures.Professional();

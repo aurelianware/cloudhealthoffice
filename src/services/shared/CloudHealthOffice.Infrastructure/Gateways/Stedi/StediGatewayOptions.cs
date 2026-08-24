@@ -69,6 +69,45 @@ public sealed class StediGatewayOptions
     public string DentalClaimPath { get; set; } = "/2024-04-01/dental-claims/submission";
 
     /// <summary>
+    /// Host for Stedi Core APIs (Poll Transactions). Separate from
+    /// <see cref="BaseUrl"/> because reports live on healthcare.us.stedi.com.
+    /// </summary>
+    public string CoreBaseUrl { get; set; } = "https://core.us.stedi.com";
+
+    /// <summary>
+    /// 277CA Report path template. API version 2024-04-01. Placeholder
+    /// <c>{transactionId}</c> is replaced with the Stedi transaction UUID.
+    /// </summary>
+    public string ClaimAcknowledgmentReportPath { get; set; } =
+        "/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/277";
+
+    /// <summary>Poll Transactions path (Core API 2023-08-01).</summary>
+    public string PollTransactionsPath { get; set; } = "/2023-08-01/polling/transactions";
+
+    /// <summary>When true, a hosted poller discovers inbound 277CAs. Default false.</summary>
+    public bool ClaimAcknowledgmentPollingEnabled { get; set; }
+
+    public bool ClaimAcknowledgmentPollingOnStartup { get; set; }
+
+    /// <summary>Polling interval in seconds. Default 60.</summary>
+    public int ClaimAcknowledgmentPollingIntervalSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Header name Stedi is configured to send (API Keys credential set).
+    /// Stedi does not HMAC-sign claim-response webhooks.
+    /// </summary>
+    public string WebhookCredentialHeaderName { get; set; } = "Authorization";
+
+    /// <summary>
+    /// Shared secret Stedi sends in <see cref="WebhookCredentialHeaderName"/>.
+    /// Distinct from <see cref="ApiKey"/> (outbound Stedi API). Fail-closed
+    /// when empty: inbound webhooks are rejected.
+    /// </summary>
+    public string? WebhookCredentialValue { get; set; }
+
+    public int WebhookMaxPayloadBytes { get; set; } = 65536;
+
+    /// <summary>
     /// Base URL of Stedi's Payers API. Defaults to the host documented for
     /// <c>GET /2024-04-01/payers</c>. Separate from <see cref="BaseUrl"/>
     /// because eligibility and the payer directory are published on different
@@ -158,5 +197,30 @@ public sealed class StediGatewayOptions
         }
 
         return errors;
+    }
+
+    public string ResolveClaimAcknowledgmentReportPath(string transactionId)
+    {
+        var template = string.IsNullOrWhiteSpace(ClaimAcknowledgmentReportPath)
+            ? "/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/277"
+            : ClaimAcknowledgmentReportPath;
+        return template.Replace("{transactionId}", Uri.EscapeDataString(transactionId), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Validate an inbound webhook credential using Stedi's documented
+    /// mechanism: a caller-configured API-key header (no HMAC).
+    /// </summary>
+    public bool WebhookCredentialIsValid(string? provided)
+    {
+        if (string.IsNullOrEmpty(WebhookCredentialValue) || string.IsNullOrEmpty(provided))
+        {
+            return false;
+        }
+
+        var expected = System.Text.Encoding.UTF8.GetBytes(WebhookCredentialValue);
+        var actual = System.Text.Encoding.UTF8.GetBytes(provided);
+        return expected.Length == actual.Length &&
+               System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(expected, actual);
     }
 }

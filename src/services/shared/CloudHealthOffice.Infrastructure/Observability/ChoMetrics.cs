@@ -379,6 +379,26 @@ public static class ChoMetrics
             unit: "s",
             description: "Outbound claim submission duration in seconds");
 
+    /// <summary>
+    /// Counter tracking 277CA acknowledgment processing outcomes.
+    /// Dimensions: cho.status.
+    /// </summary>
+    public static readonly Counter<long> ClaimAcknowledgments =
+        Meter.CreateCounter<long>(
+            "cho.claim_acknowledgment.processed.total",
+            unit: "{acknowledgment}",
+            description: "Inbound 277CA acknowledgments by canonical status");
+
+    /// <summary>
+    /// Histogram tracking 277CA acknowledgment processing duration (seconds).
+    /// Dimensions: cho.status.
+    /// </summary>
+    public static readonly Histogram<double> ClaimAcknowledgmentDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_acknowledgment.duration",
+            unit: "s",
+            description: "Inbound 277CA acknowledgment processing duration in seconds");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

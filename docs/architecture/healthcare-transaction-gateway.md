@@ -6,8 +6,9 @@ model, many interchangeable vendor implementations, living in
 [`CloudHealthOffice.Infrastructure.Gateways`](../../src/services/shared/CloudHealthOffice.Infrastructure/Gateways/).
 
 This is the **foundation** layer. The mock gateway, the Stedi eligibility
-(270/271) adapter, and the canonical payer reference service are implemented
-today. Additional transactions (837, 276/277, 275, 835) stay contract-only.
+(270/271) adapter, outbound 837 submission, 277CA acknowledgment, and the
+canonical payer reference service are implemented today. Additional
+transactions (276/277 status inquiry, 275, 835) stay contract-only.
 
 Payer-side inbound eligibility (CHO as the 271 information source) is a
 **separate** capability: [`payer-eligibility-responder.md`](payer-eligibility-responder.md).
@@ -94,7 +95,7 @@ transactions are **rejected explicitly** rather than returning a no-op result.
 | `Eligibility` | `IEligibilityGateway` | 270/271 | **Implemented (Mock + Stedi)** |
 | `ClaimSubmission` | `IClaimSubmissionGateway` | 837P/837I/837D | **Implemented (Mock + Stedi)** |
 | `ClaimStatus` | `IClaimStatusGateway` | 276/277 | Contract only |
-| `ClaimAcknowledgment` | `IClaimAcknowledgmentGateway` | 277CA | Contract only |
+| `ClaimAcknowledgment` | `IClaimAcknowledgmentGateway` | 277CA | **Implemented (Stedi retrieve + shared processor)** |
 | `ClaimAttachment` | `IClaimAttachmentGateway` | 275 | Contract only |
 | `Remittance` | `IRemittanceGateway` | 835 | Contract only |
 
@@ -107,14 +108,17 @@ so those gateways do not advertise them.
 
 | Gateway | Eligibility (270/271) | 837 | 276/277 | 277CA | 275 | 835 |
 |---------|:---:|:---:|:---:|:---:|:---:|:---:|
-| Mock  | Yes | Yes | No | No | No | No |
-| Stedi | Yes | Yes | No | No | No | No |
+| Mock  | Yes | Yes | No | No* | No | No |
+| Stedi | Yes | Yes | No | Yes | No | No |
 
-The "contract only" interfaces are intentionally member-less: they let a
-gateway advertise a future capability and let callers discover it, without a
-stub method that pretends to work. Adding a real transaction later means adding
-its method and canonical models — no change to the capability enum wiring
-beyond the single `GatewayCapabilityMap` entry.
+\*Mock does not retrieve 277CAs. Development injection
+(`POST /api/dev/gateway/claims/{transmissionId}/277ca`) feeds the same
+canonical processor used by Stedi.
+
+`IClaimAcknowledgmentGateway.RetrieveAcknowledgmentAsync` fetches and
+normalizes a 277CA. Applying it to a transmission is
+`IClaimAcknowledgmentProcessor` — transport (webhook vs poll) must not
+duplicate that logic. Remaining "contract only" interfaces stay member-less.
 
 ### Discovering and rejecting capabilities
 
@@ -316,7 +320,111 @@ Stedi endpoints (API version `2024-04-01` on `https://healthcare.us.stedi.com`):
 
 Synchronous HTTP 200/`status=SUCCESS` means **the clearinghouse accepted the
 submission for processing**. It is not a 277CA, payer acceptance,
-adjudication, or payment. 277CA remains a follow-up PR.
+adjudication, or payment.
+
+### 277CA claim acknowledgment lifecycle
+
+```
+CHO Claim
+   ↓
+837
+   ↓
+Stedi
+   ↓
+Submission accepted by gateway
+   ↓
+277CA acknowledgment received
+   ↓
+CHO matches acknowledgment to transmission
+   ↓
+Claim acknowledgment status updated
+```
+
+These states remain distinct:
+
+```
+837 submitted
+    ↓
+Gateway accepted          (GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway)
+    ↓
+Awaiting 277CA
+    ↓
+277CA accepted / rejected / partial
+    ↓
+later adjudication        (not this PR)
+    ↓
+later 835 / payment       (not this PR)
+```
+
+A 277CA is an acknowledgment of claim acceptance or rejection **into
+downstream processing**. It is not adjudication and it is not payment.
+`ClaimAcknowledgmentStatus.Accepted` must never be treated as paid,
+adjudicated, approved, or denied.
+
+#### Stedi delivery mechanism
+
+Stedi delivers asynchronous 277CAs as **pointers**, then JSON reports:
+
+1. **Discover** (either or both; processor is shared):
+   - Webhook: `transaction.processed.v2` (`source: stedi.core`) to
+     `POST /api/integrations/stedi/claim-responses`
+   - Poll: `GET https://core.us.stedi.com/2023-08-01/polling/transactions`
+2. **Retrieve JSON**: `GET https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/277`
+   (API version **2024-04-01**). Auth: raw API key in `Authorization`.
+
+The webhook body does **not** contain 277CA content. Filter
+`direction=INBOUND` and `x12.metadata.transaction.transactionSetIdentifier=277`
+(docs shorthand `x12.transactionSetIdentifier`). 835/999 events are ignored.
+
+Stedi authenticates **to** CHO using a configured credential set (API key
+header, Basic, or none). **Stedi does not HMAC-sign claim-response webhooks.**
+CHO fail-closes: `HealthcareTransactions:Gateways:Stedi:WebhookCredentialValue`
+must match the header Stedi is configured to send. Unverifiable requests
+return 401. Payload size is limited. Duplicate deliveries are expected
+(5s timeout, retries); processing is idempotent on `gateway + acknowledgmentId`
+and webhook `event id`.
+
+Polling is opt-in (`ClaimAcknowledgmentPollingEnabled`, default `false`) using
+the existing hosted-service pattern. It overlaps a one-day window and stores
+Stedi's `nextPageToken`.
+
+```
+Stedi 277CA (webhook pointer or poll item)
+    ↓
+Stedi transport adapter (Report API 2024-04-01)
+    ↓
+GatewayClaimAcknowledgment
+    ↓
+ClaimAcknowledgmentProcessor
+    ↓
+IClaimTransmissionStore / IClaimAcknowledgmentStore
+```
+
+#### Matching
+
+Deterministic only — never fuzzy, never guessed:
+
+1. Explicit `TransmissionId` (development injection)
+2. Unique `SubmissionId` / original correlation id
+   (`claimTransactionBatchNumber` / `clearinghouseTraceNumber`)
+3. Unique patient control number (`referencedTransactionTraceNumber`,
+   case-insensitive; Stedi-documented 30-character truncation only)
+
+Zero matches or more than one match → `UnableToMatch`, persisted for
+operators, **not** attached to a claim. Tenant is taken from the matched
+transmission, never from inbound payload text. Payer identity is preserved
+from the original transmission.
+
+#### Live validation
+
+Stedi sandbox accounts cannot submit test claims; test 277CAs require a
+production-account test API key
+([Test claim workflows](https://www.stedi.com/docs/healthcare/test-claims-workflow)).
+
+```
+Contract-tested against Stedi's documented 277CA format;
+live acknowledgment pending production-account test access.
+```
 
 Payer readiness uses `IPayerReferenceService` for the matching 837
 transaction type (external Stedi id, payer support, enrollment). Arbitrary
@@ -334,7 +442,9 @@ Institutional claims without type of bill or revenue codes fail
 `ClaimTypeNotReady` rather than inventing 837I fields. Dental tooth/surface
 are mapped when present on the canonical line.
 
-Development: `POST /api/dev/gateway/claims` (404 outside Development).
+Development: `POST /api/dev/gateway/claims` and
+`POST /api/dev/gateway/claims/{transmissionId}/277ca` (404 outside Development).
+The 277CA injection uses the same canonical processor as the Stedi adapter.
 
 Live 837 validation: Stedi sandbox accounts cannot submit test claims.
 Contract tests cover the documented JSON/HTTP. Opt-in
@@ -468,6 +578,12 @@ HealthcareTransactions:
       Environment: sandbox       # sandbox | test | production
       PayerDirectoryBaseUrl: https://payers.us.stedi.com
       PayerDirectoryPath: /2024-04-01/payers
+      ClaimAcknowledgmentReportPath: /2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/277
+      CoreBaseUrl: https://core.us.stedi.com
+      PollTransactionsPath: /2023-08-01/polling/transactions
+      ClaimAcknowledgmentPollingEnabled: false
+      WebhookCredentialHeaderName: Authorization
+      WebhookCredentialValue: ""   # CHO secret Stedi is configured to send; fail-closed when empty
       PayerMap:                  # deprecated fallback only
         AETNA: "60054"
       TenantPayerMap:            # deprecated fallback; tenant-scoped
@@ -536,13 +652,8 @@ consolidation should be its own PR.
 
 ## Next Stedi integration
 
-Payer identity is now a shared platform service. Recommended next step:
-**inbound payer-side 270/271 support** —
-
-```
-Stedi → CloudHealthOffice → eligibility/benefit logic → 271 → Stedi
-```
-
-so Cloud Health Office can act as the payer endpoint, not only as an outbound
-eligibility client. Claim submission (837P) and the 277CA acknowledgment
-lifecycle remain follow-on work after inbound eligibility.
+Recommended next step: **PR for Stedi 275 claim attachments** — associate
+attachment metadata/content with an existing claim/transmission while
+preserving secure payload handling and a vendor-neutral claim attachment
+model. Do not implement 276/277 inquiry, 835 ERA, or payment posting in
+that PR.

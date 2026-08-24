@@ -13,7 +13,7 @@ public class TenantMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (IsHealthCheckPath(context.Request.Path))
+        if (IsHealthCheckPath(context.Request.Path) || IsStediIntegrationPath(context.Request.Path))
         {
             await _next(context);
             return;
@@ -51,6 +51,13 @@ public class TenantMiddleware
                path.StartsWithSegments("/ready") ||
                path.StartsWithSegments("/live");
     }
+
+    /// <summary>
+    /// Stedi claim-response webhooks do not carry a tenant header. Tenant is
+    /// resolved from the matched original transmission, never from the payload.
+    /// </summary>
+    private static bool IsStediIntegrationPath(PathString path) =>
+        path.StartsWithSegments("/api/integrations/stedi");
 
     private static string SanitizeForLog(string? value)
     {
