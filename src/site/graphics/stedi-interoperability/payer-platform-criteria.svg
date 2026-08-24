@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="680" viewBox="0 0 1400 680" role="img" aria-labelledby="t d">
+  <title id="t">Healthcare payer platform criteria mapped to Cloud Health Office</title>
+  <desc id="d">Eight investor criteria for a payer platform and how Cloud Health Office answers them.</desc>
+  <rect width="1400" height="680" fill="#05070a"/>
+  <text x="700" y="46" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="800">What healthcare investors usually ask a payer platform</text>
+  <text x="700" y="76" text-anchor="middle" fill="#00ffff" font-family="Segoe UI, system-ui, sans-serif" font-size="14">Cloud Health Office answers with shipped code, not a slide about a future clearinghouse wrapper.</text>
+
+  <g font-family="Segoe UI, system-ui, sans-serif">
+    <rect x="48" y="110" width="310" height="240" rx="14" fill="rgba(0,255,255,0.07)" stroke="#00ffff"/>
+    <text x="203" y="154" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">ELIGIBILITY</text>
+    <text x="203" y="198" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="800">270 / 271</text>
+    <text x="70" y="240" fill="#c9d1d9" font-size="14">Real-time coverage inquiry</text>
+    <text x="70" y="266" fill="#c9d1d9" font-size="14">through Stedi JSON, not a</text>
+    <text x="70" y="292" fill="#c9d1d9" font-size="14">generic X12 dump.</text>
+
+    <rect x="378" y="110" width="310" height="240" rx="14" fill="rgba(0,255,255,0.07)" stroke="#00ffff"/>
+    <text x="533" y="154" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">CLAIMS</text>
+    <text x="533" y="198" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="800">837 + 277CA</text>
+    <text x="400" y="240" fill="#c9d1d9" font-size="14">Submit professional,</text>
+    <text x="400" y="266" fill="#c9d1d9" font-size="14">institutional, and dental.</text>
+    <text x="400" y="292" fill="#c9d1d9" font-size="14">Acknowledge without calling it paid.</text>
+
+    <rect x="708" y="110" width="310" height="240" rx="14" fill="rgba(0,255,255,0.07)" stroke="#00ffff"/>
+    <text x="863" y="154" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">FOLLOW-THROUGH</text>
+    <text x="863" y="198" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="800">276 / 275 / 835</text>
+    <text x="730" y="240" fill="#c9d1d9" font-size="14">Status, attachments, and ERA</text>
+    <text x="730" y="266" fill="#c9d1d9" font-size="14">on the same claim identity.</text>
+    <text x="730" y="292" fill="#c9d1d9" font-size="14">Financial truth stays on the 835.</text>
+
+    <rect x="1038" y="110" width="314" height="240" rx="14" fill="rgba(0,255,136,0.08)" stroke="#00ff88"/>
+    <text x="1195" y="154" text-anchor="middle" fill="#00ff88" font-size="13" font-weight="700">WORKFLOW</text>
+    <text x="1195" y="198" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="800">Intelligence API</text>
+    <text x="1060" y="240" fill="#c9d1d9" font-size="14">One tenant-safe read model</text>
+    <text x="1060" y="266" fill="#c9d1d9" font-size="14">for CDO, portal, ops, AI.</text>
+    <text x="1060" y="292" fill="#c9d1d9" font-size="14">Not a second system of record.</text>
+
+    <rect x="48" y="380" width="310" height="240" rx="14" fill="#080c10" stroke="rgba(0,255,255,0.28)"/>
+    <text x="203" y="424" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">TENANT + PHI</text>
+    <text x="70" y="470" fill="#c9d1d9" font-size="14">Every intelligence request</text>
+    <text x="70" y="496" fill="#c9d1d9" font-size="14">is tenant-scoped. Logs never</text>
+    <text x="70" y="522" fill="#c9d1d9" font-size="14">carry names, member IDs, or ERA payloads.</text>
+
+    <rect x="378" y="380" width="310" height="240" rx="14" fill="#080c10" stroke="rgba(0,255,255,0.28)"/>
+    <text x="533" y="424" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">COMPLIANCE</text>
+    <text x="400" y="470" fill="#c9d1d9" font-size="14">CMS-0057-F FHIR APIs sit</text>
+    <text x="400" y="496" fill="#c9d1d9" font-size="14">alongside X12, not instead of it.</text>
+    <text x="400" y="522" fill="#c9d1d9" font-size="14">Source-available under BSL 1.1.</text>
+
+    <rect x="708" y="380" width="310" height="240" rx="14" fill="#080c10" stroke="rgba(0,255,255,0.28)"/>
+    <text x="863" y="424" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">SCALE PROOF</text>
+    <text x="730" y="470" fill="#c9d1d9" font-size="14">Million Claim Challenge:</text>
+    <text x="730" y="496" fill="#c9d1d9" font-size="14">1,000,000 claims through Service Bus.</text>
+    <text x="730" y="522" fill="#c9d1d9" font-size="14">Local Kubernetes evidence, inspectable.</text>
+
+    <rect x="1038" y="380" width="314" height="240" rx="14" fill="#080c10" stroke="rgba(0,255,136,0.35)"/>
+    <text x="1195" y="424" text-anchor="middle" fill="#00ff88" font-size="13" font-weight="700">VENDOR RISK</text>
+    <text x="1060" y="470" fill="#c9d1d9" font-size="14">Stedi today. Availity later.</text>
+    <text x="1060" y="496" fill="#c9d1d9" font-size="14">The gateway is the contract.</text>
+    <text x="1060" y="522" fill="#c9d1d9" font-size="14">The business does not move with the vendor.</text>
+  </g>
+</svg>
