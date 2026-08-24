@@ -13,9 +13,8 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 /// Real external eligibility gateway backed by the Stedi Healthcare real-time
 /// eligibility (270/271) JSON API.
 ///
-/// It advertises <see cref="GatewayCapability.Eligibility"/> and
-/// <see cref="GatewayCapability.ClaimSubmission"/>. Claim status,
-/// acknowledgment, attachments, and remittance stay explicitly unsupported
+/// It advertises eligibility, claim submission, and 277CA acknowledgment.
+/// Claim status, attachments, and remittance stay explicitly unsupported
 /// even though Stedi offers some of them.
 ///
 /// The gateway is pure transport + translation: it maps the canonical request to
@@ -24,16 +23,22 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 /// accumulator, or adjudication logic — the response is an external payer
 /// eligibility statement, not a Cloud Health Office calculation.
 /// </summary>
-public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway
+public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway, IClaimAcknowledgmentGateway
 {
     /// <summary>The name this gateway registers under and is resolved by.</summary>
     public const string GatewayName = "Stedi";
 
     private static readonly IReadOnlySet<GatewayCapability> SupportedCapabilities =
-        new HashSet<GatewayCapability> { GatewayCapability.Eligibility, GatewayCapability.ClaimSubmission };
+        new HashSet<GatewayCapability>
+        {
+            GatewayCapability.Eligibility,
+            GatewayCapability.ClaimSubmission,
+            GatewayCapability.ClaimAcknowledgment
+        };
 
     private readonly StediEligibilityApiClient _apiClient;
     private readonly StediClaimApiClient? _claimClient;
+    private readonly StediClaimAcknowledgmentApiClient? _acknowledgmentClient;
     private readonly IStediPayerResolver _payerResolver;
     private readonly IClaimTransmissionStore _transmissions;
     private readonly IOptions<StediGatewayOptions> _options;
@@ -47,10 +52,12 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         ILogger<StediHealthcareGateway> logger,
         TimeProvider? timeProvider = null,
         StediClaimApiClient? claimClient = null,
-        IClaimTransmissionStore? transmissions = null)
+        IClaimTransmissionStore? transmissions = null,
+        StediClaimAcknowledgmentApiClient? acknowledgmentClient = null)
     {
         _apiClient = apiClient;
         _claimClient = claimClient;
+        _acknowledgmentClient = acknowledgmentClient;
         _payerResolver = payerResolver;
         _transmissions = transmissions ?? new InMemoryClaimTransmissionStore();
         _options = options;
@@ -223,6 +230,8 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             TransactionType = request.TransactionType(),
             IdempotencyKey = key,
             CorrelationId = request.CorrelationId,
+            PayerId = request.PayerId,
+            PatientControlNumber = Truncate(request.ClaimId, 20),
             SubmittedAtUtc = startedAt
         };
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
@@ -289,6 +298,121 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         RecordClaimMetric(request, record.Status, record.ErrorCategory, metadata.Latency);
         return GatewayResponse<GatewayClaimSubmissionResult>.Success(result, metadata);
     }
+
+    public async Task<GatewayResponse<GatewayClaimAcknowledgment>> RetrieveAcknowledgmentAsync(
+        ClaimAcknowledgmentRetrievalRequest request, CancellationToken cancellationToken = default)
+    {
+        var startedAt = _timeProvider.GetUtcNow();
+        var stopwatch = Stopwatch.GetTimestamp();
+
+        var configErrors = _options.Value.Validate();
+        if (configErrors.Count > 0)
+        {
+            return AckFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Configuration,
+                "Stedi gateway is not configured correctly: " + string.Join(" ", configErrors));
+        }
+
+        if (_acknowledgmentClient is null)
+        {
+            return AckFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Configuration,
+                "Stedi claim acknowledgment client is not registered.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ExternalAcknowledgmentId))
+        {
+            return AckFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Validation,
+                "ExternalAcknowledgmentId is required.");
+        }
+
+        Stedi277ReportApiResult apiResult;
+        try
+        {
+            apiResult = await _acknowledgmentClient
+                .GetReportAsync(request.ExternalAcknowledgmentId.Trim(), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (StediApiException ex)
+        {
+            return AckFail(request, startedAt, stopwatch, ex.RetryCount, ex.Category, ex.Message);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error retrieving Stedi 277CA for ack={AckId}",
+                SanitizeForLog(request.ExternalAcknowledgmentId));
+            return AckFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Internal,
+                "Unexpected error retrieving the Stedi claim acknowledgment.");
+        }
+
+        var canonical = StediClaimAcknowledgmentMapper.ToCanonical(
+            apiResult.Report, startedAt, request.EventId);
+        canonical.CorrelationId = request.CorrelationId;
+        canonical.ExternalTransactionId ??= apiResult.ExternalTransactionId;
+        if (string.IsNullOrWhiteSpace(canonical.AcknowledgmentId))
+        {
+            canonical.AcknowledgmentId = request.ExternalAcknowledgmentId.Trim();
+        }
+
+        var metadata = AckMetadata(
+            request, startedAt, GetElapsed(stopwatch), GatewayTransactionStatus.Completed,
+            GatewayErrorCategory.None, apiResult.RetryCount, canonical.ExternalTransactionId);
+        Log(metadata);
+        return GatewayResponse<GatewayClaimAcknowledgment>.Success(canonical, metadata);
+    }
+
+    /// <summary>
+    /// Parse a Stedi <c>transaction.processed.v2</c> webhook body into a
+    /// vendor-neutral discovery pointer. The body does not contain 277CA content.
+    /// </summary>
+    public static bool TryParseClaimResponseEvent(string json, out ClaimAcknowledgmentDiscovery discovery) =>
+        StediClaimResponseEventParser.TryParse(json, out discovery);
+
+    private GatewayResponse<GatewayClaimAcknowledgment> AckFail(
+        ClaimAcknowledgmentRetrievalRequest request,
+        DateTimeOffset startedAt,
+        long stopwatchStart,
+        int retryCount,
+        GatewayErrorCategory category,
+        string message)
+    {
+        var status = category switch
+        {
+            GatewayErrorCategory.Timeout => GatewayTransactionStatus.TimedOut,
+            _ => GatewayTransactionStatus.Failed
+        };
+        var metadata = AckMetadata(
+            request, startedAt, GetElapsed(stopwatchStart), status, category, retryCount, null);
+        Log(metadata);
+        return GatewayResponse<GatewayClaimAcknowledgment>.Failure(message, metadata);
+    }
+
+    private GatewayTransactionMetadata AckMetadata(
+        ClaimAcknowledgmentRetrievalRequest request,
+        DateTimeOffset startedAt,
+        TimeSpan latency,
+        GatewayTransactionStatus status,
+        GatewayErrorCategory category,
+        int retryCount,
+        string? externalTransactionId) =>
+        new()
+        {
+            GatewayName = GatewayName,
+            TransactionType = HealthcareTransactionType.ClaimAcknowledgment277CA,
+            SubmittedAtUtc = startedAt,
+            CompletedAtUtc = startedAt + latency,
+            Status = status,
+            ExternalTransactionId = externalTransactionId,
+            CorrelationId = request.CorrelationId,
+            Latency = latency,
+            RetryCount = retryCount,
+            ErrorCategory = category
+        };
+
+    private static string Truncate(string value, int max) =>
+        string.IsNullOrEmpty(value) ? value : value.Length <= max ? value : value[..max];
 
     private GatewayResponse<GatewayClaimSubmissionResult> ClaimFail(
         GatewayClaimSubmissionRequest request,

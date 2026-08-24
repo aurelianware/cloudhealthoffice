@@ -51,5 +51,10 @@ public enum GatewayClaimTransmissionStatus
     Transmitted,
     SubmissionAcceptedByGateway,
     SubmissionRejectedByGateway,
-    Failed
+    Failed,
+    AwaitingAcknowledgment,
+    AcknowledgmentAccepted,
+    AcknowledgmentRejected,
+    AcknowledgmentPartial,
+    AcknowledgmentFailed
 }

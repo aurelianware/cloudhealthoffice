@@ -87,6 +87,40 @@ public class StediLiveSmokeTests
         response.Metadata.ErrorCategory.Should().NotBe(GatewayErrorCategory.Configuration);
     }
 
+    /// <summary>
+    /// Live 277CA retrieve requires a transactionId from a test claim, which
+    /// Stedi sandbox accounts cannot produce. Opt-in via
+    /// CHO_STEDI_LIVE_CLAIM_TESTS + CHO_STEDI_277CA_TRANSACTION_ID.
+    /// </summary>
+    [SkippableFact]
+    public async Task Sandbox_ClaimAcknowledgment_IsDocumentedAsUnavailableOnSandboxAccounts()
+    {
+        Skip.If(
+            !string.Equals(Environment.GetEnvironmentVariable("CHO_STEDI_LIVE_CLAIM_TESTS"), "true",
+                StringComparison.OrdinalIgnoreCase),
+            "CHO_STEDI_LIVE_CLAIM_TESTS is not set. Live 277CA retrieve needs a production-account test key.");
+
+        var transactionId = Environment.GetEnvironmentVariable("CHO_STEDI_277CA_TRANSACTION_ID");
+        Skip.If(string.IsNullOrWhiteSpace(transactionId),
+            "CHO_STEDI_277CA_TRANSACTION_ID is not set. Contract tests cover the documented 277CA Report.");
+
+        var eligibility = CreateLiveGateway(out var apiKey, DocumentedTradingPartnerId);
+        Skip.If(string.IsNullOrWhiteSpace(apiKey), "STEDI_API_KEY is not set.");
+
+        var ack = eligibility as IClaimAcknowledgmentGateway;
+        Skip.If(ack is null, "Live Stedi gateway does not implement claim acknowledgment.");
+
+        var response = await ack!.RetrieveAcknowledgmentAsync(new ClaimAcknowledgmentRetrievalRequest
+        {
+            ExternalAcknowledgmentId = transactionId!
+        });
+
+        response.Should().NotBeNull();
+        response.Metadata.GatewayName.Should().Be("Stedi");
+        response.Metadata.TransactionType.Should().Be(HealthcareTransactionType.ClaimAcknowledgment277CA);
+        response.Metadata.ErrorCategory.Should().NotBe(GatewayErrorCategory.Configuration);
+    }
+
     [SkippableFact]
     public async Task Sandbox_Eligibility_ReturnsNormalizedResponse()
     {

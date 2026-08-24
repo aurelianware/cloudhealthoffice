@@ -1,9 +1,11 @@
 using CloudHealthOffice.Infrastructure.Gateways.Mock;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
+using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -35,6 +37,16 @@ public static class HealthcareGatewayServiceCollectionExtensions
 
         services.TryAddSingleton<IHealthcareGatewayResolver, HealthcareGatewayResolver>();
         services.TryAddSingleton<IClaimTransmissionStore, InMemoryClaimTransmissionStore>();
+        services.TryAddSingleton<IClaimAcknowledgmentStore, InMemoryClaimAcknowledgmentStore>();
+        services.TryAddSingleton<IClaimAcknowledgmentCursorStore, InMemoryClaimAcknowledgmentCursorStore>();
+        services.TryAddSingleton<IClaimAcknowledgmentProcessor>(sp =>
+            new ClaimAcknowledgmentProcessor(
+                sp.GetRequiredService<IClaimAcknowledgmentStore>(),
+                sp.GetRequiredService<IClaimTransmissionStore>(),
+                sp.GetRequiredService<ILogger<ClaimAcknowledgmentProcessor>>(),
+                sp.GetService<IMessageBus>(),
+                sp.GetService<TimeProvider>()));
+        services.TryAddSingleton<IClaimAcknowledgmentIngress, ClaimAcknowledgmentIngress>();
 
         // Canonical payer identity is shared by every gateway implementation.
         services.AddChoPayerReference(configuration);

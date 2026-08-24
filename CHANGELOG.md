@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 277CA claim acknowledgment lifecycle through Stedi
+
+Vendor-neutral `GatewayClaimAcknowledgment` plus `IClaimAcknowledgmentGateway`
+retrieve and `IClaimAcknowledgmentProcessor`. Stedi discovers 277CAs via
+`transaction.processed.v2` webhooks or Poll Transactions
+(`core.us.stedi.com/2023-08-01`) and retrieves JSON from
+`GET /2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/277`.
+Acknowledgments match deterministically to `#1111` transmission records.
+Tenant comes from the matched transmission. 277CA accepted/rejected stays
+separate from adjudication and payment. Duplicate webhooks are idempotent.
+
+Stedi does not HMAC-sign claim-response webhooks; CHO authenticates the
+configured credential-set header. Live 277CA testing is not claimed for
+sandbox accounts.
+
+Development: `POST /api/dev/gateway/claims/{transmissionId}/277ca`.
+Production webhook: `POST /api/integrations/stedi/claim-responses`.
+
 ### Outbound 837 claim submission through Stedi
 
 `IClaimSubmissionGateway.SubmitClaimAsync` is a real capability. Mock and
