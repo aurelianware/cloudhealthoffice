@@ -86,7 +86,19 @@ public class GatewayVendorNeutralityTests
             typeof(RemittedClaim),
             typeof(RemittedServiceLine),
             typeof(RemittanceAdjustment),
-            typeof(RemittanceReceipt)
+            typeof(RemittanceReceipt),
+            typeof(ClaimIntelligenceView),
+            typeof(ClaimIntelligenceIdentifiers),
+            typeof(ClaimIntelligenceParty),
+            typeof(ClaimIntelligencePayer),
+            typeof(ClaimIntelligenceTransactionSet),
+            typeof(ClaimIntelligenceTransactionSnapshot),
+            typeof(ClaimIntelligenceFinancialSummary),
+            typeof(ClaimIntelligenceAttachmentSummary),
+            typeof(ClaimIntelligenceTimelineEvent),
+            typeof(ClaimIntelligenceWorkflow),
+            typeof(ClaimIntelligenceSignals),
+            typeof(ClaimIntelligenceRequest)
         };
 
         foreach (var model in models)

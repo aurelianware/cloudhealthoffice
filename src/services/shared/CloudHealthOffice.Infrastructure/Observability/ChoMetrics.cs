@@ -479,6 +479,40 @@ public static class ChoMetrics
             unit: "{claim}",
             description: "Claims included on inbound 835 remittances by match outcome");
 
+    /// <summary>
+    /// Counter tracking claim intelligence views generated.
+    /// Dimensions: cho.status, cho.next_action. Never labeled with PHI.
+    /// </summary>
+    public static readonly Counter<long> ClaimIntelligenceViews =
+        Meter.CreateCounter<long>(
+            "cho.claim_intelligence.views.total",
+            unit: "{view}",
+            description: "Claim intelligence views composed by lifecycle status");
+
+    public static readonly Histogram<double> ClaimIntelligenceDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_intelligence.duration",
+            unit: "s",
+            description: "Claim intelligence composition duration in seconds");
+
+    public static readonly Counter<long> ClaimIntelligenceRebuilds =
+        Meter.CreateCounter<long>(
+            "cho.claim_intelligence.rebuilds.total",
+            unit: "{rebuild}",
+            description: "Claim intelligence projections rebuilt from transaction stores");
+
+    public static readonly Counter<long> ClaimIntelligenceFailures =
+        Meter.CreateCounter<long>(
+            "cho.claim_intelligence.failed.total",
+            unit: "{failure}",
+            description: "Failed claim intelligence projections");
+
+    public static readonly Counter<long> ClaimIntelligenceMissingLinks =
+        Meter.CreateCounter<long>(
+            "cho.claim_intelligence.missing_links.total",
+            unit: "{link}",
+            description: "Missing transaction links observed while composing claim intelligence");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly
