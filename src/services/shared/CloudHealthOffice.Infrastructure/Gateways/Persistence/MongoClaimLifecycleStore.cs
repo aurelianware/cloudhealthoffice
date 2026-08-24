@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Responders;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 
@@ -12,12 +13,14 @@ internal sealed class MongoClaimLifecycleStore :
     IClaimTransmissionStore,
     IClaimAcknowledgmentStore,
     IClaimAcknowledgmentCursorStore,
-    IClaimAttachmentTransmissionStore
+    IClaimAttachmentTransmissionStore,
+    IInboundClaimAttachmentReceiptStore
 {
     private readonly IMongoCollection<ClaimTransmissionDocument> _transmissions;
     private readonly IMongoCollection<ClaimAcknowledgmentDocument> _acknowledgments;
     private readonly IMongoCollection<ClaimAcknowledgmentCursor> _cursors;
     private readonly IMongoCollection<ClaimAttachmentTransmissionDocument> _attachments;
+    private readonly IMongoCollection<InboundClaimAttachmentReceiptDocument> _inboundAttachments;
 
     public MongoClaimLifecycleStore(IMongoDatabase database, ClaimLifecycleOptions options)
     {
@@ -25,6 +28,7 @@ internal sealed class MongoClaimLifecycleStore :
         _acknowledgments = database.GetCollection<ClaimAcknowledgmentDocument>(options.AcknowledgmentsCollection);
         _cursors = database.GetCollection<ClaimAcknowledgmentCursor>(options.CursorsCollection);
         _attachments = database.GetCollection<ClaimAttachmentTransmissionDocument>(options.AttachmentsCollection);
+        _inboundAttachments = database.GetCollection<InboundClaimAttachmentReceiptDocument>(options.InboundAttachmentsCollection);
     }
 
     public async Task EnsureIndexesAsync(CancellationToken ct)
@@ -95,6 +99,22 @@ internal sealed class MongoClaimLifecycleStore :
                 Builders<ClaimAttachmentTransmissionDocument>.IndexKeys
                     .Ascending(d => d.TenantId)
                     .Ascending(d => d.ChecksumSha256))
+        }, ct).ConfigureAwait(false);
+
+        await _inboundAttachments.Indexes.CreateManyAsync(new[]
+        {
+            new CreateIndexModel<InboundClaimAttachmentReceiptDocument>(
+                Builders<InboundClaimAttachmentReceiptDocument>.IndexKeys.Ascending(d => d.Id),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<InboundClaimAttachmentReceiptDocument>(
+                Builders<InboundClaimAttachmentReceiptDocument>.IndexKeys.Ascending(d => d.IdempotencyKey),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<InboundClaimAttachmentReceiptDocument>(
+                Builders<InboundClaimAttachmentReceiptDocument>.IndexKeys
+                    .Ascending(d => d.TenantId)
+                    .Ascending(d => d.ClaimId)),
+            new CreateIndexModel<InboundClaimAttachmentReceiptDocument>(
+                Builders<InboundClaimAttachmentReceiptDocument>.IndexKeys.Ascending(d => d.HasPendingOutbox))
         }, ct).ConfigureAwait(false);
     }
 
@@ -322,6 +342,69 @@ internal sealed class MongoClaimLifecycleStore :
         }
     }
 
+    async Task<InboundClaimAttachmentReceipt?> IInboundClaimAttachmentReceiptStore.GetByIdempotencyKeyAsync(
+        string idempotencyKey, CancellationToken ct)
+    {
+        var doc = await _inboundAttachments.Find(d => d.IdempotencyKey == idempotencyKey)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.ToModel();
+    }
+
+    async Task<InboundClaimAttachmentReceipt?> IInboundClaimAttachmentReceiptStore.GetByIdAsync(
+        string receiptId, CancellationToken ct)
+    {
+        var doc = await _inboundAttachments.Find(d => d.Id == receiptId)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.ToModel();
+    }
+
+    public async Task<IReadOnlyList<InboundClaimAttachmentReceipt>> ListByClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var docs = await _inboundAttachments
+            .Find(d => d.TenantId == tenantId && d.ClaimId == claimId)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.ToModel()).ToList();
+    }
+
+    async Task<IReadOnlyList<InboundClaimAttachmentReceipt>> IInboundClaimAttachmentReceiptStore.ListPendingOutboxAsync(
+        int take, CancellationToken ct)
+    {
+        var limit = take <= 0 ? 50 : take;
+        var docs = await _inboundAttachments
+            .Find(d => d.HasPendingOutbox)
+            .SortBy(d => d.Payload.ReceivedAtUtc)
+            .Limit(limit)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.ToModel()).ToList();
+    }
+
+    public Task SaveAsync(InboundClaimAttachmentReceipt record, CancellationToken ct = default) =>
+        _inboundAttachments.ReplaceOneAsync(
+            d => d.Id == record.ReceiptId,
+            InboundClaimAttachmentReceiptDocument.FromModel(record),
+            new ReplaceOptions { IsUpsert = true },
+            ct);
+
+    public async Task<(bool Created, InboundClaimAttachmentReceipt Record)> TryCreateAsync(
+        InboundClaimAttachmentReceipt record, CancellationToken ct = default)
+    {
+        try
+        {
+            await _inboundAttachments
+                .InsertOneAsync(InboundClaimAttachmentReceiptDocument.FromModel(record), cancellationToken: ct)
+                .ConfigureAwait(false);
+            return (true, record);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            var existing = await ((IInboundClaimAttachmentReceiptStore)this)
+                .GetByIdempotencyKeyAsync(record.IdempotencyKey, ct)
+                .ConfigureAwait(false);
+            return (false, existing ?? record);
+        }
+    }
+
     private async Task<IReadOnlyList<ClaimTransmissionRecord>> FindTransmissionsAsync(
         System.Linq.Expressions.Expression<Func<ClaimTransmissionDocument, bool>> filter,
         CancellationToken ct)
@@ -417,4 +500,32 @@ internal sealed class ClaimAttachmentTransmissionDocument
     };
 
     public ClaimAttachmentTransmissionRecord ToModel() => Payload;
+}
+
+internal sealed class InboundClaimAttachmentReceiptDocument
+{
+    [BsonId]
+    public string Id { get; set; } = string.Empty;
+
+    public string IdempotencyKey { get; set; } = string.Empty;
+
+    public string TenantId { get; set; } = string.Empty;
+
+    public string? ClaimId { get; set; }
+
+    public bool HasPendingOutbox { get; set; }
+
+    public InboundClaimAttachmentReceipt Payload { get; set; } = new();
+
+    public static InboundClaimAttachmentReceiptDocument FromModel(InboundClaimAttachmentReceipt r) => new()
+    {
+        Id = r.ReceiptId,
+        IdempotencyKey = r.IdempotencyKey,
+        TenantId = r.TenantId,
+        ClaimId = r.ClaimId,
+        HasPendingOutbox = r.HasPendingOutbox,
+        Payload = r
+    };
+
+    public InboundClaimAttachmentReceipt ToModel() => Payload;
 }
