@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Clearinghouse Is Not the Payer Platform | Cloud Health Office</title>
+  <meta name="description" content="How Cloud Health Office turned Stedi into a vendor-neutral HIPAA transaction spine — eligibility, 837, 277CA, 275, 276/277, 835, and claim intelligence — without letting the clearinghouse become the product.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="The Clearinghouse Is Not the Payer Platform">
+  <meta property="og:description" content="Stedi is the network. Cloud Health Office is the claims operating system a health plan actually runs.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/stedi-interoperability/clearinghouse-is-not-the-platform.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="The Clearinghouse Is Not the Payer Platform">
+  <meta name="twitter:description" content="Stedi is the network. Cloud Health Office is the claims operating system a health plan actually runs.">
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/stedi-interoperability/clearinghouse-is-not-the-platform.jpg">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .lede { font-size: 1.22rem !important; color: #e6edf3 !important; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .pullquote { border-left: 4px solid #00ffff; background: rgba(0,255,255,.05); padding: 22px 24px; margin: 36px 0; color: #fff; font-size: 1.25rem; line-height: 1.5; font-weight: 600; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .article-figure { margin: 40px 0; }
+    .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
+    .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
+    .table-wrap { margin: 28px 0; overflow-x: auto; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; }
+    .table-wrap table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+    .table-wrap th, .table-wrap td { padding: 10px 16px; text-align: left; border-bottom: 1px solid rgba(139,148,158,.2); }
+    .table-wrap th { color: #00ffff; font-weight: 700; background: #0d1117; white-space: nowrap; }
+    .table-wrap td { color: #c9d1d9; }
+    .table-wrap tr:last-child td { border-bottom: none; }
+    .table-wrap a { color: #00ffff; }
+    .proof-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 28px 0; }
+    .proof-metric { background: #0d1117; border: 1px solid rgba(0,255,255,.14); border-radius: 8px; padding: 16px; }
+    .proof-metric strong { display: block; color: #fff; font-size: 1.12rem; margin-bottom: 6px; }
+    .proof-metric span { color: #8b949e; font-size: .82rem; line-height: 1.4; }
+    @media (max-width: 900px) { .proof-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .proof-metrics { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/stedi-interoperability">Stedi Interoperability</a></nav>
+    <div class="eyebrow">Stedi Interoperability · Engineering Field Note</div>
+    <h1>The Clearinghouse Is Not the Payer Platform</h1>
+    <p class="lede">Cloud Health Office is the claims operating system a health plan actually runs. Stedi is one of the networks it can speak.</p>
+    <div class="disclosure"><strong>Evidence scope:</strong> This field note describes merged, inspectable pull requests on a vendor-neutral healthcare transaction gateway. It is not a production-volume result, not a live ERA enrollment certificate, and not payment posting. Live Stedi 835 retrieve still needs payer enrollment and a real transaction id. Scale evidence lives in the Million Claim Challenge.</div>
+    <div class="article-links">
+      <a href="https://github.com/aurelianware/cloudhealthoffice/pulls?q=is%3Apr+stedi" target="_blank" rel="noopener noreferrer">Inspect the PRs</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/healthcare-transaction-gateway.md" target="_blank" rel="noopener noreferrer">Gateway architecture</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/engineering-field-notes/stedi-interoperability.md" target="_blank" rel="noopener noreferrer">Article source</a>
+      <a href="/docs/million-claim-challenge/evidence">MCC evidence</a>
+    </div>
+
+    <figure class="article-figure">
+      <img src="/graphics/stedi-interoperability/clearinghouse-is-not-the-platform.jpg" alt="Dark industrial hall with a glowing cyan monolith at the center and two fiber spines carrying sealed capsules toward and away from it" width="1672" height="941">
+      <figcaption>The network carries transactions. The platform decides what they mean. Cloud Health Office sits at the core; Stedi is a spine into the rest of the industry.</figcaption>
+    </figure>
+
+    <h2 id="the-question-investors-actually-ask">The question investors actually ask</h2>
+    <p>Healthcare investors do not diligence a clearinghouse the way they diligence a payer platform. A pipe that can post an 837 is necessary and nowhere near sufficient. The strict criteria usually sound like this:</p>
+    <ul>
+      <li>Can you determine eligibility in real time?</li>
+      <li>Can you accept professional, institutional, and dental claims?</li>
+      <li>Can you tell a provider the claim was accepted into processing without pretending it was paid?</li>
+      <li>Can you ask where it is, attach documentation, and receive an ERA?</li>
+      <li>Can you keep tenants apart and keep PHI out of logs?</li>
+      <li>Can you speak FHIR for CMS-0057-F without abandoning X12?</li>
+      <li>If the clearinghouse changes, does the product die?</li>
+    </ul>
+    <p>That last question is the trap. Wrap Stedi too tightly and you have rented a network, not built a platform. Rebuild QNXT and you have a ten-year migration. Cloud Health Office is the third shape: <strong>a source-available claims platform with a replaceable network adapter.</strong></p>
+
+    <figure class="article-figure">
+      <img src="/graphics/stedi-interoperability/payer-platform-criteria.svg" alt="Eight-panel diagram mapping investor criteria: eligibility, claims, follow-through, intelligence, tenant and PHI, compliance, scale proof, and vendor risk" width="1400" height="680">
+      <figcaption>The diligence checklist, mapped onto shipped CHO surfaces. Stedi is the first implemented network. The gateway is the contract that survives a vendor swap.</figcaption>
+    </figure>
+
+    <h2 id="ninety-seconds-on-what-cho-is">Ninety seconds on what CHO is</h2>
+    <p>Cloud Health Office is a Kubernetes-native, multi-tenant claims administration platform. It does the work a health plan actually has to do after the EDI file arrives: interpret eligibility, ingest the claim, adjudicate against a versioned benefit plan, price against fee schedules, apply NCCI and COB, persist a lifecycle, and expose FHIR APIs for CMS-0057-F.</p>
+    <p>It is source-available under BSL 1.1. It deploys in the plan’s cloud. It is designed to sit beside QNXT, Facets, or HealthEdge as a compliance and modernization layer, or to run as a full claims stack for a new entrant.</p>
+    <p>The Million Claim Challenge already showed the adjudication core can carry a million mixed claims through Azure Service Bus on a local Kubernetes cluster, with inspectable evidence. This field note is the other half of the same argument: the platform can also <em>talk to the industry</em> without becoming the industry’s clearinghouse.</p>
+
+    <div class="pullquote">Stedi moves HIPAA transactions. Cloud Health Office owns eligibility interpretation, claim identity, acknowledgment, status, attachments, remittance, and the workflow view a provider or dental application can actually use.</div>
+
+    <h2 id="the-boundary-that-makes-the-platform-valuable">The boundary that makes the platform valuable</h2>
+    <p>Every Stedi PR in this sequence obeyed one architectural rule: <strong>CHO owns the healthcare business. The gateway owns transport and translation.</strong> Canonical request and response models never contain a vendor name. A guard test fails the build if they do.</p>
+    <p>That sounds academic until you price vendor lock-in. A health plan that embeds Stedi DTOs in its claim aggregate cannot change networks without rewriting adjudication. A health plan that talks to <code>IClaimSubmissionGateway</code> can add Availity later the way CHO added Stedi: an adapter, not a product rewrite.</p>
+
+    <figure class="article-figure">
+      <img src="/graphics/stedi-interoperability/cho-owns-the-business.svg" alt="Layered architecture diagram showing CHO business services above a vendor-neutral gateway, with Stedi implemented and Availity or direct payer as later adapters" width="1400" height="720">
+      <figcaption>Layer 1 is the healthcare business CHO already owns. Layer 2 is the vendor-neutral gateway. Stedi is the first implemented pipe under that gateway, not the product itself.</figcaption>
+    </figure>
+
+    <h2 id="one-claim-life-six-transactions">One claim life, six transactions</h2>
+    <p>A real claim is not one API call. It is a life:</p>
+    <ol>
+      <li><strong>270/271</strong> — is the member covered?</li>
+      <li><strong>837</strong> — submit professional, institutional, or dental.</li>
+      <li><strong>277CA</strong> — accepted or rejected into processing. Not paid.</li>
+      <li><strong>276/277</strong> — where is it now? Status is not remittance.</li>
+      <li><strong>275</strong> — outbound documents, and inbound receive when CHO is the payer.</li>
+      <li><strong>835</strong> — what was allowed, paid, and left to the patient. Stored, not posted.</li>
+    </ol>
+    <p>Most “EDI platforms” collapse those into a single status field. CHO keeps them distinct on purpose. That is how you avoid the lie that kills trust with providers: calling a clearinghouse acceptance a payment.</p>
+
+    <figure class="article-figure">
+      <img src="/graphics/stedi-interoperability/transaction-stations.jpg" alt="Six glowing instrument stations along a cyan conveyor, representing sequential healthcare transactions in a dark operations hall" width="1672" height="941">
+      <figcaption>Each HIPAA transaction is a station, not an overwrite. Eligibility, submission, acknowledgment, status, attachments, and remittance keep their own durable records.</figcaption>
+    </figure>
+
+    <figure class="article-figure">
+      <img src="/graphics/stedi-interoperability/transaction-spine.svg" alt="Six labeled stations for 270/271, 837, 277CA, 276/277, 275, and 835 feeding a claim intelligence API" width="1400" height="560">
+      <figcaption>The spine that just landed in main. Claim intelligence sits underneath the transactions, composing them rather than replacing them.</figcaption>
+    </figure>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Transaction</th><th>Business question</th><th>Evidence</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>270 / 271</td><td>Is this member covered?</td><td>Stedi eligibility JSON adapter</td></tr>
+          <tr><td>837P / I / D</td><td>Can we send this claim?</td><td><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1111" target="_blank" rel="noopener noreferrer">PR #1111</a></td></tr>
+          <tr><td>277CA</td><td>Did processing accept it?</td><td><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1112" target="_blank" rel="noopener noreferrer">#1112</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1114" target="_blank" rel="noopener noreferrer">#1114</a></td></tr>
+          <tr><td>275</td><td>Does the payer need more?</td><td><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1115" target="_blank" rel="noopener noreferrer">#1115</a> outbound, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1116" target="_blank" rel="noopener noreferrer">#1116</a> inbound</td></tr>
+          <tr><td>276 / 277</td><td>Where is it now?</td><td><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1117" target="_blank" rel="noopener noreferrer">PR #1117</a></td></tr>
+          <tr><td>835</td><td>What was paid?</td><td><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1118" target="_blank" rel="noopener noreferrer">PR #1118</a></td></tr>
+          <tr><td>Intelligence</td><td>What should we do next?</td><td><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1119" target="_blank" rel="noopener noreferrer">PR #1119</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="proof-metrics" aria-label="Stedi interoperability snapshot">
+      <div class="proof-metric"><strong>6</strong><span>HIPAA transaction types on one gateway</span></div>
+      <div class="proof-metric"><strong>9</strong><span>sequential PRs from 837 through intelligence</span></div>
+      <div class="proof-metric"><strong>0</strong><span>vendor names allowed in canonical models</span></div>
+      <div class="proof-metric"><strong>1</strong><span>tenant-safe read API for CDO and portal</span></div>
+    </div>
+
+    <h2 id="claim-intelligence-is-the-product-surface">Claim intelligence is the product surface</h2>
+    <p>A dental practice, a provider portal, and a payer operations queue should not have to understand CLP02. They need a sentence: processing, pending information, paid, denied. They need a timeline. They need to know whether documentation arrived. They need patient responsibility when an ERA exists, and “unknown” when it does not.</p>
+    <p><code>GET /api/claims/{claimId}/intelligence</code> is that sentence. It rebuilds from the transaction stores. It is not a second database of truth. Duplicate 277CA or 835 deliveries do not duplicate the timeline, because event ids are the source record ids — status lives on the payload, not in the identity.</p>
+
+    <figure class="article-figure">
+      <img src="/graphics/stedi-interoperability/claim-intelligence-observatory.jpg" alt="Control room overlooking a river of claim packets, with operators facing a constellation wall and vaulted drawers of transaction layers below" width="1672" height="941">
+      <figcaption>The product a provider or dental application actually wants: one observatory over the claim, not six EDI manuals.</figcaption>
+    </figure>
+
+    <figure class="article-figure">
+      <img src="/graphics/stedi-interoperability/claim-intelligence.svg" alt="Diagram of 837, 277CA, 276/277, 275, and 835 stores feeding a composer consumed by CloudDentalOffice, portal, operations, and future AI" width="1400" height="640">
+      <figcaption>CloudDentalOffice, a future provider portal, operations, and later AI consume the same composer. None of them should re-implement HIPAA.</figcaption>
+    </figure>
+
+    <p>Two rules from that PR are the ones to say out loud in a diligence room:</p>
+    <ul>
+      <li><strong>277CA Accepted is not Paid.</strong></li>
+      <li><strong>276/277 Paid does not create an 835.</strong></li>
+    </ul>
+    <p>Those are not slogans. They are tests. They are why a healthcare investor can believe the rest of the lifecycle.</p>
+
+    <h2 id="what-we-refused-to-fake">What we refused to fake</h2>
+    <p>The Million Claim Challenge series is useful here as a method, not just a number. We publish limitations in the same breath as results. For Stedi:</p>
+    <ul>
+      <li>CI never calls live Stedi. Contract tests use documented JSON and stubbed HTTP.</li>
+      <li>Stedi test keys are not supported for 276/277. Live inquiry needs production/test capability.</li>
+      <li>Live 835 retrieve needs ERA enrollment and a real transaction id. Sandbox accounts do not produce that ERA.</li>
+      <li>Inbound payer-side 275 through Stedi is adapter-ready. The CHO receiver is real; Stedi’s public inbound 275 path is not claimed.</li>
+      <li>Payment posting, EFT reconciliation, and accumulator writes from 835s are explicitly later work.</li>
+      <li>The provider portal UI is not this PR. The API is the reusable layer CDO will consume.</li>
+    </ul>
+    <p>That list is how you tell a serious healthcare investor you are not selling a demo that collapses in underwriting.</p>
+
+    <h2 id="why-this-is-the-valuable-platform">Why this is the valuable platform</h2>
+    <p>The value is not “we integrated Stedi.” Plenty of teams can post an 837. The value is the combination:</p>
+    <ol>
+      <li><strong>A complete claim life</strong> — eligibility through remittance — as distinct facts.</li>
+      <li><strong>A healthcare business layer</strong> that already adjudicates, prices, and scores at million-claim evidence scale.</li>
+      <li><strong>A replaceable network</strong> so the plan is not married to one clearinghouse.</li>
+      <li><strong>A workflow API</strong> that CloudDentalOffice and a provider portal can use without becoming EDI companies.</li>
+      <li><strong>CMS-0057-F FHIR</strong> on the same platform, so compliance is an on-ramp rather than a side project.</li>
+      <li><strong>Source you can read.</strong> The PRs, the evidence docs, and the Million Claim Challenge packets are public.</li>
+    </ol>
+    <p>For a capital-markets conversation, that is the underwriting story. The clearinghouse is a cost of doing business. The platform is the asset: tenant-safe claims operations that a health plan, a TPA, or a dental network can run, inspect, and extend.</p>
+    <p>Stedi made the wire real this month. Cloud Health Office is what the wire is for.</p>
+
+    <div class="article-links">
+      <a href="/insights/stedi-interoperability">Stedi series</a>
+      <a href="/insights/million-claim-challenge">Million Claim Challenge series</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/claim-intelligence.md" target="_blank" rel="noopener noreferrer">Claim intelligence architecture</a>
+      <a href="/schedule-demo">Schedule a discovery call</a>
+    </div>
+  </main>
+</body>
+</html>

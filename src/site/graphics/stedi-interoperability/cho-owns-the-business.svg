@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="720" viewBox="0 0 1400 720" role="img" aria-labelledby="title desc">
+  <title id="title">Cloud Health Office owns the healthcare business; Stedi owns transport</title>
+  <desc id="desc">Four stacked layers: CHO domain services, a vendor-neutral gateway, interchangeable networks, and external payers.</desc>
+  <defs>
+    <linearGradient id="gCyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00ffff"/><stop offset="1" stop-color="#00ff88"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1400" height="720" fill="#05070a"/>
+  <text x="700" y="46" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="800">The clearinghouse is the pipe. Cloud Health Office is the platform.</text>
+  <text x="700" y="76" text-anchor="middle" fill="#00ffff" font-family="Segoe UI, system-ui, sans-serif" font-size="14" opacity="0.85">Canonical models never leak vendor shapes. Swap the network without rewriting adjudication.</text>
+
+  <rect x="70" y="110" width="1260" height="150" rx="14" fill="rgba(0,255,136,0.07)" stroke="#00ff88" stroke-width="1.6"/>
+  <text x="100" y="148" fill="#00ff88" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="700" letter-spacing="2">LAYER 1  ·  HEALTHCARE BUSINESS  ·  CHO OWNS THIS</text>
+  <text x="100" y="184" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="22" font-weight="700">Eligibility interpretation · Coverage · Provider / network · Adjudication · Accumulators</text>
+  <text x="100" y="218" fill="#c9d1d9" font-family="Segoe UI, system-ui, sans-serif" font-size="16">Claim intelligence · Tenant isolation · PHI-safe operations · CMS-0057-F FHIR APIs</text>
+
+  <rect x="70" y="286" width="1260" height="132" rx="14" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.6"/>
+  <text x="100" y="324" fill="#00ffff" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="700" letter-spacing="2">LAYER 2  ·  VENDOR-NEUTRAL GATEWAY</text>
+  <text x="100" y="360" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="20" font-weight="700">IEligibilityGateway  ·  IClaimSubmissionGateway  ·  IClaimAcknowledgmentGateway</text>
+  <text x="100" y="392" fill="#c9d1d9" font-family="Segoe UI, system-ui, sans-serif" font-size="16">IClaimAttachmentGateway  ·  IClaimStatusGateway  ·  IRemittanceGateway</text>
+
+  <g font-family="Segoe UI, system-ui, sans-serif">
+    <rect x="70" y="444" width="390" height="120" rx="12" fill="rgba(0,255,255,0.08)" stroke="#00ffff"/>
+    <text x="265" y="494" text-anchor="middle" fill="#00ffff" font-size="18" font-weight="700">Stedi</text>
+    <text x="265" y="524" text-anchor="middle" fill="#c9d1d9" font-size="14">Implemented JSON transport</text>
+    <rect x="505" y="444" width="390" height="120" rx="12" fill="rgba(139,148,158,0.08)" stroke="#8b949e"/>
+    <text x="700" y="494" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700">Availity / other</text>
+    <text x="700" y="524" text-anchor="middle" fill="#8b949e" font-size="14">Same interfaces, later adapter</text>
+    <rect x="940" y="444" width="390" height="120" rx="12" fill="rgba(139,148,158,0.08)" stroke="#8b949e"/>
+    <text x="1135" y="494" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700">Direct payer / X12 / FHIR</text>
+    <text x="1135" y="524" text-anchor="middle" fill="#8b949e" font-size="14">No rewrite of CHO business logic</text>
+  </g>
+
+  <rect x="70" y="590" width="1260" height="88" rx="12" fill="#080c10" stroke="rgba(0,255,255,0.25)"/>
+  <text x="700" y="628" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="18" font-weight="700">External payers and trading partners</text>
+  <text x="700" y="656" text-anchor="middle" fill="#8b949e" font-family="Segoe UI, system-ui, sans-serif" font-size="14">The network is replaceable. The claim lifecycle is not.</text>
+</svg>
