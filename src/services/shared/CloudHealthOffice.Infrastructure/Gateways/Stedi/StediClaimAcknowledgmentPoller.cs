@@ -17,6 +17,7 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
     private readonly IClaimAcknowledgmentIngress _ingress;
     private readonly IClaimAcknowledgmentCursorStore _cursors;
     private readonly IOptions<StediGatewayOptions> _options;
+    private readonly IOptions<HealthcareTransactionOptions> _lifecycle;
     private readonly ILogger<StediClaimAcknowledgmentPoller> _logger;
     private readonly TimeProvider _timeProvider;
 
@@ -26,12 +27,14 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
         IClaimAcknowledgmentCursorStore cursors,
         IOptions<StediGatewayOptions> options,
         ILogger<StediClaimAcknowledgmentPoller> logger,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IOptions<HealthcareTransactionOptions>? lifecycle = null)
     {
         _client = client;
         _ingress = ingress;
         _cursors = cursors;
         _options = options;
+        _lifecycle = lifecycle ?? Options.Create(new HealthcareTransactionOptions());
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
@@ -107,10 +110,19 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
 
             var nextToken = page.Page.NextPageToken;
             var nextWindow = windowStart;
+            DateTimeOffset? polledThrough = cursor?.LastPolledThroughUtc;
             if (string.IsNullOrWhiteSpace(nextToken))
             {
                 nextToken = null;
-                nextWindow = now.AddDays(-1);
+                var overlapHours = _lifecycle.Value.ClaimLifecycle.PollOverlapHours;
+                if (overlapHours <= 0)
+                {
+                    overlapHours = 24;
+                }
+
+                // Advance past this cycle while retaining Stedi's ≥1-day overlap.
+                polledThrough = now;
+                nextWindow = now.AddHours(-overlapHours);
             }
 
             await _cursors.SaveAsync(new ClaimAcknowledgmentCursor
@@ -118,7 +130,9 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
                 GatewayName = StediHealthcareGateway.GatewayName,
                 PageToken = nextToken,
                 LastSuccessAtUtc = now,
-                WindowStartUtc = nextWindow
+                LastFailureAtUtc = cursor?.LastFailureAtUtc,
+                WindowStartUtc = nextWindow,
+                LastPolledThroughUtc = polledThrough
             }, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -128,6 +142,20 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Stedi 277CA poll cycle failed unexpectedly");
+            try
+            {
+                var failed = await _cursors.GetAsync(StediHealthcareGateway.GatewayName, ct)
+                    .ConfigureAwait(false) ?? new ClaimAcknowledgmentCursor
+                    {
+                        GatewayName = StediHealthcareGateway.GatewayName
+                    };
+                failed.LastFailureAtUtc = _timeProvider.GetUtcNow();
+                await _cursors.SaveAsync(failed, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Preserve the original poll failure; cursor persistence is best-effort.
+            }
         }
     }
 

@@ -135,7 +135,27 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
             SubmittedAtUtc = startedAt
         };
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
-        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+        if (existing is null)
+        {
+            var (created, stored) = await _transmissions.TryCreateAsync(record, ct).ConfigureAwait(false);
+            if (!created)
+            {
+                if (GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(stored.Status))
+                {
+                    var replay = ToResult(stored, replay: true);
+                    var replayMeta = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
+                        GatewayErrorCategory.None, Stopwatch.GetElapsedTime(timestamp), stored);
+                    Log(replayMeta);
+                    return GatewayResponse<GatewayClaimSubmissionResult>.Success(replay, replayMeta);
+                }
+
+                record = stored;
+            }
+        }
+        else
+        {
+            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+        }
 
         var completed = _timeProvider.GetUtcNow();
         record.Status = GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway;

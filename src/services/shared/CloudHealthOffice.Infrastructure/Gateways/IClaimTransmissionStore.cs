@@ -28,6 +28,13 @@ public interface IClaimTransmissionStore
         string gatewayName, string correlationId, CancellationToken ct = default);
 
     Task SaveAsync(ClaimTransmissionRecord record, CancellationToken ct = default);
+
+    /// <summary>
+    /// Insert if <c>tenant + idempotency key</c> is new. On a lost race, returns
+    /// the winning record instead of throwing.
+    /// </summary>
+    Task<(bool Created, ClaimTransmissionRecord Record)> TryCreateAsync(
+        ClaimTransmissionRecord record, CancellationToken ct = default);
 }
 
 public sealed class ClaimTransmissionRecord

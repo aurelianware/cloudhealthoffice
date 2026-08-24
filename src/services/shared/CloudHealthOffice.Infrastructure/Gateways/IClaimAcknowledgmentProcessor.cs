@@ -13,6 +13,8 @@ public interface IClaimAcknowledgmentProcessor
     Task<ClaimAcknowledgmentProcessResult> ProcessAsync(
         GatewayClaimAcknowledgment acknowledgment,
         CancellationToken cancellationToken = default);
+
+    Task DispatchPendingAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class ClaimAcknowledgmentProcessResult

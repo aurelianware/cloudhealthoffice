@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using CloudHealthOffice.Infrastructure.Gateways.Models;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -78,6 +79,30 @@ public sealed class InMemoryClaimAcknowledgmentStore : IClaimAcknowledgmentStore
         return Task.FromResult((true, Clone(clone)!));
     }
 
+    public Task<IReadOnlyList<ClaimAcknowledgmentRecord>> ListPendingOutboxAsync(
+        int take, CancellationToken ct = default)
+    {
+        var list = _byId.Values
+            .Where(r => r.HasPendingOutbox)
+            .OrderBy(r => r.ReceivedAtUtc)
+            .Take(take <= 0 ? 50 : take)
+            .Select(r => Clone(r)!)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<ClaimAcknowledgmentRecord>>(list);
+    }
+
+    public Task<IReadOnlyList<ClaimAcknowledgmentRecord>> ListByStatusAsync(
+        ClaimAcknowledgmentStatus status, int take, CancellationToken ct = default)
+    {
+        var list = _byId.Values
+            .Where(r => r.Status == status)
+            .OrderByDescending(r => r.ReceivedAtUtc)
+            .Take(take <= 0 ? 50 : take)
+            .Select(r => Clone(r)!)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<ClaimAcknowledgmentRecord>>(list);
+    }
+
     private void IndexEvent(ClaimAcknowledgmentRecord clone)
     {
         if (!string.IsNullOrWhiteSpace(clone.EventId))
@@ -116,9 +141,22 @@ public sealed class InMemoryClaimAcknowledgmentStore : IClaimAcknowledgmentStore
             Warnings = source.Warnings.ToList(),
             ServiceLineResults = source.ServiceLineResults.ToList(),
             ClaimLevelResults = source.ClaimLevelResults.ToList(),
-            EventsPublished = source.EventsPublished
+            Outbox = source.Outbox.Select(CopyOutbox).ToList(),
+            ProcessingAttempts = source.ProcessingAttempts,
+            LastErrorCategory = source.LastErrorCategory,
+            LastError = source.LastError
         };
     }
+
+    private static ClaimAcknowledgmentOutboxEntry CopyOutbox(ClaimAcknowledgmentOutboxEntry e) =>
+        new()
+        {
+            EventType = e.EventType,
+            CreatedAtUtc = e.CreatedAtUtc,
+            PublishedAtUtc = e.PublishedAtUtc,
+            AttemptCount = e.AttemptCount,
+            LastError = e.LastError
+        };
 }
 
 public sealed class InMemoryClaimAcknowledgmentCursorStore : IClaimAcknowledgmentCursorStore
@@ -144,6 +182,8 @@ public sealed class InMemoryClaimAcknowledgmentCursorStore : IClaimAcknowledgmen
             GatewayName = source.GatewayName,
             PageToken = source.PageToken,
             LastSuccessAtUtc = source.LastSuccessAtUtc,
-            WindowStartUtc = source.WindowStartUtc
+            LastFailureAtUtc = source.LastFailureAtUtc,
+            WindowStartUtc = source.WindowStartUtc,
+            LastPolledThroughUtc = source.LastPolledThroughUtc
         };
 }

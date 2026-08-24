@@ -361,6 +361,41 @@ downstream processing**. It is not adjudication and it is not payment.
 `ClaimAcknowledgmentStatus.Accepted` must never be treated as paid,
 adjudicated, approved, or denied.
 
+#### Production durability (hardening)
+
+```
+At-least-once Stedi delivery
+        ↓
+durable discovery (webhook pointer or poll item)
+        ↓
+atomic idempotency claim (unique gateway + acknowledgmentId)
+        ↓
+277 retrieval + structural mapping
+        ↓
+deterministic transmission match
+        ↓
+atomic state + outbox persistence
+        ↓
+event publication retry
+```
+
+`HealthcareTransactions:ClaimLifecycle:Store` is `InMemory` in Development and
+**Mongo** in non-Development when `IMongoClient` is registered. A production
+host with ephemeral storage **fails startup** (no silent in-memory fallback).
+Mongo unique indexes make `TryCreateAsync` atomic across replicas. Outbox
+entries (`Received` / `Accepted` / `Rejected`) are stored on the
+acknowledgment record; a hosted dispatcher retries unpublished events.
+Malformed / unmatched 277CAs are quarantined (`UnableToMatch` / `Malformed`)
+without a tenant guess and without mutating an existing acknowledgment
+outcome. Poll cursors persist `pageToken`, `windowStartUtc`, and
+`lastPolledThroughUtc`. When Stedi returns no next page token the window
+advances to `now - PollOverlapHours` (default 24h). Unprocessed/non-quarantined
+items do not advance the cursor.
+
+Post-277CA `SubmitClaimAsync` with the same #1111 idempotency key is a replay
+and does not resend the 837. A new claim version / frequency remains a new
+transmission.
+
 #### Stedi delivery mechanism
 
 Stedi delivers asynchronous 277CAs as **pointers**, then JSON reports:

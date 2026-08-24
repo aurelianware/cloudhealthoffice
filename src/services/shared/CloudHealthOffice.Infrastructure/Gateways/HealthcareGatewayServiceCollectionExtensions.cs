@@ -1,11 +1,15 @@
 using CloudHealthOffice.Infrastructure.Gateways.Mock;
+using CloudHealthOffice.Infrastructure.Gateways.Persistence;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -36,11 +40,7 @@ public static class HealthcareGatewayServiceCollectionExtensions
             .Bind(configuration.GetSection(HealthcareTransactionOptions.SectionName));
 
         services.TryAddSingleton<IHealthcareGatewayResolver, HealthcareGatewayResolver>();
-        // In-memory defaults for Development/tests. Production hosts register a
-        // durable store before this call; TryAdd leaves that implementation in place.
-        services.TryAddSingleton<IClaimTransmissionStore, InMemoryClaimTransmissionStore>();
-        services.TryAddSingleton<IClaimAcknowledgmentStore, InMemoryClaimAcknowledgmentStore>();
-        services.TryAddSingleton<IClaimAcknowledgmentCursorStore, InMemoryClaimAcknowledgmentCursorStore>();
+        RegisterClaimLifecycleStores(services, configuration);
         services.TryAddSingleton<IClaimAcknowledgmentProcessor>(sp =>
             new ClaimAcknowledgmentProcessor(
                 sp.GetRequiredService<IClaimAcknowledgmentStore>(),
@@ -49,6 +49,9 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 sp.GetService<IMessageBus>(),
                 sp.GetService<TimeProvider>()));
         services.TryAddSingleton<IClaimAcknowledgmentIngress, ClaimAcknowledgmentIngress>();
+        services.AddHostedService<ClaimLifecycleIndexHostedService>();
+        services.AddHostedService<ClaimLifecycleStoreGuard>();
+        services.AddHostedService<ClaimAcknowledgmentOutboxPublisher>();
 
         // Canonical payer identity is shared by every gateway implementation.
         services.AddChoPayerReference(configuration);
@@ -83,5 +86,65 @@ public static class HealthcareGatewayServiceCollectionExtensions
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IHealthcareTransactionGateway, TGateway>());
         return services;
+    }
+
+    private static void RegisterClaimLifecycleStores(IServiceCollection services, IConfiguration configuration)
+    {
+        services.TryAddSingleton(sp => CreateLifecycleBox(sp, configuration));
+        services.TryAddSingleton<IClaimTransmissionStore>(sp =>
+            sp.GetRequiredService<ClaimLifecycleStoreBox>().Transmissions);
+        services.TryAddSingleton<IClaimAcknowledgmentStore>(sp =>
+            sp.GetRequiredService<ClaimLifecycleStoreBox>().Acknowledgments);
+        services.TryAddSingleton<IClaimAcknowledgmentCursorStore>(sp =>
+            sp.GetRequiredService<ClaimLifecycleStoreBox>().Cursors);
+    }
+
+    private static ClaimLifecycleStoreBox CreateLifecycleBox(IServiceProvider sp, IConfiguration configuration)
+    {
+        var options = sp.GetRequiredService<IOptions<HealthcareTransactionOptions>>().Value.ClaimLifecycle;
+        var env = sp.GetService<IHostEnvironment>();
+        var mongoClient = sp.GetService<IMongoClient>();
+        var requireMongo = options.UseMongo ||
+            (string.IsNullOrWhiteSpace(options.Store) &&
+             env is not null &&
+             !env.IsDevelopment() &&
+             !options.AllowInMemoryInNonDevelopment);
+
+        if (requireMongo)
+        {
+            if (mongoClient is null)
+            {
+                throw new InvalidOperationException(
+                    "HealthcareTransactions:ClaimLifecycle:Store is Mongo but IMongoClient is not registered.");
+            }
+
+            var databaseName = string.IsNullOrWhiteSpace(options.MongoDatabaseName)
+                ? configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice"
+                : options.MongoDatabaseName;
+            var mongo = new MongoClaimLifecycleStore(mongoClient.GetDatabase(databaseName), options);
+            return new ClaimLifecycleStoreBox(mongo, mongo, mongo);
+        }
+
+        return new ClaimLifecycleStoreBox(
+            new InMemoryClaimTransmissionStore(),
+            new InMemoryClaimAcknowledgmentStore(),
+            new InMemoryClaimAcknowledgmentCursorStore());
+    }
+
+    internal sealed class ClaimLifecycleStoreBox
+    {
+        public ClaimLifecycleStoreBox(
+            IClaimTransmissionStore transmissions,
+            IClaimAcknowledgmentStore acknowledgments,
+            IClaimAcknowledgmentCursorStore cursors)
+        {
+            Transmissions = transmissions;
+            Acknowledgments = acknowledgments;
+            Cursors = cursors;
+        }
+
+        public IClaimTransmissionStore Transmissions { get; }
+        public IClaimAcknowledgmentStore Acknowledgments { get; }
+        public IClaimAcknowledgmentCursorStore Cursors { get; }
     }
 }
