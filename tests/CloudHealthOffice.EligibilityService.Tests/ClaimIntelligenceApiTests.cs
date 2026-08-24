@@ -21,12 +21,13 @@ public class ClaimIntelligenceApiTests : IClassFixture<EligibilityApiFactory>
     public async Task Get_PaidClaim_ReturnsLifecycleAndFinancialSummary()
     {
         var transmissionId = await SubmitAsync("CLM-INTEL-PAID");
-        await _client.PostAsJsonAsync($"/api/dev/gateway/claims/{transmissionId}/277ca", new
+        var ack = await _client.PostAsJsonAsync($"/api/dev/gateway/claims/{transmissionId}/277ca", new
         {
             acknowledgmentId = "ack-intel-paid",
             status = "Accepted",
             claimControlNumber = "INTEL-CCN-1"
         });
+        ack.EnsureSuccessStatusCode();
         var inject = await _client.PostAsJsonAsync("/api/dev/gateway/remittance", new
         {
             remittanceId = "era-intel-paid",

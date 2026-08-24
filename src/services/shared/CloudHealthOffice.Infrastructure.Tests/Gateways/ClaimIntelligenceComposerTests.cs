@@ -99,6 +99,32 @@ public class ClaimIntelligenceComposerTests
     }
 
     [Fact]
+    public async Task TimelineEventIds_StayStableWhenSourceStatusChanges()
+    {
+        var harness = await SeedSubmittedAsync();
+        var first = await harness.Composer.ComposeAsync(Request());
+        var submittedId = first!.Timeline.Single(e => e.SourceTransaction == "837").EventId;
+
+        harness.Transmission.Status = GatewayClaimTransmissionStatus.AcknowledgmentAccepted;
+        await harness.Transmissions.SaveAsync(harness.Transmission);
+        await AcknowledgeAsync(harness, ClaimAcknowledgmentStatus.Accepted, "PAYER-CCN-9");
+        await RemitAsync(harness, paid: 320m, charged: 500m, patient: 80m);
+
+        var second = await harness.Composer.ComposeAsync(Request());
+        second!.Timeline.Single(e => e.SourceTransaction == "837").EventId.Should().Be(submittedId);
+        second.Timeline.Single(e => e.SourceTransaction == "837").EventId.Should().Be(
+            $"837:{harness.Transmission.TransmissionId}");
+        second.Timeline.Single(e => e.SourceTransaction == "277CA").EventId.Should().StartWith("277ca:");
+        second.Timeline.Single(e => e.SourceTransaction == "277CA").EventId.Should().NotContain(
+            nameof(ClaimAcknowledgmentStatus.Accepted));
+        second.Timeline.Single(e => e.SourceTransaction == "835").EventId.Should().StartWith("835:");
+        second.Timeline.Single(e => e.SourceTransaction == "835").EventId.Should().NotContain(
+            nameof(RemittanceLifecycleStatus.AvailableForPosting));
+        second.Timeline.Single(e => e.SourceTransaction == "837").Status
+            .Should().Be(nameof(GatewayClaimTransmissionStatus.AcknowledgmentAccepted));
+    }
+
+    [Fact]
     public async Task Duplicate277caAnd835_DoNotDuplicateTimeline()
     {
         var harness = await SeedSubmittedAsync();

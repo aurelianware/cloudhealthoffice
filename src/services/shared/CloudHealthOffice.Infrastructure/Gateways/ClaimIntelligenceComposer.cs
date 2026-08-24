@@ -307,7 +307,7 @@ public sealed class ClaimIntelligenceComposer : IClaimIntelligenceComposer
         foreach (var tx in transmissions)
         {
             events.Add(Event(
-                $"837:{tx.TransmissionId}:{tx.Status}",
+                $"837:{tx.TransmissionId}",
                 tx.SubmittedAtUtc,
                 tx.Status is GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway
                     or GatewayClaimTransmissionStatus.Transmitted
@@ -320,7 +320,7 @@ public sealed class ClaimIntelligenceComposer : IClaimIntelligenceComposer
         foreach (var ack in acknowledgments)
         {
             events.Add(Event(
-                $"277ca:{ack.AcknowledgmentId}:{ack.Status}",
+                $"277ca:{ack.AcknowledgmentId}",
                 ack.ReceivedAtUtc,
                 ack.Status == ClaimAcknowledgmentStatus.Rejected ? "277CARejected" : "277CAAccepted",
                 "277CA",
@@ -330,7 +330,7 @@ public sealed class ClaimIntelligenceComposer : IClaimIntelligenceComposer
         foreach (var inquiry in inquiries)
         {
             events.Add(Event(
-                $"276:{inquiry.InquiryId}:{inquiry.NormalizedStatus}",
+                $"276:{inquiry.InquiryId}",
                 inquiry.CompletedAtUtc ?? inquiry.RequestedAtUtc,
                 "276277" + inquiry.NormalizedStatus,
                 "276277",
@@ -361,7 +361,7 @@ public sealed class ClaimIntelligenceComposer : IClaimIntelligenceComposer
         {
             var claim = SelectRemittedClaim(remittance, claimId, null);
             events.Add(Event(
-                $"835:{remittance.ReceiptId}:{remittance.Status}",
+                $"835:{remittance.ReceiptId}",
                 remittance.ReceivedAtUtc,
                 remittance.Status is RemittanceLifecycleStatus.AvailableForPosting
                     or RemittanceLifecycleStatus.Matched
