@@ -4,7 +4,7 @@
 **Date:** 2026-08-24  
 **Related PRs:** #1111, #1112, #1114, #1115, #1116, #1117, #1118, #1119 (plus the earlier Stedi 270/271 eligibility work)
 
-This is an engineering field note in the same series as the Million Claim Challenge write-ups. It describes shipped code. It is not a production claim-volume claim, and it is not a live ERA enrollment certificate.
+This is an engineering field note in the same series as the Million Claim Challenge write-ups. It describes shipped code. It is not a production-volume result, and it is not a live ERA enrollment certificate.
 
 ## The one-sentence version
 
