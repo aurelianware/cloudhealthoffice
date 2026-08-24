@@ -4,7 +4,7 @@ Date: 2026-08-23 UTC
 
 Branch: `feat/stedi-275`
 
-Commit: `3eddb227`
+Commit: `2ca248b5`
 
 ## Stedi 275 API
 
