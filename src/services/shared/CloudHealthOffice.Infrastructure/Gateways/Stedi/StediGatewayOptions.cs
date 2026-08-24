@@ -69,6 +69,14 @@ public sealed class StediGatewayOptions
     public string DentalClaimPath { get; set; } = "/2024-04-01/dental-claims/submission";
 
     /// <summary>
+    /// Real-Time Claim Status (276/277) JSON path. API version 2024-04-01,
+    /// documented as POST /change/medicalnetwork/claimstatus/v2. Synchronous.
+    /// Stedi test keys are not supported for this endpoint.
+    /// </summary>
+    public string ClaimStatusPath { get; set; } =
+        "/2024-04-01/change/medicalnetwork/claimstatus/v2";
+
+    /// <summary>
     /// Host for Stedi Claims APIs including Create Claim Attachment (275) JSON.
     /// Separate from <see cref="BaseUrl"/> (healthcare.us.stedi.com).
     /// </summary>
