@@ -15,7 +15,8 @@ internal sealed class MongoClaimLifecycleStore :
     IClaimAcknowledgmentCursorStore,
     IClaimAttachmentTransmissionStore,
     IInboundClaimAttachmentReceiptStore,
-    IClaimStatusInquiryStore
+    IClaimStatusInquiryStore,
+    IRemittanceStore
 {
     private readonly IMongoCollection<ClaimTransmissionDocument> _transmissions;
     private readonly IMongoCollection<ClaimAcknowledgmentDocument> _acknowledgments;
@@ -23,6 +24,7 @@ internal sealed class MongoClaimLifecycleStore :
     private readonly IMongoCollection<ClaimAttachmentTransmissionDocument> _attachments;
     private readonly IMongoCollection<InboundClaimAttachmentReceiptDocument> _inboundAttachments;
     private readonly IMongoCollection<ClaimStatusInquiryDocument> _statusInquiries;
+    private readonly IMongoCollection<RemittanceReceiptDocument> _remittances;
 
     public MongoClaimLifecycleStore(IMongoDatabase database, ClaimLifecycleOptions options)
     {
@@ -32,6 +34,7 @@ internal sealed class MongoClaimLifecycleStore :
         _attachments = database.GetCollection<ClaimAttachmentTransmissionDocument>(options.AttachmentsCollection);
         _inboundAttachments = database.GetCollection<InboundClaimAttachmentReceiptDocument>(options.InboundAttachmentsCollection);
         _statusInquiries = database.GetCollection<ClaimStatusInquiryDocument>(options.ClaimStatusInquiriesCollection);
+        _remittances = database.GetCollection<RemittanceReceiptDocument>(options.RemittancesCollection);
     }
 
     public async Task EnsureIndexesAsync(CancellationToken ct)
@@ -65,7 +68,11 @@ internal sealed class MongoClaimLifecycleStore :
             new CreateIndexModel<ClaimTransmissionDocument>(
                 Builders<ClaimTransmissionDocument>.IndexKeys
                     .Ascending(d => d.TenantId)
-                    .Ascending("Payload.ClaimId"))
+                    .Ascending("Payload.ClaimId")),
+            new CreateIndexModel<ClaimTransmissionDocument>(
+                Builders<ClaimTransmissionDocument>.IndexKeys
+                    .Ascending(d => d.GatewayName)
+                    .Ascending("Payload.PayerClaimControlNumber"))
         }, ct).ConfigureAwait(false);
 
         await _acknowledgments.Indexes.CreateManyAsync(new[]
@@ -146,6 +153,23 @@ internal sealed class MongoClaimLifecycleStore :
                     .Ascending(d => d.TenantId)
                     .Ascending(d => d.ClaimId))
         }, ct).ConfigureAwait(false);
+
+        await _remittances.Indexes.CreateManyAsync(new[]
+        {
+            new CreateIndexModel<RemittanceReceiptDocument>(
+                Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.Id),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<RemittanceReceiptDocument>(
+                Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.IdempotencyKey),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<RemittanceReceiptDocument>(
+                Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.EventKey),
+                new CreateIndexOptions { Unique = true, Sparse = true }),
+            new CreateIndexModel<RemittanceReceiptDocument>(
+                Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.HasPendingOutbox)),
+            new CreateIndexModel<RemittanceReceiptDocument>(
+                Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.TenantId))
+        }, ct).ConfigureAwait(false);
     }
 
     async Task<ClaimTransmissionRecord?> IClaimTransmissionStore.GetByIdempotencyKeyAsync(
@@ -178,6 +202,11 @@ internal sealed class MongoClaimLifecycleStore :
         string gatewayName, string patientControlNumber, CancellationToken ct = default) =>
         FindTransmissionsAsync(
             d => d.GatewayName == gatewayName && d.PatientControlNumber == patientControlNumber, ct);
+
+    public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPayerClaimControlNumberAsync(
+        string gatewayName, string payerClaimControlNumber, CancellationToken ct = default) =>
+        FindTransmissionsAsync(
+            d => d.GatewayName == gatewayName && d.Payload.PayerClaimControlNumber == payerClaimControlNumber, ct);
 
     public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByCorrelationIdAsync(
         string gatewayName, string correlationId, CancellationToken ct = default) =>
@@ -513,6 +542,97 @@ internal sealed class MongoClaimLifecycleStore :
         }
     }
 
+    async Task<RemittanceReceipt?> IRemittanceStore.GetByIdempotencyKeyAsync(
+        string gateway, string remittanceId, CancellationToken ct)
+    {
+        var key = $"{gateway}|{remittanceId}";
+        var doc = await _remittances.Find(d => d.IdempotencyKey == key)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.Payload;
+    }
+
+    async Task<RemittanceReceipt?> IRemittanceStore.GetByEventIdAsync(
+        string gateway, string eventId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return null;
+        }
+
+        var key = $"{gateway}|{eventId}";
+        var doc = await _remittances.Find(d => d.EventKey == key)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.Payload;
+    }
+
+    async Task<RemittanceReceipt?> IRemittanceStore.GetByIdAsync(string receiptId, CancellationToken ct)
+    {
+        var doc = await _remittances.Find(d => d.Id == receiptId)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.Payload;
+    }
+
+    async Task<IReadOnlyList<RemittanceReceipt>> IRemittanceStore.ListByTransmissionIdAsync(
+        string transmissionId, CancellationToken ct)
+    {
+        var docs = await _remittances.Find(d => d.TransmissionIds.Contains(transmissionId))
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.Payload).ToList();
+    }
+
+    public async Task<IReadOnlyList<RemittanceReceipt>> ListByTenantAsync(
+        string tenantId, int take, CancellationToken ct = default)
+    {
+        var limit = take <= 0 ? 50 : take;
+        var docs = await _remittances
+            .Find(d => d.TenantId == tenantId)
+            .SortByDescending(d => d.Payload.ReceivedAtUtc)
+            .Limit(limit)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.Payload).ToList();
+    }
+
+    public Task SaveAsync(RemittanceReceipt record, CancellationToken ct = default) =>
+        _remittances.ReplaceOneAsync(
+            d => d.Id == record.ReceiptId,
+            RemittanceReceiptDocument.FromModel(record),
+            new ReplaceOptions { IsUpsert = true },
+            ct);
+
+    public async Task<(bool Created, RemittanceReceipt Record)> TryCreateAsync(
+        RemittanceReceipt record, CancellationToken ct = default)
+    {
+        try
+        {
+            await _remittances
+                .InsertOneAsync(RemittanceReceiptDocument.FromModel(record), cancellationToken: ct)
+                .ConfigureAwait(false);
+            return (true, record);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            var existing = await ((IRemittanceStore)this)
+                .GetByIdempotencyKeyAsync(record.Gateway, record.RemittanceId, ct)
+                .ConfigureAwait(false)
+                ?? await ((IRemittanceStore)this)
+                    .GetByEventIdAsync(record.Gateway, record.EventId ?? string.Empty, ct)
+                    .ConfigureAwait(false);
+            return (false, existing ?? record);
+        }
+    }
+
+    async Task<IReadOnlyList<RemittanceReceipt>> IRemittanceStore.ListPendingOutboxAsync(
+        int take, CancellationToken ct)
+    {
+        var limit = take <= 0 ? 50 : take;
+        var docs = await _remittances
+            .Find(d => d.HasPendingOutbox)
+            .SortBy(d => d.Payload.ReceivedAtUtc)
+            .Limit(limit)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.Payload).ToList();
+    }
+
     private async Task<IReadOnlyList<ClaimTransmissionRecord>> FindTransmissionsAsync(
         System.Linq.Expressions.Expression<Func<ClaimTransmissionDocument, bool>> filter,
         CancellationToken ct)
@@ -670,4 +790,38 @@ internal sealed class ClaimStatusInquiryDocument
     };
 
     public ClaimStatusInquiryRecord ToModel() => Payload;
+}
+
+internal sealed class RemittanceReceiptDocument
+{
+    [BsonId]
+    public string Id { get; set; } = string.Empty;
+
+    public string IdempotencyKey { get; set; } = string.Empty;
+
+    public string? EventKey { get; set; }
+
+    public string TenantId { get; set; } = string.Empty;
+
+    public bool HasPendingOutbox { get; set; }
+
+    public List<string> TransmissionIds { get; set; } = new();
+
+    public RemittanceReceipt Payload { get; set; } = new();
+
+    public static RemittanceReceiptDocument FromModel(RemittanceReceipt r) => new()
+    {
+        Id = r.ReceiptId,
+        IdempotencyKey = r.IdempotencyKey,
+        EventKey = string.IsNullOrWhiteSpace(r.EventId) ? null : $"{r.Gateway}|{r.EventId}",
+        TenantId = r.TenantId,
+        HasPendingOutbox = r.HasPendingOutbox,
+        TransmissionIds = r.Claims
+            .Select(c => c.TransmissionId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList(),
+        Payload = r
+    };
 }

@@ -7,8 +7,9 @@ model, many interchangeable vendor implementations, living in
 
 This is the **foundation** layer. The mock gateway, the Stedi eligibility
 (270/271) adapter, outbound 837 submission, 277CA acknowledgment, 275 claim
-attachments, 276/277 claim status inquiry, and the canonical payer reference
-service are implemented today. Remittance (835) stays contract-only.
+attachments, 276/277 claim status inquiry, 835 remittance ingestion, and the
+canonical payer reference service are implemented today. Payment posting
+from 835s is a later PR.
 
 Payer-side inbound eligibility (CHO as the 271 information source) is a
 **separate** capability: [`payer-eligibility-responder.md`](payer-eligibility-responder.md).
@@ -102,22 +103,22 @@ transactions are **rejected explicitly** rather than returning a no-op result.
 | `ClaimStatus` | `IClaimStatusGateway` | 276/277 | **Implemented (Mock + Stedi JSON)** |
 | `ClaimAcknowledgment` | `IClaimAcknowledgmentGateway` | 277CA | **Implemented (Stedi retrieve + shared processor)** |
 | `ClaimAttachment` | `IClaimAttachmentGateway` | 275 | **Implemented (Mock + Stedi JSON create/upload)** |
-| `Remittance` | `IRemittanceGateway` | 835 | Contract only |
+| `Remittance` | `IRemittanceGateway` | 835 | **Implemented (Stedi retrieve + shared processor)** |
 
 ### Per-gateway implementation status
 
 This matrix is Cloud Health Office's **implementation** status — it is not
-everything a vendor supports. Stedi's own API also offers remittance; Cloud
-Health Office does not implement 835 yet, so gateways do not advertise it.
+everything a vendor supports.
 
 | Gateway | Eligibility (270/271) | 837 | 277CA | 275 | 276/277 | 835 |
 |---------|:---:|:---:|:---:|:---:|:---:|:---:|
-| Mock  | Yes | Yes | No* | Yes | Yes | No |
-| Stedi | Yes | Yes | Yes | Yes | Yes | No |
+| Mock  | Yes | Yes | No* | Yes | Yes | No* |
+| Stedi | Yes | Yes | Yes | Yes | Yes | Yes |
 
-\*Mock does not retrieve 277CAs. Development injection
-(`POST /api/dev/gateway/claims/{transmissionId}/277ca`) feeds the same
-canonical processor used by Stedi.
+\*Mock does not retrieve 277CAs or 835s. Development injection
+(`POST /api/dev/gateway/claims/{transmissionId}/277ca` and
+`POST /api/dev/gateway/remittance`) feeds the same canonical processors
+used by Stedi.
 
 `IClaimAcknowledgmentGateway.RetrieveAcknowledgmentAsync` fetches and
 normalizes a 277CA. Applying it to a transmission is
@@ -128,8 +129,10 @@ duplicate that logic.
 documentation for an existing claim transmission.
 
 `IClaimStatusGateway.CheckClaimStatusAsync` asks an external payer for the
-current status of a previously submitted claim (276/277). Remaining
-"contract only" interfaces stay member-less.
+current status of a previously submitted claim (276/277).
+
+`IRemittanceGateway.RetrieveRemittanceAsync` fetches and normalizes an 835.
+Applying it to claims is `IRemittanceProcessor` — it does not post payment.
 
 ### Discovering and rejecting capabilities
 
@@ -760,6 +763,74 @@ Development: `POST /api/dev/gateway/claims/{transmissionId}/status` and
 Development). Tenant comes from `X-Tenant-ID` and the original
 transmission.
 
+### 835 remittance ingestion
+
+An 835 is the payer's **financial** outcome for claims it accepted. It is
+not a 277CA, not a 276/277 status check, and not payment posting.
+
+```
+837 submitted
+        ↓
+277CA accepted/rejected into processing
+        ↓
+276/277 current claim status
+        ↓
+835 ERA (this PR)
+        ↓
+Future payment posting
+```
+
+```
+Stedi
+ ↓
+835 ERA
+ ↓
+Stedi Adapter
+ ↓
+Canonical Remittance
+ ↓
+CHO Remittance Store
+ ↓
+Future Payment Posting
+```
+
+Stedi delivers 835s asynchronously:
+
+1. Discover via webhook `transaction.processed.v2` (`x12.transactionSetIdentifier = 835`) or Poll Transactions.
+2. Retrieve JSON: `GET https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/835`
+3. Map to `GatewayRemittance`.
+4. `IRemittanceProcessor` matches claims and persists a receipt.
+
+Matching is deterministic (never name, DOB, provider name, or amount):
+
+1. Payer claim control number (from 277CA / ERA `payerClaimControlNumber`)
+2. Patient control number
+3. Explicit transmission id (development)
+
+Unmatched ERAs are stored for reconciliation. Mixed-tenant matches fail closed
+and do not assign a tenant. The processor does **not** change 837 transmission
+status, 277CA records, 276/277 snapshots, accumulators, or payment-service
+posting.
+
+Lifecycle: `Received` → `Validated` / `Matched` / `AvailableForPosting` /
+`Unmatched` / `Failed`. `AvailableForPosting` means the ERA is stored and
+matched — posting is out of scope.
+
+#### Live validation
+
+```
+Contract-tested against Stedi documented 835 API;
+live ERA validation pending production/test capability.
+```
+
+835 enrollment is required with the payer (separate from 837). Opt-in
+`CHO_STEDI_LIVE_CLAIM_TESTS` + `CHO_STEDI_835_TRANSACTION_ID` does not run
+in CI.
+
+Development: `POST /api/dev/gateway/remittance` and
+`GET /api/dev/gateway/claims/{transmissionId}/remittance` (404 outside
+Development).
+
 ### Architectural boundary
 
 Stedi = network / transport / transaction translation.
@@ -957,7 +1028,7 @@ consolidation should be its own PR.
 
 ## Next Stedi integration
 
-Recommended next step: **Stedi 835 ERA / remittance ingestion**. That PR
-should complete the major outbound claim lifecycle while keeping remittance
-and payment posting separate from 276/277 claim-status inquiry and from
-277CA acknowledgment.
+Recommended next step: a **provider portal / claim intelligence layer** that
+combines eligibility, claim status, attachments, remittance, patient
+responsibility, and claim explanations into a unified CHO/CDO workflow.
+Payment posting from stored 835s remains a separate follow-up.

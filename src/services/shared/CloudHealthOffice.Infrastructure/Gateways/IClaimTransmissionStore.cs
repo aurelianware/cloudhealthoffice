@@ -24,6 +24,9 @@ public interface IClaimTransmissionStore
     Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPatientControlNumberAsync(
         string gatewayName, string patientControlNumber, CancellationToken ct = default);
 
+    Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPayerClaimControlNumberAsync(
+        string gatewayName, string payerClaimControlNumber, CancellationToken ct = default);
+
     Task<IReadOnlyList<ClaimTransmissionRecord>> FindByCorrelationIdAsync(
         string gatewayName, string correlationId, CancellationToken ct = default);
 

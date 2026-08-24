@@ -42,7 +42,7 @@ public class StediClaimAcknowledgmentWebhookTests : IClassFixture<EligibilityApi
     }
 
     [Fact]
-    public async Task Webhook_ValidCredential_Ignores835()
+    public async Task Webhook_ValidCredential_Routes835ToRemittance()
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/integrations/stedi/claim-responses")
         {
@@ -64,7 +64,9 @@ public class StediClaimAcknowledgmentWebhookTests : IClassFixture<EligibilityApi
         var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(doc.RootElement.GetProperty("ignored").GetBoolean());
+        Assert.False(doc.RootElement.GetProperty("ignored").GetBoolean());
+        Assert.True(doc.RootElement.GetProperty("processed").GetBoolean());
+        Assert.Equal("835", doc.RootElement.GetProperty("transactionSet").GetString());
     }
 
     [Fact]

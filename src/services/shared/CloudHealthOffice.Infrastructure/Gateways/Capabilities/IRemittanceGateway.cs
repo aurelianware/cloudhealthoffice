@@ -1,13 +1,18 @@
+using CloudHealthOffice.Infrastructure.Gateways.Models;
+
 namespace CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 
 /// <summary>
-/// Gateway capability for 835 electronic remittance advice.
+/// Gateway capability for retrieving an 835 electronic remittance advice.
 ///
-/// <b>Foundation only.</b> The transaction method and canonical models are
-/// intentionally deferred to a later PR (remittance is out of scope here).
-/// The interface exists so gateways can advertise
-/// <see cref="GatewayCapability.Remittance"/> without a no-op stub.
+/// Stedi delivers 835s asynchronously: a webhook or poll item is a pointer,
+/// and this method retrieves the normalized remittance. Applying it to claims
+/// is <see cref="IRemittanceProcessor"/> — not this interface. Retrieval does
+/// not post payment, update 277CA, or change 276/277 claim status.
 /// </summary>
 public interface IRemittanceGateway : IHealthcareTransactionGateway
 {
+    Task<GatewayResponse<GatewayRemittance>> RetrieveRemittanceAsync(
+        RemittanceRetrievalRequest request,
+        CancellationToken cancellationToken = default);
 }
