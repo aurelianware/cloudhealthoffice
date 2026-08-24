@@ -15,7 +15,7 @@ This document provides a comprehensive overview of all features available in Clo
 | **Enhanced Claim Status** | ValueAdds277 (60+ fields) | ✅ Complete | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
 | **Security Hardening** | 6 deployment controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
 | **Deployment** | Gated release strategy | ✅ Complete | [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) |
-| **Testing** | 5,821 automated tests across 44 test projects | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| **Testing** | 5,848 automated tests across 44 test projects | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | **Multi-Tenant Security** | Cross-tenant isolation | ✅ Complete | [portal/CloudHealthOffice.Portal.Tests/](./portal/CloudHealthOffice.Portal.Tests/) |
 | **Premium Billing** | Monthly premium invoicing, NACHA/ACH EFT drafts, Stripe ACH | ✅ Complete | [src/services/premium-billing-service/](../src/services/premium-billing-service/) |
 
