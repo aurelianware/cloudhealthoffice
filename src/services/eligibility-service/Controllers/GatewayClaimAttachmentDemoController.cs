@@ -86,19 +86,27 @@ public sealed class GatewayClaimAttachmentDemoController : ControllerBase
             ? form.File.ContentType
             : form.ContentType;
 
-        await using var upload = form.File.OpenReadStream();
-        var stored = await _content.StoreAsync(
-            new ClaimAttachmentStoreRequest
-            {
-                TenantId = transmission.TenantId,
-                TransmissionId = transmission.TransmissionId,
-                AttachmentId = attachmentId,
-                ContentType = contentType ?? string.Empty,
-                DisplayName = form.File.FileName,
-                ScanStatus = ClaimAttachmentScanStatus.Unknown
-            },
-            upload,
-            ct);
+        ClaimAttachmentContentReference stored;
+        try
+        {
+            await using var upload = form.File.OpenReadStream();
+            stored = await _content.StoreAsync(
+                new ClaimAttachmentStoreRequest
+                {
+                    TenantId = transmission.TenantId,
+                    TransmissionId = transmission.TransmissionId,
+                    AttachmentId = attachmentId,
+                    ContentType = contentType ?? string.Empty,
+                    DisplayName = form.File.FileName,
+                    ScanStatus = ClaimAttachmentScanStatus.Unknown
+                },
+                upload,
+                ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
 
         var request = new ClaimAttachmentSubmissionRequest
         {

@@ -135,7 +135,7 @@ internal sealed class StediClaimAttachmentApiClient
             {
                 _logger.LogInformation(
                     "Stedi claim attachment upload completed contentType={ContentType} contentLength={ContentLength}",
-                    contentType, content.ContentLength);
+                    ClaimAttachmentRules.SanitizeForLog(contentType), content.ContentLength);
                 return;
             }
 

@@ -13,6 +13,10 @@ public static class ClaimAttachmentMessageTypes
 {
     public const string Stored = "ClaimAttachmentStored";
 
+    /// <summary>
+    /// Content bytes were read from the secure store in order to submit.
+    /// Distinct from <see cref="ClaimAttachmentTransmissionStatus.ReadyForSubmission"/>.
+    /// </summary>
     public const string ReadForSubmission = "ClaimAttachmentReadForSubmission";
 
     public const string Submitted = "ClaimAttachmentSubmitted";

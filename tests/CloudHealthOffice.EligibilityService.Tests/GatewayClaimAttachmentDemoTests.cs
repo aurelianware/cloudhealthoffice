@@ -96,4 +96,36 @@ public class GatewayClaimAttachmentDemoTests : IClassFixture<EligibilityApiFacto
         var response = await other.PostAsync($"/api/dev/gateway/claims/{transmissionId}/attachments", form);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    public async Task OversizedFile_ReturnsBadRequest()
+    {
+        var submit = await _client.PostAsJsonAsync("/api/dev/gateway/claims", new
+        {
+            tenantId = "tenant-alpha",
+            claimId = "CLM-ATT-1003",
+            claimType = "Professional",
+            frequencyCode = "1",
+            payerId = "60054",
+            placeOfServiceCode = "11",
+            totalCharge = 10,
+            billingProvider = new { npi = "1999999984" },
+            subscriber = new { memberId = "U7777788888" },
+            serviceLines = new[] { new { lineNumber = 1, procedureCode = "90837", units = 1, chargeAmount = 10 } }
+        });
+        submit.EnsureSuccessStatusCode();
+        using var submitDoc = JsonDocument.Parse(await submit.Content.ReadAsStringAsync());
+        var transmissionId = submitDoc.RootElement.GetProperty("result").GetProperty("transmissionId").GetString();
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(new byte[64])
+        {
+            Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf") }
+        }, "file", "big.pdf");
+        form.Add(new StringContent("application/pdf"), "contentType");
+        var response = await _client.PostAsync($"/api/dev/gateway/claims/{transmissionId}/attachments", form);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("maximum size", body, StringComparison.OrdinalIgnoreCase);
+    }
 }

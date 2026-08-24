@@ -224,7 +224,7 @@ internal sealed class ClaimAttachmentCoordinator
         if (!sent.Accepted)
         {
             return Fail(gatewayName, request, startedAt, stopwatch, sent.RetryCount, sent.Category,
-                sent.ErrorMessage ?? "Attachment submission failed.");
+                sent.ErrorMessage ?? "Attachment submission failed.", record.Status);
         }
 
         return Success(gatewayName, request, record, startedAt, stopwatch, replay: false);
@@ -274,7 +274,8 @@ internal sealed class ClaimAttachmentCoordinator
         long stopwatch,
         int retryCount,
         GatewayErrorCategory category,
-        string message)
+        string message,
+        ClaimAttachmentTransmissionStatus attachmentStatus = ClaimAttachmentTransmissionStatus.Failed)
     {
         var status = category switch
         {
@@ -287,7 +288,7 @@ internal sealed class ClaimAttachmentCoordinator
             gatewayName, request, startedAt, Stopwatch.GetElapsedTime(stopwatch),
             status, category, retryCount, null);
         Log(metadata, request, request.Content?.ChecksumSha256, request.ContentLength);
-        RecordMetric(gatewayName, ClaimAttachmentTransmissionStatus.Failed, category, metadata.Latency);
+        RecordMetric(gatewayName, attachmentStatus, category, metadata.Latency);
         return GatewayResponse<ClaimAttachmentSubmissionResult>.Failure(message, metadata);
     }
 
@@ -398,6 +399,5 @@ internal sealed class ClaimAttachmentCoordinator
         }
     }
 
-    private static string? Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    private static string? Sanitize(string? value) => ClaimAttachmentRules.SanitizeForLog(value);
 }
