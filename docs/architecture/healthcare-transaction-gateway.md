@@ -16,6 +16,11 @@ It uses `IEligibilityResponder`, not `IEligibilityGateway`. Stedi inbound 270
 routing is adapter-ready / pending Stedi payer-side connectivity — it is not
 implemented.
 
+Payer-side inbound claim attachments (CHO as the 275 receiver) are likewise
+separate: [`payer-claim-attachment-receiver.md`](payer-claim-attachment-receiver.md).
+`IClaimAttachmentReceiver` is not `IClaimAttachmentGateway`. Stedi inbound
+payer-side 275 is adapter-ready, not implemented.
+
 ## Where the boundary sits
 
 ```
@@ -846,8 +851,7 @@ consolidation should be its own PR.
 
 ## Next Stedi integration
 
-Recommended next step: **PR #1115 — Stedi 276/277 claim status inquiry**.
-That PR should let Cloud Health Office ask an external payer for claim status
-through the same vendor-neutral gateway, while keeping 276/277 status
-separate from 277CA acknowledgment state. Do not implement 835 ERA or
-payment posting in that PR.
+Recommended next step: **Stedi 276/277 claim status inquiry**, then **835 ERA
+/ remittance**. Keep those distinct from 277CA acknowledgment and from this
+payer-side inbound 275 receiver
+([`payer-claim-attachment-receiver.md`](payer-claim-attachment-receiver.md)).

@@ -17,6 +17,17 @@ public sealed class PayerEligibilityRouter : IPayerEligibilityRouter
         _directory = directory;
     }
 
+    public PayerEligibilityRouteResolution ResolveIdentity(
+        string? payerId,
+        string? tradingPartnerId,
+        string? authenticatedEndpointId) =>
+        Resolve(new PayerEligibilityInquiry
+        {
+            PayerId = payerId,
+            TradingPartnerId = tradingPartnerId,
+            AuthenticatedEndpointId = authenticatedEndpointId
+        });
+
     public PayerEligibilityRouteResolution Resolve(PayerEligibilityInquiry inquiry)
     {
         var routes = _directory.GetInboundRoutes();

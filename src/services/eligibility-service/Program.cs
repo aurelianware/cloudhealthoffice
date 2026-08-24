@@ -106,6 +106,7 @@ builder.Services.AddChoHealthcareGateways(builder.Configuration);
 // adapter-ready only; the canonical / X12 development routes exercise the
 // responder today.
 builder.Services.AddChoPayerEligibilityResponder(builder.Configuration);
+builder.Services.AddChoPayerClaimAttachmentReceiver(builder.Configuration);
 
 builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))

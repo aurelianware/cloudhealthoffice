@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Gateways.Persistence;
+using CloudHealthOffice.Infrastructure.Responders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -15,6 +16,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
     private readonly IClaimTransmissionStore _transmissions;
     private readonly IClaimAcknowledgmentCursorStore _cursors;
     private readonly IClaimAttachmentTransmissionStore _attachments;
+    private readonly IInboundClaimAttachmentReceiptStore _inboundAttachments;
     private readonly IClaimAttachmentContentStore _content;
     private readonly IOptions<HealthcareTransactionOptions> _options;
     private readonly IHostEnvironment? _environment;
@@ -25,6 +27,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
         IClaimTransmissionStore transmissions,
         IClaimAcknowledgmentCursorStore cursors,
         IClaimAttachmentTransmissionStore attachments,
+        IInboundClaimAttachmentReceiptStore inboundAttachments,
         IClaimAttachmentContentStore content,
         IOptions<HealthcareTransactionOptions> options,
         ILogger<ClaimLifecycleStoreGuard> logger,
@@ -34,6 +37,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
         _transmissions = transmissions;
         _cursors = cursors;
         _attachments = attachments;
+        _inboundAttachments = inboundAttachments;
         _content = content;
         _options = options;
         _logger = logger;
@@ -46,6 +50,7 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
                         _transmissions is InMemoryClaimTransmissionStore ||
                         _cursors is InMemoryClaimAcknowledgmentCursorStore ||
                         _attachments is InMemoryClaimAttachmentTransmissionStore ||
+                        _inboundAttachments is InMemoryInboundClaimAttachmentReceiptStore ||
                         _content is InMemoryClaimAttachmentContentStore;
         var allowed = ClaimLifecycleStoreResolver.AllowsEphemeral(_options.Value.ClaimLifecycle, _environment);
 

@@ -22,6 +22,8 @@ public sealed class ClaimLifecycleOptions
 
     public string AttachmentsCollection { get; set; } = "claim_attachment_transmissions";
 
+    public string InboundAttachmentsCollection { get; set; } = "inbound_claim_attachment_receipts";
+
     /// <summary>
     /// Hours of poll-window overlap when Stedi returns no next page token.
     /// Default 24 matches Stedi's "overlap by at least one day" guidance.

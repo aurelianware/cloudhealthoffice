@@ -420,6 +420,22 @@ public static class ChoMetrics
             unit: "s",
             description: "Outbound claim attachment submission duration in seconds");
 
+    /// <summary>
+    /// Counter tracking inbound payer-side 275 receipts.
+    /// Dimensions: cho.adapter, cho.status, cho.error_category, cho.association.
+    /// </summary>
+    public static readonly Counter<long> InboundClaimAttachments =
+        Meter.CreateCounter<long>(
+            "cho.inbound_claim_attachment.received.total",
+            unit: "{attachment}",
+            description: "Inbound payer-side claim attachments by adapter and status");
+
+    public static readonly Histogram<double> InboundClaimAttachmentDuration =
+        Meter.CreateHistogram<double>(
+            "cho.inbound_claim_attachment.duration",
+            unit: "s",
+            description: "Inbound payer-side claim attachment processing duration in seconds");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

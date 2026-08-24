@@ -12,6 +12,15 @@ namespace CloudHealthOffice.Infrastructure.Responders.Routing;
 public interface IPayerEligibilityRouter
 {
     PayerEligibilityRouteResolution Resolve(PayerEligibilityInquiry inquiry);
+
+    /// <summary>
+    /// Resolve tenant/payer from trusted inbound identifiers only.
+    /// Used by payer-side capabilities that share eligibility inbound routes.
+    /// </summary>
+    PayerEligibilityRouteResolution ResolveIdentity(
+        string? payerId,
+        string? tradingPartnerId,
+        string? authenticatedEndpointId);
 }
 
 /// <summary>Outcome of inbound payer / tenant routing.</summary>

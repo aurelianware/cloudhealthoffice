@@ -15,6 +15,7 @@ public static class ChoDemoEligibilitySeed
     public const string CanonicalPayerId = "CHO-DEMO-HEALTH";
     public const string PayerName = "CHO Demo Health Plan";
     public const string ExternalPayerId = "CHODEMO";
+    public const string OtherExternalPayerId = "CHOOTHER";
     public const string TradingPartnerId = "19999";
     public const string AuthenticatedEndpointId = "cho-demo-endpoint";
 
@@ -121,6 +122,14 @@ public static class ChoDemoEligibilitySeed
         new PayerEligibilityRoute
         {
             ExternalIdentifier = AmbiguousExternalId,
+            IdentifierKind = PayerEligibilityRoute.IdentifierKinds.PayerId,
+            TenantId = OtherTenantId,
+            CanonicalPayerId = "CHO-OTHER-HEALTH",
+            PayerName = "CHO Other Health Plan"
+        },
+        new PayerEligibilityRoute
+        {
+            ExternalIdentifier = OtherExternalPayerId,
             IdentifierKind = PayerEligibilityRoute.IdentifierKinds.PayerId,
             TenantId = OtherTenantId,
             CanonicalPayerId = "CHO-OTHER-HEALTH",

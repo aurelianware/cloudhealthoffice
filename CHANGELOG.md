@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Payer-side inbound 275 claim attachment receiver
+
+Vendor-neutral `IClaimAttachmentReceiver` so Cloud Health Office can receive
+a 275-equivalent attachment as the payer. Distinct from outbound
+`IClaimAttachmentGateway`. Canonical `InboundClaimAttachment`, deterministic
+claim/service-line matching, SHA-256 content store, durable receipts with
+outbox, quarantine for unmatched attachments. Development:
+`POST /api/dev/payer/claims/{claimId}/attachments`.
+
+Stedi inbound payer-side 275 is **adapter-ready / pending Stedi payer
+connectivity**, not implemented. Raw X12 275 ingress is deferred. Receipt
+does not adjudicate or pay the claim.
+
 ### 275 claim attachment submission through Stedi
 
 Vendor-neutral `IClaimAttachmentGateway.SubmitAttachmentAsync` with canonical
