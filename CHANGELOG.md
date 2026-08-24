@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 276/277 claim status inquiry through Stedi
+
+Vendor-neutral `IClaimStatusGateway.CheckClaimStatusAsync` with canonical
+`ClaimStatusRequest` / `ClaimStatusResponse`. Callers pass `ClaimId` or
+`TransmissionId`; the coordinator derives payer, provider, subscriber, dates,
+and control numbers from the original 837 snapshot and from a matched 277CA
+payer claim control number when present. Stedi transport is Real-Time Claim
+Status JSON `POST https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/claimstatus/v2`.
+276/277 status is a separate dimension from 277CA acknowledgment,
+adjudication, and 835 payment. HTTP 200 with no matching claim is a business
+`NoRecordFound`, not a transport failure. Mock returns deterministic
+statuses for tests. Development:
+`POST /api/dev/gateway/claims/{transmissionId}/status`.
+
+Stedi test keys are not supported for this endpoint. Contract-tested against
+the documented API; live inquiry pending production/test capability.
+
 ### Payer-side inbound 275 claim attachment receiver
 
 Vendor-neutral `IClaimAttachmentReceiver` so Cloud Health Office can receive

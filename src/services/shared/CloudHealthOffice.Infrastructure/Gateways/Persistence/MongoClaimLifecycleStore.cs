@@ -14,13 +14,15 @@ internal sealed class MongoClaimLifecycleStore :
     IClaimAcknowledgmentStore,
     IClaimAcknowledgmentCursorStore,
     IClaimAttachmentTransmissionStore,
-    IInboundClaimAttachmentReceiptStore
+    IInboundClaimAttachmentReceiptStore,
+    IClaimStatusInquiryStore
 {
     private readonly IMongoCollection<ClaimTransmissionDocument> _transmissions;
     private readonly IMongoCollection<ClaimAcknowledgmentDocument> _acknowledgments;
     private readonly IMongoCollection<ClaimAcknowledgmentCursor> _cursors;
     private readonly IMongoCollection<ClaimAttachmentTransmissionDocument> _attachments;
     private readonly IMongoCollection<InboundClaimAttachmentReceiptDocument> _inboundAttachments;
+    private readonly IMongoCollection<ClaimStatusInquiryDocument> _statusInquiries;
 
     public MongoClaimLifecycleStore(IMongoDatabase database, ClaimLifecycleOptions options)
     {
@@ -29,6 +31,7 @@ internal sealed class MongoClaimLifecycleStore :
         _cursors = database.GetCollection<ClaimAcknowledgmentCursor>(options.CursorsCollection);
         _attachments = database.GetCollection<ClaimAttachmentTransmissionDocument>(options.AttachmentsCollection);
         _inboundAttachments = database.GetCollection<InboundClaimAttachmentReceiptDocument>(options.InboundAttachmentsCollection);
+        _statusInquiries = database.GetCollection<ClaimStatusInquiryDocument>(options.ClaimStatusInquiriesCollection);
     }
 
     public async Task EnsureIndexesAsync(CancellationToken ct)
@@ -58,7 +61,11 @@ internal sealed class MongoClaimLifecycleStore :
             new CreateIndexModel<ClaimTransmissionDocument>(
                 Builders<ClaimTransmissionDocument>.IndexKeys
                     .Ascending(d => d.GatewayName)
-                    .Ascending(d => d.CorrelationId))
+                    .Ascending(d => d.CorrelationId)),
+            new CreateIndexModel<ClaimTransmissionDocument>(
+                Builders<ClaimTransmissionDocument>.IndexKeys
+                    .Ascending(d => d.TenantId)
+                    .Ascending("Payload.ClaimId"))
         }, ct).ConfigureAwait(false);
 
         await _acknowledgments.Indexes.CreateManyAsync(new[]
@@ -118,6 +125,26 @@ internal sealed class MongoClaimLifecycleStore :
                     .Ascending(d => d.HasPendingOutbox)
                     .Ascending("Payload.ReceivedAtUtc"))
         }, ct).ConfigureAwait(false);
+
+        await _statusInquiries.Indexes.CreateManyAsync(new[]
+        {
+            new CreateIndexModel<ClaimStatusInquiryDocument>(
+                Builders<ClaimStatusInquiryDocument>.IndexKeys.Ascending(d => d.Id),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<ClaimStatusInquiryDocument>(
+                Builders<ClaimStatusInquiryDocument>.IndexKeys.Ascending(d => d.IdempotencyKey),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<ClaimStatusInquiryDocument>(
+                Builders<ClaimStatusInquiryDocument>.IndexKeys
+                    .Ascending(d => d.GatewayName)
+                    .Ascending(d => d.ExternalTransactionId)),
+            new CreateIndexModel<ClaimStatusInquiryDocument>(
+                Builders<ClaimStatusInquiryDocument>.IndexKeys.Ascending(d => d.TransmissionId)),
+            new CreateIndexModel<ClaimStatusInquiryDocument>(
+                Builders<ClaimStatusInquiryDocument>.IndexKeys
+                    .Ascending(d => d.TenantId)
+                    .Ascending(d => d.ClaimId))
+        }, ct).ConfigureAwait(false);
     }
 
     async Task<ClaimTransmissionRecord?> IClaimTransmissionStore.GetByIdempotencyKeyAsync(
@@ -155,6 +182,10 @@ internal sealed class MongoClaimLifecycleStore :
         string gatewayName, string correlationId, CancellationToken ct = default) =>
         FindTransmissionsAsync(
             d => d.GatewayName == gatewayName && d.CorrelationId == correlationId, ct);
+
+    public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByTenantAndClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default) =>
+        FindTransmissionsAsync(d => d.TenantId == tenantId && d.Payload.ClaimId == claimId, ct);
 
     public Task SaveAsync(ClaimTransmissionRecord record, CancellationToken ct = default) =>
         _transmissions.ReplaceOneAsync(
@@ -407,6 +438,77 @@ internal sealed class MongoClaimLifecycleStore :
         }
     }
 
+    async Task<ClaimStatusInquiryRecord?> IClaimStatusInquiryStore.GetByIdAsync(
+        string inquiryId, CancellationToken ct)
+    {
+        var doc = await _statusInquiries.Find(d => d.Id == inquiryId)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.ToModel();
+    }
+
+    public async Task<ClaimStatusInquiryRecord?> GetByExternalTransactionIdAsync(
+        string gatewayName, string externalTransactionId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(externalTransactionId))
+        {
+            return null;
+        }
+
+        var doc = await _statusInquiries
+            .Find(d => d.GatewayName == gatewayName && d.ExternalTransactionId == externalTransactionId)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.ToModel();
+    }
+
+    async Task<IReadOnlyList<ClaimStatusInquiryRecord>> IClaimStatusInquiryStore.ListByTransmissionIdAsync(
+        string transmissionId, CancellationToken ct)
+    {
+        var docs = await _statusInquiries
+            .Find(d => d.TransmissionId == transmissionId)
+            .SortBy(d => d.Payload.RequestedAtUtc)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.ToModel()).ToList();
+    }
+
+    public async Task<IReadOnlyList<ClaimStatusInquiryRecord>> ListByTenantAndClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var docs = await _statusInquiries
+            .Find(d => d.TenantId == tenantId && d.ClaimId == claimId)
+            .SortBy(d => d.Payload.RequestedAtUtc)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.ToModel()).ToList();
+    }
+
+    public Task SaveAsync(ClaimStatusInquiryRecord record, CancellationToken ct = default) =>
+        _statusInquiries.ReplaceOneAsync(
+            d => d.Id == record.InquiryId,
+            ClaimStatusInquiryDocument.FromModel(record),
+            new ReplaceOptions { IsUpsert = true },
+            ct);
+
+    public async Task<(bool Created, ClaimStatusInquiryRecord Record)> TryCreateAsync(
+        ClaimStatusInquiryRecord record, CancellationToken ct = default)
+    {
+        try
+        {
+            await _statusInquiries
+                .InsertOneAsync(ClaimStatusInquiryDocument.FromModel(record), cancellationToken: ct)
+                .ConfigureAwait(false);
+            return (true, record);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            var existing = string.IsNullOrWhiteSpace(record.ExternalTransactionId)
+                ? null
+                : await GetByExternalTransactionIdAsync(record.GatewayName, record.ExternalTransactionId, ct)
+                    .ConfigureAwait(false);
+            existing ??= await ((IClaimStatusInquiryStore)this).GetByIdAsync(record.InquiryId, ct)
+                .ConfigureAwait(false);
+            return (false, existing ?? record);
+        }
+    }
+
     private async Task<IReadOnlyList<ClaimTransmissionRecord>> FindTransmissionsAsync(
         System.Linq.Expressions.Expression<Func<ClaimTransmissionDocument, bool>> filter,
         CancellationToken ct)
@@ -530,4 +632,38 @@ internal sealed class InboundClaimAttachmentReceiptDocument
     };
 
     public InboundClaimAttachmentReceipt ToModel() => Payload;
+}
+
+internal sealed class ClaimStatusInquiryDocument
+{
+    [BsonId]
+    public string Id { get; set; } = string.Empty;
+
+    public string IdempotencyKey { get; set; } = string.Empty;
+
+    public string TenantId { get; set; } = string.Empty;
+
+    public string? ClaimId { get; set; }
+
+    public string? TransmissionId { get; set; }
+
+    public string GatewayName { get; set; } = string.Empty;
+
+    public string? ExternalTransactionId { get; set; }
+
+    public ClaimStatusInquiryRecord Payload { get; set; } = new();
+
+    public static ClaimStatusInquiryDocument FromModel(ClaimStatusInquiryRecord r) => new()
+    {
+        Id = r.InquiryId,
+        IdempotencyKey = r.IdempotencyKey,
+        TenantId = r.TenantId,
+        ClaimId = r.ClaimId,
+        TransmissionId = r.TransmissionId,
+        GatewayName = r.GatewayName,
+        ExternalTransactionId = r.ExternalTransactionId,
+        Payload = r
+    };
+
+    public ClaimStatusInquiryRecord ToModel() => Payload;
 }

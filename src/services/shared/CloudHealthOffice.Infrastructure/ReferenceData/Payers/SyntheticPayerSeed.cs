@@ -58,6 +58,11 @@ internal static class SyntheticPayerSeed
                     {
                         Transaction = HealthcareTransactionType.Eligibility270271,
                         Support = PayerTransactionSupport.Supported
+                    },
+                    new PayerTransactionCapability
+                    {
+                        Transaction = HealthcareTransactionType.ClaimStatus276277,
+                        Support = PayerTransactionSupport.Supported
                     }
                 },
                 Provenance = SeedProvenance(syncedAt)
@@ -143,6 +148,11 @@ internal static class SyntheticPayerSeed
                 {
                     Transaction = HealthcareTransactionType.ClaimAttachment275,
                     Support = eligibility
+                },
+                new PayerTransactionCapability
+                {
+                    Transaction = HealthcareTransactionType.ClaimStatus276277,
+                    Support = eligibility
                 }
             },
             EnrollmentRequirements = enrollmentRequired
@@ -161,6 +171,11 @@ internal static class SyntheticPayerSeed
                     new()
                     {
                         Transaction = HealthcareTransactionType.ClaimAttachment275,
+                        Required = true
+                    },
+                    new()
+                    {
+                        Transaction = HealthcareTransactionType.ClaimStatus276277,
                         Required = true
                     }
                 }
