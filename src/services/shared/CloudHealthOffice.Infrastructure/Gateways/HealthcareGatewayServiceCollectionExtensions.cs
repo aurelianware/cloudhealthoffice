@@ -104,6 +104,8 @@ public static class HealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<ClaimLifecycleStoreBox>().Cursors);
         services.TryAddSingleton<IClaimAttachmentTransmissionStore>(sp =>
             sp.GetRequiredService<ClaimLifecycleStoreBox>().Attachments);
+        services.TryAddSingleton<CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore>(sp =>
+            sp.GetRequiredService<ClaimLifecycleStoreBox>().InboundAttachments);
     }
 
     private static ClaimLifecycleStoreBox CreateLifecycleBox(IServiceProvider sp, IConfiguration configuration)
@@ -129,14 +131,15 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 ? configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice"
                 : options.MongoDatabaseName;
             var mongo = new MongoClaimLifecycleStore(mongoClient.GetDatabase(databaseName), options);
-            return new ClaimLifecycleStoreBox(mongo, mongo, mongo, mongo);
+            return new ClaimLifecycleStoreBox(mongo, mongo, mongo, mongo, mongo);
         }
 
         return new ClaimLifecycleStoreBox(
             new InMemoryClaimTransmissionStore(),
             new InMemoryClaimAcknowledgmentStore(),
             new InMemoryClaimAcknowledgmentCursorStore(),
-            new InMemoryClaimAttachmentTransmissionStore());
+            new InMemoryClaimAttachmentTransmissionStore(),
+            new CloudHealthOffice.Infrastructure.Responders.InMemoryInboundClaimAttachmentReceiptStore());
     }
 
     internal sealed class ClaimLifecycleStoreBox
@@ -145,17 +148,20 @@ public static class HealthcareGatewayServiceCollectionExtensions
             IClaimTransmissionStore transmissions,
             IClaimAcknowledgmentStore acknowledgments,
             IClaimAcknowledgmentCursorStore cursors,
-            IClaimAttachmentTransmissionStore attachments)
+            IClaimAttachmentTransmissionStore attachments,
+            CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore inboundAttachments)
         {
             Transmissions = transmissions;
             Acknowledgments = acknowledgments;
             Cursors = cursors;
             Attachments = attachments;
+            InboundAttachments = inboundAttachments;
         }
 
         public IClaimTransmissionStore Transmissions { get; }
         public IClaimAcknowledgmentStore Acknowledgments { get; }
         public IClaimAcknowledgmentCursorStore Cursors { get; }
         public IClaimAttachmentTransmissionStore Attachments { get; }
+        public CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore InboundAttachments { get; }
     }
 }

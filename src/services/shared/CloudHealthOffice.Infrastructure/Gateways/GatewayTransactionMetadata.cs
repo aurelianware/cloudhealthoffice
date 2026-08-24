@@ -172,5 +172,29 @@ public enum GatewayErrorCategory
     GatewayRejected,
 
     /// <summary>Content scanning marked the attachment unsafe or quarantined.</summary>
-    AttachmentUnsafe
+    AttachmentUnsafe,
+
+    /// <summary>Inbound transaction could not be parsed into the canonical model.</summary>
+    MalformedTransaction,
+
+    /// <summary>The inbound payer/trading-partner identifier is missing or unknown.</summary>
+    InvalidPayer,
+
+    /// <summary>No payer-side claim matched the supplied identifiers.</summary>
+    ClaimNotFound,
+
+    /// <summary>More than one payer-side claim matched; the caller must disambiguate.</summary>
+    AmbiguousClaim,
+
+    /// <summary>More than one service line matched a line-level attachment.</summary>
+    AmbiguousServiceLine,
+
+    /// <summary>Transport checksum did not match stored content.</summary>
+    ChecksumMismatch,
+
+    /// <summary>Identical inbound attachment was already accepted.</summary>
+    DuplicateAttachment,
+
+    /// <summary>Inbound attachment could not be matched uniquely to a payer-side claim.</summary>
+    UnableToMatch
 }

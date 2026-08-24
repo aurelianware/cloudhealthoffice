@@ -157,6 +157,7 @@ public enum ClaimAttachmentMode
 
 public enum ClaimAttachmentAssociationLevel
 {
+    None = 0,
     Claim = 1,
     ServiceLine = 2
 }
