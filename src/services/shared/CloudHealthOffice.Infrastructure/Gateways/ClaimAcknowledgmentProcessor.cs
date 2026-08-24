@@ -74,6 +74,8 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             var malformed = ToRecord(acknowledgment, transmission: null);
             malformed.UnmatchedReason = "malformed";
             malformed.Status = ClaimAcknowledgmentStatus.Malformed;
+            malformed.LastErrorCategory = GatewayErrorCategory.MalformedResponse;
+            malformed.LastError = "malformed-277ca";
             return await CommitNewAsync(malformed, transmission: null, started, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -89,6 +91,8 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             unmatched.UnmatchedReason = match.Ambiguous ? "ambiguous-match" : match.Reason ?? "unmatched";
             unmatched.Status = ClaimAcknowledgmentStatus.UnableToMatch;
             unmatched.TenantId = string.Empty;
+            unmatched.LastErrorCategory = GatewayErrorCategory.UnableToMatchTransmission;
+            unmatched.LastError = unmatched.UnmatchedReason;
             return await CommitNewAsync(unmatched, transmission: null, started, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -108,6 +112,8 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
         DateTimeOffset started,
         CancellationToken ct)
     {
+        EnsureOutbox(record, started);
+        record.ProcessingAttempts = 1;
         var (created, stored) = await _acknowledgments.TryCreateAsync(record, ct).ConfigureAwait(false);
         if (!created)
         {
@@ -119,12 +125,21 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             await ApplyTransmissionAsync(stored, transmission, ct).ConfigureAwait(false);
         }
 
-        var published = await PublishAsync(stored, transmission, ct).ConfigureAwait(false);
-        stored.EventsPublished = published;
+        var published = await PublishPendingAsync(stored, transmission, ct).ConfigureAwait(false);
         await _acknowledgments.SaveAsync(stored, ct).ConfigureAwait(false);
         Log(stored, replay: false);
         RecordMetric(stored.Status, started);
         return ToResult(stored, replay: false, events: published, transmission?.Status);
+    }
+
+    /// <summary>Retry unpublished outbox entries. Safe for the background dispatcher and replay.</summary>
+    public async Task DispatchPendingAsync(CancellationToken cancellationToken = default)
+    {
+        var pending = await _acknowledgments.ListPendingOutboxAsync(50, cancellationToken).ConfigureAwait(false);
+        foreach (var record in pending)
+        {
+            await ReplayAsync(record, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static ClaimAcknowledgmentRecord ToRecord(
@@ -156,8 +171,7 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
         };
 
     private static GatewayClaimTransmissionStatus? MapTransmissionStatus(
-        ClaimAcknowledgmentStatus status,
-        GatewayClaimTransmissionStatus current) =>
+        ClaimAcknowledgmentStatus status) =>
         status switch
         {
             ClaimAcknowledgmentStatus.Accepted or ClaimAcknowledgmentStatus.AcceptedWithWarnings
@@ -167,11 +181,7 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             ClaimAcknowledgmentStatus.Partial
                 => GatewayClaimTransmissionStatus.AcknowledgmentPartial,
             ClaimAcknowledgmentStatus.Malformed
-                => current is GatewayClaimTransmissionStatus.AcknowledgmentAccepted
-                    or GatewayClaimTransmissionStatus.AcknowledgmentRejected
-                    or GatewayClaimTransmissionStatus.AcknowledgmentPartial
-                    ? null
-                    : GatewayClaimTransmissionStatus.AcknowledgmentFailed,
+                => GatewayClaimTransmissionStatus.AcknowledgmentFailed,
             _ => null
         };
 
@@ -180,14 +190,20 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
         ClaimTransmissionRecord transmission,
         CancellationToken ct)
     {
-        var submittedAt = transmission.SubmittedAtUtc;
-        var nextStatus = MapTransmissionStatus(record.Status, transmission.Status);
-        if (nextStatus is null)
+        var proposed = MapTransmissionStatus(record.Status);
+        if (proposed is null)
         {
             return;
         }
 
-        transmission.Status = nextStatus.Value;
+        if (!ClaimTransmissionStateMachine.TryTransition(
+                transmission.Status, proposed.Value, record.Status, out var next))
+        {
+            return;
+        }
+
+        var submittedAt = transmission.SubmittedAtUtc;
+        transmission.Status = next;
         transmission.AcknowledgedAtUtc = record.ReceivedAtUtc;
         transmission.SubmittedAtUtc = submittedAt;
         await _transmissions.SaveAsync(transmission, ct).ConfigureAwait(false);
@@ -206,16 +222,9 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             }
         }
 
-        var published = existing.EventsPublished;
-        if (!published)
-        {
-            published = await PublishAsync(existing, transmission, ct).ConfigureAwait(false);
-            if (published)
-            {
-                existing.EventsPublished = true;
-                await _acknowledgments.SaveAsync(existing, ct).ConfigureAwait(false);
-            }
-        }
+        existing.ProcessingAttempts++;
+        var published = await PublishPendingAsync(existing, transmission, ct).ConfigureAwait(false);
+        await _acknowledgments.SaveAsync(existing, ct).ConfigureAwait(false);
 
         Log(existing, replay: true);
         return ToResult(existing, replay: true, events: published, transmission?.Status);
@@ -243,14 +252,42 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             EventsPublished = events && !replay
         };
 
-    private async Task<bool> PublishAsync(
+    private static void EnsureOutbox(ClaimAcknowledgmentRecord record, DateTimeOffset now)
+    {
+        if (record.Outbox.Count > 0)
+        {
+            return;
+        }
+
+        record.Outbox.Add(Entry(ClaimAcknowledgmentMessageTypes.Received, now));
+        if (record.Status is ClaimAcknowledgmentStatus.Accepted
+            or ClaimAcknowledgmentStatus.AcceptedWithWarnings)
+        {
+            record.Outbox.Add(Entry(ClaimAcknowledgmentMessageTypes.Accepted, now));
+        }
+        else if (record.Status == ClaimAcknowledgmentStatus.Rejected)
+        {
+            record.Outbox.Add(Entry(ClaimAcknowledgmentMessageTypes.Rejected, now));
+        }
+    }
+
+    private static ClaimAcknowledgmentOutboxEntry Entry(string type, DateTimeOffset now) =>
+        new() { EventType = type, CreatedAtUtc = now };
+
+    private async Task<bool> PublishPendingAsync(
         ClaimAcknowledgmentRecord record,
         ClaimTransmissionRecord? transmission,
         CancellationToken ct)
     {
-        if (_messageBus is null || record.EventsPublished)
+        EnsureOutbox(record, _timeProvider.GetUtcNow());
+        if (_messageBus is null)
         {
-            return record.EventsPublished;
+            foreach (var entry in record.Outbox.Where(e => e.PublishedAtUtc is null))
+            {
+                entry.PublishedAtUtc = _timeProvider.GetUtcNow();
+            }
+
+            return true;
         }
 
         var message = new ClaimAcknowledgmentReceivedMessage
@@ -265,28 +302,29 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             CorrelationId = record.CorrelationId
         };
 
-        try
+        var allPublished = true;
+        foreach (var entry in record.Outbox.Where(e => e.PublishedAtUtc is null))
         {
-            await Send(ClaimAcknowledgmentMessageTypes.Received, message, ct).ConfigureAwait(false);
-            if (record.Status is ClaimAcknowledgmentStatus.Accepted
-                or ClaimAcknowledgmentStatus.AcceptedWithWarnings)
+            entry.AttemptCount++;
+            try
             {
-                await Send(ClaimAcknowledgmentMessageTypes.Accepted, message, ct).ConfigureAwait(false);
+                await Send(entry.EventType, message, ct).ConfigureAwait(false);
+                entry.PublishedAtUtc = _timeProvider.GetUtcNow();
+                entry.LastError = null;
             }
-            else if (record.Status == ClaimAcknowledgmentStatus.Rejected)
+            catch (Exception ex)
             {
-                await Send(ClaimAcknowledgmentMessageTypes.Rejected, message, ct).ConfigureAwait(false);
+                allPublished = false;
+                entry.LastError = "publish-failed";
+                record.LastErrorCategory = GatewayErrorCategory.ServiceUnavailable;
+                record.LastError = "outbox-publish-failed";
+                _logger.LogWarning(ex,
+                    "Failed to publish claim acknowledgment event type={EventType} gateway={Gateway}",
+                    Sanitize(entry.EventType), Sanitize(record.Gateway));
             }
+        }
 
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to publish claim acknowledgment event ack={AcknowledgmentId} gateway={Gateway}",
-                Sanitize(record.AcknowledgmentId), Sanitize(record.Gateway));
-            return false;
-        }
+        return allPublished;
     }
 
     private Task Send(string type, ClaimAcknowledgmentReceivedMessage message, CancellationToken ct) =>
@@ -304,14 +342,11 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
 
     private void Log(ClaimAcknowledgmentRecord record, bool replay) =>
         _logger.LogInformation(
-            "Claim acknowledgment {Gateway} ack={AcknowledgmentId} transmission={TransmissionId} " +
-            "tenant={TenantId} status={Status} replay={Replay}",
+            "Claim acknowledgment processed gateway={Gateway} status={Status} replay={Replay} pendingOutbox={Pending}",
             Sanitize(record.Gateway),
-            Sanitize(record.AcknowledgmentId),
-            Sanitize(record.TransmissionId),
-            Sanitize(record.TenantId),
             record.Status,
-            replay);
+            replay,
+            record.HasPendingOutbox);
 
     private static void RecordMetric(ClaimAcknowledgmentStatus status, DateTimeOffset started)
     {

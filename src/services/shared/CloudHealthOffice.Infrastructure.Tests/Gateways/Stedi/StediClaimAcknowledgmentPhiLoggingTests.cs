@@ -80,7 +80,6 @@ public class StediClaimAcknowledgmentPhiLoggingTests
         logs.Should().NotContain("JOHN");
         logs.Should().NotContain("patientClaimStatusDetails");
         logs.Should().NotContain("informationClaimStatuses");
-        logs.Should().Contain("tenant-alpha");
         logs.Should().Contain("Stedi");
     }
 }

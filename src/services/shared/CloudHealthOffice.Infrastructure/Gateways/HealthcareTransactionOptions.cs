@@ -37,6 +37,9 @@ public sealed class HealthcareTransactionOptions
     /// </summary>
     public Dictionary<string, HealthcareGatewayEndpointOptions> Gateways { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Persistence for 837 transmissions, 277CA acknowledgments, and poll cursors.</summary>
+    public ClaimLifecycleOptions ClaimLifecycle { get; set; } = new();
 }
 
 /// <summary>

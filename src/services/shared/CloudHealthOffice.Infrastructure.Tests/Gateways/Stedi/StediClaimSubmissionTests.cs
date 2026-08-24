@@ -117,6 +117,27 @@ public class StediClaimSubmissionTests
         second.Result.TransmissionId.Should().Be(first.Result!.TransmissionId);
     }
 
+    [Theory]
+    [InlineData(GatewayClaimTransmissionStatus.AcknowledgmentAccepted)]
+    [InlineData(GatewayClaimTransmissionStatus.AcknowledgmentRejected)]
+    [InlineData(GatewayClaimTransmissionStatus.AcknowledgmentPartial)]
+    public async Task Post277CA_SameIdempotencyKey_DoesNotResend(GatewayClaimTransmissionStatus ackStatus)
+    {
+        var handler = new StubHttpMessageHandler().EnqueueJson(HttpStatusCode.OK, SuccessJson);
+        var store = new InMemoryClaimTransmissionStore();
+        var gateway = NewGateway(handler, store);
+
+        var first = await gateway.SubmitClaimAsync(GatewayClaimFixtures.Professional());
+        var tx = await store.GetByIdAsync(first.Result!.TransmissionId);
+        tx!.Status = ackStatus;
+        await store.SaveAsync(tx);
+
+        var replay = await gateway.SubmitClaimAsync(GatewayClaimFixtures.Professional());
+        handler.CallCount.Should().Be(1);
+        replay.Result!.ReplayOfExistingTransmission.Should().BeTrue();
+        (await store.GetByIdAsync(tx.TransmissionId))!.Status.Should().Be(ackStatus);
+    }
+
     [Fact]
     public async Task NewClaimVersion_MayResubmit()
     {
