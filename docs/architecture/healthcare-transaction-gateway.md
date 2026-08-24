@@ -6,9 +6,9 @@ model, many interchangeable vendor implementations, living in
 [`CloudHealthOffice.Infrastructure.Gateways`](../../src/services/shared/CloudHealthOffice.Infrastructure/Gateways/).
 
 This is the **foundation** layer. The mock gateway, the Stedi eligibility
-(270/271) adapter, outbound 837 submission, 277CA acknowledgment, and the
-canonical payer reference service are implemented today. Additional
-transactions (276/277 status inquiry, 275, 835) stay contract-only.
+(270/271) adapter, outbound 837 submission, 277CA acknowledgment, 275 claim
+attachments, and the canonical payer reference service are implemented today.
+Additional transactions (276/277 status inquiry, 835) stay contract-only.
 
 Payer-side inbound eligibility (CHO as the 271 information source) is a
 **separate** capability: [`payer-eligibility-responder.md`](payer-eligibility-responder.md).
@@ -96,7 +96,7 @@ transactions are **rejected explicitly** rather than returning a no-op result.
 | `ClaimSubmission` | `IClaimSubmissionGateway` | 837P/837I/837D | **Implemented (Mock + Stedi)** |
 | `ClaimStatus` | `IClaimStatusGateway` | 276/277 | Contract only |
 | `ClaimAcknowledgment` | `IClaimAcknowledgmentGateway` | 277CA | **Implemented (Stedi retrieve + shared processor)** |
-| `ClaimAttachment` | `IClaimAttachmentGateway` | 275 | Contract only |
+| `ClaimAttachment` | `IClaimAttachmentGateway` | 275 | **Implemented (Mock + Stedi JSON create/upload)** |
 | `Remittance` | `IRemittanceGateway` | 835 | Contract only |
 
 ### Per-gateway implementation status
@@ -108,8 +108,8 @@ so those gateways do not advertise them.
 
 | Gateway | Eligibility (270/271) | 837 | 276/277 | 277CA | 275 | 835 |
 |---------|:---:|:---:|:---:|:---:|:---:|:---:|
-| Mock  | Yes | Yes | No | No* | No | No |
-| Stedi | Yes | Yes | No | Yes | No | No |
+| Mock  | Yes | Yes | No | No* | Yes | No |
+| Stedi | Yes | Yes | No | Yes | Yes | No |
 
 \*Mock does not retrieve 277CAs. Development injection
 (`POST /api/dev/gateway/claims/{transmissionId}/277ca`) feeds the same
@@ -118,7 +118,11 @@ canonical processor used by Stedi.
 `IClaimAcknowledgmentGateway.RetrieveAcknowledgmentAsync` fetches and
 normalizes a 277CA. Applying it to a transmission is
 `IClaimAcknowledgmentProcessor` — transport (webhook vs poll) must not
-duplicate that logic. Remaining "contract only" interfaces stay member-less.
+duplicate that logic.
+
+`IClaimAttachmentGateway.SubmitAttachmentAsync` submits supporting
+documentation for an existing claim transmission. Remaining "contract only"
+interfaces stay member-less.
 
 ### Discovering and rejecting capabilities
 
@@ -490,6 +494,161 @@ A subscriber-only request for that same UHC fixture returns AAA 73
 transport failure (`GatewayTransactionStatus.Rejected` /
 `GatewayErrorCategory.PayerRejected`).
 
+### 275 claim attachments
+
+A 275 is supporting documentation for a claim. It is not a claim, a 277CA,
+adjudication, or payment. Attachment lifecycle is stored separately from 837
+and 277CA state.
+
+```
+CHO Claim / Transmission
+        ↓
+ClaimAttachmentSubmissionRequest
+        ↓
+IClaimAttachmentGateway
+        ↓
+StediHealthcareGateway
+        ↓
+POST https://claims.us.stedi.com/2025-03-07/claim-attachments/file
+        ↓
+PUT pre-signed upload URL
+        ↓
+Stedi 275 (unsolicited)
+        ↓
+Payer
+```
+
+#### Stedi JSON contract (API version 2025-03-07)
+
+Documented JSON workflow
+([Create Claim Attachment (275) JSON](https://www.stedi.com/docs/healthcare/api-reference/post-healthcare-create-claim-attachment),
+[Claim attachments](https://www.stedi.com/docs/healthcare/submit-claim-attachments)):
+
+1. `POST /claim-attachments/file` with `{ "contentType": "application/pdf" }`
+   → `{ attachmentId, uploadUrl }`
+2. `PUT` the file to `uploadUrl` with a matching `Content-Type`. The PUT is
+   **not** authenticated with the Stedi API key.
+3. Stedi generates the unsolicited 275. The JSON API is designed to pair the
+   `attachmentId` with a later 837 `reportInformations` reference. This PR
+   submits the file through the documented JSON create+upload path for an
+   **existing** CHO transmission. It does **not** resubmit the 837 and does
+   **not** synthesize raw X12 275.
+
+Supported MIME types (Stedi allow-list): `application/pdf`, `image/tiff`,
+`image/jpeg`, `image/jpg`, `image/png`. Stedi recommends a 64MB per-file
+limit for JSON/S3 uploads. CHO enforces `min(CHO max, Stedi max)` before
+transport and returns `AttachmentTooLarge` rather than relying on HTTP 413.
+
+#### Supported attachment modes
+
+| Mode | Status |
+|------|--------|
+| Professional | Implemented |
+| Institutional | Implemented |
+| Dental | Implemented (claim-level; dental-specific types such as radiograph / periodontal chart / narrative map vendor-neutrally) |
+| Unsolicited | Implemented (Stedi APIs/SFTP only support unsolicited 275) |
+| Solicited | Unsupported (Stedi documents that solicited 275 / 277 RFA responses cannot be submitted through Stedi APIs) |
+| Claim-level | Implemented |
+| Service-line-level | Implemented for professional and institutional; rejected for dental (do not silently fall back) |
+
+#### Secure storage
+
+Attachment **bytes** live in `IClaimAttachmentContentStore` (container +
+storage key, the same shape as CHO `IDocumentStore`). Development/tests use
+the in-memory implementation. Production hosts that already register
+`IDocumentStore` (Azure Blob, encryption at rest, private containers — see
+`attachment-service`) should register a durable `IClaimAttachmentContentStore`
+that delegates to that store. Infrastructure does not take a project reference
+on `CloudHealthOffice.DocumentStore` in this PR because that package currently
+pulls System.Text.Json 10 / Logging 10 and fails restore against this net8
+assembly (NU1605).
+
+Domain objects hold only:
+
+```
+ClaimAttachment metadata + ContentReference (container, storage key, MIME, length, SHA-256)
+```
+
+Storage keys are `tenantId/transmissionId/attachmentId/{checksum}.{ext}`.
+Caller file names are untrusted display metadata and are never used in paths,
+URLs, or logs.
+
+There is no malware scanner in this PR. `ScanStatus` of `Quarantined`,
+`Unsafe`, or `ScanFailed` is rejected. Scanning is an operational
+responsibility of the upload path that writes to the content store.
+
+#### Claim association
+
+`ClaimId` and `TransmissionId` are required. The transmission must exist.
+Tenant, claim id, and payer must match the original transmission (no fuzzy
+match). Service-line numbers must exist on the original submitted claim
+(`ClaimTransmissionRecord.ServiceLineNumbers`). Tenant is taken from the
+transmission, not from an untrusted body field.
+
+Payer readiness reuses `IPayerReferenceService` for
+`HealthcareTransactionType.ClaimAttachment275`: gateway capability, payer
+support, and tenant enrollment are distinct. Enrollment is surfaced as
+`EnrollmentRequired`; this PR does not submit enrollments.
+
+#### Idempotency
+
+Key: `tenant|transmissionId|attachmentId|checksum|attachmentType|serviceLine|version`.
+
+Identical retries replay the accepted record and do not resend. Changed
+content with the same attachment id requires a new `AttachmentVersion`
+because submitted content is immutable. SHA-256 is persisted for integrity,
+duplicate detection, and audit (checksum prefix only in logs).
+
+#### Lifecycle
+
+```
+Stored → Validated → ReadyForSubmission → Transmitting → GatewayAccepted
+                                                      ↘ GatewayRejected / Failed
+```
+
+Independent of 837 transmission status and 277CA acknowledgment status. A
+claim may be `AcknowledgmentAccepted` while a later attachment is
+`GatewayRejected`.
+
+Synchronous Stedi success means **the gateway accepted the file for
+processing**. It does not mean the payer reviewed the document, accepted the
+claim, adjudicated, or paid.
+
+No separate 275 acknowledgment framework is built in this PR. Stedi's
+documented payer responses for attachments remain the claim's 277CA / 835.
+
+#### PHI / logging / retention
+
+Logs include only attachment id, transmission id, content type, content
+length, checksum prefix, status, latency, retry count, and error category.
+Never file bytes, base64, member names/ids, raw Stedi JSON, upload URLs, API
+keys, or caller file names.
+
+Retention is not invented here:
+
+- Attachment **metadata** follows CHO operational data retention.
+- **Binary content** follows the blob/document store lifecycle (Stedi stores
+  uploaded files for 45 days; CHO's copy is independent).
+- **Gateway transmission evidence** follows claim-lifecycle store retention.
+
+CHO sales/security materials mention a 7-year HIPAA retention pattern for
+clinical records; this PR does not encode a legal hold period.
+
+#### Live validation
+
+```
+Contract-tested against Stedi's documented 275 JSON API;
+live 275 pending production/test account capability.
+```
+
+Stedi test claims (and therefore test 275s tied to those claims) require a
+production-account test API key. Opt-in `CHO_STEDI_LIVE_CLAIM_TESTS` does
+not run in CI.
+
+Development: `POST /api/dev/gateway/claims/{transmissionId}/attachments`
+(multipart, 404 outside Development). Tenant comes from `X-Tenant-ID` and
+the original transmission.
+
 ### Architectural boundary
 
 Stedi = network / transport / transaction translation.
@@ -687,8 +846,8 @@ consolidation should be its own PR.
 
 ## Next Stedi integration
 
-Recommended next step: **PR for Stedi 275 claim attachments** — associate
-attachment metadata/content with an existing claim/transmission while
-preserving secure payload handling and a vendor-neutral claim attachment
-model. Do not implement 276/277 inquiry, 835 ERA, or payment posting in
-that PR.
+Recommended next step: **PR #1115 — Stedi 276/277 claim status inquiry**.
+That PR should let Cloud Health Office ask an external payer for claim status
+through the same vendor-neutral gateway, while keeping 276/277 status
+separate from 277CA acknowledgment state. Do not implement 835 ERA or
+payment posting in that PR.

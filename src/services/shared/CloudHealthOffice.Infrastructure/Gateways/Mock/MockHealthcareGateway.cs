@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Messaging;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CloudHealthOffice.Infrastructure.Gateways.Mock;
 
@@ -12,25 +14,31 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Mock;
 /// roster — it does <b>not</b> contact any external payer or clearinghouse.
 ///
 /// Its purpose is to prove the gateway abstraction end to end and to give
-/// automated tests a real implementation to resolve. It supports eligibility
-/// and claim submission. 277CA retrieve is not advertised; development
-/// injection uses the shared canonical processor.
+/// automated tests a real implementation to resolve. It supports eligibility,
+/// claim submission, and 275 attachments. 277CA retrieve is not advertised;
+/// development injection uses the shared canonical processor.
 ///
 /// Logging discipline: only non-PHI <see cref="GatewayTransactionMetadata"/>
-/// is logged. Subscriber identifiers, names, and dates of birth are never
-/// written to logs.
+/// is logged. Subscriber identifiers, names, dates of birth, and attachment
+/// bytes are never written to logs.
 /// </summary>
-public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway
+public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway, IClaimAttachmentGateway
 {
     /// <summary>The name this gateway registers under and is resolved by.</summary>
     public const string GatewayName = "Mock";
 
     private static readonly IReadOnlySet<GatewayCapability> SupportedCapabilities =
-        new HashSet<GatewayCapability> { GatewayCapability.Eligibility, GatewayCapability.ClaimSubmission };
+        new HashSet<GatewayCapability>
+        {
+            GatewayCapability.Eligibility,
+            GatewayCapability.ClaimSubmission,
+            GatewayCapability.ClaimAttachment
+        };
 
     private readonly ILogger<MockHealthcareGateway> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly IClaimTransmissionStore _transmissions;
+    private readonly ClaimAttachmentCoordinator _attachments;
 
     // Tenant-scoped roster: tenantId -> (subscriberId -> seeded member).
     // A member is only visible within the tenant it was seeded under, which is
@@ -40,8 +48,12 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
     public MockHealthcareGateway(
         ILogger<MockHealthcareGateway> logger,
         TimeProvider? timeProvider = null,
-        IClaimTransmissionStore? transmissions = null)
-        : this(logger, DefaultRoster(), timeProvider, transmissions)
+        IClaimTransmissionStore? transmissions = null,
+        IClaimAttachmentTransmissionStore? attachments = null,
+        IClaimAttachmentContentStore? content = null,
+        IOptions<HealthcareTransactionOptions>? options = null,
+        IMessageBus? messageBus = null)
+        : this(logger, DefaultRoster(), timeProvider, transmissions, attachments, content, options, messageBus)
     {
     }
 
@@ -49,12 +61,25 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         ILogger<MockHealthcareGateway> logger,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, MockMember>> roster,
         TimeProvider? timeProvider = null,
-        IClaimTransmissionStore? transmissions = null)
+        IClaimTransmissionStore? transmissions = null,
+        IClaimAttachmentTransmissionStore? attachments = null,
+        IClaimAttachmentContentStore? content = null,
+        IOptions<HealthcareTransactionOptions>? options = null,
+        IMessageBus? messageBus = null)
     {
         _logger = logger;
         _roster = roster;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _transmissions = transmissions ?? new InMemoryClaimTransmissionStore();
+        var attachmentOptions = options?.Value.ClaimAttachments ?? new ClaimAttachmentOptions();
+        _attachments = new ClaimAttachmentCoordinator(
+            _transmissions,
+            attachments ?? new InMemoryClaimAttachmentTransmissionStore(),
+            content ?? new InMemoryClaimAttachmentContentStore(attachmentOptions),
+            attachmentOptions,
+            logger,
+            _timeProvider,
+            messageBus);
     }
 
     public string Name => GatewayName;
@@ -132,6 +157,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
             PatientControlNumber = string.IsNullOrEmpty(request.ClaimId)
                 ? request.ClaimId
                 : request.ClaimId.Length <= 20 ? request.ClaimId : request.ClaimId[..20],
+            ServiceLineNumbers = request.ServiceLines.Select(l => l.LineNumber).Where(n => n > 0).ToList(),
             SubmittedAtUtc = startedAt
         };
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
@@ -170,6 +196,20 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         Log(metadata);
         return GatewayResponse<GatewayClaimSubmissionResult>.Success(ToResult(record, replay: false), metadata);
     }
+
+    public Task<GatewayResponse<ClaimAttachmentSubmissionResult>> SubmitAttachmentAsync(
+        ClaimAttachmentSubmissionRequest request,
+        CancellationToken cancellationToken = default) =>
+        _attachments.SubmitAsync(
+            GatewayName,
+            request,
+            (req, _, _) => Task.FromResult(new ClaimAttachmentTransportResult(
+                true,
+                $"mock-att-{req.AttachmentId}",
+                0,
+                GatewayErrorCategory.None,
+                null)),
+            cancellationToken);
 
     private GatewayResponse<GatewayClaimSubmissionResult> ClaimFail(
         GatewayClaimSubmissionRequest request,

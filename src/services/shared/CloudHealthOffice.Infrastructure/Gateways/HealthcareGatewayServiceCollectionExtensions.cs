@@ -41,6 +41,11 @@ public static class HealthcareGatewayServiceCollectionExtensions
 
         services.TryAddSingleton<IHealthcareGatewayResolver, HealthcareGatewayResolver>();
         RegisterClaimLifecycleStores(services, configuration);
+        services.TryAddSingleton<IClaimAttachmentContentStore>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<HealthcareTransactionOptions>>().Value.ClaimAttachments;
+            return new InMemoryClaimAttachmentContentStore(opts);
+        });
         services.TryAddSingleton<IClaimAcknowledgmentProcessor>(sp =>
             new ClaimAcknowledgmentProcessor(
                 sp.GetRequiredService<IClaimAcknowledgmentStore>(),
@@ -97,6 +102,8 @@ public static class HealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<ClaimLifecycleStoreBox>().Acknowledgments);
         services.TryAddSingleton<IClaimAcknowledgmentCursorStore>(sp =>
             sp.GetRequiredService<ClaimLifecycleStoreBox>().Cursors);
+        services.TryAddSingleton<IClaimAttachmentTransmissionStore>(sp =>
+            sp.GetRequiredService<ClaimLifecycleStoreBox>().Attachments);
     }
 
     private static ClaimLifecycleStoreBox CreateLifecycleBox(IServiceProvider sp, IConfiguration configuration)
@@ -122,13 +129,14 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 ? configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice"
                 : options.MongoDatabaseName;
             var mongo = new MongoClaimLifecycleStore(mongoClient.GetDatabase(databaseName), options);
-            return new ClaimLifecycleStoreBox(mongo, mongo, mongo);
+            return new ClaimLifecycleStoreBox(mongo, mongo, mongo, mongo);
         }
 
         return new ClaimLifecycleStoreBox(
             new InMemoryClaimTransmissionStore(),
             new InMemoryClaimAcknowledgmentStore(),
-            new InMemoryClaimAcknowledgmentCursorStore());
+            new InMemoryClaimAcknowledgmentCursorStore(),
+            new InMemoryClaimAttachmentTransmissionStore());
     }
 
     internal sealed class ClaimLifecycleStoreBox
@@ -136,15 +144,18 @@ public static class HealthcareGatewayServiceCollectionExtensions
         public ClaimLifecycleStoreBox(
             IClaimTransmissionStore transmissions,
             IClaimAcknowledgmentStore acknowledgments,
-            IClaimAcknowledgmentCursorStore cursors)
+            IClaimAcknowledgmentCursorStore cursors,
+            IClaimAttachmentTransmissionStore attachments)
         {
             Transmissions = transmissions;
             Acknowledgments = acknowledgments;
             Cursors = cursors;
+            Attachments = attachments;
         }
 
         public IClaimTransmissionStore Transmissions { get; }
         public IClaimAcknowledgmentStore Acknowledgments { get; }
         public IClaimAcknowledgmentCursorStore Cursors { get; }
+        public IClaimAttachmentTransmissionStore Attachments { get; }
     }
 }

@@ -69,6 +69,18 @@ public sealed class StediGatewayOptions
     public string DentalClaimPath { get; set; } = "/2024-04-01/dental-claims/submission";
 
     /// <summary>
+    /// Host for Stedi Claims APIs including Create Claim Attachment (275) JSON.
+    /// Separate from <see cref="BaseUrl"/> (healthcare.us.stedi.com).
+    /// </summary>
+    public string ClaimsBaseUrl { get; set; } = "https://claims.us.stedi.com";
+
+    /// <summary>
+    /// Create Claim Attachment (275) JSON path. API version 2025-03-07.
+    /// Returns a pre-signed upload URL; the 275 is unsolicited only.
+    /// </summary>
+    public string ClaimAttachmentCreatePath { get; set; } = "/2025-03-07/claim-attachments/file";
+
+    /// <summary>
     /// Host for Stedi Core APIs (Poll Transactions). Separate from
     /// <see cref="BaseUrl"/> because reports live on healthcare.us.stedi.com.
     /// </summary>
