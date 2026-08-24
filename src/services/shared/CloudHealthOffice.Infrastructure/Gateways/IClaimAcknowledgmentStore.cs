@@ -27,6 +27,12 @@ public interface IClaimAcknowledgmentStore
     /// </summary>
     Task<(bool Created, ClaimAcknowledgmentRecord Record)> TryCreateAsync(
         ClaimAcknowledgmentRecord record, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ClaimAcknowledgmentRecord>> ListPendingOutboxAsync(
+        int take, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ClaimAcknowledgmentRecord>> ListByStatusAsync(
+        ClaimAcknowledgmentStatus status, int take, CancellationToken ct = default);
 }
 
 public sealed class ClaimAcknowledgmentRecord
@@ -73,9 +79,35 @@ public sealed class ClaimAcknowledgmentRecord
 
     public List<GatewayClaimAcknowledgmentClaimResult> ClaimLevelResults { get; set; } = new();
 
-    public bool EventsPublished { get; set; }
+    public List<ClaimAcknowledgmentOutboxEntry> Outbox { get; set; } = new();
+
+    public int ProcessingAttempts { get; set; }
+
+    public GatewayErrorCategory LastErrorCategory { get; set; } = GatewayErrorCategory.None;
+
+    public string? LastError { get; set; }
+
+    public bool EventsPublished =>
+        Outbox.Count > 0 && Outbox.All(e => e.PublishedAtUtc is not null);
+
+    public bool HasPendingOutbox =>
+        Outbox.Any(e => e.PublishedAtUtc is null);
 
     public string IdempotencyKey => $"{Gateway}|{AcknowledgmentId}";
+}
+
+/// <summary>Durable per-event publication state. Identifier-only; no PHI.</summary>
+public sealed class ClaimAcknowledgmentOutboxEntry
+{
+    public string EventType { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+
+    public DateTimeOffset? PublishedAtUtc { get; set; }
+
+    public int AttemptCount { get; set; }
+
+    public string? LastError { get; set; }
 }
 
 public interface IClaimAcknowledgmentCursorStore
@@ -93,5 +125,10 @@ public sealed class ClaimAcknowledgmentCursor
 
     public DateTimeOffset? LastSuccessAtUtc { get; set; }
 
+    public DateTimeOffset? LastFailureAtUtc { get; set; }
+
     public DateTimeOffset? WindowStartUtc { get; set; }
+
+    /// <summary>UTC instant the last fully processed poll page covered through.</summary>
+    public DateTimeOffset? LastPolledThroughUtc { get; set; }
 }

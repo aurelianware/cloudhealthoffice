@@ -67,6 +67,22 @@ public sealed class InMemoryClaimTransmissionStore : IClaimTransmissionStore
         return Task.CompletedTask;
     }
 
+    public Task<(bool Created, ClaimTransmissionRecord Record)> TryCreateAsync(
+        ClaimTransmissionRecord record, CancellationToken ct = default)
+    {
+        var clone = Clone(record)!;
+        var key = IdempotencyKey(clone.TenantId, clone.IdempotencyKey);
+        if (!_idempotencyToId.TryAdd(key, clone.TransmissionId))
+        {
+            var existingId = _idempotencyToId[key];
+            _byId.TryGetValue(existingId, out var existing);
+            return Task.FromResult((false, Clone(existing) ?? clone));
+        }
+
+        _byId[clone.TransmissionId] = clone;
+        return Task.FromResult((true, Clone(clone)!));
+    }
+
     private IReadOnlyList<ClaimTransmissionRecord> Find(Func<ClaimTransmissionRecord, bool> predicate) =>
         _byId.Values.Where(predicate).Select(r => Clone(r)!).ToList();
 

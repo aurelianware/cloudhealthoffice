@@ -369,7 +369,7 @@ public class ClaimAcknowledgmentProcessorTests
     {
         var store = new InMemoryClaimTransmissionStore();
         var acks = new InMemoryClaimAcknowledgmentStore();
-        var bus = new FailThenCaptureMessageBus(failFirstSends: 1);
+        var bus = new FailThenCaptureMessageBus(failFirstSends: 2);
         var tx = Seed(store);
         var processor = Processor(store, acks, bus);
 

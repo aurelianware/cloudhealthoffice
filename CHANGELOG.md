@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 277CA acknowledgment production hardening
+
+Durable Mongo persistence for transmissions, 277CA acknowledgments, outbox,
+and poll cursors. Non-Development hosts fail closed unless Mongo is
+configured. `TryCreateAsync` is unique-index atomic. Outbox publication is
+retried by a hosted dispatcher. Transmission state transitions are guarded
+so malformed/duplicate events cannot rewind or overwrite a completed 277CA
+outcome. Same-key 837 submit after 277CA is a replay.
+
 ### 277CA claim acknowledgment lifecycle through Stedi
 
 Vendor-neutral `GatewayClaimAcknowledgment` plus `IClaimAcknowledgmentGateway`
