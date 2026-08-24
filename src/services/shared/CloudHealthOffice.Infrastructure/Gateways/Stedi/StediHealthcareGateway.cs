@@ -13,9 +13,9 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 /// Real external eligibility gateway backed by the Stedi Healthcare real-time
 /// eligibility (270/271) JSON API.
 ///
-/// It advertises eligibility, claim submission, and 277CA acknowledgment.
-/// Claim status, attachments, and remittance stay explicitly unsupported
-/// even though Stedi offers some of them.
+/// It advertises eligibility, claim submission, 277CA acknowledgment, and
+/// 275 claim attachments. Claim status and remittance stay explicitly
+/// unsupported even though Stedi offers some of them.
 ///
 /// The gateway is pure transport + translation: it maps the canonical request to
 /// Stedi's JSON, executes the call, and normalizes the payer's response back into
@@ -23,7 +23,7 @@ namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 /// accumulator, or adjudication logic — the response is an external payer
 /// eligibility statement, not a Cloud Health Office calculation.
 /// </summary>
-public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway, IClaimAcknowledgmentGateway
+public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissionGateway, IClaimAcknowledgmentGateway, IClaimAttachmentGateway
 {
     /// <summary>The name this gateway registers under and is resolved by.</summary>
     public const string GatewayName = "Stedi";
@@ -33,14 +33,17 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         {
             GatewayCapability.Eligibility,
             GatewayCapability.ClaimSubmission,
-            GatewayCapability.ClaimAcknowledgment
+            GatewayCapability.ClaimAcknowledgment,
+            GatewayCapability.ClaimAttachment
         };
 
     private readonly StediEligibilityApiClient _apiClient;
     private readonly StediClaimApiClient? _claimClient;
     private readonly StediClaimAcknowledgmentApiClient? _acknowledgmentClient;
+    private readonly StediClaimAttachmentApiClient? _attachmentClient;
     private readonly IStediPayerResolver _payerResolver;
     private readonly IClaimTransmissionStore _transmissions;
+    private readonly ClaimAttachmentCoordinator _attachments;
     private readonly IOptions<StediGatewayOptions> _options;
     private readonly ILogger<StediHealthcareGateway> _logger;
     private readonly TimeProvider _timeProvider;
@@ -53,16 +56,31 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         TimeProvider? timeProvider = null,
         StediClaimApiClient? claimClient = null,
         IClaimTransmissionStore? transmissions = null,
-        StediClaimAcknowledgmentApiClient? acknowledgmentClient = null)
+        StediClaimAcknowledgmentApiClient? acknowledgmentClient = null,
+        StediClaimAttachmentApiClient? attachmentClient = null,
+        IClaimAttachmentTransmissionStore? attachmentStore = null,
+        IClaimAttachmentContentStore? content = null,
+        IOptions<HealthcareTransactionOptions>? transactionOptions = null,
+        CloudHealthOffice.Infrastructure.Messaging.IMessageBus? messageBus = null)
     {
         _apiClient = apiClient;
         _claimClient = claimClient;
         _acknowledgmentClient = acknowledgmentClient;
+        _attachmentClient = attachmentClient;
         _payerResolver = payerResolver;
         _transmissions = transmissions ?? new InMemoryClaimTransmissionStore();
         _options = options;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        var attachmentOptions = transactionOptions?.Value.ClaimAttachments ?? new ClaimAttachmentOptions();
+        _attachments = new ClaimAttachmentCoordinator(
+            _transmissions,
+            attachmentStore ?? new InMemoryClaimAttachmentTransmissionStore(),
+            content ?? new InMemoryClaimAttachmentContentStore(attachmentOptions),
+            attachmentOptions,
+            logger,
+            _timeProvider,
+            messageBus);
     }
 
     public string Name => GatewayName;
@@ -231,6 +249,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             CorrelationId = request.CorrelationId,
             PayerId = request.PayerId,
             PatientControlNumber = Truncate(request.ClaimId, 20),
+            ServiceLineNumbers = request.ServiceLines.Select(l => l.LineNumber).Where(n => n > 0).ToList(),
             SubmittedAtUtc = startedAt
         };
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
@@ -331,6 +350,105 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         Log(metadata);
         RecordClaimMetric(request, record.Status, record.ErrorCategory, metadata.Latency);
         return GatewayResponse<GatewayClaimSubmissionResult>.Success(result, metadata);
+    }
+
+    public async Task<GatewayResponse<ClaimAttachmentSubmissionResult>> SubmitAttachmentAsync(
+        ClaimAttachmentSubmissionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var startedAt = _timeProvider.GetUtcNow();
+        var stopwatch = Stopwatch.GetTimestamp();
+
+        var configErrors = _options.Value.Validate();
+        if (configErrors.Count > 0)
+        {
+            return AttachmentConfigFail(request, startedAt, stopwatch,
+                "Stedi gateway is not configured correctly: " + string.Join(" ", configErrors));
+        }
+
+        if (_attachmentClient is null)
+        {
+            return AttachmentConfigFail(request, startedAt, stopwatch,
+                "Stedi claim attachment client is not registered.");
+        }
+
+        var transmission = string.IsNullOrWhiteSpace(request.TransmissionId)
+            ? null
+            : await _transmissions.GetByIdAsync(request.TransmissionId, cancellationToken).ConfigureAwait(false);
+        var payerId = request.PayerId ?? transmission?.PayerId;
+        var tenantId = !string.IsNullOrWhiteSpace(transmission?.TenantId) ? transmission.TenantId : request.TenantId;
+        var resolution = await _payerResolver
+            .ResolveAsync(tenantId, payerId, HealthcareTransactionType.ClaimAttachment275, cancellationToken)
+            .ConfigureAwait(false);
+        if (resolution.Status != PayerResolutionStatus.Found ||
+            string.IsNullOrWhiteSpace(resolution.ExternalIdentifierValue))
+        {
+            var category = MapResolution(resolution.Status);
+            var fail = AttachmentConfigFail(
+                request, startedAt, stopwatch,
+                resolution.Message ?? "Payer could not be resolved for this attachment.",
+                category);
+            return fail;
+        }
+
+        return await _attachments.SubmitAsync(
+            GatewayName,
+            request,
+            async (req, content, ct) =>
+            {
+                try
+                {
+                    var apiResult = await _attachmentClient
+                        .SubmitAsync(req, content, ct)
+                        .ConfigureAwait(false);
+                    return new ClaimAttachmentTransportResult(
+                        true,
+                        apiResult.ExternalTransactionId ?? apiResult.Response.AttachmentId,
+                        apiResult.RetryCount,
+                        GatewayErrorCategory.None,
+                        null);
+                }
+                catch (StediApiException ex)
+                {
+                    return new ClaimAttachmentTransportResult(
+                        false, null, ex.RetryCount, ex.Category, ex.Message);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return new ClaimAttachmentTransportResult(
+                        false, null, 0, GatewayErrorCategory.StorageUnavailable, ex.Message);
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private GatewayResponse<ClaimAttachmentSubmissionResult> AttachmentConfigFail(
+        ClaimAttachmentSubmissionRequest request,
+        DateTimeOffset startedAt,
+        long stopwatchStart,
+        string message,
+        GatewayErrorCategory category = GatewayErrorCategory.Configuration)
+    {
+        var status = category switch
+        {
+            GatewayErrorCategory.Timeout => GatewayTransactionStatus.TimedOut,
+            GatewayErrorCategory.EnrollmentRequired => GatewayTransactionStatus.Failed,
+            _ => GatewayTransactionStatus.Failed
+        };
+        var metadata = new GatewayTransactionMetadata
+        {
+            GatewayName = GatewayName,
+            TransactionType = HealthcareTransactionType.ClaimAttachment275,
+            SubmittedAtUtc = startedAt,
+            CompletedAtUtc = startedAt + GetElapsed(stopwatchStart),
+            Status = status,
+            CorrelationId = request.CorrelationId,
+            TenantId = request.TenantId,
+            Latency = GetElapsed(stopwatchStart),
+            ErrorCategory = category
+        };
+        Log(metadata);
+        return GatewayResponse<ClaimAttachmentSubmissionResult>.Failure(message, metadata);
     }
 
     public async Task<GatewayResponse<GatewayClaimAcknowledgment>> RetrieveAcknowledgmentAsync(

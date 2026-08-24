@@ -14,6 +14,8 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
     private readonly IClaimAcknowledgmentStore _acknowledgments;
     private readonly IClaimTransmissionStore _transmissions;
     private readonly IClaimAcknowledgmentCursorStore _cursors;
+    private readonly IClaimAttachmentTransmissionStore _attachments;
+    private readonly IClaimAttachmentContentStore _content;
     private readonly IOptions<HealthcareTransactionOptions> _options;
     private readonly IHostEnvironment? _environment;
     private readonly ILogger<ClaimLifecycleStoreGuard> _logger;
@@ -22,6 +24,8 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
         IClaimAcknowledgmentStore acknowledgments,
         IClaimTransmissionStore transmissions,
         IClaimAcknowledgmentCursorStore cursors,
+        IClaimAttachmentTransmissionStore attachments,
+        IClaimAttachmentContentStore content,
         IOptions<HealthcareTransactionOptions> options,
         ILogger<ClaimLifecycleStoreGuard> logger,
         IHostEnvironment? environment = null)
@@ -29,6 +33,8 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
         _acknowledgments = acknowledgments;
         _transmissions = transmissions;
         _cursors = cursors;
+        _attachments = attachments;
+        _content = content;
         _options = options;
         _logger = logger;
         _environment = environment;
@@ -38,15 +44,18 @@ internal sealed class ClaimLifecycleStoreGuard : IHostedService
     {
         var ephemeral = _acknowledgments is InMemoryClaimAcknowledgmentStore ||
                         _transmissions is InMemoryClaimTransmissionStore ||
-                        _cursors is InMemoryClaimAcknowledgmentCursorStore;
+                        _cursors is InMemoryClaimAcknowledgmentCursorStore ||
+                        _attachments is InMemoryClaimAttachmentTransmissionStore ||
+                        _content is InMemoryClaimAttachmentContentStore;
         var allowed = ClaimLifecycleStoreResolver.AllowsEphemeral(_options.Value.ClaimLifecycle, _environment);
 
         if (ephemeral && !allowed)
         {
             throw new InvalidOperationException(
                 "HealthcareTransactions:ClaimLifecycle:Store must be Mongo (with IMongoClient) " +
-                "in non-Development environments. In-memory 277CA storage is not durable and is " +
-                "not used silently in production.");
+                "and IClaimAttachmentContentStore must be a durable implementation " +
+                "in non-Development environments. In-memory 277CA/attachment storage is not " +
+                "durable and is not used silently in production.");
         }
 
         if (!ephemeral)

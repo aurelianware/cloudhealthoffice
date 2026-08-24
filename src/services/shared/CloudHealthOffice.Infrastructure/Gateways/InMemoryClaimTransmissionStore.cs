@@ -143,6 +143,7 @@ public sealed class InMemoryClaimTransmissionStore : IClaimTransmissionStore
             CorrelationId = source.CorrelationId,
             PayerId = source.PayerId,
             PatientControlNumber = source.PatientControlNumber,
+            ServiceLineNumbers = source.ServiceLineNumbers.ToList(),
             SubmittedAtUtc = source.SubmittedAtUtc,
             CompletedAtUtc = source.CompletedAtUtc,
             AcknowledgedAtUtc = source.AcknowledgedAtUtc,

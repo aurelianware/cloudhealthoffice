@@ -71,7 +71,11 @@ public class GatewayVendorNeutralityTests
             typeof(GatewayClaimAcknowledgmentLineResult),
             typeof(GatewayClaimAcknowledgmentIssue),
             typeof(ClaimAcknowledgmentDiscovery),
-            typeof(ClaimAcknowledgmentRetrievalRequest)
+            typeof(ClaimAcknowledgmentRetrievalRequest),
+            typeof(ClaimAttachmentSubmissionRequest),
+            typeof(ClaimAttachmentSubmissionResult),
+            typeof(ClaimAttachmentContentReference),
+            typeof(ClaimAttachmentTransmissionRecord)
         };
 
         foreach (var model in models)

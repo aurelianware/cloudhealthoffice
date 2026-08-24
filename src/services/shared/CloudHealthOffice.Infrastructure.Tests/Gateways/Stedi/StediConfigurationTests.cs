@@ -72,7 +72,9 @@ public class StediConfigurationTests
         gateway.Name.Should().Be(StediHealthcareGateway.GatewayName);
         resolver.ResolveCapability<IEligibilityGateway>().Should().BeAssignableTo<IEligibilityGateway>();
         resolver.ResolveCapability<IClaimAcknowledgmentGateway>().Should().BeAssignableTo<IClaimAcknowledgmentGateway>();
+        resolver.ResolveCapability<IClaimAttachmentGateway>().Should().BeAssignableTo<IClaimAttachmentGateway>();
         gateway.Supports(GatewayCapability.ClaimAcknowledgment).Should().BeTrue();
+        gateway.Supports(GatewayCapability.ClaimAttachment).Should().BeTrue();
     }
 
     [Fact]

@@ -88,6 +88,30 @@ public class StediLiveSmokeTests
     }
 
     /// <summary>
+    /// Live 275 JSON create+upload requires a production-account test API key,
+    /// the same constraint as test 837s. Opt-in via CHO_STEDI_LIVE_CLAIM_TESTS.
+    /// Sandbox accounts are not claimed as 275-capable.
+    /// </summary>
+    [SkippableFact]
+    public async Task Sandbox_ClaimAttachment_IsDocumentedAsUnavailableOnSandboxAccounts()
+    {
+        Skip.If(
+            !string.Equals(Environment.GetEnvironmentVariable("CHO_STEDI_LIVE_CLAIM_TESTS"), "true",
+                StringComparison.OrdinalIgnoreCase),
+            "CHO_STEDI_LIVE_CLAIM_TESTS is not set. Stedi sandbox accounts cannot submit test 275s; " +
+            "live attachment tests require a production-account test API key.");
+
+        var eligibility = CreateLiveGateway(out var apiKey, DocumentedTradingPartnerId);
+        Skip.If(string.IsNullOrWhiteSpace(apiKey), "STEDI_API_KEY is not set.");
+
+        var attachments = eligibility as IClaimAttachmentGateway;
+        Skip.If(attachments is null, "Live Stedi gateway does not implement claim attachment.");
+        attachments.Should().NotBeNull();
+        attachments!.Supports(GatewayCapability.ClaimAttachment).Should().BeTrue();
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
     /// Live 277CA retrieve requires a transactionId from a test claim, which
     /// Stedi sandbox accounts cannot produce. Opt-in via
     /// CHO_STEDI_LIVE_CLAIM_TESTS + CHO_STEDI_277CA_TRANSACTION_ID.

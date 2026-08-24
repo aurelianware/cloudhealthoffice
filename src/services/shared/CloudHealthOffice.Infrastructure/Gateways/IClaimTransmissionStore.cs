@@ -71,6 +71,12 @@ public sealed class ClaimTransmissionRecord
     /// <summary>Patient control number sent on the 837 (typically the CHO claim id).</summary>
     public string? PatientControlNumber { get; set; }
 
+    /// <summary>
+    /// Line numbers from the original submitted claim. Used to validate
+    /// service-line 275 association. Empty when the claim had no lines.
+    /// </summary>
+    public List<int> ServiceLineNumbers { get; set; } = new();
+
     public DateTimeOffset SubmittedAtUtc { get; set; }
 
     public DateTimeOffset? CompletedAtUtc { get; set; }

@@ -145,5 +145,32 @@ public enum GatewayErrorCategory
     UnableToMatchTransmission,
 
     /// <summary>The discovered transaction is not a supported acknowledgment (e.g. 835).</summary>
-    UnsupportedAcknowledgment
+    UnsupportedAcknowledgment,
+
+    /// <summary>Attachment bytes were not found in the secure content store.</summary>
+    AttachmentNotFound,
+
+    /// <summary>The referenced claim transmission does not exist.</summary>
+    TransmissionNotFound,
+
+    /// <summary>Claim, tenant, or payer identifiers do not match the transmission.</summary>
+    ClaimMismatch,
+
+    /// <summary>The service line was not present on the original submitted claim.</summary>
+    ServiceLineNotFound,
+
+    /// <summary>The attachment MIME type is not in the gateway allow-list.</summary>
+    UnsupportedContentType,
+
+    /// <summary>The attachment exceeds CHO or vendor size limits.</summary>
+    AttachmentTooLarge,
+
+    /// <summary>The secure content store could not be reached.</summary>
+    StorageUnavailable,
+
+    /// <summary>The gateway rejected the attachment after transport.</summary>
+    GatewayRejected,
+
+    /// <summary>Content scanning marked the attachment unsafe or quarantined.</summary>
+    AttachmentUnsafe
 }

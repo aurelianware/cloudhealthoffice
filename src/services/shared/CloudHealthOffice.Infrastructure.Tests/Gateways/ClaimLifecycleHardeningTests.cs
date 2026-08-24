@@ -174,7 +174,9 @@ public class ClaimLifecycleHardeningTests
         var sp = services.BuildServiceProvider();
         var guard = ActivatorUtilities.CreateInstance<ClaimLifecycleStoreGuard>(sp);
         var act = () => guard.StartAsync(CancellationToken.None);
-        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("Mongo");
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message
+            .Should().Contain("Mongo")
+            .And.Contain("IClaimAttachmentContentStore");
     }
 
     private sealed class FakeHostEnvironment : IHostEnvironment

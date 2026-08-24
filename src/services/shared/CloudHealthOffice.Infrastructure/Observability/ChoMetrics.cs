@@ -399,6 +399,27 @@ public static class ChoMetrics
             unit: "s",
             description: "Inbound 277CA acknowledgment processing duration in seconds");
 
+    /// <summary>
+    /// Counter tracking outbound 275 attachment transmissions.
+    /// Dimensions: cho.gateway, cho.status, cho.error_category.
+    /// Never labeled with member identity or file contents.
+    /// </summary>
+    public static readonly Counter<long> ClaimAttachments =
+        Meter.CreateCounter<long>(
+            "cho.claim_attachment.transmissions.total",
+            unit: "{attachment}",
+            description: "Outbound claim attachment transmissions by gateway and status");
+
+    /// <summary>
+    /// Histogram tracking outbound 275 attachment latency (seconds).
+    /// Dimensions: cho.gateway.
+    /// </summary>
+    public static readonly Histogram<double> ClaimAttachmentDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_attachment.duration",
+            unit: "s",
+            description: "Outbound claim attachment submission duration in seconds");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

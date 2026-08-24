@@ -28,7 +28,8 @@ public class EligibilityApiFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["HealthcareTransactions:Gateways:Stedi:WebhookCredentialValue"] = "test-webhook-secret",
-                ["HealthcareTransactions:Gateways:Stedi:WebhookCredentialHeaderName"] = "Authorization"
+                ["HealthcareTransactions:Gateways:Stedi:WebhookCredentialHeaderName"] = "Authorization",
+                ["HealthcareTransactions:ClaimAttachments:MaxContentLengthBytes"] = "32"
             });
         });
 
