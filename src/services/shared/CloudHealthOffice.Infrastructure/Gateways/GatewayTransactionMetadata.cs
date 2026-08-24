@@ -139,5 +139,11 @@ public enum GatewayErrorCategory
     DuplicateSubmission,
 
     /// <summary>The claim type cannot be represented from the available CHO data.</summary>
-    ClaimTypeNotReady
+    ClaimTypeNotReady,
+
+    /// <summary>A 277CA could not be matched uniquely to a durable transmission.</summary>
+    UnableToMatchTransmission,
+
+    /// <summary>The discovered transaction is not a supported acknowledgment (e.g. 835).</summary>
+    UnsupportedAcknowledgment
 }

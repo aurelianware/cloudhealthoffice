@@ -1,13 +1,18 @@
+using CloudHealthOffice.Infrastructure.Gateways.Models;
+
 namespace CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 
 /// <summary>
-/// Gateway capability for 277CA claim acknowledgment.
+/// Gateway capability for retrieving a 277CA claim acknowledgment.
 ///
-/// <b>Foundation only.</b> The transaction method and canonical models are
-/// intentionally deferred to a later PR (claim acknowledgment is out of scope
-/// here). The interface exists so gateways can advertise
-/// <see cref="GatewayCapability.ClaimAcknowledgment"/> without a no-op stub.
+/// Stedi (and similar clearinghouses) deliver 277CAs asynchronously: a webhook
+/// or poll item is a pointer, and this method retrieves the normalized
+/// acknowledgment. Applying it to a transmission is
+/// <see cref="IClaimAcknowledgmentProcessor"/> — not this interface.
 /// </summary>
 public interface IClaimAcknowledgmentGateway : IHealthcareTransactionGateway
 {
+    Task<GatewayResponse<GatewayClaimAcknowledgment>> RetrieveAcknowledgmentAsync(
+        ClaimAcknowledgmentRetrievalRequest request,
+        CancellationToken cancellationToken = default);
 }

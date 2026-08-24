@@ -51,5 +51,27 @@ public enum GatewayClaimTransmissionStatus
     Transmitted,
     SubmissionAcceptedByGateway,
     SubmissionRejectedByGateway,
-    Failed
+    Failed,
+    AwaitingAcknowledgment,
+    AcknowledgmentAccepted,
+    AcknowledgmentRejected,
+    AcknowledgmentPartial,
+    AcknowledgmentFailed
+}
+
+/// <summary>
+/// Transmission statuses that already represent a completed outbound submit.
+/// A later 277CA must not reopen the same idempotency key for another 837.
+/// Intentional resubmit uses a new claim version / frequency.
+/// </summary>
+public static class GatewayClaimTransmissionStatuses
+{
+    public static bool PreventsDuplicateSubmit(GatewayClaimTransmissionStatus status) =>
+        status is GatewayClaimTransmissionStatus.SubmissionAcceptedByGateway
+            or GatewayClaimTransmissionStatus.Transmitted
+            or GatewayClaimTransmissionStatus.AwaitingAcknowledgment
+            or GatewayClaimTransmissionStatus.AcknowledgmentAccepted
+            or GatewayClaimTransmissionStatus.AcknowledgmentRejected
+            or GatewayClaimTransmissionStatus.AcknowledgmentPartial
+            or GatewayClaimTransmissionStatus.AcknowledgmentFailed;
 }

@@ -12,6 +12,21 @@ public interface IClaimTransmissionStore
     Task<ClaimTransmissionRecord?> GetByIdempotencyKeyAsync(
         string tenantId, string idempotencyKey, CancellationToken ct = default);
 
+    Task<ClaimTransmissionRecord?> GetByIdAsync(
+        string transmissionId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ClaimTransmissionRecord>> FindBySubmissionIdAsync(
+        string gatewayName, string submissionId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ClaimTransmissionRecord>> FindByExternalTransactionIdAsync(
+        string gatewayName, string externalTransactionId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPatientControlNumberAsync(
+        string gatewayName, string patientControlNumber, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ClaimTransmissionRecord>> FindByCorrelationIdAsync(
+        string gatewayName, string correlationId, CancellationToken ct = default);
+
     Task SaveAsync(ClaimTransmissionRecord record, CancellationToken ct = default);
 }
 
@@ -43,9 +58,18 @@ public sealed class ClaimTransmissionRecord
 
     public string? CorrelationId { get; set; }
 
+    /// <summary>Canonical payer id from the original submission. Not taken from inbound 277CA text.</summary>
+    public string? PayerId { get; set; }
+
+    /// <summary>Patient control number sent on the 837 (typically the CHO claim id).</summary>
+    public string? PatientControlNumber { get; set; }
+
     public DateTimeOffset SubmittedAtUtc { get; set; }
 
     public DateTimeOffset? CompletedAtUtc { get; set; }
+
+    /// <summary>When a 277CA was last applied to this transmission. Does not replace <see cref="SubmittedAtUtc"/>.</summary>
+    public DateTimeOffset? AcknowledgedAtUtc { get; set; }
 
     public int RetryCount { get; set; }
 
