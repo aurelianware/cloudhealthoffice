@@ -17,7 +17,7 @@ deployment guarantee.
 | FHIR integration | [fhir-conformance.md](fhir-conformance.md), [fhir-endpoint-projection.md](fhir-endpoint-projection.md), [claim-fhir-projection.md](claim-fhir-projection.md) |
 | X12 processing | [837 claims pipeline](../features/837-CLAIMS-PIPELINE.md), [834 enrollment](../features/834-IMPLEMENTATION-SUMMARY.md), [276/277 inbound/ECS](../features/276-277-IMPLEMENTATION-COMPLETE.md), outbound 276/277 via [healthcare-transaction-gateway.md](healthcare-transaction-gateway.md), [277 value-adds](../features/VALUEADDS277-README.md) |
 | Event flow | [shared-messagebus.md](shared-messagebus.md) |
-| Payer / clearinghouse connectivity | [healthcare-transaction-gateway.md](healthcare-transaction-gateway.md) |
+| Payer / clearinghouse connectivity | [healthcare-transaction-gateway.md](healthcare-transaction-gateway.md), field note: [Stedi interoperability](../engineering-field-notes/stedi-interoperability.md) |
 | Claim intelligence | [claim-intelligence.md](claim-intelligence.md) |
 | Authorization flow | [Prior Authorization API](../features/PRIOR-AUTHORIZATION-API.md), [authorization request](../features/AUTHORIZATION-REQUEST.md), [authorization inquiry](../features/AUTHORIZATION-INQUIRY.md) |
 | Sentinel and rules | [declarative-benefit-model.md](declarative-benefit-model.md), [claim-ai-examination.md](claim-ai-examination.md), [claim-scrubbing-pipeline.md](claim-scrubbing-pipeline.md) |

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560" role="img" aria-labelledby="t d">
+  <title id="t">HIPAA transaction spine implemented through Stedi</title>
+  <desc id="d">Six sequential transactions from eligibility through remittance, then claim intelligence.</desc>
+  <rect width="1400" height="560" fill="#05070a"/>
+  <text x="700" y="44" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="800">One claim life, six HIPAA transactions, one platform</text>
+  <text x="700" y="74" text-anchor="middle" fill="#00ffff" font-family="Segoe UI, system-ui, sans-serif" font-size="14">Shipped as sequential PRs on a vendor-neutral gateway. None of these overwrites the others.</text>
+
+  <g font-family="Segoe UI, system-ui, sans-serif">
+    <g transform="translate(40,130)">
+      <rect width="200" height="210" rx="12" fill="rgba(0,255,255,0.07)" stroke="#00ffff"/>
+      <text x="100" y="42" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">270 / 271</text>
+      <text x="100" y="78" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="800">Eligibility</text>
+      <text x="100" y="110" text-anchor="middle" fill="#c9d1d9" font-size="13">Is the member covered?</text>
+      <text x="100" y="168" text-anchor="middle" fill="#00ff88" font-size="12">Shipped</text>
+    </g>
+    <g transform="translate(260,130)">
+      <rect width="200" height="210" rx="12" fill="rgba(0,255,255,0.07)" stroke="#00ffff"/>
+      <text x="100" y="42" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">837  ·  #1111</text>
+      <text x="100" y="78" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="800">Submit</text>
+      <text x="100" y="110" text-anchor="middle" fill="#c9d1d9" font-size="13">Send the claim</text>
+      <text x="100" y="168" text-anchor="middle" fill="#00ff88" font-size="12">Professional / Inst. / Dental</text>
+    </g>
+    <g transform="translate(480,130)">
+      <rect width="200" height="210" rx="12" fill="rgba(0,255,255,0.07)" stroke="#00ffff"/>
+      <text x="100" y="42" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">277CA  ·  #1112</text>
+      <text x="100" y="78" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="800">Acknowledge</text>
+      <text x="100" y="110" text-anchor="middle" fill="#c9d1d9" font-size="13">Accepted into processing</text>
+      <text x="100" y="168" text-anchor="middle" fill="#00ff88" font-size="12">Not paid. Not adjudicated.</text>
+    </g>
+    <g transform="translate(700,130)">
+      <rect width="200" height="210" rx="12" fill="rgba(0,255,255,0.07)" stroke="#00ffff"/>
+      <text x="100" y="42" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">276 / 277  ·  #1117</text>
+      <text x="100" y="78" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="800">Status</text>
+      <text x="100" y="110" text-anchor="middle" fill="#c9d1d9" font-size="13">Where is it now?</text>
+      <text x="100" y="168" text-anchor="middle" fill="#00ff88" font-size="12">Does not invent an 835</text>
+    </g>
+    <g transform="translate(920,130)">
+      <rect width="200" height="210" rx="12" fill="rgba(0,255,255,0.07)" stroke="#00ffff"/>
+      <text x="100" y="42" text-anchor="middle" fill="#00ffff" font-size="13" font-weight="700">275  ·  #1115 / #1116</text>
+      <text x="100" y="78" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="800">Attachments</text>
+      <text x="100" y="110" text-anchor="middle" fill="#c9d1d9" font-size="13">Does the payer need more?</text>
+      <text x="100" y="168" text-anchor="middle" fill="#00ff88" font-size="12">Outbound + inbound</text>
+    </g>
+    <g transform="translate(1140,130)">
+      <rect width="220" height="210" rx="12" fill="rgba(0,255,136,0.08)" stroke="#00ff88"/>
+      <text x="110" y="42" text-anchor="middle" fill="#00ff88" font-size="13" font-weight="700">835  ·  #1118</text>
+      <text x="110" y="78" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="800">Remittance</text>
+      <text x="110" y="110" text-anchor="middle" fill="#c9d1d9" font-size="13">What was paid?</text>
+      <text x="110" y="168" text-anchor="middle" fill="#00ff88" font-size="12">Stored. Not posted yet.</text>
+    </g>
+  </g>
+
+  <rect x="40" y="380" width="1320" height="140" rx="14" fill="rgba(0,255,136,0.06)" stroke="#00ff88"/>
+  <text x="700" y="434" text-anchor="middle" fill="#00ff88" font-family="ui-monospace, Menlo, monospace" font-size="13" font-weight="700" letter-spacing="2">CLAIM INTELLIGENCE  ·  #1119</text>
+  <text x="700" y="472" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="22" font-weight="700">GET /api/claims/{claimId}/intelligence</text>
+  <text x="700" y="504" text-anchor="middle" fill="#c9d1d9" font-family="Segoe UI, system-ui, sans-serif" font-size="15">Where is my claim? What happened? Is action required? How much was paid?</text>
+</svg>
