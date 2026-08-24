@@ -4,7 +4,7 @@ Date: 2026-08-23 UTC
 
 Branch: `feat/stedi-277ca`
 
-Commit: `137154c4`
+Commit: `2d1990b5`
 
 ## Stedi delivery
 
