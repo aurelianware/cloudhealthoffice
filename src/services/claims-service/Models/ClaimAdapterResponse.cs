@@ -130,6 +130,7 @@ public class AdapterClaim
     public string? ClaimNotes { get; set; }
     public string? EDI837ControlNumber { get; set; }
     public string? EDI835ControlNumber { get; set; }
+    public string? InboundRemittanceId { get; set; }
 
     // Version-chain identity (5.1)
     public string ClaimVersionId { get; set; } = string.Empty;
@@ -192,6 +193,7 @@ public class AdapterClaim
         ClaimNotes = src.ClaimNotes,
         EDI837ControlNumber = src.EDI837ControlNumber,
         EDI835ControlNumber = src.EDI835ControlNumber,
+        InboundRemittanceId = src.InboundRemittanceId,
         ClaimVersionId = src.ClaimVersionId,
         VersionNumber = src.VersionNumber,
         VersionState = src.VersionState,
@@ -250,6 +252,7 @@ public class AdapterClaim
         ClaimNotes = ClaimNotes,
         EDI837ControlNumber = EDI837ControlNumber,
         EDI835ControlNumber = EDI835ControlNumber,
+        InboundRemittanceId = InboundRemittanceId,
         ClaimVersionId = ClaimVersionId,
         VersionNumber = VersionNumber,
         VersionState = VersionState,

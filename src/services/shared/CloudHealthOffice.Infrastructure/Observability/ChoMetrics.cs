@@ -480,6 +480,16 @@ public static class ChoMetrics
             description: "Claims included on inbound 835 remittances by match outcome");
 
     /// <summary>
+    /// Counter tracking 835 remittances posted to claim financials and accumulators.
+    /// Dimensions: cho.gateway, cho.status. Never labeled with check/trace numbers.
+    /// </summary>
+    public static readonly Counter<long> RemittancePosted =
+        Meter.CreateCounter<long>(
+            "cho.remittance.posted.total",
+            unit: "{remittance}",
+            description: "Inbound 835 remittances posted to claims and accumulators");
+
+    /// <summary>
     /// Counter tracking claim intelligence views generated.
     /// Dimensions: cho.status, cho.next_action. Never labeled with PHI.
     /// </summary>

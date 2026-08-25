@@ -16,6 +16,8 @@ public static class RemittanceMessageTypes
     public const string Matched = "RemittanceMatched";
 
     public const string Unmatched = "RemittanceUnmatched";
+
+    public const string Posted = "RemittancePosted";
 }
 
 /// <summary>Identifier-only remittance event. Must not carry PHI or bank data.</summary>

@@ -113,5 +113,6 @@ payloads.
 
 ## Out of scope
 
-Provider portal UI, CloudDentalOffice changes, payment posting, accounting,
-AI assistants, denial prediction, and automated follow-up.
+Provider portal UI, CloudDentalOffice changes, accounting, EFT
+reconciliation, AI assistants, denial prediction, and automated follow-up.
+Payment posting is `IRemittancePoster`, not this read model.

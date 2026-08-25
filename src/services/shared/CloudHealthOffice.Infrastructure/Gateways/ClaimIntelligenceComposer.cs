@@ -144,7 +144,8 @@ public sealed class ClaimIntelligenceComposer : IClaimIntelligenceComposer
             primary, latestAck, latestStatus, matchedRemittance, remittedClaim);
         var missing = ClaimIntelligenceMapper.MissingLinks(
             primary, latestAck, latestStatus, matchedRemittance);
-        var next = ClaimIntelligenceMapper.MapNextAction(lifecycle, latestStatus, attachments);
+        var next = ClaimIntelligenceMapper.MapNextAction(
+            lifecycle, latestStatus, attachments, matchedRemittance?.Status);
         var payer = await ResolvePayerAsync(primary?.PayerId, ct).ConfigureAwait(false);
         var source = primary?.InquirySource;
         var financial = MapFinancial(primary, remittedClaim, matchedRemittance);
@@ -363,10 +364,12 @@ public sealed class ClaimIntelligenceComposer : IClaimIntelligenceComposer
             events.Add(Event(
                 $"835:{remittance.ReceiptId}",
                 remittance.ReceivedAtUtc,
-                remittance.Status is RemittanceLifecycleStatus.AvailableForPosting
-                    or RemittanceLifecycleStatus.Matched
-                    ? "ReadyForPosting"
-                    : "835Received",
+                remittance.Status == RemittanceLifecycleStatus.Posted
+                    ? "Posted"
+                    : remittance.Status is RemittanceLifecycleStatus.AvailableForPosting
+                        or RemittanceLifecycleStatus.Matched
+                        ? "ReadyForPosting"
+                        : "835Received",
                 "835",
                 remittance.Status.ToString(),
                 claim is null ? null : "matched"));

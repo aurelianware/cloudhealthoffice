@@ -54,3 +54,6 @@ live ERA validation pending production/test capability.
 | Payment posting | Not executed |
 
 No raw 835, PHI, member identifiers, or banking/trace numbers are recorded here.
+
+Payment posting of stored receipts is
+[stedi-remittance-posting.md](stedi-remittance-posting.md).

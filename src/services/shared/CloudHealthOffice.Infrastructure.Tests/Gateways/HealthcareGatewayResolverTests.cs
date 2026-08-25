@@ -113,6 +113,7 @@ public class HealthcareGatewayResolverTests
         services.AddChoHealthcareGateways(config);
         var provider = services.BuildServiceProvider();
         provider.GetRequiredService<IClaimIntelligenceComposer>().Should().NotBeNull();
+        provider.GetRequiredService<IRemittancePoster>().Should().NotBeNull();
     }
 
     [Fact]

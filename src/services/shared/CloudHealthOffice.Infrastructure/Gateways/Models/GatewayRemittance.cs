@@ -145,9 +145,10 @@ public enum RemittanceClaimMatchStatus
 }
 
 /// <summary>
-/// Remittance receipt lifecycle. Distinct from claim adjudication and from
-/// payment posting. <c>AvailableForPosting</c> means the ERA is stored and
-/// matched — posting is a later PR.
+/// Remittance receipt lifecycle. Distinct from claim adjudication, 277CA,
+/// and 276/277 status. <c>AvailableForPosting</c> means the ERA is stored
+/// and matched. <c>Posted</c> means claim financials and accumulators have
+/// been applied. It is not EFT/bank reconciliation.
 /// </summary>
 public enum RemittanceLifecycleStatus
 {
@@ -157,5 +158,6 @@ public enum RemittanceLifecycleStatus
     AvailableForPosting,
     Unmatched,
     Rejected,
-    Failed
+    Failed,
+    Posted
 }

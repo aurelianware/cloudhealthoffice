@@ -291,6 +291,13 @@ public class Claim
     [StringLength(50)]
     public string? EDI835ControlNumber { get; set; }
 
+    /// <summary>
+    /// Inbound payer 835 remittance id applied by <c>IRemittancePoster</c>.
+    /// Distinct from CHO-as-payer outbound <see cref="EDI835ControlNumber"/>.
+    /// </summary>
+    [StringLength(100)]
+    public string? InboundRemittanceId { get; set; }
+
     // Version identity (5.1 — Claim Identity & Versioning)
     //
     // A claim is an append-only chain of immutable terminal versions. Each

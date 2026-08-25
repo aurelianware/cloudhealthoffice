@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 835 remittance payment posting
+
+`IRemittancePoster` posts a stored, matched 835 (`AvailableForPosting`) onto
+claim financials and member benefit accumulators and marks the receipt
+`Posted`. Source of the ERA is the remittance store — this does not invent
+835s, change 277CA or 276/277, or reconcile EFT. Tenant comes from the
+matched transmission. Duplicate posts replay. Failed claim or accumulator
+writes abort without marking `Posted`. Gateway-only claims (no domain
+claim) skip the claim sink. Accumulators use 835 PR deductible/copay/
+coinsurance deltas with AdjustmentId `835|{remittanceId}|{claimId}`, not
+`claims.finalized.v1`. Development: `POST /api/dev/gateway/remittance/{receiptId}/post`.
+
 ### Claim intelligence API
 
 Vendor-neutral `IClaimIntelligenceComposer` composes 837 submission, 277CA

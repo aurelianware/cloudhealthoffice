@@ -42,6 +42,7 @@ Over a focused sequence of pull requests, CHO activated a vendor-neutral **Healt
 | 276 / 277 | Current claim status | #1117 |
 | 835 | Electronic remittance | #1118 |
 | Claim intelligence | Unified lifecycle read model | #1119 |
+| 835 posting | Claim financials + accumulators from stored ERA | this PR |
 
 Stedi is the first real adapter. The Mock gateway remains for offline tests. Availity, Change Healthcare, or a direct payer link would implement the same interfaces. A neutrality test fails the build if a vendor name leaks into the canonical models.
 
@@ -51,7 +52,7 @@ These constraints were written into the code, not the pitch:
 
 1. **277CA Accepted is not Paid.** Acknowledgment is entry into processing.
 2. **276/277 Paid does not invent an 835.** Status is not remittance.
-3. **835 is stored, not posted.** `AvailableForPosting` means matched and durable. Accounting is a later PR.
+3. **835 store is not posting.** `AvailableForPosting` means matched and durable. `Posted` means claim financials and accumulators were applied from that stored ERA. It is not EFT/bank reconciliation and does not invent 835s.
 4. **Matching is deterministic.** Payer claim control number, then patient control number, then an explicit transmission id. No name, DOB, or amount matching.
 5. **Tenant identity never comes from an inbound payload.** It comes from the matched original claim.
 6. **Logs do not carry PHI.** Metrics use gateway, status, and error category.
@@ -72,7 +73,7 @@ The view includes:
 
 - Not a provider portal UI.
 - Not CloudDentalOffice itself (CDO consumes the API later).
-- Not payment posting or bank reconciliation.
+- Not EFT or bank reconciliation. Inbound 835 posting applies stored remittance amounts; it does not generate outbound 835s.
 - Not a live Stedi sandbox ERA certificate. 835 retrieve is contract-tested against the documented API; live ERA validation needs payer enrollment and a real transaction id.
 - Not a production-cloud capacity claim. Scale evidence lives in the Million Claim Challenge.
 

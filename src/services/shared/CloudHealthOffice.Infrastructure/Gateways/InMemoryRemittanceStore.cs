@@ -113,6 +113,21 @@ public sealed class InMemoryRemittanceStore : IRemittanceStore
         return Task.FromResult<IReadOnlyList<RemittanceReceipt>>(list);
     }
 
+    public Task<IReadOnlyList<RemittanceReceipt>> ListAvailableForPostingAsync(
+        string tenantId, int take, CancellationToken ct = default)
+    {
+        var limit = take <= 0 ? 50 : take;
+        var list = _byId.Values
+            .Where(r =>
+                string.Equals(r.TenantId, tenantId, StringComparison.Ordinal) &&
+                r.Status == RemittanceLifecycleStatus.AvailableForPosting)
+            .OrderBy(r => r.ReceivedAtUtc)
+            .Take(limit)
+            .Select(r => Clone(r)!)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<RemittanceReceipt>>(list);
+    }
+
     private void IndexEvent(RemittanceReceipt record)
     {
         if (!string.IsNullOrWhiteSpace(record.EventId))
@@ -142,6 +157,9 @@ public sealed class InMemoryRemittanceStore : IRemittanceStore
             PaymentDate = source.PaymentDate,
             PaymentAmount = source.PaymentAmount,
             ReceivedAtUtc = source.ReceivedAtUtc,
+            PostedAtUtc = source.PostedAtUtc,
+            ClaimsPosted = source.ClaimsPosted,
+            AccumulatorsApplied = source.AccumulatorsApplied,
             Status = source.Status,
             CorrelationId = source.CorrelationId,
             RawSourceReference = source.RawSourceReference,

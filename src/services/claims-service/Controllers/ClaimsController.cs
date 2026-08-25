@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using ClaimsService.Exceptions;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
@@ -1003,6 +1004,74 @@ public class ClaimsController : ControllerBase
 
             default:
                 return StatusCode(StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    /// <summary>
+    /// Record an inbound payer 835 on a domain claim. Distinct from
+    /// <c>POST {id}/remittance</c> (PaymentRun finalize + outbound 835).
+    /// Does not emit <c>claims.finalized.v1</c>. Missing claims return 404
+    /// so gateway-only transmissions skip rather than fail posting.
+    /// </summary>
+    [HttpPost("{id}/inbound-remittance")]
+    [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> PostInboundRemittance(
+        string id,
+        [FromBody] InboundRemittancePostRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RemittanceId))
+        {
+            return BadRequest(new { message = "RemittanceId is required" });
+        }
+
+        var claim = await _claimRepository.GetByIdAsync(id);
+        if (claim is null)
+        {
+            return NotFound(new { message = $"Claim {id} not found" });
+        }
+
+        if (string.Equals(claim.InboundRemittanceId, request.RemittanceId, StringComparison.Ordinal))
+        {
+            return Conflict(new { message = "already-posted" });
+        }
+
+        if (!string.IsNullOrWhiteSpace(claim.InboundRemittanceId))
+        {
+            return UnprocessableEntity(new { message = "claim-not-postable" });
+        }
+
+        _logger.LogInformation(
+            "Recording inbound remittance for claim {Id}",
+            SanitizeForLog(id));
+
+        claim.InboundRemittanceId = request.RemittanceId;
+        claim.AdjudicationResult ??= new AdjudicationResult();
+        claim.AdjudicationResult.PayerPayment = request.PaymentAmount;
+        claim.AdjudicationResult.PatientResponsibility = request.PatientResponsibility;
+        if (request.PaymentDate != default)
+        {
+            claim.AdjudicationResult.PaymentDate = request.PaymentDate;
+        }
+
+        claim.LastUpdatedDate = DateTime.UtcNow;
+        claim.LastUpdatedBy = TryGetActorId();
+
+        try
+        {
+            var updated = await _claimRepository.UpdateAsync(claim);
+            return Ok(updated);
+        }
+        catch (ClaimVersionStateException ex) when (ex.IsNotFound)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (ClaimVersionStateException)
+        {
+            return UnprocessableEntity(new { message = "claim-not-postable" });
         }
     }
 
