@@ -168,7 +168,11 @@ internal sealed class MongoClaimLifecycleStore :
             new CreateIndexModel<RemittanceReceiptDocument>(
                 Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.HasPendingOutbox)),
             new CreateIndexModel<RemittanceReceiptDocument>(
-                Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.TenantId))
+                Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.TenantId)),
+            new CreateIndexModel<RemittanceReceiptDocument>(
+                Builders<RemittanceReceiptDocument>.IndexKeys
+                    .Ascending(d => d.TenantId)
+                    .Ascending(d => d.Status))
         }, ct).ConfigureAwait(false);
     }
 
@@ -633,6 +637,18 @@ internal sealed class MongoClaimLifecycleStore :
         return docs.Select(d => d.Payload).ToList();
     }
 
+    async Task<IReadOnlyList<RemittanceReceipt>> IRemittanceStore.ListAvailableForPostingAsync(
+        string tenantId, int take, CancellationToken ct)
+    {
+        var limit = take <= 0 ? 50 : take;
+        var docs = await _remittances
+            .Find(d => d.TenantId == tenantId && d.Status == RemittanceLifecycleStatus.AvailableForPosting)
+            .SortBy(d => d.Payload.ReceivedAtUtc)
+            .Limit(limit)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return docs.Select(d => d.Payload).ToList();
+    }
+
     private async Task<IReadOnlyList<ClaimTransmissionRecord>> FindTransmissionsAsync(
         System.Linq.Expressions.Expression<Func<ClaimTransmissionDocument, bool>> filter,
         CancellationToken ct)
@@ -803,6 +819,8 @@ internal sealed class RemittanceReceiptDocument
 
     public string TenantId { get; set; } = string.Empty;
 
+    public RemittanceLifecycleStatus Status { get; set; }
+
     public bool HasPendingOutbox { get; set; }
 
     public List<string> TransmissionIds { get; set; } = new();
@@ -815,6 +833,7 @@ internal sealed class RemittanceReceiptDocument
         IdempotencyKey = r.IdempotencyKey,
         EventKey = string.IsNullOrWhiteSpace(r.EventId) ? null : $"{r.Gateway}|{r.EventId}",
         TenantId = r.TenantId,
+        Status = r.Status,
         HasPendingOutbox = r.HasPendingOutbox,
         TransmissionIds = r.Claims
             .Select(c => c.TransmissionId)

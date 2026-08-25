@@ -5,26 +5,29 @@ using Microsoft.AspNetCore.Mvc;
 namespace EligibilityService.Controllers;
 
 /// <summary>
-/// Development-only 835 remittance injection and read surface. Feeds the same
-/// <see cref="IRemittanceProcessor"/> used by the Stedi adapter. Disabled
-/// outside Development.
+/// Development-only 835 remittance injection, read, and posting surface.
+/// Inject/list feed <see cref="IRemittanceProcessor"/>; post uses
+/// <see cref="IRemittancePoster"/>. Disabled outside Development.
 /// </summary>
 [ApiController]
 [Route("api/dev/gateway")]
 public sealed class GatewayRemittanceDemoController : ControllerBase
 {
     private readonly IRemittanceProcessor _processor;
+    private readonly IRemittancePoster _poster;
     private readonly IRemittanceStore _receipts;
     private readonly IClaimTransmissionStore _transmissions;
     private readonly IHostEnvironment _environment;
 
     public GatewayRemittanceDemoController(
         IRemittanceProcessor processor,
+        IRemittancePoster poster,
         IRemittanceStore receipts,
         IClaimTransmissionStore transmissions,
         IHostEnvironment environment)
     {
         _processor = processor;
+        _poster = poster;
         _receipts = receipts;
         _transmissions = transmissions;
         _environment = environment;
@@ -93,5 +96,31 @@ public sealed class GatewayRemittanceDemoController : ControllerBase
 
         var list = await _receipts.ListByTransmissionIdAsync(transmission.TransmissionId, ct);
         return Ok(list);
+    }
+
+    [HttpPost("remittance/{receiptId}/post")]
+    public async Task<IActionResult> Post(string receiptId, CancellationToken ct)
+    {
+        if (!_environment.IsDevelopment())
+        {
+            return NotFound();
+        }
+
+        var tenantId = HttpContext.Items["TenantId"]?.ToString();
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            return BadRequest(new { error = "Tenant is required." });
+        }
+
+        var result = await _poster.PostAsync(
+            new RemittancePostRequest { ReceiptId = receiptId, TenantId = tenantId },
+            ct);
+        if (result.ErrorCategory != GatewayErrorCategory.None &&
+            result.Status != RemittanceLifecycleStatus.Posted)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
     }
 }

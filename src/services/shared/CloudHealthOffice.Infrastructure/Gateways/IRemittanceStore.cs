@@ -4,7 +4,7 @@ namespace CloudHealthOffice.Infrastructure.Gateways;
 
 /// <summary>
 /// Durable inbound 835 remittance receipts. Does not store raw X12/JSON
-/// payloads and does not post payments.
+/// payloads. Posting is <see cref="IRemittancePoster"/>, not this store.
 /// </summary>
 public interface IRemittanceStore
 {
@@ -29,6 +29,9 @@ public interface IRemittanceStore
 
     Task<IReadOnlyList<RemittanceReceipt>> ListPendingOutboxAsync(
         int take, CancellationToken ct = default);
+
+    Task<IReadOnlyList<RemittanceReceipt>> ListAvailableForPostingAsync(
+        string tenantId, int take, CancellationToken ct = default);
 }
 
 public sealed class RemittanceReceipt
@@ -56,6 +59,8 @@ public sealed class RemittanceReceipt
     public decimal PaymentAmount { get; set; }
 
     public DateTimeOffset ReceivedAtUtc { get; set; }
+
+    public DateTimeOffset? PostedAtUtc { get; set; }
 
     public RemittanceLifecycleStatus Status { get; set; } = RemittanceLifecycleStatus.Received;
 

@@ -7,9 +7,10 @@ model, many interchangeable vendor implementations, living in
 
 This is the **foundation** layer. The mock gateway, the Stedi eligibility
 (270/271) adapter, outbound 837 submission, 277CA acknowledgment, 275 claim
-attachments, 276/277 claim status inquiry, 835 remittance ingestion, and the
-canonical payer reference service, and the claim intelligence read model
-are implemented today. Payment posting from 835s is a later PR.
+attachments, 276/277 claim status inquiry, 835 remittance ingestion, the
+canonical payer reference service, the claim intelligence read model, and
+payment posting from stored 835s onto claim financials and member
+accumulators are implemented today. EFT/bank reconciliation is later.
 
 Payer-side inbound eligibility (CHO as the 271 information source) is a
 **separate** capability: [`payer-eligibility-responder.md`](payer-eligibility-responder.md).
@@ -132,7 +133,8 @@ documentation for an existing claim transmission.
 current status of a previously submitted claim (276/277).
 
 `IRemittanceGateway.RetrieveRemittanceAsync` fetches and normalizes an 835.
-Applying it to claims is `IRemittanceProcessor` — it does not post payment.
+Applying it to durable storage is `IRemittanceProcessor`. Posting stored
+receipts onto claim financials and accumulators is `IRemittancePoster`.
 
 `IClaimIntelligenceComposer` reads those stores and returns a unified
 workflow view. See [`claim-intelligence.md`](claim-intelligence.md).
@@ -769,7 +771,7 @@ transmission.
 ### 835 remittance ingestion
 
 An 835 is the payer's **financial** outcome for claims it accepted. It is
-not a 277CA, not a 276/277 status check, and not payment posting.
+not a 277CA, not a 276/277 status check, and not EFT/bank reconciliation.
 
 ```
 837 submitted
@@ -778,9 +780,9 @@ not a 277CA, not a 276/277 status check, and not payment posting.
         ↓
 276/277 current claim status
         ↓
-835 ERA (this PR)
+835 ERA stored (AvailableForPosting)
         ↓
-Future payment posting
+Payment posting (Posted)
 ```
 
 ```
@@ -794,7 +796,7 @@ Canonical Remittance
  ↓
 CHO Remittance Store
  ↓
-Future Payment Posting
+IRemittancePoster (claim financials + accumulators)
 ```
 
 Stedi delivers 835s asynchronously:
@@ -813,11 +815,13 @@ Matching is deterministic (never name, DOB, provider name, or amount):
 Unmatched ERAs are stored for reconciliation. Mixed-tenant matches fail closed
 and do not assign a tenant. The processor does **not** change 837 transmission
 status, 277CA records, 276/277 snapshots, accumulators, or payment-service
-posting.
+outbound 835 generation.
 
 Lifecycle: `Received` → `Validated` / `Matched` / `AvailableForPosting` /
-`Unmatched` / `Failed`. `AvailableForPosting` means the ERA is stored and
-matched — posting is out of scope.
+`Posted` / `Unmatched` / `Failed`. `AvailableForPosting` means the ERA is
+stored and matched. `Posted` means `IRemittancePoster` applied claim
+financials and member accumulators. It is not EFT/bank reconciliation and
+does not invent 835s or change 277CA / 276/277.
 
 #### Live validation
 
@@ -830,9 +834,31 @@ live ERA validation pending production/test capability.
 `CHO_STEDI_LIVE_CLAIM_TESTS` + `CHO_STEDI_835_TRANSACTION_ID` does not run
 in CI.
 
-Development: `POST /api/dev/gateway/remittance` and
-`GET /api/dev/gateway/claims/{transmissionId}/remittance` (404 outside
+Development: `POST /api/dev/gateway/remittance`,
+`GET /api/dev/gateway/claims/{transmissionId}/remittance`, and
+`POST /api/dev/gateway/remittance/{receiptId}/post` (404 outside
 Development).
+
+### 835 payment posting
+
+`IRemittancePoster` posts a stored receipt. It never invents an 835.
+
+- Eligible: `AvailableForPosting`. Success: `Posted` (claim financials +
+  member accumulators). Not EFT/bank reconciliation.
+- Tenant from the matched transmission; missing/wrong tenant is not found.
+- Duplicate `PostAsync` is a replay and does not write sinks again.
+- Claim sink `NotFound` (gateway-only transmission) is skip, not failure.
+- Claim sink `Rejected` / `Failed` or accumulator `Failed` aborts and
+  leaves the receipt `AvailableForPosting`.
+- Accumulators apply 835 PR deductible/copay/coinsurance with AdjustmentId
+  `835|{remittanceId}|{claimId}`. This is not `claims.finalized.v1`.
+- Default sinks are in-memory (tests/Development). HTTP adapters are
+  optional and must not call CHO-as-payer `POST /api/claims/{id}/remittance`
+  (PaymentRun outbound 835).
+- Logs: gateway, remittance id, tenant, counts. Never check/trace, member
+  id, or ERA payload.
+
+See [`stedi-remittance-posting.md`](../evidence/stedi-remittance-posting.md).
 
 ### Architectural boundary
 
