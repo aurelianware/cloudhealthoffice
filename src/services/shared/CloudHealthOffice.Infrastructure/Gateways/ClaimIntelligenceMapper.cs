@@ -20,6 +20,7 @@ internal static class ClaimIntelligenceMapper
             remittedClaim is not null &&
             remittedClaim.MatchStatus == RemittanceClaimMatchStatus.Matched &&
             remittance.Status is RemittanceLifecycleStatus.AvailableForPosting
+                or RemittanceLifecycleStatus.Posted
                 or RemittanceLifecycleStatus.Matched)
         {
             return MapFromRemittance(remittedClaim);
@@ -47,11 +48,17 @@ internal static class ClaimIntelligenceMapper
     public static ClaimIntelligenceNextAction MapNextAction(
         ClaimIntelligenceLifecycleStatus lifecycle,
         ClaimStatusInquiryRecord? status,
-        ClaimIntelligenceAttachmentSummary attachments)
+        ClaimIntelligenceAttachmentSummary attachments,
+        RemittanceLifecycleStatus? remittanceStatus = null)
     {
         if (lifecycle is ClaimIntelligenceLifecycleStatus.Denied)
         {
             return ClaimIntelligenceNextAction.CorrectAndResubmit;
+        }
+
+        if (remittanceStatus == RemittanceLifecycleStatus.Posted)
+        {
+            return ClaimIntelligenceNextAction.None;
         }
 
         if (lifecycle is ClaimIntelligenceLifecycleStatus.Paid

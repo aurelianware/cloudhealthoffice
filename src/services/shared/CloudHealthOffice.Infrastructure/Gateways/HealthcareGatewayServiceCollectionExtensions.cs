@@ -62,6 +62,23 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 sp.GetService<IMessageBus>(),
                 sp.GetService<TimeProvider>()));
         services.TryAddSingleton<IRemittanceIngress, RemittanceIngress>();
+        // In-memory posting sinks by default. HTTP adapters exist but are not
+        // registered: claims-service POST remittance is CHO-as-payer outbound
+        // 835 generation, which inbound posting must not invoke.
+        services.TryAddSingleton<InMemoryClaimRemittancePostingSink>();
+        services.TryAddSingleton<InMemoryRemittanceAccumulatorSink>();
+        services.TryAddSingleton<IClaimRemittancePostingSink>(sp =>
+            sp.GetRequiredService<InMemoryClaimRemittancePostingSink>());
+        services.TryAddSingleton<IRemittanceAccumulatorSink>(sp =>
+            sp.GetRequiredService<InMemoryRemittanceAccumulatorSink>());
+        services.TryAddSingleton<IRemittancePoster>(sp =>
+            new RemittancePoster(
+                sp.GetRequiredService<IRemittanceStore>(),
+                sp.GetRequiredService<IClaimTransmissionStore>(),
+                sp.GetRequiredService<IClaimRemittancePostingSink>(),
+                sp.GetRequiredService<IRemittanceAccumulatorSink>(),
+                sp.GetRequiredService<ILogger<RemittancePoster>>(),
+                sp.GetService<TimeProvider>()));
         services.TryAddSingleton<IClaimIntelligenceComposer>(sp =>
             new ClaimIntelligenceComposer(
                 sp.GetRequiredService<IClaimTransmissionStore>(),

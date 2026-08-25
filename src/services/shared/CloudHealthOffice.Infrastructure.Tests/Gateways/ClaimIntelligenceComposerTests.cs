@@ -46,6 +46,40 @@ public class ClaimIntelligenceComposerTests
         view.Financial.PatientResponsibility.Should().Be(80m);
         view.Workflow.NextAction.Should().Be(ClaimIntelligenceNextAction.ReadyForPosting);
         view.Workflow.PatientResponsibilityDisplay.Should().Be("80");
+        view.Timeline.Should().Contain(e =>
+            e.SourceTransaction == "835" && e.EventType == "ReadyForPosting");
+        (await harness.Acks.ListByTransmissionIdAsync(harness.Transmission.TransmissionId))
+            .Single().Status.Should().Be(ClaimAcknowledgmentStatus.Accepted);
+        (await harness.Transmissions.GetByIdAsync(harness.Transmission.TransmissionId))!
+            .Status.Should().Be(GatewayClaimTransmissionStatus.AcknowledgmentAccepted);
+    }
+
+    [Fact]
+    public async Task Posted835_ClearsReadyForPostingWithoutChanging277ca()
+    {
+        var harness = await SeedSubmittedAsync();
+        await AcknowledgeAsync(harness, ClaimAcknowledgmentStatus.Accepted, "PAYER-CCN-9");
+        await RemitAsync(harness, paid: 320m, charged: 500m, patient: 80m);
+        var stored = (await harness.Remittances.ListByTransmissionIdAsync(
+            harness.Transmission.TransmissionId)).Single();
+        await new RemittancePoster(
+            harness.Remittances,
+            harness.Transmissions,
+            new InMemoryClaimRemittancePostingSink(),
+            new InMemoryRemittanceAccumulatorSink(),
+            NullLogger<RemittancePoster>.Instance)
+            .PostAsync(new RemittancePostRequest
+            {
+                ReceiptId = stored.ReceiptId,
+                TenantId = "tenant-alpha"
+            });
+
+        var view = await harness.Composer.ComposeAsync(Request());
+        view!.Transactions.Remittance!.Status.Should().Be(nameof(RemittanceLifecycleStatus.Posted));
+        view.Workflow.NextAction.Should().Be(ClaimIntelligenceNextAction.None);
+        view.Timeline.Single(e => e.SourceTransaction == "835").EventId.Should().Be(
+            $"835:{stored.ReceiptId}");
+        view.Timeline.Single(e => e.SourceTransaction == "835").EventType.Should().Be("Posted");
         (await harness.Acks.ListByTransmissionIdAsync(harness.Transmission.TransmissionId))
             .Single().Status.Should().Be(ClaimAcknowledgmentStatus.Accepted);
         (await harness.Transmissions.GetByIdAsync(harness.Transmission.TransmissionId))!

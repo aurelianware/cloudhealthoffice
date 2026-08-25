@@ -49,6 +49,23 @@ public class RemittanceUpdate
 }
 
 /// <summary>
+/// Inbound payer 835 applied onto a domain claim. Distinct from
+/// <see cref="RemittanceUpdate"/> (CHO-as-payer PaymentRun finalize).
+/// </summary>
+public class InboundRemittancePostRequest
+{
+    [Required]
+    [StringLength(100)]
+    public string RemittanceId { get; set; } = string.Empty;
+
+    public decimal PaymentAmount { get; set; }
+
+    public decimal PatientResponsibility { get; set; }
+
+    public DateTime PaymentDate { get; set; }
+}
+
+/// <summary>
 /// Accumulator totals response — aggregated cost-share amounts per bucket.
 /// Returned by GET /api/claims/accumulator-totals; consumed by the Redis
 /// accumulator service on a cache miss to rebuild from claim history.
