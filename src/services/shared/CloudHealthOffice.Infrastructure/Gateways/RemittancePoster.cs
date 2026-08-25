@@ -57,7 +57,7 @@ public sealed class RemittancePoster : IRemittancePoster
 
         if (receipt.Status == RemittanceLifecycleStatus.Posted)
         {
-            return ToResult(receipt, replay: true, claims: CountPosted(receipt), accumulators: CountPosted(receipt));
+            return ToResult(receipt, replay: true, receipt.ClaimsPosted, receipt.AccumulatorsApplied);
         }
 
         if (receipt.Status != RemittanceLifecycleStatus.AvailableForPosting)
@@ -175,6 +175,8 @@ public sealed class RemittancePoster : IRemittancePoster
         var now = _timeProvider.GetUtcNow();
         receipt.Status = RemittanceLifecycleStatus.Posted;
         receipt.PostedAtUtc = now;
+        receipt.ClaimsPosted = claimsPosted;
+        receipt.AccumulatorsApplied = accumulatorsApplied;
         if (receipt.Outbox.All(e => e.EventType != RemittanceMessageTypes.Posted))
         {
             receipt.Outbox.Add(new RemittanceOutboxEntry
@@ -247,9 +249,6 @@ public sealed class RemittancePoster : IRemittancePoster
 
         return (deductible, copay, coinsurance);
     }
-
-    private static int CountPosted(RemittanceReceipt receipt) =>
-        receipt.Claims.Count(c => c.MatchStatus == RemittanceClaimMatchStatus.Matched);
 
     private static RemittancePostResult ToResult(
         RemittanceReceipt receipt, bool replay, int claims, int accumulators) =>

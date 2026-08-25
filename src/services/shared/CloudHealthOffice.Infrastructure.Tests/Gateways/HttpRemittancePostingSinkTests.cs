@@ -40,6 +40,25 @@ public class HttpRemittancePostingSinkTests
     }
 
     [Fact]
+    public async Task ClaimSink_Ok_IsPosted()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://claims.test/") };
+        var sink = new HttpClaimRemittancePostingSink(new StubFactory(client));
+
+        var result = await sink.PostAsync(new RemittanceClaimPost
+        {
+            TenantId = "tenant-alpha",
+            ClaimId = "CLM-P-1001",
+            RemittanceId = "era-1",
+            PaymentAmount = 320m
+        });
+
+        result.Outcome.Should().Be(RemittanceClaimPostOutcome.Posted);
+        handler.Path.Should().Contain("/inbound-remittance");
+    }
+
+    [Fact]
     public async Task AccumulatorSink_WithoutBaseAddress_IsSkipped()
     {
         var sink = new HttpRemittanceAccumulatorSink(new StubFactory(new HttpClient()));

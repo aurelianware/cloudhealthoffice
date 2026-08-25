@@ -7,9 +7,9 @@ namespace CloudHealthOffice.Infrastructure.Gateways;
 /// Optional HTTP adapter for inbound 835 claim financials. Not registered by
 /// default — <see cref="IRemittancePoster"/> uses the in-memory sink unless a
 /// host replaces <see cref="IClaimRemittancePostingSink"/>.
-/// Does not call <c>POST /api/claims/{id}/remittance</c> (that is CHO-as-payer
-/// PaymentRun finalize and outbound 835 generation). A missing domain claim
-/// is skip, not failure.
+/// Posts to <c>POST /api/claims/{id}/inbound-remittance</c>. Does not call
+/// <c>POST /api/claims/{id}/remittance</c> (CHO-as-payer PaymentRun finalize
+/// and outbound 835 generation). A missing domain claim is skip, not failure.
 /// </summary>
 public sealed class HttpClaimRemittancePostingSink : IClaimRemittancePostingSink
 {

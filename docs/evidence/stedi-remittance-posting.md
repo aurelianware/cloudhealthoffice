@@ -30,7 +30,7 @@ stored. It does not invent 835s, change 277CA or 276/277, or reconcile EFT.
 | Invent an 835 | Missing receipt → not found; processor still owns ingest |
 | Change 277CA | Poster does not load or save acknowledgments |
 | Change 276/277 | Poster does not touch status inquiries |
-| Generate outbound 835 | Does not call PaymentRun / `POST /api/claims/{id}/remittance` |
+| Generate outbound 835 | Claims use `POST /api/claims/{id}/inbound-remittance`, not PaymentRun `/remittance` |
 | Double-count accumulators | Does not emit `claims.finalized.v1` |
 | Reconcile EFT | `Posted` is claim+accumulator effect, not bank match |
 | Log PHI / bank data | Logs gateway, remittance id, tenant, counts |

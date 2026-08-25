@@ -51,10 +51,46 @@ public class RemittancePosterTests
         });
 
         first.Replay.Should().BeFalse();
+        first.ClaimsPosted.Should().Be(1);
+        first.AccumulatorsApplied.Should().Be(1);
         second.Replay.Should().BeTrue();
         second.Status.Should().Be(RemittanceLifecycleStatus.Posted);
+        second.ClaimsPosted.Should().Be(first.ClaimsPosted);
+        second.AccumulatorsApplied.Should().Be(first.AccumulatorsApplied);
         harness.Claims.Posted.Should().ContainSingle();
         harness.Accumulators.Applied.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Replay_DoesNotCountSkippedClaimsOrZeroDeltaAccumulators()
+    {
+        var harness = await SeedPostedPathAsync();
+        var stored = await harness.Receipts.GetByIdempotencyKeyAsync("Stedi", "era-1");
+        stored!.Claims.Add(new RemittedClaim
+        {
+            MatchStatus = RemittanceClaimMatchStatus.Matched,
+            PaidAmount = 1m
+        });
+        stored.Claims[0].Adjustments.Clear();
+        stored.Claims[0].PatientResponsibilityAmount = 0m;
+        await harness.Receipts.SaveAsync(stored);
+
+        var first = await harness.Poster.PostAsync(new RemittancePostRequest
+        {
+            ReceiptId = stored.ReceiptId,
+            TenantId = "tenant-alpha"
+        });
+        var second = await harness.Poster.PostAsync(new RemittancePostRequest
+        {
+            ReceiptId = stored.ReceiptId,
+            TenantId = "tenant-alpha"
+        });
+
+        first.ClaimsPosted.Should().Be(1);
+        first.AccumulatorsApplied.Should().Be(0);
+        second.Replay.Should().BeTrue();
+        second.ClaimsPosted.Should().Be(1);
+        second.AccumulatorsApplied.Should().Be(0);
     }
 
     [Fact]

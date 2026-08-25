@@ -158,6 +158,8 @@ public sealed class InMemoryRemittanceStore : IRemittanceStore
             PaymentAmount = source.PaymentAmount,
             ReceivedAtUtc = source.ReceivedAtUtc,
             PostedAtUtc = source.PostedAtUtc,
+            ClaimsPosted = source.ClaimsPosted,
+            AccumulatorsApplied = source.AccumulatorsApplied,
             Status = source.Status,
             CorrelationId = source.CorrelationId,
             RawSourceReference = source.RawSourceReference,

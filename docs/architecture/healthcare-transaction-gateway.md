@@ -853,8 +853,9 @@ Development).
 - Accumulators apply 835 PR deductible/copay/coinsurance with AdjustmentId
   `835|{remittanceId}|{claimId}`. This is not `claims.finalized.v1`.
 - Default sinks are in-memory (tests/Development). HTTP adapters are
-  optional and must not call CHO-as-payer `POST /api/claims/{id}/remittance`
-  (PaymentRun outbound 835).
+  optional. Claim financials use `POST /api/claims/{id}/inbound-remittance`,
+  not CHO-as-payer `POST /api/claims/{id}/remittance` (PaymentRun outbound
+  835).
 - Logs: gateway, remittance id, tenant, counts. Never check/trace, member
   id, or ERA payload.
 

@@ -62,6 +62,10 @@ public sealed class RemittanceReceipt
 
     public DateTimeOffset? PostedAtUtc { get; set; }
 
+    public int ClaimsPosted { get; set; }
+
+    public int AccumulatorsApplied { get; set; }
+
     public RemittanceLifecycleStatus Status { get; set; } = RemittanceLifecycleStatus.Received;
 
     public string? CorrelationId { get; set; }

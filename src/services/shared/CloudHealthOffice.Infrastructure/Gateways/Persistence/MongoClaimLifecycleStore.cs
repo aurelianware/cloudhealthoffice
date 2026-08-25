@@ -642,7 +642,9 @@ internal sealed class MongoClaimLifecycleStore :
     {
         var limit = take <= 0 ? 50 : take;
         var docs = await _remittances
-            .Find(d => d.TenantId == tenantId && d.Status == RemittanceLifecycleStatus.AvailableForPosting)
+            .Find(d => d.TenantId == tenantId &&
+                (d.Payload.Status == RemittanceLifecycleStatus.AvailableForPosting ||
+                 d.Status == RemittanceLifecycleStatus.AvailableForPosting))
             .SortBy(d => d.Payload.ReceivedAtUtc)
             .Limit(limit)
             .ToListAsync(ct).ConfigureAwait(false);
