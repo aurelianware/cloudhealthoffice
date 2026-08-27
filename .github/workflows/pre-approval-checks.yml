@@ -24,7 +24,7 @@ jobs:
 
       - name: Security Scan - Secrets Detection
         id: secrets-scan
-        uses: trufflesecurity/trufflehog@v3.97.0
+        uses: trufflesecurity/trufflehog@v3.97.1
         with:
           path: ./
           base: ${{ github.event.before || '' }}
