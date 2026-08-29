@@ -26,7 +26,6 @@
 
   var ANON_KEY = 'cho_anonymous_id';
   var PAGES_KEY = 'cho_session_pages';
-  var IDENTITY_KEY = 'cho_identity';
 
   /* ---------- storage helpers (never throw) ---------- */
   function lsGet(key) {
@@ -115,38 +114,37 @@
     try { return JSON.parse(raw) || []; } catch (e) { return []; }
   }
 
-  /* ---------- identity (alias anon -> email/company on form submit) ---------- */
+  /* ---------- identity (alias anon -> lead on form submit) ---------- */
+  // We deliberately do NOT persist the lead's email/name/company anywhere in the
+  // browser (no clear-text storage of PII). The email <-> anonymous_id join is
+  // recorded server-side in the lead record (Formspree). Here we only keep a
+  // non-persistent, in-memory marker for the current page and send a non-PII
+  // signal to GA keyed on the anonymous_id.
+  var identifiedThisPage = null;
   function getIdentity() {
-    var raw = lsGet(IDENTITY_KEY);
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch (e) { return null; }
+    return identifiedThisPage;
   }
   function identify(traits) {
-    if (!traits || !traits.email) return getIdentity();
-    var current = getIdentity() || {};
-    var merged = {
-      email: traits.email || current.email,
-      company: traits.company || current.company,
-      name: traits.name || current.name,
-      role: traits.role || current.role,
+    if (!traits || !traits.email) return identifiedThisPage;
+    identifiedThisPage = {
+      identified: true,
+      role: traits.role || (identifiedThisPage && identifiedThisPage.role) || '',
+      has_company: !!(traits.company || (identifiedThisPage && identifiedThisPage.has_company)),
       anonymous_id: getAnonymousId()
     };
-    lsSet(IDENTITY_KEY, JSON.stringify(merged));
-    // GA4 must not receive PII (email/company). We key GA on the anonymous_id
-    // only and send a non-PII "identified" signal; the email <-> anonymous_id
-    // join lives in the first-party lead record (Formspree) and localStorage,
-    // never in Google Analytics.
+    // GA4 must never receive PII (email/company/name). Key GA on the
+    // anonymous_id only and send a non-PII "identified" signal.
     choTrack('lead_identified', {
-      anonymous_id: merged.anonymous_id,
-      has_company: merged.company ? true : false,
-      role: merged.role || ''
+      anonymous_id: identifiedThisPage.anonymous_id,
+      has_company: identifiedThisPage.has_company,
+      role: identifiedThisPage.role
     });
     try {
       if (typeof window.gtag === 'function') {
-        window.gtag('set', { user_id: merged.anonymous_id });
+        window.gtag('set', { user_id: identifiedThisPage.anonymous_id });
       }
     } catch (e) { /* ignore */ }
-    return merged;
+    return identifiedThisPage;
   }
 
   /* ---------- GA4 event helper ---------- */
