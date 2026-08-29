@@ -47,7 +47,25 @@
     try {
       if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
     } catch (e) { /* fall through */ }
-    return 'anon-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    // Use the Web Crypto CSPRNG for the fallback; never Math.random() for an
+    // identifier. Web Crypto is available in every supported browser.
+    try {
+      if (window.crypto && window.crypto.getRandomValues) {
+        var bytes = window.crypto.getRandomValues(new Uint8Array(16));
+        var hex = '';
+        for (var i = 0; i < bytes.length; i++) {
+          hex += ('0' + bytes[i].toString(16)).slice(-2);
+        }
+        return 'anon-' + hex;
+      }
+    } catch (e) { /* fall through */ }
+    // Last resort where Web Crypto is entirely unavailable: time-based, still
+    // no Math.random(). Uniqueness is best-effort in this rare path.
+    return 'anon-' + Date.now().toString(36) + '-' + (
+      (typeof performance !== 'undefined' && performance.now)
+        ? Math.floor(performance.now()).toString(36)
+        : '0'
+    );
   }
 
   function getAnonymousId() {
