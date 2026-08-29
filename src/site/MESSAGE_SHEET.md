@@ -73,7 +73,7 @@ workflow, and Platform Engagement (claims / payments / core replacement) are pai
 - Source-available (BSL 1.1) so security teams can read the code
 
 ## Is not
-- A clearinghouse (Availity / Change / Stedi are pipes; CHO is the plan's system)
+- A clearinghouse (Availity / Change / Stedi are pipes; Cloud Health Office is the plan's system)
 - A hosted black-box SaaS that takes PHI out of the plan's boundary by default
 - An overnight Facets/QNXT replacement
 - Apache-licensed open source

@@ -159,8 +159,11 @@
           consumer_inbox: email ? isConsumerInbox(email) : false,
           page_path: location.pathname
         });
-        var thankyou = form.parentNode.querySelector('[data-lead-thankyou]') ||
-          document.querySelector('[data-lead-thankyou][data-for="' + form.id + '"]');
+        // Prefer the explicit data-for mapping so a container with more than
+        // one lead form always reveals the matching thank-you block; fall back
+        // to the nearest one under the same parent.
+        var thankyou = (form.id && document.querySelector('[data-lead-thankyou][data-for="' + form.id + '"]')) ||
+          form.parentNode.querySelector('[data-lead-thankyou]');
         form.hidden = true;
         if (thankyou) {
           thankyou.hidden = false;

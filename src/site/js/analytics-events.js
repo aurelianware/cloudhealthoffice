@@ -57,8 +57,9 @@
       lsSet(ANON_KEY, id);
       // Mirror into a first-party cookie so server-side tooling can read it too.
       try {
+        var secure = (location.protocol === 'https:') ? '; Secure' : '';
         document.cookie = ANON_KEY + '=' + id + '; path=/; max-age=' +
-          (60 * 60 * 24 * 365) + '; SameSite=Lax';
+          (60 * 60 * 24 * 365) + '; SameSite=Lax' + secure;
       } catch (e) { /* ignore */ }
     }
     return id;
@@ -101,16 +102,18 @@
       anonymous_id: getAnonymousId()
     };
     lsSet(IDENTITY_KEY, JSON.stringify(merged));
-    // Alias in GA4: attach a stable user_id + person-like properties.
-    choTrack('identify', {
-      user_id: merged.email,
+    // GA4 must not receive PII (email/company). We key GA on the anonymous_id
+    // only and send a non-PII "identified" signal; the email <-> anonymous_id
+    // join lives in the first-party lead record (Formspree) and localStorage,
+    // never in Google Analytics.
+    choTrack('lead_identified', {
       anonymous_id: merged.anonymous_id,
-      company: merged.company || '',
+      has_company: merged.company ? true : false,
       role: merged.role || ''
     });
     try {
       if (typeof window.gtag === 'function') {
-        window.gtag('set', { user_id: merged.email });
+        window.gtag('set', { user_id: merged.anonymous_id });
       }
     } catch (e) { /* ignore */ }
     return merged;
@@ -247,7 +250,12 @@
     var isInternal = host === window.location.hostname;
     if (isInternal) {
       for (var i = 0; i < CTA_DESTINATIONS.length; i++) {
-        if (url.pathname.indexOf(CTA_DESTINATIONS[i].match) > -1) {
+        // Match on a path-segment boundary so "/evidence" does not also match
+        // "/docs/million-claim-challenge/evidence" and "/pricing" does not
+        // match "/pricing-api".
+        var m = CTA_DESTINATIONS[i].match;
+        var p = url.pathname.replace(/\/$/, '');
+        if (p === m || p.indexOf(m + '/') === 0) {
           if (url.pathname !== pagePath()) {
             choTrack(CTA_DESTINATIONS[i].event, {
               link_text: textOf(anchor),

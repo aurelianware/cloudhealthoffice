@@ -28,7 +28,7 @@ payments, and FHIR — that you deploy in your own Azure, AWS, or GCP. Source-av
 HealthEdge.
 
 ## What it is not
-- Not a clearinghouse. Availity, Change, and Stedi are pipes; CHO is the plan's system.
+- Not a clearinghouse. Availity, Change, and Stedi are pipes; Cloud Health Office is the plan's system.
 - Not a hosted black-box SaaS that takes PHI out of the plan's boundary by default.
 - Not an overnight Facets/QNXT replacement.
 - Not Apache-licensed open source.
