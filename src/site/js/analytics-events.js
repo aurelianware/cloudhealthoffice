@@ -1,49 +1,146 @@
 /*
  * analytics-events.js
  * -------------------
- * Conversion / engagement event tracking for the Cloud Health Office
- * marketing site. Loaded on every page by build.mjs, right after the
- * Google Analytics tag.
+ * First-party analytics + identity for the Cloud Health Office marketing site.
+ * Loaded on every page by build.mjs, right after the Google Analytics tag.
  *
  * Design goals:
  *   - No dependencies, no build step, safe to run before or without GA.
- *   - A single helper (window.choTrack) that other inline scripts can call
- *     to report high-intent actions (e.g. a lead form submitting).
- *   - Automatic instrumentation of the outbound / CTA links that signal a
- *     visitor is evaluating the platform, so we don't have to hand-edit
- *     every page.
+ *   - A durable first-party anonymous_id so we can see a visitor's path and,
+ *     on any form submit, alias that id to a work email / company.
+ *   - A single helper (window.choTrack) other inline scripts and shared
+ *     components (lead-capture.js, assistant.js) call to report high-intent
+ *     actions.
+ *   - Automatic instrumentation of page views, scroll depth, and the outbound /
+ *     CTA links that signal a visitor is evaluating the platform.
  *
- * All events surface in GA4 under Reports > Engagement > Events. Mark any of
- * them as a "Key event" in the GA4 UI (Admin > Events) to treat it as a
- * conversion.
+ * Privacy: this is a B2B marketing site. We collect work-contact and usage only.
+ * We never collect member/patient/PHI. See /legal/privacy-policy.
+ *
+ * All events surface in GA4 under Reports > Engagement > Events. The server-side
+ * lead store (Formspree -> sales@cloudhealthoffice.com) is the source of truth for
+ * leads; GA holds the event/path history.
  */
 (function () {
   'use strict';
 
-  /**
-   * Fire a GA4 event. No-op (but never throws) if gtag isn't present yet,
-   * so this is safe to call during local development where the build hasn't
-   * injected Google Analytics.
-   */
-  function choTrack(name, params) {
+  var ANON_KEY = 'cho_anonymous_id';
+  var PAGES_KEY = 'cho_session_pages';
+  var IDENTITY_KEY = 'cho_identity';
+
+  /* ---------- storage helpers (never throw) ---------- */
+  function lsGet(key) {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function lsSet(key, value) {
+    try { window.localStorage.setItem(key, value); } catch (e) { /* private mode */ }
+  }
+  function ssGet(key) {
+    try { return window.sessionStorage.getItem(key); } catch (e) { return null; }
+  }
+  function ssSet(key, value) {
+    try { window.sessionStorage.setItem(key, value); } catch (e) { /* private mode */ }
+  }
+
+  /* ---------- durable anonymous id ---------- */
+  function makeId() {
+    try {
+      if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    } catch (e) { /* fall through */ }
+    return 'anon-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function getAnonymousId() {
+    var id = lsGet(ANON_KEY);
+    if (!id) {
+      id = makeId();
+      lsSet(ANON_KEY, id);
+      // Mirror into a first-party cookie so server-side tooling can read it too.
+      try {
+        document.cookie = ANON_KEY + '=' + id + '; path=/; max-age=' +
+          (60 * 60 * 24 * 365) + '; SameSite=Lax';
+      } catch (e) { /* ignore */ }
+    }
+    return id;
+  }
+
+  /* ---------- pages viewed this session ---------- */
+  function recordPageView(path) {
+    var raw = ssGet(PAGES_KEY);
+    var list = [];
+    if (raw) {
+      try { list = JSON.parse(raw) || []; } catch (e) { list = []; }
+    }
+    if (list[list.length - 1] !== path) {
+      list.push(path);
+      if (list.length > 50) list = list.slice(-50);
+      ssSet(PAGES_KEY, JSON.stringify(list));
+    }
+    return list;
+  }
+  function getViewedPages() {
+    var raw = ssGet(PAGES_KEY);
+    if (!raw) return [];
+    try { return JSON.parse(raw) || []; } catch (e) { return []; }
+  }
+
+  /* ---------- identity (alias anon -> email/company on form submit) ---------- */
+  function getIdentity() {
+    var raw = lsGet(IDENTITY_KEY);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+  function identify(traits) {
+    if (!traits || !traits.email) return getIdentity();
+    var current = getIdentity() || {};
+    var merged = {
+      email: traits.email || current.email,
+      company: traits.company || current.company,
+      name: traits.name || current.name,
+      role: traits.role || current.role,
+      anonymous_id: getAnonymousId()
+    };
+    lsSet(IDENTITY_KEY, JSON.stringify(merged));
+    // Alias in GA4: attach a stable user_id + person-like properties.
+    choTrack('identify', {
+      user_id: merged.email,
+      anonymous_id: merged.anonymous_id,
+      company: merged.company || '',
+      role: merged.role || ''
+    });
     try {
       if (typeof window.gtag === 'function') {
-        window.gtag('event', name, params || {});
+        window.gtag('set', { user_id: merged.email });
+      }
+    } catch (e) { /* ignore */ }
+    return merged;
+  }
+
+  /* ---------- GA4 event helper ---------- */
+  function choTrack(name, params) {
+    var payload = params || {};
+    try {
+      payload.anonymous_id = payload.anonymous_id || getAnonymousId();
+    } catch (e) { /* ignore */ }
+    try {
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', name, payload);
       }
     } catch (e) {
       /* analytics must never break the page */
     }
   }
 
-  // Expose for inline form scripts (contact form, founding-client form).
   window.choTrack = choTrack;
+  window.choIdentity = {
+    getAnonymousId: getAnonymousId,
+    getViewedPages: getViewedPages,
+    getIdentity: getIdentity,
+    identify: identify
+  };
 
   function pagePath() {
-    try {
-      return window.location.pathname || '/';
-    } catch (e) {
-      return '/';
-    }
+    try { return window.location.pathname || '/'; } catch (e) { return '/'; }
   }
 
   function textOf(el) {
@@ -53,12 +150,68 @@
       .slice(0, 100);
   }
 
-  // High-intent internal destinations worth counting as CTA clicks.
-  // Keyed by a substring test against the link's pathname.
+  /* ---------- UTM capture ---------- */
+  function utmParams() {
+    var out = {};
+    try {
+      var q = new URLSearchParams(window.location.search);
+      ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach(function (k) {
+        var v = q.get(k);
+        if (v) out[k] = v;
+      });
+    } catch (e) { /* ignore */ }
+    return out;
+  }
+
+  /* ---------- page_view ---------- */
+  function firePageView() {
+    var path = pagePath();
+    recordPageView(path);
+    var params = {
+      page_path: path,
+      page_title: (document.title || '').slice(0, 120)
+    };
+    try { params.referrer = document.referrer || ''; } catch (e) { /* ignore */ }
+    var utm = utmParams();
+    for (var k in utm) { if (utm.hasOwnProperty(k)) params[k] = utm[k]; }
+    choTrack('page_view_cho', params);
+  }
+
+  /* ---------- scroll depth on key pages ---------- */
+  var SCROLL_PAGES = ['/', '/platform', '/cms-0057f-compliance', '/evidence', '/what-is', '/deploy'];
+  function initScrollDepth() {
+    var path = pagePath().replace(/\/$/, '') || '/';
+    if (SCROLL_PAGES.indexOf(path) === -1) return;
+    var marks = [25, 50, 75, 100];
+    var fired = {};
+    function onScroll() {
+      var doc = document.documentElement;
+      var scrollable = (doc.scrollHeight - window.innerHeight);
+      if (scrollable <= 0) return;
+      var pct = Math.min(100, Math.round((window.scrollY / scrollable) * 100));
+      for (var i = 0; i < marks.length; i++) {
+        var m = marks[i];
+        if (pct >= m && !fired[m]) {
+          fired[m] = true;
+          choTrack('scroll_depth', { page_path: pagePath(), percent: m });
+        }
+      }
+      if (fired[100]) {
+        window.removeEventListener('scroll', onScroll);
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+
+  /* ---------- high-intent link instrumentation ---------- */
   var CTA_DESTINATIONS = [
     { match: '/schedule-demo', event: 'demo_cta_click' },
     { match: '/contact', event: 'contact_cta_click' },
+    { match: '/start', event: 'start_cta_click' },
+    { match: '/deploy', event: 'deploy_cta_click' },
     { match: '/pricing', event: 'pricing_cta_click' },
+    { match: '/evidence', event: 'evidence_cta_click' },
     { match: '/docs/quickstart', event: 'quickstart_click' }
   ];
 
@@ -66,7 +219,6 @@
     var href = anchor.getAttribute('href');
     if (!href) return;
 
-    // Explicit opt-in via data attribute always wins.
     var explicit = anchor.getAttribute('data-ga-event');
     if (explicit) {
       choTrack(explicit, {
@@ -78,41 +230,24 @@
     }
 
     var url;
-    try {
-      url = new URL(href, window.location.href);
-    } catch (e) {
-      return;
-    }
+    try { url = new URL(href, window.location.href); } catch (e) { return; }
 
     var host = url.hostname.toLowerCase();
 
-    // Booking a demo happens off-domain (Proton Calendar bookings), so a
-    // click here is the only signal we get that someone booked.
     if (host === 'calendar.proton.me') {
-      choTrack('demo_booking_click', {
-        link_url: url.href,
-        page_path: pagePath()
-      });
+      choTrack('demo_booking_click', { link_url: url.href, page_path: pagePath() });
       return;
     }
 
-    // Cloning / browsing the source-available repo is our strongest
-    // "evaluating the platform" signal on the web side.
     if (host === 'github.com' || host.endsWith('.github.com')) {
-      choTrack('github_repo_click', {
-        link_url: url.href,
-        page_path: pagePath()
-      });
+      choTrack('github_repo_click', { link_url: url.href, page_path: pagePath() });
       return;
     }
 
-    // Internal high-intent CTAs.
     var isInternal = host === window.location.hostname;
     if (isInternal) {
       for (var i = 0; i < CTA_DESTINATIONS.length; i++) {
-        if (url.pathname.indexOf(CTA_DESTINATIONS[i].match) === 0 ||
-            url.pathname.indexOf(CTA_DESTINATIONS[i].match) > -1) {
-          // Don't count a CTA click when the visitor is already on that page.
+        if (url.pathname.indexOf(CTA_DESTINATIONS[i].match) > -1) {
           if (url.pathname !== pagePath()) {
             choTrack(CTA_DESTINATIONS[i].event, {
               link_text: textOf(anchor),
@@ -127,14 +262,14 @@
   }
 
   function init() {
-    // Single delegated listener so dynamically added links are covered too.
+    getAnonymousId();
+    firePageView();
+    initScrollDepth();
     document.addEventListener(
       'click',
       function (e) {
         var anchor = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-        if (anchor) {
-          handleLinkClick(anchor);
-        }
+        if (anchor) handleLinkClick(anchor);
       },
       true
     );

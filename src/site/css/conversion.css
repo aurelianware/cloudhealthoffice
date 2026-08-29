@@ -156,3 +156,84 @@
     transition: none;
   }
 }
+
+/* === LEAD FORM (shared LeadForm component) === */
+.cho-leadform {
+  display: grid;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.cho-leadform__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.cho-leadform label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(0, 255, 255, 0.8);
+  margin-bottom: 6px;
+}
+
+.cho-leadform input,
+.cho-leadform select,
+.cho-leadform textarea {
+  width: 100%;
+  padding: 11px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.93rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.cho-leadform input:focus,
+.cho-leadform select:focus,
+.cho-leadform textarea:focus {
+  outline: none;
+  border-color: rgba(0, 255, 255, 0.6);
+}
+
+.cho-leadform select option {
+  background: #0a0a0a;
+}
+
+.cho-leadform__error {
+  background: rgba(255, 60, 60, 0.1);
+  border: 1px solid rgba(255, 60, 60, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.86rem;
+  color: rgba(255, 120, 120, 0.9);
+}
+
+.cho-leadform__note {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: rgba(128, 128, 128, 0.6);
+  text-align: center;
+}
+
+.cho-leadform__thanks {
+  background: rgba(0, 255, 136, 0.06);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  border-radius: 14px;
+  padding: 32px 26px;
+  text-align: center;
+  line-height: 1.7;
+  color: rgba(210, 210, 210, 0.9);
+}
+
+@media (max-width: 520px) {
+  .cho-leadform__row {
+    grid-template-columns: 1fr;
+  }
+}

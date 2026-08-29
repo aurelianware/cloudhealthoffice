@@ -10,6 +10,12 @@
 # config exactly and does not rely on Pages' default redirect behavior.
 
 # ---------------------------------------------------------------------------
+# Host canonicalization: www -> apex (301). Keeps the current apex story as the
+# single indexable origin.
+# ---------------------------------------------------------------------------
+https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat  301
+
+# ---------------------------------------------------------------------------
 # Canonical redirects: *.html  ->  clean URL (301 permanent)
 # ---------------------------------------------------------------------------
 /index.html                                /                                  301
@@ -23,6 +29,10 @@
 /release-notes.html                        /release-notes                     301
 /legal/privacy-policy.html                 /legal/privacy-policy              301
 /login.html                                /login                             301
+/what-is.html                              /what-is                           301
+/start.html                                /start                             301
+/deploy.html                               /deploy                            301
+/evidence.html                             /evidence                          301
 /docs.html                                /docs                              301
 /docs/quickstart.html                      /docs/quickstart                   301
 /docs/compliance.html                      /docs/compliance                   301
@@ -56,6 +66,10 @@
 /release-notes                             /release-notes.html                200
 /legal/privacy-policy                      /legal/privacy-policy.html         200
 /login                                     /login.html                        200
+/what-is                                   /what-is.html                      200
+/start                                     /start.html                        200
+/deploy                                    /deploy.html                       200
+/evidence                                  /evidence.html                     200
 /docs                                      /docs/index.html                   200
 /docs/quickstart                           /docs/quickstart.html              200
 /docs/compliance                           /docs/compliance.html              200
