@@ -66,7 +66,7 @@
     },
     {
       id: 'deploy',
-      label: 'Deploy in our cloud',
+      label: 'Deploy in your cloud',
       keywords: ['deploy', 'cloud', 'azure', 'aws', 'gcp', 'install', 'run', 'host', 'phi', 'data'],
       answer: 'You deploy Cloud Health Office in your own Azure, AWS, or GCP. PHI stays inside ' +
         'your boundary. You can also evaluate and run it locally for free.',
@@ -92,7 +92,11 @@
     }
   ];
 
-  var OFF_POLICY = ['diagnos', 'symptom', 'treat', 'patient', 'member id', 'phi', 'hack',
+  // Off-policy intents. Deliberately NOT including bare "phi" or "patient":
+  // "does PHI leave our boundary?" and "patient access API" are on-topic
+  // (deploy / CMS-0057-F). Medical-advice intent is caught by diagnos/symptom/
+  // treat; PHI *submission* is caught by "member id".
+  var OFF_POLICY = ['diagnos', 'symptom', 'treat', 'member id', 'hack',
     'exploit', 'bypass', 'pmpm', 'quote me', 'discount'];
 
   function track(name, params) {
@@ -118,9 +122,19 @@
     return node;
   }
 
+  // Bot bubbles render trusted, static markup (topic answers + fixed links).
   function addBubble(role, html) {
     var b = el('div', { class: 'cho-asst__msg cho-asst__msg--' + role });
     b.innerHTML = html;
+    log.appendChild(b);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // User (and topic-button) bubbles use textContent so visitor-typed text can
+  // never reach an innerHTML sink — no HTML is ever parsed from user input.
+  function addUserBubble(text) {
+    var b = el('div', { class: 'cho-asst__msg cho-asst__msg--user' });
+    b.textContent = String(text);
     log.appendChild(b);
     log.scrollTop = log.scrollHeight;
   }
@@ -161,7 +175,7 @@
 
   function handleUserText(text) {
     if (!text) return;
-    addBubble('user', escapeText(text));
+    addUserBubble(text);
     logTurn('visitor', text);
     track('assistant_message', { page_path: location.pathname });
 
@@ -300,7 +314,7 @@
     TOPICS.forEach(function (topic) {
       var b = el('button', { type: 'button', class: 'cho-asst__chip' }, escapeText(topic.label));
       b.addEventListener('click', function () {
-        addBubble('user', escapeText(topic.label));
+        addUserBubble(topic.label);
         logTurn('visitor', topic.label);
         track('assistant_message', { topic: topic.id, page_path: location.pathname });
         answerTopic(topic);

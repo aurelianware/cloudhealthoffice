@@ -41,6 +41,19 @@
   function ssSet(key, value) {
     try { window.sessionStorage.setItem(key, value); } catch (e) { /* private mode */ }
   }
+  function cookieGet(key) {
+    try {
+      var m = document.cookie.match('(?:^|; )' + key + '=([^;]*)');
+      return m ? decodeURIComponent(m[1]) : null;
+    } catch (e) { return null; }
+  }
+  function cookieSet(key, value) {
+    try {
+      var secure = (location.protocol === 'https:') ? '; Secure' : '';
+      document.cookie = key + '=' + value + '; path=/; max-age=' +
+        (60 * 60 * 24 * 365) + '; SameSite=Lax' + secure;
+    } catch (e) { /* ignore */ }
+  }
 
   /* ---------- durable anonymous id ---------- */
   function makeId() {
@@ -69,17 +82,16 @@
   }
 
   function getAnonymousId() {
-    var id = lsGet(ANON_KEY);
+    // Read from localStorage first, then fall back to the first-party cookie so
+    // the id stays durable when localStorage is blocked (strict privacy modes).
+    var id = lsGet(ANON_KEY) || cookieGet(ANON_KEY);
     if (!id) {
       id = makeId();
-      lsSet(ANON_KEY, id);
-      // Mirror into a first-party cookie so server-side tooling can read it too.
-      try {
-        var secure = (location.protocol === 'https:') ? '; Secure' : '';
-        document.cookie = ANON_KEY + '=' + id + '; path=/; max-age=' +
-          (60 * 60 * 24 * 365) + '; SameSite=Lax' + secure;
-      } catch (e) { /* ignore */ }
     }
+    // Always (re)persist to both stores so a value recovered from one heals the
+    // other, and the cookie also exposes the id to server-side tooling.
+    lsSet(ANON_KEY, id);
+    cookieSet(ANON_KEY, id);
     return id;
   }
 
