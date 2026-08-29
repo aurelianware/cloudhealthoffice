@@ -28,6 +28,16 @@ const formspreeFoundingPartnerEndpoint = (
     : rawFormspreeFoundingPartnerEndpoint.trim()
 ) || defaultFormspreeFoundingPartnerEndpoint;
 
+// Lead-capture endpoint for the new LeadForm / /start assets / assistant handoff.
+// Defaults to the same Formspree inbox as the founding form; override with
+// FORMSPREE_LEADS_ENDPOINT to route leads to a dedicated form.
+const rawFormspreeLeadsEndpoint = process.env.FORMSPREE_LEADS_ENDPOINT;
+const formspreeLeadsEndpoint = (
+  rawFormspreeLeadsEndpoint === undefined
+    ? formspreeFoundingPartnerEndpoint
+    : rawFormspreeLeadsEndpoint.trim()
+) || formspreeFoundingPartnerEndpoint;
+
 if (googleAnalyticsId && !/^G-[A-Z0-9]+$/i.test(googleAnalyticsId)) {
   console.error(
     `Error: GOOGLE_ANALYTICS_ID "${googleAnalyticsId}" is not a valid GA4 measurement ID (expected format: G-XXXXXXXXXX)`
@@ -41,6 +51,16 @@ if (
 ) {
   console.error(
     `Error: FORMSPREE_FOUNDING_PARTNER_ENDPOINT must use the format https://formspree.io/f/{form_id}`
+  );
+  process.exit(1);
+}
+
+if (
+  formspreeLeadsEndpoint &&
+  !/^https:\/\/formspree\.io\/f\/[a-z0-9]+$/i.test(formspreeLeadsEndpoint)
+) {
+  console.error(
+    `Error: FORMSPREE_LEADS_ENDPOINT must use the format https://formspree.io/f/{form_id}`
   );
   process.exit(1);
 }
@@ -69,7 +89,17 @@ const shouldInclude = (sourcePath) =>
 const plausibleCommentPattern = /\s*<!-- Privacy-friendly analytics by Plausible -->\s*/gi;
 const plausibleLoaderPattern = /\s*<script[^>]*src="https:\/\/plausible\.io\/js\/pa-JQNNrBf52mV2BxHPtkLAv\.js"><\/script>\s*/gi;
 const plausibleInlinePattern = /\s*<script>window\.plausible[\s\S]*?<\/script>\s*/gi;
-const analyticsInjection = googleAnalyticsId
+// Site scripts load on every page whether or not GA is configured: the
+// first-party analytics, lead-capture, and constrained assistant must run
+// regardless of Google Analytics.
+const siteScripts = [
+  '<!-- First-party analytics + identity, lead capture, on-site assistant -->',
+  `<script>window.CHO_LEADS_ENDPOINT=${JSON.stringify(formspreeLeadsEndpoint)};</script>`,
+  '<script defer src="/js/analytics-events.js"></script>',
+  '<script defer src="/js/lead-capture.js"></script>',
+  '<script defer src="/js/assistant.js"></script>'
+];
+const analyticsInjection = (googleAnalyticsId
   ? [
       '<!-- Google Analytics -->',
       `<script async src="https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}"></script>`,
@@ -78,11 +108,10 @@ const analyticsInjection = googleAnalyticsId
       '  function gtag(){dataLayer.push(arguments);}',
       "  gtag('js', new Date());",
       `  gtag('config', '${googleAnalyticsId}');`,
-      '</script>',
-      '<!-- Conversion / engagement event tracking -->',
-      '<script defer src="/js/analytics-events.js"></script>'
-    ].join('\n')
-  : '';
+      '</script>'
+    ]
+  : []
+).concat(siteScripts).join('\n');
 
 function processHtmlFiles(directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -104,6 +133,10 @@ function processHtmlFiles(directory) {
       .replaceAll(
         '__FORMSPREE_FOUNDING_PARTNER_ENDPOINT__',
         formspreeFoundingPartnerEndpoint
+      )
+      .replaceAll(
+        '__FORMSPREE_LEADS_ENDPOINT__',
+        formspreeLeadsEndpoint
       )
       .replaceAll(
         defaultFormspreeFoundingPartnerEndpoint,

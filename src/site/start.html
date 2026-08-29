@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get started — Cloud Health Office</title>
+  <meta name="description" content="Get the CMS-0057-F readiness checklist, the evaluator pack, the architecture one-pager, or book 30 minutes with the team." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/start" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/start" />
+  <meta property="og:title" content="Get started — Cloud Health Office" />
+  <meta property="og:description" content="Get the CMS-0057-F readiness checklist, the evaluator pack, the architecture one-pager, or book 30 minutes with the team." />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/editorial-visuals.css" />
+  <link rel="stylesheet" href="/css/conversion.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <section class="hero-section" style="min-height:auto; padding:120px 24px 30px;">
+      <div class="hero-content">
+        <div class="hero-badge">Get started</div>
+        <h1 class="hero-headline" style="font-size:clamp(1.9rem,4vw,3rem);">Get the pack that fits where you are.</h1>
+        <p class="hero-subheadline">
+          Pick a resource below. Each is a short form &mdash; then we deliver the asset and follow up within one
+          business day. We never collect member or patient data.
+        </p>
+      </div>
+    </section>
+
+    <section aria-label="Registration offers" style="padding:10px 24px 80px; background:#000;">
+      <div class="section-wrapper">
+        <div class="feature-grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); align-items:start;">
+
+        <div class="feature-card" id="checklist" style="display:flex; flex-direction:column;">
+          <span class="section-eyebrow" style="color:#00ff88;">Checklist</span>
+          <h3 style="margin:6px 0 8px;">CMS-0057-F readiness checklist</h3>
+          <p style="color:rgba(200,200,200,0.82); line-height:1.65;">A 2&ndash;3 page PDF: what the five APIs require, what &ldquo;beside the core&rdquo; means, and the questions to ask a vendor.</p>
+          <form data-lead-form data-lead-interest="cms-0057f-checklist" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
+                id="checklistForm" class="cho-leadform" style="margin-top:14px;" aria-label="CMS-0057-F readiness checklist">
+            <input type="hidden" name="_subject" value="CMS-0057-F readiness checklist request" />
+            <div class="cho-leadform__row">
+              <div><label for="checklist-first">First name *</label><input id="checklist-first" name="firstName" required autocomplete="given-name" /></div>
+              <div><label for="checklist-last">Last name *</label><input id="checklist-last" name="lastName" required autocomplete="family-name" /></div>
+            </div>
+            <div><label for="checklist-email">Work email *</label><input id="checklist-email" type="email" name="email" required autocomplete="email" placeholder="you@healthplan.org" /></div>
+            <div><label for="checklist-company">Company *</label><input id="checklist-company" name="company" required autocomplete="organization" /></div>
+            <div class="cho-leadform__row">
+              <div>
+                <label for="checklist-role">Role *</label>
+                <select id="checklist-role" name="role" required>
+                  <option value="">Select…</option>
+                  <option>CIO / CTO</option><option>Architect</option><option>Compliance</option><option>Consultant</option><option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label for="checklist-core">Current core</label>
+                <select id="checklist-core" name="coreSystem">
+                  <option value="">Select…</option>
+                  <option>QNXT</option><option>Facets</option><option>HealthEdge</option><option>Other</option><option>None</option>
+                </select>
+              </div>
+            </div>
+            
+            <div data-lead-error role="alert" aria-live="polite" class="cho-leadform__error" hidden></div>
+            <button type="submit" class="button" style="width:100%;">Send me the checklist</button>
+            <p class="cho-leadform__note">We reply within one business day. Work email preferred. No PHI, ever.</p>
+          </form>
+          <div data-lead-thankyou data-for="checklistForm" class="cho-leadform__thanks" hidden style="margin-top:14px;">
+            <h3 style="color:#00ff88;">Thank you.</h3>
+            <p>We reply within one business day. <a href="/cms-0057f-compliance" data-asset-download="cms-0057f-checklist" style="color:#00ffff;">Read the CMS-0057-F summary &rarr;</a></p>
+          </div>
+        </div>
+        <div class="feature-card" id="evaluator" style="display:flex; flex-direction:column;">
+          <span class="section-eyebrow" style="color:#00ff88;">Evaluator pack</span>
+          <h3 style="margin:6px 0 8px;">Evaluator pack</h3>
+          <p style="color:rgba(200,200,200,0.82); line-height:1.65;">Local quickstart link, the First Claim journey, the 1M evidence summary, and the license one-pager.</p>
+          <form data-lead-form data-lead-interest="evaluator-pack" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
+                id="evaluatorForm" class="cho-leadform" style="margin-top:14px;" aria-label="Evaluator pack">
+            <input type="hidden" name="_subject" value="Evaluator pack request" />
+            <div class="cho-leadform__row">
+              <div><label for="evaluator-first">First name *</label><input id="evaluator-first" name="firstName" required autocomplete="given-name" /></div>
+              <div><label for="evaluator-last">Last name *</label><input id="evaluator-last" name="lastName" required autocomplete="family-name" /></div>
+            </div>
+            <div><label for="evaluator-email">Work email *</label><input id="evaluator-email" type="email" name="email" required autocomplete="email" placeholder="you@healthplan.org" /></div>
+            <div><label for="evaluator-company">Company *</label><input id="evaluator-company" name="company" required autocomplete="organization" /></div>
+            <div class="cho-leadform__row">
+              <div>
+                <label for="evaluator-role">Role *</label>
+                <select id="evaluator-role" name="role" required>
+                  <option value="">Select…</option>
+                  <option>CIO / CTO</option><option>Architect</option><option>Compliance</option><option>Consultant</option><option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label for="evaluator-core">Current core</label>
+                <select id="evaluator-core" name="coreSystem">
+                  <option value="">Select…</option>
+                  <option>QNXT</option><option>Facets</option><option>HealthEdge</option><option>Other</option><option>None</option>
+                </select>
+              </div>
+            </div>
+            
+            <div data-lead-error role="alert" aria-live="polite" class="cho-leadform__error" hidden></div>
+            <button type="submit" class="button" style="width:100%;">Send me the evaluator pack</button>
+            <p class="cho-leadform__note">We reply within one business day. Work email preferred. No PHI, ever.</p>
+          </form>
+          <div data-lead-thankyou data-for="evaluatorForm" class="cho-leadform__thanks" hidden style="margin-top:14px;">
+            <h3 style="color:#00ff88;">Thank you.</h3>
+            <p>We reply within one business day. The local quickstart is ready now: <a href="/docs/quickstart" data-asset-download="evaluator-pack" style="color:#00ffff;">Open the local quickstart &rarr;</a></p>
+          </div>
+        </div>
+        <div class="feature-card" id="architecture" style="display:flex; flex-direction:column;">
+          <span class="section-eyebrow" style="color:#00ff88;">Architecture</span>
+          <h3 style="margin:6px 0 8px;">Architecture one-pager</h3>
+          <p style="color:rgba(200,200,200,0.82); line-height:1.65;">How Cloud Health Office sits next to QNXT, Facets, or HealthEdge &mdash; and what stays your system of record.</p>
+          <form data-lead-form data-lead-interest="architecture-one-pager" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
+                id="architectureForm" class="cho-leadform" style="margin-top:14px;" aria-label="Architecture one-pager">
+            <input type="hidden" name="_subject" value="Architecture one-pager request" />
+            <div class="cho-leadform__row">
+              <div><label for="architecture-first">First name *</label><input id="architecture-first" name="firstName" required autocomplete="given-name" /></div>
+              <div><label for="architecture-last">Last name *</label><input id="architecture-last" name="lastName" required autocomplete="family-name" /></div>
+            </div>
+            <div><label for="architecture-email">Work email *</label><input id="architecture-email" type="email" name="email" required autocomplete="email" placeholder="you@healthplan.org" /></div>
+            <div><label for="architecture-company">Company *</label><input id="architecture-company" name="company" required autocomplete="organization" /></div>
+            <div class="cho-leadform__row">
+              <div>
+                <label for="architecture-role">Role *</label>
+                <select id="architecture-role" name="role" required>
+                  <option value="">Select…</option>
+                  <option>CIO / CTO</option><option>Architect</option><option>Compliance</option><option>Consultant</option><option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label for="architecture-core">Current core</label>
+                <select id="architecture-core" name="coreSystem">
+                  <option value="">Select…</option>
+                  <option>QNXT</option><option>Facets</option><option>HealthEdge</option><option>Other</option><option>None</option>
+                </select>
+              </div>
+            </div>
+            
+            <div data-lead-error role="alert" aria-live="polite" class="cho-leadform__error" hidden></div>
+            <button type="submit" class="button" style="width:100%;">Send me the one-pager</button>
+            <p class="cho-leadform__note">We reply within one business day. Work email preferred. No PHI, ever.</p>
+          </form>
+          <div data-lead-thankyou data-for="architectureForm" class="cho-leadform__thanks" hidden style="margin-top:14px;">
+            <h3 style="color:#00ff88;">Thank you.</h3>
+            <p>We reply within one business day. <a href="/platform" data-asset-download="architecture-one-pager" style="color:#00ffff;">See the platform &rarr;</a></p>
+          </div>
+        </div>
+        <div class="feature-card" id="book" style="display:flex; flex-direction:column;">
+          <span class="section-eyebrow" style="color:#00ff88;">Book time</span>
+          <h3 style="margin:6px 0 8px;">Book 30 minutes</h3>
+          <p style="color:rgba(200,200,200,0.82); line-height:1.65;">Prefer to talk? Book a 30-minute call. Tell us what you want to cover and we will come prepared.</p>
+          <form data-lead-form data-lead-interest="book-30" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
+                id="bookForm" class="cho-leadform" style="margin-top:14px;" aria-label="Book 30 minutes">
+            <input type="hidden" name="_subject" value="Book 30 minutes request" />
+            <div class="cho-leadform__row">
+              <div><label for="book-first">First name *</label><input id="book-first" name="firstName" required autocomplete="given-name" /></div>
+              <div><label for="book-last">Last name *</label><input id="book-last" name="lastName" required autocomplete="family-name" /></div>
+            </div>
+            <div><label for="book-email">Work email *</label><input id="book-email" type="email" name="email" required autocomplete="email" placeholder="you@healthplan.org" /></div>
+            <div><label for="book-company">Company *</label><input id="book-company" name="company" required autocomplete="organization" /></div>
+            <div class="cho-leadform__row">
+              <div>
+                <label for="book-role">Role *</label>
+                <select id="book-role" name="role" required>
+                  <option value="">Select…</option>
+                  <option>CIO / CTO</option><option>Architect</option><option>Compliance</option><option>Consultant</option><option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label for="book-core">Current core</label>
+                <select id="book-core" name="coreSystem">
+                  <option value="">Select…</option>
+                  <option>QNXT</option><option>Facets</option><option>HealthEdge</option><option>Other</option><option>None</option>
+                </select>
+              </div>
+            </div>
+            <div><label for="book-cover">What do you want to cover?</label><textarea id="book-cover" name="message" rows="2" placeholder="e.g., CMS-0057-F Layer 1 beside QNXT"></textarea></div>
+            <div data-lead-error role="alert" aria-live="polite" class="cho-leadform__error" hidden></div>
+            <button type="submit" class="button" style="width:100%;">Request a time</button>
+            <p class="cho-leadform__note">We reply within one business day. Work email preferred. No PHI, ever.</p>
+          </form>
+          <div data-lead-thankyou data-for="bookForm" class="cho-leadform__thanks" hidden style="margin-top:14px;">
+            <h3 style="color:#00ff88;">Thank you.</h3>
+            <p>We reply within one business day. Or book directly on the calendar below. <a href="/contact" data-asset-download="book-30" style="color:#00ffff;">Contact the team &rarr;</a></p>
+          </div>
+        </div>
+        </div>
+
+        <div style="max-width:820px; margin:56px auto 0; text-align:center;">
+          <div class="section-header" style="margin-bottom:18px;">
+            <span class="section-eyebrow" style="color:#00ffff;">Or book directly</span>
+            <h2 class="section-title" style="font-size:clamp(1.3rem,3vw,1.9rem);">Book 30 minutes on the calendar</h2>
+          </div>
+          <a href="https://calendar.proton.me/bookings#t8cx42xrcsdyKpyO-u6tOusw7bHVaQdosjyL0txXTQA=" target="_blank" rel="noopener noreferrer" class="button" data-ga-event="calendar_open_click">Open the booking calendar &rarr;</a>
+          <p style="margin-top:14px; font-size:0.85rem; color:rgba(160,160,160,0.7);">
+            Engineers: you can skip all of this and <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">clone the repo</a>. The evaluator pack above emails you the notes.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/what-is">What is Cloud Health Office?</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/evidence">Evidence</a></li>
+            <li><a href="/deploy">Deploy</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/trust">Trust &amp; Security</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

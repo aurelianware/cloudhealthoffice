@@ -23,6 +23,42 @@
       "statusCode": 301
     },
     {
+      "route": "/what-is.html",
+      "redirect": "/what-is",
+      "statusCode": 301
+    },
+    {
+      "route": "/what-is",
+      "rewrite": "/what-is.html"
+    },
+    {
+      "route": "/start.html",
+      "redirect": "/start",
+      "statusCode": 301
+    },
+    {
+      "route": "/start",
+      "rewrite": "/start.html"
+    },
+    {
+      "route": "/deploy.html",
+      "redirect": "/deploy",
+      "statusCode": 301
+    },
+    {
+      "route": "/deploy",
+      "rewrite": "/deploy.html"
+    },
+    {
+      "route": "/evidence.html",
+      "redirect": "/evidence",
+      "statusCode": 301
+    },
+    {
+      "route": "/evidence",
+      "rewrite": "/evidence.html"
+    },
+    {
       "route": "/solutions-payers.html",
       "redirect": "/solutions-payers",
       "statusCode": 301

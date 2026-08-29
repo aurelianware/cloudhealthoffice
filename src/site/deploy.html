@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deploy Cloud Health Office</title>
+  <meta name="description" content="Deploy Cloud Health Office in your own Azure, AWS, or GCP — PHI never leaves your boundary. Evaluate locally for free; license production when ready." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/deploy" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/deploy" />
+  <meta property="og:title" content="Deploy Cloud Health Office" />
+  <meta property="og:description" content="Deploy Cloud Health Office in your own Azure, AWS, or GCP — PHI never leaves your boundary. Evaluate locally for free; license production when ready." />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/editorial-visuals.css" />
+  <link rel="stylesheet" href="/css/conversion.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <section class="hero-section" style="min-height:auto; padding:120px 24px 40px;">
+      <div class="hero-content">
+        <div class="hero-badge">Deploy &nbsp;&middot;&nbsp; Your cloud or local eval</div>
+        <h1 class="hero-headline" style="font-size:clamp(1.9rem,4vw,3rem);">How Cloud Health Office runs.</h1>
+        <p class="hero-subheadline">
+          You deploy in your own cloud. PHI never leaves your boundary. Evaluate and run locally for free;
+          license a production deployment when you are ready.
+        </p>
+      </div>
+    </section>
+
+    <section aria-label="Deployment models" style="padding:10px 24px 50px; background:#000;">
+      <div class="section-wrapper">
+        <div class="feature-grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/></svg></div>
+            <h3>Evaluate locally &mdash; free</h3>
+            <p>Clone the repo and run it on local Docker Desktop Kubernetes. Read the source, walk the First Claim journey, and reproduce the Million Claim Challenge. No license required for evaluation.</p>
+            <p style="margin-top:12px;"><a href="/docs/quickstart" style="color:#00ffff;">Local quickstart &rarr;</a></p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.34 9.5 4 4 0 0 0 7 17.5h10.5z"/></svg></div>
+            <h3>Production &mdash; in your cloud</h3>
+            <p>Deploy in your own Azure, AWS, or GCP subscription. Your team owns the environment and the data permanently; there is no black-box vendor access to member data. Private endpoints, network isolation, full audit evidence.</p>
+            <p style="margin-top:12px;"><a href="/trust" style="color:#00ffff;">Trust &amp; security &rarr;</a></p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><polyline points="9 12 11 14 15 10"/></svg></div>
+            <h3>Managed tenant &mdash; optional</h3>
+            <p>Prefer us to operate it? A managed tenant is available. Either way you start at Layer&nbsp;1 (CMS-0057-F compliance) beside your core and expand only when you choose.</p>
+            <p style="margin-top:12px;"><a href="/platform" style="color:#00ffff;">See the layers &rarr;</a></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="License" style="padding:40px 24px; background:linear-gradient(180deg,#05060c,#000); border-top:1px solid rgba(0,255,255,0.1); border-bottom:1px solid rgba(0,255,255,0.1);">
+      <div style="max-width:760px; margin:0 auto; text-align:center;">
+        <span class="section-eyebrow" style="color:#00ffff;">License</span>
+        <p style="font-size:1.1rem; line-height:1.8; color:rgba(215,215,215,0.92); margin-top:12px;">
+          Source-available under BSL 1.1. Evaluate and run locally for free. Production use requires a license.
+          Deploy in your cloud or as a managed tenant.
+        </p>
+        <p style="font-size:0.9rem; color:rgba(160,160,160,0.7); margin-top:10px;">
+          The CMS-0057-F API implementations ship in the repo. Implementation, core mapping, prior-auth workflow,
+          and Platform Engagement (claims / payments / core replacement) are paid.
+        </p>
+        <p style="margin-top:16px;"><a href="/docs/commercial-licensing" class="button button-secondary">Commercial licensing &rarr;</a></p>
+      </div>
+    </section>
+
+    <section aria-label="What production means" style="padding:60px 24px 30px; background:#000;">
+      <div style="max-width:760px; margin:0 auto;">
+        <div class="section-header" style="text-align:left; margin-bottom:20px;">
+          <span class="section-eyebrow">Stage</span>
+          <h2 class="section-title" style="font-size:clamp(1.4rem,3vw,2rem);">What &ldquo;production&rdquo; means today</h2>
+        </div>
+        <p style="font-size:1.02rem; line-height:1.8; color:rgba(210,210,210,0.9);">
+          Cloud Health Office is ready to deploy in your cloud as a compliance layer beside QNXT, Facets, or
+          HealthEdge. The first production tenant is under discussion; the evidence and source are already public.
+        </p>
+      </div>
+    </section>
+
+    <section id="terms" aria-labelledby="terms-heading" style="padding:30px 24px 80px; background:linear-gradient(180deg,#000,#050510);">
+      <div class="section-wrapper">
+        <div class="section-header">
+          <span class="section-eyebrow" style="color:#00ff88;">First production deployment terms</span>
+          <h2 id="terms-heading" class="section-title" style="color:#00ff88; text-shadow:0 0 30px rgba(0,255,136,0.3);">
+            Terms for an early production tenant
+          </h2>
+          <p class="section-subtitle">
+            A production Layer&nbsp;1 deploy in your cloud is a low-friction entry. For an early production tenant,
+            license terms can be waived &mdash; in exchange for engineering partnership and a reference.
+          </p>
+        </div>
+        <div class="feature-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
+          <div class="feature-card" style="border-color:rgba(0,255,136,0.2);">
+            <h3 style="color:#00ff88;">Waived platform license</h3>
+            <p>Platform license terms can be waived for the first production tenant. You still own your cloud environment and your data permanently.</p>
+          </div>
+          <div class="feature-card" style="border-color:rgba(0,255,136,0.2);">
+            <h3 style="color:#00ff88;">Direct engineer access</h3>
+            <p>Work side-by-side with the engineers building the platform while you deploy the CMS-0057-F surface and map it to your core.</p>
+          </div>
+          <div class="feature-card" style="border-color:rgba(0,255,136,0.2);">
+            <h3 style="color:#00ff88;">Reference partnership</h3>
+            <p>In return, we ask to reference the deployment. Implementation, core mapping, and Platform Engagement remain scoped, paid work.</p>
+          </div>
+        </div>
+        <div style="text-align:center; margin-top:36px;">
+          <a href="/contact" class="button">Talk about a deployment &rarr;</a>
+          <a href="/start" class="button button-secondary">Get the evaluator pack &rarr;</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/what-is">What is Cloud Health Office?</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/evidence">Evidence</a></li>
+            <li><a href="/deploy">Deploy</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/trust">Trust &amp; Security</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

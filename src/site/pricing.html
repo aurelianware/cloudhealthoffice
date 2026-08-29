@@ -674,8 +674,8 @@
     .pricing-grid { grid-template-columns: 1fr; max-width: 440px; }
   }
 
-  /* Founding-client nav link + nav wrapping on small screens */
-  .nav-founding { color: var(--accent-teal) !important; font-weight: 600; }
+  /* Primary nav link + nav wrapping on small screens */
+  .nav-highlight { color: var(--accent-teal) !important; font-weight: 600; }
   @media (max-width: 760px) {
     nav { flex-wrap: wrap; gap: 16px; }
     .nav-links { flex-wrap: wrap; gap: 18px 20px; justify-content: flex-start; }
@@ -766,7 +766,7 @@
     <a href="/cms-0057f-compliance">Compliance</a>
     <a href="/trust">Trust</a>
     <a href="/docs">Docs</a>
-    <a href="/#founding-partner-form" class="nav-founding">Founding Client</a>
+    <a href="/evidence" class="nav-highlight">Evidence</a>
     <a href="/contact" class="nav-cta">Contact Sales</a>
   </div>
 </nav>
@@ -776,7 +776,7 @@
   <h1>Compliance now. Modernization on your timeline.</h1>
   <p>Most health plans engage Cloud Health Office through Platform Engagement &mdash; multi-year, payer-scale relationships priced per member per month (PMPM). We also offer Public Tools, Transactional Services, and Managed Data Services for developers, integrators, and small plans with specific data needs. Modernize now. Replace later.</p>
   <div class="hero-actions">
-    <a href="/#founding-partner-form" class="btn-primary" data-ga-event="founding_client_cta_click">Apply for Founding Client &rarr;</a>
+    <a href="/contact" class="btn-primary" data-ga-event="talk_deployment_cta_click">Talk about a deployment &rarr;</a>
     <a href="/contact" class="btn-secondary">Talk to Sales</a>
   </div>
 </section>
@@ -896,7 +896,7 @@
     <div class="section-label">Commercial shape</div>
     <ul class="feature-list">
       <li>Multi-year contracts; expansion is an amendment, not a renegotiation</li>
-      <li>Founding-partner terms available for first pilots in each layer</li>
+      <li>First production deployment terms available for an early production tenant in each layer</li>
       <li>Indicative ranges available on request; pilot terms set per engagement</li>
     </ul>
 
@@ -932,7 +932,7 @@
       <div class="layer-name">Full CAPS Platform</div>
       <div class="layer-row"><strong>Who enters here</strong>MA startups and new-license plans with no legacy platform; small regional Medicaid plans whose existing platform cannot meet new requirements; mid-market commercial plans finishing a Layer 2 journey by turning their legacy core off entirely.</div>
       <div class="layer-row"><strong>What&rsquo;s included</strong>The full cloud-native CAPS &mdash; 36 services, 9 adjudication and rules engines, Argo-orchestrated adjudication pipeline, EDI ingress and egress (270/271/275/276/277/278/834/837), multi-tenant throughout. Ready for customer-owned validation with honest disclosure of remaining gaps (reference customer, scale testing, portal polish) discussed openly with pilot partners.</div>
-      <div class="layer-row"><strong>Commercial shape</strong>Larger engagement, multi-year, priced PMPM. Founding-partner terms reflect both the strategic advantage of being first and the cost structure a cloud-native architecture supports.</div>
+      <div class="layer-row"><strong>Commercial shape</strong>Larger engagement, multi-year, priced PMPM. First production deployment terms reflect both the advantage of being first and the cost structure a cloud-native architecture supports.</div>
     </div>
   </div>
 </section>
@@ -1013,7 +1013,7 @@
 
   <div class="faq-item">
     <div class="faq-q">What does PMPM mean and how is it priced?</div>
-    <div class="faq-a">PMPM stands for per member per month &mdash; the standard unit economics for payer-scale platform relationships. CHO&rsquo;s Platform Engagement is priced PMPM across all three layers. Pricing is indicative market-rate within each layer; specific terms are negotiated per pilot. Founding-partner terms are available for first pilot engagements in each layer. Layer 1 entry pricing is market-rate for CMS-0057-F compliance surfaces; Layer 2 PMPM expands per domain migrated; Layer 3 PMPM aspires to the range of incumbent CAPS platforms as production references accumulate.</div>
+    <div class="faq-a">PMPM stands for per member per month &mdash; the standard unit economics for payer-scale platform relationships. CHO&rsquo;s Platform Engagement is priced PMPM across all three layers. Pricing is indicative market-rate within each layer; specific terms are negotiated per pilot. First production deployment terms are available for an early production tenant in each layer. Layer 1 entry pricing is market-rate for CMS-0057-F compliance surfaces; Layer 2 PMPM expands per domain migrated; Layer 3 PMPM aspires to the range of incumbent CAPS platforms as production references accumulate.</div>
   </div>
 
   <div class="faq-item">
@@ -1055,7 +1055,7 @@
   </p>
   <p style="margin-top:14px;">
     Questions? <a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a> &middot;
-    <a href="/#founding-partner-form">Apply for the Founding Client Program</a> &middot;
+    <a href="/deploy#terms">First production deployment terms</a> &middot;
     <a href="/founder">Meet the founder</a>
   </p>
   <p style="margin-top:18px; color: var(--text-muted);">&copy; 2026 Aurelianware, Inc. &middot; Source-available (BSL 1.1) &middot; <a href="mailto:licensing@cloudhealthoffice.com">Commercial licensing</a> &middot; <a href="/legal/privacy-policy">Privacy</a></p>
@@ -1066,7 +1066,7 @@
 <!-- ===== STICKY PRIMARY CTA ===== -->
 <div id="stickyCta" class="sticky-cta" role="region" aria-label="Get started with Cloud Health Office">
   <p>Ready to scope a CMS-0057-F pilot?</p>
-  <a href="/#founding-partner-form" class="btn-primary" data-ga-event="sticky_founding_client_click">Apply for Founding Client &rarr;</a>
+  <a href="/contact" class="btn-primary" data-ga-event="sticky_talk_deployment_click">Talk about a deployment &rarr;</a>
   <a href="/contact" class="btn-secondary">Talk to Sales</a>
 </div>
 

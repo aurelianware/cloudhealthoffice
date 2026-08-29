@@ -258,12 +258,12 @@
         <table>
           <thead><tr><th>Capability</th><th>CHO</th><th>Typical Implementation</th></tr></thead>
           <tbody>
-            <tr><td>FHIR R4 APIs (Patient, Provider, P2P, PA)</td><td><span class="badge badge-complete">Built-in</span></td><td>Varies &mdash; often assembled from open-source tooling</td></tr>
+            <tr><td>FHIR R4 APIs (Patient, Provider, P2P, PA)</td><td><span class="badge badge-complete">Built-in</span></td><td>Varies &mdash; often assembled from third-party tooling</td></tr>
             <tr><td>X12 EDI Mapping</td><td><span class="badge badge-complete">Implemented mapping surfaces</span></td><td>Third-party libraries or manual mapping</td></tr>
             <tr><td>SNOMED &#8596; CPT/ICD Terminology Translation</td><td><span class="badge badge-complete">Native ConceptMap/$translate</span></td><td>Not included &mdash; &ldquo;customer responsibility&rdquo;</td></tr>
             <tr><td>Context-Aware Disambiguation</td><td><span class="badge badge-complete">Rule engine with plan overrides</span></td><td>Not available</td></tr>
             <tr><td>Provider Verification (NPPES, OIG, PECOS, FSMB)</td><td><span class="badge badge-complete">Multi-source Integrity Score</span></td><td>Manual or separate product</td></tr>
-            <tr><td>Claims Adjudication Pipeline</td><td><span class="badge badge-complete">10-step DAG, &lt;500ms</span></td><td>Depends on legacy CAPS</td></tr>
+            <tr><td>Claims Adjudication Pipeline</td><td><span class="badge badge-complete">10-step DAG, sub-second</span></td><td>Depends on legacy CAPS</td></tr>
             <tr><td>Benefit Engine (HDHP, HSA, COB, NCCI, DRG)</td><td><span class="badge badge-complete">9 calculation engines</span></td><td>Depends on legacy CAPS</td></tr>
             <tr><td>Core Admin Adapter Pattern</td><td><span class="badge badge-complete">Vendor-neutral ICoreAdminAdapter</span></td><td>Hard-coded to one CAPS</td></tr>
             <tr><td>Multi-Tenant SaaS</td><td><span class="badge badge-complete">X-Tenant-ID isolation</span></td><td>Single-tenant or per-client deployment</td></tr>
