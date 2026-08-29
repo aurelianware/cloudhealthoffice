@@ -269,7 +269,9 @@
       });
   }
 
+  var lastFocused = null;
   function openPanel() {
+    lastFocused = document.activeElement;
     panel.hidden = false;
     document.getElementById('cho-asst-toggle').setAttribute('aria-expanded', 'true');
     track('assistant_open', { page_path: location.pathname });
@@ -279,10 +281,17 @@
         'or type a question.', 'greeting');
       assistantTurns = 0; // greeting doesn't count toward the handoff
     }
+    // Move keyboard focus into the dialog.
+    try { (textInput || panel).focus(); } catch (e) { /* ignore */ }
   }
   function closePanel() {
     panel.hidden = true;
     document.getElementById('cho-asst-toggle').setAttribute('aria-expanded', 'false');
+    // Restore focus to whatever opened the dialog (usually the toggle).
+    try {
+      (lastFocused && lastFocused.focus ? lastFocused
+        : document.getElementById('cho-asst-toggle')).focus();
+    } catch (e) { /* ignore */ }
   }
 
   function build() {
@@ -300,7 +309,15 @@
 
     panel = el('section', {
       id: 'cho-asst-panel', class: 'cho-asst__panel', hidden: 'hidden',
-      role: 'dialog', 'aria-label': 'Ask about Cloud Health Office'
+      role: 'dialog', 'aria-modal': 'true', tabindex: '-1',
+      'aria-label': 'Ask about Cloud Health Office'
+    });
+    // Escape closes the dialog from anywhere inside it.
+    panel.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' || e.keyCode === 27) {
+        e.stopPropagation();
+        closePanel();
+      }
     });
 
     var header = el('header', { class: 'cho-asst__header' },

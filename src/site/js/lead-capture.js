@@ -92,17 +92,16 @@
       var emailField = form.querySelector('input[type="email"], input[name="email"]');
       var email = emailField ? emailField.value.trim() : '';
 
-      // Required-field check driven by the markup (required attributes).
-      var missing = false;
-      form.querySelectorAll('[required]').forEach(function (field) {
-        if (!String(field.value || '').trim()) missing = true;
-      });
-      if (missing) {
-        showError(form, 'Please fill in the required fields before sending.');
+      // Let the browser enforce native constraints (required, type=email,
+      // pattern, radio groups) and announce field-level errors to assistive
+      // tech via the built-in bubbles.
+      if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
         return;
       }
+      // Belt-and-suspenders for older browsers without constraint validation.
       if (email && !isEmail(email)) {
         showError(form, 'Please enter a valid email address.');
+        if (emailField && emailField.focus) emailField.focus();
         return;
       }
 

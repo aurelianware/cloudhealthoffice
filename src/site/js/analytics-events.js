@@ -42,14 +42,16 @@
   }
   function cookieGet(key) {
     try {
-      var m = document.cookie.match('(?:^|; )' + key + '=([^;]*)');
+      // Cookies are joined with "; " but tolerate any whitespace after ";".
+      var m = document.cookie.match(new RegExp('(?:^|;\\s*)' + key + '=([^;]*)'));
       return m ? decodeURIComponent(m[1]) : null;
     } catch (e) { return null; }
   }
   function cookieSet(key, value) {
     try {
       var secure = (location.protocol === 'https:') ? '; Secure' : '';
-      document.cookie = key + '=' + value + '; path=/; max-age=' +
+      // Encode the value so any non-token character round-trips safely.
+      document.cookie = key + '=' + encodeURIComponent(value) + '; path=/; max-age=' +
         (60 * 60 * 24 * 365) + '; SameSite=Lax' + secure;
     } catch (e) { /* ignore */ }
   }
