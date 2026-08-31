@@ -58,6 +58,7 @@
       --font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--max:1140px;
     }
     html{scroll-behavior:smooth}
+    @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
     body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.7;overflow-x:hidden}
     a{color:var(--cyan)}
     .skip-to-main{position:absolute;left:-999px;top:0;background:var(--cyan);color:#000;padding:.6rem 1rem;z-index:200}
@@ -192,8 +193,8 @@
 
         <figure class="hero-figure">
           <img src="/graphics/insights/cms0057-modern-payer-boundary.svg"
-               alt="Vertical architecture diagram: Provider and EHR systems connect through FHIR and Da Vinci to CloudHealthOffice — which provides CRD, DTR, PAS, terminology, a prior authorization rule engine, SMART/OAuth and audit — then through a payer-specific integration boundary to QNXT, Facets, HealthEdge and other payer systems. CloudHealthOffice can also provide the payer backend itself."/>
-          <figcaption>CloudHealthOffice establishes a modern FHIR boundary around an existing payer environment — and can progressively provide payer backend capabilities itself.</figcaption>
+               alt="Vertical architecture diagram: Provider and EHR systems connect through FHIR and Da Vinci to Cloud Health Office — which provides CRD, DTR, PAS, terminology, a prior authorization rule engine, SMART/OAuth and audit — then through a payer-specific integration boundary to QNXT, Facets, HealthEdge and other payer systems. Cloud Health Office can also provide the payer backend itself."/>
+          <figcaption>Cloud Health Office establishes a modern FHIR boundary around an existing payer environment — and can progressively provide payer backend capabilities itself.</figcaption>
         </figure>
       </div>
     </header>
@@ -205,18 +206,18 @@
       <div class="container">
         <div class="section-label">Pillar Article</div>
         <h2 class="section-title">Start here</h2>
-        <p class="section-desc">The foundational article for this series — how CloudHealthOffice implements CRD, DTR, PAS, and terminology alongside a legacy core, and how the same architecture can eventually become the payer core backend.</p>
+        <p class="section-desc">The foundational article for this series — how Cloud Health Office implements CRD, DTR, PAS, and terminology alongside a legacy core, and how the same architecture can eventually become the payer core backend.</p>
 
         <article class="featured">
           <div class="featured-body">
             <span class="tag">Architecture · CRD · DTR · PAS</span>
-            <h3>CMS-0057-F with QNXT, Facets, or HealthEdge: How CloudHealthOffice Implements CRD, DTR, PAS, and a Modern Payer Backend</h3>
+            <h3>CMS-0057-F with QNXT, Facets, or HealthEdge: How Cloud Health Office Implements CRD, DTR, PAS, and a Modern Payer Backend</h3>
             <p>How health plans can meet modern FHIR prior-authorization requirements without a rip-and-replace core transformation — and how the same architecture can eventually replace the legacy core when the payer is ready.</p>
             <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas" class="btn btn-primary">Read the architecture article →</a>
           </div>
           <figure class="featured-figure">
             <img src="/graphics/insights/cms0057-crd-dtr-pas-flow.svg"
-                 alt="Horizontal lifecycle diagram of CRD discovering requirements, DTR collecting documentation, and PAS submitting and deciding — with the CloudHealthOffice services that implement each Da Vinci stage shown beneath, feeding an Authorization Service."/>
+                 alt="Horizontal lifecycle diagram of CRD discovering requirements, DTR collecting documentation, and PAS submitting and deciding — with the Cloud Health Office services that implement each Da Vinci stage shown beneath, feeding an Authorization Service."/>
           </figure>
         </article>
       </div>
@@ -277,9 +278,9 @@
 
     <section class="cta-section">
       <div class="container">
-        <div class="section-label" style="justify-content:center">Get Started</div>
+        <div class="section-label" style="text-align:center">Get Started</div>
         <h2>Modernize incrementally. Keep the FHIR boundary stable.</h2>
-        <p>See how CloudHealthOffice fits alongside your existing core — or becomes it — on your CMS-0057-F timeline.</p>
+        <p>See how Cloud Health Office fits alongside your existing core — or becomes it — on your CMS-0057-F timeline.</p>
         <div class="cta-actions">
           <a href="/contact" class="btn btn-primary">Contact Sales →</a>
           <a href="/platform" class="btn btn-ghost">Platform Overview</a>
