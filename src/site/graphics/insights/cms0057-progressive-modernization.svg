@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 620" role="img"
+     aria-labelledby="pm-title pm-desc" preserveAspectRatio="xMidYMid meet"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="pm-title">Progressive payer modernization in three stages</title>
+  <desc id="pm-desc">Three stages share one stable external FHIR boundary. Stage 1, modernize around the core: CloudHealthOffice provides FHIR, CRD, DTR, PAS, and terminology in front of QNXT, Facets, or HealthEdge. Stage 2, hybrid payer platform: selected capabilities such as prior auth, terminology, benefits, and provider services move into CloudHealthOffice while a legacy core handles remaining domains. Stage 3, CloudHealthOffice as the core: membership, eligibility, benefits, providers, prior authorization, claims, accumulators, and interoperability all run on CloudHealthOffice and the legacy core is retired. A payer can move from Stage 1 to Stage 3 without changing the external FHIR contract.</desc>
+
+  <defs>
+    <marker id="pm-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ff88"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="620" rx="16" fill="#0a0a0a"/>
+  <rect x="1" y="1" width="1178" height="618" rx="15" fill="none" stroke="#00ffff" stroke-opacity="0.18"/>
+
+  <!-- Stable FHIR boundary ribbon across the top -->
+  <rect x="40" y="30" width="1100" height="46" rx="10" fill="#0b1620" stroke="#00ffff" stroke-width="1.6"/>
+  <text x="590" y="52" text-anchor="middle" fill="#00ffff" font-size="16" font-weight="700">Stable external FHIR boundary &#8212; Provider / EHR contract is unchanged across every stage</text>
+  <text x="590" y="70" text-anchor="middle" fill="#8b949e" font-size="12">Patient Access &#183; Provider Access &#183; Prior Authorization APIs &#183; CRD / DTR / PAS</text>
+
+  <!-- three connecting arrows between panels -->
+  <line x1="386" y1="330" x2="416" y2="330" stroke="#00ff88" stroke-width="3" marker-end="url(#pm-arrow)"/>
+  <line x1="762" y1="330" x2="792" y2="330" stroke="#00ff88" stroke-width="3" marker-end="url(#pm-arrow)"/>
+
+  <!-- ============ STAGE 1 ============ -->
+  <g>
+    <rect x="40" y="98" width="346" height="464" rx="12" fill="#0d1117" stroke="#8b949e" stroke-opacity="0.6" stroke-width="1.4"/>
+    <text x="213" y="126" text-anchor="middle" fill="#e6edf3" font-size="15" font-weight="800">STAGE 1</text>
+    <text x="213" y="148" text-anchor="middle" fill="#00ffff" font-size="15" font-weight="700">Modernize around the core</text>
+
+    <rect x="66" y="170" width="294" height="150" rx="10" fill="#0b1f1a" stroke="#00ff88" stroke-width="1.8"/>
+    <text x="213" y="196" text-anchor="middle" fill="#00ff88" font-size="15" font-weight="700">CloudHealthOffice</text>
+    <text x="213" y="222" text-anchor="middle" fill="#c9d1d9" font-size="13">FHIR</text>
+    <text x="213" y="244" text-anchor="middle" fill="#c9d1d9" font-size="13">CRD &#183; DTR &#183; PAS</text>
+    <text x="213" y="266" text-anchor="middle" fill="#c9d1d9" font-size="13">Terminology</text>
+    <text x="213" y="298" text-anchor="middle" fill="#8b949e" font-size="12">Modern interoperability layer</text>
+
+    <line x1="213" y1="320" x2="213" y2="352" stroke="#00ffff" stroke-width="2" marker-end="url(#pm-arrow)"/>
+
+    <rect x="66" y="354" width="294" height="120" rx="10" fill="#141414" stroke="#8b949e" stroke-width="1.6"/>
+    <text x="213" y="392" text-anchor="middle" fill="#e6edf3" font-size="14.5" font-weight="700">QNXT / Facets / HealthEdge</text>
+    <text x="213" y="418" text-anchor="middle" fill="#8b949e" font-size="12.5">Authoritative for existing</text>
+    <text x="213" y="437" text-anchor="middle" fill="#8b949e" font-size="12.5">core domains</text>
+
+    <text x="213" y="512" text-anchor="middle" fill="#c9d1d9" font-size="12.5">Core stays the system of record.</text>
+    <text x="213" y="532" text-anchor="middle" fill="#8b949e" font-size="12">CHO adds the compliance surface.</text>
+  </g>
+
+  <!-- ============ STAGE 2 ============ -->
+  <g>
+    <rect x="416" y="98" width="346" height="464" rx="12" fill="#0d1117" stroke="#8b949e" stroke-opacity="0.6" stroke-width="1.4"/>
+    <text x="589" y="126" text-anchor="middle" fill="#e6edf3" font-size="15" font-weight="800">STAGE 2</text>
+    <text x="589" y="148" text-anchor="middle" fill="#00ffff" font-size="15" font-weight="700">Hybrid payer platform</text>
+
+    <rect x="442" y="170" width="294" height="184" rx="10" fill="#0b1f1a" stroke="#00ff88" stroke-width="1.8"/>
+    <text x="589" y="196" text-anchor="middle" fill="#00ff88" font-size="15" font-weight="700">CloudHealthOffice</text>
+    <text x="589" y="220" text-anchor="middle" fill="#c9d1d9" font-size="12.5">FHIR &#183; Prior Auth &#183; Terminology</text>
+    <text x="589" y="242" text-anchor="middle" fill="#c9d1d9" font-size="12.5">Benefits</text>
+    <text x="589" y="264" text-anchor="middle" fill="#c9d1d9" font-size="12.5">Provider services</text>
+    <text x="589" y="286" text-anchor="middle" fill="#c9d1d9" font-size="12.5">Eligibility</text>
+    <text x="589" y="320" text-anchor="middle" fill="#8b949e" font-size="12">Selected capabilities moved in</text>
+
+    <line x1="589" y1="354" x2="589" y2="386" stroke="#00ffff" stroke-width="2" marker-end="url(#pm-arrow)"/>
+
+    <rect x="442" y="388" width="294" height="86" rx="10" fill="#141414" stroke="#8b949e" stroke-width="1.6"/>
+    <text x="589" y="422" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">Legacy core</text>
+    <text x="589" y="444" text-anchor="middle" fill="#8b949e" font-size="12.5">Remaining domains only</text>
+
+    <text x="589" y="512" text-anchor="middle" fill="#c9d1d9" font-size="12.5">Capabilities move over time:</text>
+    <text x="589" y="532" text-anchor="middle" fill="#8b949e" font-size="12">prior auth, provider, benefits, claims.</text>
+  </g>
+
+  <!-- ============ STAGE 3 ============ -->
+  <g>
+    <rect x="792" y="98" width="348" height="464" rx="12" fill="#0d1117" stroke="#00ff88" stroke-opacity="0.8" stroke-width="1.6"/>
+    <text x="966" y="126" text-anchor="middle" fill="#e6edf3" font-size="15" font-weight="800">STAGE 3</text>
+    <text x="966" y="148" text-anchor="middle" fill="#00ffff" font-size="15" font-weight="700">CloudHealthOffice as the core</text>
+
+    <rect x="818" y="170" width="296" height="304" rx="10" fill="#0b1f1a" stroke="#00ff88" stroke-width="2"/>
+    <text x="966" y="198" text-anchor="middle" fill="#00ff88" font-size="15" font-weight="700">CloudHealthOffice</text>
+    <text x="966" y="228" text-anchor="middle" fill="#c9d1d9" font-size="13">Membership</text>
+    <text x="966" y="252" text-anchor="middle" fill="#c9d1d9" font-size="13">Eligibility &#183; Benefits</text>
+    <text x="966" y="276" text-anchor="middle" fill="#c9d1d9" font-size="13">Providers</text>
+    <text x="966" y="300" text-anchor="middle" fill="#c9d1d9" font-size="13">Prior Authorization</text>
+    <text x="966" y="324" text-anchor="middle" fill="#c9d1d9" font-size="13">Claims &#183; Accumulators</text>
+    <text x="966" y="348" text-anchor="middle" fill="#c9d1d9" font-size="13">FHIR / Interoperability</text>
+    <text x="966" y="384" text-anchor="middle" fill="#00ff88" font-size="12.5" font-weight="600">Payer backend</text>
+    <text x="966" y="430" text-anchor="middle" fill="#8b949e" font-size="12.5">The legacy core is no longer</text>
+    <text x="966" y="449" text-anchor="middle" fill="#8b949e" font-size="12.5">required.</text>
+
+    <text x="966" y="512" text-anchor="middle" fill="#c9d1d9" font-size="12.5">CHO is the system of record.</text>
+    <text x="966" y="532" text-anchor="middle" fill="#8b949e" font-size="12">Old core retired.</text>
+  </g>
+
+  <!-- takeaway -->
+  <text x="590" y="596" text-anchor="middle" fill="#00ff88" font-size="16" font-weight="800">Modernize incrementally. Keep the external FHIR boundary stable.</text>
+</svg>

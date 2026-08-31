@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CMS-0057-F &amp; Payer Modernization — Insights | Cloud Health Office</title>
+  <meta name="description" content="Practical architecture and implementation guidance for health plans preparing for CMS-0057-F: FHIR APIs, CRD, DTR, PAS, terminology, prior authorization, and modernization strategies for QNXT, Facets, and HealthEdge.">
+  <meta name="keywords" content="CMS-0057-F, FHIR API, payer FHIR API, FHIR prior authorization, CRD, DTR, PAS, QNXT FHIR API, Facets FHIR API, HealthEdge FHIR API, payer core modernization, Da Vinci prior authorization">
+  <meta name="author" content="Aurelianware">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/cms-0057-f">
+  <meta property="og:title" content="CMS-0057-F &amp; Payer Modernization — Insights Series">
+  <meta property="og:description" content="Practical architecture and implementation guidance for health plans preparing for CMS-0057-F: FHIR APIs, CRD, DTR, PAS, terminology, and modernization for QNXT, Facets, and HealthEdge.">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-modern-payer-boundary-og.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://cloudhealthoffice.com/insights/cms-0057-f">
+  <meta name="twitter:title" content="CMS-0057-F &amp; Payer Modernization — Insights Series">
+  <meta name="twitter:description" content="FHIR APIs, CRD, DTR, PAS, terminology, and legacy-core modernization for QNXT, Facets, and HealthEdge.">
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-modern-payer-boundary-og.png">
+
+  <!-- JSON-LD: CollectionPage + Breadcrumb -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": "CMS-0057-F & Payer Modernization",
+    "description": "Architecture and implementation guidance for health plans preparing for CMS-0057-F, covering FHIR APIs, CRD, DTR, PAS, terminology, and modernization strategies for QNXT, Facets, and HealthEdge.",
+    "url": "https://cloudhealthoffice.com/insights/cms-0057-f",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Cloud Health Office",
+      "url": "https://cloudhealthoffice.com"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Aurelianware, Inc.",
+      "url": "https://github.com/aurelianware"
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
+      { "@type": "ListItem", "position": 2, "name": "Insights", "item": "https://cloudhealthoffice.com/insights" },
+      { "@type": "ListItem", "position": 3, "name": "CMS-0057-F & Payer Modernization", "item": "https://cloudhealthoffice.com/insights/cms-0057-f" }
+    ]
+  }
+  </script>
+
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .series-container { max-width: 1120px; margin: 0 auto; padding: 40px 20px 80px; }
+    .series-hero { text-align: center; padding: 56px 0 40px; background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%); border-bottom: 2px solid #00ffff; }
+    .series-hero .eyebrow { color: #00ff88; font-size: .82rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    .series-hero h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 14px auto 18px; max-width: 900px; }
+    .series-hero p.lede { color: #c9d1d9; font-size: 1.12rem; line-height: 1.7; max-width: 760px; margin: 0 auto; }
+    .hero-figure { max-width: 760px; margin: 34px auto 0; }
+    .hero-figure img { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid rgba(0,255,255,.18); background: #000; }
+    .series-hero .hero-actions { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+
+    .quicklinks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 44px 0; }
+    .quicklink { display: block; background: #0a0a0a; border: 1px solid rgba(0,255,255,.22); border-radius: 10px; padding: 20px; text-decoration: none; transition: all .25s ease; }
+    .quicklink:hover { border-color: #00ff88; box-shadow: 0 0 22px rgba(0,255,255,.16); transform: translateY(-3px); }
+    .quicklink strong { display: block; color: #00ffff; font-size: 1.02rem; margin-bottom: 6px; }
+    .quicklink span { color: #8b949e; font-size: .9rem; line-height: 1.5; }
+
+    .article-card { display: grid; grid-template-columns: 1.05fr 1fr; gap: 0; background: #0a0a0a; border: 1px solid rgba(0,255,255,.28); border-radius: 14px; overflow: hidden; margin: 26px 0; }
+    .article-card .card-media { background: #000; display: flex; align-items: center; justify-content: center; padding: 22px; }
+    .article-card .card-media img { width: 100%; height: auto; border-radius: 8px; }
+    .article-card .card-body { padding: 34px 32px; }
+    .article-card .tag { color: #00ff88; font-size: .74rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .article-card h3 { margin: 12px 0 14px; font-size: 1.5rem; line-height: 1.2; }
+    .article-card p { color: #c9d1d9; line-height: 1.7; font-size: 1rem; }
+    .article-card .card-meta { color: #8b949e; font-size: .84rem; margin-top: 16px; }
+    .article-card .read-more { display: inline-block; margin-top: 20px; color: #00ffff; font-weight: 700; text-decoration: none; }
+    .article-card .read-more:hover { color: #00ff88; }
+
+    .relationship-box { background: #0a0a0a; border-left: 4px solid #00ff88; border-radius: 8px; padding: 28px 30px; margin: 40px 0; }
+    .relationship-box h3 { margin-top: 0; color: #00ff88; }
+    .relationship-box p { color: #c9d1d9; line-height: 1.75; }
+    .topics { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .topics span { border: 1px solid rgba(0,255,255,.3); border-radius: 999px; padding: 5px 12px; font-size: .82rem; color: #c9d1d9; }
+
+    @media (max-width: 760px) {
+      .article-card { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/">Home</a></li>
+          <li><a href="/solutions-payers">For Payers</a></li>
+          <li><a href="/solutions-providers">For Providers</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/insights" aria-current="page" style="color:#00ffff;">Insights</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/founder">Founder</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });
+  </script>
+
+  <main id="main-content">
+    <div class="series-hero circuit-veins">
+      <div class="hero-content">
+        <div class="eyebrow">Insights Series</div>
+        <h1>CMS-0057-F &amp; Payer Modernization</h1>
+        <p class="lede">
+          Practical architecture and implementation guidance for health plans preparing for CMS-0057-F.
+          Explore FHIR APIs, CRD, DTR, PAS, terminology services, prior authorization, and modernization
+          strategies for QNXT, Facets, HealthEdge, and other payer core administration platforms.
+        </p>
+        <figure class="hero-figure">
+          <img src="/graphics/insights/cms0057-modern-payer-boundary.svg"
+               alt="CloudHealthOffice sits between provider EHRs and an existing payer core, exposing FHIR R4 with Da Vinci CRD, DTR, PAS, terminology, and SMART/OAuth in front of QNXT, Facets, HealthEdge, and other payer systems.">
+        </figure>
+        <div class="hero-actions">
+          <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas" class="button button-green">Read the pillar article →</a>
+          <a href="/cms-0057f-compliance" class="button button-secondary">CMS-0057-F Readiness</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="series-container">
+
+      <section class="assessment-section">
+        <div class="section-label" style="color:#00ffff; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:12px;">About This Series</div>
+        <h2>Interoperability without a rip-and-replace</h2>
+        <p style="color:#c9d1d9; line-height:1.8; max-width:820px;">
+          CMS-0057-F asks impacted payers to stand up modern FHIR interoperability &mdash; including Prior
+          Authorization API capabilities &mdash; while membership, benefits, provider, authorization, and claims
+          processing keep running on existing systems. This series documents how Cloud Health Office implements
+          those capabilities as real, running services: Da Vinci CRD, DTR, and PAS wired to a terminology service
+          and a prior authorization rule engine, deployed alongside a payer&rsquo;s core &mdash; and, when the payer
+          is ready, able to take over payer domains or serve as the core backend itself.
+        </p>
+
+        <div class="quicklinks">
+          <a class="quicklink" href="/cms-0057f-compliance">
+            <strong>CMS-0057-F Readiness →</strong>
+            <span>The vendor-neutral readiness surface: APIs, Da Vinci IGs, and deployment model.</span>
+          </a>
+          <a class="quicklink" href="/docs/prior-auth-guide">
+            <strong>Prior Authorization Guide →</strong>
+            <span>How prior authorization is configured and operated in the platform.</span>
+          </a>
+          <a class="quicklink" href="/docs/terminology-guide">
+            <strong>Terminology Guide →</strong>
+            <span>FHIR-native CodeSystem, ValueSet, and ConceptMap/$translate capabilities.</span>
+          </a>
+          <a class="quicklink" href="/docs/architecture">
+            <strong>Architecture →</strong>
+            <span>How the services fit together across tenants and deployment targets.</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="featured-article-section" aria-labelledby="in-this-series">
+        <h2 id="in-this-series" style="color:#00ffff;">In this series</h2>
+
+        <article class="article-card">
+          <div class="card-media">
+            <img src="/graphics/insights/cms0057-crd-dtr-pas-flow.svg"
+                 alt="A four-stage lifecycle: CRD discovers requirements, DTR collects documentation, PAS submits and decides, and the decision is written to the Authorization Service — each stage running on CloudHealthOffice services.">
+          </div>
+          <div class="card-body">
+            <span class="tag">Pillar article &middot; Architecture</span>
+            <h3>CMS-0057-F with QNXT, Facets, or HealthEdge</h3>
+            <p>
+              How CloudHealthOffice implements CRD, DTR, PAS, and terminology alongside an existing core &mdash;
+              and how the same architecture can progressively become the payer core backend, without changing the
+              external FHIR contract.
+            </p>
+            <div class="card-meta">CRD &middot; DTR &middot; PAS &middot; Terminology &middot; Progressive modernization</div>
+            <a class="read-more" href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">Read the architecture article →</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="assessment-section">
+        <div class="relationship-box">
+          <h3>How this connects to the CMS-0057-F Readiness page</h3>
+          <p>
+            The <a href="/cms-0057f-compliance" style="color:#00ffff;">CMS-0057-F Readiness</a> page is the
+            product view: what the readiness surface covers and how it deploys. This Insights series is the
+            engineering view: how CRD, DTR, PAS, terminology, and the prior authorization rule engine are actually
+            implemented, and how a payer moves from &ldquo;modernize around the core&rdquo; to
+            &ldquo;CloudHealthOffice as the core&rdquo; over time. Readiness in production still depends on a
+            payer&rsquo;s configuration, identity, source systems, policies, data quality, operations, security
+            controls, governance, and legal and compliance review &mdash; installing the platform alone does not
+            make a payer CMS-0057-F compliant.
+          </p>
+          <div class="topics" aria-label="Topics covered in this series">
+            <span>CMS-0057-F</span><span>FHIR API</span><span>Payer FHIR API</span><span>FHIR prior authorization</span>
+            <span>CRD</span><span>DTR</span><span>PAS</span><span>QNXT FHIR API</span><span>Facets FHIR API</span>
+            <span>HealthEdge FHIR API</span><span>Da Vinci</span><span>Terminology service</span><span>Payer core modernization</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta-section">
+        <h2>Preparing for CMS-0057-F?</h2>
+        <p>
+          Walk through the architecture with the team building the platform &mdash; alongside your core, or as the core.
+        </p>
+        <div style="margin-top: 26px;">
+          <a href="/contact" class="button button-green">Contact Sales →</a>
+          <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas" class="button">Read the pillar article</a>
+          <a href="/insights" class="button button-secondary">All Insights</a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer>
+    <p>
+      <strong>Cloud Health Office</strong><br>
+      Source-available healthcare payer infrastructure.
+    </p>
+    <p>
+      BSL 1.1 • Free for non-production use • <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a> • © 2026 Aurelianware<br>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
+      <a href="/docs">Docs</a> •
+      <a href="/insights">Insights</a> •
+      <a href="mailto:mark@aurelianware.com">Contact</a>
+    </p>
+    <p style="margin-top:18px;"><a href="/founder">Meet the founder &rarr;</a></p>
+  </footer>
+</body>
+</html>

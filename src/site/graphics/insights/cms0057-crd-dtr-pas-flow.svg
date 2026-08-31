@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 460" role="img"
+     aria-labelledby="cdp-title cdp-desc" preserveAspectRatio="xMidYMid meet"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="cdp-title">The CRD to DTR to PAS prior-authorization lifecycle</title>
+  <desc id="cdp-desc">Four connected Da Vinci stages run on CloudHealthOffice services. CRD discovers requirements using terminology, benefit context, and prior-auth rules. DTR collects documentation via Questionnaire and QuestionnaireResponse. PAS submits and decides using FHIR Claim submit, provider verification, and auto adjudication, producing an approved, denied, or pended decision. The decision is written to the Authorization Service. CRD, DTR, and PAS are connected payer workflows, not isolated APIs.</desc>
+
+  <defs>
+    <marker id="cdp-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="460" rx="16" fill="#0a0a0a"/>
+  <rect x="1" y="1" width="1178" height="458" rx="15" fill="none" stroke="#00ffff" stroke-opacity="0.18"/>
+
+  <!-- CHO substrate band -->
+  <rect x="24" y="300" width="1132" height="112" rx="12" fill="#0b1f1a" stroke="#00ff88" stroke-opacity="0.55" stroke-width="1.4"/>
+  <text x="44" y="326" fill="#00ff88" font-size="13" font-weight="700" letter-spacing="0.08em">CLOUDHEALTHOFFICE SERVICES</text>
+
+  <!-- Stage template: 4 stages -->
+  <!-- Stage 1: CRD -->
+  <g>
+    <rect x="40" y="60" width="230" height="150" rx="12" fill="#0d1117" stroke="#00ffff" stroke-width="1.8"/>
+    <text x="155" y="92" text-anchor="middle" fill="#00ffff" font-size="22" font-weight="800">CRD</text>
+    <text x="155" y="114" text-anchor="middle" fill="#c9d1d9" font-size="14" font-weight="600">Discover requirements</text>
+    <text x="155" y="144" text-anchor="middle" fill="#8b949e" font-size="12.5">Terminology</text>
+    <text x="155" y="166" text-anchor="middle" fill="#8b949e" font-size="12.5">Benefit context</text>
+    <text x="155" y="188" text-anchor="middle" fill="#8b949e" font-size="12.5">Prior Auth Rules</text>
+    <rect x="60" y="344" width="190" height="50" rx="8" fill="#0d1117" stroke="#00ff88" stroke-opacity="0.5"/>
+    <text x="155" y="366" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">Terminology +</text>
+    <text x="155" y="383" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">Prior Auth Rule Engine</text>
+  </g>
+
+  <line x1="270" y1="135" x2="312" y2="135" stroke="#00ffff" stroke-width="2.5" marker-end="url(#cdp-arrow)"/>
+
+  <!-- Stage 2: DTR -->
+  <g>
+    <rect x="314" y="60" width="230" height="150" rx="12" fill="#0d1117" stroke="#00ffff" stroke-width="1.8"/>
+    <text x="429" y="92" text-anchor="middle" fill="#00ffff" font-size="22" font-weight="800">DTR</text>
+    <text x="429" y="114" text-anchor="middle" fill="#c9d1d9" font-size="14" font-weight="600">Collect documentation</text>
+    <text x="429" y="144" text-anchor="middle" fill="#8b949e" font-size="12.5">Questionnaire</text>
+    <text x="429" y="166" text-anchor="middle" fill="#8b949e" font-size="12.5">QuestionnaireResponse</text>
+    <text x="429" y="188" text-anchor="middle" fill="#8b949e" font-size="12.5">Clinical documentation</text>
+    <rect x="334" y="344" width="190" height="50" rx="8" fill="#0d1117" stroke="#00ff88" stroke-opacity="0.5"/>
+    <text x="429" y="366" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">DTR Service</text>
+    <text x="429" y="383" text-anchor="middle" fill="#8b949e" font-size="11.5">$questionnaire-package</text>
+  </g>
+
+  <line x1="544" y1="135" x2="586" y2="135" stroke="#00ffff" stroke-width="2.5" marker-end="url(#cdp-arrow)"/>
+
+  <!-- Stage 3: PAS -->
+  <g>
+    <rect x="588" y="60" width="230" height="150" rx="12" fill="#0d1117" stroke="#00ffff" stroke-width="1.8"/>
+    <text x="703" y="92" text-anchor="middle" fill="#00ffff" font-size="22" font-weight="800">PAS</text>
+    <text x="703" y="114" text-anchor="middle" fill="#c9d1d9" font-size="14" font-weight="600">Submit and decide</text>
+    <text x="703" y="144" text-anchor="middle" fill="#8b949e" font-size="12.5">FHIR Claim/$submit</text>
+    <text x="703" y="166" text-anchor="middle" fill="#8b949e" font-size="12.5">Provider verification</text>
+    <text x="703" y="188" text-anchor="middle" fill="#8b949e" font-size="12.5">Auto adjudication</text>
+    <rect x="608" y="344" width="190" height="50" rx="8" fill="#0d1117" stroke="#00ff88" stroke-opacity="0.5"/>
+    <text x="703" y="366" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">PAS auto-adjudicator +</text>
+    <text x="703" y="383" text-anchor="middle" fill="#e6edf3" font-size="12.5" font-weight="600">Provider Verification</text>
+  </g>
+
+  <line x1="818" y1="135" x2="860" y2="135" stroke="#00ffff" stroke-width="2.5" marker-end="url(#cdp-arrow)"/>
+
+  <!-- Stage 4: Decision -->
+  <g>
+    <rect x="862" y="60" width="278" height="150" rx="12" fill="#0d1117" stroke="#f0b429" stroke-width="1.8"/>
+    <text x="1001" y="92" text-anchor="middle" fill="#f0b429" font-size="20" font-weight="800">Decision</text>
+    <rect x="884" y="110" width="234" height="30" rx="6" fill="#0b1f1a" stroke="#00ff88" stroke-opacity="0.6"/>
+    <text x="1001" y="130" text-anchor="middle" fill="#00ff88" font-size="13.5" font-weight="700">Approved</text>
+    <rect x="884" y="146" width="234" height="30" rx="6" fill="#1a1113" stroke="#ff6b6b" stroke-opacity="0.6"/>
+    <text x="1001" y="166" text-anchor="middle" fill="#ff8f8f" font-size="13.5" font-weight="700">Denied</text>
+    <rect x="884" y="182" width="234" height="30" rx="6" fill="#141414" stroke="#8b949e" stroke-opacity="0.7"/>
+    <text x="1001" y="202" text-anchor="middle" fill="#c9d1d9" font-size="13.5" font-weight="700">Pended</text>
+  </g>
+
+  <!-- Decision down to Authorization Service band -->
+  <line x1="1001" y1="212" x2="1001" y2="344" stroke="#00ffff" stroke-width="2.5" marker-end="url(#cdp-arrow)"/>
+  <rect x="884" y="344" width="234" height="50" rx="8" fill="#0b1f1a" stroke="#00ff88" stroke-width="1.4"/>
+  <text x="1001" y="366" text-anchor="middle" fill="#00ff88" font-size="13.5" font-weight="700">Authorization Service</text>
+  <text x="1001" y="383" text-anchor="middle" fill="#8b949e" font-size="11.5">persistence + telemetry</text>
+
+  <text x="590" y="438" text-anchor="middle" fill="#8b949e" font-size="12.5">
+    CRD, DTR, and PAS are connected payer workflows &#8212; not isolated APIs. Each stage runs on CloudHealthOffice services shown below it.
+  </text>
+</svg>

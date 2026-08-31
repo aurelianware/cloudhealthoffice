@@ -52,6 +52,8 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/million-claim-challenge/part-8-clean-100k.html /insights/million-claim-challenge/part-8-clean-100k 301
 /insights/million-claim-challenge/part-9-from-unsupported-to-scored.html /insights/million-claim-challenge/part-9-from-unsupported-to-scored 301
 /docs/million-claim-challenge/evidence.html /docs/million-claim-challenge/evidence 301
+/insights/cms-0057-f/index.html            /insights/cms-0057-f               301
+/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas 301
 
 # ---------------------------------------------------------------------------
 # Rewrites: clean URL  ->  *.html (200, URL stays clean)
@@ -89,6 +91,8 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/million-claim-challenge/part-8-clean-100k /insights/million-claim-challenge/part-8-clean-100k.html 200
 /insights/million-claim-challenge/part-9-from-unsupported-to-scored /insights/million-claim-challenge/part-9-from-unsupported-to-scored.html 200
 /docs/million-claim-challenge/evidence     /docs/million-claim-challenge/evidence.html 200
+/insights/cms-0057-f                        /insights/cms-0057-f/index.html    200
+/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html 200
 
 # ---------------------------------------------------------------------------
 # NOT migrated here (cannot be done with file-based config):

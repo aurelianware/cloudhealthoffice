@@ -230,6 +230,19 @@
         grid-template-columns: 1fr;
       }
     }
+
+    /* Series / category navigation */
+    .series-section { margin: 50px 0 20px; }
+    .series-section > h2 { color: #00ffff; margin-bottom: 8px; }
+    .series-section > p.series-lede { color: #8b949e; margin: 0 0 28px; max-width: 760px; }
+    .series-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+    .series-card { display: flex; flex-direction: column; background: #0a0a0a; border: 1px solid rgba(0,255,255,0.22); border-left: 4px solid #00ff88; border-radius: 12px; padding: 26px; text-decoration: none; transition: all 0.25s ease; }
+    .series-card:hover { border-color: #00ff88; box-shadow: 0 0 26px rgba(0,255,255,0.16); transform: translateY(-4px); }
+    .series-card .series-eyebrow { color: #00ff88; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+    .series-card h3 { color: #ffffff; margin: 10px 0 10px; font-size: 1.24rem; line-height: 1.25; }
+    .series-card p { color: #c9d1d9; font-size: 0.96rem; line-height: 1.6; margin: 0 0 16px; flex: 1; }
+    .series-card .series-go { color: #00ffff; font-weight: 700; font-size: 0.95rem; }
+    .series-card:hover .series-go { color: #00ff88; }
   </style>
 </head>
 <body>
@@ -249,7 +262,7 @@
           <li><a href="/solutions-providers">For Providers</a></li>
           <li><a href="/pricing">Pricing</a></li>
           <li><a href="/platform">Platform</a></li>
-          <li><span aria-current="page" style="color:#00ffff;">Market Insights</span></li>
+          <li><span aria-current="page" style="color:#00ffff;">Insights</span></li>
           <li><a href="/docs">Docs</a></li>
           <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
           <li><a href="/founder">Founder</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
@@ -270,12 +283,44 @@
         <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" 
              alt="Cloud Health Office Sentinel Logo - Obsidian monolith shield with digital eye and circuit veins"
              style="max-width: 500px; height: auto; margin: 20px 0;">
-        <h1>Market Insights</h1>
-        <p class="tagline">Enhanced EDI Integration Is Underway</p>
+        <h1>Payer Technology Insights</h1>
+        <p class="tagline">Architecture, engineering, and market analysis for health plans</p>
       </div>
     </div>
 
     <div class="insights-container">
+
+      <!-- ===== SERIES / CATEGORIES ===== -->
+      <section class="series-section" aria-labelledby="series-heading">
+        <h2 id="series-heading">Browse by series</h2>
+        <p class="series-lede">Deep-dive engineering and architecture series, plus market analysis, organized by topic.</p>
+        <div class="series-grid">
+          <a class="series-card" href="/insights/cms-0057-f">
+            <span class="series-eyebrow">Compliance &amp; Architecture</span>
+            <h3>CMS-0057-F &amp; Payer Modernization</h3>
+            <p>FHIR, CRD, DTR, PAS, terminology, and legacy-core modernization for QNXT, Facets, and HealthEdge.</p>
+            <span class="series-go">Explore the series →</span>
+          </a>
+          <a class="series-card" href="/insights/million-claim-challenge">
+            <span class="series-eyebrow">Engineering Series</span>
+            <h3>Million Claim Challenge</h3>
+            <p>Claims adjudication performance, correctness, scaling, and inspectable evidence.</p>
+            <span class="series-go">Read the field notes →</span>
+          </a>
+          <a class="series-card" href="/insights/stedi-interoperability">
+            <span class="series-eyebrow">Interoperability</span>
+            <h3>Interoperability</h3>
+            <p>X12, clearinghouses, Stedi, provider connectivity, and payer integration.</p>
+            <span class="series-go">Read the series →</span>
+          </a>
+          <a class="series-card" href="/insights/azure-scaling">
+            <span class="series-eyebrow">Cloud Engineering</span>
+            <h3>Cloud Engineering</h3>
+            <p>Kubernetes, Azure, scaling, infrastructure, and operational engineering.</p>
+            <span class="series-go">Read the series →</span>
+          </a>
+        </div>
+      </section>
 
       <!-- ===== PRODUCT LINE CONTEXT (W3.2) ===== -->
       <section class="assessment-section">

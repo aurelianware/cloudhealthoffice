@@ -411,6 +411,19 @@
       "rewrite": "/insights/million-claim-challenge/part-9-from-unsupported-to-scored.html"
     },
     {
+      "route": "/insights/cms-0057-f",
+      "rewrite": "/insights/cms-0057-f/index.html"
+    },
+    {
+      "route": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html",
+      "redirect": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas",
+      "statusCode": 301
+    },
+    {
+      "route": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas",
+      "rewrite": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html"
+    },
+    {
       "route": "/docs/prior-auth-guide.html",
       "redirect": "/docs/prior-auth-guide",
       "statusCode": 301

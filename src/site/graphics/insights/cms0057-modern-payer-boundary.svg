@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" role="img"
+     aria-labelledby="mpb-title mpb-desc" preserveAspectRatio="xMidYMid meet"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="mpb-title">CloudHealthOffice modern FHIR boundary around an existing payer core</title>
+  <desc id="mpb-desc">A vertical flow: providers and EHRs connect through FHIR and Da Vinci to CloudHealthOffice, which exposes CRD, DTR, PAS, terminology, and SMART/OAuth. Below CloudHealthOffice, a payer integration boundary connects to QNXT, Facets, HealthEdge, and other payer systems. CloudHealthOffice can also provide payer backend capabilities itself.</desc>
+
+  <defs>
+    <marker id="mpb-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="660" rx="16" fill="#0a0a0a"/>
+  <rect x="1" y="1" width="958" height="658" rx="15" fill="none" stroke="#00ffff" stroke-opacity="0.18"/>
+
+  <!-- Tier 1: Provider / EHR -->
+  <g>
+    <rect x="330" y="30" width="300" height="58" rx="10" fill="#0d1117" stroke="#8b949e" stroke-width="1.5"/>
+    <text x="480" y="58" text-anchor="middle" fill="#e6edf3" font-size="20" font-weight="700">Provider / EHR</text>
+    <text x="480" y="78" text-anchor="middle" fill="#8b949e" font-size="13">Order entry &#183; clinical systems</text>
+  </g>
+  <line x1="480" y1="88" x2="480" y2="118" stroke="#00ffff" stroke-width="2" marker-end="url(#mpb-arrow)"/>
+
+  <!-- Tier 2: FHIR + Da Vinci -->
+  <g>
+    <rect x="300" y="120" width="360" height="52" rx="10" fill="#0d1117" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="480" y="146" text-anchor="middle" fill="#00ffff" font-size="18" font-weight="700">FHIR R4 + Da Vinci</text>
+    <text x="480" y="164" text-anchor="middle" fill="#8b949e" font-size="12.5">CDS Hooks &#183; SMART on FHIR</text>
+  </g>
+  <line x1="480" y1="172" x2="480" y2="202" stroke="#00ffff" stroke-width="2" marker-end="url(#mpb-arrow)"/>
+
+  <!-- Tier 3: CloudHealthOffice -->
+  <g>
+    <rect x="150" y="204" width="660" height="150" rx="14" fill="#0b1f1a" stroke="#00ff88" stroke-width="2"/>
+    <text x="480" y="234" text-anchor="middle" fill="#00ff88" font-size="22" font-weight="800">CloudHealthOffice</text>
+    <text x="480" y="255" text-anchor="middle" fill="#c9d1d9" font-size="13">Modern payer interoperability layer &#8212; and, when the payer is ready, the core backend</text>
+    <!-- capability chips -->
+    <g font-size="14" font-weight="600">
+      <g>
+        <rect x="176" y="276" width="118" height="58" rx="8" fill="#0d1117" stroke="#00ffff" stroke-opacity="0.55"/>
+        <text x="235" y="301" text-anchor="middle" fill="#e6edf3">CRD</text>
+        <text x="235" y="320" text-anchor="middle" fill="#8b949e" font-size="11">Requirements</text>
+      </g>
+      <g>
+        <rect x="304" y="276" width="118" height="58" rx="8" fill="#0d1117" stroke="#00ffff" stroke-opacity="0.55"/>
+        <text x="363" y="301" text-anchor="middle" fill="#e6edf3">DTR</text>
+        <text x="363" y="320" text-anchor="middle" fill="#8b949e" font-size="11">Documentation</text>
+      </g>
+      <g>
+        <rect x="432" y="276" width="118" height="58" rx="8" fill="#0d1117" stroke="#00ffff" stroke-opacity="0.55"/>
+        <text x="491" y="301" text-anchor="middle" fill="#e6edf3">PAS</text>
+        <text x="491" y="320" text-anchor="middle" fill="#8b949e" font-size="11">Submit &amp; decide</text>
+      </g>
+      <g>
+        <rect x="560" y="276" width="118" height="58" rx="8" fill="#0d1117" stroke="#00ffff" stroke-opacity="0.55"/>
+        <text x="619" y="301" text-anchor="middle" fill="#e6edf3">Terminology</text>
+        <text x="619" y="320" text-anchor="middle" fill="#8b949e" font-size="11">$translate</text>
+      </g>
+      <g>
+        <rect x="688" y="276" width="106" height="58" rx="8" fill="#0d1117" stroke="#00ffff" stroke-opacity="0.55"/>
+        <text x="741" y="301" text-anchor="middle" fill="#e6edf3">SMART</text>
+        <text x="741" y="320" text-anchor="middle" fill="#8b949e" font-size="11">OAuth 2.0</text>
+      </g>
+    </g>
+  </g>
+  <line x1="480" y1="354" x2="480" y2="392" stroke="#00ffff" stroke-width="2" marker-end="url(#mpb-arrow)"/>
+
+  <!-- Tier 4: Payer integration boundary -->
+  <g>
+    <rect x="230" y="394" width="500" height="56" rx="10" fill="#141414" stroke="#f0b429" stroke-width="1.6" stroke-dasharray="7 5"/>
+    <text x="480" y="420" text-anchor="middle" fill="#f0b429" font-size="17" font-weight="700">Payer Integration Boundary</text>
+    <text x="480" y="439" text-anchor="middle" fill="#8b949e" font-size="12.5">Payer-specific adapter &#183; configured during onboarding</text>
+  </g>
+  <line x1="480" y1="450" x2="480" y2="484" stroke="#00ffff" stroke-width="2" marker-end="url(#mpb-arrow)"/>
+
+  <!-- Tier 5: Payer systems -->
+  <g font-size="15" font-weight="700">
+    <rect x="110" y="486" width="180" height="60" rx="10" fill="#0d1117" stroke="#8b949e" stroke-width="1.5"/>
+    <text x="200" y="513" text-anchor="middle" fill="#e6edf3">QNXT</text>
+    <text x="200" y="532" text-anchor="middle" fill="#8b949e" font-size="11.5" font-weight="500">Core admin platform</text>
+
+    <rect x="300" y="486" width="180" height="60" rx="10" fill="#0d1117" stroke="#8b949e" stroke-width="1.5"/>
+    <text x="390" y="513" text-anchor="middle" fill="#e6edf3">Facets</text>
+    <text x="390" y="532" text-anchor="middle" fill="#8b949e" font-size="11.5" font-weight="500">Core admin platform</text>
+
+    <rect x="490" y="486" width="180" height="60" rx="10" fill="#0d1117" stroke="#8b949e" stroke-width="1.5"/>
+    <text x="580" y="513" text-anchor="middle" fill="#e6edf3">HealthEdge</text>
+    <text x="580" y="532" text-anchor="middle" fill="#8b949e" font-size="11.5" font-weight="500">Core admin platform</text>
+
+    <rect x="680" y="486" width="180" height="60" rx="10" fill="#0d1117" stroke="#8b949e" stroke-width="1.5"/>
+    <text x="770" y="513" text-anchor="middle" fill="#e6edf3">Other systems</text>
+    <text x="770" y="532" text-anchor="middle" fill="#8b949e" font-size="11.5" font-weight="500">UM &#183; provider &#183; DW</text>
+  </g>
+
+  <text x="480" y="590" text-anchor="middle" fill="#c9d1d9" font-size="14" font-weight="600">
+    One stable, modern FHIR boundary in front &#8212; the payer&#8217;s actual source systems behind it.
+  </text>
+  <text x="480" y="620" text-anchor="middle" fill="#8b949e" font-size="12.5">
+    Readiness depends on payer configuration, identity, source systems, policy, data quality, and governance.
+  </text>
+</svg>
