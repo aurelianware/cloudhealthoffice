@@ -24,8 +24,14 @@ public interface IClaimTransmissionStore
     Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPatientControlNumberAsync(
         string gatewayName, string patientControlNumber, CancellationToken ct = default);
 
+    Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPayerClaimControlNumberAsync(
+        string gatewayName, string payerClaimControlNumber, CancellationToken ct = default);
+
     Task<IReadOnlyList<ClaimTransmissionRecord>> FindByCorrelationIdAsync(
         string gatewayName, string correlationId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ClaimTransmissionRecord>> FindByTenantAndClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default);
 
     Task SaveAsync(ClaimTransmissionRecord record, CancellationToken ct = default);
 
@@ -70,6 +76,26 @@ public sealed class ClaimTransmissionRecord
 
     /// <summary>Patient control number sent on the 837 (typically the CHO claim id).</summary>
     public string? PatientControlNumber { get; set; }
+
+    /// <summary>
+    /// Payer-assigned claim control number copied from a matched 277CA when
+    /// present. Used by later 276 inquiries. Does not replace 277CA records.
+    /// </summary>
+    public string? PayerClaimControlNumber { get; set; }
+
+    public DateOnly? ServiceDateFrom { get; set; }
+
+    public DateOnly? ServiceDateTo { get; set; }
+
+    public decimal? ClaimAmount { get; set; }
+
+    public string? TypeOfBill { get; set; }
+
+    /// <summary>
+    /// Provider/subscriber/line snapshot captured at 837 submit so a later
+    /// 276 can be built without reconstructing the claim. Not a raw 837.
+    /// </summary>
+    public ClaimStatusInquirySource? InquirySource { get; set; }
 
     /// <summary>
     /// Line numbers from the original submitted claim. Used to validate

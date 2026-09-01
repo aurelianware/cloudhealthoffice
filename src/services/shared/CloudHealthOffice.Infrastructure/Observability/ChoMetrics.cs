@@ -436,6 +436,93 @@ public static class ChoMetrics
             unit: "s",
             description: "Inbound payer-side claim attachment processing duration in seconds");
 
+    /// <summary>
+    /// Counter tracking outbound 276/277 claim-status inquiries.
+    /// Dimensions: cho.gateway, cho.status, cho.error_category.
+    /// Never labeled with member or provider identity.
+    /// </summary>
+    public static readonly Counter<long> ClaimStatusInquiries =
+        Meter.CreateCounter<long>(
+            "cho.claim_status.inquiries.total",
+            unit: "{inquiry}",
+            description: "Outbound 276/277 claim status inquiries by gateway and normalized status");
+
+    /// <summary>
+    /// Histogram tracking outbound 276/277 claim-status latency (seconds).
+    /// Dimensions: cho.gateway, cho.status.
+    /// </summary>
+    public static readonly Histogram<double> ClaimStatusDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_status.duration",
+            unit: "s",
+            description: "Outbound 276/277 claim status inquiry duration in seconds");
+
+    /// <summary>
+    /// Counter tracking inbound 835 remittance receipts.
+    /// Dimensions: cho.gateway, cho.status, cho.error_category.
+    /// </summary>
+    public static readonly Counter<long> Remittances =
+        Meter.CreateCounter<long>(
+            "cho.remittance.received.total",
+            unit: "{remittance}",
+            description: "Inbound 835 remittances by gateway and lifecycle status");
+
+    public static readonly Histogram<double> RemittanceDuration =
+        Meter.CreateHistogram<double>(
+            "cho.remittance.duration",
+            unit: "s",
+            description: "Inbound 835 remittance processing duration in seconds");
+
+    public static readonly Counter<long> RemittedClaims =
+        Meter.CreateCounter<long>(
+            "cho.remittance.claims.total",
+            unit: "{claim}",
+            description: "Claims included on inbound 835 remittances by match outcome");
+
+    /// <summary>
+    /// Counter tracking 835 remittances posted to claim financials and accumulators.
+    /// Dimensions: cho.gateway, cho.status. Never labeled with check/trace numbers.
+    /// </summary>
+    public static readonly Counter<long> RemittancePosted =
+        Meter.CreateCounter<long>(
+            "cho.remittance.posted.total",
+            unit: "{remittance}",
+            description: "Inbound 835 remittances posted to claims and accumulators");
+
+    /// <summary>
+    /// Counter tracking claim intelligence views generated.
+    /// Dimensions: cho.status, cho.next_action. Never labeled with PHI.
+    /// </summary>
+    public static readonly Counter<long> ClaimIntelligenceViews =
+        Meter.CreateCounter<long>(
+            "cho.claim_intelligence.views.total",
+            unit: "{view}",
+            description: "Claim intelligence views composed by lifecycle status");
+
+    public static readonly Histogram<double> ClaimIntelligenceDuration =
+        Meter.CreateHistogram<double>(
+            "cho.claim_intelligence.duration",
+            unit: "s",
+            description: "Claim intelligence composition duration in seconds");
+
+    public static readonly Counter<long> ClaimIntelligenceRebuilds =
+        Meter.CreateCounter<long>(
+            "cho.claim_intelligence.rebuilds.total",
+            unit: "{rebuild}",
+            description: "Claim intelligence projections rebuilt from transaction stores");
+
+    public static readonly Counter<long> ClaimIntelligenceFailures =
+        Meter.CreateCounter<long>(
+            "cho.claim_intelligence.failed.total",
+            unit: "{failure}",
+            description: "Failed claim intelligence projections");
+
+    public static readonly Counter<long> ClaimIntelligenceMissingLinks =
+        Meter.CreateCounter<long>(
+            "cho.claim_intelligence.missing_links.total",
+            unit: "{link}",
+            description: "Missing transaction links observed while composing claim intelligence");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

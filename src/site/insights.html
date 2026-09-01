@@ -11,19 +11,19 @@
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="Cloud Health Office">
   <meta property="og:url" content="https://cloudhealthoffice.com/insights">
-  <meta property="og:title" content="Market and Engineering Insights — Cloud Health Office">
+  <meta property="og:title" content="Payer Technology Insights — Cloud Health Office">
   <meta property="og:description" content="Healthcare EDI market analysis, CMS-0057-F platform strategy, and repeatable claims adjudication benchmark evidence from Cloud Health Office.">
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="https://cloudhealthoffice.com/insights">
-  <meta name="twitter:title" content="Market and Engineering Insights — Cloud Health Office">
+  <meta name="twitter:title" content="Payer Technology Insights — Cloud Health Office">
   <meta name="twitter:description" content="Healthcare EDI market analysis plus repeatable claims adjudication benchmark evidence.">
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
 
   <link rel="canonical" href="https://cloudhealthoffice.com/insights" />
-  <title>Market and Engineering Insights — Cloud Health Office</title>
+  <title>Payer Technology Insights — Cloud Health Office</title>
   <!-- Privacy-friendly analytics by Plausible -->
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
@@ -225,6 +225,57 @@
       }
     }
 
+    /* ── SERIES / CATEGORY CARDS ── */
+    .series-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      margin: 36px 0 0;
+    }
+    .series-card {
+      display: block;
+      text-decoration: none;
+      background: #0a0a0a;
+      border: 1px solid rgba(0,255,255,0.22);
+      border-left: 4px solid #00ffff;
+      border-radius: 10px;
+      padding: 26px;
+      transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+    }
+    .series-card:hover {
+      border-color: #00ff88;
+      box-shadow: 0 0 30px rgba(0, 255, 255, 0.12);
+      transform: translateY(-3px);
+    }
+    .series-card .series-kicker {
+      color: #00ff88;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .series-card h3 {
+      margin: 0 0 8px;
+      color: #ffffff;
+      font-size: 1.2rem;
+    }
+    .series-card p {
+      color: #b0b0b0;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      margin: 0 0 14px;
+    }
+    .series-card .series-go {
+      color: #00ffff;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .series-card.featured-series {
+      border-left-color: #00ff88;
+      background: linear-gradient(135deg, rgba(0,255,255,0.05), rgba(0,255,136,0.03));
+    }
+
     @media (max-width: 560px) {
       .proof-metrics {
         grid-template-columns: 1fr;
@@ -249,7 +300,7 @@
           <li><a href="/solutions-providers">For Providers</a></li>
           <li><a href="/pricing">Pricing</a></li>
           <li><a href="/platform">Platform</a></li>
-          <li><span aria-current="page" style="color:#00ffff;">Market Insights</span></li>
+          <li><span aria-current="page" style="color:#00ffff;">Insights</span></li>
           <li><a href="/docs">Docs</a></li>
           <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
           <li><a href="/founder">Founder</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
@@ -270,12 +321,49 @@
         <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" 
              alt="Cloud Health Office Sentinel Logo - Obsidian monolith shield with digital eye and circuit veins"
              style="max-width: 500px; height: auto; margin: 20px 0;">
-        <h1>Market Insights</h1>
-        <p class="tagline">Enhanced EDI Integration Is Underway</p>
+        <h1>Payer Technology Insights</h1>
+        <p class="tagline">FHIR, CMS-0057-F, claims performance, interoperability, and cloud engineering</p>
       </div>
     </div>
 
     <div class="insights-container">
+
+      <!-- ===== SERIES & CATEGORIES ===== -->
+      <section class="assessment-section" aria-labelledby="series-heading">
+        <div class="section-label" style="color:#00ffff; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:12px;">Explore by Series</div>
+        <h2 id="series-heading">Insights, Organized by Series</h2>
+        <p>Field notes and analysis grouped by the problems payers actually work on &mdash; regulatory interoperability, claims performance, connectivity, and cloud engineering.</p>
+
+        <div class="series-grid">
+          <a class="series-card featured-series" href="/insights/cms-0057-f">
+            <div class="series-kicker">Regulatory · Interoperability</div>
+            <h3>CMS-0057-F &amp; Payer Modernization</h3>
+            <p>FHIR, CRD, DTR, PAS, terminology, and legacy-core modernization for QNXT, Facets, HealthEdge, and other payer platforms.</p>
+            <span class="series-go">Explore the series &rarr;</span>
+          </a>
+
+          <a class="series-card" href="/insights/million-claim-challenge">
+            <div class="series-kicker">Claims Engineering</div>
+            <h3>Million Claim Challenge</h3>
+            <p>Claims adjudication performance, correctness, scaling, and repeatable, inspectable benchmark evidence.</p>
+            <span class="series-go">Read the field notes &rarr;</span>
+          </a>
+
+          <a class="series-card" href="/insights/stedi-interoperability">
+            <div class="series-kicker">Interoperability</div>
+            <h3>Interoperability</h3>
+            <p>X12, clearinghouses, Stedi, provider connectivity, and vendor-neutral payer integration.</p>
+            <span class="series-go">Read the series &rarr;</span>
+          </a>
+
+          <a class="series-card" href="/insights/azure-scaling">
+            <div class="series-kicker">Cloud Engineering</div>
+            <h3>Cloud Engineering</h3>
+            <p>Kubernetes, Azure, scaling, infrastructure, and operational engineering behind the platform.</p>
+            <span class="series-go">Read the series &rarr;</span>
+          </a>
+        </div>
+      </section>
 
       <!-- ===== PRODUCT LINE CONTEXT (W3.2) ===== -->
       <section class="assessment-section">
@@ -326,6 +414,39 @@
             <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus" style="color:#00ffff;">Read Part 16</a> &middot;
             <a href="/insights/million-claim-challenge" style="color:#00ffff;">Engineering series</a> &middot;
             <a href="/docs/million-claim-challenge/evidence" style="color:#00ffff;">Evidence archive &rarr;</a>
+          </p>
+        </article>
+
+        <article class="engineering-proof">
+          <div class="proof-meta">Stedi Interoperability &middot; Vendor-neutral gateway</div>
+          <h3>The Clearinghouse Is Not the Payer Platform</h3>
+          <p>
+            Cloud Health Office is the claims operating system a health plan actually runs. Stedi is one of the networks it can speak.
+            Sequential PRs activated eligibility, 837, 277CA, 275, 276/277, 835, and a tenant-safe claim intelligence API — without letting a 277CA acceptance pretend to be payment, and without baking Stedi into the claim aggregate.
+          </p>
+          <div class="proof-metrics" aria-label="Stedi interoperability snapshot">
+            <div class="proof-metric">
+              <strong>6</strong>
+              <span>HIPAA transaction types on one gateway</span>
+            </div>
+            <div class="proof-metric">
+              <strong>837 → 835</strong>
+              <span>submit, acknowledge, status, attach, remit</span>
+            </div>
+            <div class="proof-metric">
+              <strong>#1119</strong>
+              <span>claim intelligence read model for CDO and portal</span>
+            </div>
+            <div class="proof-metric">
+              <strong>0</strong>
+              <span>vendor names allowed in canonical models</span>
+            </div>
+          </div>
+          <p style="font-size:0.95rem;color:#888;">
+            Shipped code, contract-tested against Stedi's documented JSON APIs. Not a live ERA enrollment certificate.
+            <a href="/insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform" style="color:#00ffff;">Read the field note</a> &middot;
+            <a href="/insights/stedi-interoperability" style="color:#00ffff;">Series</a> &middot;
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/healthcare-transaction-gateway.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Gateway architecture &rarr;</a>
           </p>
         </article>
       </section>
@@ -493,7 +614,7 @@
             <li><strong>Cloud-Native Adoption:</strong> Azure/AWS/GCP dominating enterprise infrastructure</li>
             <li><strong>Managed Services:</strong> Operations teams prefer PaaS over IaaS management</li>
             <li><strong>DevOps Culture:</strong> Infrastructure as Code (IaC) becoming standard</li>
-            <li><strong>Open Source Preference:</strong> Transparency and community support valued</li>
+            <li><strong>Source-Available Preference:</strong> Transparency and the ability to read the code are valued</li>
             <li><strong>Configuration Over Code:</strong> Low-code/no-code platforms gaining traction</li>
           </ul>
         </div>

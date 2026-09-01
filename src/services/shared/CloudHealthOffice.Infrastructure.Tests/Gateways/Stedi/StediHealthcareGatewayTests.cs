@@ -87,9 +87,9 @@ public class StediHealthcareGatewayTests
         gateway.Supports(GatewayCapability.Eligibility).Should().BeTrue();
         gateway.Supports(GatewayCapability.ClaimSubmission).Should().BeTrue();
         gateway.Supports(GatewayCapability.ClaimAcknowledgment).Should().BeTrue();
-        gateway.Supports(GatewayCapability.ClaimStatus).Should().BeFalse();
+        gateway.Supports(GatewayCapability.ClaimStatus).Should().BeTrue();
         gateway.Supports(GatewayCapability.ClaimAttachment).Should().BeTrue();
-        gateway.Supports(GatewayCapability.Remittance).Should().BeFalse();
+        gateway.Supports(GatewayCapability.Remittance).Should().BeTrue();
     }
 
     [Fact]

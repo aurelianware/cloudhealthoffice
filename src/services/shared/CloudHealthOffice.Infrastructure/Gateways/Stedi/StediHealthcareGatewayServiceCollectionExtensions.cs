@@ -107,6 +107,18 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
         // IHealthcareTransactionGateway so the resolver can select it by name.
         // The two-type enumerable overload records the implementation type so
         // TryAddEnumerable stays idempotent.
+        services.TryAddSingleton(sp => new StediClaimStatusApiClient(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptions<StediGatewayOptions>>(),
+            sp.GetRequiredService<ILogger<StediClaimStatusApiClient>>(),
+            sp.GetService<TimeProvider>()));
+
+        services.TryAddSingleton(sp => new StediRemittanceApiClient(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptions<StediGatewayOptions>>(),
+            sp.GetRequiredService<ILogger<StediRemittanceApiClient>>(),
+            sp.GetService<TimeProvider>()));
+
         services.TryAddSingleton(sp => new StediHealthcareGateway(
             sp.GetRequiredService<StediEligibilityApiClient>(),
             sp.GetRequiredService<IStediPayerResolver>(),
@@ -120,7 +132,11 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<IClaimAttachmentTransmissionStore>(),
             sp.GetRequiredService<IClaimAttachmentContentStore>(),
             sp.GetRequiredService<IOptions<HealthcareTransactionOptions>>(),
-            sp.GetService<CloudHealthOffice.Infrastructure.Messaging.IMessageBus>()));
+            sp.GetService<CloudHealthOffice.Infrastructure.Messaging.IMessageBus>(),
+            sp.GetRequiredService<IClaimAcknowledgmentStore>(),
+            sp.GetRequiredService<IClaimStatusInquiryStore>(),
+            sp.GetRequiredService<StediClaimStatusApiClient>(),
+            sp.GetRequiredService<StediRemittanceApiClient>()));
 
         services.AddHostedService<StediClaimAcknowledgmentPoller>();
 

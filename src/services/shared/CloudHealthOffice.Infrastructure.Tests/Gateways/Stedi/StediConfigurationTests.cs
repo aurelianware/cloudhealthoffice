@@ -73,8 +73,12 @@ public class StediConfigurationTests
         resolver.ResolveCapability<IEligibilityGateway>().Should().BeAssignableTo<IEligibilityGateway>();
         resolver.ResolveCapability<IClaimAcknowledgmentGateway>().Should().BeAssignableTo<IClaimAcknowledgmentGateway>();
         resolver.ResolveCapability<IClaimAttachmentGateway>().Should().BeAssignableTo<IClaimAttachmentGateway>();
+        resolver.ResolveCapability<IClaimStatusGateway>().Should().BeAssignableTo<IClaimStatusGateway>();
+        resolver.ResolveCapability<IRemittanceGateway>().Should().BeAssignableTo<IRemittanceGateway>();
         gateway.Supports(GatewayCapability.ClaimAcknowledgment).Should().BeTrue();
         gateway.Supports(GatewayCapability.ClaimAttachment).Should().BeTrue();
+        gateway.Supports(GatewayCapability.ClaimStatus).Should().BeTrue();
+        gateway.Supports(GatewayCapability.Remittance).Should().BeTrue();
     }
 
     [Fact]

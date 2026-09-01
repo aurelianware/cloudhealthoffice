@@ -15,6 +15,7 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
 {
     private readonly StediClaimAcknowledgmentApiClient _client;
     private readonly IClaimAcknowledgmentIngress _ingress;
+    private readonly IRemittanceIngress _remittanceIngress;
     private readonly IClaimAcknowledgmentCursorStore _cursors;
     private readonly IOptions<StediGatewayOptions> _options;
     private readonly IOptions<HealthcareTransactionOptions> _lifecycle;
@@ -24,6 +25,7 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
     public StediClaimAcknowledgmentPoller(
         StediClaimAcknowledgmentApiClient client,
         IClaimAcknowledgmentIngress ingress,
+        IRemittanceIngress remittanceIngress,
         IClaimAcknowledgmentCursorStore cursors,
         IOptions<StediGatewayOptions> options,
         ILogger<StediClaimAcknowledgmentPoller> logger,
@@ -32,6 +34,7 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
     {
         _client = client;
         _ingress = ingress;
+        _remittanceIngress = remittanceIngress;
         _cursors = cursors;
         _options = options;
         _lifecycle = lifecycle ?? Options.Create(new HealthcareTransactionOptions());
@@ -89,6 +92,21 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
                         item.X12?.Metadata?.Transaction?.TransactionSetIdentifier ??
                         item.X12?.TransactionSetIdentifier
                 };
+
+                if (RemittanceIngress.IsInbound835(discovery, out _))
+                {
+                    var remittance = await _remittanceIngress
+                        .IngestDiscoveredAsync(discovery, ct).ConfigureAwait(false);
+                    if (remittance.TransientFailure)
+                    {
+                        _logger.LogWarning(
+                            "Transient 835 poll ingest for transaction {TransactionId} category={Category}",
+                            Sanitize(item.TransactionId), remittance.ErrorCategory);
+                        return;
+                    }
+
+                    continue;
+                }
 
                 var result = await _ingress.IngestDiscoveredAsync(discovery, ct).ConfigureAwait(false);
                 if (result.TransientFailure)

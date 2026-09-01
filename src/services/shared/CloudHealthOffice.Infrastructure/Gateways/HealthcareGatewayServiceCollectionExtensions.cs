@@ -54,6 +54,43 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 sp.GetService<IMessageBus>(),
                 sp.GetService<TimeProvider>()));
         services.TryAddSingleton<IClaimAcknowledgmentIngress, ClaimAcknowledgmentIngress>();
+        services.TryAddSingleton<IRemittanceProcessor>(sp =>
+            new RemittanceProcessor(
+                sp.GetRequiredService<IRemittanceStore>(),
+                sp.GetRequiredService<IClaimTransmissionStore>(),
+                sp.GetRequiredService<ILogger<RemittanceProcessor>>(),
+                sp.GetService<IMessageBus>(),
+                sp.GetService<TimeProvider>()));
+        services.TryAddSingleton<IRemittanceIngress, RemittanceIngress>();
+        // In-memory posting sinks by default. HTTP adapters exist but are not
+        // registered: claims-service POST remittance is CHO-as-payer outbound
+        // 835 generation, which inbound posting must not invoke.
+        services.TryAddSingleton<InMemoryClaimRemittancePostingSink>();
+        services.TryAddSingleton<InMemoryRemittanceAccumulatorSink>();
+        services.TryAddSingleton<IClaimRemittancePostingSink>(sp =>
+            sp.GetRequiredService<InMemoryClaimRemittancePostingSink>());
+        services.TryAddSingleton<IRemittanceAccumulatorSink>(sp =>
+            sp.GetRequiredService<InMemoryRemittanceAccumulatorSink>());
+        services.TryAddSingleton<IRemittancePoster>(sp =>
+            new RemittancePoster(
+                sp.GetRequiredService<IRemittanceStore>(),
+                sp.GetRequiredService<IClaimTransmissionStore>(),
+                sp.GetRequiredService<IClaimRemittancePostingSink>(),
+                sp.GetRequiredService<IRemittanceAccumulatorSink>(),
+                sp.GetRequiredService<ILogger<RemittancePoster>>(),
+                sp.GetService<TimeProvider>()));
+        services.TryAddSingleton<IClaimIntelligenceComposer>(sp =>
+            new ClaimIntelligenceComposer(
+                sp.GetRequiredService<IClaimTransmissionStore>(),
+                sp.GetRequiredService<IClaimAcknowledgmentStore>(),
+                sp.GetRequiredService<IClaimStatusInquiryStore>(),
+                sp.GetRequiredService<IClaimAttachmentTransmissionStore>(),
+                sp.GetRequiredService<CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore>(),
+                sp.GetRequiredService<IRemittanceStore>(),
+                sp.GetRequiredService<ILogger<ClaimIntelligenceComposer>>(),
+                sp.GetService<IPayerReferenceService>(),
+                sp.GetService<TimeProvider>()));
+        services.AddHostedService<RemittanceOutboxPublisher>();
         services.AddHostedService<ClaimLifecycleIndexHostedService>();
         services.AddHostedService<ClaimLifecycleStoreGuard>();
         services.AddHostedService<ClaimAcknowledgmentOutboxPublisher>();
@@ -106,6 +143,10 @@ public static class HealthcareGatewayServiceCollectionExtensions
             sp.GetRequiredService<ClaimLifecycleStoreBox>().Attachments);
         services.TryAddSingleton<CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore>(sp =>
             sp.GetRequiredService<ClaimLifecycleStoreBox>().InboundAttachments);
+        services.TryAddSingleton<IClaimStatusInquiryStore>(sp =>
+            sp.GetRequiredService<ClaimLifecycleStoreBox>().StatusInquiries);
+        services.TryAddSingleton<IRemittanceStore>(sp =>
+            sp.GetRequiredService<ClaimLifecycleStoreBox>().Remittances);
     }
 
     private static ClaimLifecycleStoreBox CreateLifecycleBox(IServiceProvider sp, IConfiguration configuration)
@@ -131,7 +172,7 @@ public static class HealthcareGatewayServiceCollectionExtensions
                 ? configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice"
                 : options.MongoDatabaseName;
             var mongo = new MongoClaimLifecycleStore(mongoClient.GetDatabase(databaseName), options);
-            return new ClaimLifecycleStoreBox(mongo, mongo, mongo, mongo, mongo);
+            return new ClaimLifecycleStoreBox(mongo, mongo, mongo, mongo, mongo, mongo, mongo);
         }
 
         return new ClaimLifecycleStoreBox(
@@ -139,7 +180,9 @@ public static class HealthcareGatewayServiceCollectionExtensions
             new InMemoryClaimAcknowledgmentStore(),
             new InMemoryClaimAcknowledgmentCursorStore(),
             new InMemoryClaimAttachmentTransmissionStore(),
-            new CloudHealthOffice.Infrastructure.Responders.InMemoryInboundClaimAttachmentReceiptStore());
+            new CloudHealthOffice.Infrastructure.Responders.InMemoryInboundClaimAttachmentReceiptStore(),
+            new InMemoryClaimStatusInquiryStore(),
+            new InMemoryRemittanceStore());
     }
 
     internal sealed class ClaimLifecycleStoreBox
@@ -149,13 +192,17 @@ public static class HealthcareGatewayServiceCollectionExtensions
             IClaimAcknowledgmentStore acknowledgments,
             IClaimAcknowledgmentCursorStore cursors,
             IClaimAttachmentTransmissionStore attachments,
-            CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore inboundAttachments)
+            CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore inboundAttachments,
+            IClaimStatusInquiryStore statusInquiries,
+            IRemittanceStore remittances)
         {
             Transmissions = transmissions;
             Acknowledgments = acknowledgments;
             Cursors = cursors;
             Attachments = attachments;
             InboundAttachments = inboundAttachments;
+            StatusInquiries = statusInquiries;
+            Remittances = remittances;
         }
 
         public IClaimTransmissionStore Transmissions { get; }
@@ -163,5 +210,7 @@ public static class HealthcareGatewayServiceCollectionExtensions
         public IClaimAcknowledgmentCursorStore Cursors { get; }
         public IClaimAttachmentTransmissionStore Attachments { get; }
         public CloudHealthOffice.Infrastructure.Responders.IInboundClaimAttachmentReceiptStore InboundAttachments { get; }
+        public IClaimStatusInquiryStore StatusInquiries { get; }
+        public IRemittanceStore Remittances { get; }
     }
 }

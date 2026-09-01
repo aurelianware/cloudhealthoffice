@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="640" viewBox="0 0 1400 640" role="img" aria-labelledby="t d">
+  <title id="t">Claim intelligence composes transaction stores into one read model</title>
+  <desc id="d">837, 277CA, 276/277, 275, and 835 stores feed a composer that applications consume.</desc>
+  <rect width="1400" height="640" fill="#05070a"/>
+  <text x="700" y="46" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="800">Disconnected transactions become one business view</text>
+  <text x="700" y="76" text-anchor="middle" fill="#00ffff" font-family="Segoe UI, system-ui, sans-serif" font-size="14">The read model is rebuilt from source stores. It is not the system of record.</text>
+
+  <g font-family="Segoe UI, system-ui, sans-serif">
+    <rect x="50" y="120" width="220" height="86" rx="10" fill="rgba(0,255,255,0.08)" stroke="#00ffff"/>
+    <text x="160" y="156" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">837 store</text>
+    <text x="160" y="180" text-anchor="middle" fill="#8b949e" font-size="12">transmissions</text>
+    <rect x="310" y="120" width="220" height="86" rx="10" fill="rgba(0,255,255,0.08)" stroke="#00ffff"/>
+    <text x="420" y="156" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">277CA store</text>
+    <text x="420" y="180" text-anchor="middle" fill="#8b949e" font-size="12">acknowledgments</text>
+    <rect x="570" y="120" width="220" height="86" rx="10" fill="rgba(0,255,255,0.08)" stroke="#00ffff"/>
+    <text x="680" y="156" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">276 / 277 store</text>
+    <text x="680" y="180" text-anchor="middle" fill="#8b949e" font-size="12">status inquiries</text>
+    <rect x="830" y="120" width="220" height="86" rx="10" fill="rgba(0,255,255,0.08)" stroke="#00ffff"/>
+    <text x="940" y="156" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">275 stores</text>
+    <text x="940" y="180" text-anchor="middle" fill="#8b949e" font-size="12">outbound + inbound</text>
+    <rect x="1090" y="120" width="260" height="86" rx="10" fill="rgba(0,255,136,0.08)" stroke="#00ff88"/>
+    <text x="1220" y="156" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">835 store</text>
+    <text x="1220" y="180" text-anchor="middle" fill="#8b949e" font-size="12">remittance receipts</text>
+  </g>
+
+  <line x1="160" y1="206" x2="700" y2="270" stroke="#00ffff" stroke-width="1.4" opacity="0.55"/>
+  <line x1="420" y1="206" x2="700" y2="270" stroke="#00ffff" stroke-width="1.4" opacity="0.55"/>
+  <line x1="680" y1="206" x2="700" y2="270" stroke="#00ffff" stroke-width="1.4" opacity="0.55"/>
+  <line x1="940" y1="206" x2="700" y2="270" stroke="#00ffff" stroke-width="1.4" opacity="0.55"/>
+  <line x1="1220" y1="206" x2="700" y2="270" stroke="#00ff88" stroke-width="1.4" opacity="0.7"/>
+
+  <rect x="250" y="270" width="900" height="130" rx="14" fill="rgba(0,255,136,0.07)" stroke="#00ff88"/>
+  <text x="700" y="322" text-anchor="middle" fill="#00ff88" font-family="ui-monospace, Menlo, monospace" font-size="13" font-weight="700" letter-spacing="2">IClaimIntelligenceComposer</text>
+  <text x="700" y="358" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, system-ui, sans-serif" font-size="20" font-weight="700">Lifecycle · Timeline · Financial summary · Attachment summary</text>
+  <text x="700" y="384" text-anchor="middle" fill="#c9d1d9" font-family="Segoe UI, system-ui, sans-serif" font-size="14">277CA Accepted is not Paid. 276 Paid does not invent an 835.</text>
+
+  <g font-family="Segoe UI, system-ui, sans-serif">
+    <rect x="120" y="450" width="260" height="130" rx="12" fill="#080c10" stroke="rgba(0,255,255,0.3)"/>
+    <text x="250" y="508" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="700">CloudDentalOffice</text>
+    <text x="250" y="536" text-anchor="middle" fill="#8b949e" font-size="13">provider claim view</text>
+    <rect x="430" y="450" width="260" height="130" rx="12" fill="#080c10" stroke="rgba(0,255,255,0.3)"/>
+    <text x="560" y="508" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="700">Provider portal</text>
+    <text x="560" y="536" text-anchor="middle" fill="#8b949e" font-size="13">later UI, same API</text>
+    <rect x="740" y="450" width="260" height="130" rx="12" fill="#080c10" stroke="rgba(0,255,255,0.3)"/>
+    <text x="870" y="508" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="700">Operations</text>
+    <text x="870" y="536" text-anchor="middle" fill="#8b949e" font-size="13">payer work queues</text>
+    <rect x="1050" y="450" width="230" height="130" rx="12" fill="#080c10" stroke="rgba(0,255,255,0.3)"/>
+    <text x="1165" y="508" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="700">Future AI</text>
+    <text x="1165" y="536" text-anchor="middle" fill="#8b949e" font-size="13">structured, not guessed</text>
+  </g>
+</svg>

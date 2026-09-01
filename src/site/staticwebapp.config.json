@@ -23,6 +23,42 @@
       "statusCode": 301
     },
     {
+      "route": "/what-is.html",
+      "redirect": "/what-is",
+      "statusCode": 301
+    },
+    {
+      "route": "/what-is",
+      "rewrite": "/what-is.html"
+    },
+    {
+      "route": "/start.html",
+      "redirect": "/start",
+      "statusCode": 301
+    },
+    {
+      "route": "/start",
+      "rewrite": "/start.html"
+    },
+    {
+      "route": "/deploy.html",
+      "redirect": "/deploy",
+      "statusCode": 301
+    },
+    {
+      "route": "/deploy",
+      "rewrite": "/deploy.html"
+    },
+    {
+      "route": "/evidence.html",
+      "redirect": "/evidence",
+      "statusCode": 301
+    },
+    {
+      "route": "/evidence",
+      "rewrite": "/evidence.html"
+    },
+    {
       "route": "/solutions-payers.html",
       "redirect": "/solutions-payers",
       "statusCode": 301
@@ -373,6 +409,24 @@
     {
       "route": "/insights/million-claim-challenge/part-9-from-unsupported-to-scored",
       "rewrite": "/insights/million-claim-challenge/part-9-from-unsupported-to-scored.html"
+    },
+    {
+      "route": "/insights/cms-0057-f/index.html",
+      "redirect": "/insights/cms-0057-f",
+      "statusCode": 301
+    },
+    {
+      "route": "/insights/cms-0057-f",
+      "rewrite": "/insights/cms-0057-f/index.html"
+    },
+    {
+      "route": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html",
+      "redirect": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas",
+      "statusCode": 301
+    },
+    {
+      "route": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas",
+      "rewrite": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html"
     },
     {
       "route": "/docs/prior-auth-guide.html",

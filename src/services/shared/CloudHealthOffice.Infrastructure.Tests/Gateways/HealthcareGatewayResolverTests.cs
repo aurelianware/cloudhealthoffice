@@ -79,8 +79,17 @@ public class HealthcareGatewayResolverTests
         resolver.ResolveCapability<IClaimAttachmentGateway>().Should().BeAssignableTo<IClaimAttachmentGateway>();
     }
 
+    [Fact]
+    public void ClaimStatusCapability_IsDiscoverable()
+    {
+        var resolver = BuildResolver();
+        var gateway = resolver.Resolve();
+
+        gateway.Supports(GatewayCapability.ClaimStatus).Should().BeTrue();
+        resolver.ResolveCapability<IClaimStatusGateway>().Should().BeAssignableTo<IClaimStatusGateway>();
+    }
+
     [Theory]
-    [InlineData(GatewayCapability.ClaimStatus)]
     [InlineData(GatewayCapability.ClaimAcknowledgment)]
     [InlineData(GatewayCapability.Remittance)]
     public void UnsupportedCapabilities_AreNotAdvertised(GatewayCapability capability)
@@ -88,6 +97,23 @@ public class HealthcareGatewayResolverTests
         var gateway = BuildResolver().Resolve();
 
         gateway.Supports(capability).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ClaimIntelligenceComposer_IsRegistered()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["HealthcareTransactions:DefaultGateway"] = "Mock"
+            })
+            .Build();
+        services.AddChoHealthcareGateways(config);
+        var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<IClaimIntelligenceComposer>().Should().NotBeNull();
+        provider.GetRequiredService<IRemittancePoster>().Should().NotBeNull();
     }
 
     [Fact]
@@ -106,7 +132,7 @@ public class HealthcareGatewayResolverTests
     {
         var resolver = BuildResolver();
 
-        var act = () => resolver.ResolveCapability<IClaimStatusGateway>();
+        var act = () => resolver.ResolveCapability<IRemittanceGateway>();
 
         act.Should().Throw<GatewayCapabilityNotSupportedException>()
             .Which.GatewayName.Should().Be(MockHealthcareGateway.GatewayName);

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stedi Interoperability Engineering Series | Cloud Health Office</title>
+  <meta name="description" content="Engineering field notes on Cloud Health Office's vendor-neutral Stedi gateway: eligibility, 837, 277CA, 275, 276/277, 835, and claim intelligence.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/stedi-interoperability">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Stedi Interoperability Engineering Series">
+  <meta property="og:description" content="The clearinghouse is the pipe. Cloud Health Office is the payer platform.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/stedi-interoperability">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/stedi-interoperability/clearinghouse-is-not-the-platform.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+    .hero-shot { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); margin: 28px 0; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/stedi-interoperability">Stedi Interoperability</a></nav>
+    <div class="eyebrow">Engineering series</div>
+    <h1>Stedi Interoperability Field Notes</h1>
+    <p>How Cloud Health Office turned a clearinghouse into a replaceable adapter and kept the healthcare business — eligibility through remittance, then a unified claim intelligence API — in the platform.</p>
+    <div class="disclosure"><strong>Current verified scope:</strong> vendor-neutral gateway with Stedi JSON adapters for 270/271, 837, 277CA, 275, 276/277, and 835, plus a tenant-safe intelligence read model. Not a live ERA enrollment certificate. Not payment posting. Scale evidence is the Million Claim Challenge.</div>
+    <img class="hero-shot" src="/graphics/stedi-interoperability/clearinghouse-is-not-the-platform.jpg" alt="Cyan monolith at the center of two fiber spines carrying sealed capsules" width="1672" height="941">
+    <article class="evidence-block" style="padding:22px">
+      <div class="eyebrow">Field note</div>
+      <h2 style="margin-top:8px">The Clearinghouse Is Not the Payer Platform</h2>
+      <p>Why Stedi is the network and Cloud Health Office is the claims operating system a health plan actually runs — and how nine sequential PRs made that distinction real in code.</p>
+      <div class="article-links">
+        <a href="/insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform">Read article</a>
+        <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/healthcare-transaction-gateway.md" target="_blank" rel="noopener noreferrer">Gateway architecture</a>
+      </div>
+    </article>
+    <div class="article-links">
+      <a href="/insights/million-claim-challenge">Million Claim Challenge series</a>
+      <a href="/insights">All insights</a>
+    </div>
+  </main>
+</body>
+</html>

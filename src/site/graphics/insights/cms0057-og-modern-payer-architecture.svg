@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="og-title og-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="og-title">CMS-0057-F and modern payer architecture</title>
+  <desc id="og-desc">CloudHealthOffice social preview: CMS-0057-F plus modern payer architecture, covering CRD, DTR, PAS, QNXT, Facets and HealthEdge.</desc>
+  <defs>
+    <radialGradient id="og-glow" cx="0.5" cy="0.25" r="0.9">
+      <stop offset="0" stop-color="#00ffff" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="og-accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00ffff"/>
+      <stop offset="1" stop-color="#00ff88"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1200" height="630" fill="#05070a"/>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#og-glow)"/>
+  <rect x="0" y="0" width="1200" height="8" fill="url(#og-accent)"/>
+
+  <text x="80" y="150" font-size="22" font-weight="600" fill="#00ffff" font-family="JetBrains Mono, monospace" letter-spacing="4">CLOUDHEALTHOFFICE</text>
+
+  <text x="80" y="250" font-size="72" font-weight="900" fill="#ffffff">CMS-0057-F +</text>
+  <text x="80" y="330" font-size="72" font-weight="900" fill="url(#og-accent)">Modern Payer Architecture</text>
+
+  <text x="80" y="410" font-size="30" font-weight="600" fill="#c9d1d9">CRD · DTR · PAS · QNXT · Facets · HealthEdge</text>
+
+  <!-- chips -->
+  <g font-size="22" font-weight="600" text-anchor="middle">
+    <rect x="80" y="452" width="200" height="52" rx="10" fill="rgba(0,255,255,0.08)" stroke="rgba(0,255,255,0.4)"/>
+    <text x="180" y="486" fill="#00ffff">FHIR API</text>
+    <rect x="300" y="452" width="320" height="52" rx="10" fill="rgba(0,255,136,0.08)" stroke="rgba(0,255,136,0.4)"/>
+    <text x="460" y="486" fill="#00ff88">Prior Authorization</text>
+    <rect x="640" y="452" width="300" height="52" rx="10" fill="rgba(0,180,255,0.08)" stroke="rgba(0,180,255,0.4)"/>
+    <text x="790" y="486" fill="#00b4ff">Payer Modernization</text>
+  </g>
+
+  <text x="80" y="576" font-size="21" fill="#808080">Modernize incrementally. Keep the external FHIR boundary stable.</text>
+</svg>

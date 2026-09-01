@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 835 remittance payment posting
+
+`IRemittancePoster` posts a stored, matched 835 (`AvailableForPosting`) onto
+claim financials and member benefit accumulators and marks the receipt
+`Posted`. Source of the ERA is the remittance store — this does not invent
+835s, change 277CA or 276/277, or reconcile EFT. Tenant comes from the
+matched transmission. Duplicate posts replay. Failed claim or accumulator
+writes abort without marking `Posted`. Gateway-only claims (no domain
+claim) skip the claim sink. Accumulators use 835 PR deductible/copay/
+coinsurance deltas with AdjustmentId `835|{remittanceId}|{claimId}`, not
+`claims.finalized.v1`. Development: `POST /api/dev/gateway/remittance/{receiptId}/post`.
+
+### Claim intelligence API
+
+Vendor-neutral `IClaimIntelligenceComposer` composes 837 submission, 277CA
+acknowledgment, 276/277 claim status, 275 attachments, and 835 remittance
+into a tenant-scoped read model. Lifecycle status is derived without letting
+one transaction overwrite another (277CA accepted is not paid; 276/277 paid
+does not invent an 835). Financial and attachment summaries are
+informational. Timeline event ids are stable, so duplicate deliveries do not
+duplicate history. `GET /api/claims/{claimId}/intelligence`. The view is not
+the system of record and does not post payment.
+
+### 835 ERA remittance ingestion through Stedi
+
+Vendor-neutral `IRemittanceGateway.RetrieveRemittanceAsync` with canonical
+`GatewayRemittance`. Stedi transport is the 835 ERA Report
+`GET https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/{transactionId}/835`
+after webhook or poll discovery. `IRemittanceProcessor` matches claims
+deterministically (payer claim control number, then patient control number),
+persists receipts, and emits identifier-only events. It does not post
+payment, change 277CA, or overwrite 276/277 status. Development:
+`POST /api/dev/gateway/remittance`.
+
+Contract-tested against Stedi's documented 835 API; live ERA retrieve pending
+production/test capability.
+
+### 276/277 claim status inquiry through Stedi
+
+Vendor-neutral `IClaimStatusGateway.CheckClaimStatusAsync` with canonical
+`ClaimStatusRequest` / `ClaimStatusResponse`. Callers pass `ClaimId` or
+`TransmissionId`; the coordinator derives payer, provider, subscriber, dates,
+and control numbers from the original 837 snapshot and from a matched 277CA
+payer claim control number when present. Stedi transport is Real-Time Claim
+Status JSON `POST https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/claimstatus/v2`.
+276/277 status is a separate dimension from 277CA acknowledgment,
+adjudication, and 835 payment. HTTP 200 with no matching claim is a business
+`NoRecordFound`, not a transport failure. Mock returns deterministic
+statuses for tests. Development:
+`POST /api/dev/gateway/claims/{transmissionId}/status`.
+
+Stedi test keys are not supported for this endpoint. Contract-tested against
+the documented API; live inquiry pending production/test capability.
+
 ### Payer-side inbound 275 claim attachment receiver
 
 Vendor-neutral `IClaimAttachmentReceiver` so Cloud Health Office can receive

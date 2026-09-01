@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using CloudHealthOffice.Infrastructure.Gateways.Models;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -58,6 +59,19 @@ public sealed class InMemoryClaimTransmissionStore : IClaimTransmissionStore
             PatientControlMatches(r, patientControlNumber));
         return Task.FromResult(matches);
     }
+
+    public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByPayerClaimControlNumberAsync(
+        string gatewayName, string payerClaimControlNumber, CancellationToken ct = default) =>
+        Task.FromResult(Find(r =>
+            NamesEqual(r.GatewayName, gatewayName) &&
+            !string.IsNullOrWhiteSpace(r.PayerClaimControlNumber) &&
+            string.Equals(r.PayerClaimControlNumber, payerClaimControlNumber, StringComparison.OrdinalIgnoreCase)));
+
+    public Task<IReadOnlyList<ClaimTransmissionRecord>> FindByTenantAndClaimIdAsync(
+        string tenantId, string claimId, CancellationToken ct = default) =>
+        Task.FromResult(Find(r =>
+            string.Equals(r.TenantId, tenantId, StringComparison.Ordinal) &&
+            string.Equals(r.ClaimId, claimId, StringComparison.Ordinal)));
 
     public Task SaveAsync(ClaimTransmissionRecord record, CancellationToken ct = default)
     {
@@ -143,6 +157,12 @@ public sealed class InMemoryClaimTransmissionStore : IClaimTransmissionStore
             CorrelationId = source.CorrelationId,
             PayerId = source.PayerId,
             PatientControlNumber = source.PatientControlNumber,
+            PayerClaimControlNumber = source.PayerClaimControlNumber,
+            ServiceDateFrom = source.ServiceDateFrom,
+            ServiceDateTo = source.ServiceDateTo,
+            ClaimAmount = source.ClaimAmount,
+            TypeOfBill = source.TypeOfBill,
+            InquirySource = source.InquirySource?.Clone(),
             ServiceLineNumbers = source.ServiceLineNumbers.ToList(),
             SubmittedAtUtc = source.SubmittedAtUtc,
             CompletedAtUtc = source.CompletedAtUtc,
