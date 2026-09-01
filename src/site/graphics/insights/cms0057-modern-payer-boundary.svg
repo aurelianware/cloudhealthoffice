@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 620" role="img" aria-labelledby="mpb-title mpb-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="mpb-title">CloudHealthOffice CMS-0057-F modern payer boundary</title>
+  <desc id="mpb-desc">A vertical flow: Provider and EHR systems connect through FHIR and Da Vinci to CloudHealthOffice, which provides CRD, DTR, PAS, Terminology and SMART/OAuth capabilities. CloudHealthOffice presents a payer integration boundary to QNXT, Facets, HealthEdge and other payer systems, and can itself provide payer backend capabilities.</desc>
+  <defs>
+    <linearGradient id="mpb-cho" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00ffff" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#00ff88" stop-opacity="0.10"/>
+    </linearGradient>
+    <marker id="mpb-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="960" height="620" fill="#05070a"/>
+
+  <!-- Provider / EHR -->
+  <rect x="300" y="24" width="360" height="66" rx="10" fill="rgba(8,8,8,0.92)" stroke="#00b4ff" stroke-width="1.5"/>
+  <text x="480" y="52" text-anchor="middle" font-size="19" font-weight="700" fill="#ffffff">Provider / EHR</text>
+  <text x="480" y="74" text-anchor="middle" font-size="12.5" fill="#a0a0a0">Ordering clinicians, EHR and provider systems</text>
+
+  <line x1="480" y1="90" x2="480" y2="120" stroke="#00ffff" stroke-width="2" marker-end="url(#mpb-arrow)"/>
+  <text x="496" y="110" font-size="12" font-weight="600" fill="#00ffff" font-family="JetBrains Mono, monospace">FHIR + Da Vinci</text>
+
+  <!-- CloudHealthOffice -->
+  <rect x="150" y="128" width="660" height="196" rx="14" fill="url(#mpb-cho)" stroke="#00ffff" stroke-width="2"/>
+  <text x="480" y="160" text-anchor="middle" font-size="20" font-weight="800" fill="#ffffff">CloudHealthOffice</text>
+  <text x="480" y="182" text-anchor="middle" font-size="12.5" fill="#00ff88">A modern FHIR boundary — and, when the payer is ready, the core backend</text>
+
+  <!-- capability chips -->
+  <g font-size="13" font-weight="600" fill="#00ffff" text-anchor="middle">
+    <rect x="176" y="204" width="130" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="241" y="229">CRD</text>
+    <rect x="318" y="204" width="130" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="383" y="229">DTR</text>
+    <rect x="460" y="204" width="130" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="525" y="229">PAS</text>
+    <rect x="602" y="204" width="182" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="693" y="229">Terminology</text>
+  </g>
+  <g font-size="13" font-weight="600" fill="#00ff88" text-anchor="middle">
+    <rect x="176" y="256" width="286" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="319" y="281">Prior Authorization Rule Engine</text>
+    <rect x="474" y="256" width="176" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="562" y="281">SMART / OAuth</text>
+    <rect x="662" y="256" width="122" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="723" y="281">Audit</text>
+  </g>
+
+  <line x1="480" y1="324" x2="480" y2="360" stroke="#00ffff" stroke-width="2" marker-end="url(#mpb-arrow)"/>
+
+  <!-- Payer integration boundary -->
+  <rect x="210" y="368" width="540" height="52" rx="10" fill="rgba(0,180,255,0.08)" stroke="#00b4ff" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="480" y="399" text-anchor="middle" font-size="15" font-weight="700" fill="#00b4ff">Payer-specific integration boundary (adapter layer)</text>
+
+  <line x1="480" y1="420" x2="480" y2="456" stroke="#00ffff" stroke-width="2" marker-end="url(#mpb-arrow)"/>
+
+  <!-- Payer systems -->
+  <g font-size="14" font-weight="700" text-anchor="middle">
+    <rect x="120" y="464" width="180" height="60" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="210" y="492" fill="#ffffff">QNXT</text>
+    <text x="210" y="512" font-size="11" font-weight="500" fill="#808080">Core admin</text>
+    <rect x="316" y="464" width="180" height="60" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="406" y="492" fill="#ffffff">Facets</text>
+    <text x="406" y="512" font-size="11" font-weight="500" fill="#808080">Core admin</text>
+    <rect x="512" y="464" width="180" height="60" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="602" y="492" fill="#ffffff">HealthEdge</text>
+    <text x="602" y="512" font-size="11" font-weight="500" fill="#808080">Core admin</text>
+    <rect x="708" y="464" width="132" height="60" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="774" y="489" fill="#ffffff" font-size="12.5">Other payer</text>
+    <text x="774" y="507" fill="#ffffff" font-size="12.5">systems</text>
+  </g>
+
+  <text x="480" y="566" text-anchor="middle" font-size="13.5" fill="#a0a0a0">CloudHealthOffice creates a stable, modern FHIR boundary around an existing payer environment —</text>
+  <text x="480" y="586" text-anchor="middle" font-size="13.5" fill="#a0a0a0">and can progressively provide payer backend capabilities itself.</text>
+</svg>

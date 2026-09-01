@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>CMS-0057-F with QNXT, Facets &amp; HealthEdge | CRD, DTR &amp; PAS</title>
+  <meta name="description" content="See how Cloud Health Office implements CMS-0057-F prior authorization using FHIR, CRD, DTR, PAS and terminology alongside QNXT, Facets and HealthEdge—or as the payer core itself."/>
+  <meta name="keywords" content="CMS-0057-F FHIR API, CMS-0057-F prior authorization, FHIR API for health plans, FHIR API for payers, QNXT FHIR API, QNXT CMS-0057-F, Facets FHIR API, HealthEdge FHIR API, CRD, DTR, PAS, Da Vinci prior authorization, FHIR terminology service, payer core modernization"/>
+  <meta name="author" content="Aurelianware, Inc."/>
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas"/>
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article"/>
+  <meta property="og:site_name" content="Cloud Health Office"/>
+  <meta property="og:title" content="CMS-0057-F with QNXT, Facets &amp; HealthEdge | CRD, DTR &amp; PAS"/>
+  <meta property="og:description" content="How Cloud Health Office implements CMS-0057-F prior authorization with FHIR, CRD, DTR, PAS and terminology alongside QNXT, Facets and HealthEdge—or as the payer core itself."/>
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas"/>
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+  <meta property="article:published_time" content="2026-08-31"/>
+  <meta property="article:modified_time" content="2026-08-31"/>
+  <meta property="article:section" content="CMS-0057-F &amp; Payer Modernization"/>
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="CMS-0057-F with QNXT, Facets &amp; HealthEdge | CRD, DTR &amp; PAS"/>
+  <meta name="twitter:description" content="FHIR, CRD, DTR, PAS and terminology for CMS-0057-F prior authorization—alongside QNXT, Facets and HealthEdge, or as the payer core."/>
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+
+  <!-- JSON-LD: TechArticle + Breadcrumb -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "CMS-0057-F with QNXT, Facets, or HealthEdge: How Cloud Health Office Implements CRD, DTR, PAS, and a Modern Payer Backend",
+    "description": "How health plans running QNXT, Facets, or HealthEdge can meet CMS-0057-F FHIR prior-authorization requirements using CRD, DTR, PAS, and terminology services—without a rip-and-replace core transformation, and how the same architecture can progressively become the payer core backend.",
+    "url": "https://cloudhealthoffice.com/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas",
+    "image": "https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc.", "url": "https://github.com/aurelianware" },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Cloud Health Office",
+      "url": "https://cloudhealthoffice.com",
+      "logo": { "@type": "ImageObject", "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" }
+    },
+    "datePublished": "2026-08-31",
+    "dateModified": "2026-08-31",
+    "proficiencyLevel": "Intermediate",
+    "articleSection": "CMS-0057-F & Payer Modernization",
+    "isPartOf": { "@type": "CollectionPage", "name": "CMS-0057-F & Payer Modernization", "url": "https://cloudhealthoffice.com/insights/cms-0057-f" },
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
+        { "@type": "ListItem", "position": 2, "name": "Insights", "item": "https://cloudhealthoffice.com/insights" },
+        { "@type": "ListItem", "position": 3, "name": "CMS-0057-F & Payer Modernization", "item": "https://cloudhealthoffice.com/insights/cms-0057-f" },
+        { "@type": "ListItem", "position": 4, "name": "CMS-0057-F with QNXT, Facets, or HealthEdge", "item": "https://cloudhealthoffice.com/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas" }
+      ]
+    }
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --cyan:#00ffff;--green:#00ff88;--blue:#00b4ff;
+      --bg:#05070a;--surface:rgba(8,8,8,.92);--surface-alt:rgba(0,255,255,.03);
+      --border:rgba(0,255,255,.12);--border-bright:rgba(0,255,255,.3);
+      --text:#d7dde3;--text-muted:#a0a0a0;--text-dim:#606060;
+      --font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--max:1140px;--measure:760px;
+    }
+    html{scroll-behavior:smooth}
+    @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+    body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.8;overflow-x:hidden}
+    a{color:var(--cyan)}
+    .skip-to-main{position:absolute;left:-999px;top:0;background:var(--cyan);color:#000;padding:.6rem 1rem;z-index:200}
+    .skip-to-main:focus{left:8px;top:8px}
+
+    nav{position:sticky;top:0;z-index:100;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+    .nav-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+    .nav-brand{font-weight:800;font-size:1.05rem;color:#fff;text-decoration:none;display:flex;align-items:center;gap:.6rem}
+    .nav-brand span{opacity:.5;font-weight:400;font-size:.8rem}
+    .nav-links{display:flex;gap:1.8rem;align-items:center}
+    .nav-links a{color:var(--text-muted);text-decoration:none;font-size:.82rem;font-weight:500;transition:color .2s}
+    .nav-links a:hover{color:var(--cyan)}
+    .nav-cta{background:rgba(0,255,255,.08);border:1px solid rgba(0,255,255,.25);color:var(--cyan);padding:.35rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .nav-cta:hover{background:rgba(0,255,255,.15);box-shadow:0 0 20px rgba(0,255,255,.1)}
+
+    .article-head{padding:3.4rem 2rem 1rem;position:relative;overflow:hidden}
+    .article-head::before{content:'';position:absolute;top:-240px;left:15%;width:760px;height:760px;background:radial-gradient(circle,rgba(0,255,255,.05) 0%,transparent 70%);pointer-events:none}
+    .wrap{max-width:var(--measure);margin:0 auto}
+    .wrap-wide{max-width:var(--max);margin:0 auto}
+    .breadcrumb{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-bottom:1.4rem}
+    .breadcrumb a{color:var(--text-muted);text-decoration:none}
+    .breadcrumb a:hover{color:var(--cyan)}
+    .eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:1rem;opacity:.85}
+    h1{font-size:clamp(1.9rem,4.6vw,2.9rem);font-weight:900;color:#fff;line-height:1.18;margin-bottom:1rem}
+    .subtitle{font-size:1.12rem;color:var(--text-muted);line-height:1.75;margin-bottom:1.4rem}
+    .meta{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:.8rem 0;margin:1.4rem 0 0;display:flex;flex-wrap:wrap;gap:1.2rem}
+    .meta strong{color:var(--text-muted);font-weight:500}
+
+    article{padding:1.5rem 2rem 4rem}
+    article h2{font-size:clamp(1.4rem,3vw,1.9rem);font-weight:800;color:#fff;margin:3rem 0 .4rem;line-height:1.25}
+    article h2 .num{font-family:var(--mono);font-size:.85rem;color:var(--cyan);display:block;margin-bottom:.3rem;letter-spacing:2px}
+    article h3{font-size:1.15rem;font-weight:700;color:var(--cyan);margin:2rem 0 .3rem}
+    article p{margin:.9rem 0;color:var(--text)}
+    article ul,article ol{margin:1rem 0 1rem 1.3rem;color:var(--text)}
+    article li{margin:.4rem 0}
+    article strong{color:#fff}
+    code{font-family:var(--mono);font-size:.86em;color:var(--green);background:rgba(0,255,136,.08);padding:.1rem .35rem;border-radius:4px}
+    .lead{font-size:1.05rem}
+
+    .callout{border-left:3px solid var(--blue);background:rgba(0,180,255,.06);padding:1.1rem 1.3rem;border-radius:0 8px 8px 0;margin:1.6rem 0}
+    .callout.green{border-left-color:var(--green);background:rgba(0,255,136,.06)}
+    .callout.amber{border-left-color:#f0b429;background:rgba(240,180,41,.07)}
+    .callout p{margin:.4rem 0;font-size:.95rem;color:var(--text-muted)}
+    .callout strong{color:#fff}
+    .callout .k{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:2px;color:var(--blue);display:block;margin-bottom:.4rem}
+    .callout.green .k{color:var(--green)}
+    .callout.amber .k{color:#f0b429}
+
+    figure{margin:2.2rem 0}
+    figure img{width:100%;height:auto;display:block;border:1px solid var(--border);border-radius:12px;background:#03050a;padding:.8rem}
+    figcaption{font-size:.8rem;color:var(--text-dim);text-align:center;margin-top:.7rem;line-height:1.6;max-width:var(--measure);margin-left:auto;margin-right:auto}
+
+    /* semantic HTML/CSS mini flow */
+    .flow{display:flex;flex-direction:column;align-items:stretch;gap:.1rem;max-width:420px;margin:1.8rem auto;font-family:var(--mono)}
+    .flow .step{background:var(--surface);border:1px solid var(--border-bright);border-radius:8px;padding:.75rem 1rem;text-align:center;font-size:.82rem;color:#fff}
+    .flow .arrow{text-align:center;color:var(--cyan);font-size:1rem;line-height:1}
+
+    .capgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1.6rem 0}
+    .cap{border:1px solid var(--border);border-radius:10px;padding:1.2rem;background:var(--surface-alt)}
+    .cap h4{color:var(--cyan);font-size:.92rem;margin-bottom:.4rem;font-family:var(--mono);letter-spacing:.5px}
+    .cap ul{margin:.4rem 0 0 1.1rem}
+    .cap li{font-size:.86rem;color:var(--text-muted)}
+
+    .models{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.2rem;margin:1.8rem 0}
+    .model{border:1px solid var(--border);border-radius:12px;padding:1.5rem;background:var(--surface)}
+    .model .tag{font-family:var(--mono);font-size:.62rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px}
+    .model h3{color:#fff;font-size:1.05rem;margin:.5rem 0 .6rem}
+    .model p{font-size:.88rem;color:var(--text-muted);margin:.4rem 0}
+    .model.core{border-color:rgba(0,255,136,.3);background:linear-gradient(160deg,rgba(0,255,136,.05),transparent)}
+
+    .keyline{border:1px solid var(--border-bright);border-radius:12px;padding:1.4rem 1.6rem;margin:2rem 0;background:linear-gradient(135deg,rgba(0,255,255,.05),rgba(0,255,136,.03))}
+    .keyline p{font-size:1.02rem;color:#fff;margin:0}
+
+    .related{border-top:1px solid var(--border);margin-top:3rem;padding-top:1.8rem}
+    .related-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-top:1rem}
+    .rc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;text-decoration:none;display:block;transition:border-color .3s}
+    .rc:hover{border-color:var(--border-bright)}
+    .rc .k{font-family:var(--mono);font-size:.6rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px;display:block;margin-bottom:.4rem}
+    .rc h4{color:#fff;font-size:.95rem;margin-bottom:.2rem}
+    .rc p{font-size:.8rem;color:var(--text-muted);margin:0}
+
+    .cta-section{text-align:center;padding:4rem 2rem;background:linear-gradient(180deg,transparent,rgba(0,255,255,.02),transparent);border-top:1px solid var(--border)}
+    .cta-section h2{font-size:clamp(1.4rem,3vw,2rem);color:#fff;margin-bottom:.8rem}
+    .cta-section p{color:var(--text-muted);max-width:560px;margin:0 auto 1.6rem}
+    .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.7rem 1.4rem;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .btn-primary{background:rgba(0,255,255,.1);border:1px solid rgba(0,255,255,.3);color:var(--cyan)}
+    .btn-primary:hover{background:rgba(0,255,255,.18);box-shadow:0 0 30px rgba(0,255,255,.1)}
+    .btn-green{background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);color:var(--green)}
+    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--text-muted)}
+    .btn-ghost:hover{border-color:rgba(255,255,255,.2);color:#fff}
+    .cta-actions{display:flex;flex-wrap:wrap;gap:.8rem;justify-content:center}
+
+    footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;color:var(--text-dim);font-size:.82rem}
+    footer a{color:rgba(0,255,255,.7);text-decoration:none}
+
+    @media(max-width:820px){.nav-links{display:none}}
+    @media(max-width:768px){article,.article-head{padding-left:1.2rem;padding-right:1.2rem}}
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="https://cloudhealthoffice.com" class="nav-brand">Cloud Health Office <span>Insights</span></a>
+      <div class="nav-links">
+        <a href="/solutions-payers">Solutions</a>
+        <a href="/cms-0057f-compliance">CMS Compliance</a>
+        <a href="/platform">Platform</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/insights/cms-0057-f">Series</a>
+        <a href="/docs">Docs</a>
+        <a href="/contact" class="nav-cta">Contact Sales →</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main-content">
+    <header class="article-head">
+      <div class="wrap">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          <a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/cms-0057-f">CMS-0057-F &amp; Payer Modernization</a> / <span>QNXT, Facets &amp; HealthEdge</span>
+        </nav>
+        <div class="eyebrow">CMS-0057-F &amp; Payer Modernization</div>
+        <h1>CMS-0057-F with QNXT, Facets, or HealthEdge: How Cloud Health Office Implements CRD, DTR, PAS, and a Modern Payer Backend</h1>
+        <p class="subtitle">How health plans can meet modern FHIR prior-authorization requirements without being forced into a rip-and-replace core transformation&mdash;and how the same architecture can eventually replace the legacy core when the payer is ready.</p>
+        <div class="meta">
+          <span><strong>Series:</strong> CMS-0057-F &amp; Payer Modernization</span>
+          <span><strong>Published:</strong> <time datetime="2026-08-31">August 31, 2026</time></span>
+          <span><strong>For:</strong> Payer CIOs, CTOs, architects &amp; interoperability teams</span>
+        </div>
+      </div>
+    </header>
+
+    <article>
+      <div class="wrap">
+
+        <p class="lead">Payers running <strong>QNXT</strong>, <strong>Facets</strong>, <strong>HealthEdge</strong>, or another core administration processing system (CAPS) all face the same practical question: how do you implement modern FHIR interoperability and prior authorization when decades of membership, benefits, provider, authorization, and claims processing already live in existing systems?</p>
+
+        <p>You do not have to choose between "do nothing" and "replace everything." There are three architectural options in front of most health plans:</p>
+        <ol>
+          <li><strong>Force the legacy core to implement every new interoperability capability</strong> &mdash; extending a CAPS platform that was never designed around FHIR, on the vendor's roadmap and timeline.</li>
+          <li><strong>Replace the core entirely</strong> &mdash; a multi-year, high-risk transformation program before any compliance value is realized.</li>
+          <li><strong>Deploy Cloud Health Office alongside the existing core</strong> and progressively move capabilities into it when&mdash;and only when&mdash;it makes operational sense.</li>
+        </ol>
+
+        <p>Cloud Health Office is built for the third path, and it is deliberately not a one-way door. The same platform supports <strong>modernization around an existing core</strong> and <strong>operating as the payer core backend itself</strong>. A plan can start with Cloud Health Office as a thin FHIR boundary in front of QNXT, Facets, or HealthEdge, and&mdash;behind a stable external FHIR contract&mdash;grow it into the system of record for one domain, several domains, or eventually the whole core.</p>
+
+        <figure>
+          <img src="/graphics/insights/cms0057-modern-payer-boundary.svg"
+               alt="Vertical architecture diagram: Provider and EHR systems connect through FHIR and Da Vinci to Cloud Health Office — which provides CRD, DTR, PAS, terminology, a prior authorization rule engine, SMART/OAuth and audit — then through a payer-specific integration boundary to QNXT, Facets, HealthEdge and other payer systems. Cloud Health Office can also provide the payer backend itself."/>
+          <figcaption>Cloud Health Office creates a modern FHIR boundary around an existing payer environment&mdash;and can progressively provide payer backend capabilities itself.</figcaption>
+        </figure>
+
+        <h2><span class="num">01</span>The CMS-0057-F interoperability boundary</h2>
+        <p>CMS-0057-F&mdash;the <em>Advancing Interoperability and Improving Prior Authorization Processes</em> final rule&mdash;requires impacted payers (Medicare Advantage organizations, state Medicaid and CHIP programs, and Qualified Health Plan issuers on the Marketplaces) to implement a set of modern, standardized FHIR&nbsp;R4 interoperability APIs. Among these is an <strong>expanded Prior Authorization API</strong> that surfaces prior-authorization requirements, documentation, and decisions through FHIR.</p>
+
+        <div class="callout amber">
+          <span class="k">Be precise about what is required</span>
+          <p><strong>CRD, DTR, and PAS are not individually named as mandates in the current final rule.</strong> They are the HL7 Da&nbsp;Vinci implementation approaches most commonly recommended to satisfy the required Prior Authorization API capabilities. Cloud Health Office implements CRD, DTR, and PAS as a coherent way to meet those capabilities&mdash;but implementing them is an <em>implementation strategy</em>, not a certification.</p>
+          <p>Cloud Health Office makes no claim of regulatory certification. Installing Cloud Health Office does not, by itself, make a payer CMS-0057-F compliant. Production compliance depends on payer configuration, identity, source systems, policies, data quality, operations, security controls, governance, and legal/compliance review.</p>
+        </div>
+
+        <p>What Cloud Health Office does provide is a concrete, implemented technical surface: the FHIR&nbsp;R4 APIs and the Da&nbsp;Vinci CRD, DTR, and PAS workflows that a prior-authorization program is built on. The <a href="/cms-0057f-compliance">CMS-0057-F readiness overview</a> covers the four required FHIR APIs and how a vendor-neutral readiness layer maps to them; this article focuses on the prior-authorization workflow and how it connects to QNXT, Facets, and HealthEdge.</p>
+
+        <h2><span class="num">02</span>CRD &mdash; what does the payer require?</h2>
+        <p>Coverage Requirements Discovery (CRD) answers a provider-facing question at the point of ordering: <strong>does this service require prior authorization, and what does the payer need?</strong> Cloud Health Office exposes CRD through CDS&nbsp;Hooks, so an ordering clinician's EHR can call it during the order workflow and get an answer back as a card&mdash;before the order is even signed.</p>
+
+        <p>The interaction turns on a set of payer questions: eligibility, plan, benefits, provider, procedure, diagnosis, place of service, policy, and the resulting authorization requirements. Cloud Health Office's CRD implementation is real, not hypothetical&mdash;it lives in <code>src/services/fhir-service/Controllers/CrdController.cs</code> and <code>src/services/fhir-service/Services/CrdService.cs</code>. Concretely, Cloud Health Office CRD:</p>
+        <ul>
+          <li><strong>Exposes CDS&nbsp;Hooks discovery</strong> at a publicly reachable discovery endpoint, advertising its available services.</li>
+          <li><strong>Supports <code>order-select</code></strong> &mdash; early guidance as a service is chosen.</li>
+          <li><strong>Supports <code>order-sign</code></strong> &mdash; a final prior-authorization determination at order signing.</li>
+          <li><strong>Extracts codes from draft orders</strong> in the hook request (for example, <code>ServiceRequest</code> and <code>MedicationRequest</code> resources).</li>
+          <li><strong>Invokes terminology translation</strong> where appropriate&mdash;calling the Cloud Health Office Terminology Service to normalize codes before evaluation.</li>
+          <li><strong>Calls the Cloud Health Office Prior Authorization Rule Engine</strong> to evaluate the requested service.</li>
+          <li><strong>Evaluates payer-specific classifications and rules</strong> (auth-required, documentation-required, and auto-approved code sets) per tenant.</li>
+          <li><strong>Returns CDS cards</strong> describing authorization and documentation requirements&mdash;including a card that can launch DTR when documentation is needed.</li>
+        </ul>
+
+        <h2><span class="num">03</span>Terminology &mdash; the layer that makes it work</h2>
+        <p>Terminology is central to this workflow, not a footnote. An EHR may send a diagnosis as SNOMED&nbsp;CT while the payer's medical policy and benefit configuration are expressed in ICD-10-CM, CPT, or HCPCS. Without translation, a correct clinical code and a correct policy rule simply never meet.</p>
+
+        <p>Cloud Health Office provides FHIR-native terminology capabilities and works across the code systems this workflow depends on:</p>
+        <ul>
+          <li><strong>SNOMED&nbsp;CT</strong> for clinical findings and procedures from the EHR</li>
+          <li><strong>CPT</strong> and <strong>HCPCS</strong> for procedures and services</li>
+          <li><strong>ICD-10-CM</strong> for diagnoses</li>
+          <li><strong>LOINC</strong> where laboratory and observation codes are in play</li>
+          <li><strong>FHIR <code>CodeSystem</code> and <code>ValueSet</code></strong> resources, plus payer-specific code groupings</li>
+        </ul>
+
+        <p>The terminology architecture lives in <code>src/services/CHO.TerminologyService/</code> and is documented in the <a href="/docs/terminology-guide">Terminology Crosswalk guide</a>. Its primary operation is the FHIR-standard <code>ConceptMap/$translate</code> (with a <code>$batch-translate</code> variant for translating many codes at once). Crucially, <strong>the CRD implementation actually calls this service</strong>: <code>CrdService</code> collects the SNOMED codes from the draft order and posts them to the Terminology Service for translation to ICD-10-CM before the Prior Authorization Rule Engine ever runs. If the Terminology Service is unavailable, CRD degrades gracefully and continues with the raw codes rather than failing the hook.</p>
+
+        <figure>
+          <img src="/graphics/insights/cms0057-crd-terminology-flow.svg"
+               alt="Flow diagram: a provider EHR order-select or order-sign event triggers CDS Hooks and CRD; Cloud Health Office extracts codes and calls its Terminology Service to translate SNOMED CT and normalize to CPT, HCPCS and ICD-10-CM; the Prior Authorization Rule Engine returns one of three outcomes — no authorization required, prior authorization required, or additional documentation required; documentation paths continue to DTR."/>
+          <figcaption>CRD extracts order codes, calls the Terminology Service to normalize them, and evaluates the Prior Authorization Rule Engine before returning a CDS decision.</figcaption>
+        </figure>
+
+        <p>The essential path is short and worth stating plainly:</p>
+        <div class="flow" role="img" aria-label="Flow: Provider slash EHR to FHIR and CDS Hooks to Terminology to Prior Auth Rule Engine to CRD decision">
+          <div class="step">Provider / EHR</div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">FHIR / CDS Hooks</div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">Terminology</div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">Prior Auth Rule Engine</div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">CRD decision</div>
+        </div>
+
+        <h2><span class="num">04</span>DTR &mdash; what information does the provider need to supply?</h2>
+        <p>When CRD determines that documentation is required, Documentation Templates &amp; Rules (DTR) is how it gets collected. DTR answers a different question than CRD: not "is authorization required?" but <strong>"what exactly does the provider need to supply, and how do we gather it as structured data?"</strong></p>
+
+        <p>Cloud Health Office's DTR implementation is in <code>src/services/fhir-service/Controllers/DtrController.cs</code> and supports the FHIR&nbsp;R4 building blocks DTR depends on:</p>
+        <div class="capgrid">
+          <div class="cap">
+            <h4>Questionnaire</h4>
+            <ul><li>GET by id</li><li>Search</li><li>Create</li><li>Update</li></ul>
+          </div>
+          <div class="cap">
+            <h4>QuestionnaireResponse</h4>
+            <ul><li>GET by id</li><li>Search</li><li>Submit completed / amended responses</li></ul>
+          </div>
+          <div class="cap">
+            <h4>Operations &amp; context</h4>
+            <ul><li><code>$questionnaire-package</code></li><li>Tenant-aware workflows</li><li>Patient context</li></ul>
+          </div>
+        </div>
+
+        <div class="callout amber">
+          <span class="k">Not turnkey without configuration</span>
+          <p>The DTR <em>engine</em> is implemented, but a payer's DTR behavior is not turnkey out of the box. Payer-specific onboarding still determines the <strong>questionnaire content</strong>, the <strong>medical-policy content</strong> behind it, the <strong>prepopulation rules</strong>, the <strong>clinical governance</strong> that signs off on them, and the <strong>effective dates</strong> that decide which version applies when. Cloud Health Office provides the mechanism; the plan's policies provide the meaning.</p>
+        </div>
+
+        <h2><span class="num">05</span>PAS &mdash; submit the authorization and receive the decision</h2>
+        <p>Prior Authorization Support (PAS) is where the request becomes a decision. Cloud Health Office implements the Da&nbsp;Vinci PAS <code>Claim/$submit</code> operation in <code>src/services/fhir-service/Controllers/PasController.cs</code>, and it does real payer business processing rather than proxying FHIR into another platform. On submit, Cloud Health Office:</p>
+        <ul>
+          <li><strong>Validates and extracts the PAS Claim</strong> from the request <code>Bundle</code>.</li>
+          <li><strong>Runs CMS-0057-F-oriented compliance checks</strong> on the request before adjudicating.</li>
+          <li><strong>Performs provider verification</strong>&mdash;for example, screening the requesting provider NPI against federal exclusion sources, and auto-denying an excluded provider.</li>
+          <li><strong>Runs prior-authorization decisioning</strong> to produce a result.</li>
+          <li><strong>Returns approved, denied, or pended</strong> outcomes as a PAS response bundle.</li>
+          <li><strong>Persists the authorization</strong> so decisions are tracked and available downstream.</li>
+          <li><strong>Records telemetry and metrics</strong> for each decision (outcome and firing rule), with a response-time target aligned to the PAS implementation guide.</li>
+        </ul>
+
+        <p>The point worth emphasizing to an architecture team: <strong>Cloud Health Office is doing the payer business processing itself.</strong> The authorization decision, the provider screening, and the persistence are Cloud Health Office's, not a thin passthrough to a downstream UM system.</p>
+
+        <h2><span class="num">06</span>How it fits together &mdash; and where it can go</h2>
+        <p>Put CRD, DTR, and PAS on one line and the shape of the workflow appears: discover requirements, collect documentation, submit and decide. They are connected payer workflows, not three isolated APIs.</p>
+
+        <figure>
+          <img src="/graphics/insights/cms0057-crd-dtr-pas-flow.svg"
+               alt="Horizontal lifecycle diagram: CRD discovers requirements using terminology, benefit context and prior-auth rules; DTR collects documentation via Questionnaire and QuestionnaireResponse; PAS submits and decides using FHIR Claim dollar-submit, provider verification and auto-adjudication; the decision is approved, denied or pended and is written to the Authorization Service. Each Da Vinci stage sits above the Cloud Health Office service that implements it."/>
+          <figcaption>CRD &rarr; DTR &rarr; PAS as one connected lifecycle, with the Cloud Health Office services that implement each Da&nbsp;Vinci stage shown beneath it.</figcaption>
+        </figure>
+
+        <p>The same picture has two end states. In the first, Cloud Health Office sits in front of the existing core and hands off to a payer-specific adapter layer:</p>
+        <div class="flow" role="img" aria-label="Provider slash EHR to FHIR and CDS Hooks to Cloud Health Office to payer-specific adapter layer to QNXT, Facets, HealthEdge or other payer systems">
+          <div class="step">Provider / EHR</div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">FHIR + CDS Hooks</div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">Cloud Health Office<br/><small>CRD · Terminology · Rule Engine · DTR · PAS · Authorization · SMART/OAuth · Provider Verification · Audit</small></div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">Payer-specific adapter layer</div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">QNXT / Facets / HealthEdge / UM / other systems</div>
+        </div>
+
+        <p>In the second, Cloud Health Office <em>is</em> the core backend&mdash;the same FHIR surface, now over Cloud Health Office's own membership, eligibility, benefits, provider, prior authorization, claims, accumulator, and payer administration services:</p>
+        <div class="flow" role="img" aria-label="Provider slash EHR to Cloud Health Office as the core backend providing FHIR, membership, eligibility, benefits, providers, prior authorization, claims, accumulators and payer administration">
+          <div class="step">Provider / EHR</div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="step">Cloud Health Office<br/><small>FHIR · Membership · Eligibility · Benefits · Providers · Prior Authorization · Claims · Accumulators · Payer Administration</small></div>
+        </div>
+
+        <div class="keyline"><p>The external FHIR contract is the same in both pictures. What changes underneath is how much of the payer backend Cloud Health Office owns.</p></div>
+
+        <h2><span class="num">07</span>Why there is no universal QNXT, Facets, or HealthEdge adapter</h2>
+        <p>It is tempting to advertise a single, preconfigured "QNXT adapter" or "Facets adapter." Cloud Health Office deliberately does not, because it would not be true. <strong>Two payers running the same CAPS product are rarely the same system.</strong> They can differ in:</p>
+        <ul>
+          <li>product versions and modules</li>
+          <li>extensions and customizations</li>
+          <li>available APIs and middleware</li>
+          <li>data warehouses and reporting stores</li>
+          <li>UM systems and provider systems</li>
+          <li>which team operationally owns which domain</li>
+        </ul>
+
+        <p>So the adapter is determined during onboarding, not assumed. The work is to establish, for each specific plan:</p>
+        <ul>
+          <li>the system of record for <strong>membership</strong></li>
+          <li>the system of record for <strong>benefits</strong></li>
+          <li>the <strong>provider</strong> source</li>
+          <li>the <strong>authorization</strong> source</li>
+          <li>the <strong>claims</strong> dependencies</li>
+          <li>the <strong>interfaces</strong> actually available</li>
+          <li>the <strong>synchronization</strong> requirements between systems</li>
+        </ul>
+        <p>Only then is the appropriate adapter configured or implemented.</p>
+
+        <div class="callout green">
+          <span class="k">The stable-boundary principle</span>
+          <p><strong>Cloud Health Office maintains a stable modern interoperability boundary while the payer-specific adapter connects to the organization's actual source systems.</strong> The FHIR contract facing providers stays constant; the adapter absorbs the reality of each plan's environment. QNXT, Facets, and HealthEdge adapters are payer-specific onboarding integrations&mdash;implementation work&mdash;not universal preconfigured connectors.</p>
+        </div>
+
+        <h2><span class="num">08</span>Progressive core modernization &mdash; three deployment models</h2>
+        <p>Because the FHIR boundary is stable, a payer can move along a spectrum at its own pace. There are three reference points on that spectrum.</p>
+
+        <div class="models">
+          <div class="model">
+            <span class="tag">Model 1</span>
+            <h3>Cloud Health Office beside the core</h3>
+            <p>Cloud Health Office handles FHIR, CRD, DTR, PAS, terminology, and modern payer services.</p>
+            <p>QNXT, Facets, or HealthEdge remains authoritative for existing core domains&mdash;membership, benefits, claims, and the rest.</p>
+          </div>
+          <div class="model">
+            <span class="tag">Model 2</span>
+            <h3>Hybrid modernization</h3>
+            <p>Selected payer capabilities move into Cloud Health Office over time&mdash;for example prior authorization, provider verification, benefit services, eligibility, provider administration, or claims.</p>
+            <p>The legacy core keeps the domains that have not moved yet.</p>
+          </div>
+          <div class="model core">
+            <span class="tag">Model 3</span>
+            <h3>Cloud Health Office as the core</h3>
+            <p>Cloud Health Office becomes the payer backend and the old core is retired.</p>
+            <p>Membership, eligibility, benefits, providers, prior authorization, claims, and accumulators all run on Cloud Health Office.</p>
+          </div>
+        </div>
+
+        <figure>
+          <img src="/graphics/insights/cms0057-progressive-modernization.svg"
+               alt="Three-stage architecture diagram. Stage 1, modernize around the core: Cloud Health Office provides FHIR, CRD, DTR, PAS and terminology in front of QNXT, Facets or HealthEdge, which stays authoritative for all core domains. Stage 2, hybrid payer platform: Cloud Health Office also handles prior auth, terminology, benefits and provider services while a legacy core keeps remaining domains. Stage 3, Cloud Health Office as the core: it provides membership, eligibility, benefits, providers, prior authorization, claims, accumulators and FHIR interoperability, and the legacy core is no longer required. The key takeaway: modernize incrementally and keep the external FHIR boundary stable."/>
+          <figcaption>A payer can start at Model&nbsp;1 and progressively reach Model&nbsp;3&mdash;incrementally, and without changing the external FHIR boundary.</figcaption>
+        </figure>
+
+        <div class="keyline"><p><strong>A payer can start with Model&nbsp;1 and progressively reach Model&nbsp;3 without changing the external FHIR contract.</strong> That is the core positioning point: modernization becomes an internal decision about systems of record, not a renegotiation of the interface providers and partners depend on.</p></div>
+
+        <h2><span class="num">09</span>What Cloud Health Office does &mdash; and what still depends on the payer</h2>
+        <p>To keep expectations accurate: the CRD, DTR, PAS, terminology, provider-verification, and authorization capabilities described here are <strong>implemented technical capabilities</strong> in the platform&mdash;PAS-aligned prior authorization, a CRD capability, a DTR capability, and FHIR-native terminology. They support a CMS-0057-F implementation strategy and put a payer on a path toward CMS-0057-F <strong>readiness</strong>.</p>
+        <p>They do not, on their own, constitute compliance. Production payer compliance depends on the payer's configuration, identity infrastructure, source systems, medical policies, data quality, operations, security controls, governance, and legal and compliance review. Cloud Health Office is not "CMS certified," is not "guaranteed compliant," and is not "compliant out of the box." What it offers is a real implementation you can read, run, and extend&mdash;and a payer-specific onboarding path to put it into production.</p>
+
+        <div class="related">
+          <div class="eyebrow">Keep reading</div>
+          <div class="related-cards">
+            <a class="rc" href="/cms-0057f-compliance"><span class="k">Readiness</span><h4>CMS-0057-F Compliance</h4><p>The four required FHIR APIs and the readiness layer.</p></a>
+            <a class="rc" href="/docs/prior-auth-guide"><span class="k">Guide</span><h4>Prior Authorization Guide</h4><p>CRD, DTR, and PAS end to end.</p></a>
+            <a class="rc" href="/docs/terminology-guide"><span class="k">Guide</span><h4>Terminology Crosswalk</h4><p>SNOMED, ICD-10-CM, CPT translation.</p></a>
+            <a class="rc" href="/docs/architecture"><span class="k">Architecture</span><h4>Platform Architecture</h4><p>How the services fit together.</p></a>
+            <a class="rc" href="/platform"><span class="k">Platform</span><h4>Platform Overview</h4><p>The full payer platform substrate.</p></a>
+            <a class="rc" href="/insights/cms-0057-f"><span class="k">Series</span><h4>CMS-0057-F Insights</h4><p>More in this series.</p></a>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <section class="cta-section">
+      <div class="wrap">
+        <div class="eyebrow" style="text-align:center">Get Started</div>
+        <h2>See it against your actual core</h2>
+        <p>Whether you run QNXT, Facets, HealthEdge, or something else, the fastest way to evaluate this architecture is against your real source systems. Let's map it.</p>
+        <div class="cta-actions">
+          <a href="/contact" class="btn btn-primary">Contact Sales →</a>
+          <a href="/pricing" class="btn btn-ghost">See Pricing</a>
+          <a href="https://github.com/aurelianware/cloudhealthoffice" class="btn btn-ghost">View Source on GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Cloud Health Office — <a href="https://github.com/aurelianware">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com">Commercial licensing</a></p>
+    <p style="margin-top:.4rem"><a href="/insights/cms-0057-f">CMS-0057-F Series</a> &nbsp;·&nbsp; <a href="/cms-0057f-compliance">CMS-0057-F</a> &nbsp;·&nbsp; <a href="/platform">Platform</a> &nbsp;·&nbsp; <a href="/docs">Docs</a> &nbsp;·&nbsp; <a href="/contact">Contact</a></p>
+  </footer>
+</body>
+</html>

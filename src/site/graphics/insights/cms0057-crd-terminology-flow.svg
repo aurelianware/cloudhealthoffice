@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" role="img" aria-labelledby="ctf-title ctf-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="ctf-title">CRD, terminology and prior authorization rule flow</title>
+  <desc id="ctf-desc">A provider EHR order-select or order-sign event triggers CDS Hooks and CRD. CloudHealthOffice extracts codes and calls its Terminology Service to translate SNOMED CT and normalize to CPT, HCPCS and ICD-10-CM. The Prior Authorization Rule Engine then returns one of three outcomes: no authorization required, prior authorization required, or additional documentation required. When documentation is required the workflow continues to DTR.</desc>
+  <defs>
+    <marker id="ctf-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+    <marker id="ctf-arrow-g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ff88"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="960" height="720" fill="#05070a"/>
+
+  <!-- Provider EHR -->
+  <rect x="320" y="20" width="320" height="58" rx="10" fill="rgba(8,8,8,0.92)" stroke="#00b4ff" stroke-width="1.5"/>
+  <text x="480" y="46" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">Provider EHR</text>
+  <text x="480" y="66" text-anchor="middle" font-size="12" fill="#a0a0a0">Order-select · Order-sign (draft orders)</text>
+  <line x1="480" y1="78" x2="480" y2="106" stroke="#00ffff" stroke-width="2" marker-end="url(#ctf-arrow)"/>
+
+  <!-- CDS Hooks / CRD -->
+  <rect x="300" y="114" width="360" height="60" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.6"/>
+  <text x="480" y="140" text-anchor="middle" font-size="16" font-weight="700" fill="#00ffff">CDS Hooks / CRD</text>
+  <text x="480" y="160" text-anchor="middle" font-size="11.5" fill="#a0a0a0" font-family="JetBrains Mono, monospace">CrdController · CrdService — extract codes from draft orders</text>
+  <line x1="480" y1="174" x2="480" y2="202" stroke="#00ffff" stroke-width="2" marker-end="url(#ctf-arrow)"/>
+
+  <!-- Terminology Service -->
+  <rect x="230" y="210" width="500" height="150" rx="12" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.6"/>
+  <text x="480" y="238" text-anchor="middle" font-size="16" font-weight="700" fill="#00ffff">CloudHealthOffice Terminology Service</text>
+  <text x="480" y="258" text-anchor="middle" font-size="11.5" fill="#a0a0a0" font-family="JetBrains Mono, monospace">ConceptMap/$translate · $batch-translate</text>
+  <g font-size="12" text-anchor="middle">
+    <rect x="256" y="274" width="200" height="34" rx="7" fill="rgba(0,0,0,0.5)" stroke="rgba(0,255,255,0.28)"/>
+    <text x="356" y="296" fill="#00ffff">SNOMED CT · FHIR CodeSystem / ValueSet</text>
+    <rect x="470" y="274" width="234" height="34" rx="7" fill="rgba(0,0,0,0.5)" stroke="rgba(0,255,136,0.28)"/>
+    <text x="587" y="296" fill="#00ff88">CPT · HCPCS · ICD-10-CM · payer concepts</text>
+  </g>
+  <text x="480" y="336" text-anchor="middle" font-size="12" fill="#c9d1d9" font-style="italic">translation &amp; normalization</text>
+  <line x1="480" y1="360" x2="480" y2="392" stroke="#00ffff" stroke-width="2" marker-end="url(#ctf-arrow)"/>
+
+  <!-- Prior Auth Rule Engine -->
+  <rect x="280" y="400" width="400" height="58" rx="10" fill="rgba(0,255,136,0.06)" stroke="#00ff88" stroke-width="1.6"/>
+  <text x="480" y="426" text-anchor="middle" font-size="16" font-weight="700" fill="#00ff88">Prior Authorization Rule Engine</text>
+  <text x="480" y="446" text-anchor="middle" font-size="11.5" fill="#a0a0a0">Evaluates payer-specific classifications &amp; rules</text>
+
+  <!-- three outcome branches -->
+  <line x1="480" y1="458" x2="480" y2="486" stroke="#00ff88" stroke-width="2"/>
+  <path d="M480 486 L160 486 L160 512" fill="none" stroke="#00ff88" stroke-width="2" marker-end="url(#ctf-arrow-g)"/>
+  <path d="M480 486 L480 512" fill="none" stroke="#00ff88" stroke-width="2" marker-end="url(#ctf-arrow-g)"/>
+  <path d="M480 486 L800 486 L800 512" fill="none" stroke="#00ff88" stroke-width="2" marker-end="url(#ctf-arrow-g)"/>
+
+  <g text-anchor="middle">
+    <rect x="60" y="520" width="200" height="72" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(0,255,136,0.4)"/>
+    <text x="160" y="550" font-size="14" font-weight="700" fill="#00ff88">No authorization</text>
+    <text x="160" y="570" font-size="14" font-weight="700" fill="#00ff88">required</text>
+
+    <rect x="360" y="520" width="240" height="72" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(240,180,41,0.5)"/>
+    <text x="480" y="550" font-size="14" font-weight="700" fill="#f0b429">Prior authorization</text>
+    <text x="480" y="570" font-size="14" font-weight="700" fill="#f0b429">required</text>
+
+    <rect x="700" y="520" width="200" height="72" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(0,180,255,0.5)"/>
+    <text x="800" y="550" font-size="14" font-weight="700" fill="#00b4ff">Additional</text>
+    <text x="800" y="570" font-size="14" font-weight="700" fill="#00b4ff">documentation</text>
+  </g>
+
+  <!-- to DTR -->
+  <line x1="800" y1="592" x2="800" y2="628" stroke="#00b4ff" stroke-width="2" marker-end="url(#ctf-arrow)"/>
+  <rect x="700" y="636" width="200" height="54" rx="10" fill="rgba(0,180,255,0.08)" stroke="#00b4ff" stroke-width="1.6"/>
+  <text x="800" y="662" text-anchor="middle" font-size="16" font-weight="700" fill="#00b4ff">DTR</text>
+  <text x="800" y="680" text-anchor="middle" font-size="11" fill="#a0a0a0">Collect required documentation</text>
+
+  <text x="330" y="668" text-anchor="middle" font-size="12.5" fill="#a0a0a0">Outcomes are returned to the EHR as CDS cards.</text>
+  <text x="330" y="686" text-anchor="middle" font-size="12.5" fill="#a0a0a0">Documentation paths launch DTR.</text>
+</svg>

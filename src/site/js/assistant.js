@@ -373,6 +373,12 @@
     'max-height:min(560px,calc(100vh - 100px));display:flex;flex-direction:column;background:rgba(4,6,12,.98);',
     'border:1px solid rgba(0,255,255,.22);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.6);overflow:hidden;',
     'font:400 .9rem/1.5 system-ui,-apple-system,sans-serif;color:#e6f7ff;}',
+    // The panel and email form set an explicit display, which overrides the
+    // user-agent [hidden]{display:none} rule — so toggling el.hidden alone
+    // never hides them (this is why the close/✕ button did nothing on mobile).
+    // These [hidden] rules restore the hidden attribute as the source of truth.
+    '.cho-asst__panel[hidden]{display:none;}',
+    '.cho-asst__email[hidden]{display:none;}',
     '.cho-asst__header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;',
     'border-bottom:1px solid rgba(0,255,255,.15);color:#7fffd4;}',
     '.cho-asst__close{background:none;border:none;color:rgba(230,247,255,.6);font-size:1.4rem;line-height:1;cursor:pointer;}',
