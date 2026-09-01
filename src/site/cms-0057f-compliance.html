@@ -40,6 +40,12 @@
       "name": "Aurelianware, Inc.",
       "url": "https://github.com/aurelianware"
     },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Aurelianware, Inc.",
+      "url": "https://cloudhealthoffice.com",
+      "sameAs": "https://github.com/aurelianware"
+    },
     "offers": {
       "@type": "Offer",
       "description": "PMPM (per member per month) pricing across Platform Engagement layers (Layer 1 Compliance Accelerator, Layer 2 Progressive Modernization, Layer 3 Full CAPS Platform). Pilot-scoped, early production deployment terms negotiated per engagement.",
@@ -75,15 +81,79 @@
         "name": "What is CMS-0057-F?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "The Advancing Interoperability and Improving Prior Authorization Processes final rule requires Medicare Advantage, Medicaid, CHIP, and QHP issuers to implement standardized FHIR R4 APIs — improving prior authorization, reducing provider burden, and enabling patient data access. The compliance deadline is January 1, 2027."
+          "text": "CMS-0057-F is the CMS Advancing Interoperability and Improving Prior Authorization Processes final rule. It requires impacted payers — Medicare Advantage organizations, state Medicaid and CHIP programs, and Qualified Health Plan issuers on the federal Marketplaces — to expose standardized HL7 FHIR R4 APIs and to modernize prior authorization. The goals are patient and provider access to data, payer-to-payer data exchange, and faster, more transparent prior authorization decisions. Most API and prior authorization provisions carry a compliance date of January 1, 2027."
         }
       },
       {
         "@type": "Question",
-        "name": "Who must comply with CMS-0057-F?",
+        "name": "Which payers are affected by CMS-0057-F?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "CMS-0057-F applies to Medicare Advantage organizations, Medicaid managed care plans and fee-for-service programs, CHIP fee-for-service and managed care entities, and Qualified Health Plan issuers on the federal Marketplaces. Impacted payers must implement the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs by January 1, 2027."
+          "text": "CMS-0057-F applies to Medicare Advantage organizations, state Medicaid fee-for-service programs and managed care plans, CHIP fee-for-service and managed care entities, and Qualified Health Plan issuers on the federally-facilitated Marketplaces. These impacted payers must implement the required FHIR APIs and prior authorization changes. Commercial and employer-sponsored plans are outside the federal rule's direct scope, though many adopt the same Da Vinci-aligned patterns."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What FHIR APIs does CMS-0057-F require?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "CMS-0057-F requires four FHIR R4 APIs: a Patient Access API (claims, encounters, and clinical data via USCDI), a Provider Access API (member data to in-network providers), a Payer-to-Payer API (data exchange when members change plans), and a Prior Authorization API (status, decisions, and rationale). It also expands the existing Provider Directory API. Cloud Health Office implements all four as an implemented technical capability; each payer's data mapping is configured during onboarding."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What are CRD, DTR, and PAS?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "CRD, DTR, and PAS are the three HL7 Da Vinci prior authorization Implementation Guides. Coverage Requirements Discovery (CRD) tells a provider, at the point of order, whether prior authorization is needed. Documentation Templates and Rules (DTR) gathers the required clinical documentation using FHIR Questionnaires. Prior Authorization Support (PAS) submits the request and returns the decision. PAS underpins the CMS-0057-F Prior Authorization API; CRD and DTR are Da Vinci-aligned capabilities CMS encourages rather than separately mandating in this final rule."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does CMS-0057-F require a payer to replace QNXT, Facets, or HealthEdge?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. CMS-0057-F requires FHIR APIs and prior authorization changes; it does not require replacing your core administration system. Cloud Health Office is designed to deploy as an interoperability and readiness layer beside an existing QNXT, Facets, HealthEdge, or Amisys core, which remains the system of record. The core keeps adjudicating claims and holding member data while Cloud Health Office exposes the required FHIR surfaces and Da Vinci-aligned prior authorization. Integration to each specific core is configured during onboarding."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can Cloud Health Office work alongside an existing payer core?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Running alongside an existing core is the default deployment. Cloud Health Office reads member, coverage, provider, and claims data from the core through a vendor-neutral adapter, typically in a read-only augment mode, and exposes CMS-0057-F FHIR APIs, terminology translation, and Da Vinci-aligned prior authorization on top. Your core administration system stays in place as the system of record. The specific adapter and data mappings for QNXT, Facets, HealthEdge, or a custom core are configured during onboarding."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can Cloud Health Office become the payer core backend?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, progressively. Beyond the interoperability layer, Cloud Health Office includes the engines a payer core requires — eligibility, benefits, provider data, prior authorization, claims adjudication, and accumulators. A payer can migrate one domain at a time onto Cloud Health Office rather than performing a single rip-and-replace, keeping the legacy core authoritative for the domains not yet moved. This progressive modernization path lets the same platform that delivered CMS-0057-F readiness grow into the payer core backend."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What role does terminology play in FHIR prior authorization?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A large one. Da Vinci workflows exchange clinical concepts in SNOMED CT and LOINC, while payer coverage rules and claims adjudicate in CPT and ICD-10-CM. Without translation between these code systems, a prior authorization request cannot be reliably matched to benefit configuration. Cloud Health Office includes a FHIR terminology service that performs SNOMED CT to CPT/ICD-10-CM translation via ConceptMap/$translate, with context-aware disambiguation and plan-specific overrides configured per payer."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does PAS replace X12 278?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Not entirely. CMS-0057-F adds a FHIR-based Prior Authorization API built on Da Vinci PAS, but the X12 278 transaction remains part of the ecosystem — clearinghouses and many trading partners still exchange 278. In practice PAS and X12 278 coexist, and a payer needs to translate between them. Cloud Health Office maps X12 278 to and from FHIR PAS resources so a single prior authorization can move across both worlds."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What does a payer still need to configure during implementation?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Cloud Health Office provides the implemented technical capability; a payer-specific implementation still requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage."
         }
       }
     ]
@@ -242,6 +312,27 @@
     /* ── DIVIDER ── */
     .divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:0 auto;max-width:var(--max)}
 
+    /* ── QUICK ANSWERS (AI-extractable Q&A) ── */
+    .qa-list{display:grid;gap:1rem;margin-top:1rem}
+    .qa{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.4rem 1.6rem}
+    .qa h3{font-size:1.02rem;font-weight:700;color:#fff;margin-bottom:.5rem;line-height:1.3}
+    .qa p{font-size:.88rem;color:var(--text-muted);line-height:1.75}
+    .qa p + p{margin-top:.6rem}
+    .qa a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(0,255,255,.25)}
+    .qa a:hover{border-bottom-color:var(--cyan)}
+
+    /* ── CAPABILITY DEEP-DIVE (Quick answer / How it works / CHO / Evidence) ── */
+    .cap-list{display:grid;gap:1.4rem;margin-top:1rem}
+    .cap{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.6rem 1.8rem}
+    .cap > h3{font-size:1.1rem;font-weight:700;color:#fff;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)}
+    .cap-row{margin-bottom:.9rem}
+    .cap-row:last-child{margin-bottom:0}
+    .cap-row .cap-label{font-family:var(--mono);font-size:.6rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:2px;display:block;margin-bottom:.25rem;opacity:.85}
+    .cap-row p{font-size:.85rem;color:var(--text-muted);line-height:1.7}
+    .cap-row.evidence .cap-label{color:var(--green)}
+    .cap-row a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(0,255,255,.25)}
+    .cap-row a:hover{border-bottom-color:var(--cyan)}
+
     /* ── RESPONSIVE ── */
     @media(max-width:768px){
       .stats{grid-template-columns:repeat(2,1fr)}
@@ -328,6 +419,19 @@
     </div>
   </div>
 </header>
+
+<div class="divider"></div>
+
+<!-- ═══════════════ WHAT IS CLOUD HEALTH OFFICE (ENTITY DEFINITION) ═══════════════ -->
+
+<section id="what-is-cho" data-reveal>
+  <div class="container">
+    <div class="section-label">Entity Definition</div>
+    <h2 class="section-title">What is Cloud Health Office?</h2>
+    <p class="section-desc">Cloud Health Office is a modern payer administration and interoperability platform. It can operate alongside existing core administration systems such as QNXT, Facets, or HealthEdge, or progressively take over payer domains including eligibility, benefits, providers, prior authorization, claims, and accumulators.</p>
+    <p class="section-desc">For CMS-0057-F, a payer can start with an interoperability and readiness layer — FHIR R4 APIs, Da Vinci-aligned prior authorization, and terminology services deployed beside the core — and, over time, migrate individual domains onto Cloud Health Office as a payer core backend. It is not only a FHIR gateway or middleware shim: the same platform carries the adjudication, benefit, accumulator, and provider engines a payer core requires. See the <a href="/platform">platform overview</a> and <a href="/solutions-payers">payer solutions</a> for the full domain map.</p>
+  </div>
+</section>
 
 <div class="divider"></div>
 
@@ -426,6 +530,70 @@
   </svg>
 </div>
 
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════ CMS-0057-F QUICK ANSWERS ═══════════════ -->
+
+<section id="quick-answers" data-reveal>
+  <div class="container">
+    <div class="section-label">Buyer &amp; Architect FAQ</div>
+    <h2 class="section-title">CMS-0057-F Quick Answers</h2>
+    <p class="section-desc">Concise, authoritative answers to the questions payer architects and technology leaders ask most about CMS-0057-F, FHIR APIs, prior authorization, and where Cloud Health Office fits. Each answer stands on its own and links deeper into the documentation.</p>
+
+    <div class="qa-list">
+      <div class="qa">
+        <h3>What is CMS-0057-F?</h3>
+        <p>CMS-0057-F is the CMS <strong>Advancing Interoperability and Improving Prior Authorization Processes</strong> final rule. It requires impacted payers — Medicare Advantage organizations, state Medicaid and CHIP programs, and Qualified Health Plan issuers on the federal Marketplaces — to expose standardized HL7 FHIR R4 APIs and to modernize prior authorization. The goals are patient and provider access to data, payer-to-payer data exchange, and faster, more transparent prior authorization decisions. Most API and prior authorization provisions carry a compliance date of January 1, 2027.</p>
+      </div>
+
+      <div class="qa">
+        <h3>Which payers are affected by CMS-0057-F?</h3>
+        <p>CMS-0057-F applies to Medicare Advantage organizations, state Medicaid fee-for-service programs and managed care plans, CHIP fee-for-service and managed care entities, and Qualified Health Plan issuers on the federally-facilitated Marketplaces. These impacted payers must implement the required FHIR APIs and prior authorization changes. Commercial and employer-sponsored plans are outside the federal rule's direct scope, though many adopt the same Da Vinci-aligned patterns. See <a href="#who">who must comply</a> for the detail by payer type.</p>
+      </div>
+
+      <div class="qa">
+        <h3>What FHIR APIs does CMS-0057-F require?</h3>
+        <p>CMS-0057-F requires four FHIR R4 APIs: a Patient Access API (claims, encounters, and clinical data via USCDI), a Provider Access API (member data to in-network providers), a Payer-to-Payer API (data exchange when members change plans), and a Prior Authorization API (status, decisions, and rationale). It also expands the existing Provider Directory API. Cloud Health Office implements all four as an implemented technical capability; each payer's data mapping is configured during onboarding. The <a href="/docs/compliance">compliance documentation</a> maps each API to its FHIR resources.</p>
+      </div>
+
+      <div class="qa">
+        <h3>What are CRD, DTR, and PAS?</h3>
+        <p>CRD, DTR, and PAS are the three HL7 Da Vinci prior authorization Implementation Guides. Coverage Requirements Discovery (CRD) tells a provider, at the point of order, whether prior authorization is needed. Documentation Templates and Rules (DTR) gathers the required clinical documentation using FHIR Questionnaires. Prior Authorization Support (PAS) submits the request and returns the decision. PAS underpins the CMS-0057-F Prior Authorization API; CRD and DTR are Da Vinci-aligned capabilities CMS encourages rather than separately mandating in this final rule. The <a href="/docs/prior-auth-guide">prior authorization guide</a> walks the full flow.</p>
+      </div>
+
+      <div class="qa">
+        <h3>Does CMS-0057-F require a payer to replace QNXT, Facets, or HealthEdge?</h3>
+        <p>No. CMS-0057-F requires FHIR APIs and prior authorization changes; it does not require replacing your core administration system. Cloud Health Office is designed to deploy as an interoperability and readiness layer beside an existing QNXT, Facets, HealthEdge, or Amisys core, which remains the system of record. The core keeps adjudicating claims and holding member data while Cloud Health Office exposes the required FHIR surfaces and Da Vinci-aligned prior authorization. Integration to each specific core is configured during onboarding — see the <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">QNXT / Facets / HealthEdge architecture article</a>.</p>
+      </div>
+
+      <div class="qa">
+        <h3>Can Cloud Health Office work alongside an existing payer core?</h3>
+        <p>Yes. Running alongside an existing core is the default deployment. Cloud Health Office reads member, coverage, provider, and claims data from the core through a vendor-neutral adapter, typically in a read-only augment mode, and exposes CMS-0057-F FHIR APIs, terminology translation, and Da Vinci-aligned prior authorization on top. Your core administration system stays in place as the system of record. The specific adapter and data mappings for QNXT, Facets, HealthEdge, or a custom core are configured during onboarding. The <a href="/docs/architecture">architecture documentation</a> details the adapter model.</p>
+      </div>
+
+      <div class="qa">
+        <h3>Can Cloud Health Office become the payer core backend?</h3>
+        <p>Yes, progressively. Beyond the interoperability layer, Cloud Health Office includes the engines a payer core requires — eligibility, benefits, provider data, prior authorization, claims adjudication, and accumulators. A payer can migrate one domain at a time onto Cloud Health Office rather than performing a single rip-and-replace, keeping the legacy core authoritative for the domains not yet moved. This progressive modernization path lets the same platform that delivered CMS-0057-F readiness grow into the payer core backend. The <a href="/platform">platform overview</a> shows the domains available today.</p>
+      </div>
+
+      <div class="qa">
+        <h3>What role does terminology play in FHIR prior authorization?</h3>
+        <p>A large one. Da Vinci workflows exchange clinical concepts in SNOMED CT and LOINC, while payer coverage rules and claims adjudicate in CPT and ICD-10-CM. Without translation between these code systems, a prior authorization request cannot be reliably matched to benefit configuration. Cloud Health Office includes a FHIR terminology service that performs SNOMED CT to CPT/ICD-10-CM translation via ConceptMap/$translate, with context-aware disambiguation and plan-specific overrides configured per payer. See the <a href="/docs/terminology-guide">terminology guide</a> for the mapping model.</p>
+      </div>
+
+      <div class="qa">
+        <h3>Does PAS replace X12 278?</h3>
+        <p>Not entirely. CMS-0057-F adds a FHIR-based Prior Authorization API built on Da Vinci PAS, but the X12 278 transaction remains part of the ecosystem — clearinghouses and many trading partners still exchange 278. In practice PAS and X12 278 coexist, and a payer needs to translate between them. Cloud Health Office maps X12 278 to and from FHIR PAS resources so a single prior authorization can move across both worlds. The <a href="/docs/prior-auth-guide">prior authorization guide</a> covers the 278 ↔ FHIR mapping.</p>
+      </div>
+
+      <div class="qa">
+        <h3>What does a payer still need to configure during implementation?</h3>
+        <p>Cloud Health Office provides the implemented technical capability; a payer-specific implementation still requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the <a href="#checklist">payer compliance checklist</a> for the full list.</p>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -1021,6 +1189,65 @@
   </article>
 </div>
 
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════ CAPABILITY DEEP-DIVE ═══════════════ -->
+
+<section id="capabilities" data-reveal>
+  <div class="container">
+    <div class="section-label">Capability Detail</div>
+    <h2 class="section-title">How Cloud Health Office implements the core capabilities</h2>
+    <p class="section-desc">Each CMS-0057-F capability below follows the same structure — a quick answer, how it works, how Cloud Health Office implements it, and links to the implementation evidence. For the full narrative, read the <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">architecture article</a>.</p>
+
+    <div class="cap-list">
+      <!-- CRD -->
+      <div class="cap">
+        <h3>Coverage Requirements Discovery (CRD)</h3>
+        <div class="cap-row"><span class="cap-label">Quick answer</span><p>CRD tells a provider, while they are placing an order, whether a service needs prior authorization and what documentation applies. It runs through CDS Hooks so the answer appears inside the provider's EHR workflow.</p></div>
+        <div class="cap-row"><span class="cap-label">How it works</span><p>The EHR fires an <code>order-select</code> or <code>order-sign</code> CDS Hook to the payer's CRD service, which evaluates coverage rules for the ordered code and member coverage, then returns cards indicating authorization requirements and pointing to a DTR questionnaire when documentation is needed.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office evaluates coverage rules against the member's benefit configuration and the terminology service, so SNOMED-coded orders resolve to the payer's CPT/ICD code space before a rule fires. Coverage rules are payer-specific and configured during onboarding.</p></div>
+        <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/src/engines/CloudHealthOffice.PriorAuthRuleEngine">PriorAuthRuleEngine source</a></p></div>
+      </div>
+
+      <!-- DTR -->
+      <div class="cap">
+        <h3>Documentation Templates and Rules (DTR)</h3>
+        <div class="cap-row"><span class="cap-label">Quick answer</span><p>DTR collects the clinical documentation a prior authorization needs using a FHIR Questionnaire, pre-populating answers from the patient record so the provider fills in as little as possible.</p></div>
+        <div class="cap-row"><span class="cap-label">How it works</span><p>The payer publishes a FHIR <code>Questionnaire</code> with embedded CQL logic. A DTR app renders it, pulls known values from the EHR, and returns a <code>QuestionnaireResponse</code> that travels with the authorization request into PAS.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office produces and consumes FHIR Questionnaire and QuestionnaireResponse resources and carries the response through to the prior authorization submission. Questionnaire content is Da Vinci-aligned and tailored to each payer's policies during onboarding.</p></div>
+        <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/fhir/prior-auth-api.ts">prior-auth-api.ts source</a></p></div>
+      </div>
+
+      <!-- PAS -->
+      <div class="cap">
+        <h3>Prior Authorization Support (PAS)</h3>
+        <div class="cap-row"><span class="cap-label">Quick answer</span><p>PAS is the FHIR mechanism behind the CMS-0057-F Prior Authorization API. It submits the authorization request and returns the decision, status, and rationale to the provider.</p></div>
+        <div class="cap-row"><span class="cap-label">How it works</span><p>A provider system sends a <code>Claim/$submit</code> bundle containing the ServiceRequest and supporting documentation. The payer responds with a ClaimResponse carrying the decision. Where trading partners still use EDI, the request is bridged to and from the X12 278 transaction.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office exposes a Da Vinci-aligned PAS endpoint and maps X12 278 to and from FHIR PAS resources, so PAS and 278 coexist. Response timelines and decision rationale are set to each payer's policies during onboarding.</p></div>
+        <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/fhir/prior-auth-api.ts">prior-auth-api.ts</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/fhir/mapping/x12-to-fhir.ts">X12 ↔ FHIR mapping</a></p></div>
+      </div>
+
+      <!-- Terminology -->
+      <div class="cap">
+        <h3>Terminology services</h3>
+        <div class="cap-row"><span class="cap-label">Quick answer</span><p>Terminology services translate between the SNOMED CT and LOINC codes used in clinical workflows and the CPT and ICD-10-CM codes used in payer coverage and claims, so prior authorization requests can be matched to benefit configuration.</p></div>
+        <div class="cap-row"><span class="cap-label">How it works</span><p>A FHIR terminology server exposes <code>ConceptMap/$translate</code>. When one source code maps to several targets, a context engine uses member and policy attributes to choose the appropriate code rather than the first match.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office ships a terminology service with ConceptMap/$translate, context-aware disambiguation, and tenant-scoped plan-specific overrides. Source mappings and payer coding policy are loaded and reviewed during onboarding.</p></div>
+        <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/terminology-guide">Terminology guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/src/services/CHO.TerminologyService">Terminology service source</a></p></div>
+      </div>
+
+      <!-- Progressive modernization -->
+      <div class="cap">
+        <h3>Progressive modernization</h3>
+        <div class="cap-row"><span class="cap-label">Quick answer</span><p>Progressive modernization lets a payer start with an interoperability layer for CMS-0057-F readiness and then migrate individual domains — eligibility, benefits, providers, prior authorization, claims, accumulators — onto Cloud Health Office over time, without a single rip-and-replace.</p></div>
+        <div class="cap-row"><span class="cap-label">How it works</span><p>A vendor-neutral core adapter connects to the existing core, initially in read-only augment mode. Domains move onto Cloud Health Office one at a time; the legacy core stays authoritative for domains not yet migrated, so each step is reversible and independently validated.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>The same platform that delivers the FHIR readiness layer carries the adjudication, benefit, provider, and accumulator engines, so a payer can grow it into the payer core backend. The adapter and per-domain cutover are payer-specific and configured during onboarding.</p></div>
+        <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/architecture">Architecture documentation</a> · <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">QNXT / Facets / HealthEdge article</a> · <a href="/platform">Platform overview</a></p></div>
+      </div>
+    </div>
   </div>
 </section>
 
