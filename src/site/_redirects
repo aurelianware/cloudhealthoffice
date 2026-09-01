@@ -41,6 +41,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /docs/deployment.html                      /docs/deployment                   301
 /docs/finance-guide.html                   /docs/finance-guide                301
 /docs/terminology-guide.html               /docs/terminology-guide            301
+/docs/prior-auth-guide.html                /docs/prior-auth-guide             301
 /docs/provider-verification-guide.html     /docs/provider-verification-guide  301
 /docs/commercial-licensing.html            /docs/commercial-licensing         301
 /contact.html                              /contact                           301
@@ -80,6 +81,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /docs/deployment                           /docs/deployment.html              200
 /docs/finance-guide                        /docs/finance-guide.html           200
 /docs/terminology-guide                    /docs/terminology-guide.html       200
+/docs/prior-auth-guide                     /docs/prior-auth-guide.html        200
 /docs/provider-verification-guide          /docs/provider-verification-guide.html  200
 /docs/commercial-licensing                 /docs/commercial-licensing.html    200
 /contact                                   /contact.html                      200
