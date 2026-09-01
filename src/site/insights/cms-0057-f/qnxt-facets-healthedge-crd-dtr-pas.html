@@ -222,6 +222,11 @@
 
         <p>Cloud Health Office is built for the third path, and it is deliberately not a one-way door. The same platform supports <strong>modernization around an existing core</strong> and <strong>operating as the payer core backend itself</strong>. A plan can start with Cloud Health Office as a thin FHIR boundary in front of QNXT, Facets, or HealthEdge, and&mdash;behind a stable external FHIR contract&mdash;grow it into the system of record for one domain, several domains, or eventually the whole core.</p>
 
+        <div class="callout green">
+          <span class="k">Vendor-neutral, and yours to run</span>
+          <p>Cloud Health Office presents <strong>one modern FHIR boundary across QNXT, Facets, HealthEdge, or any core</strong>&mdash;it is not tied to a single core-administration vendor. It is <strong>source-available</strong> (BSL&nbsp;1.1) and deploys in <strong>your own cloud</strong>, so PHI stays inside your boundary and the implementation stays inspectable and extensible&mdash;you can read the source of the CRD, DTR, PAS, and terminology services described below.</p>
+        </div>
+
         <figure>
           <img src="/graphics/insights/cms0057-modern-payer-boundary.svg"
                alt="Vertical architecture diagram: Provider and EHR systems connect through FHIR and Da Vinci to Cloud Health Office — which provides CRD, DTR, PAS, terminology, a prior authorization rule engine, SMART/OAuth and audit — then through a payer-specific integration boundary to QNXT, Facets, HealthEdge and other payer systems. Cloud Health Office can also provide the payer backend itself."/>
