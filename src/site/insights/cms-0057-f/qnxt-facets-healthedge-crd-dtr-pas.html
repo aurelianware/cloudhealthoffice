@@ -340,7 +340,7 @@
         </figure>
 
         <p>The same picture has two end states. In the first, Cloud Health Office sits in front of the existing core and hands off to a payer-specific adapter layer:</p>
-        <div class="flow" role="img" aria-label="Provider slash EHR to FHIR and CDS Hooks to Cloud Health Office to payer-specific adapter layer to QNXT, Facets, HealthEdge or other payer systems">
+        <div class="flow" role="img" aria-label="Provider slash EHR to FHIR and CDS Hooks to Cloud Health Office to payer-specific adapter layer to QNXT, Facets, HealthEdge, Cloud Health Office, UM or other payer systems — Cloud Health Office can be the core here too">
           <div class="step">Provider / EHR</div>
           <div class="arrow" aria-hidden="true">↓</div>
           <div class="step">FHIR + CDS Hooks</div>
@@ -349,7 +349,7 @@
           <div class="arrow" aria-hidden="true">↓</div>
           <div class="step">Payer-specific adapter layer</div>
           <div class="arrow" aria-hidden="true">↓</div>
-          <div class="step">QNXT / Facets / HealthEdge / UM / other systems</div>
+          <div class="step">QNXT / Facets / HealthEdge / Cloud Health Office / UM / other systems<br/><small>Cloud Health Office can be the core here too</small></div>
         </div>
 
         <p>In the second, Cloud Health Office <em>is</em> the core backend&mdash;the same FHIR surface, now over Cloud Health Office's own membership, eligibility, benefits, provider, prior authorization, claims, accumulator, and payer administration services:</p>
