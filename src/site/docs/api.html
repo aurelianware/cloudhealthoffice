@@ -3,21 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>API Reference — Cloud Health Office Documentation</title>
-  <meta name="description" content="Cloud Health Office API reference. 7 production FHIR R4 APIs with OpenAPI 3.1 specs — Patient Access, Provider Access, Prior Authorization, Payer-to-Payer, Claims Scrubbing, Risk Adjustment, Encounter." />
-  <meta name="keywords" content="FHIR R4 API reference, healthcare payer API, Patient Access API, Prior Authorization API FHIR, OpenAPI healthcare, claims scrubbing API, risk adjustment API, CMS-0057-F API" />
+  <title>FHIR APIs for Health Plans | Cloud Health Office Payer API Platform</title>
+  <meta name="description" content="Explore Cloud Health Office FHIR R4 APIs for health plans, including CMS-0057-F interoperability, prior authorization, CRD, DTR, PAS, SMART/OAuth, Bulk FHIR and payer-core integration." />
+  <meta name="keywords" content="FHIR API, payer FHIR API, healthcare FHIR API, FHIR API gateway, FHIR server API, FHIR API for health plans, CMS-0057-F API, FHIR prior authorization, SMART on FHIR, Da Vinci PAS CRD DTR" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/api" />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/api" />
-  <meta property="og:title" content="API Reference — Cloud Health Office" />
-  <meta property="og:description" content="7 production FHIR R4 APIs with OpenAPI 3.1 specs. Patient Access, Provider Access, Prior Auth, Payer-to-Payer, and more." />
+  <meta property="og:title" content="FHIR APIs for Health Plans — Cloud Health Office" />
+  <meta property="og:description" content="Payer-focused FHIR R4 APIs: CMS-0057-F interoperability, prior authorization (CRD/DTR/PAS), SMART/OAuth, Bulk FHIR, and payer-specific core-system adapters." />
   <script type="application/ld+json">
-  {"@context":"https://schema.org","@type":"TechArticle","headline":"Cloud Health Office API Reference","description":"7 production FHIR R4 APIs with OpenAPI 3.1 specifications for healthcare payer integration.","url":"https://cloudhealthoffice.com/docs/api","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-03-24","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"API Reference","item":"https://cloudhealthoffice.com/docs/api"}]}}
+  {"@context":"https://schema.org","@type":"TechArticle","headline":"FHIR APIs for Health Plans — Cloud Health Office Payer API Platform","description":"Payer-focused FHIR R4 APIs for CMS-0057-F interoperability, prior authorization (CRD, DTR, PAS), SMART on FHIR/OAuth, Bulk FHIR, terminology services, and integration with payer core administration systems.","url":"https://cloudhealthoffice.com/docs/api","author":{"@type":"Organization","name":"Aurelianware, Inc.","url":"https://github.com/aurelianware"},"publisher":{"@type":"Organization","name":"Aurelianware, Inc.","url":"https://cloudhealthoffice.com","sameAs":"https://github.com/aurelianware"},"datePublished":"2026-03-24","dateModified":"2026-09-01","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"API Reference","item":"https://cloudhealthoffice.com/docs/api"}]}}
+  </script>
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+    {"@type":"Question","name":"What is a FHIR API for a health plan?","acceptedAnswer":{"@type":"Answer","text":"A FHIR API for a health plan is a standards-based HL7 FHIR R4 interface that exposes payer data — members, coverage, claims, prior authorizations, and provider directories — as structured resources over HTTPS. Providers, member apps, and other payers read and write that data through predictable endpoints secured with OAuth 2.0 and SMART on FHIR scopes. For payers, FHIR is the external contract that CMS-0057-F requires: it standardizes how the outside world reaches plan data, while the plan's own systems remain the source of record behind it."}},
+    {"@type":"Question","name":"What FHIR APIs are relevant to CMS-0057-F?","acceptedAnswer":{"@type":"Answer","text":"CMS-0057-F centers on four FHIR R4 APIs: the Patient Access API (member access to claims, encounters, and clinical data), the Provider Access API (member data to in-network providers), the Payer-to-Payer API (data exchange when members change plans), and the Prior Authorization API (status, decisions, and rationale). It also builds on the Provider Directory API and expects SMART on FHIR/OAuth security. Cloud Health Office provides technical capability across all of these; production readiness and scope vary by capability, tracked in the CMS-0057-F readiness record."}},
+    {"@type":"Question","name":"Is Cloud Health Office a FHIR server or an API gateway?","acceptedAnswer":{"@type":"Answer","text":"Both, and more. Cloud Health Office serves FHIR R4 resources and can act as the FHIR gateway in front of an existing core, but it is not only a generic FHIR server. It is a payer administration and interoperability platform: behind the FHIR contract it carries eligibility, benefits, provider, prior authorization, claims, accumulator, and terminology logic. That lets it either sit alongside a core such as QNXT, Facets, or HealthEdge as an interoperability layer, or serve as the payer backend itself. See the platform overview."}},
+    {"@type":"Question","name":"Does Cloud Health Office support SMART on FHIR?","acceptedAnswer":{"@type":"Answer","text":"Yes. Cloud Health Office implements SMART on FHIR/OAuth 2.0 as an implemented technical capability. The FHIR server publishes a SMART App Launch v2 configuration at /.well-known/smart-configuration and enforces scopes such as patient/*.read, user/*.read, and system/*.read through scope-enforcement middleware, so patient-scoped tokens are bound to patient resource access. Production deployment still requires issuer and client registration, an identity model, third-party app registration, and audit controls, which are configured per payer during onboarding."}},
+    {"@type":"Question","name":"How does FHIR prior authorization work?","acceptedAnswer":{"@type":"Answer","text":"FHIR prior authorization moves the request off phone and fax and onto structured resources. At the point of order, Coverage Requirements Discovery (CRD) tells the provider whether authorization is needed; Documentation Templates and Rules (DTR) gathers the required clinical documentation with FHIR Questionnaires; and Prior Authorization Support (PAS) submits the request and returns the decision. Cloud Health Office implements the PAS Claim/$submit operation per PAS IG v2.1.0, backed by a prior authorization rule engine and authorization service. Payer rules and utilization-management policy are configured during implementation. See the prior authorization guide."}},
+    {"@type":"Question","name":"How do CRD, DTR, and PAS relate to the Prior Authorization API?","acceptedAnswer":{"@type":"Answer","text":"CRD, DTR, and PAS are the three Da Vinci Implementation Guides that make up the prior authorization workflow behind the CMS-0057-F Prior Authorization API. CRD discovers whether authorization and documentation are required, DTR collects that documentation, and PAS carries the actual submission and decision — PAS is the API that returns approval, denial, or a request for information. Cloud Health Office provides CRD and DTR services and an implemented PAS submission surface; each is configured with payer-specific rules and questionnaires during onboarding. The architecture article walks the full flow."}},
+    {"@type":"Question","name":"Does Cloud Health Office support Bulk FHIR?","acceptedAnswer":{"@type":"Answer","text":"Yes, as an implemented foundation. Cloud Health Office exposes asynchronous Bulk Data ($export) operations at the system and group level, following the FHIR Bulk Data Access pattern with a kickoff request, a status poll, and downloadable output. This underpins population-level export for Provider Access and Payer-to-Payer use. The current export path is a technical scaffold: production use requires storage, encryption, lifecycle management, manifest retention, and recipient access controls, which are implementation work rather than turnkey features."}},
+    {"@type":"Question","name":"Can Cloud Health Office connect FHIR APIs to QNXT, Facets, or HealthEdge?","acceptedAnswer":{"@type":"Answer","text":"Yes, through a vendor-neutral adapter configured per deployment — not through a single universal connector for every QNXT, Facets, or HealthEdge environment. The external FHIR contract stays stable while the integration behind it is selected and configured for each payer's authoritative sources: member, benefit, provider, and authorization systems, the UM platform, claims dependencies, and any required write-back. Onboarding identifies those sources and the available APIs, events, and middleware, then wires the adapter so FHIR resources project from live systems of record."}},
+    {"@type":"Question","name":"Can Cloud Health Office operate without a legacy core?","acceptedAnswer":{"@type":"Answer","text":"Yes. Beyond the interoperability layer, Cloud Health Office includes the engines a payer core requires — eligibility, benefits, provider data, prior authorization, claims adjudication, accumulators, and terminology — so it can serve as the payer backend itself rather than only fronting another system. Payers can also modernize progressively: start with Cloud Health Office as the FHIR and prior authorization layer beside an existing core, then migrate individual domains onto it over time. The same external FHIR contract holds across both deployment models."}}
+  ]}
   </script>
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
   <link rel="stylesheet" href="/css/sentinel.css" />
   <link rel="stylesheet" href="/css/docs.css" />
+  <style>
+    /* Payer FHIR API page — scoped additions */
+    .badge-phase2 { background: rgba(255,120,80,0.14); color: #ff9070; border: 1px solid rgba(255,120,80,0.32); }
+    .cap-card .cap-status { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .cap-card h3 { display: flex; align-items: center; gap: 8px; }
+    .qa-block { margin: 0 0 22px; }
+    .qa-block h3 { color: #fff; font-size: 1.05rem; margin: 0 0 6px; }
+    .qa-block p { color: rgba(176,176,176,0.85); line-height: 1.65; margin: 0; }
+    .flow-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 18px 0; padding: 0; list-style: none; }
+    .flow-steps li { background: #0a0a0a; border: 1px solid rgba(0,255,255,0.18); border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; color: #e0e0e0; }
+    .flow-steps .flow-arrow { background: none; border: none; color: rgba(0,255,255,0.55); padding: 0; font-weight: 700; }
+    .model-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin: 20px 0; }
+    .model-cols .model-col { background: #0a0a0a; border: 1px solid rgba(0,255,255,0.15); border-radius: 10px; padding: 20px 22px; }
+    .model-cols .model-col h4 { color: #00ffff; margin: 0 0 10px; font-size: 0.98rem; }
+    .model-flow { font-family: var(--mono, 'JetBrains Mono', monospace); font-size: 0.8rem; color: rgba(176,176,176,0.9); line-height: 1.9; }
+    .model-flow strong { color: #00ff88; font-weight: 600; }
+  </style>
   <script src="/js/auth.js"></script>
   <script src="/js/mobile-nav.js"></script>
 </head>
@@ -33,19 +63,153 @@
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li><li><a href="/docs/api" class="active">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">User Guides</div><ul><li><a href="/docs/finance-guide">Finance Guide</a></li><li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li><li><a href="/docs/claims-guide">Claims Adjudication</a></li><li><a href="/docs/prior-auth-guide">Prior Authorization</a></li><li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li><li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li><li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li><li><a href="/docs/provider-verification-guide">Provider Verification</a></li><li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">State Compliance</div><ul><li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li><li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li></ul></div>
-        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#environments">Environments</a></li><li><a href="#auth">Authentication</a></li><li><a href="#patient-access">Patient Access</a></li><li><a href="#provider-access">Provider Access</a></li><li><a href="#prior-auth">Prior Authorization</a></li><li><a href="#payer-to-payer">Payer-to-Payer</a></li><li><a href="#operational">Operational APIs</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#what-is">What is the Cloud Health Office FHIR API?</a></li><li><a href="#quick-answers">FHIR API Quick Answers</a></li><li><a href="#capabilities">Payer FHIR API Capabilities</a></li><li><a href="#prior-auth-flow">FHIR Prior Authorization</a></li><li><a href="#contract">FHIR Contract &amp; Integration</a></li><li><a href="#environments">Environments</a></li><li><a href="#auth">Authentication</a></li><li><a href="#patient-access">Patient Access</a></li><li><a href="#provider-access">Provider Access</a></li><li><a href="#prior-auth">Prior Authorization</a></li><li><a href="#payer-to-payer">Payer-to-Payer</a></li><li><a href="#operational">Operational APIs</a></li><li><a href="#planning">Planning an Implementation</a></li></ul></div>
       </div></aside>
 
       <div class="docs-content">
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">API Reference</span></div>
 
-        <h1>API Reference</h1>
-        <p class="docs-subtitle">FHIR R4 APIs you can run locally or deploy into your own environment, with OpenAPI 3.1 specs, OAuth 2.0 authentication, and standard FHIR R4 bundles with Da Vinci and US Core profile conformance.</p>
+        <h1>FHIR APIs for Health Plans</h1>
+        <p class="docs-subtitle">The Cloud Health Office payer API reference: FHIR R4 APIs for CMS-0057-F interoperability, prior authorization, terminology, and administration workflows &mdash; with OpenAPI 3.1 specs, OAuth 2.0 / SMART on FHIR security, and Da&nbsp;Vinci-aligned resource profiles. Run them locally or deploy into your own environment.</p>
+
+        <h2 id="what-is">What is the Cloud Health Office FHIR API?</h2>
+        <p>The Cloud Health Office FHIR API is a set of HL7 <strong>FHIR R4</strong> interfaces built for payer interoperability and administration, not a generic FHIR server. It exposes CMS-0057-F-oriented capabilities &mdash; Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization &mdash; secured with SMART on FHIR/OAuth 2.0, together with FHIR prior authorization workflows (CRD, DTR, PAS), terminology services, and the eligibility, benefits, provider, authorization, and claims domains behind them. Because the administration logic lives in the platform, Cloud Health Office can <strong>operate alongside an existing payer core</strong> such as QNXT, Facets, or HealthEdge, or <strong>serve as the payer backend itself</strong>. The external FHIR contract stays the same in either model.</p>
 
         <figure class="docs-diagram">
           <img src="/graphics/docs-api-landscape.svg" alt="API landscape showing 7 production APIs — 4 CMS-0057-F FHIR R4 APIs (Patient Access, Provider Access, Prior Authorization, Payer-to-Payer) plus 3 operational APIs (Claims Scrubbing, Risk Adjustment, Encounter Service)" />
-          <figcaption>7 production APIs — 4 CMS-0057-F required + 3 operational</figcaption>
+          <figcaption>Seven APIs &mdash; four CMS-0057-F FHIR surfaces plus three operational APIs. Readiness varies by capability; see the <a href="/docs/compliance">CMS-0057-F compliance overview</a>.</figcaption>
         </figure>
+
+        <h2 id="quick-answers">FHIR API Quick Answers</h2>
+        <p>Direct answers to the questions payer architects ask about FHIR APIs, CMS-0057-F, and where Cloud Health Office fits. Each answer stands alone and links deeper where documentation exists.</p>
+
+        <div class="qa-block"><h3>What is a FHIR API for a health plan?</h3>
+        <p>A FHIR API for a health plan is a standards-based HL7 FHIR R4 interface that exposes payer data &mdash; members, coverage, claims, prior authorizations, and provider directories &mdash; as structured resources over HTTPS. Providers, member apps, and other payers read and write that data through predictable endpoints secured with OAuth 2.0 and SMART on FHIR scopes. For payers, FHIR is the external contract that <a href="/cms-0057f-compliance">CMS-0057-F</a> requires: it standardizes how the outside world reaches plan data, while the plan's own systems remain the source of record behind it.</p></div>
+
+        <div class="qa-block"><h3>What FHIR APIs are relevant to CMS-0057-F?</h3>
+        <p>CMS-0057-F centers on four FHIR R4 APIs: the Patient Access API (member access to claims, encounters, and clinical data), the Provider Access API (member data to in-network providers), the Payer-to-Payer API (data exchange when members change plans), and the Prior Authorization API (status, decisions, and rationale). It also builds on the Provider Directory API and expects SMART on FHIR/OAuth security. Cloud Health Office provides technical capability across all of these; production readiness and scope vary by capability, tracked in the <a href="/docs/compliance">CMS-0057-F readiness</a> record.</p></div>
+
+        <div class="qa-block"><h3>Is Cloud Health Office a FHIR server or an API gateway?</h3>
+        <p>Both, and more. Cloud Health Office serves FHIR R4 resources and can act as the FHIR gateway in front of an existing core, but it is not only a generic FHIR server. It is a payer administration and interoperability platform: behind the FHIR contract it carries eligibility, benefits, provider, prior authorization, claims, accumulator, and terminology logic. That lets it either sit alongside a core such as QNXT, Facets, or HealthEdge as an interoperability layer, or serve as the payer backend itself. See the <a href="/platform">platform overview</a>.</p></div>
+
+        <div class="qa-block"><h3>Does Cloud Health Office support SMART on FHIR?</h3>
+        <p>Yes. Cloud Health Office implements SMART on FHIR/OAuth 2.0 as an implemented technical capability. The FHIR server publishes a SMART App Launch v2 configuration at <code>/.well-known/smart-configuration</code> and enforces scopes such as <code>patient/*.read</code>, <code>user/*.read</code>, and <code>system/*.read</code> through scope-enforcement middleware, so patient-scoped tokens are bound to patient resource access. Production deployment still requires issuer and client registration, an identity model, third-party app registration, and audit controls, which are configured per payer during onboarding.</p></div>
+
+        <div class="qa-block"><h3>How does FHIR prior authorization work?</h3>
+        <p>FHIR prior authorization moves the request off phone and fax and onto structured resources. At the point of order, Coverage Requirements Discovery (CRD) tells the provider whether authorization is needed; Documentation Templates and Rules (DTR) gathers the required clinical documentation with FHIR Questionnaires; and Prior Authorization Support (PAS) submits the request and returns the decision. Cloud Health Office implements the PAS <code>Claim/$submit</code> operation per PAS IG v2.1.0, backed by a prior authorization rule engine and authorization service. Payer rules and utilization-management policy are configured during implementation. See the <a href="/docs/prior-auth-guide">prior authorization guide</a>.</p></div>
+
+        <div class="qa-block"><h3>How do CRD, DTR, and PAS relate to the Prior Authorization API?</h3>
+        <p>CRD, DTR, and PAS are the three Da Vinci Implementation Guides that make up the prior authorization workflow behind the CMS-0057-F Prior Authorization API. CRD discovers whether authorization and documentation are required, DTR collects that documentation, and PAS carries the actual submission and decision &mdash; PAS is the API that returns approval, denial, or a request for information. Cloud Health Office provides CRD and DTR services and an implemented PAS submission surface; each is configured with payer-specific rules and questionnaires during onboarding. The <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">architecture article</a> walks the full flow.</p></div>
+
+        <div class="qa-block"><h3>Does Cloud Health Office support Bulk FHIR?</h3>
+        <p>Yes, as an implemented foundation. Cloud Health Office exposes asynchronous Bulk Data (<code>$export</code>) operations at the system and group level, following the FHIR Bulk Data Access pattern with a kickoff request, a status poll, and downloadable output. This underpins population-level export for Provider Access and Payer-to-Payer use. The current export path is a technical scaffold: production use requires storage, encryption, lifecycle management, manifest retention, and recipient access controls, which are implementation work rather than turnkey features.</p></div>
+
+        <div class="qa-block"><h3>Can Cloud Health Office connect FHIR APIs to QNXT, Facets, or HealthEdge?</h3>
+        <p>Yes, through a vendor-neutral adapter configured per deployment &mdash; not through a single universal connector for every QNXT, Facets, or HealthEdge environment. The external FHIR contract stays stable while the integration behind it is selected and configured for each payer's authoritative sources: member, benefit, provider, and authorization systems, the UM platform, claims dependencies, and any required write-back. Onboarding identifies those sources and the available APIs, events, and middleware, then wires the adapter so FHIR resources project from live systems of record.</p></div>
+
+        <div class="qa-block"><h3>Can Cloud Health Office operate without a legacy core?</h3>
+        <p>Yes. Beyond the interoperability layer, Cloud Health Office includes the engines a payer core requires &mdash; eligibility, benefits, provider data, prior authorization, claims adjudication, accumulators, and terminology &mdash; so it can serve as the payer backend itself rather than only fronting another system. Payers can also modernize progressively: start with Cloud Health Office as the FHIR and prior authorization layer beside an existing core, then migrate individual domains onto it over time. The same external FHIR contract holds across both deployment models.</p></div>
+
+        <h2 id="capabilities">Payer FHIR API Capabilities</h2>
+        <p>The FHIR surfaces most relevant to health plans, with a readiness label for each. Labels follow the internal CMS-0057-F readiness matrix: <span class="badge badge-complete">Implemented</span> means code and tests exist and the capability can be demonstrated; <span class="badge badge-required">Integration required</span> means the surface exists but production use depends on wiring payer sources and controls; <span class="badge badge-phase2">Phase 2</span> means known work remains before it should be represented as production-ready.</p>
+
+        <div class="docs-hub-grid">
+          <div class="docs-hub-card cap-card">
+            <div class="cap-status"><span class="badge badge-required">Integration required</span></div>
+            <h3>Patient Access API</h3>
+            <p>Member-facing access to their own data: demographics, coverage and benefits, claims and encounter information (X12 837/835 projected to FHIR Claim/EOB), and clinical resources where available. Secured with SMART/OAuth patient scopes. The FHIR surface and scope enforcement are in place; production breadth depends on payer identity, consent, and source-system integration.</p>
+          </div>
+          <div class="docs-hub-card cap-card">
+            <div class="cap-status"><span class="badge badge-required">Integration required</span></div>
+            <h3>Provider Access API</h3>
+            <p>Provider-authorized access to attributed members' clinical and claims data, with Da&nbsp;Vinci PDex-aligned resources and <code>$member-match</code>. The SMART/FHIR and provider-resource foundation exists; attributed-access logic, patient opt-out, and payer-specific data-minimization are implementation work configured per deployment.</p>
+          </div>
+          <div class="docs-hub-card cap-card">
+            <div class="cap-status"><span class="badge badge-phase2">Phase 2</span></div>
+            <h3>Payer-to-Payer API</h3>
+            <p>Member data exchange when a member changes plans. Cloud Health Office provides Bulk FHIR and consent building blocks, but end-to-end opt-in, five-year historical scoping, outbound/inbound exchange workflow, and receiving-payer audit remain a Phase&nbsp;2 implementation workstream &mdash; this is not represented as turnkey production-ready.</p>
+          </div>
+          <div class="docs-hub-card cap-card">
+            <div class="cap-status"><span class="badge badge-complete">Implemented</span> <span class="badge badge-required">Integration required</span></div>
+            <h3>Prior Authorization API</h3>
+            <p>Da&nbsp;Vinci-aligned prior authorization spanning requirement discovery (CRD), documentation (DTR), submission (PAS <code>Claim/$submit</code>), and decision. Outcomes include approval, denial, and request for information. The PAS surface, auto-adjudication/pending behavior, and authorization persistence are implemented; payer rules, UM policy, attachments, and denial governance are configured during onboarding. See the <a href="/docs/prior-auth-guide">prior authorization guide</a>.</p>
+          </div>
+          <div class="docs-hub-card cap-card">
+            <div class="cap-status"><span class="badge badge-complete">Implemented</span> <span class="badge badge-required">Integration required</span></div>
+            <h3>Provider Directory API</h3>
+            <p>FHIR Practitioner, PractitionerRole, and Organization projections plus a provider-directory surface &mdash; one of Cloud Health Office's stronger readiness areas. Production readiness depends on network/source-system freshness, endpoint publication, and directory-update operations.</p>
+          </div>
+          <div class="docs-hub-card cap-card">
+            <div class="cap-status"><span class="badge badge-complete">Implemented</span> <span class="badge badge-required">Integration required</span></div>
+            <h3>Bulk FHIR</h3>
+            <p>Asynchronous, population-level Bulk Data <code>$export</code> at system and group level following the FHIR async pattern (kickoff &rarr; status poll &rarr; output). The export foundation is implemented; production use requires storage, encryption, lifecycle, manifest retention, and recipient access controls.</p>
+          </div>
+        </div>
+
+        <h2 id="prior-auth-flow">FHIR Prior Authorization in Cloud Health Office</h2>
+        <p>Prior authorization is a first-class workflow, not a single endpoint. A request flows from the provider's EHR through requirement discovery, terminology translation, and rule evaluation, into documentation and submission, and out to a recorded decision:</p>
+
+        <ul class="flow-steps" aria-label="Prior authorization flow">
+          <li>Provider / EHR</li><li class="flow-arrow" aria-hidden="true">&rarr;</li>
+          <li>CRD</li><li class="flow-arrow" aria-hidden="true">&rarr;</li>
+          <li>Terminology</li><li class="flow-arrow" aria-hidden="true">&rarr;</li>
+          <li>Prior Auth Rule Engine</li><li class="flow-arrow" aria-hidden="true">&rarr;</li>
+          <li>DTR</li><li class="flow-arrow" aria-hidden="true">&rarr;</li>
+          <li>PAS</li><li class="flow-arrow" aria-hidden="true">&rarr;</li>
+          <li>Authorization Decision</li><li class="flow-arrow" aria-hidden="true">&rarr;</li>
+          <li>Authorization Service</li>
+        </ul>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/insights/cms0057-crd-dtr-pas-flow.svg" alt="Horizontal lifecycle diagram: CRD discovers requirements using terminology, benefit context and prior-auth rules; DTR collects documentation via Questionnaire and QuestionnaireResponse; PAS submits and decides using FHIR Claim dollar-submit, provider verification and auto-adjudication; the decision is approved, denied or pended and is written to the Authorization Service. Each Da Vinci stage sits above the Cloud Health Office service that implements it." />
+          <figcaption>CRD &rarr; DTR &rarr; PAS as one connected lifecycle, with the Cloud Health Office service that implements each Da&nbsp;Vinci stage shown beneath it.</figcaption>
+        </figure>
+
+        <ul>
+          <li><strong>CRD (Coverage Requirements Discovery)</strong> &mdash; at order time, tells the provider whether prior authorization and documentation are required, via CDS Hooks. Available for payer-specific rule configuration.</li>
+          <li><strong>Terminology services</strong> &mdash; translate clinical codes (SNOMED CT, LOINC) to the payer's CPT/ICD-10-CM code space via <code>ConceptMap/$translate</code>, so rules and benefits match the request. See the <a href="/docs/terminology-guide">terminology crosswalk guide</a>.</li>
+          <li><strong>Prior authorization rules</strong> &mdash; a rule engine evaluates coverage and medical-necessity policy against the (translated) request to drive the decision path.</li>
+          <li><strong>DTR (Documentation Templates and Rules)</strong> &mdash; collects required clinical documentation using FHIR Questionnaire and QuestionnaireResponse; available as an implementation module with payer-specific questionnaires.</li>
+          <li><strong>PAS (Prior Authorization Support)</strong> &mdash; submits the request through <code>Claim/$submit</code> (per PAS IG v2.1.0) and returns a structured decision; auto-adjudication and pended-status behavior are implemented.</li>
+          <li><strong>Authorization decision &amp; service</strong> &mdash; approval, denial, or request-for-information outcomes are recorded and tracked by the authorization service; decision-window tracking and structured denial/status data are implemented, with payer denial taxonomy and reviewer workflow configured per deployment.</li>
+        </ul>
+        <p>For the architecture in context, see <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">CMS-0057-F with QNXT, Facets, or HealthEdge</a> and the <a href="/insights/cms-0057-f">CMS-0057-F insights hub</a>.</p>
+
+        <h2 id="contract">A FHIR API Is Only the External Contract</h2>
+        <p>FHIR endpoints standardize how the outside world reaches a plan, but every endpoint is backed by payer business logic and data: <strong>eligibility, benefits, provider networks, authorization rules, clinical policy, claims, accumulators, terminology, identity and security, and audit</strong>. A FHIR server with no payer logic behind it cannot answer a coverage question or adjudicate a prior authorization. Cloud Health Office supplies that logic, in one of two deployment models.</p>
+
+        <h3>Two deployment models</h3>
+        <div class="model-cols">
+          <div class="model-col">
+            <h4>Cloud Health Office alongside an existing core</h4>
+            <div class="model-flow">FHIR<br/>&darr;<br/><strong>Cloud Health Office</strong><br/>&darr;<br/>QNXT / Facets / HealthEdge / UM / enterprise systems</div>
+            <p style="margin-top:12px;color:rgba(176,176,176,0.8);font-size:0.86rem;line-height:1.6;">The core stays the system of record. Cloud Health Office is the FHIR, SMART/OAuth, prior authorization, terminology, and audit layer on top of it.</p>
+          </div>
+          <div class="model-col">
+            <h4>Cloud Health Office as the payer backend</h4>
+            <div class="model-flow">FHIR<br/>&darr;<br/><strong>Cloud Health Office</strong><br/>&darr;<br/>Membership / eligibility / benefits / providers / prior authorization / claims / accumulators</div>
+            <p style="margin-top:12px;color:rgba(176,176,176,0.8);font-size:0.86rem;line-height:1.6;">Cloud Health Office owns the administration domains directly, either from day one or progressively as domains migrate off a legacy core.</p>
+          </div>
+        </div>
+
+        <h3>Connecting FHIR to Existing Payer Systems</h3>
+        <p>Cloud Health Office does <strong>not</strong> ship one universal connector for every QNXT, Facets, or HealthEdge environment. Two payers on the same core can have very different data ownership, identity, and utilization-management topologies, so the payer-specific adapter is selected and configured during onboarding. Onboarding identifies:</p>
+        <ul>
+          <li>Authoritative <strong>member</strong> source</li>
+          <li><strong>Benefit</strong> source</li>
+          <li><strong>Provider</strong> source</li>
+          <li><strong>Authorization</strong> source</li>
+          <li><strong>UM platform</strong></li>
+          <li><strong>Claims</strong> dependencies</li>
+          <li>Integration <strong>middleware</strong></li>
+          <li>Available <strong>APIs</strong></li>
+          <li><strong>Event and message</strong> infrastructure</li>
+          <li>Required <strong>write-back</strong></li>
+        </ul>
+        <div class="callout callout-info">
+          <div class="callout-title">Stable contract, payer-specific integration</div>
+          <p>The external FHIR contract remains stable while the payer-specific integration behind it can vary by organization. Apps and partners integrate once against FHIR; the adapter work happens behind it. See the <a href="/docs/architecture">architecture documentation</a> for the adapter model.</p>
+        </div>
 
         <h2 id="environments">Environments</h2>
         <table>
@@ -60,9 +224,9 @@
         <p>OpenAPI docs are available from the local or customer-deployed API surface. All requests require an <code>X-Tenant-ID</code> header for multi-tenant routing.</p>
 
         <h2 id="auth">Authentication</h2>
-        <p>Customer-deployed APIs use OAuth 2.0 with Azure AD (Microsoft Entra ID). The FHIR server publishes a SMART on FHIR configuration at <code>/.well-known/smart-configuration</code> with supported scopes including <code>patient/*.read</code>, <code>user/*.read</code>, and <code>system/*.read</code>.</p>
+        <p>Customer-deployed APIs use OAuth 2.0 with Azure AD (Microsoft Entra ID). The FHIR server publishes a SMART App Launch v2 configuration at <code>/.well-known/smart-configuration</code> with supported scopes including <code>patient/*.read</code>, <code>user/*.read</code>, and <code>system/*.read</code>.</p>
 
-<pre><code><span class="code-comment"># Discover OAuth endpoints</span>
+<pre><code><span class="code-comment"># Discover SMART/OAuth endpoints and supported scopes</span>
 curl https://api.your-domain.example/fhir/r4/.well-known/smart-configuration
 
 <span class="code-comment"># Get access token (client credentials)</span>
@@ -70,10 +234,15 @@ curl -X POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token \
   -d "grant_type=client_credentials" \
   -d "client_id={client_id}" \
   -d "client_secret={client_secret}" \
-  -d "scope=api://cloudhealthoffice/.default"</code></pre>
+  -d "scope=api://cloudhealthoffice/.default"
+
+<span class="code-comment"># Read a FHIR resource with the token + tenant header</span>
+curl https://api.your-domain.example/fhir/r4/Patient/{id} \
+  -H "Authorization: Bearer {access_token}" \
+  -H "X-Tenant-ID: {tenant}"</code></pre>
 
         <h2 id="patient-access">Patient Access API</h2>
-        <p>CMS-9115-F and CMS-0057-F required. Enables patients to access their complete health data via FHIR.</p>
+        <p>CMS-9115-F and CMS-0057-F oriented. Enables patients to access their own health data via FHIR, secured with SMART patient scopes.</p>
         <table>
           <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
           <tbody>
@@ -87,7 +256,7 @@ curl -X POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token \
         </table>
 
         <h2 id="provider-access">Provider Access API</h2>
-        <p>Gives in-network providers access to member clinical and claims data with Da Vinci PDex profile conformance.</p>
+        <p>Gives in-network providers access to attributed members' clinical and claims data, with Da&nbsp;Vinci PDex-aligned resource profiles.</p>
         <table>
           <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
           <tbody>
@@ -97,7 +266,7 @@ curl -X POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token \
         </table>
 
         <h2 id="prior-auth">Prior Authorization API</h2>
-        <p>Converts prior auth from phone/fax to real-time FHIR with Da Vinci PAS, CRD, and DTR conformance. Bidirectional X12 278 mapping.</p>
+        <p>Moves prior authorization from phone/fax to real-time FHIR, Da&nbsp;Vinci-aligned across PAS, CRD, and DTR, with bidirectional X12 278 mapping. The PAS <code>Claim/$submit</code> operation is implemented per PAS IG v2.1.0.</p>
         <table>
           <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
           <tbody>
@@ -108,8 +277,20 @@ curl -X POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token \
           </tbody>
         </table>
 
+<pre><code><span class="code-comment"># Submit a prior authorization (Da Vinci PAS Claim/$submit)</span>
+curl -X POST https://api.your-domain.example/fhir/r4/Claim/\$submit \
+  -H "Authorization: Bearer {access_token}" \
+  -H "X-Tenant-ID: {tenant}" \
+  -H "Content-Type: application/fhir+json" \
+  -d '{"resourceType":"Bundle","type":"collection","entry":[{"resource":{"resourceType":"Claim","use":"preauthorization"}}]}'
+
+<span class="code-comment"># Translate a clinical code to the payer code space (terminology service)</span>
+curl "https://api.your-domain.example/fhir/ConceptMap/\$translate?system=http://snomed.info/sct&code=44054006&target=http://hl7.org/fhir/sid/icd-10-cm" \
+  -H "Authorization: Bearer {access_token}" \
+  -H "X-Tenant-ID: {tenant}"</code></pre>
+
         <h2 id="payer-to-payer">Payer-to-Payer API</h2>
-        <p>Enables data exchange when members switch health plans. Supports Bulk FHIR <code>$export</code> operations.</p>
+        <p>Enables data exchange when members switch health plans, using Bulk FHIR <code>$export</code> and member matching. Payer-to-payer is a Phase&nbsp;2 implementation workstream (see the capability readiness above), not a turnkey production claim.</p>
         <table>
           <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
           <tbody>
@@ -118,6 +299,13 @@ curl -X POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token \
             <tr><td><code>/Group/$export</code></td><td>POST</td><td>Bulk transfer for member cohorts</td></tr>
           </tbody>
         </table>
+
+<pre><code><span class="code-comment"># Initiate an asynchronous bulk export (FHIR Bulk Data Access)</span>
+curl -X POST https://api.your-domain.example/fhir/r4/Group/{groupId}/\$export \
+  -H "Authorization: Bearer {access_token}" \
+  -H "X-Tenant-ID: {tenant}" \
+  -H "Prefer: respond-async"
+<span class="code-comment"># → 202 Accepted with a Content-Location header to poll for job status</span></code></pre>
 
         <h2 id="operational">Operational APIs</h2>
 
@@ -131,8 +319,28 @@ curl -X POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token \
         <p>State and federal encounter submission management for Medicaid MCOs, including encounter data validation, submission tracking, and reconciliation.</p>
 
         <div class="callout callout-info">
-          <div class="callout-title">OpenAPI specs</div>
-          <p>Full OpenAPI 3.1 specifications are available in the <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/api/openapi" target="_blank" rel="noopener noreferrer">api/openapi</a> directory on GitHub. Explore them interactively in the <a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a>.</p>
+          <div class="callout-title">Specifications &amp; source</div>
+          <p>Full OpenAPI 3.1 specifications for all seven APIs are in the <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/api/openapi" target="_blank" rel="noopener noreferrer">api/openapi</a> directory on GitHub, and the FHIR services that implement them live under <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/src/services/fhir-service" target="_blank" rel="noopener noreferrer">src/services/fhir-service</a>. Explore the specs interactively in the <a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a>. For requirements context, see the <a href="/docs/compliance">CMS-0057-F compliance overview</a> and the <a href="/cms-0057f-compliance">CMS-0057-F compliance page</a>.</p>
+        </div>
+
+        <h2 id="planning">Planning a Payer FHIR Implementation?</h2>
+        <p>A payer FHIR architecture depends on your specifics: your existing CAPS/core, who owns each data domain, your identity provider, your utilization-management and provider systems, your CMS scope (Medicare Advantage, Medicaid, CHIP, or QHP), and your migration strategy. The FHIR contract is standard; the integration behind it is designed around those answers.</p>
+        <div class="docs-hub-grid" style="margin-top:24px;">
+          <a href="/cms-0057f-compliance" class="docs-hub-card">
+            <h3>Review CMS-0057-F architecture</h3>
+            <p>How the required FHIR APIs, prior authorization, and terminology fit a payer stack &mdash; alongside a core or as the backend.</p>
+            <span class="card-arrow">CMS-0057-F compliance &rarr;</span>
+          </a>
+          <a href="/platform" class="docs-hub-card">
+            <h3>Explore the payer platform</h3>
+            <p>The administration domains behind the FHIR contract: eligibility, benefits, providers, prior authorization, claims, and accumulators.</p>
+            <span class="card-arrow">Platform overview &rarr;</span>
+          </a>
+          <a href="/contact" class="docs-hub-card">
+            <h3>Discuss your payer architecture</h3>
+            <p>Talk through your core, data ownership, and CMS scope to scope an integration and deployment model.</p>
+            <span class="card-arrow">Contact us &rarr;</span>
+          </a>
         </div>
 
         <div class="docs-pager">
