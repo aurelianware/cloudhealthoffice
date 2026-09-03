@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>CMS-0057-F Implementation Architecture for Health Plans | Cloud Health Office</title>
   <meta name="description" content="A practical guide to implementing CMS-0057-F across FHIR APIs, prior authorization (CRD/DTR/PAS), security, terminology, and existing payer core platforms."/>
-  <meta name="keywords" content="CMS-0057-F implementation, CMS-0057-F architecture, CMS-0057-F implementation for health plans, payer FHIR architecture, healthcare payer FHIR APIs, prior authorization API, Da Vinci CRD DTR PAS, Patient Access API, Provider Access API, Payer-to-Payer API, CMS-0057-F QNXT, CMS-0057-F Facets, CMS-0057-F HealthEdge, payer core modernization, FHIR API gateway for payers, payer terminology service"/>
   <meta name="author" content="Aurelianware, Inc."/>
   <link rel="canonical" href="https://cloudhealthoffice.com/cms-0057-f/implementation-architecture"/>
 
@@ -73,7 +72,7 @@
         "name": "Does CMS-0057-F require replacing a payer core administration system?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. CMS-0057-F requires standardized FHIR R4 APIs and modernized prior authorization; it does not mandate replacing your core administration platform. The rule is satisfied by exposing compliant Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs with the required security and audit behavior. CloudHealthOffice can provide those capabilities as an interoperability layer in front of or alongside an existing core such as QNXT, Facets, or HealthEdge, so the core administration system of record can stay in place."
+          "text": "No. CMS-0057-F requires standardized FHIR R4 APIs and modernized prior authorization; it does not mandate replacing your core administration platform. The rule is satisfied by exposing compliant Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs with the required security and audit behavior. Cloud Health Office can provide those capabilities as an interoperability layer in front of or alongside an existing core such as QNXT, Facets, or HealthEdge, so the core administration system of record can stay in place."
         }
       },
       {
@@ -81,7 +80,7 @@
         "name": "Can CMS-0057-F be implemented with QNXT?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. CloudHealthOffice can operate as a FHIR and prior-authorization interoperability layer while QNXT continues to own claims, eligibility, and benefits as the system of record. The connection between CloudHealthOffice and QNXT is a payer-specific onboarding integration built through the adapter layer during implementation — it is an architecture and deployment model, configured per payer, rather than a universal preconfigured connector."
+          "text": "Yes. Cloud Health Office can operate as a FHIR and prior-authorization interoperability layer while QNXT continues to own claims, eligibility, and benefits as the system of record. The connection between Cloud Health Office and QNXT is a payer-specific onboarding integration built through the adapter layer during implementation — it is an architecture and deployment model, configured per payer, rather than a universal preconfigured connector."
         }
       },
       {
@@ -89,7 +88,7 @@
         "name": "Can CMS-0057-F be implemented with Facets?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. The same adapter-based deployment pattern applies to Facets. CloudHealthOffice presents the required FHIR APIs and Da Vinci prior-authorization workflows externally while integrating with Facets for claims, eligibility, and benefits data during onboarding. Facets remains the core administration platform; CloudHealthOffice provides the modern FHIR boundary and prior-authorization orchestration."
+          "text": "Yes. The same adapter-based deployment pattern applies to Facets. Cloud Health Office presents the required FHIR APIs and Da Vinci prior-authorization workflows externally while integrating with Facets for claims, eligibility, and benefits data during onboarding. Facets remains the core administration platform; Cloud Health Office provides the modern FHIR boundary and prior-authorization orchestration."
         }
       },
       {
@@ -97,7 +96,7 @@
         "name": "Can CMS-0057-F be implemented with HealthEdge?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. CloudHealthOffice can sit alongside HealthEdge as a modernization and interoperability layer using the same adapter model, exposing compliant FHIR APIs and prior-authorization workflows while HealthEdge continues to operate as the core. As with any core platform, the specific integration is configured during onboarding rather than shipped as a fixed connector."
+          "text": "Yes. Cloud Health Office can sit alongside HealthEdge as a modernization and interoperability layer using the same adapter model, exposing compliant FHIR APIs and prior-authorization workflows while HealthEdge continues to operate as the core. As with any core platform, the specific integration is configured during onboarding rather than shipped as a fixed connector."
         }
       },
       {
@@ -126,18 +125,18 @@
       },
       {
         "@type": "Question",
-        "name": "Can CloudHealthOffice run alongside an existing core platform?",
+        "name": "Can Cloud Health Office run alongside an existing core platform?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. This is the interoperability and modernization deployment pattern: CloudHealthOffice provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit while the existing core administration platform continues to own claims, eligibility, and benefits. Integration between the two is built through the adapter layer during onboarding."
+          "text": "Yes. This is the interoperability and modernization deployment pattern: Cloud Health Office provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit while the existing core administration platform continues to own claims, eligibility, and benefits. Integration between the two is built through the adapter layer during onboarding."
         }
       },
       {
         "@type": "Question",
-        "name": "Can CloudHealthOffice serve as the backend core platform?",
+        "name": "Can Cloud Health Office serve as the backend core platform?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. For organizations that want a more modern architecture, CloudHealthOffice services — claims, eligibility, provider, benefits, prior authorization, and terminology/reference data — can participate directly as the underlying payer backend, with no external legacy core. Payers can also migrate domains from a legacy core to CloudHealthOffice progressively behind the same stable FHIR boundary."
+          "text": "Yes. For organizations that want a more modern architecture, Cloud Health Office services — claims, eligibility, provider, benefits, prior authorization, and terminology/reference data — can participate directly as the underlying payer backend, with no external legacy core. Payers can also migrate domains from a legacy core to Cloud Health Office progressively behind the same stable FHIR boundary."
         }
       }
     ]
@@ -329,7 +328,7 @@
           <span class="badge">QNXT · Facets · HealthEdge</span>
         </div>
         <div class="hero-actions">
-          <a href="/platform" class="btn btn-primary">Explore CloudHealthOffice →</a>
+          <a href="/platform" class="btn btn-primary">Explore Cloud Health Office →</a>
           <a href="/docs" class="btn btn-ghost">View technical documentation</a>
           <a href="/contact" class="btn btn-green">Talk to an architect</a>
         </div>
@@ -353,7 +352,7 @@
           <li><a href="#security">Security and identity</a></li>
           <li><a href="#observability">Observability and operational readiness</a></li>
           <li><a href="#roadmap">Implementation roadmap</a></li>
-          <li><a href="#patterns">CloudHealthOffice deployment patterns</a></li>
+          <li><a href="#patterns">Cloud Health Office deployment patterns</a></li>
           <li><a href="#faq">Frequently asked questions</a></li>
         </ol>
       </nav>
@@ -394,8 +393,8 @@
 
         <figure class="diagram">
           <img src="/graphics/cms-0057-f/implementation-reference-architecture.svg"
-               alt="Layered CMS-0057-F reference architecture. External consumers — provider and EHR systems, patient apps, trading-partner payers, and regulators — connect over HL7 FHIR R4 into an API and interoperability layer exposing the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs, secured with SMART on FHIR and OAuth 2.0, consent and authorization controls, and audit and observability. That layer calls CloudHealthOffice services: prior authorization, claims and encounters, eligibility and member, provider, benefits, terminology and reference data, workflow and orchestration, and observability. In deployment pattern 1 those services reach an adapter and integration layer that connects to existing payer platforms such as QNXT, Facets, HealthEdge, and other core, utilization-management, and data systems. In deployment pattern 2, shown on the right, CloudHealthOffice services act as the core backend directly with no external legacy core."/>
-          <figcaption>The regulated FHIR boundary sits above CloudHealthOffice services. Pattern 1 integrates an existing core through an adapter layer; Pattern 2 uses CloudHealthOffice services as the core backend. Both present the same FHIR contract externally.</figcaption>
+               alt="Layered CMS-0057-F reference architecture. External consumers — provider and EHR systems, patient apps, trading-partner payers, and regulators — connect over HL7 FHIR R4 into an API and interoperability layer exposing the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs, secured with SMART on FHIR and OAuth 2.0, consent and authorization controls, and audit and observability. That layer calls Cloud Health Office services: prior authorization, claims and encounters, eligibility and member, provider, benefits, terminology and reference data, workflow and orchestration, and observability. In deployment pattern 1 those services reach an adapter and integration layer that connects to existing payer platforms such as QNXT, Facets, HealthEdge, and other core, utilization-management, and data systems. In deployment pattern 2, shown on the right, Cloud Health Office services act as the core backend directly with no external legacy core."/>
+          <figcaption>The regulated FHIR boundary sits above Cloud Health Office services. Pattern 1 integrates an existing core through an adapter layer; Pattern 2 uses Cloud Health Office services as the core backend. Both present the same FHIR contract externally.</figcaption>
         </figure>
 
         <div class="grid-2">
@@ -407,7 +406,7 @@
           <div class="panel">
             <span class="k">Below the boundary</span>
             <h3>Services and integration</h3>
-            <p>CloudHealthOffice services — prior authorization, claims, eligibility/member, provider, benefits, terminology, workflow, and observability — implement the behavior behind the APIs. They either integrate an existing core through the adapter layer (Pattern 1) or act as the core backend directly (Pattern 2).</p>
+            <p>Cloud Health Office services — prior authorization, claims, eligibility/member, provider, benefits, terminology, workflow, and observability — implement the behavior behind the APIs. They either integrate an existing core through the adapter layer (Pattern 1) or act as the core backend directly (Pattern 2).</p>
           </div>
         </div>
 
@@ -424,7 +423,7 @@
       <div class="container prose">
         <div class="section-label">03 · The four API areas</div>
         <h2 class="section-title">Patient Access, Provider Access, Payer-to-Payer, Prior Authorization</h2>
-        <p class="section-desc">CMS-0057-F centers on four FHIR R4 APIs. CloudHealthOffice implements all four as a platform capability; each payer's data mapping is configured during onboarding. The <a href="/cms-0057f-compliance">CMS-0057-F compliance overview</a> maps each API to its FHIR resources in detail.</p>
+        <p class="section-desc">CMS-0057-F centers on four FHIR R4 APIs. Cloud Health Office implements all four as a platform capability; each payer's data mapping is configured during onboarding. The <a href="/cms-0057f-compliance">CMS-0057-F compliance overview</a> maps each API to its FHIR resources in detail.</p>
         <div class="cards">
           <a class="card" href="/cms-0057f-compliance#quick-answers">
             <span class="k">API 1</span>
@@ -465,7 +464,7 @@
 
         <figure class="diagram">
           <img src="/graphics/insights/cms0057-crd-dtr-pas-flow.svg"
-               alt="Horizontal lifecycle diagram of the Da Vinci prior authorization workflow: CRD discovers coverage requirements at order-select and order-sign, DTR collects the required documentation through FHIR Questionnaire and QuestionnaireResponse, and PAS submits the request and returns the decision, with the CloudHealthOffice services that implement each stage shown beneath, feeding an authorization service."/>
+               alt="Horizontal lifecycle diagram of the Da Vinci prior authorization workflow: CRD discovers coverage requirements at order-select and order-sign, DTR collects the required documentation through FHIR Questionnaire and QuestionnaireResponse, and PAS submits the request and returns the decision, with the Cloud Health Office services that implement each stage shown beneath, feeding an authorization service."/>
           <figcaption>CRD discovers what is required, DTR collects the documentation, and PAS submits and decides — the sequence the Prior Authorization API exposes.</figcaption>
         </figure>
 
@@ -480,7 +479,7 @@
           <a class="card" href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">
             <span class="k">Pillar Article</span>
             <h3>CRD, DTR, PAS with QNXT, Facets &amp; HealthEdge</h3>
-            <p>How CloudHealthOffice implements the Da Vinci workflow alongside — or as — a payer core.</p>
+            <p>How Cloud Health Office implements the Da Vinci workflow alongside — or as — a payer core.</p>
             <span class="go">Read the article →</span>
           </a>
           <a class="card" href="/docs/prior-auth-guide">
@@ -529,7 +528,7 @@
           <li><strong>Mappings</strong> — crosswalks such as SNOMED CT to ICD-10-CM or CPT via <code>ConceptMap/$translate</code>.</li>
           <li><strong>Validation</strong> — rejecting resources that carry codes outside their required value sets before they ever reach a consumer.</li>
         </ul>
-        <p>Without a terminology service, each integration re-implements its own mappings and they drift apart. CloudHealthOffice provides FHIR-native terminology and crosswalk services so the same codes resolve identically across the prior authorization, claims, and access APIs. The <a href="/docs/terminology-guide">terminology guide</a> shows the translation workflows in detail.</p>
+        <p>Without a terminology service, each integration re-implements its own mappings and they drift apart. Cloud Health Office provides FHIR-native terminology and crosswalk services so the same codes resolve identically across the prior authorization, claims, and access APIs. The <a href="/docs/terminology-guide">terminology guide</a> shows the translation workflows in detail.</p>
         <div class="cards">
           <a class="card" href="/docs/terminology-guide">
             <span class="k">Implementation Guide</span>
@@ -549,12 +548,12 @@
         <div class="section-label">07 · Existing core administration integration</div>
         <h2 class="section-title">Integrating existing core administration systems</h2>
         <p class="section-desc">Most impacted payers already run a core administration platform. The architecture is designed so CMS-0057-F does not force a rip-and-replace — while leaving the door open to modernization when the plan is ready.</p>
-        <p>CloudHealthOffice supports two deployment patterns for the systems of record. In the <strong>interoperability / modernization</strong> pattern, CloudHealthOffice sits in front of or alongside an existing payer core and integrates through the adapter layer, providing modern FHIR and prior-authorization capabilities without replacing the core. In the <strong>CloudHealthOffice-as-core</strong> pattern, the platform's own claims, eligibility, provider, benefits, prior authorization, and terminology services participate directly as the backend.</p>
+        <p>Cloud Health Office supports two deployment patterns for the systems of record. In the <strong>interoperability / modernization</strong> pattern, Cloud Health Office sits in front of or alongside an existing payer core and integrates through the adapter layer, providing modern FHIR and prior-authorization capabilities without replacing the core. In the <strong>Cloud Health Office-as-core</strong> pattern, the platform's own claims, eligibility, provider, benefits, prior authorization, and terminology services participate directly as the backend.</p>
 
         <figure class="diagram">
           <img src="/graphics/cms-0057-f/deployment-patterns-comparison.svg"
-               alt="Side-by-side comparison of two deployment patterns. Pattern 1, CloudHealthOffice plus existing core: external FHIR consumers connect to CloudHealthOffice, which provides the FHIR APIs, CRD/DTR/PAS, terminology, security, and audit, then connects through an adapter and integration layer to an existing payer core such as QNXT, Facets, or HealthEdge that continues to own claims, eligibility, and benefits as the system of record. Pattern 2, CloudHealthOffice as core: the same external FHIR consumers connect to CloudHealthOffice, which provides both the FHIR APIs and the underlying claims, eligibility, benefits, provider, and prior-authorization services directly, with no external legacy core. Both patterns present the same stable FHIR boundary to external consumers."/>
-          <figcaption>The same FHIR boundary, two backends. In Pattern 1 the existing core stays the system of record; in Pattern 2 CloudHealthOffice is the system of record — and a plan can migrate domains from one to the other behind the boundary.</figcaption>
+               alt="Side-by-side comparison of two deployment patterns. Pattern 1, Cloud Health Office plus existing core: external FHIR consumers connect to Cloud Health Office, which provides the FHIR APIs, CRD/DTR/PAS, terminology, security, and audit, then connects through an adapter and integration layer to an existing payer core such as QNXT, Facets, or HealthEdge that continues to own claims, eligibility, and benefits as the system of record. Pattern 2, Cloud Health Office as core: the same external FHIR consumers connect to Cloud Health Office, which provides both the FHIR APIs and the underlying claims, eligibility, benefits, provider, and prior-authorization services directly, with no external legacy core. Both patterns present the same stable FHIR boundary to external consumers."/>
+          <figcaption>The same FHIR boundary, two backends. In Pattern 1 the existing core stays the system of record; in Pattern 2 Cloud Health Office is the system of record — and a plan can migrate domains from one to the other behind the boundary.</figcaption>
         </figure>
 
         <div class="table-wrap">
@@ -562,20 +561,20 @@
             <thead>
               <tr>
                 <th scope="col">Consideration</th>
-                <th scope="col" class="col-a">CloudHealthOffice + existing core</th>
-                <th scope="col" class="col-b">CloudHealthOffice as core</th>
+                <th scope="col" class="col-a">Cloud Health Office + existing core</th>
+                <th scope="col" class="col-b">Cloud Health Office as core</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <th scope="row">System of record</th>
                 <td>Existing core (QNXT, Facets, HealthEdge, or other) keeps claims, eligibility, and benefits.</td>
-                <td>CloudHealthOffice services own claims, eligibility, benefits, provider, and prior authorization.</td>
+                <td>Cloud Health Office services own claims, eligibility, benefits, provider, and prior authorization.</td>
               </tr>
               <tr>
                 <th scope="row">FHIR boundary</th>
-                <td>Provided by CloudHealthOffice above the core.</td>
-                <td>Provided by CloudHealthOffice as part of the platform.</td>
+                <td>Provided by Cloud Health Office above the core.</td>
+                <td>Provided by Cloud Health Office as part of the platform.</td>
               </tr>
               <tr>
                 <th scope="row">Integration work</th>
@@ -666,7 +665,7 @@
           <div class="phase"><div class="num">Phase 3</div><div><h3>Identity and security</h3><p>Implement OAuth 2.0, SMART on FHIR registration and launch, scopes, consent, service-to-service identity, tenant isolation, and audit — the gate every API call passes through.</p></div></div>
           <div class="phase"><div class="num">Phase 4</div><div><h3>Patient, Provider, and Payer-to-Payer APIs</h3><p>Deliver the three access APIs against the boundary, wiring each FHIR resource to its owning system and enforcing attribution, consent, and opt-out.</p></div></div>
           <div class="phase"><div class="num">Phase 5</div><div><h3>Prior authorization: CRD, DTR, PAS</h3><p>Implement the Da Vinci workflow and expose it through the Prior Authorization API — discovery at ordering, documentation capture, submission, and decisioning.</p></div></div>
-          <div class="phase"><div class="num">Phase 6</div><div><h3>Integrate core and UM systems</h3><p>Connect the adapter layer to the existing core and utilization-management systems so decisions and data flow to and from the systems of record — or stand up CloudHealthOffice services as the backend.</p></div></div>
+          <div class="phase"><div class="num">Phase 6</div><div><h3>Integrate core and UM systems</h3><p>Connect the adapter layer to the existing core and utilization-management systems so decisions and data flow to and from the systems of record — or stand up Cloud Health Office services as the backend.</p></div></div>
           <div class="phase"><div class="num">Phase 7</div><div><h3>Testing, monitoring, and auditability</h3><p>Validate against the implementation guides, load-test the APIs, wire observability and alerting, and confirm the audit trail is complete and reportable.</p></div></div>
           <div class="phase"><div class="num">Phase 8</div><div><h3>Production readiness</h3><p>Clear the operational gates — incident response, disaster recovery, and sign-off — before routing production traffic and attesting to compliance.</p></div></div>
         </div>
@@ -679,28 +678,28 @@
     <section id="patterns">
       <div class="container prose">
         <div class="section-label">11 · Deployment patterns</div>
-        <h2 class="section-title">CloudHealthOffice deployment patterns</h2>
+        <h2 class="section-title">Cloud Health Office deployment patterns</h2>
         <p class="section-desc">The same architecture supports several adoption paths. Which one fits depends on how much of the core a plan wants to modernize, and how quickly.</p>
         <div class="grid-2">
           <div class="panel">
             <span class="k">Pattern A</span>
             <h3>Augment the existing stack</h3>
-            <p>CloudHealthOffice provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit in front of an existing core. The core stays the system of record; the plan meets the rule without disrupting operations. Integration is configured through the adapter layer during onboarding.</p>
+            <p>Cloud Health Office provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit in front of an existing core. The core stays the system of record; the plan meets the rule without disrupting operations. Integration is configured through the adapter layer during onboarding.</p>
           </div>
           <div class="panel">
             <span class="k">Pattern B</span>
             <h3>Staged modernization</h3>
-            <p>Start by augmenting, then migrate domains — claims, eligibility, benefits — from the legacy core to CloudHealthOffice services one at a time, behind the same FHIR boundary, so external consumers see no change as the backend moves.</p>
+            <p>Start by augmenting, then migrate domains — claims, eligibility, benefits — from the legacy core to Cloud Health Office services one at a time, behind the same FHIR boundary, so external consumers see no change as the backend moves.</p>
           </div>
           <div class="panel">
             <span class="k">Pattern C</span>
-            <h3>Full CloudHealthOffice backend</h3>
-            <p>For a modern, FHIR-native architecture, CloudHealthOffice services provide the underlying payer capabilities directly, with no external legacy core. The FHIR boundary and the systems of record are one platform.</p>
+            <h3>Full Cloud Health Office backend</h3>
+            <p>For a modern, FHIR-native architecture, Cloud Health Office services provide the underlying payer capabilities directly, with no external legacy core. The FHIR boundary and the systems of record are one platform.</p>
           </div>
           <div class="panel">
             <span class="k">Positioning</span>
             <h3>What we do — and don't — claim</h3>
-            <p>CloudHealthOffice is not only a core-replacement platform. It is an interoperability and modernization layer <em>and</em>, when a plan wants it, a modern backend. Named-core integrations are described as an architecture and deployment model configured per payer — not as finished, shipped connectors.</p>
+            <p>Cloud Health Office is not only a core-replacement platform. It is an interoperability and modernization layer <em>and</em>, when a plan wants it, a modern backend. Named-core integrations are described as an architecture and deployment model configured per payer — not as finished, shipped connectors.</p>
           </div>
         </div>
       </div>
@@ -718,19 +717,19 @@
       <div class="faq">
         <details class="faq-item">
           <summary>Does CMS-0057-F require replacing a payer core administration system?</summary>
-          <div class="faq-body">No. CMS-0057-F requires standardized FHIR R4 APIs and modernized prior authorization; it does not mandate replacing your core administration platform. CloudHealthOffice can provide those capabilities as an interoperability layer in front of or alongside an existing core such as QNXT, Facets, or HealthEdge, so the system of record can stay in place. See <a href="#core">existing core integration</a>.</div>
+          <div class="faq-body">No. CMS-0057-F requires standardized FHIR R4 APIs and modernized prior authorization; it does not mandate replacing your core administration platform. Cloud Health Office can provide those capabilities as an interoperability layer in front of or alongside an existing core such as QNXT, Facets, or HealthEdge, so the system of record can stay in place. See <a href="#core">existing core integration</a>.</div>
         </details>
         <details class="faq-item">
           <summary>Can CMS-0057-F be implemented with QNXT?</summary>
-          <div class="faq-body">Yes. CloudHealthOffice operates as a FHIR and prior-authorization layer while QNXT continues to own claims, eligibility, and benefits. The connection is a payer-specific onboarding integration built through the adapter layer — an architecture and deployment model configured per payer, not a universal preconfigured connector.</div>
+          <div class="faq-body">Yes. Cloud Health Office operates as a FHIR and prior-authorization layer while QNXT continues to own claims, eligibility, and benefits. The connection is a payer-specific onboarding integration built through the adapter layer — an architecture and deployment model configured per payer, not a universal preconfigured connector.</div>
         </details>
         <details class="faq-item">
           <summary>Can CMS-0057-F be implemented with Facets?</summary>
-          <div class="faq-body">Yes. The same adapter-based pattern applies to Facets: CloudHealthOffice presents the required FHIR APIs and Da Vinci workflows externally while integrating with Facets for claims, eligibility, and benefits during onboarding. Facets remains the core administration platform.</div>
+          <div class="faq-body">Yes. The same adapter-based pattern applies to Facets: Cloud Health Office presents the required FHIR APIs and Da Vinci workflows externally while integrating with Facets for claims, eligibility, and benefits during onboarding. Facets remains the core administration platform.</div>
         </details>
         <details class="faq-item">
           <summary>Can CMS-0057-F be implemented with HealthEdge?</summary>
-          <div class="faq-body">Yes. CloudHealthOffice can sit alongside HealthEdge as a modernization and interoperability layer using the same adapter model, exposing compliant FHIR APIs and prior-authorization workflows while HealthEdge continues to operate as the core. The specific integration is configured during onboarding.</div>
+          <div class="faq-body">Yes. Cloud Health Office can sit alongside HealthEdge as a modernization and interoperability layer using the same adapter model, exposing compliant FHIR APIs and prior-authorization workflows while HealthEdge continues to operate as the core. The specific integration is configured during onboarding.</div>
         </details>
         <details class="faq-item">
           <summary>Where do CRD, DTR, and PAS fit?</summary>
@@ -745,12 +744,12 @@
           <div class="faq-body">The FHIR prior-authorization workflow is exposed at the boundary, and decisioning connects to existing utilization-management systems through the adapter layer. Requests captured through PAS route to the payer's UM rules and reviewers, and decisions return over FHIR. This is configured per payer during onboarding so existing medical policy and review processes stay authoritative.</div>
         </details>
         <details class="faq-item">
-          <summary>Can CloudHealthOffice run alongside an existing core platform?</summary>
-          <div class="faq-body">Yes — this is the interoperability and modernization pattern. CloudHealthOffice provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit while the existing core continues to own claims, eligibility, and benefits, with integration built through the adapter layer during onboarding.</div>
+          <summary>Can Cloud Health Office run alongside an existing core platform?</summary>
+          <div class="faq-body">Yes — this is the interoperability and modernization pattern. Cloud Health Office provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit while the existing core continues to own claims, eligibility, and benefits, with integration built through the adapter layer during onboarding.</div>
         </details>
         <details class="faq-item">
-          <summary>Can CloudHealthOffice serve as the backend core platform?</summary>
-          <div class="faq-body">Yes. CloudHealthOffice services — claims, eligibility, provider, benefits, prior authorization, and terminology/reference data — can participate directly as the underlying payer backend, with no external legacy core. Plans can also migrate domains from a legacy core progressively behind the same FHIR boundary.</div>
+          <summary>Can Cloud Health Office serve as the backend core platform?</summary>
+          <div class="faq-body">Yes. Cloud Health Office services — claims, eligibility, provider, benefits, prior authorization, and terminology/reference data — can participate directly as the underlying payer backend, with no external legacy core. Plans can also migrate domains from a legacy core progressively behind the same FHIR boundary.</div>
         </details>
       </div>
     </section>
@@ -833,9 +832,9 @@
       <div class="container">
         <div class="section-label" style="text-align:center">Get Started</div>
         <h2>Implement CMS-0057-F on an architecture that lasts past 2027.</h2>
-        <p>See how CloudHealthOffice establishes a stable FHIR boundary in front of your existing core — or becomes the modern backend itself — on your CMS-0057-F timeline.</p>
+        <p>See how Cloud Health Office establishes a stable FHIR boundary in front of your existing core — or becomes the modern backend itself — on your CMS-0057-F timeline.</p>
         <div class="cta-actions">
-          <a href="/platform" class="btn btn-primary">Explore CloudHealthOffice →</a>
+          <a href="/platform" class="btn btn-primary">Explore Cloud Health Office →</a>
           <a href="/docs" class="btn btn-ghost">Technical documentation</a>
           <a href="/contact" class="btn btn-green">Talk to an architect</a>
         </div>
