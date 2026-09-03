@@ -54,6 +54,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/million-claim-challenge/part-9-from-unsupported-to-scored.html /insights/million-claim-challenge/part-9-from-unsupported-to-scored 301
 /insights/cms-0057-f/index.html            /insights/cms-0057-f               301
 /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas 301
+/cms-0057-f/implementation-architecture/index.html /cms-0057-f/implementation-architecture 301
 /docs/million-claim-challenge/evidence.html /docs/million-claim-challenge/evidence 301
 
 # ---------------------------------------------------------------------------
@@ -94,6 +95,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/million-claim-challenge/part-9-from-unsupported-to-scored /insights/million-claim-challenge/part-9-from-unsupported-to-scored.html 200
 /insights/cms-0057-f                        /insights/cms-0057-f/index.html    200
 /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html 200
+/cms-0057-f/implementation-architecture     /cms-0057-f/implementation-architecture/index.html 200
 /docs/million-claim-challenge/evidence     /docs/million-claim-challenge/evidence.html 200
 
 # ---------------------------------------------------------------------------
