@@ -149,6 +149,41 @@
       font-weight: bold;
     }
 
+    .layers-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      margin-top: 28px;
+    }
+
+    .layers-card {
+      background: #0a0a0a;
+      border: 1px solid rgba(0,255,255,0.22);
+      border-top: 3px solid #00ffff;
+      border-radius: 8px;
+      padding: 24px;
+    }
+
+    .layers-card h3 {
+      margin: 0 0 12px 0;
+      font-size: 1.25rem;
+    }
+
+    .layers-card p {
+      color: #b0b0b0;
+      line-height: 1.65;
+      margin: 0 0 12px 0;
+      font-size: 0.98rem;
+    }
+
+    .layers-card p:last-child { margin-bottom: 0; }
+
+    .layers-constraint {
+      margin-top: 20px;
+      font-size: 0.95rem;
+      color: #888;
+    }
+
     .mcc-proof-strip {
       background: #0a0a0a;
       border: 1px solid rgba(0,255,255,0.22);
@@ -306,6 +341,32 @@
         <p style="margin-top:20px;">
           <a href="/pricing" style="color:#00ffff;">See pricing &rarr;</a>
         </p>
+      </section>
+
+      <!-- ===== THREE LAYERS — FOOTHOLD / DOMAIN CUTOVER / CORE ===== -->
+      <section id="layers" class="assessment-section" aria-labelledby="layers-heading">
+        <div class="section-label" style="color:#00ffff; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">Where you start</div>
+        <h2 id="layers-heading">Foothold, domain cutover, core.</h2>
+        <p>Three budget questions. Same platform. You enter where this year&rsquo;s money already is.</p>
+
+        <div class="layers-grid">
+          <article class="layers-card">
+            <h3>Layer 1 &mdash; Foothold</h3>
+            <p>What can we buy this year against the 1 Jan 2027 CMS-0057-F clock while QNXT, Facets, or HealthEdge stays the system of record?</p>
+            <p>CMS-0057-F FHIR APIs in your Azure, AWS, or GCP. Your core stays authoritative. Buy this against the 2027 mandate so the compliance spend is not a throwaway sidecar.</p>
+          </article>
+          <article class="layers-card">
+            <h3>Layer 2 &mdash; Domain cutover</h3>
+            <p>Which one operational domain do we peel off the core without a rip-and-replace program?</p>
+            <p>Move one domain (prior auth, provider, eligibility, or claims intake) onto Cloud Health Office. The core remains system of record for everything not cut over. Reversible.</p>
+          </article>
+          <article class="layers-card">
+            <h3>Layer 3 &mdash; Core</h3>
+            <p>When, if ever, is Cloud Health Office the claims ledger?</p>
+            <p>Cloud Health Office becomes the ledger for claims, benefits, and payments. Only when you choose. Not a big-bang HealthEdge-style program, and not a claim that a live QNXT book has already moved.</p>
+          </article>
+        </div>
+        <p class="layers-constraint">Layer 3 is a path, not a completed QNXT replacement reference. Named cores remain adapter-based and configured per payer during onboarding.</p>
       </section>
 
       <section class="mcc-proof-strip" aria-labelledby="mcc-proof-heading">
