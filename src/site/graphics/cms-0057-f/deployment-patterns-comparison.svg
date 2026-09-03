@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" role="img" aria-labelledby="dpc-title dpc-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="dpc-title">Two CMS-0057-F deployment patterns for CloudHealthOffice</title>
+  <desc id="dpc-desc">A side-by-side comparison. On the left, the interoperability and modernization pattern: external FHIR consumers connect to CloudHealthOffice as a FHIR and prior-authorization layer, which connects through an adapter layer to an existing payer core such as QNXT, Facets or HealthEdge that continues to own claims, eligibility and benefits. On the right, the CloudHealthOffice-as-core pattern: the same external FHIR consumers connect to CloudHealthOffice, which provides both the FHIR APIs and the underlying claims, eligibility, benefits, provider and prior-authorization services directly, with no external legacy core. Both patterns present the same stable FHIR boundary to external consumers.</desc>
+  <defs>
+    <linearGradient id="dpc-cho" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00ffff" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#00ff88" stop-opacity="0.08"/>
+    </linearGradient>
+    <marker id="dpc-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="560" fill="#05070a"/>
+
+  <!-- Divider -->
+  <line x1="500" y1="60" x2="500" y2="520" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="4 6"/>
+
+  <!-- ===== LEFT: CHO + Existing Core ===== -->
+  <text x="240" y="40" text-anchor="middle" font-size="17" font-weight="800" fill="#00b4ff">Pattern 1 — CloudHealthOffice + existing core</text>
+  <text x="240" y="62" text-anchor="middle" font-size="12" fill="#a0a0a0">Interoperability / modernization layer</text>
+
+  <!-- consumers -->
+  <rect x="70" y="82" width="340" height="46" rx="9" fill="rgba(8,8,8,0.92)" stroke="#00b4ff" stroke-width="1.4"/>
+  <text x="240" y="110" text-anchor="middle" font-size="13.5" font-weight="700" fill="#ffffff">Provider · Patient apps · Trading partners</text>
+  <line x1="240" y1="128" x2="240" y2="156" stroke="#00ffff" stroke-width="2" marker-end="url(#dpc-arrow)"/>
+  <text x="256" y="147" font-size="10.5" font-weight="600" fill="#00ffff" font-family="JetBrains Mono, monospace">FHIR</text>
+
+  <!-- CHO layer -->
+  <rect x="70" y="162" width="340" height="96" rx="12" fill="url(#dpc-cho)" stroke="#00ffff" stroke-width="1.8"/>
+  <text x="240" y="188" text-anchor="middle" font-size="14.5" font-weight="800" fill="#ffffff">CloudHealthOffice</text>
+  <text x="240" y="208" text-anchor="middle" font-size="11.5" fill="#00ff88">FHIR APIs · CRD/DTR/PAS · terminology · security · audit</text>
+  <g font-size="11" font-weight="600" fill="#00ffff" text-anchor="middle">
+    <rect x="88" y="220" width="150" height="26" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="163" y="237">Patient / Provider APIs</text>
+    <rect x="246" y="220" width="146" height="26" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="319" y="237">Prior auth workflow</text>
+  </g>
+  <line x1="240" y1="258" x2="240" y2="286" stroke="#00ffff" stroke-width="2" marker-end="url(#dpc-arrow)"/>
+
+  <!-- adapter -->
+  <rect x="110" y="292" width="260" height="40" rx="9" fill="rgba(0,180,255,0.08)" stroke="#00b4ff" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <text x="240" y="317" text-anchor="middle" font-size="12.5" font-weight="700" fill="#00b4ff">Adapter / integration layer</text>
+  <line x1="240" y1="332" x2="240" y2="360" stroke="#00ffff" stroke-width="2" marker-end="url(#dpc-arrow)"/>
+
+  <!-- existing core -->
+  <rect x="70" y="366" width="340" height="118" rx="12" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.16)"/>
+  <text x="240" y="392" text-anchor="middle" font-size="14" font-weight="800" fill="#ffffff">Existing payer core</text>
+  <text x="240" y="411" text-anchor="middle" font-size="11.5" fill="#909090">QNXT · Facets · HealthEdge · UM systems</text>
+  <g font-size="11" font-weight="600" fill="#c0c0c0" text-anchor="middle">
+    <rect x="88" y="424" width="98" height="26" rx="6" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="137" y="441">Claims</text>
+    <rect x="192" y="424" width="98" height="26" rx="6" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="241" y="441">Eligibility</text>
+    <rect x="296" y="424" width="96" height="26" rx="6" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="344" y="441">Benefits</text>
+  </g>
+  <text x="240" y="470" text-anchor="middle" font-size="11" fill="#808080">System of record stays where it is</text>
+
+  <!-- ===== RIGHT: CHO as Core ===== -->
+  <text x="760" y="40" text-anchor="middle" font-size="17" font-weight="800" fill="#00ff88">Pattern 2 — CloudHealthOffice as core</text>
+  <text x="760" y="62" text-anchor="middle" font-size="12" fill="#a0a0a0">Modern payer backend</text>
+
+  <!-- consumers -->
+  <rect x="590" y="82" width="340" height="46" rx="9" fill="rgba(8,8,8,0.92)" stroke="#00b4ff" stroke-width="1.4"/>
+  <text x="760" y="110" text-anchor="middle" font-size="13.5" font-weight="700" fill="#ffffff">Provider · Patient apps · Trading partners</text>
+  <line x1="760" y1="128" x2="760" y2="156" stroke="#00ffff" stroke-width="2" marker-end="url(#dpc-arrow)"/>
+  <text x="776" y="147" font-size="10.5" font-weight="600" fill="#00ffff" font-family="JetBrains Mono, monospace">FHIR</text>
+
+  <!-- CHO full stack -->
+  <rect x="590" y="162" width="340" height="322" rx="12" fill="url(#dpc-cho)" stroke="#00ff88" stroke-width="1.8"/>
+  <text x="760" y="188" text-anchor="middle" font-size="14.5" font-weight="800" fill="#ffffff">CloudHealthOffice</text>
+  <text x="760" y="208" text-anchor="middle" font-size="11.5" fill="#00ff88">FHIR boundary and core services in one platform</text>
+
+  <g font-size="11.5" font-weight="600" fill="#00ffff" text-anchor="middle">
+    <rect x="610" y="222" width="150" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="685" y="241">Patient / Provider APIs</text>
+    <rect x="768" y="222" width="146" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="841" y="241">Payer-to-Payer API</text>
+    <rect x="610" y="260" width="150" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="685" y="279">Prior auth CRD/DTR/PAS</text>
+    <rect x="768" y="260" width="146" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="841" y="279">Terminology service</text>
+  </g>
+  <line x1="760" y1="300" x2="760" y2="322" stroke="#00ff88" stroke-width="1.6" marker-end="url(#dpc-arrow)"/>
+  <g font-size="11.5" font-weight="600" fill="#00ff88" text-anchor="middle">
+    <rect x="610" y="328" width="98" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="659" y="347">Claims</text>
+    <rect x="714" y="328" width="98" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="763" y="347">Eligibility</text>
+    <rect x="818" y="328" width="96" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="866" y="347">Benefits</text>
+    <rect x="610" y="366" width="150" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="685" y="385">Provider &amp; member</text>
+    <rect x="768" y="366" width="146" height="30" rx="6" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="841" y="385">Workflow / orchestration</text>
+  </g>
+  <text x="760" y="424" text-anchor="middle" font-size="11.5" fill="#7fd6a8">CloudHealthOffice is the system of record</text>
+  <text x="760" y="452" text-anchor="middle" font-size="11" fill="#808080">Adopt in full, or migrate domains from the legacy</text>
+  <text x="760" y="469" text-anchor="middle" font-size="11" fill="#808080">core progressively behind the same FHIR boundary</text>
+
+  <!-- shared note -->
+  <text x="500" y="530" text-anchor="middle" font-size="12.5" fill="#a0a0a0">Both patterns present the same stable FHIR boundary to external consumers — the deployment choice is internal to the payer.</text>
+</svg>
