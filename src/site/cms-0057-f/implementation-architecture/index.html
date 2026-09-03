@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>CMS-0057-F Implementation Architecture for Health Plans | Cloud Health Office</title>
+  <meta name="description" content="A practical guide to implementing CMS-0057-F across FHIR APIs, prior authorization (CRD/DTR/PAS), security, terminology, and existing payer core platforms."/>
+  <meta name="keywords" content="CMS-0057-F implementation, CMS-0057-F architecture, CMS-0057-F implementation for health plans, payer FHIR architecture, healthcare payer FHIR APIs, prior authorization API, Da Vinci CRD DTR PAS, Patient Access API, Provider Access API, Payer-to-Payer API, CMS-0057-F QNXT, CMS-0057-F Facets, CMS-0057-F HealthEdge, payer core modernization, FHIR API gateway for payers, payer terminology service"/>
+  <meta name="author" content="Aurelianware, Inc."/>
+  <link rel="canonical" href="https://cloudhealthoffice.com/cms-0057-f/implementation-architecture"/>
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article"/>
+  <meta property="og:site_name" content="Cloud Health Office"/>
+  <meta property="og:title" content="CMS-0057-F Implementation Architecture for Health Plans"/>
+  <meta property="og:description" content="How a health plan actually implements CMS-0057-F across FHIR APIs, prior authorization, Da Vinci CRD/DTR/PAS, terminology, security, and existing payer core systems."/>
+  <meta property="og:url" content="https://cloudhealthoffice.com/cms-0057-f/implementation-architecture"/>
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="CMS-0057-F Implementation Architecture for Health Plans"/>
+  <meta name="twitter:description" content="FHIR APIs, prior authorization, CRD/DTR/PAS, terminology, security, and integration with QNXT, Facets, and HealthEdge — the architecture behind CMS-0057-F."/>
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+
+  <!-- JSON-LD: TechArticle -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "CMS-0057-F Implementation Architecture for Health Plans",
+    "description": "A practical architecture guide for implementing CMS-0057-F across FHIR APIs, prior authorization, Da Vinci CRD/DTR/PAS, security, terminology, and existing payer core platforms.",
+    "url": "https://cloudhealthoffice.com/cms-0057-f/implementation-architecture",
+    "image": "https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc.", "url": "https://github.com/aurelianware" },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Cloud Health Office",
+      "url": "https://cloudhealthoffice.com",
+      "logo": { "@type": "ImageObject", "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" }
+    },
+    "inLanguage": "en",
+    "isPartOf": { "@type": "WebSite", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "about": [
+      { "@type": "Thing", "name": "CMS-0057-F" },
+      { "@type": "Thing", "name": "Payer FHIR architecture" },
+      { "@type": "Thing", "name": "Prior authorization API" }
+    ]
+  }
+  </script>
+
+  <!-- JSON-LD: Breadcrumb -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
+      { "@type": "ListItem", "position": 2, "name": "CMS-0057-F", "item": "https://cloudhealthoffice.com/cms-0057f-compliance" },
+      { "@type": "ListItem", "position": 3, "name": "Implementation Architecture", "item": "https://cloudhealthoffice.com/cms-0057-f/implementation-architecture" }
+    ]
+  }
+  </script>
+
+  <!-- JSON-LD: FAQ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Does CMS-0057-F require replacing a payer core administration system?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. CMS-0057-F requires standardized FHIR R4 APIs and modernized prior authorization; it does not mandate replacing your core administration platform. The rule is satisfied by exposing compliant Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs with the required security and audit behavior. CloudHealthOffice can provide those capabilities as an interoperability layer in front of or alongside an existing core such as QNXT, Facets, or HealthEdge, so the core administration system of record can stay in place."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can CMS-0057-F be implemented with QNXT?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. CloudHealthOffice can operate as a FHIR and prior-authorization interoperability layer while QNXT continues to own claims, eligibility, and benefits as the system of record. The connection between CloudHealthOffice and QNXT is a payer-specific onboarding integration built through the adapter layer during implementation — it is an architecture and deployment model, configured per payer, rather than a universal preconfigured connector."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can CMS-0057-F be implemented with Facets?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The same adapter-based deployment pattern applies to Facets. CloudHealthOffice presents the required FHIR APIs and Da Vinci prior-authorization workflows externally while integrating with Facets for claims, eligibility, and benefits data during onboarding. Facets remains the core administration platform; CloudHealthOffice provides the modern FHIR boundary and prior-authorization orchestration."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can CMS-0057-F be implemented with HealthEdge?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. CloudHealthOffice can sit alongside HealthEdge as a modernization and interoperability layer using the same adapter model, exposing compliant FHIR APIs and prior-authorization workflows while HealthEdge continues to operate as the core. As with any core platform, the specific integration is configured during onboarding rather than shipped as a fixed connector."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Where do CRD, DTR, and PAS fit in a CMS-0057-F implementation?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "CRD (Coverage Requirements Discovery), DTR (Documentation Templates and Rules), and PAS (Prior Authorization Support) are the HL7 Da Vinci implementation guides that make electronic prior authorization work. CRD tells a provider at the point of ordering whether authorization is required and what the payer needs; DTR collects that documentation through FHIR Questionnaire workflows; PAS submits the request and returns the decision. Together they form the prior authorization workflow that CMS-0057-F's Prior Authorization API surfaces."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is FHIR alone enough for CMS-0057-F compliance?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. FHIR is the data and API standard, but CMS-0057-F implementation also requires identity and security (SMART on FHIR and OAuth 2.0), consent and authorization controls, consistent terminology and reference data, prior authorization workflows, integration with operational systems, and observability and audit. FHIR provides the interoperability layer; a compliant implementation is the surrounding architecture that makes those APIs correct, secure, and operable."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does a payer integrate prior authorization with existing utilization management systems?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The FHIR prior-authorization workflow (CRD, DTR, PAS) is exposed at the interoperability boundary, and the decisioning connects to existing utilization management systems through the adapter layer. Requests captured through PAS can be routed to the payer's UM rules and reviewers, and decisions returned over FHIR. This integration is configured per payer during onboarding so the payer's existing medical policy and review processes remain authoritative."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can CloudHealthOffice run alongside an existing core platform?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. This is the interoperability and modernization deployment pattern: CloudHealthOffice provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit while the existing core administration platform continues to own claims, eligibility, and benefits. Integration between the two is built through the adapter layer during onboarding."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can CloudHealthOffice serve as the backend core platform?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. For organizations that want a more modern architecture, CloudHealthOffice services — claims, eligibility, provider, benefits, prior authorization, and terminology/reference data — can participate directly as the underlying payer backend, with no external legacy core. Payers can also migrate domains from a legacy core to CloudHealthOffice progressively behind the same stable FHIR boundary."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --cyan:#00ffff;--green:#00ff88;--blue:#00b4ff;
+      --bg:#05070a;--surface:rgba(8,8,8,.92);--surface-alt:rgba(0,255,255,.03);
+      --border:rgba(0,255,255,.12);--border-bright:rgba(0,255,255,.3);
+      --text:#e0e0e0;--text-muted:#a0a0a0;--text-dim:#606060;
+      --font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--max:1140px;
+    }
+    html{scroll-behavior:smooth}
+    @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+    body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.7;overflow-x:hidden}
+    a{color:var(--cyan)}
+    img,svg{max-width:100%}
+    .skip-to-main{position:absolute;left:-999px;top:0;background:var(--cyan);color:#000;padding:.6rem 1rem;z-index:200}
+    .skip-to-main:focus{left:8px;top:8px}
+
+    nav.site{position:sticky;top:0;z-index:100;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+    .nav-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+    .nav-brand{font-weight:800;font-size:1.05rem;color:#fff;text-decoration:none;display:flex;align-items:center;gap:.6rem}
+    .nav-brand span{opacity:.5;font-weight:400;font-size:.8rem}
+    .nav-links{display:flex;gap:1.8rem;align-items:center}
+    .nav-links a{color:var(--text-muted);text-decoration:none;font-size:.82rem;font-weight:500;transition:color .2s}
+    .nav-links a:hover{color:var(--cyan)}
+    .nav-cta{background:rgba(0,255,255,.08);border:1px solid rgba(0,255,255,.25);color:var(--cyan);padding:.35rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .nav-cta:hover{background:rgba(0,255,255,.15);box-shadow:0 0 20px rgba(0,255,255,.1)}
+
+    .hero{padding:4.5rem 2rem 3rem;position:relative;overflow:hidden}
+    .hero-inner{max-width:var(--max);margin:0 auto;position:relative;z-index:1}
+    .hero::before{content:'';position:absolute;top:-220px;left:20%;width:760px;height:760px;background:radial-gradient(circle,rgba(0,255,255,.05) 0%,transparent 70%);pointer-events:none}
+    .breadcrumb{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-bottom:1.4rem}
+    .breadcrumb a{color:var(--text-muted);text-decoration:none}
+    .breadcrumb a:hover{color:var(--cyan)}
+    .hero-eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:1rem;opacity:.85}
+    .hero h1{font-size:clamp(2rem,5vw,3.1rem);font-weight:900;color:#fff;line-height:1.15;max-width:900px;margin-bottom:1.2rem}
+    .hero h1 em{font-style:normal;background:linear-gradient(90deg,var(--cyan),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .hero-sub{font-size:1.08rem;color:var(--text-muted);max-width:780px;margin-bottom:1.2rem;line-height:1.8}
+    .hero-badges{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.6rem 0 2rem}
+    .badge{font-family:var(--mono);font-size:.68rem;font-weight:500;padding:.3rem .7rem;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted)}
+    .badge.cyan{border-color:rgba(0,255,255,.25);color:var(--cyan)}
+    .badge.green{border-color:rgba(0,255,136,.25);color:var(--green)}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:.8rem}
+    .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.7rem 1.4rem;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .btn-primary{background:rgba(0,255,255,.1);border:1px solid rgba(0,255,255,.3);color:var(--cyan)}
+    .btn-primary:hover{background:rgba(0,255,255,.18);box-shadow:0 0 30px rgba(0,255,255,.1)}
+    .btn-green{background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);color:var(--green)}
+    .btn-green:hover{background:rgba(0,255,136,.18)}
+    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--text-muted)}
+    .btn-ghost:hover{border-color:rgba(255,255,255,.2);color:#fff}
+
+    section{padding:3.5rem 2rem}
+    .container{max-width:var(--max);margin:0 auto}
+    .section-label{font-family:var(--mono);font-size:.65rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:.6rem;opacity:.7}
+    .section-title{font-size:clamp(1.5rem,3.5vw,2.1rem);font-weight:800;color:#fff;margin-bottom:.6rem;line-height:1.25}
+    .section-desc{font-size:.98rem;color:var(--text-muted);max-width:760px;line-height:1.8;margin-bottom:2rem}
+    .prose p{font-size:.98rem;color:var(--text-muted);line-height:1.85;margin-bottom:1.1rem;max-width:820px}
+    .prose p strong{color:#fff;font-weight:600}
+    .prose a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(0,255,255,.25)}
+    .prose a:hover{border-bottom-color:var(--cyan)}
+    .prose h3{color:#fff;font-size:1.2rem;font-weight:700;margin:2rem 0 .8rem}
+    .prose ul{margin:0 0 1.2rem 1.1rem;max-width:820px}
+    .prose li{font-size:.95rem;color:var(--text-muted);line-height:1.8;margin-bottom:.5rem}
+    .prose li strong{color:#e8e8e8;font-weight:600}
+    code{font-family:var(--mono);font-size:.86em;color:var(--green);background:rgba(0,255,136,.07);padding:.1rem .35rem;border-radius:4px}
+
+    /* Table of contents */
+    .toc{border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:1.6rem 1.8rem;max-width:var(--max);margin:0 auto}
+    .toc h2{font-size:.7rem;font-family:var(--mono);text-transform:uppercase;letter-spacing:2px;color:var(--cyan);margin-bottom:1rem}
+    .toc ol{list-style:none;counter-reset:toc;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.5rem 1.6rem}
+    .toc li{counter-increment:toc}
+    .toc a{display:flex;gap:.6rem;color:var(--text-muted);text-decoration:none;font-size:.86rem;padding:.35rem 0;transition:color .2s}
+    .toc a::before{content:counter(toc,decimal-leading-zero);font-family:var(--mono);font-size:.72rem;color:var(--text-dim)}
+    .toc a:hover{color:var(--cyan)}
+
+    .divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);max-width:var(--max);margin:0 auto}
+
+    figure.diagram{margin:2rem auto 0;border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:1rem;max-width:var(--max)}
+    figure.diagram img{width:100%;height:auto;display:block;border-radius:8px}
+    figcaption{font-size:.78rem;color:var(--text-dim);text-align:center;margin-top:.7rem;line-height:1.6}
+
+    .grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.2rem;margin-top:1.5rem}
+    .panel{border:1px solid var(--border);border-radius:12px;background:var(--surface-alt);padding:1.6rem}
+    .panel h3{color:#fff;font-size:1.1rem;font-weight:700;margin-bottom:.7rem;display:flex;align-items:center;gap:.5rem}
+    .panel p{font-size:.9rem;color:var(--text-muted);line-height:1.75}
+    .panel .k{font-family:var(--mono);font-size:.62rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px;display:block;margin-bottom:.6rem}
+
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1.2rem;margin-top:1.5rem}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.6rem;transition:border-color .3s,box-shadow .3s;text-decoration:none;display:block}
+    .card:hover{border-color:var(--border-bright);box-shadow:0 0 30px rgba(0,255,255,.05)}
+    .card .k{font-family:var(--mono);font-size:.62rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px;display:block;margin-bottom:.7rem}
+    .card h3{font-size:1.05rem;font-weight:700;color:#fff;margin-bottom:.4rem}
+    .card p{font-size:.85rem;color:var(--text-muted);line-height:1.7}
+    .card .go{color:var(--cyan);font-size:.82rem;font-weight:600;margin-top:.9rem;display:inline-block}
+
+    .topics{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;margin-top:1.5rem}
+    .topic{border:1px solid var(--border);border-radius:10px;padding:1.3rem;background:var(--surface-alt)}
+    .topic h3{color:var(--cyan);font-size:.95rem;font-weight:700;margin-bottom:.4rem}
+    .topic p{font-size:.82rem;color:var(--text-muted);line-height:1.7}
+
+    .note{border-left:3px solid var(--green);background:rgba(0,255,136,.05);padding:1.2rem 1.4rem;border-radius:0 8px 8px 0;margin:2rem auto 0;max-width:820px}
+    .note p{font-size:.9rem;color:var(--text-muted);line-height:1.8;margin:0}
+    .note strong{color:var(--green)}
+
+    /* comparison table */
+    .table-wrap{overflow-x:auto;margin-top:1.6rem;border:1px solid var(--border);border-radius:12px}
+    table.cmp{border-collapse:collapse;width:100%;min-width:640px;font-size:.9rem}
+    table.cmp th,table.cmp td{text-align:left;padding:.9rem 1.1rem;border-bottom:1px solid var(--border);vertical-align:top}
+    table.cmp thead th{background:rgba(0,255,255,.04);color:#fff;font-weight:700;font-size:.85rem}
+    table.cmp tbody th{color:var(--text-muted);font-weight:600;font-size:.82rem;width:230px}
+    table.cmp td{color:var(--text-muted);line-height:1.6}
+    table.cmp tr:last-child td,table.cmp tr:last-child th{border-bottom:none}
+    .col-a{color:var(--blue)!important}
+    .col-b{color:var(--green)!important}
+
+    /* roadmap */
+    .roadmap{margin-top:1.8rem;display:grid;gap:1rem}
+    .phase{display:grid;grid-template-columns:auto 1fr;gap:1.2rem;align-items:start;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:1.3rem 1.5rem}
+    .phase .num{font-family:var(--mono);font-size:.72rem;font-weight:600;color:#000;background:linear-gradient(135deg,var(--cyan),var(--green));border-radius:8px;padding:.5rem .7rem;white-space:nowrap;text-align:center}
+    .phase h3{color:#fff;font-size:1.02rem;font-weight:700;margin-bottom:.3rem}
+    .phase p{font-size:.88rem;color:var(--text-muted);line-height:1.7;margin:0}
+
+    /* FAQ */
+    .faq{max-width:var(--max);margin:1.6rem auto 0;display:grid;gap:.8rem}
+    details.faq-item{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:0 1.3rem;transition:border-color .25s}
+    details.faq-item[open]{border-color:var(--border-bright)}
+    details.faq-item summary{cursor:pointer;list-style:none;padding:1.1rem 0;font-weight:600;color:#fff;font-size:.98rem;display:flex;justify-content:space-between;align-items:center;gap:1rem}
+    details.faq-item summary::-webkit-details-marker{display:none}
+    details.faq-item summary::after{content:'+';color:var(--cyan);font-weight:400;font-size:1.3rem;line-height:1}
+    details.faq-item[open] summary::after{content:'\2212'}
+    details.faq-item .faq-body{padding:0 0 1.2rem;color:var(--text-muted);font-size:.92rem;line-height:1.8}
+    details.faq-item .faq-body a{color:var(--cyan)}
+
+    .cta-section{text-align:center;padding:4.5rem 2rem;background:linear-gradient(180deg,transparent,rgba(0,255,255,.02),transparent)}
+    .cta-section h2{font-size:clamp(1.5rem,3.5vw,2.1rem);color:#fff;margin-bottom:.8rem}
+    .cta-section p{color:var(--text-muted);max-width:620px;margin:0 auto 1.6rem}
+    .cta-actions{display:flex;flex-wrap:wrap;gap:.8rem;justify-content:center}
+
+    footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;color:var(--text-dim);font-size:.82rem}
+    footer a{color:rgba(0,255,255,.7);text-decoration:none}
+
+    @media(max-width:820px){.nav-links{display:none}}
+    @media(max-width:768px){section{padding:2.6rem 1.2rem}.hero{padding:3rem 1.2rem 2rem}.phase{grid-template-columns:1fr;gap:.6rem}}
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav class="site">
+    <div class="nav-inner">
+      <a href="https://cloudhealthoffice.com" class="nav-brand">Cloud Health Office <span>CMS-0057-F</span></a>
+      <div class="nav-links">
+        <a href="/solutions-payers">Solutions</a>
+        <a href="/cms-0057f-compliance">CMS Compliance</a>
+        <a href="/platform">Platform</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/docs">Docs</a>
+        <a href="/contact" class="nav-cta">Contact Sales →</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main-content">
+    <!-- ═══════════ HERO ═══════════ -->
+    <header class="hero">
+      <div class="hero-inner">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          <a href="/">Home</a> / <a href="/cms-0057f-compliance">CMS-0057-F</a> / <span>Implementation Architecture</span>
+        </nav>
+        <div class="hero-eyebrow">Implementation Pillar</div>
+        <h1>CMS-0057-F <em>Implementation Architecture</em> for Health Plans</h1>
+        <p class="hero-sub">Compliance is more than exposing a few endpoints. A payer needs FHIR APIs, identity and security, prior authorization workflows, terminology and reference data, integration with existing operational systems, observability, and governance — working together as one architecture.</p>
+        <p class="hero-sub">This guide is the technical answer to a harder question than “What is CMS-0057-F?” It is <strong>how a health plan actually implements it</strong> across FHIR APIs, prior authorization, Da Vinci workflows, reference data, identity, and existing core administration systems.</p>
+        <div class="hero-badges">
+          <span class="badge cyan">FHIR R4</span>
+          <span class="badge cyan">Da Vinci CRD · DTR · PAS</span>
+          <span class="badge green">Patient · Provider · Payer-to-Payer</span>
+          <span class="badge green">Prior Authorization API</span>
+          <span class="badge">SMART on FHIR / OAuth 2.0</span>
+          <span class="badge">QNXT · Facets · HealthEdge</span>
+        </div>
+        <div class="hero-actions">
+          <a href="/platform" class="btn btn-primary">Explore CloudHealthOffice →</a>
+          <a href="/docs" class="btn btn-ghost">View technical documentation</a>
+          <a href="/contact" class="btn btn-green">Talk to an architect</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="divider"></div>
+
+    <!-- TABLE OF CONTENTS -->
+    <section aria-label="On this page">
+      <nav class="toc" aria-label="Table of contents">
+        <h2>On this page</h2>
+        <ol>
+          <li><a href="#changes">What CMS-0057-F changes for payer architecture</a></li>
+          <li><a href="#reference">Reference architecture</a></li>
+          <li><a href="#apis">The four API areas</a></li>
+          <li><a href="#davinci">Prior authorization with CRD, DTR &amp; PAS</a></li>
+          <li><a href="#fhir">FHIR and payer interoperability</a></li>
+          <li><a href="#terminology">Terminology and reference data</a></li>
+          <li><a href="#core">Existing core administration integration</a></li>
+          <li><a href="#security">Security and identity</a></li>
+          <li><a href="#observability">Observability and operational readiness</a></li>
+          <li><a href="#roadmap">Implementation roadmap</a></li>
+          <li><a href="#patterns">CloudHealthOffice deployment patterns</a></li>
+          <li><a href="#faq">Frequently asked questions</a></li>
+        </ol>
+      </nav>
+    </section>
+
+    <!-- ═══════════ 1. WHAT CHANGES ═══════════ -->
+    <section id="changes">
+      <div class="container prose">
+        <div class="section-label">01 · Architecture, not endpoints</div>
+        <h2 class="section-title">What CMS-0057-F changes for payer architecture</h2>
+        <p class="section-desc">CMS-0057-F is often read as an API checklist. In practice it changes where a health plan's data has to flow, who is allowed to reach it, and how quickly the plan has to respond — which is an architectural problem, not a point solution.</p>
+        <p>The rule requires impacted payers — Medicare Advantage organizations, state Medicaid and CHIP programs, and Qualified Health Plan issuers on the federal Marketplaces — to expose standardized HL7 FHIR R4 APIs and to modernize prior authorization, with most provisions carrying a compliance date of January 1, 2027. Meeting that date means opening the plan's operational data to <strong>external consumers</strong> it never previously served directly, and doing so without destabilizing the systems that run the business.</p>
+        <p>That pulls in nearly every part of the payer stack:</p>
+        <ul>
+          <li><strong>External API consumers</strong> — member-authorized patient apps, in-network providers, and other payers now request data over FHIR on the member's behalf.</li>
+          <li><strong>Payer operational systems</strong> — claims, encounters, member, and provider data have to be reachable, current, and correctly scoped.</li>
+          <li><strong>Legacy core platforms</strong> — the core administration system of record continues to run adjudication and enrollment while new FHIR surfaces read from and write to it.</li>
+          <li><strong>Utilization management</strong> — prior authorization decisions have to connect to existing medical policy and review workflows, not bypass them.</li>
+          <li><strong>Claims and encounters</strong> — the Patient Access and Provider Access APIs surface adjudicated claims and encounter history under USCDI.</li>
+          <li><strong>Member and provider data</strong> — identity, attribution, and directory data have to be consistent across every API.</li>
+          <li><strong>Prior authorization</strong> — CRD, DTR, and PAS turn a fax-and-phone process into an interoperable, auditable FHIR workflow.</li>
+          <li><strong>Interoperability</strong> — payer-to-payer exchange has to move a member's history when they change plans.</li>
+          <li><strong>Security</strong> — every request has to be authenticated, authorized, scoped, and consent-aware.</li>
+          <li><strong>Auditability</strong> — access and decisions have to be logged and reportable to demonstrate compliance.</li>
+        </ul>
+        <p>Treating these as ten separate projects produces ten brittle integrations. Treating them as one architecture — a stable FHIR boundary with shared identity, terminology, and audit in front of the payer's operational systems — is what makes the program maintainable past the compliance date.</p>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 2. REFERENCE ARCHITECTURE ═══════════ -->
+    <section id="reference">
+      <div class="container prose">
+        <div class="section-label">02 · Reference architecture</div>
+        <h2 class="section-title">A reference architecture for CMS-0057-F</h2>
+        <p class="section-desc">The architecture separates the regulated boundary from the systems of record. External consumers only ever see a stable FHIR surface; the operational systems behind it can change without breaking that contract.</p>
+
+        <figure class="diagram">
+          <img src="/graphics/cms-0057-f/implementation-reference-architecture.svg"
+               alt="Layered CMS-0057-F reference architecture. External consumers — provider and EHR systems, patient apps, trading-partner payers, and regulators — connect over HL7 FHIR R4 into an API and interoperability layer exposing the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs, secured with SMART on FHIR and OAuth 2.0, consent and authorization controls, and audit and observability. That layer calls CloudHealthOffice services: prior authorization, claims and encounters, eligibility and member, provider, benefits, terminology and reference data, workflow and orchestration, and observability. In deployment pattern 1 those services reach an adapter and integration layer that connects to existing payer platforms such as QNXT, Facets, HealthEdge, and other core, utilization-management, and data systems. In deployment pattern 2, shown on the right, CloudHealthOffice services act as the core backend directly with no external legacy core."/>
+          <figcaption>The regulated FHIR boundary sits above CloudHealthOffice services. Pattern 1 integrates an existing core through an adapter layer; Pattern 2 uses CloudHealthOffice services as the core backend. Both present the same FHIR contract externally.</figcaption>
+        </figure>
+
+        <div class="grid-2">
+          <div class="panel">
+            <span class="k">Top to bottom</span>
+            <h3>The regulated boundary</h3>
+            <p>Provider, EHR, patient, and trading-partner traffic enters over FHIR R4. The API &amp; interoperability layer hosts the four required APIs together with SMART on FHIR / OAuth 2.0, consent and authorization controls, and audit and observability. This is the only surface external consumers ever touch.</p>
+          </div>
+          <div class="panel">
+            <span class="k">Below the boundary</span>
+            <h3>Services and integration</h3>
+            <p>CloudHealthOffice services — prior authorization, claims, eligibility/member, provider, benefits, terminology, workflow, and observability — implement the behavior behind the APIs. They either integrate an existing core through the adapter layer (Pattern 1) or act as the core backend directly (Pattern 2).</p>
+          </div>
+        </div>
+
+        <div class="note">
+          <p><strong>Honest scoping:</strong> the adapter / integration layer is an architecture and deployment model. Connections to a specific core administration platform are payer-specific onboarding integrations configured during implementation — not universal preconfigured connectors. The distinction between implemented platform capabilities and per-payer integration work is made explicit throughout this guide.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 3. FOUR API AREAS ═══════════ -->
+    <section id="apis">
+      <div class="container prose">
+        <div class="section-label">03 · The four API areas</div>
+        <h2 class="section-title">Patient Access, Provider Access, Payer-to-Payer, Prior Authorization</h2>
+        <p class="section-desc">CMS-0057-F centers on four FHIR R4 APIs. CloudHealthOffice implements all four as a platform capability; each payer's data mapping is configured during onboarding. The <a href="/cms-0057f-compliance">CMS-0057-F compliance overview</a> maps each API to its FHIR resources in detail.</p>
+        <div class="cards">
+          <a class="card" href="/cms-0057f-compliance#quick-answers">
+            <span class="k">API 1</span>
+            <h3>Patient Access API</h3>
+            <p>Claims, encounters, and clinical data delivered to member-authorized apps under USCDI, secured with SMART on FHIR consent.</p>
+            <span class="go">See the requirements →</span>
+          </a>
+          <a class="card" href="/cms-0057f-compliance#quick-answers">
+            <span class="k">API 2</span>
+            <h3>Provider Access API</h3>
+            <p>Member data made available to in-network providers, with attribution and opt-out handling built into the boundary.</p>
+            <span class="go">See the requirements →</span>
+          </a>
+          <a class="card" href="/cms-0057f-compliance#quick-answers">
+            <span class="k">API 3</span>
+            <h3>Payer-to-Payer API</h3>
+            <p>Member history exchanged between plans at enrollment, so coverage transitions carry claims and clinical context forward.</p>
+            <span class="go">See the requirements →</span>
+          </a>
+          <a class="card" href="/cms-0057f-compliance#capabilities">
+            <span class="k">API 4</span>
+            <h3>Prior Authorization API</h3>
+            <p>Authorization status, decisions, and rationale exposed over FHIR — the surface for the Da Vinci CRD/DTR/PAS workflow below.</p>
+            <span class="go">See the requirements →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 4. DA VINCI ═══════════ -->
+    <section id="davinci">
+      <div class="container prose">
+        <div class="section-label">04 · Da Vinci prior authorization</div>
+        <h2 class="section-title">Prior authorization with CRD, DTR, and PAS</h2>
+        <p class="section-desc">The Prior Authorization API is the visible surface; the HL7 Da Vinci implementation guides are the workflow behind it. Three guides turn prior authorization from a fax-and-phone exchange into an interoperable, auditable sequence.</p>
+
+        <figure class="diagram">
+          <img src="/graphics/insights/cms0057-crd-dtr-pas-flow.svg"
+               alt="Horizontal lifecycle diagram of the Da Vinci prior authorization workflow: CRD discovers coverage requirements at order-select and order-sign, DTR collects the required documentation through FHIR Questionnaire and QuestionnaireResponse, and PAS submits the request and returns the decision, with the CloudHealthOffice services that implement each stage shown beneath, feeding an authorization service."/>
+          <figcaption>CRD discovers what is required, DTR collects the documentation, and PAS submits and decides — the sequence the Prior Authorization API exposes.</figcaption>
+        </figure>
+
+        <div class="topics">
+          <div class="topic"><h3>CRD</h3><p><strong>Coverage Requirements Discovery.</strong> Through CDS Hooks, the payer tells the provider at order-select and order-sign whether authorization is required and what documentation applies.</p></div>
+          <div class="topic"><h3>DTR</h3><p><strong>Documentation Templates &amp; Rules.</strong> FHIR <code>Questionnaire</code> and <code>QuestionnaireResponse</code> workflows collect exactly what the payer needs, prefilled from clinical data where possible.</p></div>
+          <div class="topic"><h3>PAS</h3><p><strong>Prior Authorization Support.</strong> The request is submitted over FHIR (mapped to X12 278 where required), validated, routed to review, and a decision with rationale is returned.</p></div>
+        </div>
+
+        <p style="margin-top:1.8rem">This is a concise introduction on purpose. For the full end-to-end workflow — including how CRD, DTR, and PAS integrate with QNXT, Facets, and HealthEdge — see the dedicated pillar article and the implementation guide.</p>
+        <div class="cards">
+          <a class="card" href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">
+            <span class="k">Pillar Article</span>
+            <h3>CRD, DTR, PAS with QNXT, Facets &amp; HealthEdge</h3>
+            <p>How CloudHealthOffice implements the Da Vinci workflow alongside — or as — a payer core.</p>
+            <span class="go">Read the article →</span>
+          </a>
+          <a class="card" href="/docs/prior-auth-guide">
+            <span class="k">Implementation Guide</span>
+            <h3>Prior Authorization Guide</h3>
+            <p>The end-to-end FHIR prior authorization workflow, from discovery to decision.</p>
+            <span class="go">Read the guide →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 5. FHIR INTEROP ═══════════ -->
+    <section id="fhir">
+      <div class="container prose">
+        <div class="section-label">05 · FHIR as an interoperability layer</div>
+        <h2 class="section-title">FHIR and payer interoperability</h2>
+        <p class="section-desc">For a payer, FHIR is not a database format — it is the contract between external consumers and internal operational systems. The value is in what that contract lets you change without breaking callers.</p>
+        <p>A health plan's operational data lives in adjudication engines, enrollment systems, care-management tools, and data warehouses that were never designed to be queried by a member's phone app. FHIR becomes the <strong>translation and stability layer</strong> between those systems and the outside world: external consumers speak a single, versioned resource model, while the plan is free to source each resource from whichever internal system owns it.</p>
+        <p>Implemented well, that boundary gives a payer three things the underlying systems can't provide on their own:</p>
+        <ul>
+          <li><strong>A stable external contract.</strong> Patient Access, Provider Access, and Payer-to-Payer callers depend on FHIR resources, not on the core's internal schema — so the core can be modernized or replaced without a coordinated external migration.</li>
+          <li><strong>Consistent semantics across sources.</strong> A <code>Claim</code>, <code>Coverage</code>, or <code>ExplanationOfBenefit</code> means the same thing whether it originated in claims, enrollment, or a warehouse, because the mapping and terminology are enforced at the boundary.</li>
+          <li><strong>A single place to apply policy.</strong> Security, consent, scoping, and audit are enforced once at the FHIR layer rather than reimplemented in every backend integration.</li>
+        </ul>
+        <p>This is why the reference architecture puts the FHIR APIs above the services and the core: the interoperability layer is what lets a payer meet an external, regulated contract while the systems of record evolve on their own timeline.</p>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 6. TERMINOLOGY ═══════════ -->
+    <section id="terminology">
+      <div class="container prose">
+        <div class="section-label">06 · Terminology and reference data</div>
+        <h2 class="section-title">Terminology and reference data</h2>
+        <p class="section-desc">Payer APIs are only as trustworthy as the codes inside them. Consistent terminology is what makes a FHIR resource returned to a provider mean the same thing as the code adjudicated in the core.</p>
+        <p>Every one of the four APIs depends on shared reference data. When a provider's system reads a coverage requirement, or a member's app renders an explanation of benefits, the codes have to resolve consistently across systems that were built independently. That requires the plan to manage, as first-class infrastructure:</p>
+        <ul>
+          <li><strong>Code systems</strong> — SNOMED CT, LOINC, ICD-10-CM, CPT, and HCPCS with correct versioning.</li>
+          <li><strong>Value sets</strong> — the bounded sets of codes valid for a given element or workflow.</li>
+          <li><strong>Procedure codes</strong> and <strong>diagnoses</strong> — carried consistently from order through authorization to claim.</li>
+          <li><strong>Benefit and reference data</strong> — plan, network, and cost-sharing references the APIs resolve against.</li>
+          <li><strong>Mappings</strong> — crosswalks such as SNOMED CT to ICD-10-CM or CPT via <code>ConceptMap/$translate</code>.</li>
+          <li><strong>Validation</strong> — rejecting resources that carry codes outside their required value sets before they ever reach a consumer.</li>
+        </ul>
+        <p>Without a terminology service, each integration re-implements its own mappings and they drift apart. CloudHealthOffice provides FHIR-native terminology and crosswalk services so the same codes resolve identically across the prior authorization, claims, and access APIs. The <a href="/docs/terminology-guide">terminology guide</a> shows the translation workflows in detail.</p>
+        <div class="cards">
+          <a class="card" href="/docs/terminology-guide">
+            <span class="k">Implementation Guide</span>
+            <h3>Terminology &amp; Crosswalk Guide</h3>
+            <p>FHIR-native SNOMED CT, ICD-10-CM, CPT, and HCPCS translation with <code>ConceptMap/$translate</code>.</p>
+            <span class="go">Read the guide →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 7. CORE INTEGRATION ═══════════ -->
+    <section id="core">
+      <div class="container prose">
+        <div class="section-label">07 · Existing core administration integration</div>
+        <h2 class="section-title">Integrating existing core administration systems</h2>
+        <p class="section-desc">Most impacted payers already run a core administration platform. The architecture is designed so CMS-0057-F does not force a rip-and-replace — while leaving the door open to modernization when the plan is ready.</p>
+        <p>CloudHealthOffice supports two deployment patterns for the systems of record. In the <strong>interoperability / modernization</strong> pattern, CloudHealthOffice sits in front of or alongside an existing payer core and integrates through the adapter layer, providing modern FHIR and prior-authorization capabilities without replacing the core. In the <strong>CloudHealthOffice-as-core</strong> pattern, the platform's own claims, eligibility, provider, benefits, prior authorization, and terminology services participate directly as the backend.</p>
+
+        <figure class="diagram">
+          <img src="/graphics/cms-0057-f/deployment-patterns-comparison.svg"
+               alt="Side-by-side comparison of two deployment patterns. Pattern 1, CloudHealthOffice plus existing core: external FHIR consumers connect to CloudHealthOffice, which provides the FHIR APIs, CRD/DTR/PAS, terminology, security, and audit, then connects through an adapter and integration layer to an existing payer core such as QNXT, Facets, or HealthEdge that continues to own claims, eligibility, and benefits as the system of record. Pattern 2, CloudHealthOffice as core: the same external FHIR consumers connect to CloudHealthOffice, which provides both the FHIR APIs and the underlying claims, eligibility, benefits, provider, and prior-authorization services directly, with no external legacy core. Both patterns present the same stable FHIR boundary to external consumers."/>
+          <figcaption>The same FHIR boundary, two backends. In Pattern 1 the existing core stays the system of record; in Pattern 2 CloudHealthOffice is the system of record — and a plan can migrate domains from one to the other behind the boundary.</figcaption>
+        </figure>
+
+        <div class="table-wrap">
+          <table class="cmp">
+            <thead>
+              <tr>
+                <th scope="col">Consideration</th>
+                <th scope="col" class="col-a">CloudHealthOffice + existing core</th>
+                <th scope="col" class="col-b">CloudHealthOffice as core</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">System of record</th>
+                <td>Existing core (QNXT, Facets, HealthEdge, or other) keeps claims, eligibility, and benefits.</td>
+                <td>CloudHealthOffice services own claims, eligibility, benefits, provider, and prior authorization.</td>
+              </tr>
+              <tr>
+                <th scope="row">FHIR boundary</th>
+                <td>Provided by CloudHealthOffice above the core.</td>
+                <td>Provided by CloudHealthOffice as part of the platform.</td>
+              </tr>
+              <tr>
+                <th scope="row">Integration work</th>
+                <td>Adapter-based, payer-specific, configured during onboarding.</td>
+                <td>Domain configuration rather than external core integration.</td>
+              </tr>
+              <tr>
+                <th scope="row">Change to core</th>
+                <td>None required to meet the rule; modernize later on your timeline.</td>
+                <td>Adopt in full, or migrate domains from the legacy core progressively.</td>
+              </tr>
+              <tr>
+                <th scope="row">Best fit</th>
+                <td>Plans meeting the 2027 date without disrupting operations.</td>
+                <td>Plans that want a modern, FHIR-native backend architecture.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          <p><strong>What is implemented vs. configured:</strong> the FHIR APIs, prior-authorization workflow, terminology services, and the adapter model are implemented platform capabilities. Integration with a specific named core administration platform is per-payer onboarding work. This guide does not imply that a turnkey QNXT, Facets, or HealthEdge connector ships preconfigured.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 8. SECURITY ═══════════ -->
+    <section id="security">
+      <div class="container prose">
+        <div class="section-label">08 · Security and identity</div>
+        <h2 class="section-title">Security and identity</h2>
+        <p class="section-desc">CMS-0057-F opens payer data to external consumers, which makes identity and access control part of the architecture rather than a deployment afterthought. Every request has to prove who is asking, on whose behalf, and for what.</p>
+        <p>The security model spans the external boundary and the internal service mesh:</p>
+        <ul>
+          <li><strong>OAuth 2.0</strong> — the authorization framework for every external API call, issuing scoped, expiring access tokens.</li>
+          <li><strong>Authentication</strong> — SMART on FHIR app registration and launch flows establish who the caller is before any data is returned.</li>
+          <li><strong>Authorization</strong> — access decisions bind the token, the member's consent, and the resource being requested.</li>
+          <li><strong>Service-to-service identity</strong> — internal calls between the FHIR layer, services, and adapters carry their own verifiable identity, not shared secrets.</li>
+          <li><strong>Scopes and permissions</strong> — SMART scopes constrain each app to exactly the resources and actions it was granted.</li>
+          <li><strong>Auditing</strong> — every access and prior-authorization decision is logged in a form that can be reported for compliance.</li>
+          <li><strong>Tenant isolation</strong> — in a multi-tenant deployment, one plan's data is never reachable from another's context.</li>
+          <li><strong>Least privilege</strong> — every component, human and machine, gets the minimum access its role requires.</li>
+        </ul>
+        <p>These are real deployment considerations, not abstractions: a Patient Access request from a consumer app and a Provider Access request from an in-network clinic are authorized differently, and payer-to-payer exchange introduces a third trust relationship. Enforcing all three consistently at the FHIR boundary — with audit behind it — is what makes the APIs safe to expose. The <a href="/trust">trust and security overview</a> describes the platform's controls.</p>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 9. OBSERVABILITY ═══════════ -->
+    <section id="observability">
+      <div class="container prose">
+        <div class="section-label">09 · Observability and operational readiness</div>
+        <h2 class="section-title">Observability and operational readiness</h2>
+        <p class="section-desc">A regulatory API that is deployed but unmonitored is a liability. These are production systems that external parties depend on, with a regulatory obligation behind their availability.</p>
+        <p>Once the APIs are live, the work shifts from building to operating. A member's app failing to load claims, a provider's authorization request timing out, or a payer-to-payer exchange silently dropping records are all operational incidents with compliance consequences. Readiness means the plan can <strong>see</strong> that behavior in real time — latency, error rates, and throughput per API — and has defined alerting and incident response before it is needed, not after the first outage.</p>
+        <p>That is why observability is a layer in the reference architecture, not an add-on: the same boundary that enforces security also emits the signals that prove the APIs are healthy and the audit trail that proves they are compliant. The <a href="/docs/observability-alerting-incident-response">observability, alerting &amp; incident response runbook</a> covers monitoring, paging, and response, and the <a href="/docs/production-readiness-checklist">production readiness checklist</a> gathers the operational gates before go-live.</p>
+        <div class="cards">
+          <a class="card" href="/docs/observability-alerting-incident-response">
+            <span class="k">Runbook</span>
+            <h3>Observability &amp; Incident Response</h3>
+            <p>Monitoring, alerting, and paging for regulated payer APIs in production.</p>
+            <span class="go">Read the runbook →</span>
+          </a>
+          <a class="card" href="/docs/production-readiness-checklist">
+            <span class="k">Checklist</span>
+            <h3>Production Readiness Checklist</h3>
+            <p>The operational gates to clear before routing production traffic.</p>
+            <span class="go">See the checklist →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 10. ROADMAP ═══════════ -->
+    <section id="roadmap">
+      <div class="container prose">
+        <div class="section-label">10 · Implementation roadmap</div>
+        <h2 class="section-title">A phased implementation roadmap</h2>
+        <p class="section-desc">A practical sequence for getting from today's core to a compliant, operable CMS-0057-F implementation — each phase building on the boundary established by the last.</p>
+        <div class="roadmap">
+          <div class="phase"><div class="num">Phase 1</div><div><h3>Inventory systems and data</h3><p>Map where member, provider, claims, encounter, benefit, and authorization data live today, and which system owns each. This inventory determines every adapter and mapping that follows.</p></div></div>
+          <div class="phase"><div class="num">Phase 2</div><div><h3>Establish the FHIR / interoperability boundary</h3><p>Stand up the FHIR R4 layer as the stable external contract, with resource models and the terminology service in place before any external consumer is onboarded.</p></div></div>
+          <div class="phase"><div class="num">Phase 3</div><div><h3>Identity and security</h3><p>Implement OAuth 2.0, SMART on FHIR registration and launch, scopes, consent, service-to-service identity, tenant isolation, and audit — the gate every API call passes through.</p></div></div>
+          <div class="phase"><div class="num">Phase 4</div><div><h3>Patient, Provider, and Payer-to-Payer APIs</h3><p>Deliver the three access APIs against the boundary, wiring each FHIR resource to its owning system and enforcing attribution, consent, and opt-out.</p></div></div>
+          <div class="phase"><div class="num">Phase 5</div><div><h3>Prior authorization: CRD, DTR, PAS</h3><p>Implement the Da Vinci workflow and expose it through the Prior Authorization API — discovery at ordering, documentation capture, submission, and decisioning.</p></div></div>
+          <div class="phase"><div class="num">Phase 6</div><div><h3>Integrate core and UM systems</h3><p>Connect the adapter layer to the existing core and utilization-management systems so decisions and data flow to and from the systems of record — or stand up CloudHealthOffice services as the backend.</p></div></div>
+          <div class="phase"><div class="num">Phase 7</div><div><h3>Testing, monitoring, and auditability</h3><p>Validate against the implementation guides, load-test the APIs, wire observability and alerting, and confirm the audit trail is complete and reportable.</p></div></div>
+          <div class="phase"><div class="num">Phase 8</div><div><h3>Production readiness</h3><p>Clear the operational gates — incident response, disaster recovery, and sign-off — before routing production traffic and attesting to compliance.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 11. DEPLOYMENT PATTERNS ═══════════ -->
+    <section id="patterns">
+      <div class="container prose">
+        <div class="section-label">11 · Deployment patterns</div>
+        <h2 class="section-title">CloudHealthOffice deployment patterns</h2>
+        <p class="section-desc">The same architecture supports several adoption paths. Which one fits depends on how much of the core a plan wants to modernize, and how quickly.</p>
+        <div class="grid-2">
+          <div class="panel">
+            <span class="k">Pattern A</span>
+            <h3>Augment the existing stack</h3>
+            <p>CloudHealthOffice provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit in front of an existing core. The core stays the system of record; the plan meets the rule without disrupting operations. Integration is configured through the adapter layer during onboarding.</p>
+          </div>
+          <div class="panel">
+            <span class="k">Pattern B</span>
+            <h3>Staged modernization</h3>
+            <p>Start by augmenting, then migrate domains — claims, eligibility, benefits — from the legacy core to CloudHealthOffice services one at a time, behind the same FHIR boundary, so external consumers see no change as the backend moves.</p>
+          </div>
+          <div class="panel">
+            <span class="k">Pattern C</span>
+            <h3>Full CloudHealthOffice backend</h3>
+            <p>For a modern, FHIR-native architecture, CloudHealthOffice services provide the underlying payer capabilities directly, with no external legacy core. The FHIR boundary and the systems of record are one platform.</p>
+          </div>
+          <div class="panel">
+            <span class="k">Positioning</span>
+            <h3>What we do — and don't — claim</h3>
+            <p>CloudHealthOffice is not only a core-replacement platform. It is an interoperability and modernization layer <em>and</em>, when a plan wants it, a modern backend. Named-core integrations are described as an architecture and deployment model configured per payer — not as finished, shipped connectors.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ 12. FAQ ═══════════ -->
+    <section id="faq">
+      <div class="container">
+        <div class="section-label">12 · FAQ</div>
+        <h2 class="section-title">Frequently asked questions</h2>
+        <p class="section-desc">The questions payer architects and health-plan technology leaders ask most when scoping a CMS-0057-F implementation.</p>
+      </div>
+      <div class="faq">
+        <details class="faq-item">
+          <summary>Does CMS-0057-F require replacing a payer core administration system?</summary>
+          <div class="faq-body">No. CMS-0057-F requires standardized FHIR R4 APIs and modernized prior authorization; it does not mandate replacing your core administration platform. CloudHealthOffice can provide those capabilities as an interoperability layer in front of or alongside an existing core such as QNXT, Facets, or HealthEdge, so the system of record can stay in place. See <a href="#core">existing core integration</a>.</div>
+        </details>
+        <details class="faq-item">
+          <summary>Can CMS-0057-F be implemented with QNXT?</summary>
+          <div class="faq-body">Yes. CloudHealthOffice operates as a FHIR and prior-authorization layer while QNXT continues to own claims, eligibility, and benefits. The connection is a payer-specific onboarding integration built through the adapter layer — an architecture and deployment model configured per payer, not a universal preconfigured connector.</div>
+        </details>
+        <details class="faq-item">
+          <summary>Can CMS-0057-F be implemented with Facets?</summary>
+          <div class="faq-body">Yes. The same adapter-based pattern applies to Facets: CloudHealthOffice presents the required FHIR APIs and Da Vinci workflows externally while integrating with Facets for claims, eligibility, and benefits during onboarding. Facets remains the core administration platform.</div>
+        </details>
+        <details class="faq-item">
+          <summary>Can CMS-0057-F be implemented with HealthEdge?</summary>
+          <div class="faq-body">Yes. CloudHealthOffice can sit alongside HealthEdge as a modernization and interoperability layer using the same adapter model, exposing compliant FHIR APIs and prior-authorization workflows while HealthEdge continues to operate as the core. The specific integration is configured during onboarding.</div>
+        </details>
+        <details class="faq-item">
+          <summary>Where do CRD, DTR, and PAS fit?</summary>
+          <div class="faq-body">CRD, DTR, and PAS are the HL7 Da Vinci implementation guides that make electronic prior authorization work: CRD discovers whether authorization is required and what is needed, DTR collects that documentation through FHIR Questionnaire workflows, and PAS submits the request and returns the decision. Together they form the workflow the Prior Authorization API surfaces. See <a href="#davinci">prior authorization with CRD, DTR &amp; PAS</a>.</div>
+        </details>
+        <details class="faq-item">
+          <summary>Is FHIR alone enough for CMS-0057-F compliance?</summary>
+          <div class="faq-body">No. FHIR is the data and API standard, but a compliant implementation also requires identity and security, consent and authorization controls, consistent terminology, prior-authorization workflows, integration with operational systems, and observability and audit. FHIR provides the interoperability layer; compliance is the surrounding architecture that makes the APIs correct, secure, and operable.</div>
+        </details>
+        <details class="faq-item">
+          <summary>How does a payer integrate prior authorization with existing UM systems?</summary>
+          <div class="faq-body">The FHIR prior-authorization workflow is exposed at the boundary, and decisioning connects to existing utilization-management systems through the adapter layer. Requests captured through PAS route to the payer's UM rules and reviewers, and decisions return over FHIR. This is configured per payer during onboarding so existing medical policy and review processes stay authoritative.</div>
+        </details>
+        <details class="faq-item">
+          <summary>Can CloudHealthOffice run alongside an existing core platform?</summary>
+          <div class="faq-body">Yes — this is the interoperability and modernization pattern. CloudHealthOffice provides the FHIR APIs, prior-authorization workflow, terminology, security, and audit while the existing core continues to own claims, eligibility, and benefits, with integration built through the adapter layer during onboarding.</div>
+        </details>
+        <details class="faq-item">
+          <summary>Can CloudHealthOffice serve as the backend core platform?</summary>
+          <div class="faq-body">Yes. CloudHealthOffice services — claims, eligibility, provider, benefits, prior authorization, and terminology/reference data — can participate directly as the underlying payer backend, with no external legacy core. Plans can also migrate domains from a legacy core progressively behind the same FHIR boundary.</div>
+        </details>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════════ RELATED ═══════════ -->
+    <section>
+      <div class="container prose">
+        <div class="section-label">Go deeper</div>
+        <h2 class="section-title">Related guidance &amp; references</h2>
+        <p class="section-desc">This pillar connects the CMS-0057-F readiness overview to the implementation guides and platform documentation behind it.</p>
+        <div class="cards">
+          <a class="card" href="/cms-0057f-compliance">
+            <span class="k">Readiness Overview</span>
+            <h3>CMS-0057-F Compliance</h3>
+            <p>The vendor-neutral readiness layer, the four required FHIR APIs, and what CMS-0057-F requires of impacted payers.</p>
+            <span class="go">Explore readiness →</span>
+          </a>
+          <a class="card" href="/insights/cms-0057-f">
+            <span class="k">Insights Series</span>
+            <h3>CMS-0057-F &amp; Payer Modernization</h3>
+            <p>Architecture and implementation guidance for CRD, DTR, PAS, terminology, and legacy-core modernization.</p>
+            <span class="go">Read the series →</span>
+          </a>
+          <a class="card" href="/docs/prior-auth-guide">
+            <span class="k">Implementation Guide</span>
+            <h3>Prior Authorization Guide</h3>
+            <p>How CRD, DTR, and PAS come together into an end-to-end FHIR prior authorization workflow.</p>
+            <span class="go">Read the guide →</span>
+          </a>
+          <a class="card" href="/docs/claims-guide">
+            <span class="k">Implementation Guide</span>
+            <h3>Claims Guide</h3>
+            <p>How claims and encounters are adjudicated and surfaced to the Patient and Provider Access APIs.</p>
+            <span class="go">Read the guide →</span>
+          </a>
+          <a class="card" href="/docs/eligibility-guide">
+            <span class="k">Implementation Guide</span>
+            <h3>Eligibility Guide</h3>
+            <p>Member and eligibility data behind the access APIs and prior-authorization workflow.</p>
+            <span class="go">Read the guide →</span>
+          </a>
+          <a class="card" href="/docs/terminology-guide">
+            <span class="k">Implementation Guide</span>
+            <h3>Terminology &amp; Crosswalk</h3>
+            <p>FHIR-native SNOMED CT, ICD-10-CM, and CPT translation with <code>ConceptMap/$translate</code>.</p>
+            <span class="go">Read the guide →</span>
+          </a>
+          <a class="card" href="/docs/api">
+            <span class="k">Reference</span>
+            <h3>API Documentation</h3>
+            <p>The platform's FHIR and operational API surface for developers and integrators.</p>
+            <span class="go">Browse the APIs →</span>
+          </a>
+          <a class="card" href="/docs/architecture">
+            <span class="k">Architecture</span>
+            <h3>Platform Architecture</h3>
+            <p>How the services fit together — FHIR surface, terminology, rule engine, and payer integration.</p>
+            <span class="go">See the architecture →</span>
+          </a>
+          <a class="card" href="/insights/million-claim-challenge">
+            <span class="k">Evidence</span>
+            <h3>Million Claim Challenge</h3>
+            <p>How the platform's claims engine was validated at scale — one million claims, repeatably.</p>
+            <span class="go">See the evidence →</span>
+          </a>
+          <a class="card" href="/docs/quickstart">
+            <span class="k">Get Started</span>
+            <h3>Quickstart</h3>
+            <p>Stand up the platform and exercise the FHIR surface in a working environment.</p>
+            <span class="go">Start building →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ CTA ═══════════ -->
+    <section class="cta-section">
+      <div class="container">
+        <div class="section-label" style="text-align:center">Get Started</div>
+        <h2>Implement CMS-0057-F on an architecture that lasts past 2027.</h2>
+        <p>See how CloudHealthOffice establishes a stable FHIR boundary in front of your existing core — or becomes the modern backend itself — on your CMS-0057-F timeline.</p>
+        <div class="cta-actions">
+          <a href="/platform" class="btn btn-primary">Explore CloudHealthOffice →</a>
+          <a href="/docs" class="btn btn-ghost">Technical documentation</a>
+          <a href="/contact" class="btn btn-green">Talk to an architect</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Cloud Health Office — <a href="https://github.com/aurelianware">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com">Commercial licensing</a></p>
+    <p style="margin-top:.4rem"><a href="/cms-0057f-compliance">CMS-0057-F</a> &nbsp;·&nbsp; <a href="/insights/cms-0057-f">Insights</a> &nbsp;·&nbsp; <a href="/platform">Platform</a> &nbsp;·&nbsp; <a href="/docs">Docs</a> &nbsp;·&nbsp; <a href="/contact">Contact</a></p>
+  </footer>
+</body>
+</html>
