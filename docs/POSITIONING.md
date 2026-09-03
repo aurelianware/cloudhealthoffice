@@ -2,7 +2,7 @@
 
 **Audience:** internal teams, partners, and evaluators deciding how Cloud Health Office fits into their roadmap. Payer-facing pitch materials should derive from this document and not contradict it.
 
-**Last updated:** July 2026
+**Last updated:** September 2026
 
 ## Summary
 
@@ -11,7 +11,7 @@ Cloud Health Office is a cloud-native, Kubernetes-native, multi-tenant platform 
 - **Public Tools** — free utilities (fee schedule lookup, free-tier claims repricing) that establish credibility and serve as the top of the commercial funnel.
 - **Transactional Services** — per-call APIs (claims repricing, pricing API) available via self-serve subscription. Developer- and integrator-accessible.
 - **Managed Data Services** — subscription services for data that changes constantly (state Medicaid compliance updates, CMS fee schedule updates, provider verification, terminology). Recurring value, recurring revenue.
-- **Platform Engagement** — payer-scale relationships priced per member per month (PMPM). Three layers: Compliance Accelerator (Layer 1), Progressive Modernization (Layer 2), Full CAPS Platform (Layer 3). Multi-year contracts, multi-million-dollar deals.
+- **Platform Engagement** — payer-scale relationships priced per member per month (PMPM). Three layers: Foothold (Layer 1), Domain cutover (Layer 2), Core (Layer 3). Multi-year contracts, multi-million-dollar deals.
 
 Customers enter at any product line and expand over time. We don't ask customers to commit to one product line. We meet them where they are and let them expand.
 
@@ -130,7 +130,7 @@ Platform Engagement is the highest-investment product line and the one payers ty
 
 Platform Engagement engages customers at three layers, each a coherent offering on its own, each containing the previous:
 
-### Layer 1 — Compliance Accelerator
+### Layer 1 — Foothold
 
 #### What we claim
 
@@ -176,7 +176,7 @@ A payer locked into QNXT, HealthEdge, Facets, or a comparable legacy core, stari
 
 Small annual subscription, weeks-to-deploy, Kubernetes cluster or Azure AKS target. Price structure and list figures live in the pitch materials, not this document.
 
-### Layer 2 — Progressive Modernization
+### Layer 2 — Domain cutover
 
 #### What we claim
 
@@ -214,7 +214,7 @@ A payer frustrated with QNXT's license cost, innovation pace, or integration fri
 
 Multi-year relationship, priced per domain or per member per month, expansion over time. The contract structure is explicitly designed for additive scope — a new domain is an amendment, not a renegotiation.
 
-### Layer 3 — Full CAPS Platform
+### Layer 3 — Core
 
 #### What we claim
 
@@ -334,11 +334,11 @@ For integrations that need recurring access to data CHO maintains (state Medicai
 
 Transactional Services and Managed Data Services together cover most operational data needs without requiring a Platform Engagement commitment. A TPA running monthly rate validation against the Claims Repricing API and subscribing to quarterly CMS Fee Schedule Updates is a complete relationship at a few-thousand-dollars-per-month scale; no multi-year contract required.
 
-When CMS-0057-F compliance pressure grows, Layer 1 — Compliance Accelerator — is the natural next step. It deploys alongside the existing core admin system without touching the adjudication path. A small plan that has already proven CHO at the Transactional Services and Managed Data Services tiers has substantially de-risked the Layer 1 conversation: the engines are familiar, the data quality is verified, the commercial relationship exists.
+When CMS-0057-F compliance pressure grows, Layer 1 — Foothold — is the natural next step. It deploys alongside the existing core admin system without touching the adjudication path. A small plan that has already proven CHO at the Transactional Services and Managed Data Services tiers has substantially de-risked the Layer 1 conversation: the engines are familiar, the data quality is verified, the commercial relationship exists.
 
 ### For established payers on existing core admin systems
 
-Our primary engagement frame for established payers is Layer 2 — Progressive Modernization, starting with appeals plus the CMS-0057-F compliance surface that Layer 1 already delivers. Layer 1 alone is available if a multi-year commitment is premature. Layer 3 is the aspirational end-state story for the CTO conversation, with honest disclosure of the gaps listed above.
+Our primary engagement frame for established payers is Layer 2 — Domain cutover, starting with appeals plus the CMS-0057-F compliance surface that Layer 1 already delivers. Layer 1 alone is available if a multi-year commitment is premature. Layer 3 is the aspirational end-state story for the CTO conversation, with honest disclosure of the gaps listed above.
 
 Managed Data Services supplement any Platform Engagement layer. A payer on Layer 1 today benefits from CMS Fee Schedule Updates, Provider Verification, and state Medicaid compliance subscriptions even before Layer 2 domain migrations begin. The same data infrastructure powers both.
 

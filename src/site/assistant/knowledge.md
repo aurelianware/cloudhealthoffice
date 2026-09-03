@@ -34,11 +34,9 @@ HealthEdge.
 - Not Apache-licensed open source.
 
 ## The three layers
-- **Layer 1 — Compliance.** Meet CMS-0057-F beside your core. FHIR compliance surface,
-  weeks to deploy. Most established payers start here.
-- **Layer 2 — Progressive modernization.** Replace one domain at a time. Your system of
-  record stays authoritative until you choose to cut over.
-- **Layer 3 — Full platform.** End-to-end cloud-native claims administration.
+- **Layer 1 — Foothold.** CMS-0057-F FHIR APIs in your cloud while QNXT, Facets, or HealthEdge stays the system of record. Most established payers start here.
+- **Layer 2 — Domain cutover.** Move one operational domain (prior auth, provider, eligibility, or claims intake) onto Cloud Health Office. The core remains system of record for everything not cut over. Reversible.
+- **Layer 3 — Core.** Cloud Health Office becomes the ledger for claims, benefits, and payments only when you choose. A path, not a completed QNXT replacement reference.
 
 ## CMS-0057-F (reuse verbatim)
 CMS-0057-F is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and
