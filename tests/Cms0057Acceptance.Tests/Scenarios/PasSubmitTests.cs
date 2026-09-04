@@ -79,7 +79,7 @@ public class PasSubmitTests
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
             Use = ClaimUseCode.Preauthorization,
             Patient = new ResourceReference("Patient/pat-001"),
-            Created = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+            Created = "2026-09-01", // fixed for deterministic, reproducible bundles
             Insurer = new ResourceReference("Organization/cho-payer"),
             Provider = new ResourceReference("Practitioner/npi-1234567890"),
             Priority = new CodeableConcept("http://terminology.hl7.org/CodeSystem/processpriority", priority),

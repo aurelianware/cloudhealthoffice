@@ -63,10 +63,27 @@ internal static class AcceptanceContext
 
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies().Where(IsProduct))
         {
-            Type[] types;
-            try { types = asm.GetTypes(); }
-            catch { continue; }
-            foreach (var t in types) yield return t;
+            Type?[] types;
+            try
+            {
+                types = asm.GetTypes();
+            }
+            catch (System.Reflection.ReflectionTypeLoadException ex)
+            {
+                // A dependency failed to load: keep the types that DID load so
+                // an absence-scan doesn't silently miss product types (false
+                // negative). Only genuinely unreadable assemblies are skipped.
+                types = ex.Types;
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var t in types)
+            {
+                if (t is not null) yield return t;
+            }
         }
     }
 }

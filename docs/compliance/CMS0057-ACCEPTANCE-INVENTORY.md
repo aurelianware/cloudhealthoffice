@@ -14,6 +14,9 @@ current code. It is the source of truth the executable harness
 
 ## Product / services boundary
 
+Cloud Health Office (CHO) is used as the short form for the product throughout
+this engineering doc.
+
 - **CHO ships**: the FHIR surface (CRD/DTR/PAS, Patient/Provider Access
   projections), IG handling, consent/identity plumbing, the CHO-native
   authorization store, and this acceptance harness. Runs in **Demo/Cho mode by

@@ -4,13 +4,13 @@
     CMS-0057-F Acceptance Scenario Suite
     ====================================
     Executable acceptance harness proving the CMS-0057-F scenario set against
-    the REAL CHO C# services (fhir-service controllers/services, plus the
-    per-engagement source-system adapter stubs in claims/provider/benefit-plan/
-    authorization services). Every scenario carries a [Trait("Scenario","…")]
-    so the suite can be filtered by scenario id, e.g.
+    the REAL Cloud Health Office C# services (fhir-service controllers/services,
+    plus the per-engagement source-system adapter stubs in claims/provider/
+    benefit-plan/authorization services). Every scenario carries a
+    [Trait("Scenario","…")] so the suite can be filtered by scenario id, e.g.
     `dotnet test` with a filter expression of Scenario=PAS-03.
 
-    Tests run in Demo/Cho mode by default (the platform default; see
+    Tests run in Demo mode by default (the platform default; see
     fhir-service appsettings.json FhirAdapters:Mode = "Demo"). GAP tests assert
     that the QNXT source-system adapters are still NotImplementedException stubs
     — the acceptance suite must not paper over stubs with fake "green" tests.
