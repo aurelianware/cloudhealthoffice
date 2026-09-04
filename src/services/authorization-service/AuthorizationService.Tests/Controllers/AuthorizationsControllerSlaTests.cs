@@ -1,3 +1,4 @@
+using AuthorizationService.Backends;
 using AuthorizationService.Controllers;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AuthorizationService.Tests.Controllers;
 
@@ -21,7 +23,15 @@ public class AuthorizationsControllerSlaTests
         _environmentMock = new Mock<IWebHostEnvironment>();
         _environmentMock.SetupGet(x => x.EnvironmentName).Returns("Test");
         _loggerMock = new Mock<ILogger<AuthorizationsController>>();
-        _controller = new AuthorizationsController(_repositoryMock.Object, _environmentMock.Object, _loggerMock.Object)
+
+        // Default Replace mode: create routes through the CHO-native backend,
+        // which delegates to the mocked repository.
+        var selector = new AuthorizationBackendSelector(
+            new IAuthorizationBackend[] { new ChoAuthorizationBackend(_repositoryMock.Object) },
+            Options.Create(new AuthorizationBackendOptions()));
+
+        _controller = new AuthorizationsController(
+            _repositoryMock.Object, selector, _environmentMock.Object, _loggerMock.Object)
         {
             ControllerContext = new ControllerContext
             {

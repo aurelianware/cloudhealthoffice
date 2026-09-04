@@ -18,24 +18,75 @@ Cloud Health Office (CHO) is used as the short form for the product throughout
 this engineering doc.
 
 - **CHO ships**: the FHIR surface (CRD/DTR/PAS, Patient/Provider Access
-  projections), IG handling, consent/identity plumbing, the CHO-native
-  authorization store, and this acceptance harness. Runs in **Demo/Cho mode by
-  default** (`FhirAdapters:Mode = "Demo"`, synthetic data).
-- **Per-engagement (QNXT adapter)**: binding a customer's system of record.
-  **Most QNXT adapters today are stubs that throw `NotImplementedException`.**
-  The suite asserts those stubs rather than papering over them.
+  projections), IG handling, consent/identity plumbing, the **CHO-native
+  authorization backend** (Replace mode — Cloud Health Office owns the record),
+  and this acceptance harness.
+- **Per-engagement (external-core adapter)**: binding a customer's system of
+  record (QNXT / Facets / HealthEdge) in **Augment mode**. **These external
+  adapters are stubs today that throw `NotImplementedException`.** The suite
+  asserts those stubs rather than papering over them.
 
-Nothing here claims "production ready against QNXT". The QNXT adapters are
-stubs; see the GAP rows.
+Nothing here claims "production ready against QNXT". The external-core adapters
+are stubs; see the GAP rows.
 
-## Operating mode
+## Two dimensions: product capability vs integration capability
 
-`docs/architecture/OPERATING-MODE.md` defines Augment / Replace / Legacy per
-tenant/engine. Acceptance tests run in **Cho/Demo** by default and separately
-assert the QNXT bindings are still stubs (`GapAdapterTests`). Default for
-unconfigured engines is Replace (CHO authoritative); the FHIR adapter layer
-defaults to Demo + synthetic so a deployment can never silently look live
-(`FhirAdapterOptions`).
+CMS-0057-F readiness has **two independent axes**. This inventory scores them
+separately — a QNXT gap is not a Cloud Health Office product gap.
+
+- **Product capability** — can Cloud Health Office itself perform the workflow?
+  Proven in **Replace mode** (CHO is the authoritative backend).
+- **Integration capability** — can Cloud Health Office perform the workflow
+  against a specific external core *right now*? Proven in **Augment mode** with a
+  live adapter. The QNXT/Facets/HealthEdge adapters are engagement work.
+
+So, for example: **PAS-03 → CHO Replace: PASSABLE; QNXT Augment: GAP.**
+
+## Operating mode: Demo vs Replace vs Augment
+
+Three distinct concepts, deliberately not conflated:
+
+| Mode | Who is authoritative | Data | Where configured |
+| --- | --- | --- | --- |
+| **Demo** | n/a — demonstration | synthetic / demo | `FhirAdapters:Mode = "Demo"` (fhir-service FHIR projections) |
+| **Replace** | **Cloud Health Office** | authoritative (CHO-owned) | `Cms0057:Authorization:OperatingMode = "Replace"` (default) |
+| **Augment** | external core (QNXT / Facets / HealthEdge) | authoritative (external) | `Cms0057:Authorization:OperatingMode = "Augment"` + `AugmentBackend` |
+
+"Demo" is **not** a synonym for "Cloud Health Office backend": Demo is synthetic
+demonstration data, Replace is CHO operating as the production system of record.
+The authorization vertical slice reuses the OperatingMode engine's
+`EngineOperatingMode { Augment, Replace }` (`docs/architecture/OPERATING-MODE.md`),
+which defaults engines to **Replace** (CHO authoritative). A deployment
+configured for Augment never silently falls back to the CHO backend — selection
+fails loudly if the configured external backend is not registered
+(`AuthorizationBackendSelector`). The FHIR projection layer defaults to Demo +
+synthetic so a deployment can never silently look live (`FhirAdapterOptions`).
+
+## Authorization vertical slice — Replace vs Augment
+
+The prior-authorization slice is the first workflow made explicitly CHO-native:
+
+```
+FHIR / PAS $submit
+   -> AuthorizationsController
+   -> IAuthorizationBackendSelector (by operating mode)
+        Replace -> ChoAuthorizationBackend -> IAuthorizationRepository (Cosmos / Mongo)   [CHO authoritative]
+        Augment -> QnxtAuthorizationBackend (stub)                                        [external core]
+```
+
+- `Backends/IAuthorizationBackend.cs` — the domain seam (create / get-by-number
+  / update-status).
+- `Backends/ChoAuthorizationBackend.cs` — **Replace**, production; thin layer
+  over the existing repository. Records append-only `StatusHistory`.
+- `Backends/QnxtAuthorizationBackend.cs` — **Augment**, documented stub
+  (throws; no fake SOAP). Replaces the PR #1143 `IAuthorizationAdapter`.
+- `Backends/AuthorizationBackendSelector.cs` — routes by
+  `Cms0057:Authorization:OperatingMode`; no silent fallback.
+- `GET /api/authorizations/backend-status` reports the active mode/backend.
+
+The acceptance suite exercises the **real** `ChoAuthorizationBackend` against an
+in-memory repository *fixture* (test-only), so the production domain workflow —
+not a parallel acceptance-only path — is what is proven.
 
 ## IG pins
 
@@ -103,15 +154,16 @@ Mode column: current operating mode of that surface in the default build.
 | `src/services/provider-service/Adapters/QnxtOrganizationAdapter.cs` | `QnxtOrganizationAdapter` | **stub** | throws `NotImplementedException` |
 | `src/services/benefit-plan-service/Adapters/QnxtBenefitPlanAdapter.cs` | `QnxtBenefitPlanAdapter : IBenefitPlanAdapter` | **stub** | throws `NotImplementedException` (PAS-01 GAP) |
 | `src/services/idcard-service/Adapters/QnxtIdCardAdapter.cs` | `QnxtIdCardAdapter : IIdCardAdapter` | Augment | best-effort mirror; not a 0057 scenario |
-| `src/services/authorization-service/Adapters/QnxtAuthorizationAdapter.cs` | `QnxtAuthorizationAdapter : IAuthorizationAdapter` | **stub (added by this suite)** | throws `NotImplementedException` (PAS-03 GAP). Was **missing** before this work — see below. |
+| `src/services/authorization-service/Backends/QnxtAuthorizationBackend.cs` | `QnxtAuthorizationBackend : IAuthorizationBackend` | **Augment stub** | throws `NotImplementedException`; selected only when configured for Augment. Integration GAP, not a product GAP. |
 
-**PAS-03 QNXT finding:** there was **no** authorization-service QNXT adapter.
-Per the adapter pattern (`I*Adapter` + `Cho*Adapter` + `Qnxt*Adapter`) this
-suite added `IAuthorizationAdapter` + `QnxtAuthorizationAdapter` as a documented
-stub with a single TODO (no fake QNXT SOAP client), and a GAP test. The
-CHO-native authorization path (`AuthorizationsController` +
-`AuthorizationRepository`) remains the default and is what PAS-03's happy path
-runs against.
+**Authorization backend (this PR).** The authorization slice now routes through
+`IAuthorizationBackend` selected by operating mode (see the vertical-slice
+section above), rather than the flat `IAuthorizationAdapter` from PR #1143
+(removed). **Replace** binds `ChoAuthorizationBackend` (the CHO-native system of
+record over `IAuthorizationRepository` → Cosmos/Mongo) and is the default;
+**Augment** binds `QnxtAuthorizationBackend` (stub). So PAS-03 is **product
+PASSABLE** on CHO Replace and **integration GAP** on QNXT Augment — two
+dimensions, not one.
 
 ### Other surfaces
 
@@ -127,29 +179,40 @@ runs against.
 
 ## Traceability table
 
-| Scenario | Code path | Adapter mode | Varies | Status |
-| --- | --- | --- | --- | --- |
-| PAS-01 CRD | `CrdController` + `CrdService` + CHO classification | Demo; QNXT benefit adapter stub | YES | **PASSABLE** (CHO); QNXT **GAP** |
-| PAS-02 DTR | `DtrController` + `DtrService` (seeded, in-memory) | Demo | no | **PASSABLE** |
-| PAS-03 PA submit | `PasController` `$submit` + `PasResponseBuilder` + `Cms0057ComplianceChecker`; persist → authorization-service | Demo; QNXT auth adapter stub | YES | **PASSABLE** (CHO); QNXT create-auth **GAP** |
-| PAS-04 inquiry/status | tracking id from `PasResponseBuilder`; status via `AuthorizationsController` `number/{n}` + `search` | Demo/CHO | YES | **PARTIAL** — FHIR PAS `$inquire` **GAP** |
-| PAS-05 specific denial | `PasResponseBuilder.BuildDeniedResponse` coded `ClaimResponse.error` | Demo | no | **PASSABLE** |
-| PAS-06 decision timeframe | `Cms0057ComplianceChecker.CheckPriorAuthTimeline` (72h/7d), explicit-Z timestamps | Demo | no | **PASSABLE** |
-| PAS-07 CDex additional-info | pended X12 A4 via `PasResponseBuilder`; `CommunicationController` is appeal-notes only | Demo | no | **PARTIAL** — CDex round-trip **GAP** |
-| PAS-08 drug exclusion | `Cms0057ComplianceChecker` (no drug filter); DTR medication PA is a distinct Draft questionnaire | Demo | no | **GAP** — exclusion not enforced in PAS path |
-| PROV-01 attributed pull | `MockPatientAccessDataProvider` + `PatientAccessMapper` (US Core / CARIN EOB) | Demo; QNXT provider adapter stub | YES | **PASSABLE** (CHO); QNXT **GAP** |
-| PROV-02 attribution enforce | data-layer returns no data for non-attributed member; 403-class via `SmartScopeEnforcementMiddleware` | Demo | no | **PASSABLE** (data layer); middleware = SEC-01 |
-| PROV-03 opt-out honored | `ConsentStateMachine` Active→Revoked; revoked ≠ Active | Demo/CHO | no | **PASSABLE** |
-| P2P-01 inbound respond | `FhirAdapterStatusService` → PayerToPayer OutOfScope | OutOfScope | — | **GAP** |
-| P2P-02 outbound initiate | no enrollment/opt-in initiation hook in product code | OutOfScope | — | **GAP** |
-| P2P-03 opt-in enforcement | opt-in modeled as Active consent; no dedicated P2P `ConsentType` | Demo/CHO | — | **PARTIAL** |
-| P2P-04 member-match/concurrent | no `$member-match`/concurrent-coverage surface in product code | OutOfScope | — | **GAP** |
-| PAT-01 member claims / CARIN EOB | `MockPatientAccessDataProvider` payments → `PatientAccessMapper` EOB | Demo; QNXT claim adapter stub | YES | **PASSABLE** (CHO); QNXT **GAP** |
-| PAT-02 US Core clinical | `Cms0057ComplianceChecker` validates US Core Patient; USCDI clinical is external store | Demo | no | **PARTIAL** (demographics PASSABLE; clinical external) |
-| PAT-03 PA data except drugs | `ClaimResponse` is a supported PA-data type; retention job absent | Demo | no | **PARTIAL** — retention/1-day-freshness **GAP** |
-| SEC-01 SMART/OAuth | `SmartConfigurationController` (endpoints, scopes, S256); IdP per customer | Demo | no | **PARTIAL** (IdP per-engagement) |
-| CONSENT-01 single registry | `ConsentStateMachine` + `Consent` (one registry, opt-in/opt-out lifecycle) | Demo/CHO | no | **PARTIAL** — no dedicated Provider-Access/P2P `ConsentType` |
-| METRICS-01 public metric set | `AuthorizationsSummaryCalculator` + `Authorization` timestamps/reason codes | Demo/CHO; QNXT auth data stub | YES | **PARTIAL** — building blocks PASSABLE; full extract job engagement work |
+Two dimensions per scenario: **CHO Replace** = Cloud Health Office as the
+native/authoritative backend (product capability); **QNXT Augment** = the
+external-core integration (integration capability). "n/a" = the scenario has no
+external-core dependency (no vendor adapter involved).
+
+| Scenario | CHO Replace (product) | QNXT Augment (integration) | Code path / notes |
+| --- | --- | --- | --- |
+| PAS-01 CRD | **PASSABLE** | **GAP** | `CrdController` + `CrdService` + CHO rule store; QNXT benefit adapter stub |
+| PAS-02 DTR | **PASSABLE** | n/a | `DtrController` + `DtrService` (seeded, in-memory) |
+| PAS-03 PA submit | **PASSABLE** | **GAP** | `ChoAuthorizationBackend` persists + retrieves via `IAuthorizationRepository`; `QnxtAuthorizationBackend` stub |
+| PAS-04 inquiry/status | **PARTIAL** | **GAP** | `ChoAuthorizationBackend.GetByNumberAsync` + `AuthorizationsController` status persisted; FHIR PAS `$inquire` **GAP** |
+| PAS-05 specific denial | **PASSABLE** | **GAP** | `PasResponseBuilder` coded error; `ChoAuthorizationBackend` persists coded denial reason |
+| PAS-06 decision timeframe | **PASSABLE** | n/a | `Cms0057ComplianceChecker.CheckPriorAuthTimeline` (72h/7d); persisted status/decision history |
+| PAS-07 CDex additional-info | **PARTIAL** | n/a | pended X12 A4 via `PasResponseBuilder`; CDex round-trip **GAP** |
+| PAS-08 drug exclusion | **GAP** | n/a | no drug-exclusion filter in the PAS path |
+| PROV-01 attributed pull | **PASSABLE** | **GAP** | `MockPatientAccessDataProvider` + `PatientAccessMapper`; QNXT provider adapter stub |
+| PROV-02 attribution enforce | **PASSABLE** | n/a | data layer returns no data for non-attributed member; 403-class via middleware (SEC-01) |
+| PROV-03 opt-out honored | **PASSABLE** | n/a | `ConsentStateMachine` Active→Revoked |
+| P2P-01 inbound respond | **GAP** | **GAP** | `FhirAdapterStatusService` → PayerToPayer OutOfScope |
+| P2P-02 outbound initiate | **GAP** | **GAP** | no enrollment/opt-in initiation hook |
+| P2P-03 opt-in enforcement | **PARTIAL** | **GAP** | opt-in modeled as Active consent; no dedicated P2P `ConsentType` |
+| P2P-04 member-match/concurrent | **GAP** | **GAP** | no `$member-match`/concurrent-coverage surface |
+| PAT-01 member claims / CARIN EOB | **PASSABLE** | **GAP** | `MockPatientAccessDataProvider` payments → `PatientAccessMapper` EOB; QNXT claim adapter stub |
+| PAT-02 US Core clinical | **PARTIAL** | n/a | demographics validate; USCDI clinical is an external store |
+| PAT-03 PA data except drugs | **PARTIAL** | n/a | `ClaimResponse` is a supported PA-data type; retention job absent |
+| SEC-01 SMART/OAuth | **PARTIAL** | n/a | `SmartConfigurationController` (endpoints, scopes, S256); IdP per engagement |
+| CONSENT-01 single registry | **PARTIAL** | n/a | one registry, opt-in/opt-out lifecycle; no dedicated Provider-Access/P2P `ConsentType` |
+| METRICS-01 public metric set | **PASSABLE** | **GAP** | metrics derive from the persisted CHO authorization (`ChoAuthorizationBackend` + `AuthorizationsSummaryCalculator`); QNXT auth data stub. Full public-metrics *extract job* is still engagement work. |
+
+**What changed in this PR:** PAS-03/PAS-04/PAS-05/PAS-06 and METRICS-01 are now
+scored on the CHO-native authorization backend (Replace) rather than a flat GAP.
+PAS-03 product capability moved GAP → **PASSABLE**; METRICS-01 product moved
+PARTIAL → **PASSABLE** (derives from the persisted record, not a test-only
+object). The QNXT column stays GAP: that integration is engagement work.
 
 ---
 
@@ -157,11 +220,15 @@ runs against.
 
 `tests/Cms0057Acceptance.Tests/` (xUnit, in the solution
 `cloudhealthoffice-main.sln`). Every scenario is tagged
-`[Trait("Scenario","PAS-01")]` (etc.); GAP scenarios also carry
-`[Trait("Kind","GAP")]` and assert the stub / missing type / OutOfScope mode.
+`[Trait("Scenario","PAS-01")]`; the authorization slice and the QNXT stubs also
+carry `[Trait("Backend","Replace")]` or `[Trait("Backend","Augment")]` so the
+two dimensions can be run independently, and integration/absence gaps carry
+`[Trait("Kind","GAP")]`.
 
-Filter by scenario id with `dotnet test` and a filter expression of
-`Scenario=PAS-03`. All non-GAP scenarios pass in Demo/Cho mode. GAP tests pass
-by confirming the gap still exists — when a QNXT adapter or missing surface is
-implemented for real, the matching GAP test fails and must be replaced with a
-live-mode acceptance test.
+Filter by scenario id or backend, e.g. a `dotnet test` filter expression of
+`Scenario=PAS-03` (both dimensions), `Backend=Replace` (product capability), or
+`Backend=Augment` (integration capability). Replace-mode scenarios pass against
+the real `ChoAuthorizationBackend`; Augment GAP tests pass by confirming the
+QNXT backend is still a stub — when a QNXT integration ships for real, the
+matching Augment test fails and must be replaced with a live-mode acceptance
+test. Demo (synthetic FHIR projection) scenarios remain distinct from Replace.

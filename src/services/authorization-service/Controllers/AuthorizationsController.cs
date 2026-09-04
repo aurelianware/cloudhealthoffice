@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using AuthorizationService.Backends;
 using AuthorizationService.Middleware;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
@@ -14,17 +15,67 @@ namespace AuthorizationService.Controllers;
 public class AuthorizationsController : ControllerBase
 {
     private readonly IAuthorizationRepository _authorizationRepository;
+    private readonly IAuthorizationBackendSelector _backends;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<AuthorizationsController> _logger;
 
     public AuthorizationsController(
         IAuthorizationRepository authorizationRepository,
+        IAuthorizationBackendSelector backends,
         IWebHostEnvironment environment,
         ILogger<AuthorizationsController> logger)
     {
         _authorizationRepository = authorizationRepository;
+        _backends = backends;
         _environment = environment;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Report the active authorization backend (operating mode + backend).
+    /// Makes Replace (CHO-native) vs Augment (external core) explicit for demos
+    /// and diligence. No sensitive configuration is exposed.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("backend-status")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public IActionResult GetBackendStatus()
+    {
+        // Mode and the configured backend key never throw; resolving the backend
+        // can (misconfigured Augment). Report that as a structured "misconfigured"
+        // status rather than an unstructured 500.
+        var mode = _backends.Mode;
+        var backendKey = _backends.ActiveBackendKey;
+        bool? authoritative;
+        bool configured;
+        string description;
+
+        try
+        {
+            authoritative = _backends.Resolve().IsAuthoritative;
+            configured = true;
+            description = mode == CloudHealthOffice.OperatingMode.EngineOperatingMode.Replace
+                ? "Cloud Health Office owns the authoritative authorization record (Replace mode)."
+                : $"Cloud Health Office fronts an external core ('{backendKey}') that remains authoritative (Augment mode).";
+        }
+        catch (InvalidOperationException)
+        {
+            // Do not leak the exception detail; state that the configured backend
+            // is not available.
+            authoritative = null;
+            configured = false;
+            description = $"Operating mode is '{mode}' but backend '{backendKey}' is not registered/available. " +
+                          "Configure Cms0057:Authorization to a registered backend.";
+        }
+
+        return Ok(new
+        {
+            operatingMode = mode.ToString(),
+            backend = backendKey,
+            configured,
+            authoritative,
+            description,
+        });
     }
 
     /// <summary>
@@ -51,9 +102,13 @@ public class AuthorizationsController : ControllerBase
         authorization.CreatedDate = DateTime.UtcNow;
         authorization.LastUpdatedDate = DateTime.UtcNow;
 
-        var created = await _authorizationRepository.CreateAsync(authorization);
+        // Persist via the operating-mode-selected backend. Replace = CHO-native
+        // repository; Augment = configured external core. No vendor branching here.
+        var created = await _backends.Resolve().CreateAsync(authorization, HttpContext.RequestAborted);
 
-        _logger.LogInformation("Authorization {AuthNumber} submitted successfully", SanitizeForLog(authorization.AuthorizationNumber));
+        _logger.LogInformation(
+            "Authorization {AuthNumber} submitted successfully via {Backend} backend ({Mode} mode)",
+            SanitizeForLog(authorization.AuthorizationNumber), _backends.ActiveBackendKey, _backends.Mode);
 
         return CreatedAtAction(nameof(GetAuthorizationById), new { id = created.Id }, created);
     }
@@ -87,7 +142,9 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation("Fetching authorization by number: {AuthNumber}", SanitizeForLog(authNumber));
 
-        var authorization = await _authorizationRepository.GetByAuthorizationNumberAsync(authNumber);
+        // Route through the operating-mode-selected backend so an Augment
+        // deployment does not silently read from the CHO repository.
+        var authorization = await _backends.Resolve().GetByNumberAsync(authNumber, HttpContext.RequestAborted);
         if (authorization == null)
         {
             return NotFound($"Authorization {authNumber} not found");
@@ -121,7 +178,7 @@ public class AuthorizationsController : ControllerBase
             "Validating authorization {AuthNumber} for procedure {Procedure} on {Date}",
             SanitizeForLog(authNumber), SanitizeForLog(procedureCode), checkDate);
 
-        var authorization = await _authorizationRepository.GetByAuthorizationNumberAsync(authNumber);
+        var authorization = await _backends.Resolve().GetByNumberAsync(authNumber, HttpContext.RequestAborted);
         if (authorization == null)
         {
             return NotFound($"Authorization {authNumber} not found");
@@ -327,7 +384,12 @@ public class AuthorizationsController : ControllerBase
                 : $"{authorization.Notes}\n{DateTime.UtcNow:yyyy-MM-dd HH:mm}: {statusUpdate.Notes}";
         }
 
-        var updated = await _authorizationRepository.UpdateAsync(authorization);
+        // Persist the transition through the selected backend so the status
+        // history is appended and an Augment deployment does not silently write
+        // to the CHO repository.
+        var updated = await _backends.Resolve().UpdateStatusAsync(
+            authorization, authorization.Status, authorization.ReviewDecision,
+            authorization.DenialReason, HttpContext.RequestAborted);
         return Ok(updated);
     }
 
@@ -397,7 +459,11 @@ public class AuthorizationsController : ControllerBase
         authorization.ReviewerName = response.ReviewerName;
         authorization.ReviewerPhone = response.ReviewerPhone;
 
-        var updated = await _authorizationRepository.UpdateAsync(authorization);
+        // Persist the decision through the selected backend (history append +
+        // no silent CHO write in Augment).
+        var updated = await _backends.Resolve().UpdateStatusAsync(
+            authorization, authorization.Status, authorization.ReviewDecision,
+            authorization.DenialReason, HttpContext.RequestAborted);
         return Ok(updated);
     }
 

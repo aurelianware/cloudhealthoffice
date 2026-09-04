@@ -7,6 +7,7 @@ COPY src/services/authorization-service/authorization-service.csproj src/service
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/CloudHealthOffice.ProviderEnrollmentService.csproj src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/CloudHealthOffice.PriorAuthRuleEngine.csproj src/engines/CloudHealthOffice.PriorAuthRuleEngine/
+COPY src/engines/CloudHealthOffice.OperatingMode/CloudHealthOffice.OperatingMode.csproj src/engines/CloudHealthOffice.OperatingMode/
 RUN dotnet restore src/services/authorization-service/authorization-service.csproj
 
 # Copy source code and build
@@ -14,6 +15,7 @@ COPY src/services/authorization-service/ src/services/authorization-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/
+COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.OperatingMode/
 RUN dotnet build src/services/authorization-service/authorization-service.csproj -c Release --no-restore
 
 # Publish stage

@@ -30,6 +30,7 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// via the CHO authorization-service HTTP path (stubbed here as unreachable —
 /// the controller returns the ClaimResponse to the caller regardless).
 /// </summary>
+[Trait("Backend", "Replace")]
 public class PasSubmitTests
 {
     private const string CptSystem = "http://www.ama-assn.org/go/cpt";

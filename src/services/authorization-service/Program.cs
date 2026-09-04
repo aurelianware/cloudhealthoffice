@@ -137,6 +137,20 @@ else
     Console.WriteLine("Using Cosmos DB repository");
 }
 
+// ── Authorization backend seam (Replace / Augment) ──────────────────────────
+// The controller/PAS workflow resolves an IAuthorizationBackend by operating
+// mode rather than choosing a vendor type. Replace (default) = CHO-native
+// (ChoAuthorizationBackend over the repository above). Augment = external core
+// (QnxtAuthorizationBackend stub) — never a silent fallback to CHO.
+builder.Services.Configure<AuthorizationService.Backends.AuthorizationBackendOptions>(
+    builder.Configuration.GetSection(AuthorizationService.Backends.AuthorizationBackendOptions.SectionName));
+builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,
+    AuthorizationService.Backends.ChoAuthorizationBackend>();
+builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,
+    AuthorizationService.Backends.QnxtAuthorizationBackend>();
+builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackendSelector,
+    AuthorizationService.Backends.AuthorizationBackendSelector>();
+
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 

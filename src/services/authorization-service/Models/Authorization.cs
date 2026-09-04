@@ -346,6 +346,36 @@ public class Authorization
     /// </summary>
     [StringLength(200)]
     public string? LastUpdatedBy { get; set; }
+
+    /// <summary>
+    /// Audit: append-only status/decision history preserved on the record so
+    /// the authorization lifecycle survives persistence (not just the latest
+    /// HTTP response). Each transition is recorded by the CHO-native backend.
+    /// </summary>
+    [JsonPropertyName("statusHistory")]
+    public List<AuthorizationStatusChange> StatusHistory { get; set; } = new();
+}
+
+/// <summary>
+/// A single entry in an authorization's append-only status/decision history.
+/// </summary>
+public class AuthorizationStatusChange
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    [JsonPropertyName("status")]
+    public AuthorizationStatus Status { get; set; }
+
+    [JsonPropertyName("reviewDecision")]
+    public string? ReviewDecision { get; set; }
+
+    [JsonPropertyName("reason")]
+    public string? Reason { get; set; }
+
+    [JsonPropertyName("changedAt")]
+    public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
+
+    [JsonPropertyName("changedBy")]
+    public string? ChangedBy { get; set; }
 }
 
 /// <summary>
