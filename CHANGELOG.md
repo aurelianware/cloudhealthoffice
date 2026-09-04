@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Versioned CMS-0057-F acceptance evidence in CI
+
+Turned the CMS-0057-F acceptance suite into auditable, reproducible evidence
+tied to a source revision. `tests/Cms0057Acceptance.Tests/scenarios.json`
+(`schemaVersion: 1`) is now the machine-readable source of truth for scenario
+status (`PASSABLE | PARTIAL | GAP | N/A`), scored on two independent axes —
+Cloud Health Office **Replace** (product capability) and external-core
+**Augment** (integration capability). New `ScenarioManifestTests` reconcile the
+suite's `[Trait]`s against the manifest (unknown/duplicate ids, invalid statuses,
+a scenario silently losing all its tests, or a PASSABLE-for-a-backend scenario
+backed only by GAP-assertion tests all fail the build). New generator
+`tools/Cms0057Evidence` reads the manifest, the acceptance TRX, and the suite's
+traits and emits deterministic `cms0057-evidence.json`/`.md`/`.html` bound to the
+full tested commit SHA, keeping **declared capability status** separate from
+**test execution status** (a passing GAP-assertion test confirms the gap and is
+never promoted to PASSABLE). New `CMS-0057-F Acceptance Evidence` workflow runs
+the suite, generates the evidence, writes a job summary, and uploads the
+`cms0057-acceptance-evidence-<sha>` artifact; it fails on test failure or
+manifest/test drift. Evidence contains only synthetic identifiers, repository
+metadata, and test results — no PHI, tenant data, secrets, or QNXT field
+mappings. Generator has its own unit tests (`tools/Cms0057Evidence.Tests`). No
+runtime service behavior changed.
+
 ### Cloud Health Office as the native CMS-0057-F authorization backend
 
 Made Cloud Health Office the authoritative (Replace-mode) backend for the

@@ -177,6 +177,34 @@ dimensions, not one.
 
 ---
 
+## Machine-readable source of truth & CI evidence
+
+The status of every scenario is declared in one machine-readable manifest —
+**`tests/Cms0057Acceptance.Tests/scenarios.json`** (`schemaVersion: 1`). It is the
+single source of truth for the two-dimension status; the human table below is a
+derived view of it. Statuses are constrained to `PASSABLE | PARTIAL | GAP | N/A`.
+
+Three things stay in sync with the manifest, so a QNXT integration gap is never
+presented as a Cloud Health Office product gap:
+
+- **The acceptance suite** validates it — `ScenarioManifestTests` reconciles
+  every `[Trait("Scenario"/"Backend"/"Kind")]` against the manifest (unknown or
+  duplicate ids, invalid statuses, a scenario silently losing all its tests, or
+  a scenario declared PASSABLE for a backend but backed only by GAP-assertion
+  tests all fail the build).
+- **The evidence generator** — `tools/Cms0057Evidence` — reads the manifest, the
+  acceptance-suite TRX, and the suite's traits and emits versioned, deterministic
+  evidence (`cms0057-evidence.json` / `.md` / `.html`) bound to the tested commit
+  SHA. It keeps **declared capability status** separate from **test execution
+  status**: a passing GAP-assertion test confirms the gap and never becomes
+  PASSABLE.
+- **CI** — the `CMS-0057-F Acceptance Evidence` workflow runs the suite, generates
+  the evidence, and uploads it as the `cms0057-acceptance-evidence-<sha>` artifact.
+
+`PASSABLE` means the repository's defined acceptance scenario is supported by the
+tested implementation. It is not a CMS certification and does not by itself
+establish production readiness for a specific payer deployment.
+
 ## Traceability table
 
 Two dimensions per scenario: **CHO Replace** = Cloud Health Office as the
