@@ -1,0 +1,223 @@
+using System.Reflection;
+using FhirService.Controllers;
+using FhirService.Services;
+using FluentAssertions;
+using Hl7.Fhir.Model;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Cms0057Acceptance.Tests.Scenarios;
+
+/// <summary>
+/// PAS-04 (inquiry/status), PAS-06 (decision timeframe), PAS-07 (CDex
+/// additional-info), PAS-08 (drug exclusion). Executed against the REAL
+/// Cms0057ComplianceChecker + PasResponseBuilder in Demo/Cho mode, with honest
+/// GAP markers where the corresponding surface is not yet built.
+///
+/// Traceability:
+///   compliance  src/services/fhir-service/Services/Cms0057ComplianceChecker.cs (CheckPriorAuthTimeline)
+///   builder     src/services/fhir-service/Services/PasResponseBuilder.cs (BuildPendedResponse — X12 A4)
+///   status      src/services/authorization-service/Controllers/AuthorizationsController.cs
+///   pas surface src/services/fhir-service/Controllers/PasController.cs (only Claim/$submit)
+/// </summary>
+public class PasDecisionAndScopeTests
+{
+    private static ServiceRequest BuildServiceRequest(RequestPriority priority) => new()
+    {
+        Status = RequestStatus.Active,
+        Intent = RequestIntent.Order,
+        Subject = new ResourceReference("Patient/pat-001"),
+        Requester = new ResourceReference("Practitioner/npi-1234567890"),
+        AuthoredOn = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+        Priority = priority,
+        Code = new CodeableConcept("http://www.ama-assn.org/go/cpt", "27447"),
+    };
+
+    // ── PAS-06 decision timeframe ───────────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PAS-06")]
+    public void PAS06_ExpeditedRequest_Tracks72HourClock()
+    {
+        var checker = new Cms0057ComplianceChecker();
+
+        var result = checker.ValidateCompliance(BuildServiceRequest(RequestPriority.Urgent));
+
+        result.Summary.TimelineCompliance.Applicable.Should().BeTrue();
+        result.Summary.TimelineCompliance.Deadline.Should().Be("72 hours");
+        result.Summary.TimelineCompliance.Requirement.Should().Contain("urgent");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-06")]
+    public void PAS06_StandardRequest_Tracks7CalendarDayClock()
+    {
+        var checker = new Cms0057ComplianceChecker();
+
+        var result = checker.ValidateCompliance(BuildServiceRequest(RequestPriority.Routine));
+
+        result.Summary.TimelineCompliance.Applicable.Should().BeTrue();
+        result.Summary.TimelineCompliance.Deadline.Should().Be("7 calendar days");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-06")]
+    public void PAS06_ClaimResponse_CarriesExplicitTimezoneTimestamp()
+    {
+        // Received/decision timestamps must be auditable with an explicit
+        // timezone so the 72h / 7-calendar-day clocks are unambiguous.
+        var builder = new PasResponseBuilder();
+        var claim = new Claim
+        {
+            Id = "c1",
+            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
+            Patient = new ResourceReference("Patient/pat-001"),
+        };
+
+        var bundle = builder.BuildApprovedResponse(claim, new FhirService.Models.PasDecisionResult
+        {
+            HasDecision = true, Decision = "approved", AuthorizationNumber = "PAS-ACC-06",
+        });
+
+        var claimResponse = bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+        claimResponse.Created.Should().EndWith("Z"); // UTC / explicit offset
+        claimResponse.Meta!.LastUpdated.Should().NotBeNull();
+    }
+
+    // ── PAS-07 CDex / additional information ────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PAS-07")]
+    public void PAS07_PendedResponse_SignalsOutstandingReviewViaX12A4()
+    {
+        // A pended decision carries the Da Vinci PAS reviewAction extension with
+        // X12 code A4 (Pending) — the signal that a decision (and, in a full
+        // CDex exchange, additional documentation) is still outstanding.
+        var builder = new PasResponseBuilder();
+        var claim = new Claim { Id = "c1", Patient = new ResourceReference("Patient/pat-001") };
+
+        var bundle = builder.BuildPendedResponse(claim);
+        var claimResponse = bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+
+        claimResponse.Disposition.Should().Be("pended");
+        var reviewAction = claimResponse.Extension.Should().ContainSingle(e =>
+            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction").Subject;
+        var code = reviewAction.Extension.Should().ContainSingle().Subject.Value as Coding;
+        code!.Code.Should().Be("A4");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-07")]
+    [Trait("Kind", "GAP")]
+    public void PAS07_Gap_NoCdexAdditionalInfoRoundTripInPasPath()
+    {
+        // GAP: there is no Da Vinci CDex additional-information request/response
+        // round-trip wired into the fhir-service PAS path. The existing
+        // CommunicationController projects APPEAL notes onto FHIR Communication
+        // (cho-appeal-communication), not a CDex documentation request on a
+        // pended prior-auth. Standing up that exchange is engagement/product
+        // follow-up.
+        var commType = typeof(CommunicationController);
+        var xmlRefsAppeal = commType.GetCustomAttributesData(); // presence check only
+        xmlRefsAppeal.Should().NotBeNull();
+
+        // Assert the PAS controller exposes no additional-info intake action.
+        var pasActions = typeof(PasController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .SelectMany(m => m.GetCustomAttributes<RouteAttribute>()
+                .Select(a => a.Template)
+                .Concat(m.GetCustomAttributes<HttpPostAttribute>().Select(a => a.Template ?? "")))
+            .Where(t => !string.IsNullOrEmpty(t))
+            .ToList();
+        pasActions.Should().NotContain(t => t!.Contains("$inquire") || t!.Contains("additional"));
+    }
+
+    // ── PAS-08 drug exclusion ───────────────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PAS-08")]
+    [Trait("Kind", "GAP")]
+    public void PAS08_Gap_DrugExclusionNotEnforcedInPasMedicalPath()
+    {
+        // CMS-0057-F prior-authorization scope EXCLUDES drugs. Today the PAS
+        // compliance path does not distinguish a pharmacy claim from a medical
+        // one — a pharmacy-type Claim validates identically. This test pins that
+        // current behavior and marks the missing drug-exclusion filter as a GAP:
+        // enforcing "pharmacy PA is out of 0057 medical scope" is product/
+        // engagement follow-up.
+        var checker = new Cms0057ComplianceChecker();
+        var pharmacyClaim = new Claim
+        {
+            Status = FinancialResourceStatusCodes.Active,
+            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "pharmacy"),
+            Use = ClaimUseCode.Preauthorization,
+            Patient = new ResourceReference("Patient/pat-001"),
+            Provider = new ResourceReference("Practitioner/npi-1234567890"),
+            Insurance = new List<Claim.InsuranceComponent>
+            {
+                new() { Sequence = 1, Focal = true, Coverage = new ResourceReference("Coverage/cov-001") },
+            },
+            Item = new List<Claim.ItemComponent>
+            {
+                new() { Sequence = 1, ProductOrService = new CodeableConcept("http://hl7.org/fhir/sid/ndc", "00071015523") },
+            },
+        };
+
+        var result = checker.ValidateCompliance(pharmacyClaim);
+
+        // No exclusion filter exists → a pharmacy claim passes the same gate as
+        // medical. When drug-exclusion enforcement lands, this test must change.
+        result.Compliant.Should().BeTrue(
+            "PAS compliance does not yet special-case pharmacy/drug claims (documented GAP)");
+    }
+
+    // ── PAS-04 inquiry / status ─────────────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public void PAS04_TrackingIdIssuedAtSubmit_IsInquiryHandle()
+    {
+        // The PreAuthRef on the ClaimResponse is the tracking id a provider uses
+        // to inquire on status later.
+        var builder = new PasResponseBuilder();
+        var claim = new Claim { Id = "c1", Patient = new ResourceReference("Patient/pat-001") };
+
+        var bundle = builder.BuildApprovedResponse(claim, new FhirService.Models.PasDecisionResult
+        {
+            HasDecision = true, Decision = "approved", AuthorizationNumber = "PAS-ACC-04",
+        });
+        var claimResponse = bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+        claimResponse.PreAuthRef.Should().Be("PAS-ACC-04");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public void PAS04_AuthorizationService_ExposesStatusByNumberAndMemberSearch()
+    {
+        // Line-level status inquiry is served by authorization-service today:
+        // GET api/authorizations/number/{authNumber} and GET .../search.
+        var routes = typeof(global::AuthorizationService.Controllers.AuthorizationsController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .SelectMany(m => m.GetCustomAttributes<HttpGetAttribute>().Select(a => a.Template ?? ""))
+            .ToList();
+
+        routes.Should().Contain(t => t.Contains("number/"));
+        routes.Should().Contain("search");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    [Trait("Kind", "GAP")]
+    public void PAS04_Gap_NoFhirPasInquireOperation()
+    {
+        // GAP: the FHIR PAS Claim/$inquire operation is not implemented in
+        // fhir-service (only Claim/$submit). Status inquiry is currently the
+        // authorization-service REST surface above, not a FHIR PAS operation.
+        var postTemplates = typeof(PasController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .SelectMany(m => m.GetCustomAttributes<HttpPostAttribute>().Select(a => a.Template ?? ""))
+            .ToList();
+
+        postTemplates.Should().Contain("Claim/$submit");
+        postTemplates.Should().NotContain(t => t.Contains("$inquire"));
+    }
+}

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CMS-0057-F acceptance scenario suite
+
+Executable acceptance harness (`tests/Cms0057Acceptance.Tests/`, in
+`cloudhealthoffice-main.sln`) proving the CMS-0057-F scenario set against the
+real C# services in Demo/Cho mode. Scenarios are tagged
+`[Trait("Scenario","…")]` (PAS-01..08, PROV-01..03, P2P-01..04, PAT-01..03,
+SEC-01, CONSENT-01, METRICS-01), each with a happy path and, for prior auth, a
+negative path. GAP scenarios are tests that assert the still-unimplemented seam
+(the QNXT source-system adapters, the out-of-scope Payer-to-Payer surface, the
+absent drug-exclusion and retention paths) rather than papering over stubs.
+Added `IAuthorizationAdapter` + `QnxtAuthorizationAdapter` documented stub in
+authorization-service (mirrors the existing `Qnxt*Adapter` pattern) so the
+PAS-03 QNXT create-auth seam is explicit and testable; it throws
+`NotImplementedException` and is not wired into DI. Honest PASSABLE / PARTIAL /
+GAP inventory and traceability table at
+`docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md`; public definition-of-done
+guide at `src/site/insights/cms-0057-f/acceptance-scenarios.html`. No change to
+runtime behavior of shipped services.
+
 ### Layer 1 commercial packet (first-customer motion)
 
 Founding-partner CMS-0057-F Compliance Accelerator offer ($90k / 6–8 weeks), CISO diligence binder (BAA template, security one-pager, adapter-status table, data-handling rules, 25-name target list), and a labeled synthetic demo tenant. `fhir-service` now exposes `GET /fhir/r4/adapter-status` and stamps `X-CHO-Adapter-Mode` / `X-CHO-Data-Class` / `X-CHO-Adapter-Label` on every response so mock adapters cannot look live.
