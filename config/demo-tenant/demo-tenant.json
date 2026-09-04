@@ -1,0 +1,25 @@
+{
+  "tenantId": "demo-tenant",
+  "displayName": "Cloud Health Office Synthetic Demo Tenant",
+  "dataClassification": "synthetic",
+  "adapterMode": "Demo",
+  "lineOfBusiness": "Medicaid-MCO-demo",
+  "state": "TX",
+  "notes": [
+    "Synthetic members, providers, claims, and prior-auth fixtures only.",
+    "No PHI. Do not load production member or claim files into this tenant.",
+    "Every FHIR response is labeled via X-CHO-Adapter-Mode / X-CHO-Data-Class / X-CHO-Adapter-Label.",
+    "Start a buyer demo at GET /fhir/r4/adapter-status."
+  ],
+  "fhir": {
+    "baseUrl": "http://localhost:5023/fhir/r4",
+    "adapterStatusPath": "/fhir/r4/adapter-status",
+    "complianceStatusPath": "/fhir/r4/compliance-status",
+    "metadataPath": "/fhir/r4/metadata"
+  },
+  "seed": {
+    "patients": ["pat-001", "pat-002", "pat-003"],
+    "memberExample": "SUB900112345",
+    "providerNpi": "1234567890"
+  }
+}

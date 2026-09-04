@@ -157,7 +157,7 @@
 
 **YOU:** "You can see:"
 - "Total attachments processed: [X]"
-- "Success rate: 99.8%"
+- Do not quote a 99.8% success rate — we have no production reference customer. Use adapter-status labels and the Million Claim Challenge as local evidence only.
 - "Average processing time: 3.2 minutes"
 - "Failed transactions with detailed error logs"
 

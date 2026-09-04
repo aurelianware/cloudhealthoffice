@@ -311,6 +311,10 @@ services:
       - MongoDb__DatabaseName=FhirDB
       - SmartAuth__Issuer=http://smart-auth-service:8080
       - SmartAuth__RequireHttpsMetadata=false
+      - FhirAdapters__Mode=Demo
+      - FhirAdapters__DataClassification=synthetic
+      - FhirAdapters__TenantId=demo-tenant
+      - Appeals__UseMockAdapter=true
     depends_on:
       mongo:
         condition: service_healthy

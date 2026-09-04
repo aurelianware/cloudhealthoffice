@@ -111,6 +111,8 @@ The current repo can demonstrate:
 - Add a one-page Compliance Accelerator buyer brief.
 - Add a pilot-specific diligence checklist covering BAA, HIPAA controls,
   deployment, source-system integration, identity, audit, and support.
+- **Shipped September 2026:** founding-partner offer sheet, CISO diligence
+  binder, labeled `GET /fhir/r4/adapter-status`, synthetic `demo-tenant`.
 
 ### Days 16-45: Build proof artifacts
 

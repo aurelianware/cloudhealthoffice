@@ -1,6 +1,15 @@
 # Cloud Health Office - Pilot Program
 
-**60-Day Free Implementation for Qualifying Organizations**
+> **Canonical commercial offer (September 2026):** the SKU we sell is the
+> paid [CMS-0057-F Compliance Accelerator](CMS-0057-F-ACCELERATOR-OFFER.md)
+> ($90,000 founding-partner package, 6–8 weeks, one LOB). Diligence:
+> [docs/diligence/README.md](../diligence/README.md).
+>
+> The historical “60-day free complete platform” framing below is
+> **retired**. Do not send it to a prospect. A $0 full-platform install
+> is not how we take a first customer.
+
+**Retired template — 60-Day Free Implementation (do not use)**
 
 ---
 

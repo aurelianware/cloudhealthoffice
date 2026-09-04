@@ -46,12 +46,12 @@ CHO operates four product lines, each with distinct unit economics: **Public Too
 
 | Capability | Status |
 |------------|--------|
-| Patient Access API (FHIR R4) | ✅ Production Ready (Layer 1) |
-| Provider Access API | ✅ Production Ready (Layer 1) |
-| Prior Authorization API (72hr/7-day) | ✅ Automated (Layer 1) |
-| Payer-to-Payer API | ✅ Ready (Layer 1) |
-| Complete X12 ↔ FHIR Transformation | ✅ 45 transformation tests (part of ~2,800-method suite across 44 test projects) |
-| Configuration Wizard | **< 5 min per tenant** |
+| Patient Access API (FHIR R4) | Layer 1 technical surface; source-system integration required |
+| Provider Access API | Layer 1 technical surface; attribution / opt-out is implementation |
+| Prior Authorization API (72hr/7-day) | PAS / CRD / DTR implemented; UM rules and staffing are the payer's |
+| Payer-to-Payer API | Phase 2 — Bulk FHIR + consent building blocks, not turnkey |
+| X12 ↔ FHIR transformation tests | In repo; adapters labeled Demo / Hybrid / Live |
+| Tenant stand-up | Weeks for a Layer 1 accelerator, not “< 5 minutes to attested compliance” |
 
 *Layer 1 = CMS-0057-F compliance surface. Layer 2 (appeals re-foundation) also production-ready. See [POSITIONING.md](../POSITIONING.md) §Layer 3 for full-CAPS honest today-state.*
 
@@ -73,7 +73,7 @@ CHO operates four product lines, each with distinct unit economics: **Public Too
 
 | Metric | Current | Year 1 Target |
 |--------|---------|---------------|
-| Platform Status | ✅ 100% CMS-Ready | Maintained |
+| Platform Status | Pre-pilot; Layer 1 technical surface shipped | First paid founding-partner accelerator |
 | Test Suite | ~2,800 test methods across 44 test projects | Maintain coverage |
 | Pilot Pipeline | Active conversations | 25 customers |
 | GitHub Stars | Growing | 1,000 |

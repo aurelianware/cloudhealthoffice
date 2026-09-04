@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Layer 1 commercial packet (first-customer motion)
+
+Founding-partner CMS-0057-F Compliance Accelerator offer ($90k / 6–8 weeks), CISO diligence binder (BAA template, security one-pager, adapter-status table, data-handling rules, 25-name target list), and a labeled synthetic demo tenant. `fhir-service` now exposes `GET /fhir/r4/adapter-status` and stamps `X-CHO-Adapter-Mode` / `X-CHO-Data-Class` / `X-CHO-Adapter-Label` on every response so mock adapters cannot look live.
+
 ### 835 remittance payment posting
 
 `IRemittancePoster` posts a stored, matched 835 (`AvailableForPosting`) onto

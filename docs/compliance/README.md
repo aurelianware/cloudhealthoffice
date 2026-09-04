@@ -15,6 +15,8 @@ or payer attestation artifacts.
 | [CMS-0057-F-DEMO-MODE-LIVE-ADAPTERS.md](CMS-0057-F-DEMO-MODE-LIVE-ADAPTERS.md) | Demo-mode vs live-adapter labeling guide for buyer and pilot demos. |
 | [CMS-0057-F-PRIOR-AUTH-METRICS-TEMPLATE.md](CMS-0057-F-PRIOR-AUTH-METRICS-TEMPLATE.md) | Public prior-authorization metrics template and data collection plan. |
 | [claims-cms-0057-f-readiness.md](claims-cms-0057-f-readiness.md) | Claims-domain CMS-0057-F readiness detail. |
+| [CMS-0057-F-ACCELERATOR-OFFER.md](../sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) | The SKU we sell first (founding-partner price). |
+| [Diligence binder](../diligence/README.md) | CISO packet: BAA template, security one-pager, adapter status, data handling. |
 
 ## Package Workflow
 

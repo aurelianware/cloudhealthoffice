@@ -47,6 +47,12 @@ NOW, THEREFORE, in consideration of the mutual covenants and agreements set fort
 
 **1.7 "PHI"** has the meaning set forth in the Health Insurance Portability and Accountability Act of 1996 and its implementing regulations (collectively, "HIPAA").
 
+**1.8 "Operating Mode"** means, for a given tenant and domain, whether Cloud Health Office runs in Augment (shadow; Customer's legacy system of record remains authoritative), Replace (Cloud Health Office is authoritative for that domain), or Legacy (Cloud Health Office is not on the path). Operating Mode is set on the Order Form per domain.
+
+**1.9 "Layer 1 Compliance Accelerator"** means the CMS-0057-F FHIR / SMART / prior-authorization / audit surface described in the Order Form. Layer 1 does not replace Customer's core claims adjudication system.
+
+**1.10 "Founding Partner"** means a Customer purchasing under the founding-partner exhibit on the Order Form, including the case-study and reference-call commitments stated there.
+
 ---
 
 ## 2. LICENSE GRANT

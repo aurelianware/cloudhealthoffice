@@ -25,7 +25,7 @@ Cloud Health Office Platform automates the entire workflow:
 ✅ 100% HIPAA compliant (Premium Key Vault, private endpoints, PHI masking)
 
 **Results:**
-- 80% reduction in processing time
+- Modeled processing-time reduction (not a live customer result; we are pre-pilot)
 - 60% fewer provider calls
 - $180K+ annual savings per payer
 - 18x ROI in first year

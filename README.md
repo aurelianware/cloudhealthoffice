@@ -142,6 +142,8 @@ Interoperability and Prior Authorization Final Rule. Treat the readiness matrix
 as the source of truth for current status and gaps.
 
 - [CMS-0057-F readiness matrix](docs/compliance/CMS-0057-F-READINESS-MATRIX.md)
+- [CMS-0057-F Compliance Accelerator offer](docs/sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) — the SKU we sell first
+- [Pilot diligence binder](docs/diligence/README.md)
 - [CMS-0057-F compliance guide](docs/features/CMS-0057-F-COMPLIANCE.md)
 - [FHIR integration](docs/features/FHIR-INTEGRATION.md)
 - [Prior authorization API](docs/features/PRIOR-AUTHORIZATION-API.md)
