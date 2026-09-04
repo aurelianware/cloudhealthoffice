@@ -17,8 +17,6 @@ public class ScenarioManifestTests
     private static readonly IReadOnlyList<ScenarioTrait> Traits =
         TraitScanner.Scan(Assembly.GetExecutingAssembly());
 
-    private static readonly IReadOnlySet<string> AllowedTraitBackends =
-        new HashSet<string>(StringComparer.Ordinal) { "Replace", "Augment" };
     private static readonly IReadOnlySet<string> AllowedAugmentKeys =
         new HashSet<string>(StringComparer.Ordinal) { "qnxt", "facets", "healthedge" };
 
@@ -65,9 +63,14 @@ public class ScenarioManifestTests
     [Fact]
     public void EveryTestBackendTrait_IsValid()
     {
-        var bad = Traits.Select(t => t.Backend).Distinct()
-            .Where(b => !AllowedTraitBackends.Contains(b)).ToList();
-        bad.Should().BeEmpty("[Trait(\"Backend\",…)] must be Replace or Augment");
+        static bool IsValid(string b) =>
+            b is "Replace" or "Augment"
+            || (b.StartsWith("augment.", System.StringComparison.Ordinal)
+                && new HashSet<string>(StringComparer.Ordinal) { "qnxt", "facets", "healthedge" }
+                    .Contains(b["augment.".Length..]));
+
+        var bad = Traits.Select(t => t.Backend).Distinct().Where(b => !IsValid(b)).ToList();
+        bad.Should().BeEmpty("[Trait(\"Backend\",…)] must be Replace, Augment, or augment.<known-key>");
     }
 
     [Fact]
@@ -101,11 +104,14 @@ public class ScenarioManifestTests
         {
             foreach (var (key, backend) in s.Augment.Where(a => a.Value.Status == "PASSABLE"))
             {
+                // Mirrors the evidence generator: a key-specific test proves a
+                // specific augment backend PASSABLE (a generic "Augment" test does not).
                 var augmentTests = Traits
-                    .Where(t => t.ScenarioId == s.Id && t.Backend == "Augment" && !t.IsGap)
+                    .Where(t => t.ScenarioId == s.Id && !t.IsGap
+                        && string.Equals(t.Backend, $"augment.{key}", StringComparison.OrdinalIgnoreCase))
                     .ToList();
                 augmentTests.Should().NotBeEmpty(
-                    $"scenario {s.Id} is PASSABLE for augment backend '{key}' and needs a non-GAP Augment test");
+                    $"scenario {s.Id} is PASSABLE for augment backend '{key}' and needs a non-GAP augment.{key} test");
             }
         }
     }

@@ -51,20 +51,30 @@ public static class EvidenceWriters
         sb.AppendLine($"> {PassableDisclaimer}");
         sb.AppendLine();
 
+        // Matrix columns are generated from the augment backends actually present
+        // in the report, so new backends (e.g. facets/healthedge) appear
+        // automatically without editing the writer.
+        var augmentKeys = AugmentKeys(r);
         sb.AppendLine("## Scenario matrix");
         sb.AppendLine();
-        sb.AppendLine("| Scenario | Name | CHO Replace (product) | QNXT Augment (integration) |");
-        sb.AppendLine("| --- | --- | --- | --- |");
+        sb.Append("| Scenario | Name | CHO Replace (product) |");
+        foreach (var key in augmentKeys) sb.Append($" {key.ToUpperInvariant()} Augment (integration) |");
+        sb.AppendLine();
+        sb.Append("| --- | --- | --- |");
+        foreach (var _ in augmentKeys) sb.Append(" --- |");
+        sb.AppendLine();
         foreach (var s in r.Scenarios)
         {
-            var replace = s.Backends.FirstOrDefault(b => b.Backend == BackendIds.Replace)?.DeclaredStatus ?? "N/A";
-            var qnxt = s.Backends.FirstOrDefault(b => b.Backend == BackendIds.Augment("qnxt"))?.DeclaredStatus ?? "N/A";
-            sb.AppendLine($"| {s.Id} | {s.Name} | {replace} | {qnxt} |");
+            sb.Append($"| {s.Id} | {s.Name} | {Declared(s, BackendIds.Replace)} |");
+            foreach (var key in augmentKeys) sb.Append($" {Declared(s, BackendIds.Augment(key))} |");
+            sb.AppendLine();
         }
         sb.AppendLine();
 
-        AppendGapSection(sb, r, "## Remaining product gaps", BackendIds.Replace);
-        AppendIntegrationGapSection(sb, r);
+        AppendCapabilitySection(sb, r, "## Product capability — Cloud Health Office Replace",
+            b => b == BackendIds.Replace, includeBackendColumn: false);
+        AppendCapabilitySection(sb, r, "## Integration capability — external cores (Augment)",
+            b => b.StartsWith("augment.", StringComparison.Ordinal), includeBackendColumn: true);
 
         sb.AppendLine("## Test details");
         sb.AppendLine();
@@ -91,16 +101,21 @@ public static class EvidenceWriters
         return sb.ToString();
     }
 
-    private static void AppendGapSection(StringBuilder sb, EvidenceReport r, string heading, string backendId)
+    private static void AppendCapabilitySection(
+        StringBuilder sb, EvidenceReport r, string heading, Func<string, bool> backendMatch, bool includeBackendColumn)
     {
         sb.AppendLine(heading);
         sb.AppendLine();
-        sb.AppendLine("## Product capability — Cloud Health Office Replace");
-        sb.AppendLine();
-        var rows = r.KnownGaps.Where(g => g.Backend == backendId).ToList();
+        var rows = r.KnownGaps.Where(g => backendMatch(g.Backend)).ToList();
         if (rows.Count == 0)
         {
-            sb.AppendLine("_No declared product gaps._");
+            sb.AppendLine("_No declared partials or gaps._");
+        }
+        else if (includeBackendColumn)
+        {
+            sb.AppendLine("| Scenario | Backend | Status | Rationale |");
+            sb.AppendLine("| --- | --- | --- | --- |");
+            foreach (var g in rows) sb.AppendLine($"| {g.ScenarioId} | {g.Backend} | {g.Status} | {g.Rationale} |");
         }
         else
         {
@@ -111,23 +126,19 @@ public static class EvidenceWriters
         sb.AppendLine();
     }
 
-    private static void AppendIntegrationGapSection(StringBuilder sb, EvidenceReport r)
-    {
-        sb.AppendLine("## Integration capability — external cores (Augment)");
-        sb.AppendLine();
-        var rows = r.KnownGaps.Where(g => g.Backend.StartsWith("augment.", StringComparison.Ordinal)).ToList();
-        if (rows.Count == 0)
-        {
-            sb.AppendLine("_No declared integration gaps._");
-        }
-        else
-        {
-            sb.AppendLine("| Scenario | Backend | Status | Rationale |");
-            sb.AppendLine("| --- | --- | --- | --- |");
-            foreach (var g in rows) sb.AppendLine($"| {g.ScenarioId} | {g.Backend} | {g.Status} | {g.Rationale} |");
-        }
-        sb.AppendLine();
-    }
+    private static string Declared(ScenarioEvidence s, string backendId) =>
+        s.Backends.FirstOrDefault(b => b.Backend == backendId)?.DeclaredStatus ?? "N/A";
+
+    /// <summary>Ordered set of augment backend keys present anywhere in the report.</summary>
+    private static IReadOnlyList<string> AugmentKeys(EvidenceReport r) =>
+        r.Scenarios
+            .SelectMany(s => s.Backends)
+            .Select(b => b.Backend)
+            .Where(b => b.StartsWith("augment.", StringComparison.Ordinal))
+            .Select(b => b["augment.".Length..])
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(k => k, StringComparer.Ordinal)
+            .ToList();
 
     // ── HTML ───────────────────────────────────────────────────────────────────
 
@@ -141,7 +152,7 @@ public static class EvidenceWriters
         sb.AppendLine("<style>body{font:14px/1.6 system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#111}"
                       + "table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left}"
                       + "th{background:#f3f4f6}code{background:#f3f4f6;padding:.1rem .3rem;border-radius:3px}"
-                      + ".PASSABLE{color:#087f5b;font-weight:600}.PARTIAL{color:#b7791f;font-weight:600}.GAP{color:#c92a2a;font-weight:600}"
+                      + ".PASSABLE{color:#087f5b;font-weight:600}.PARTIAL{color:#b7791f;font-weight:600}.GAP{color:#c92a2a;font-weight:600}.NA{color:#555}"
                       + "blockquote{border-left:3px solid #ccc;margin:1rem 0;padding:.2rem 1rem;color:#444}</style></head><body>");
         sb.AppendLine("<h1>Cloud Health Office CMS-0057-F Acceptance Evidence</h1>");
         sb.AppendLine("<h2>Evidence identity</h2><ul>");
@@ -156,14 +167,25 @@ public static class EvidenceWriters
         sb.AppendLine($"<li>FHIR version: {E(r.Identity.FhirVersion)}</li></ul>");
         sb.AppendLine($"<h2>Test execution summary</h2><p>Passed {r.TestSummary.Passed} · Failed {r.TestSummary.Failed} · Skipped {r.TestSummary.Skipped} · Total {r.TestSummary.Total}</p>");
         sb.AppendLine($"<blockquote>{E(PassableDisclaimer)}</blockquote>");
-        sb.AppendLine("<h2>Scenario matrix</h2><table><tr><th>Scenario</th><th>Name</th><th>CHO Replace (product)</th><th>QNXT Augment (integration)</th></tr>");
+        var augmentKeys = AugmentKeys(r);
+        sb.Append("<h2>Scenario matrix</h2><table><tr><th>Scenario</th><th>Name</th><th>CHO Replace (product)</th>");
+        foreach (var key in augmentKeys) sb.Append($"<th>{E(key.ToUpperInvariant())} Augment (integration)</th>");
+        sb.AppendLine("</tr>");
         foreach (var s in r.Scenarios)
         {
-            var replace = s.Backends.FirstOrDefault(b => b.Backend == BackendIds.Replace)?.DeclaredStatus ?? "N/A";
-            var qnxt = s.Backends.FirstOrDefault(b => b.Backend == BackendIds.Augment("qnxt"))?.DeclaredStatus ?? "N/A";
-            sb.AppendLine($"<tr><td>{E(s.Id)}</td><td>{E(s.Name)}</td><td class=\"{E(replace)}\">{E(replace)}</td><td class=\"{E(qnxt)}\">{E(qnxt)}</td></tr>");
+            sb.Append($"<tr><td>{E(s.Id)}</td><td>{E(s.Name)}</td>{Cell(Declared(s, BackendIds.Replace))}");
+            foreach (var key in augmentKeys) sb.Append(Cell(Declared(s, BackendIds.Augment(key))));
+            sb.AppendLine("</tr>");
         }
         sb.AppendLine("</table>");
+
+        // Local helper: a status cell with a CSS-safe class (N/A -> NA).
+        static string Cell(string status)
+        {
+            var enc = System.Net.WebUtility.HtmlEncode(status);
+            var cls = new string(status.Where(char.IsLetterOrDigit).ToArray());
+            return $"<td class=\"{cls}\">{enc}</td>";
+        }
         sb.AppendLine("<h2>Limitations</h2><ul>"
             + "<li>Evidence reflects the acceptance suite on the tested commit, on synthetic data only.</li>"
             + "<li>Declared capability status is separate from test execution status.</li>"

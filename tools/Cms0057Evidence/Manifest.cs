@@ -15,6 +15,16 @@ public static class Status
         new HashSet<string>(StringComparer.Ordinal) { Passable, Partial, Gap, NotApplicable };
 }
 
+/// <summary>Known external-core (Augment) backend keys. Constrained so a typo or
+/// an unimplemented backend cannot silently enter the evidence.</summary>
+public static class AugmentBackends
+{
+    public const string Qnxt = "qnxt";
+
+    public static readonly IReadOnlySet<string> Known =
+        new HashSet<string>(StringComparer.Ordinal) { Qnxt, "facets", "healthedge" };
+}
+
 public sealed class ManifestDocument
 {
     [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; init; }
@@ -84,6 +94,11 @@ public static class ManifestLoader
                 throw new ManifestException($"Scenario {s.Id} replace.status '{s.Replace.Status}' is not a valid status.");
             foreach (var (key, backend) in s.Augment)
             {
+                if (string.IsNullOrWhiteSpace(key))
+                    throw new ManifestException($"Scenario {s.Id} has an empty augment backend key.");
+                if (!AugmentBackends.Known.Contains(key))
+                    throw new ManifestException(
+                        $"Scenario {s.Id} augment backend '{key}' is not a known backend ({string.Join(", ", AugmentBackends.Known)}).");
                 if (!Status.All.Contains(backend.Status))
                     throw new ManifestException($"Scenario {s.Id} augment.{key}.status '{backend.Status}' is not a valid status.");
             }
