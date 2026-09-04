@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Harden and publish CMS-0057-F acceptance evidence
+
+Made the CMS-0057-F evidence pipeline fresh, traceable, and externally
+understandable without exposing CI internals. The evidence workflow now also runs
+when runtime/domain code that can affect CMS-0057-F behavior changes (the FHIR,
+authorization, member, provider, claims, benefit-plan, consent, and smart-auth
+services, plus the operating-mode and prior-auth-rule engines), not only when the
+acceptance suite or evidence tooling changes. A new allow-list projection in
+`tools/Cms0057Evidence` (`--public-output`) emits a sanitized
+`cms0057-public-evidence.json` — built field by field, so it carries only schema
+version, evidence status, commit SHA/short/URL, timestamp, synthetic
+classification, framework, FHIR version, scenario count, a test-execution summary,
+independent Replace (product) and per-backend Augment (integration) declared-status
+counts, a per-scenario declared-status matrix, and disclaimers — never test names,
+rationales, run identity, PHI, secrets, tenant data, or QNXT field mappings. The
+projector refuses to publish a run with any failed test. Declared capability status
+stays separate from execution: a passing GAP-assertion test remains **GAP** in the
+public snapshot, never a pass. The workflow now splits into an `evidence` job
+(PR + main; validates and uploads artifacts only) and a main-only `publish` job
+(narrow `contents: write`) that commits the sanitized snapshot to the site tree; the
+acceptance-scenarios page renders it under **Latest published evidence** with the
+tested source revision and generation date, Replace shown as product capability and
+each external core as separate integration capability. Public reporting avoids any
+CMS-certification or universal-production-readiness claim, and known gaps stay
+visible. New projector unit tests cover allow-list sanitization, GAP-stays-GAP,
+independent Replace/Augment counts, deterministic ordering, fail-safe on missing or
+failed input, and unknown future backends. No runtime service behavior changed.
+
 ### Versioned CMS-0057-F acceptance evidence in CI
 
 Turned the CMS-0057-F acceptance suite into auditable, reproducible evidence
