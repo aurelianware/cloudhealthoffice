@@ -180,7 +180,7 @@
 
 **YOU:** "Hi [Name], this is [Your Name] from Cloud Health Office Platform. I left you a voicemail and sent an email last week about automating your attachment processing, but I wanted to try you one more time."
 
-**YOU:** "I don't want to be a pest, so I'll make this the last call. But I did want to mention one thing—we just onboarded [Similar Payer], and they're seeing exactly the results we discussed: 80% reduction in processing time and about $180K in annual savings."
+**YOU:** "I don't want to be a pest, so I'll make this the last call. We are pre-pilot — no invented customer results. What we do have is a $90k founding-partner CMS-0057-F accelerator that sits beside your core in 6–8 weeks, and a diligence binder your CISO can read this week."
 
 **YOU:** "If this is something you'd like to explore, just shoot me a quick email or give me a call. If not, no worries—I'll assume it's not a priority right now and I won't bother you again."
 

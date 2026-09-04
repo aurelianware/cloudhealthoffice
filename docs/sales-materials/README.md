@@ -1,7 +1,9 @@
 # Sales Materials for Cloud Health Office Platform
 ## Phase 1: Manual Onboarding - First Customer Live
 
-This directory contains all sales, marketing, and customer onboarding materials for securing and deploying the first paying customer.
+**Start here for the first customer:** [CMS-0057-F-ACCELERATOR-OFFER.md](CMS-0057-F-ACCELERATOR-OFFER.md) and the [diligence binder](../diligence/README.md). Demo: [cms-0057-f-accelerator-demo.md](demo-materials/cms-0057-f-accelerator-demo.md). Targets: [FOUNDING-PARTNER-TARGET-LIST.md](../diligence/FOUNDING-PARTNER-TARGET-LIST.md).
+
+This directory contains sales, marketing, and customer onboarding materials. The retired “60-day free complete platform” language in older files is not the SKU.
 
 ---
 

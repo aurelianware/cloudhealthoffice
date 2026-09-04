@@ -14,6 +14,7 @@ the architecture, and find an area to contribute.
 | Learn payer-domain concepts | [Healthcare domain](domain/README.md) |
 | Reproduce benchmark evidence | [Benchmarks](benchmarks/README.md) |
 | Deploy beyond local development | [Deployment](deployment/DEPLOYMENT.md) |
+| Sell the first Layer 1 pilot | [CMS-0057-F Accelerator offer](sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) and [diligence binder](diligence/README.md) |
 | Contribute | [Developer guide](developer/README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
 
 ## Getting Started

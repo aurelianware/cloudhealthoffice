@@ -135,12 +135,12 @@ This pitch deck presents Cloud Health Office (CHO) across all four of its produc
 
 | Capability | Status |
 |------------|--------|
-| Patient Access API | ✅ Implemented |
-| Provider Access API | ✅ Implemented |
-| Prior Authorization API | ✅ Automated |
-| Payer-to-Payer API | ✅ Ready |
-| X12 ↔ FHIR R4 Transformation | ✅ 45 Tests Passing |
-| Da Vinci IG Conformance | ✅ PDex, PAS, CRD, DTR |
+| Patient Access API | Implemented technical surface |
+| Provider Access API | Implemented technical surface |
+| Prior Authorization API | PAS / CRD / DTR implemented; UM rules are the payer's |
+| Payer-to-Payer API | Phase 2 — not turnkey |
+| X12 ↔ FHIR R4 Transformation | Tests in repo; adapters labeled Demo / Hybrid / Live |
+| Da Vinci IG support | PAS, CRD, DTR surfaces |
 
 *Implemented as a Layer 1 CMS-0057-F readiness surface. First pilot deployment in motion; no production reference customer yet. See [POSITIONING.md](../POSITIONING.md) §Layer 3 ("what it honestly is today").*
 

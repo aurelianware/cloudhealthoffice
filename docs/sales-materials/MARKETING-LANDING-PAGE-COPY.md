@@ -33,7 +33,7 @@ The source-available, Azure-native payer platform that delivers an inspectable C
 
 ### Customer Logos Section
 
-**Trusted by Healthcare Innovators**
+**Built for Healthcare Innovators**
 
 [PLACEHOLDER: Logo grid - 4-6 anonymized logos with text:]
 - "Regional Health Plan - Southeast"

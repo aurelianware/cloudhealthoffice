@@ -21,10 +21,12 @@
 #   AUTH_URL          (default: http://localhost:5006)
 #   CLAIMS_URL       (default: http://localhost:5001)
 #   BENEFIT_PLAN_URL (default: http://localhost:5002)
-#   FHIR_URL         (default: http://localhost:5007)
+#   FHIR_URL         (default: http://localhost:5023)
 #   TENANT_ID        (default: demo-tenant)
 #   FHIR_TOKEN       (default: empty — set to a SMART on FHIR Bearer token)
 #   PAUSE_SECONDS    (default: 2)
+#
+# Data class: synthetic. This is not a CMS attestation.
 # =============================================================================
 set -euo pipefail
 
@@ -36,7 +38,7 @@ ELIGIBILITY_URL="${ELIGIBILITY_URL:-http://localhost:5005}"
 AUTH_URL="${AUTH_URL:-http://localhost:5006}"
 CLAIMS_URL="${CLAIMS_URL:-http://localhost:5001}"
 BENEFIT_PLAN_URL="${BENEFIT_PLAN_URL:-http://localhost:5002}"
-FHIR_URL="${FHIR_URL:-http://localhost:5007}"
+FHIR_URL="${FHIR_URL:-http://localhost:5023}"
 TENANT_ID="${TENANT_ID:-demo-tenant}"
 FHIR_TOKEN="${FHIR_TOKEN:-}"
 PAUSE="${PAUSE_SECONDS:-2}"
@@ -106,9 +108,25 @@ check_response() {
   if [[ "$http_code" -lt 200 || "$http_code" -ge 300 ]]; then
     echo ""
     echo -e "  ${RED}FATAL: ${step_name} returned HTTP ${http_code}. Halting demo.${RESET}" >&2
-    echo -e "  ${RED}Check that all services are running (docker compose up -d).${RESET}" >&2
+    echo -e "  ${RED}Check that all services are running (docker compose --profile fhir up -d).${RESET}" >&2
     exit 1
   fi
+}
+
+# FHIR reads need a SMART token. Without one, label the skip instead of faking success.
+fhir_or_skip() {
+  local step_name="$1"
+  local http_code="$2"
+
+  if [[ "$http_code" -ge 200 && "$http_code" -lt 300 ]]; then
+    return 0
+  fi
+  if [[ -z "$FHIR_TOKEN" && ( "$http_code" == "401" || "$http_code" == "000" ) ]]; then
+    narrate "SKIPPED ${step_name}: set FHIR_TOKEN for authenticated FHIR reads. Adapter labels still apply."
+    return 1
+  fi
+  echo -e "  ${YELLOW}WARNING: ${step_name} returned HTTP ${http_code}. Continuing (synthetic demo).${RESET}"
+  return 1
 }
 
 # Build FHIR authorization header array for curl
@@ -120,10 +138,11 @@ fi
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
-banner "Cloud Health Office — CMS-0057-F Compliance Demo"
+banner "Cloud Health Office — CMS-0057-F Accelerator Demo (synthetic)"
 
 echo -e "  ${BOLD}Date:${RESET}       $(date '+%Y-%m-%d %H:%M %Z')"
 echo -e "  ${BOLD}Tenant:${RESET}     ${TENANT_ID}"
+echo -e "  ${BOLD}Data class:${RESET} synthetic — not PHI, not an attestation"
 echo -e "  ${BOLD}Claims:${RESET}     ${CLAIMS_URL}"
 echo -e "  ${BOLD}Benefit:${RESET}    ${BENEFIT_PLAN_URL}"
 echo -e "  ${BOLD}Enrollment:${RESET} ${ENROLLMENT_URL}"
@@ -146,7 +165,35 @@ if ! command -v jq &>/dev/null; then
   echo -e "${YELLOW}WARNING: jq is not installed — responses will not be formatted.${RESET}"
 fi
 
-narrate "All services configured. Starting end-to-end CMS-0057-F demo..."
+narrate "All services configured. Starting labeled synthetic CMS-0057-F demo..."
+narrate "Every FHIR response should carry X-CHO-Adapter-Mode / X-CHO-Data-Class."
+pause
+
+# ==========================================================================
+# STEP 0: Adapter status (public, labeled)
+# ==========================================================================
+step "Adapter status — Demo vs Hybrid vs Live (public)"
+
+narrate "GET ${FHIR_URL}/fhir/r4/adapter-status"
+narrate "Label: this inventory is the source of truth for the rest of the demo."
+echo ""
+
+RESPONSE=$(curl -s -D - -o /tmp/cho-adapter-status.json -w "\n%{http_code}" \
+  -X GET "${FHIR_URL}/fhir/r4/adapter-status" \
+  -H "Accept: application/json")
+
+HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+BODY=$(cat /tmp/cho-adapter-status.json 2>/dev/null || echo "")
+
+show_response "$HTTP_CODE" "$BODY"
+if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+  MODE=$(echo "$BODY" | jq -r '.effectiveMode // .EffectiveMode // empty' 2>/dev/null || echo "")
+  CLASS=$(echo "$BODY" | jq -r '.dataClassification // .DataClassification // empty' 2>/dev/null || echo "")
+  narrate "Effective adapter mode: ${MODE:-unknown}; data class: ${CLASS:-unknown}."
+  narrate "Payer-to-payer should be OutOfScope on this tenant."
+else
+  narrate "Adapter-status endpoint not reachable. Continue, but do not call unlabeled FHIR 'live'."
+fi
 pause
 
 # ==========================================================================
@@ -295,6 +342,7 @@ pause
 # ==========================================================================
 step "FHIR Patient Access API — ExplanationOfBenefit (CMS-0057-F §1)"
 
+narrate "Label: Hybrid on the demo tenant (claims-service proxy, synthetic fixtures)."
 narrate "CMS-0057-F requires payers to expose claims data via FHIR Patient Access API."
 narrate "Querying ExplanationOfBenefit for patient SUB900112345."
 narrate "GET ${FHIR_URL}/fhir/r4/ExplanationOfBenefit?patient=SUB900112345"
@@ -310,9 +358,9 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
-check_response "FHIR ExplanationOfBenefit" "$HTTP_CODE"
-
-narrate "FHIR R4 ExplanationOfBenefit bundle returned — adjudicated claims accessible to member apps."
+if fhir_or_skip "FHIR ExplanationOfBenefit" "$HTTP_CODE"; then
+  narrate "FHIR R4 ExplanationOfBenefit bundle returned. Label remains Hybrid/synthetic unless adapter-status says Live."
+fi
 pause
 
 # ==========================================================================
@@ -320,6 +368,7 @@ pause
 # ==========================================================================
 step "FHIR Provider Directory API — Practitioner (CMS-0057-F §2)"
 
+narrate "Label: Hybrid on the demo tenant (provider-service proxy)."
 narrate "CMS-0057-F requires a public-facing FHIR Provider Directory."
 narrate "Looking up rendering provider NPI 1234567890."
 narrate "GET ${FHIR_URL}/fhir/r4/Practitioner/1234567890"
@@ -335,9 +384,9 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
-check_response "FHIR Practitioner" "$HTTP_CODE"
-
-narrate "Provider directory entry returned with NPI, specialty, and network status."
+if fhir_or_skip "FHIR Practitioner" "$HTTP_CODE"; then
+  narrate "Provider directory entry returned. Label remains Hybrid unless adapter-status says Live."
+fi
 pause
 
 # ==========================================================================
@@ -345,6 +394,7 @@ pause
 # ==========================================================================
 step "CMS-0057-F Compliance Self-Assessment"
 
+narrate "Label: config posture only — not a CMS attestation."
 narrate "Running compliance self-assessment against CMS-0057-F requirements:"
 narrate "  • Patient Access API (FHIR R4)"
 narrate "  • Provider Directory API"
@@ -365,37 +415,39 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
-check_response "Compliance status" "$HTTP_CODE"
-
-# Extract compliance summary if available
-COMPLIANT=$(echo "$BODY" | jq -r '.overallCompliant // empty' 2>/dev/null || echo "")
-PCT=$(echo "$BODY" | jq -r '.compliancePercentage // empty' 2>/dev/null || echo "")
-
-if [[ "$COMPLIANT" == "true" ]]; then
-  narrate "COMPLIANT — All CMS-0057-F requirements met (${PCT}%)."
-elif [[ -n "$PCT" ]]; then
-  narrate "Compliance: ${PCT}% of CMS-0057-F requirements met."
+if fhir_or_skip "Compliance status" "$HTTP_CODE"; then
+  COMPLIANT=$(echo "$BODY" | jq -r '.overallCompliant // .OverallCompliant // empty' 2>/dev/null || echo "")
+  PCT=$(echo "$BODY" | jq -r '.compliancePercentage // .CompliancePercentage // empty' 2>/dev/null || echo "")
+  NOTE=$(echo "$BODY" | jq -r '.attestationNote // .AttestationNote // empty' 2>/dev/null || echo "")
+  narrate "Config posture: compliant=${COMPLIANT:-n/a} percentage=${PCT:-n/a}."
+  if [[ -n "$NOTE" ]]; then
+    narrate "$NOTE"
+  else
+    narrate "This percentage is not a CMS score and not a payer attestation."
+  fi
 fi
 pause
 
 # ==========================================================================
 # Summary
 # ==========================================================================
-banner "Demo Complete — CMS-0057-F End-to-End"
+banner "Demo Complete — labeled synthetic accelerator"
 
-echo -e "  ${BOLD}What we demonstrated:${RESET}"
+echo -e "  ${BOLD}What we demonstrated (synthetic demo-tenant):${RESET}"
 echo ""
-echo -e "  ${GREEN}✓${RESET} 834 Member Enrollment      — Automated enrollment import"
+echo -e "  ${GREEN}✓${RESET} Adapter status              — Demo / Hybrid / OutOfScope inventory"
+echo -e "  ${GREEN}✓${RESET} 834 Member Enrollment       — Automated enrollment import"
 echo -e "  ${GREEN}✓${RESET} 270/271 Eligibility         — Real-time eligibility verification"
 echo -e "  ${GREEN}✓${RESET} 278 Prior Authorization     — Electronic prior auth submission"
 echo -e "  ${GREEN}✓${RESET} 837P Claim Submission       — Professional claim intake"
 echo -e "  ${GREEN}✓${RESET} Claims Adjudication         — NCCI edits, fee schedule, benefits"
-echo -e "  ${GREEN}✓${RESET} FHIR Patient Access API     — ExplanationOfBenefit for members"
-echo -e "  ${GREEN}✓${RESET} FHIR Provider Directory     — Practitioner lookup by NPI"
-echo -e "  ${GREEN}✓${RESET} CMS-0057-F Compliance       — Self-assessment across all requirements"
+echo -e "  ${GREEN}✓${RESET} FHIR Patient Access API     — ExplanationOfBenefit (Hybrid/synthetic)"
+echo -e "  ${GREEN}✓${RESET} FHIR Provider Directory     — Practitioner lookup (Hybrid)"
+echo -e "  ${GREEN}✓${RESET} CMS-0057-F config posture   — Not an attestation"
 echo ""
-echo -e "  ${BOLD}CMS-0057-F Interoperability & Prior Authorization Final Rule${RESET}"
-echo -e "  Cloud Health Office delivers full compliance out of the box."
+echo -e "  ${BOLD}This is technical evidence for a Layer 1 accelerator, not CMS certification.${RESET}"
+echo -e "  ${BOLD}Payer-to-payer is out of scope. Production PHI requires a BAA.${RESET}"
 echo ""
-echo -e "  ${CYAN}Questions? Let's dive deeper into any component.${RESET}"
+echo -e "  ${CYAN}Offer: docs/sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md${RESET}"
+echo -e "  ${CYAN}Diligence: docs/diligence/README.md${RESET}"
 echo ""

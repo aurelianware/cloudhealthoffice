@@ -97,32 +97,32 @@ This deck presents Cloud Health Office (CHO) across all four product lines: Publ
 - Before/After comparison graphic
 
 ### Headline
-**Cloud Health Office: Production-Ready in Minutes, Not Months**
+**Cloud Health Office: CMS-0057-F technical surface beside your core, in weeks**
 
 ### Platform Overview
 
-**The first source-available, Azure-native EDI platform with complete CMS-0057-F compliance**
+**Source-available Layer 1 accelerator. Not a CMS certification. No production reference customer yet.**
 
 | Capability | Status |
 |------------|--------|
-| Patient Access API | ✅ Production Ready |
-| Provider Access API | ✅ Production Ready |
-| Prior Authorization API | ✅ Automated (Da Vinci PAS 2.0) |
-| Payer-to-Payer API | ✅ Ready |
-| X12 ↔ FHIR R4 Transformation | ✅ 45 Tests Passing |
-| Da Vinci IG Conformance | ✅ PDex, PAS, CRD, DTR |
-| HIPAA Compliance | ✅ BAA Included |
-| Security | ✅ Zero Vulnerabilities |
+| Patient Access API | Implemented technical surface (source integration required) |
+| Provider Access API / Directory | Implemented technical surface (attribution / opt-out is implementation) |
+| Prior Authorization API | PAS `$submit` / CRD / DTR implemented; UM rules are the payer's |
+| Payer-to-Payer API | Phase 2 — Bulk FHIR + consent building blocks, not turnkey |
+| X12 ↔ FHIR R4 Transformation | Tests in repo; adapters labeled Demo / Hybrid / Live |
+| Da Vinci IG support | PAS, CRD, DTR surfaces in `fhir-service` |
+| HIPAA | BAA template in diligence binder; not signed until the Order Form |
+| Security | Architecture + scanning; no “zero vulnerabilities” claim |
 
 ### The Transformation
 
 | Metric | Before Cloud Health Office | After |
 |--------|---------------------------|-------|
-| Deployment Time | 6-18 months | **< 1 hour** |
-| Implementation Cost | $500K - $2M | **$6K - $60K/year** |
-| Compliance Readiness | Uncertain | **100% CMS-0057-F capability coverage — pilot-validated with first partners** |
-| Source Code Access | None (vendor lock-in) | **Full (BSL 1.1)** |
-| Ongoing Maintenance | $150K+/year | **$0 (included)** |
+| Deployment Time | 6-18 months core project | **6–8 week Layer 1 accelerator** |
+| Implementation Cost | $500K - $2M | **Founding-partner $90k package** (see offer sheet) |
+| Compliance Readiness | Uncertain | **Inspectable evidence; payer still attests** |
+| Source Code Access | None (vendor lock-in) | **Full (BSL 1.1); production needs a commercial license** |
+| First logo | n/a | **We are pre-pilot. That is why founding-partner terms exist.** |
 
 ---
 

@@ -38,11 +38,34 @@ Phone: ___________________________________________________________________
 
 ---
 
+## SKU (select one)
+
+☐ **Layer 1 — CMS-0057-F Compliance Accelerator (founding partner)**
+   Fixed package: $90,000 · 6–8 weeks · one tenant · one line of business
+   Includes 90 days Layer 1 runtime from kickoff
+   Case study (named or anonymized) and two reference calls in year 1: ☐ Yes (required for founding-partner price)
+
+☐ **Live-adapter add-on** (Patient, Coverage, EOB to named source systems) · $60,000
+
+☐ **Second LOB** (scoped at kickoff) · $45,000
+
+☐ **Layer 2 amendment — Appeals domain** (Operating Mode: ☐ Augment  ☐ Replace) · PMPM / SOW on exhibit
+
+☐ **Other / custom** · attach SOW
+
+**Data classification at kickoff**: ☐ Synthetic only  ☐ De-identified  ☐ Limited PHI (BAA required)  ☐ Production PHI (BAA + commercial license required)
+
+**BAA**: ☐ Attached  ☐ Customer paper  ☐ Not applicable (synthetic only)
+
+Canonical offer: `docs/sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md`
+
+---
+
 ## SERVICE SUBSCRIPTION
 
 ### Subscription Details
 
-**Subscription Tier**: ☐ Starter  ☐ Professional  ☐ Enterprise  ☐ Custom
+**Subscription Tier**: ☐ Layer 1 Accelerator  ☐ Starter  ☐ Professional  ☐ Enterprise  ☐ Custom
 
 **Subscription Term**:  
 ☐ Annual (10% discount)  

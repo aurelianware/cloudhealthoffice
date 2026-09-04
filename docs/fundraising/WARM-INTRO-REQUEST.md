@@ -125,7 +125,7 @@ A few quick highlights:
 • 900+ health plans must comply by January 1, 2027
 • Traditional implementations take 6-18 months and $500K+
 • We deploy in <5 minutes at 85% lower cost
-• 100% compliant, ~2,800 test methods across 44 test projects, production-ready
+• Pre-pilot Layer 1 technical surface, ~4,100 test methods across 45 test projects; no production reference customer yet
 
 I've attached our one-pager and would be happy to send our full deck if helpful. Would [specific times] work for a call?
 
@@ -234,7 +234,7 @@ Cloud Health Office is helping us achieve CMS-0057-F compliance with their sourc
 What impressed us:
 • Deployed in [timeframe] vs. typical 6-18 months
 • 85% cost reduction vs. enterprise alternatives
-• Complete CMS compliance out of the box
+• CMS-0057-F technical accelerator beside the existing core — not certification out of the box
 • Strong technical team, responsive support
 
 They're raising a seed round, and I thought it might be worth a conversation given [Firm]'s focus on healthcare. I'm copying [Founder Name] who can share more.
@@ -260,7 +260,7 @@ Thank you, [Customer Name], for the kind introduction.
 
 • Deploy CMS-0057-F compliance in under 5 minutes
 • 85% cost reduction vs. enterprise vendors
-• 100% compliant infrastructure, ~2,800 test methods across 44 test projects
+• Inspectable CMS-0057-F technical surface; adapters labeled Demo / Hybrid / Live
 • Zero-code configuration for payer-specific needs
 
 We're raising a $2M seed round to scale from pilot customers like [Customer Company] to 50+ customers by end of Year 1.

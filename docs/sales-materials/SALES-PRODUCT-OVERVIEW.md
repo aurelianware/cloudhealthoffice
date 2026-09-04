@@ -25,12 +25,12 @@ CHO is a source-available, cloud-native platform for healthcare claims administr
 
 | Capability | Status | Compliance Impact |
 |------------|--------|-------------------|
-| Patient Access API (FHIR R4) | ✅ Implemented | CMS-0057-F Required |
-| Provider Access API | ✅ Implemented | CMS-0057-F Required |
-| Prior Authorization API | ✅ Automated 72hr/7-day | CMS-0057-F Required |
-| Payer-to-Payer API | ✅ Bulk FHIR Export | CMS-0057-F Required |
-| Da Vinci IG Conformance | ✅ PDex, PAS, CRD, DTR | Readiness evidence |
-| USCDI v1/v2 Data Classes | ✅ Complete | Federal Mandate |
+| Patient Access API (FHIR R4) | Implemented technical surface | CMS-0057-F required; source integration required |
+| Provider Access API | Implemented technical surface | Attribution / opt-out is implementation |
+| Prior Authorization API | PAS `$submit` / CRD / DTR implemented | UM rules, letters, queues are the payer's |
+| Payer-to-Payer API | Bulk FHIR + consent building blocks | Phase 2 — not turnkey |
+| Da Vinci IG support | PAS, CRD, DTR surfaces | Readiness evidence, not certification |
+| USCDI data classes | Partial via FHIR resources in scope | Completeness is payer data-quality work |
 
 ---
 
@@ -222,10 +222,10 @@ Deploy → Configure → Process Transactions
 
 | Metric | Industry Average | Cloud Health Office |
 |--------|------------------|---------------------|
-| Initial Deployment | 6-18 months | **< 5 minutes** |
-| First Transaction | 3-6 months | **Same day** |
-| Full Production | 12-24 months | **< 90 days** |
-| CMS Compliance | Unknown/at risk | **Immediate** |
+| Initial Deployment | 6-18 months | **6–8 week Layer 1 accelerator** |
+| First Transaction | 3-6 months | **Synthetic demo in week 4; PHI only after BAA** |
+| Full Production | 12-24 months | **Payer go/no-go after evidence packet** |
+| CMS Compliance | Unknown/at risk | **Technical evidence; payer attests** |
 
 ### Cost Savings
 
@@ -238,10 +238,9 @@ Deploy → Configure → Process Transactions
 
 ### Operational Efficiency
 
-- **80% reduction** in payer onboarding time
-- **60% fewer** claim status follow-up calls
-- **70% auto-adjudication** roadmap (AI-powered)
-- **94% storage cost** reduction via lifecycle management
+- Modeled time-to-Layer-1 is weeks, not a claimed customer “80% reduction”
+- No production reference metrics yet — do not quote invented call-volume savings
+- Auto-adjudication and storage-cost figures are roadmap or model, not live customer results
 
 ### Provider Satisfaction (ValueAdds277)
 
@@ -256,7 +255,7 @@ Deploy → Configure → Process Transactions
 
 ### Start Your Pilot Today
 
-**60-Day Pilot Program** - Free for qualifying organizations:
+**Founding-partner Layer 1 accelerator** — paid, 6–8 weeks, see [CMS-0057-F-ACCELERATOR-OFFER.md](CMS-0057-F-ACCELERATOR-OFFER.md). Not a free complete-platform install:
 
 1. **Complete platform deployment** in your Azure environment
 2. **CMS-0057-F compliance audit** with remediation guidance
