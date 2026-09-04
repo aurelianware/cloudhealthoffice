@@ -59,6 +59,11 @@ internal sealed class InMemoryAuthorizationRepository : IAuthorizationRepository
         if (!string.IsNullOrEmpty(memberId)) q = q.Where(a => a.MemberId == memberId);
         if (!string.IsNullOrEmpty(providerNPI))
             q = q.Where(a => a.RequestingProviderNPI == providerNPI || a.ServicingProviderNPI == providerNPI);
+        // Mirror AuthorizationRepository.SearchAsync date filtering.
+        if (serviceDateFrom.HasValue)
+            q = q.Where(a => a.RequestedServiceDateFrom >= serviceDateFrom.Value);
+        if (serviceDateTo.HasValue)
+            q = q.Where(a => a.RequestedServiceDateTo == null || a.RequestedServiceDateTo <= serviceDateTo.Value);
         if (status.HasValue) q = q.Where(a => a.Status == status.Value);
         if (lineOfBusiness.HasValue) q = q.Where(a => a.LineOfBusiness == lineOfBusiness.Value);
         return Task.FromResult(q.Skip((page - 1) * pageSize).Take(pageSize).Select(Clone).AsEnumerable());

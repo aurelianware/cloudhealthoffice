@@ -39,15 +39,44 @@ public class AuthorizationsController : ControllerBase
     [AllowAnonymous]
     [HttpGet("backend-status")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public IActionResult GetBackendStatus() => Ok(new
+    public IActionResult GetBackendStatus()
     {
-        operatingMode = _backends.Mode.ToString(),
-        backend = _backends.ActiveBackendKey,
-        authoritative = _backends.IsAuthoritative,
-        description = _backends.Mode == CloudHealthOffice.OperatingMode.EngineOperatingMode.Replace
-            ? "Cloud Health Office owns the authoritative authorization record (Replace mode)."
-            : $"Cloud Health Office fronts an external core ('{_backends.ActiveBackendKey}') that remains authoritative (Augment mode).",
-    });
+        // Mode and the configured backend key never throw; resolving the backend
+        // can (misconfigured Augment). Report that as a structured "misconfigured"
+        // status rather than an unstructured 500.
+        var mode = _backends.Mode;
+        var backendKey = _backends.ActiveBackendKey;
+        bool? authoritative;
+        bool configured;
+        string description;
+
+        try
+        {
+            authoritative = _backends.Resolve().IsAuthoritative;
+            configured = true;
+            description = mode == CloudHealthOffice.OperatingMode.EngineOperatingMode.Replace
+                ? "Cloud Health Office owns the authoritative authorization record (Replace mode)."
+                : $"Cloud Health Office fronts an external core ('{backendKey}') that remains authoritative (Augment mode).";
+        }
+        catch (InvalidOperationException)
+        {
+            // Do not leak the exception detail; state that the configured backend
+            // is not available.
+            authoritative = null;
+            configured = false;
+            description = $"Operating mode is '{mode}' but backend '{backendKey}' is not registered/available. " +
+                          "Configure Cms0057:Authorization to a registered backend.";
+        }
+
+        return Ok(new
+        {
+            operatingMode = mode.ToString(),
+            backend = backendKey,
+            configured,
+            authoritative,
+            description,
+        });
+    }
 
     /// <summary>
     /// Submit new prior authorization request (278 request)
@@ -113,7 +142,9 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation("Fetching authorization by number: {AuthNumber}", SanitizeForLog(authNumber));
 
-        var authorization = await _authorizationRepository.GetByAuthorizationNumberAsync(authNumber);
+        // Route through the operating-mode-selected backend so an Augment
+        // deployment does not silently read from the CHO repository.
+        var authorization = await _backends.Resolve().GetByNumberAsync(authNumber, HttpContext.RequestAborted);
         if (authorization == null)
         {
             return NotFound($"Authorization {authNumber} not found");
@@ -147,7 +178,7 @@ public class AuthorizationsController : ControllerBase
             "Validating authorization {AuthNumber} for procedure {Procedure} on {Date}",
             SanitizeForLog(authNumber), SanitizeForLog(procedureCode), checkDate);
 
-        var authorization = await _authorizationRepository.GetByAuthorizationNumberAsync(authNumber);
+        var authorization = await _backends.Resolve().GetByNumberAsync(authNumber, HttpContext.RequestAborted);
         if (authorization == null)
         {
             return NotFound($"Authorization {authNumber} not found");
@@ -353,7 +384,12 @@ public class AuthorizationsController : ControllerBase
                 : $"{authorization.Notes}\n{DateTime.UtcNow:yyyy-MM-dd HH:mm}: {statusUpdate.Notes}";
         }
 
-        var updated = await _authorizationRepository.UpdateAsync(authorization);
+        // Persist the transition through the selected backend so the status
+        // history is appended and an Augment deployment does not silently write
+        // to the CHO repository.
+        var updated = await _backends.Resolve().UpdateStatusAsync(
+            authorization, authorization.Status, authorization.ReviewDecision,
+            authorization.DenialReason, HttpContext.RequestAborted);
         return Ok(updated);
     }
 
@@ -423,7 +459,11 @@ public class AuthorizationsController : ControllerBase
         authorization.ReviewerName = response.ReviewerName;
         authorization.ReviewerPhone = response.ReviewerPhone;
 
-        var updated = await _authorizationRepository.UpdateAsync(authorization);
+        // Persist the decision through the selected backend (history append +
+        // no silent CHO write in Augment).
+        var updated = await _backends.Resolve().UpdateStatusAsync(
+            authorization, authorization.Status, authorization.ReviewDecision,
+            authorization.DenialReason, HttpContext.RequestAborted);
         return Ok(updated);
     }
 

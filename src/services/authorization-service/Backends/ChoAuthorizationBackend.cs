@@ -63,6 +63,9 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
     private static void AppendHistory(
         Authorization authorization, AuthorizationStatus status, string? reviewDecision, string? reason)
     {
+        // Guard against a null history (client sent "statusHistory": null, or an
+        // older stored record predates the field).
+        authorization.StatusHistory ??= new List<AuthorizationStatusChange>();
         authorization.StatusHistory.Add(new AuthorizationStatusChange
         {
             Status = status,
