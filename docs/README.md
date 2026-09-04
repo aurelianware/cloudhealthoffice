@@ -15,6 +15,7 @@ the architecture, and find an area to contribute.
 | Reproduce benchmark evidence | [Benchmarks](benchmarks/README.md) |
 | Deploy beyond local development | [Deployment](deployment/DEPLOYMENT.md) |
 | Contribute | [Developer guide](developer/README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
+| Portal UX and API security audit | [Audits](audits/README.md) |
 
 ## Getting Started
 
