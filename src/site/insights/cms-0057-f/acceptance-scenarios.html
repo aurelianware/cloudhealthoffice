@@ -271,12 +271,44 @@
 
     <div class="divider"></div>
 
+    <!-- Two implementation patterns -->
+    <section>
+      <div class="container">
+        <div class="section-label">Two implementation patterns</div>
+        <h2 class="section-title">Cloud Health Office as the core backend, or in front of your core</h2>
+        <p class="section-desc">Cloud Health Office supports two patterns behind the same FHIR contract. A plan can start with either and move between them per workflow.</p>
+        <div class="split">
+          <div class="panel">
+            <h3>Cloud Health Office as the core backend</h3>
+            <span class="when">Replace mode</span>
+            <ul>
+              <li>Cloud Health Office owns the operational record and the workflow. For prior authorization, a request is created, persisted, and tracked in Cloud Health Office — no legacy core is required.</li>
+              <li>Prior authorization runs this way today: submission creates and stores an authorization, the decision and status history are persisted, and metrics derive from that stored record.</li>
+            </ul>
+          </div>
+          <div class="panel future">
+            <h3>Cloud Health Office in front of your core</h3>
+            <span class="when">Augment mode</span>
+            <ul>
+              <li>Cloud Health Office serves the FHIR and compliance surface while an existing core administration system — QNXT, Facets, or HealthEdge — remains the system of record, connected through an implementation-specific adapter.</li>
+              <li>Those adapters are per-engagement work. Where an adapter is not yet built, the acceptance suite reports it as an integration gap — it is never a silent fallback to demonstration data.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="note">
+          <p>These are separate questions. Whether Cloud Health Office can perform a workflow itself (product capability, proven in Replace mode) is scored independently from whether it can currently run against a specific external core (integration capability). A pending QNXT, Facets, or HealthEdge integration is not a gap in the Cloud Health Office product.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
     <!-- Scenario list -->
     <section>
       <div class="container">
         <div class="section-label">The scenarios</div>
         <h2 class="section-title">What we prove, and how it scores today</h2>
-        <p class="section-desc">Each scenario states what it proves and its current status against the shipped code. Statuses are deliberately honest: some capabilities are complete in the compliance surface, some are partial, and some are gaps that are engagement or roadmap work. The default build runs on synthetic data.</p>
+        <p class="section-desc">Each scenario states what it proves and its status today, scored on two dimensions: Cloud Health Office as the native backend (Replace), and integration with an external core (Augment). Statuses are deliberately honest — passable, partial, or a tracked gap. The prior-authorization scenarios below reflect the Replace-mode result.</p>
 
         <div class="legend">
           <span><span class="pill pass">Passable</span> proven in the compliance surface today</span>

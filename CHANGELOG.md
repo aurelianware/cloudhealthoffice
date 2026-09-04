@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Cloud Health Office as the native CMS-0057-F authorization backend
+
+Made Cloud Health Office the authoritative (Replace-mode) backend for the
+prior-authorization CMS-0057-F vertical slice, distinct from external-core
+(Augment-mode) integration. New authorization-service backend seam:
+`Backends/IAuthorizationBackend` selected by operating mode via
+`AuthorizationBackendSelector` (`Cms0057:Authorization:OperatingMode`,
+default Replace). `ChoAuthorizationBackend` (Replace) is the CHO-native system
+of record — a thin application layer over the existing `IAuthorizationRepository`
+(Cosmos/Mongo) that persists submission, retrieval, status/decision lifecycle,
+stable id, and an append-only `Authorization.StatusHistory`.
+`QnxtAuthorizationBackend` (Augment) is a documented stub (throws; no fake SOAP)
+selected only when configured — never a silent fallback to CHO; selection fails
+loudly if the configured external backend is unregistered. Replaces PR #1143's
+flat `IAuthorizationAdapter`. `AuthorizationsController` routes create through
+the selected backend and exposes `GET /api/authorizations/backend-status`
+(active mode/backend, no sensitive config). Reuses the OperatingMode engine's
+`EngineOperatingMode`. The FHIR/PAS layer is unchanged and depends on no
+vendor-specific abstraction.
+
+The acceptance suite now distinguishes **product capability** (CHO Replace) from
+**integration capability** (QNXT Augment): PAS-03 is product PASSABLE on
+`ChoAuthorizationBackend` (exercised via an in-memory repository *fixture* so the
+real production backend, not an acceptance-only path, is proven) and integration
+GAP on QNXT Augment. Scenarios carry `[Trait("Backend","Replace"|"Augment")]`.
+METRICS-01 product moved PARTIAL → PASSABLE (metrics derive from the persisted
+CHO record). Inventory and the public acceptance page now score the two
+dimensions separately and clarify Demo (synthetic) vs Replace (CHO authoritative)
+vs Augment (external core). No runtime behavior change to shipped services beyond
+the additive backend routing (Replace is the default and preserves prior
+behavior).
+
 ### CMS-0057-F acceptance scenario suite
 
 Executable acceptance harness (`tests/Cms0057Acceptance.Tests/`, in
