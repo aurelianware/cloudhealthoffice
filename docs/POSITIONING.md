@@ -174,7 +174,7 @@ A payer locked into QNXT, HealthEdge, Facets, or a comparable legacy core, stari
 
 #### Commercial shape
 
-Small annual subscription, weeks-to-deploy, Kubernetes cluster or Azure AKS target. Price structure and list figures live in the pitch materials, not this document.
+Small annual subscription, weeks-to-deploy, Kubernetes cluster or Azure AKS target. The SKU we sell first is the founding-partner [CMS-0057-F Compliance Accelerator](sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) ($90,000 / 6–8 weeks / one LOB). Diligence packet: [docs/diligence/README.md](diligence/README.md). Broader PMPM list figures stay on the order form, not this document.
 
 ### Layer 2 — Domain cutover
 

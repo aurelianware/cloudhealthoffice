@@ -122,6 +122,9 @@ else
 }
 
 // ── FHIR data adapters ────────────────────────────────────────────────────────
+builder.Services.Configure<FhirAdapterOptions>(
+    builder.Configuration.GetSection(FhirAdapterOptions.SectionName));
+builder.Services.AddSingleton<IFhirAdapterStatusService, FhirAdapterStatusService>();
 builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
 builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
@@ -298,6 +301,7 @@ if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+app.UseMiddleware<AdapterLabelMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<SmartScopeEnforcementMiddleware>();
 app.UseMiddleware<TenantMiddleware>();

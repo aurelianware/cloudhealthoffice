@@ -15,11 +15,16 @@ public class ComplianceController : FhirControllerBase
 {
     private readonly IConfiguration _config;
     private readonly ICms0057ComplianceChecker _complianceChecker;
+    private readonly IFhirAdapterStatusService _adapterStatus;
 
-    public ComplianceController(IConfiguration config, ICms0057ComplianceChecker complianceChecker)
+    public ComplianceController(
+        IConfiguration config,
+        ICms0057ComplianceChecker complianceChecker,
+        IFhirAdapterStatusService adapterStatus)
     {
         _config = config;
         _complianceChecker = complianceChecker;
+        _adapterStatus = adapterStatus;
     }
 
     /// <summary>
@@ -51,6 +56,7 @@ public class ComplianceController : FhirControllerBase
         var metCount = requirements.Count(r => r.Met);
 
         var supportedResourceTypes = _complianceChecker.SupportedResourceTypes;
+        var adapters = _adapterStatus.GetStatus();
 
         var report = new Cms0057ComplianceReport(
             TenantId: tenantId,
@@ -63,7 +69,11 @@ public class ComplianceController : FhirControllerBase
             AssessedAt: DateTimeOffset.UtcNow,
             FhirVersion: "4.0.1",
             RuleName: "CMS-0057-F",
-            RuleDescription: "CMS Interoperability and Prior Authorization Final Rule");
+            RuleDescription: "CMS Interoperability and Prior Authorization Final Rule",
+            AdapterMode: adapters.EffectiveMode,
+            DataClassification: adapters.DataClassification,
+            AttestationNote: adapters.AttestationNote,
+            Adapters: adapters.Resources);
 
         return Ok(report);
     }
@@ -253,7 +263,11 @@ public record Cms0057ComplianceReport(
     DateTimeOffset AssessedAt,
     string FhirVersion,
     string RuleName,
-    string RuleDescription);
+    string RuleDescription,
+    string AdapterMode,
+    string DataClassification,
+    string AttestationNote,
+    IReadOnlyList<FhirAdapterResourceStatus> Adapters);
 
 public record Cms0057Requirement(
     string Id,

@@ -20,6 +20,8 @@ claim should carry one of these labels:
 | Live payer-backed | Uses payer-approved source systems and tenant configuration. | "Backed by payer source-system integration for this pilot scope." |
 | Out of scope | Not demonstrated in the pilot. | "Not in current pilot scope." |
 
+Live inventory (synthetic demo tenant): `GET /fhir/r4/adapter-status`. Every FHIR response also carries `X-CHO-Adapter-Mode`, `X-CHO-Data-Class`, and `X-CHO-Adapter-Label`. Table for the default tenant: [ADAPTER-STATUS.md](../diligence/ADAPTER-STATUS.md).
+
 ## Current Adapter Evidence
 
 | Capability | Current repo evidence | Demo-mode risk | Live-adapter requirement |

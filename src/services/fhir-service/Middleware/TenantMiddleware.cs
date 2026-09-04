@@ -47,6 +47,7 @@ public class TenantMiddleware
         || path.StartsWithSegments("/ready")
         || path.StartsWithSegments("/live")
         || path.StartsWithSegments("/fhir/r4/metadata")
+        || path.StartsWithSegments("/fhir/r4/adapter-status")
         || path.StartsWithSegments("/fhir/r4/.well-known")
         || path.StartsWithSegments("/fhir/r4/StructureDefinition")
         || path.StartsWithSegments("/fhir/r4/OperationDefinition")
