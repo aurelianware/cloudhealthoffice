@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CMS-0057-F Acceptance Scenario Suite
+    ====================================
+    Executable acceptance harness proving the CMS-0057-F scenario set against
+    the REAL Cloud Health Office C# services (fhir-service controllers/services,
+    plus the per-engagement source-system adapter stubs in claims/provider/
+    benefit-plan/authorization services). Every scenario carries a
+    [Trait("Scenario","…")] so the suite can be filtered by scenario id, e.g.
+    `dotnet test` with a filter expression of Scenario=PAS-03.
+
+    Tests run in Demo mode by default (the platform default; see
+    fhir-service appsettings.json FhirAdapters:Mode = "Demo"). GAP tests assert
+    that the QNXT source-system adapters are still NotImplementedException stubs
+    — the acceptance suite must not paper over stubs with fake "green" tests.
+
+    The suite deliberately does NOT bootstrap a WebApplicationFactory: it
+    follows the existing controller/service unit-test idiom
+    (see tests/CloudHealthOffice.FhirService.Tests/Controllers/*ControllerTests.cs)
+    so it can reference several service assemblies at once without the ambiguous
+    top-level `Program` type that a WebApplicationFactory<Program> would require.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="FluentAssertions" Version="6.12.2" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="Hl7.Fhir.R4" Version="5.10.2" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- CHO product surface: FHIR CRD/DTR/PAS/PatientAccess + compliance + adapter status. -->
+    <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" />
+
+    <!-- Per-engagement source-system adapter stubs (asserted GAP by the harness). -->
+    <ProjectReference Include="..\..\src\services\claims-service\claims-service.csproj" />
+    <ProjectReference Include="..\..\src\services\provider-service\provider-service.csproj" />
+    <ProjectReference Include="..\..\src\services\benefit-plan-service\benefit-plan-service.csproj" />
+    <ProjectReference Include="..\..\src\services\authorization-service\authorization-service.csproj" />
+
+    <!-- Consent registry (Provider Access opt-out / P2P opt-in modeling). -->
+    <ProjectReference Include="..\..\src\services\consent-service\consent-service.csproj" />
+  </ItemGroup>
+
+</Project>
