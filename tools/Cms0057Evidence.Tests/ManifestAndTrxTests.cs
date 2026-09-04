@@ -64,6 +64,18 @@ public class ManifestLoaderTests
     }
 
     [Fact]
+    public void UnknownAugmentBackendKey_Throws()
+    {
+        var path = Temp("""
+        { "schemaVersion": 1, "scenarios": [
+          { "id": "PAS-03", "name": "a", "capability": "c", "replace": { "status": "PASSABLE" },
+            "augment": { "mainframe": { "status": "GAP" } } } ] }
+        """);
+        var act = () => ManifestLoader.Load(path);
+        act.Should().Throw<ManifestException>().WithMessage("*mainframe*not a known backend*");
+    }
+
+    [Fact]
     public void NonPositiveSchemaVersion_Throws()
     {
         var path = Temp("""

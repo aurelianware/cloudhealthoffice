@@ -48,16 +48,22 @@ public static class EvidenceBuilder
         foreach (var s in manifest.Scenarios.OrderBy(s => s.Id, StringComparer.Ordinal))
         {
             var backends = new List<BackendEvidence>();
+            var scenarioTraits = traits.Where(t => t.ScenarioId == s.Id).ToList();
 
             // Replace (product capability) is always emitted first.
-            var replaceTests = traits.Where(t => t.ScenarioId == s.Id && t.Backend == ScenarioTrait.ReplaceBackend).ToList();
-            backends.Add(BuildBackend(s.Id, BackendIds.Replace, s.Replace, replaceTests, outcomeByTest));
+            var replaceTests = scenarioTraits.Where(t => t.Backend == ScenarioTrait.ReplaceBackend).ToList();
+            backends.Add(BuildBackend(s.Id, BackendIds.Replace, s.Replace, replaceTests, replaceTests, outcomeByTest));
 
-            // Augment backends (integration capability), sorted by key.
-            var augmentTests = traits.Where(t => t.ScenarioId == s.Id && t.Backend == ScenarioTrait.AugmentBackend).ToList();
+            // Augment backends (integration capability), sorted by key. A generic
+            // "Augment" test contributes to a backend's display/execution status,
+            // but only a KEY-SPECIFIC test ("augment.<key>") may prove that
+            // backend PASSABLE — so multiple augment backends never share a single
+            // generic test as proof.
             foreach (var key in s.Augment.Keys.OrderBy(k => k, StringComparer.Ordinal))
             {
-                backends.Add(BuildBackend(s.Id, BackendIds.Augment(key), s.Augment[key], augmentTests, outcomeByTest));
+                var associated = scenarioTraits.Where(t => AppliesToAugment(t.Backend, key)).ToList();
+                var proving = scenarioTraits.Where(t => IsKeySpecific(t.Backend, key)).ToList();
+                backends.Add(BuildBackend(s.Id, BackendIds.Augment(key), s.Augment[key], associated, proving, outcomeByTest));
             }
 
             foreach (var b in backends)
@@ -88,24 +94,33 @@ public static class EvidenceBuilder
         };
     }
 
+    private static bool AppliesToAugment(string backend, string key) =>
+        string.Equals(backend, ScenarioTrait.AugmentBackend, StringComparison.OrdinalIgnoreCase)
+        || IsKeySpecific(backend, key);
+
+    private static bool IsKeySpecific(string backend, string key) =>
+        string.Equals(backend, BackendIds.Augment(key), StringComparison.OrdinalIgnoreCase);
+
     private static BackendEvidence BuildBackend(
         string scenarioId, string backendId, ManifestBackend declared,
-        List<ScenarioTrait> tests, IReadOnlyDictionary<string, TestOutcome> outcomeByTest)
+        List<ScenarioTrait> associatedTests, List<ScenarioTrait> provingTests,
+        IReadOnlyDictionary<string, TestOutcome> outcomeByTest)
     {
-        var supporting = tests
+        var supporting = associatedTests
             .Select(t => t.TestName)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();
 
-        var exec = AggregateExecution(tests, outcomeByTest);
+        var exec = AggregateExecution(associatedTests, outcomeByTest);
 
-        // A PASSABLE claim must be proven by a passing, non-GAP test.
+        // A PASSABLE claim must be proven by a passing, non-GAP test that is
+        // specific to this backend (see provingTests construction).
         if (declared.Status == Status.Passable)
         {
-            var provingTest = tests.Any(t => !t.IsGap
+            var proven = provingTests.Any(t => !t.IsGap
                 && outcomeByTest.TryGetValue(t.TestName, out var o) && o == TestOutcome.Passed);
-            if (!provingTest)
+            if (!proven)
                 throw new EvidenceReconciliationException(
                     $"Scenario {scenarioId} declares {backendId} = PASSABLE but has no passing non-GAP test to prove it.");
         }
