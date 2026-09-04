@@ -1,0 +1,135 @@
+name: CMS-0057-F Acceptance Evidence
+
+# Runs the CMS-0057-F acceptance suite and generates versioned, reproducible
+# evidence (JSON + Markdown + HTML) tied to the tested commit. The evidence
+# separates Cloud Health Office product capability (Replace) from external-core
+# integration capability (Augment), derived from the scenario manifest
+# (tests/Cms0057Acceptance.Tests/scenarios.json) — the machine-readable source
+# of truth — not from prose or test names.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'tests/Cms0057Acceptance.Tests/**'
+      - 'tools/Cms0057Evidence/**'
+      - 'tools/Cms0057Evidence.Tests/**'
+      - '.github/workflows/cms0057-acceptance-evidence.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'tests/Cms0057Acceptance.Tests/**'
+      - 'tools/Cms0057Evidence/**'
+      - 'tools/Cms0057Evidence.Tests/**'
+      - '.github/workflows/cms0057-acceptance-evidence.yml'
+  workflow_dispatch:
+
+jobs:
+  acceptance-evidence:
+    name: CMS-0057-F Acceptance Evidence
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Test the evidence generator
+        run: dotnet test tools/Cms0057Evidence.Tests/Cms0057Evidence.Tests.csproj -c Debug
+
+      - name: Build acceptance suite and generator
+        run: |
+          dotnet build tests/Cms0057Acceptance.Tests/Cms0057Acceptance.Tests.csproj -c Debug
+          dotnet build tools/Cms0057Evidence/Cms0057Evidence.csproj -c Debug
+
+      - name: Run acceptance suite (structured TRX)
+        id: acceptance
+        run: |
+          set +e
+          dotnet test tests/Cms0057Acceptance.Tests/Cms0057Acceptance.Tests.csproj \
+            -c Debug --no-build \
+            --logger "trx;LogFileName=cms0057-acceptance.trx" \
+            --results-directory artifacts/trx
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Generate evidence
+        id: evidence
+        run: |
+          set +e
+          TRX=$(find artifacts/trx -name 'cms0057-acceptance.trx' | head -1)
+          ASM=tests/Cms0057Acceptance.Tests/bin/Debug/net8.0/Cms0057Acceptance.Tests.dll
+          mkdir -p artifacts/cms0057-evidence
+          dotnet run --project tools/Cms0057Evidence -c Debug --no-build -- \
+            --manifest tests/Cms0057Acceptance.Tests/scenarios.json \
+            --results "$TRX" \
+            --test-assembly "$ASM" \
+            --output artifacts/cms0057-evidence \
+            --environment CI
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          # Include the raw TRX in the evidence package.
+          cp "$TRX" artifacts/cms0057-evidence/ 2>/dev/null || true
+
+      - name: Job summary
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          path = 'artifacts/cms0057-evidence/cms0057-evidence.json'
+          print('## CMS-0057-F Acceptance')
+          if not os.path.exists(path):
+              print('\n_Evidence was not generated._')
+              raise SystemExit(0)
+          d = json.load(open(path))
+          ts = d['testSummary']
+          print(f"\nTests: {ts['passed']} passed / {ts['failed']} failed / {ts['skipped']} skipped\n")
+          def counts(backend_pred):
+              c = {}
+              for s in d['scenarios']:
+                  for b in s['backends']:
+                      if backend_pred(b['backend']):
+                          c[b['declaredStatus']] = c.get(b['declaredStatus'], 0) + 1
+              return c
+          rep = counts(lambda b: b == 'replace.cloudHealthOffice')
+          aug = counts(lambda b: b.startswith('augment.'))
+          print("CHO Replace (product capability):")
+          for k in ('PASSABLE','PARTIAL','GAP','N/A'):
+              if rep.get(k): print(f"  {k}: {rep[k]}")
+          print("\nExternal core (Augment integration capability):")
+          for k in ('PASSABLE','PARTIAL','GAP','N/A'):
+              if aug.get(k): print(f"  {k}: {aug[k]}")
+          sha = (d.get('identity') or {}).get('commitSha') or ''
+          print(f"\nCommit: `{sha}`")
+          print(f"\nEvidence artifact: cms0057-acceptance-evidence-{sha[:12]}")
+          PY
+
+      - name: Upload evidence package
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cms0057-acceptance-evidence-${{ github.sha }}
+          path: |
+            artifacts/cms0057-evidence/cms0057-evidence.json
+            artifacts/cms0057-evidence/cms0057-evidence.md
+            artifacts/cms0057-evidence/cms0057-evidence.html
+            artifacts/cms0057-evidence/cms0057-acceptance.trx
+          if-no-files-found: warn
+
+      - name: Fail if acceptance tests or evidence generation failed
+        run: |
+          ACCEPTANCE_RC="${{ steps.acceptance.outputs.rc }}"
+          EVIDENCE_RC="${{ steps.evidence.outputs.rc }}"
+          echo "acceptance rc=$ACCEPTANCE_RC, evidence rc=$EVIDENCE_RC"
+          if [ "$ACCEPTANCE_RC" != "0" ]; then
+            echo "::error::CMS-0057-F acceptance tests failed."
+            exit 1
+          fi
+          if [ "$EVIDENCE_RC" != "0" ]; then
+            echo "::error::CMS-0057-F evidence generation or scenario reconciliation failed."
+            exit 1
+          fi

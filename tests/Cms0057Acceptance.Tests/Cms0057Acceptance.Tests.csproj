@@ -31,6 +31,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The CMS-0057-F scenario manifest is the machine-readable source of truth.
+         Copy it next to the test assembly so drift tests can load it at runtime. -->
+    <Content Include="scenarios.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
