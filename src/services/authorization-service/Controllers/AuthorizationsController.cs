@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using AuthorizationService.Backends;
 using AuthorizationService.Middleware;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
@@ -14,18 +15,39 @@ namespace AuthorizationService.Controllers;
 public class AuthorizationsController : ControllerBase
 {
     private readonly IAuthorizationRepository _authorizationRepository;
+    private readonly IAuthorizationBackendSelector _backends;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<AuthorizationsController> _logger;
 
     public AuthorizationsController(
         IAuthorizationRepository authorizationRepository,
+        IAuthorizationBackendSelector backends,
         IWebHostEnvironment environment,
         ILogger<AuthorizationsController> logger)
     {
         _authorizationRepository = authorizationRepository;
+        _backends = backends;
         _environment = environment;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Report the active authorization backend (operating mode + backend).
+    /// Makes Replace (CHO-native) vs Augment (external core) explicit for demos
+    /// and diligence. No sensitive configuration is exposed.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("backend-status")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public IActionResult GetBackendStatus() => Ok(new
+    {
+        operatingMode = _backends.Mode.ToString(),
+        backend = _backends.ActiveBackendKey,
+        authoritative = _backends.IsAuthoritative,
+        description = _backends.Mode == CloudHealthOffice.OperatingMode.EngineOperatingMode.Replace
+            ? "Cloud Health Office owns the authoritative authorization record (Replace mode)."
+            : $"Cloud Health Office fronts an external core ('{_backends.ActiveBackendKey}') that remains authoritative (Augment mode).",
+    });
 
     /// <summary>
     /// Submit new prior authorization request (278 request)
@@ -51,9 +73,13 @@ public class AuthorizationsController : ControllerBase
         authorization.CreatedDate = DateTime.UtcNow;
         authorization.LastUpdatedDate = DateTime.UtcNow;
 
-        var created = await _authorizationRepository.CreateAsync(authorization);
+        // Persist via the operating-mode-selected backend. Replace = CHO-native
+        // repository; Augment = configured external core. No vendor branching here.
+        var created = await _backends.Resolve().CreateAsync(authorization, HttpContext.RequestAborted);
 
-        _logger.LogInformation("Authorization {AuthNumber} submitted successfully", SanitizeForLog(authorization.AuthorizationNumber));
+        _logger.LogInformation(
+            "Authorization {AuthNumber} submitted successfully via {Backend} backend ({Mode} mode)",
+            SanitizeForLog(authorization.AuthorizationNumber), _backends.ActiveBackendKey, _backends.Mode);
 
         return CreatedAtAction(nameof(GetAuthorizationById), new { id = created.Id }, created);
     }
