@@ -8,6 +8,9 @@
 # .html -> clean-URL canonicalization to a 301, and the 200 rules map each
 # clean URL back to its .html file. This mirrors the original Azure SWA route
 # config exactly and does not rely on Pages' default redirect behavior.
+#
+# Canonical form is the no-trailing-slash clean URL (matches sitemap.xml).
+# /page/ must 301 to /page so Googlebot slash guesses are not 404s.
 
 # ---------------------------------------------------------------------------
 # Host canonicalization: www -> apex (301). Keeps the current apex story as the
@@ -16,12 +19,99 @@
 https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat  301
 
 # ---------------------------------------------------------------------------
+# Trailing slash -> canonical clean URL (301)
+# Explicit list covers every public sitemap path. Catch-all follows for new pages.
+# Do not 301 /page to /page/. Real directory indexes still resolve at no-slash
+# via the 200 rewrite block below (/docs -> /docs/index.html, etc.).
+# ---------------------------------------------------------------------------
+/cms-0057f-compliance/                     /cms-0057f-compliance                     301
+/cms-0057-f/implementation-architecture/   /cms-0057-f/implementation-architecture   301
+/what-is/                                  /what-is                                  301
+/evidence/                                 /evidence                                 301
+/deploy/                                   /deploy                                   301
+/start/                                    /start                                    301
+/solutions-payers/                         /solutions-payers                         301
+/solutions-providers/                      /solutions-providers                      301
+/platform/                                 /platform                                 301
+/trust/                                    /trust                                    301
+/founder/                                  /founder                                  301
+/pricing/                                  /pricing                                  301
+/pricing-api/                              /pricing-api                              301
+/claims-repricing/                         /claims-repricing                         301
+/release-notes/                            /release-notes                            301
+/assessment/                               /assessment                               301
+/contact/                                  /contact                                  301
+/schedule-demo/                            /schedule-demo                            301
+/login/                                    /login                                    301
+/insights/                                 /insights                                 301
+/insights/cms-0057-f/                      /insights/cms-0057-f                      301
+/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas/ /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas 301
+/insights/stedi-interoperability/          /insights/stedi-interoperability          301
+/insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform/ /insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform 301
+/insights/million-claim-challenge/         /insights/million-claim-challenge         301
+/insights/million-claim-challenge/part-5-repeatably-faster/ /insights/million-claim-challenge/part-5-repeatably-faster 301
+/insights/million-claim-challenge/part-6-honest-edge-case-scoring/ /insights/million-claim-challenge/part-6-honest-edge-case-scoring 301
+/insights/million-claim-challenge/part-7-operator-console/ /insights/million-claim-challenge/part-7-operator-console 301
+/insights/million-claim-challenge/part-8-clean-100k/ /insights/million-claim-challenge/part-8-clean-100k 301
+/insights/million-claim-challenge/part-9-from-unsupported-to-scored/ /insights/million-claim-challenge/part-9-from-unsupported-to-scored 301
+/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt/ /insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt 301
+/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark/ /insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark 301
+/insights/million-claim-challenge/part-12-the-database-nobody-profiled/ /insights/million-claim-challenge/part-12-the-database-nobody-profiled 301
+/insights/million-claim-challenge/part-13-the-gap-was-the-laptop/ /insights/million-claim-challenge/part-13-the-gap-was-the-laptop 301
+/insights/million-claim-challenge/part-14-zero-unsupported-parallelism/ /insights/million-claim-challenge/part-14-zero-unsupported-parallelism 301
+/insights/million-claim-challenge/part-15-one-million-claims/ /insights/million-claim-challenge/part-15-one-million-claims 301
+/insights/million-claim-challenge/part-16-the-million-went-through-the-bus/ /insights/million-claim-challenge/part-16-the-million-went-through-the-bus 301
+/docs/                                     /docs                                     301
+/docs/quickstart/                          /docs/quickstart                          301
+/docs/compliance/                          /docs/compliance                          301
+/docs/architecture/                        /docs/architecture                        301
+/docs/api/                                 /docs/api                                 301
+/docs/deployment/                          /docs/deployment                          301
+/docs/finance-guide/                       /docs/finance-guide                       301
+/docs/terminology-guide/                   /docs/terminology-guide                   301
+/docs/commercial-licensing/                /docs/commercial-licensing                301
+/docs/million-claim-challenge/             /docs/million-claim-challenge             301
+/docs/million-claim-challenge/evidence/    /docs/million-claim-challenge/evidence    301
+/docs/benefit-plan-guide/                  /docs/benefit-plan-guide                  301
+/docs/create-verify-benefit-plan/          /docs/create-verify-benefit-plan          301
+/docs/configure-benefits-cost-sharing/     /docs/configure-benefits-cost-sharing     301
+/docs/publish-version-benefit-plan/        /docs/publish-version-benefit-plan        301
+/docs/validate-benefit-plan/               /docs/validate-benefit-plan               301
+/docs/configure-plan-networks/             /docs/configure-plan-networks             301
+/docs/claims-guide/                        /docs/claims-guide                        301
+/docs/prior-auth-guide/                    /docs/prior-auth-guide                    301
+/docs/eligibility-guide/                   /docs/eligibility-guide                   301
+/docs/fee-schedule-guide/                  /docs/fee-schedule-guide                  301
+/docs/provider-verification-guide/         /docs/provider-verification-guide         301
+/docs/provider-enrollment-guide/           /docs/provider-enrollment-guide           301
+/docs/texas-compliance/                    /docs/texas-compliance                    301
+/docs/fee-schedule-engine/                 /docs/fee-schedule-engine                 301
+/docs/florida-compliance/                  /docs/florida-compliance                  301
+/docs/quickstart-kubernetes/               /docs/quickstart-kubernetes               301
+/docs/submit-837-follow-claim/             /docs/submit-837-follow-claim             301
+/docs/review-resolve-pended-claim/         /docs/review-resolve-pended-claim         301
+/docs/837-intake-adjudication-operations/  /docs/837-intake-adjudication-operations  301
+/docs/production-readiness-checklist/      /docs/production-readiness-checklist      301
+/docs/backup-restore-disaster-recovery/    /docs/backup-restore-disaster-recovery    301
+/docs/observability-alerting-incident-response/ /docs/observability-alerting-incident-response 301
+/docs/texas-tmppm-pa-rules/                /docs/texas-tmppm-pa-rules                301
+/docs/first-claim-evaluator-journey/       /docs/first-claim-evaluator-journey       301
+/legal/privacy-policy/                     /legal/privacy-policy                     301
+/cho-ar-marketing/                         /cho-ar-marketing                         301
+/cho-capitation-marketing/                 /cho-capitation-marketing                 301
+/cho-ffs-payments-marketing/               /cho-ffs-payments-marketing               301
+/cho-premium-billing-marketing/            /cho-premium-billing-marketing            301
+/*/                                        /:splat                                   301
+
+# ---------------------------------------------------------------------------
 # Canonical redirects: *.html  ->  clean URL (301 permanent)
 # ---------------------------------------------------------------------------
 /index.html                                /                                  301
 /solutions-payers.html                     /solutions-payers                  301
 /solutions-providers.html                  /solutions-providers               301
 /pricing.html                              /pricing                           301
+/pricing-api.html                          /pricing-api                       301
+/claims-repricing.html                     /claims-repricing                  301
 /platform.html                             /platform                          301
 /founder.html                              /founder                           301
 /assessment.html                           /assessment                        301
@@ -33,6 +123,8 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /start.html                                /start                             301
 /deploy.html                               /deploy                            301
 /evidence.html                             /evidence                          301
+/trust.html                                /trust                             301
+/cms-0057f-compliance.html                 /cms-0057f-compliance              301
 /docs.html                                /docs                              301
 /docs/quickstart.html                      /docs/quickstart                   301
 /docs/compliance.html                      /docs/compliance                   301
@@ -44,7 +136,34 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /docs/prior-auth-guide.html                /docs/prior-auth-guide             301
 /docs/provider-verification-guide.html     /docs/provider-verification-guide  301
 /docs/commercial-licensing.html            /docs/commercial-licensing         301
+/docs/million-claim-challenge.html         /docs/million-claim-challenge      301
+/docs/benefit-plan-guide.html              /docs/benefit-plan-guide           301
+/docs/create-verify-benefit-plan.html      /docs/create-verify-benefit-plan   301
+/docs/configure-benefits-cost-sharing.html /docs/configure-benefits-cost-sharing 301
+/docs/publish-version-benefit-plan.html    /docs/publish-version-benefit-plan 301
+/docs/validate-benefit-plan.html           /docs/validate-benefit-plan        301
+/docs/configure-plan-networks.html         /docs/configure-plan-networks      301
+/docs/claims-guide.html                    /docs/claims-guide                 301
+/docs/eligibility-guide.html               /docs/eligibility-guide            301
+/docs/fee-schedule-guide.html              /docs/fee-schedule-guide           301
+/docs/provider-enrollment-guide.html       /docs/provider-enrollment-guide    301
+/docs/texas-compliance.html                /docs/texas-compliance             301
+/docs/fee-schedule-engine.html             /docs/fee-schedule-engine          301
+/docs/florida-compliance.html              /docs/florida-compliance           301
+/docs/quickstart-kubernetes.html           /docs/quickstart-kubernetes        301
+/docs/submit-837-follow-claim.html         /docs/submit-837-follow-claim      301
+/docs/review-resolve-pended-claim.html     /docs/review-resolve-pended-claim  301
+/docs/837-intake-adjudication-operations.html /docs/837-intake-adjudication-operations 301
+/docs/production-readiness-checklist.html  /docs/production-readiness-checklist 301
+/docs/backup-restore-disaster-recovery.html /docs/backup-restore-disaster-recovery 301
+/docs/observability-alerting-incident-response.html /docs/observability-alerting-incident-response 301
+/docs/texas-tmppm-pa-rules.html            /docs/texas-tmppm-pa-rules         301
+/docs/first-claim-evaluator-journey.html   /docs/first-claim-evaluator-journey 301
 /contact.html                              /contact                           301
+/cho-ar-marketing.html                     /cho-ar-marketing                  301
+/cho-capitation-marketing.html             /cho-capitation-marketing          301
+/cho-ffs-payments-marketing.html           /cho-ffs-payments-marketing        301
+/cho-premium-billing-marketing.html        /cho-premium-billing-marketing     301
 /schedule-demo/index.html                 /schedule-demo                     301
 /insights/million-claim-challenge/index.html /insights/million-claim-challenge 301
 /insights/million-claim-challenge/part-5-repeatably-faster.html /insights/million-claim-challenge/part-5-repeatably-faster 301
@@ -52,8 +171,18 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/million-claim-challenge/part-7-operator-console.html /insights/million-claim-challenge/part-7-operator-console 301
 /insights/million-claim-challenge/part-8-clean-100k.html /insights/million-claim-challenge/part-8-clean-100k 301
 /insights/million-claim-challenge/part-9-from-unsupported-to-scored.html /insights/million-claim-challenge/part-9-from-unsupported-to-scored 301
+/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt.html /insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt 301
+/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark.html /insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark 301
+/insights/million-claim-challenge/part-12-the-database-nobody-profiled.html /insights/million-claim-challenge/part-12-the-database-nobody-profiled 301
+/insights/million-claim-challenge/part-13-the-gap-was-the-laptop.html /insights/million-claim-challenge/part-13-the-gap-was-the-laptop 301
+/insights/million-claim-challenge/part-14-zero-unsupported-parallelism.html /insights/million-claim-challenge/part-14-zero-unsupported-parallelism 301
+/insights/million-claim-challenge/part-15-one-million-claims.html /insights/million-claim-challenge/part-15-one-million-claims 301
+/insights/million-claim-challenge/part-16-the-million-went-through-the-bus.html /insights/million-claim-challenge/part-16-the-million-went-through-the-bus 301
 /insights/cms-0057-f/index.html            /insights/cms-0057-f               301
 /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas 301
+/insights/stedi-interoperability/index.html /insights/stedi-interoperability  301
+/insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform.html /insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform 301
+/cms-0057-f/implementation-architecture/index.html /cms-0057-f/implementation-architecture 301
 /docs/million-claim-challenge/evidence.html /docs/million-claim-challenge/evidence 301
 
 # ---------------------------------------------------------------------------
@@ -62,6 +191,8 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /solutions-payers                          /solutions-payers.html             200
 /solutions-providers                       /solutions-providers.html          200
 /pricing                                   /pricing.html                      200
+/pricing-api                               /pricing-api.html                  200
+/claims-repricing                          /claims-repricing.html             200
 /platform                                  /platform.html                     200
 /founder                                   /founder.html                      200
 /assessment                                /assessment.html                   200
@@ -73,6 +204,8 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /start                                     /start.html                        200
 /deploy                                    /deploy.html                       200
 /evidence                                  /evidence.html                     200
+/trust                                     /trust.html                        200
+/cms-0057f-compliance                      /cms-0057f-compliance.html         200
 /docs                                      /docs/index.html                   200
 /docs/quickstart                           /docs/quickstart.html              200
 /docs/compliance                           /docs/compliance.html              200
@@ -84,7 +217,34 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /docs/prior-auth-guide                     /docs/prior-auth-guide.html        200
 /docs/provider-verification-guide          /docs/provider-verification-guide.html  200
 /docs/commercial-licensing                 /docs/commercial-licensing.html    200
+/docs/million-claim-challenge              /docs/million-claim-challenge.html 200
+/docs/benefit-plan-guide                   /docs/benefit-plan-guide.html      200
+/docs/create-verify-benefit-plan           /docs/create-verify-benefit-plan.html 200
+/docs/configure-benefits-cost-sharing      /docs/configure-benefits-cost-sharing.html 200
+/docs/publish-version-benefit-plan         /docs/publish-version-benefit-plan.html 200
+/docs/validate-benefit-plan                /docs/validate-benefit-plan.html   200
+/docs/configure-plan-networks              /docs/configure-plan-networks.html 200
+/docs/claims-guide                         /docs/claims-guide.html            200
+/docs/eligibility-guide                    /docs/eligibility-guide.html       200
+/docs/fee-schedule-guide                   /docs/fee-schedule-guide.html      200
+/docs/provider-enrollment-guide            /docs/provider-enrollment-guide.html 200
+/docs/texas-compliance                     /docs/texas-compliance.html        200
+/docs/fee-schedule-engine                  /docs/fee-schedule-engine.html     200
+/docs/florida-compliance                   /docs/florida-compliance.html      200
+/docs/quickstart-kubernetes                /docs/quickstart-kubernetes.html   200
+/docs/submit-837-follow-claim              /docs/submit-837-follow-claim.html 200
+/docs/review-resolve-pended-claim          /docs/review-resolve-pended-claim.html 200
+/docs/837-intake-adjudication-operations   /docs/837-intake-adjudication-operations.html 200
+/docs/production-readiness-checklist       /docs/production-readiness-checklist.html 200
+/docs/backup-restore-disaster-recovery     /docs/backup-restore-disaster-recovery.html 200
+/docs/observability-alerting-incident-response /docs/observability-alerting-incident-response.html 200
+/docs/texas-tmppm-pa-rules                 /docs/texas-tmppm-pa-rules.html    200
+/docs/first-claim-evaluator-journey        /docs/first-claim-evaluator-journey.html 200
 /contact                                   /contact.html                      200
+/cho-ar-marketing                          /cho-ar-marketing.html             200
+/cho-capitation-marketing                  /cho-capitation-marketing.html     200
+/cho-ffs-payments-marketing                /cho-ffs-payments-marketing.html   200
+/cho-premium-billing-marketing             /cho-premium-billing-marketing.html 200
 /schedule-demo                            /schedule-demo/index.html          200
 /insights/million-claim-challenge          /insights/million-claim-challenge/index.html 200
 /insights/million-claim-challenge/part-5-repeatably-faster /insights/million-claim-challenge/part-5-repeatably-faster.html 200
@@ -92,8 +252,18 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/million-claim-challenge/part-7-operator-console /insights/million-claim-challenge/part-7-operator-console.html 200
 /insights/million-claim-challenge/part-8-clean-100k /insights/million-claim-challenge/part-8-clean-100k.html 200
 /insights/million-claim-challenge/part-9-from-unsupported-to-scored /insights/million-claim-challenge/part-9-from-unsupported-to-scored.html 200
+/insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt /insights/million-claim-challenge/part-10-the-migration-cost-that-wasnt.html 200
+/insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark /insights/million-claim-challenge/part-11-the-check-that-only-ran-in-the-benchmark.html 200
+/insights/million-claim-challenge/part-12-the-database-nobody-profiled /insights/million-claim-challenge/part-12-the-database-nobody-profiled.html 200
+/insights/million-claim-challenge/part-13-the-gap-was-the-laptop /insights/million-claim-challenge/part-13-the-gap-was-the-laptop.html 200
+/insights/million-claim-challenge/part-14-zero-unsupported-parallelism /insights/million-claim-challenge/part-14-zero-unsupported-parallelism.html 200
+/insights/million-claim-challenge/part-15-one-million-claims /insights/million-claim-challenge/part-15-one-million-claims.html 200
+/insights/million-claim-challenge/part-16-the-million-went-through-the-bus /insights/million-claim-challenge/part-16-the-million-went-through-the-bus.html 200
 /insights/cms-0057-f                        /insights/cms-0057-f/index.html    200
 /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html 200
+/insights/stedi-interoperability            /insights/stedi-interoperability/index.html 200
+/insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform /insights/stedi-interoperability/the-clearinghouse-is-not-the-payer-platform.html 200
+/cms-0057-f/implementation-architecture     /cms-0057-f/implementation-architecture/index.html 200
 /docs/million-claim-challenge/evidence     /docs/million-claim-challenge/evidence.html 200
 
 # ---------------------------------------------------------------------------

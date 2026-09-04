@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" role="img" aria-labelledby="ira-title ira-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="ira-title">CMS-0057-F implementation reference architecture for health plans</title>
+  <desc id="ira-desc">A layered enterprise architecture. External consumers — provider and EHR systems, patient applications, and trading-partner payers — connect downward into an API and interoperability layer that exposes the Patient Access, Provider Access, Payer-to-Payer and Prior Authorization FHIR APIs, secured with SMART on FHIR and OAuth 2.0, consent and authorization controls, and audit and observability. That layer calls CloudHealthOffice services: prior authorization, claims, eligibility and member, provider, benefits, terminology and reference data, workflow and orchestration, and observability. In the interoperability and modernization deployment pattern, those services reach an adapter and integration layer, which connects to existing payer platforms such as QNXT, Facets, HealthEdge and other core, utilization-management and data systems. In the alternate deployment pattern, shown on the right, CloudHealthOffice services act as the core backend directly, without an external legacy core.</desc>
+  <defs>
+    <linearGradient id="ira-cho" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00ffff" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#00ff88" stop-opacity="0.09"/>
+    </linearGradient>
+    <linearGradient id="ira-api" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00b4ff" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#00b4ff" stop-opacity="0.05"/>
+    </linearGradient>
+    <marker id="ira-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+    <marker id="ira-arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ff88"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="900" fill="#05070a"/>
+
+  <!-- ============ Layer 1: External consumers ============ -->
+  <text x="40" y="30" font-size="12" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2">EXTERNAL CONSUMERS</text>
+  <g font-size="14.5" font-weight="700" text-anchor="middle">
+    <rect x="40" y="42" width="216" height="66" rx="10" fill="rgba(8,8,8,0.92)" stroke="#00b4ff" stroke-width="1.4"/>
+    <text x="148" y="72" fill="#ffffff">Provider / EHR</text>
+    <text x="148" y="92" font-size="11" font-weight="500" fill="#808080">Ordering &amp; treating clinicians</text>
+
+    <rect x="272" y="42" width="216" height="66" rx="10" fill="rgba(8,8,8,0.92)" stroke="#00b4ff" stroke-width="1.4"/>
+    <text x="380" y="72" fill="#ffffff">Patient apps</text>
+    <text x="380" y="92" font-size="11" font-weight="500" fill="#808080">Member-authorized 3rd parties</text>
+
+    <rect x="504" y="42" width="216" height="66" rx="10" fill="rgba(8,8,8,0.92)" stroke="#00b4ff" stroke-width="1.4"/>
+    <text x="612" y="72" fill="#ffffff">Trading partners</text>
+    <text x="612" y="92" font-size="11" font-weight="500" fill="#808080">Payer-to-payer exchange</text>
+
+    <rect x="736" y="42" width="224" height="66" rx="10" fill="rgba(8,8,8,0.92)" stroke="#00b4ff" stroke-width="1.4"/>
+    <text x="848" y="72" fill="#ffffff">Regulators / auditors</text>
+    <text x="848" y="92" font-size="11" font-weight="500" fill="#808080">Attestation &amp; reporting</text>
+  </g>
+
+  <line x1="500" y1="108" x2="500" y2="140" stroke="#00ffff" stroke-width="2" marker-end="url(#ira-arrow)"/>
+  <text x="516" y="130" font-size="12" font-weight="600" fill="#00ffff" font-family="JetBrains Mono, monospace">HL7 FHIR R4 / REST</text>
+
+  <!-- ============ Layer 2: API & interoperability layer ============ -->
+  <rect x="40" y="146" width="920" height="164" rx="14" fill="url(#ira-api)" stroke="#00b4ff" stroke-width="1.8"/>
+  <text x="60" y="174" font-size="15" font-weight="800" fill="#ffffff">API &amp; interoperability layer</text>
+  <text x="60" y="194" font-size="11.5" fill="#00b4ff">The regulated boundary — the four required FHIR APIs, security, consent, and audit</text>
+
+  <g font-size="12.5" font-weight="600" fill="#00b4ff" text-anchor="middle">
+    <rect x="60" y="206" width="212" height="38" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,180,255,0.35)"/>
+    <text x="166" y="230">Patient Access API</text>
+    <rect x="288" y="206" width="212" height="38" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,180,255,0.35)"/>
+    <text x="394" y="230">Provider Access API</text>
+    <rect x="516" y="206" width="212" height="38" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,180,255,0.35)"/>
+    <text x="622" y="230">Payer-to-Payer API</text>
+    <rect x="744" y="206" width="196" height="38" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,180,255,0.35)"/>
+    <text x="842" y="230">Prior Authorization API</text>
+  </g>
+  <g font-size="12" font-weight="600" fill="#a0a0a0" text-anchor="middle">
+    <rect x="60" y="256" width="284" height="38" rx="8" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="202" y="280" fill="#00ffff">SMART on FHIR / OAuth 2.0</text>
+    <rect x="360" y="256" width="284" height="38" rx="8" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="502" y="280" fill="#00ffff">Consent &amp; authorization controls</text>
+    <rect x="660" y="256" width="280" height="38" rx="8" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="800" y="280" fill="#00ffff">Audit &amp; observability</text>
+  </g>
+
+  <line x1="500" y1="310" x2="500" y2="342" stroke="#00ffff" stroke-width="2" marker-end="url(#ira-arrow)"/>
+
+  <!-- ============ Layer 3: CloudHealthOffice services ============ -->
+  <rect x="40" y="348" width="920" height="176" rx="14" fill="url(#ira-cho)" stroke="#00ffff" stroke-width="2"/>
+  <text x="60" y="376" font-size="16" font-weight="800" fill="#ffffff">CloudHealthOffice services</text>
+  <text x="60" y="396" font-size="11.5" fill="#00ff88">Domain services behind the FHIR boundary — orchestration, decisioning, and reference data</text>
+
+  <g font-size="12.5" font-weight="600" fill="#00ffff" text-anchor="middle">
+    <rect x="60" y="408" width="212" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="166" y="433">Prior authorization</text>
+    <rect x="288" y="408" width="212" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="394" y="433">Claims &amp; encounters</text>
+    <rect x="516" y="408" width="212" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="622" y="433">Eligibility / member</text>
+    <rect x="744" y="408" width="196" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,255,0.3)"/>
+    <text x="842" y="433">Provider</text>
+  </g>
+  <g font-size="12.5" font-weight="600" fill="#00ff88" text-anchor="middle">
+    <rect x="60" y="460" width="212" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="166" y="485">Benefits</text>
+    <rect x="288" y="460" width="212" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="394" y="485">Terminology / reference</text>
+    <rect x="516" y="460" width="212" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="622" y="485">Workflow / orchestration</text>
+    <rect x="744" y="460" width="196" height="40" rx="8" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.3)"/>
+    <text x="842" y="485">Observability</text>
+  </g>
+
+  <!-- Split arrows: down to adapter, and alternate right path -->
+  <line x1="420" y1="524" x2="420" y2="566" stroke="#00ffff" stroke-width="2" marker-end="url(#ira-arrow)"/>
+  <text x="436" y="552" font-size="11.5" font-weight="600" fill="#00ffff" font-family="JetBrains Mono, monospace">Pattern 1</text>
+
+  <!-- ============ Layer 4: Adapter / integration layer ============ -->
+  <rect x="120" y="572" width="600" height="54" rx="10" fill="rgba(0,180,255,0.08)" stroke="#00b4ff" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="420" y="597" text-anchor="middle" font-size="14.5" font-weight="700" fill="#00b4ff">Adapter / integration layer</text>
+  <text x="420" y="615" text-anchor="middle" font-size="11" fill="#8fb8cf">Payer-specific onboarding integrations — configured, not preconfigured</text>
+
+  <line x1="420" y1="626" x2="420" y2="664" stroke="#00ffff" stroke-width="2" marker-end="url(#ira-arrow)"/>
+
+  <!-- ============ Layer 5: Existing payer platforms ============ -->
+  <text x="120" y="656" font-size="11.5" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="1.5">EXISTING PAYER PLATFORMS</text>
+  <g font-size="14" font-weight="700" text-anchor="middle">
+    <rect x="120" y="670" width="138" height="62" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="189" y="698" fill="#ffffff">QNXT</text>
+    <text x="189" y="717" font-size="10.5" font-weight="500" fill="#808080">Core admin</text>
+    <rect x="274" y="670" width="138" height="62" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="343" y="698" fill="#ffffff">Facets</text>
+    <text x="343" y="717" font-size="10.5" font-weight="500" fill="#808080">Core admin</text>
+    <rect x="428" y="670" width="138" height="62" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="497" y="694" fill="#ffffff" font-size="13">HealthEdge</text>
+    <text x="497" y="717" font-size="10.5" font-weight="500" fill="#808080">Core admin</text>
+    <rect x="582" y="670" width="138" height="62" rx="10" fill="rgba(8,8,8,0.92)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="651" y="694" fill="#ffffff" font-size="12">Core / UM /</text>
+    <text x="651" y="712" fill="#ffffff" font-size="12">data systems</text>
+  </g>
+
+  <!-- ============ Alternate path: CHO as core backend ============ -->
+  <path d="M812 524 L812 700 L732 700" fill="none" stroke="#00ff88" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#ira-arrow-green)"/>
+  <rect x="762" y="656" width="196" height="88" rx="10" fill="rgba(0,255,136,0.06)" stroke="#00ff88" stroke-width="1.6"/>
+  <text x="860" y="682" text-anchor="middle" font-size="13" font-weight="800" fill="#00ff88">Pattern 2</text>
+  <text x="860" y="704" text-anchor="middle" font-size="12.5" font-weight="600" fill="#ffffff">CloudHealthOffice</text>
+  <text x="860" y="722" text-anchor="middle" font-size="12.5" font-weight="600" fill="#ffffff">as core backend</text>
+  <text x="860" y="740" text-anchor="middle" font-size="10.5" fill="#7fd6a8">No external legacy core</text>
+
+  <!-- ============ Footnote ============ -->
+  <text x="500" y="792" text-anchor="middle" font-size="13" fill="#a0a0a0">Pattern 1: CloudHealthOffice as an interoperability / modernization layer in front of or alongside an existing payer core.</text>
+  <text x="500" y="814" text-anchor="middle" font-size="13" fill="#a0a0a0">Pattern 2: CloudHealthOffice services provide the underlying payer / core capabilities directly.</text>
+  <text x="500" y="852" text-anchor="middle" font-size="11.5" fill="#606060" font-family="JetBrains Mono, monospace">Adapter integrations are an architecture / deployment model, configured per payer during onboarding.</text>
+</svg>

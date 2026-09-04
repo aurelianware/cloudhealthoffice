@@ -306,6 +306,15 @@
       "rewrite": "/cms-0057f-compliance.html"
     },
     {
+      "route": "/cms-0057-f/implementation-architecture/index.html",
+      "redirect": "/cms-0057-f/implementation-architecture",
+      "statusCode": 301
+    },
+    {
+      "route": "/cms-0057-f/implementation-architecture",
+      "rewrite": "/cms-0057-f/implementation-architecture/index.html"
+    },
+    {
       "route": "/pricing-api.html",
       "redirect": "/pricing-api",
       "statusCode": 301

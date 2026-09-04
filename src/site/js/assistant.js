@@ -49,11 +49,11 @@
     {
       id: 'qnxt',
       label: 'How it sits on QNXT / Facets',
-      keywords: ['qnxt', 'facets', 'healthedge', 'core', 'sit', 'beside', 'replace', 'alongside', 'amisys'],
-      answer: 'It deploys alongside your core admin system. Layer 1 serves the CMS-0057-F ' +
-        'APIs now; then you replace one domain at a time when you are ready. Your system of ' +
-        'record stays authoritative until you choose to cut over — no overnight rip-and-replace.',
-      link: { href: '/platform', text: 'See the platform staircase' }
+      keywords: ['qnxt', 'facets', 'healthedge', 'core', 'sit', 'beside', 'replace', 'alongside', 'amisys', 'foothold', 'cutover'],
+      answer: 'It deploys alongside your core admin system. Layer 1 — Foothold — serves the CMS-0057-F ' +
+        'APIs in your cloud while the core stays the system of record. Layer 2 is a domain cutover: ' +
+        'one operational domain, reversible. Layer 3 is core — Cloud Health Office as the claims ledger — only when you choose.',
+      link: { href: '/platform#layers', text: 'See the platform staircase' }
     },
     {
       id: 'evidence',
