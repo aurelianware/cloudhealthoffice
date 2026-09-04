@@ -606,7 +606,7 @@
       .catch(function () {
         var fb = document.getElementById('evidence-fallback');
         if (fb) fb.textContent = 'The latest published evidence snapshot could not be loaded here. '
-          + 'The scenario scoring above reflects the same source, and the machine-readable evidence is available in the repository.';
+          + 'The machine-readable evidence is generated in CI and available in the repository, tied to the tested source revision.';
       });
   })();
   </script>

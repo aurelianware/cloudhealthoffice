@@ -170,6 +170,20 @@ public class PublicEvidenceTests
     }
 
     [Fact]
+    public void UnknownDeclaredStatus_FailsFast_RatherThanMiscounting()
+    {
+        // A status outside PASSABLE/PARTIAL/GAP/N/A must not be silently dropped
+        // from the summary — that would make counts disagree with the matrix.
+        var report = Report(Summary(passed: 1),
+            Scenario("PAS-03", "PAS submit",
+                Backend(BackendIds.Replace, "MAYBE", ExecutionStatus.Passed, "T.A")));
+
+        var act = () => PublicEvidenceProjector.Project(report);
+
+        act.Should().Throw<PublicEvidenceException>().WithMessage("*MAYBE*");
+    }
+
+    [Fact]
     public void NaStatus_IsPreservedAndCounted()
     {
         var report = Report(Summary(passed: 1),

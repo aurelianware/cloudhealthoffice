@@ -20,7 +20,7 @@ public sealed class PublicEvidenceException : Exception
 /// </summary>
 public static class PublicEvidenceProjector
 {
-    private const string GithubServerUrl = "https://github.com";
+    private const string GitHubServerUrl = "https://github.com";
     private const string AugmentPrefix = "augment.";
 
     public static PublicEvidence Project(EvidenceReport report)
@@ -41,7 +41,7 @@ public static class PublicEvidenceProjector
         var shortSha = string.IsNullOrEmpty(sha) ? null : sha[..Math.Min(12, sha.Length)];
         var repo = report.Identity.Repository;
         var sourceCommitUrl = (!string.IsNullOrEmpty(sha) && !string.IsNullOrEmpty(repo))
-            ? $"{GithubServerUrl}/{repo}/commit/{sha}"
+            ? $"{GitHubServerUrl}/{repo}/commit/{sha}"
             : null;
 
         return new PublicEvidence
@@ -126,6 +126,13 @@ public static class PublicEvidenceProjector
                 case Status.Partial: partial++; break;
                 case Status.Gap: gap++; break;
                 case Status.NotApplicable: na++; break;
+                // Fail fast rather than silently dropping an unrecognized status:
+                // a summary that disagreed with the per-scenario matrix would hide
+                // manifest/status drift instead of surfacing it.
+                default:
+                    throw new PublicEvidenceException(
+                        $"Cannot summarize unknown declared status '{status}'. "
+                        + $"Expected one of: {Status.Passable}, {Status.Partial}, {Status.Gap}, {Status.NotApplicable}.");
             }
         }
         return new StatusCounts { Passable = passable, Partial = partial, Gap = gap, Na = na };
