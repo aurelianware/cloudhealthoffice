@@ -45,6 +45,7 @@ local.settings.json
 .env
 .env.*
 !.env.example
+!.env.local.example
 
 # Dev certificates
 .certs/
