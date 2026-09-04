@@ -1,0 +1,159 @@
+{
+  "$comment": "CMS-0057-F acceptance scenario manifest — the machine-readable SOURCE OF TRUTH for scenario status. The acceptance suite validates its [Trait(\"Scenario\",...)] against this file (see ScenarioManifestTests), and tools/Cms0057Evidence generates versioned evidence from it. Statuses are one of: PASSABLE, PARTIAL, GAP, N/A. 'replace' is Cloud Health Office product capability (Replace mode). 'augment' is external-core integration capability (per backend). Do not invent Facets/HealthEdge results until an integration exists.",
+  "schemaVersion": 1,
+  "capabilityDefinitions": {
+    "PASSABLE": "The repository's defined acceptance scenario is supported by the tested implementation. Not a CMS certification and not by itself production readiness for a specific payer deployment.",
+    "PARTIAL": "Core of the scenario is implemented; some part is engagement or roadmap work.",
+    "GAP": "Not implemented in the tested code; tracked so it is not silently claimed.",
+    "N/A": "The scenario has no dependency on this backend/dimension."
+  },
+  "scenarios": [
+    {
+      "id": "PAS-01",
+      "name": "CRD — is prior authorization required?",
+      "capability": "PriorAuthorization",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT benefit/auth-required lookup is per-engagement integration work; product path runs on the CHO rule store." } }
+    },
+    {
+      "id": "PAS-02",
+      "name": "DTR — correct documentation questionnaire",
+      "capability": "PriorAuthorization",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "PAS-03",
+      "name": "PAS submit — create prior authorization",
+      "capability": "PriorAuthorization",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT AUTH_CREATE is per-engagement integration work; product path persists via ChoAuthorizationBackend." } }
+    },
+    {
+      "id": "PAS-04",
+      "name": "PAS inquiry / status",
+      "capability": "PriorAuthorization",
+      "replace": { "status": "PARTIAL", "rationale": "Status is persisted and retrievable via the CHO backend; a FHIR PAS $inquire operation is not implemented." },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT status inquiry is per-engagement integration work." } }
+    },
+    {
+      "id": "PAS-05",
+      "name": "PAS specific denial reason",
+      "capability": "PriorAuthorization",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT-sourced denial reasons are per-engagement integration work." } }
+    },
+    {
+      "id": "PAS-06",
+      "name": "PAS decision timeframe (72h / 7 calendar days)",
+      "capability": "PriorAuthorization",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "PAS-07",
+      "name": "CDex additional-information exchange",
+      "capability": "PriorAuthorization",
+      "replace": { "status": "PARTIAL", "rationale": "A pended decision signals outstanding review (X12 A4); a full CDex request/response round-trip is not implemented." },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "PAS-08",
+      "name": "Drug exclusion from medical PA scope",
+      "capability": "PriorAuthorization",
+      "replace": { "status": "GAP", "rationale": "Drug/pharmacy exclusion is not enforced in the PAS medical path yet." },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "PROV-01",
+      "name": "Provider Access — attributed member data pull",
+      "capability": "ProviderAccess",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT provider directory pull is per-engagement integration work; product path uses the CHO projection." } }
+    },
+    {
+      "id": "PROV-02",
+      "name": "Provider Access — attribution enforcement",
+      "capability": "ProviderAccess",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "PROV-03",
+      "name": "Provider Access — patient opt-out honored",
+      "capability": "ProviderAccess",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "P2P-01",
+      "name": "Payer-to-Payer inbound respond",
+      "capability": "PayerToPayer",
+      "replace": { "status": "GAP", "rationale": "Payer-to-Payer is out of scope at the FHIR adapter layer; no inbound respond surface yet." },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
+    },
+    {
+      "id": "P2P-02",
+      "name": "Payer-to-Payer outbound initiate",
+      "capability": "PayerToPayer",
+      "replace": { "status": "GAP", "rationale": "No enrollment/opt-in-triggered outbound initiation or ingestion target." },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
+    },
+    {
+      "id": "P2P-03",
+      "name": "Payer-to-Payer opt-in enforcement",
+      "capability": "PayerToPayer",
+      "replace": { "status": "PARTIAL", "rationale": "Opt-in is modeled as an Active consent; no dedicated Payer-to-Payer ConsentType yet." },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
+    },
+    {
+      "id": "P2P-04",
+      "name": "Payer-to-Payer member-match / concurrent coverage",
+      "capability": "PayerToPayer",
+      "replace": { "status": "GAP", "rationale": "No $member-match / concurrent-coverage surface in product code." },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
+    },
+    {
+      "id": "PAT-01",
+      "name": "Patient Access — member claims / CARIN EOB",
+      "capability": "PatientAccess",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT claims read is per-engagement integration work; product path projects CHO claims to CARIN EOB." } }
+    },
+    {
+      "id": "PAT-02",
+      "name": "Patient Access — US Core clinical",
+      "capability": "PatientAccess",
+      "replace": { "status": "PARTIAL", "rationale": "Demographics validate against US Core; broader USCDI clinical data lives in an external clinical store." },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "PAT-03",
+      "name": "Patient Access — PA data (drugs excluded)",
+      "capability": "PatientAccess",
+      "replace": { "status": "PARTIAL", "rationale": "PA data is a recognized resource type; the >=1-year retention / 1-business-day freshness job is not implemented." },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "SEC-01",
+      "name": "SMART on FHIR / OAuth",
+      "capability": "Security",
+      "replace": { "status": "PARTIAL", "rationale": "SMART discovery, scopes, and PKCE are served; the identity provider is configured per engagement." },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "CONSENT-01",
+      "name": "Single consent registry",
+      "capability": "Consent",
+      "replace": { "status": "PARTIAL", "rationale": "One registry carries the opt-in/opt-out lifecycle; no dedicated Provider-Access/P2P ConsentType yet." },
+      "augment": { "qnxt": { "status": "N/A" } }
+    },
+    {
+      "id": "METRICS-01",
+      "name": "Prior-authorization public metric set",
+      "capability": "Metrics",
+      "replace": { "status": "PASSABLE" },
+      "augment": { "qnxt": { "status": "GAP", "rationale": "Metrics over QNXT-owned authorization data are per-engagement integration work; product path derives from the persisted CHO authorization record. The full public-metrics extract job remains engagement work." } }
+    }
+  ]
+}
