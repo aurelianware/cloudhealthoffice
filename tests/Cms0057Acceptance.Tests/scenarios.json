@@ -110,7 +110,7 @@
       "id": "P2P-04",
       "name": "Payer-to-Payer member-match / concurrent coverage",
       "capability": "PayerToPayer",
-      "replace": { "status": "GAP", "rationale": "No $member-match / concurrent-coverage surface in product code." },
+      "replace": { "status": "PASSABLE", "rationale": "Cloud Health Office Replace mode implements the FHIR Patient/$member-match operation as a dedicated application service (PayerToPayerMemberMatchService): it resolves a transitioning member across payer contexts within the tenant from normalized identity attributes, using a deterministic strong-vs-supporting policy (a strong identifier — member/subscriber id or SSN — or the family-name + birth-date pair, with any contradiction failing closed) so zero candidates yield no match, more than one yields ambiguous, and cross-tenant identities are never visible. Concurrent/overlapping coverage is selected deterministically by requested payer/subscriber context and effective date (overlaps without a discriminator refuse rather than guess). The resolved member/coverage context is consumable by the P2P-01 export path. Outbound initiation (P2P-02) remains GAP and dedicated P2P consent (P2P-03) remains PARTIAL." },
       "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
     },
     {

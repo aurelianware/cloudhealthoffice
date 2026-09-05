@@ -33,12 +33,31 @@ public record ChoAddress
 }
 
 /// <summary>
-/// CHO backend coverage record.
+/// CHO backend coverage record. Carries the payer/subscriber context and the
+/// effective period so a member's concurrent, prior, and current coverages can
+/// be told apart (used by the Payer-to-Payer <c>$member-match</c> coverage
+/// selection, P2P-04). All fields beyond <see cref="MemberId"/> are optional so
+/// callers that only need the member link are unaffected.
 /// </summary>
 public record ChoCoverage
 {
     public required string MemberId { get; init; }
     public string Status { get; init; } = "active";
+
+    /// <summary>Stable coverage identifier (e.g. COV-001-A).</summary>
+    public string? CoverageId { get; init; }
+
+    /// <summary>Payer that issued this coverage — the payer context of the relationship.</summary>
+    public string? PayerId { get; init; }
+
+    /// <summary>Subscriber id under this payer (may differ from the CHO member id).</summary>
+    public string? SubscriberId { get; init; }
+
+    /// <summary>Coverage period start (yyyy-MM-dd), when known.</summary>
+    public string? PeriodStart { get; init; }
+
+    /// <summary>Coverage period end (yyyy-MM-dd); null when the coverage is open-ended/current.</summary>
+    public string? PeriodEnd { get; init; }
 }
 
 /// <summary>
@@ -329,6 +348,10 @@ public record FhirCoverage : FhirResource
 
     [JsonPropertyName("payor")]
     public IReadOnlyList<FhirReference>? Payor { get; init; }
+
+    [JsonPropertyName("period")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FhirPeriod? Period { get; init; }
 }
 
 /// <summary>
