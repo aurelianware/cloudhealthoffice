@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Implement CHO-native Payer-to-Payer member data export (P2P-01)
+
+Closed CMS-0057-F acceptance gap **P2P-01** (Payer-to-Payer inbound respond) with
+the first production-shaped Payer-to-Payer vertical slice, Cloud Health Office
+acting as the authoritative prior payer in Replace mode. New fhir-service
+`PayerToPayer` domain: `PayerToPayerExchangeService` (application service) resolves
+the transitioning member via a **tenant-scoped, deterministic** resolver
+(`PayerToPayerMemberResolver` over `PatientAccessPayerToPayerMemberSource`, which
+reuses the existing `IPatientAccessDataProvider` — no duplicate store), enforces
+the member's opt-in **authorization** (fail-closed), and assembles a member-scoped
+FHIR export with `PayerToPayerExportBuilder` reusing the existing CARIN/US Core
+`PatientAccessMapper` (Patient + Coverage + ExplanationOfBenefit). A
+`PayerToPayerExportPolicy` applies the locked 5-year date-of-service lookback (the
+remittance/cost-sharing/drug exclusions are represented as predicates, gated on
+data-model markers that do not exist yet). A thin `PayerToPayerController`
+(`POST fhir/r4/PayerToPayer/$member-data-export`, under the SMART-enforced FHIR
+surface, tenant taken from the authenticated context) routes to the service; all
+logic lives in the service, not the controller. Member matching is safe:
+insufficient criteria, no candidate, more than one candidate, a demographic
+mismatch, a cross-tenant request, or a missing opt-in each fail explicitly and
+never return another member's or another tenant's data. Every exchange yields an
+audit entry. Real acceptance tests (`PayerToPayerExportTests`,
+`[Trait("Backend","Replace")]`) exercise the production service/resolver/source/
+builder/mapper: happy path, wrong member, no/ambiguous match, tenant boundary,
+missing consent, empty-but-valid member, and the 5-year lookback. The prior P2P-01
+GAP-assertion test is replaced by this behavioral coverage; the adapter-status
+report moves PayerToPayer `OutOfScope → Demo` (inbound respond). The scenario
+manifest moves P2P-01 `replace` `GAP → PASSABLE`. **P2P-02** (outbound initiation),
+**P2P-03** (dedicated P2P ConsentType — stays PARTIAL), **P2P-04** (`$member-match`
+/ concurrent coverage), and **QNXT Augment** are unchanged and independently
+truthful. The CI evidence pipeline derives the new result automatically — CHO
+Replace counts move `PASSABLE 11 / GAP 3` → `PASSABLE 12 / GAP 2` with no
+evidence-tooling change and no manual edit of generated evidence. Synthetic data
+only; no PHI or payer configuration. Production P2P transport security (mTLS/UDAP)
+remains engagement work.
+
 ### Enforce drug exclusions in the CMS-0057-F prior-auth workflow
 
 Closed CMS-0057-F acceptance gap **PAS-08** by implementing benefit drug/service

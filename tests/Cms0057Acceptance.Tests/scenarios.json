@@ -89,7 +89,7 @@
       "id": "P2P-01",
       "name": "Payer-to-Payer inbound respond",
       "capability": "PayerToPayer",
-      "replace": { "status": "GAP", "rationale": "Payer-to-Payer is out of scope at the FHIR adapter layer; no inbound respond surface yet." },
+      "replace": { "status": "PASSABLE", "rationale": "CHO Replace mode implements inbound Payer-to-Payer respond: a dedicated application service (PayerToPayerExchangeService) deterministically matches the transitioning member within the tenant, enforces the member's opt-in via a server-side consent gate (never a caller-supplied value; generic active opt-in, not a dedicated P2P ConsentType), and assembles a member-scoped FHIR export (Patient + Coverage + CARIN EOBs) from CHO-owned data with a 5-year lookback and an audit trail. Outbound initiation (P2P-02) and $member-match/concurrent coverage (P2P-04) remain out of scope." },
       "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
     },
     {

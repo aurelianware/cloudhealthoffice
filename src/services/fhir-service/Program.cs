@@ -129,6 +129,25 @@ builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
 builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
 builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecker>();
+
+// ── Payer-to-Payer inbound respond (CMS-0057-F P2P-01) ────────────────────────
+// CHO-native member-data export over CHO-owned data (reuses the Patient Access
+// data provider + mapper). Tenant-scoped, deterministic member resolution with a
+// consent/authorization gate. Outbound initiation (P2P-02) and $member-match
+// (P2P-04) are intentionally not wired here.
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberSource,
+    FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberSource>();
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberResolver,
+    FhirService.Services.PayerToPayer.PayerToPayerMemberResolver>();
+builder.Services.Configure<FhirService.Services.PayerToPayer.PayerToPayerConsentOptions>(
+    builder.Configuration.GetSection(
+        FhirService.Services.PayerToPayer.PayerToPayerConsentOptions.SectionName));
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentGate,
+    FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentGate>();
+builder.Services.AddSingleton<FhirService.Services.PayerToPayer.IPayerToPayerExportBuilder,
+    FhirService.Services.PayerToPayer.PayerToPayerExportBuilder>();
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerExchangeService,
+    FhirService.Services.PayerToPayer.PayerToPayerExchangeService>();
 builder.Services.AddSingleton<IChoFhirArtifactRegistry, ChoFhirArtifactRegistry>();
 
 // ── Appeals FHIR adapter (PR 3) ───────────────────────────────────────────────
