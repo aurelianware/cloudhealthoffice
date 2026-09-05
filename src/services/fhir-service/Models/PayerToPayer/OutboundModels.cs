@@ -76,7 +76,20 @@ public enum PayerToPayerOutboundStatus
     /// <summary>The remote member-data export has been issued.</summary>
     RequestingData,
 
-    /// <summary>A validated member-scoped package was received.</summary>
+    /// <summary>
+    /// A validated member-scoped package was received but is not yet durable.
+    /// The exchange is NOT complete here: nothing has been written to the
+    /// member's record, so this state is retryable, never reportable as success.
+    /// </summary>
+    DataReceived,
+
+    /// <summary>The package is being ingested into CHO's durable member record.</summary>
+    Ingesting,
+
+    /// <summary>
+    /// A validated package was received AND durably ingested. This is the only
+    /// success state: retrieval alone never reaches it.
+    /// </summary>
     Completed,
 
     /// <summary>The remote payer did not resolve the member — no data was requested.</summary>
@@ -135,6 +148,13 @@ public enum PayerToPayerOutboundFailure
 
     /// <summary>The remote payer's response was unparseable, not a Bundle, or not member-consistent.</summary>
     InvalidRemoteResponse,
+
+    /// <summary>
+    /// The package was valid but could not be durably ingested. The member's
+    /// record is unchanged and the exchange is retryable; see the exchange's
+    /// ingestion status for the specific category.
+    /// </summary>
+    IngestionFailed,
 }
 
 /// <summary>
@@ -177,8 +197,34 @@ public sealed class PayerToPayerOutboundExchange
     /// <summary>Member id the remote payer resolved (their identifier, not CHO's).</summary>
     public string? RemoteMemberId { get; set; }
 
-    /// <summary>Number of FHIR resources in the received package (0 until completed).</summary>
+    /// <summary>Number of FHIR resources in the received package (0 until a package arrives).</summary>
     public int ReceivedResourceCount { get; set; }
+
+    // ── Durable ingestion ───────────────────────────────────────────────────────
+    // Retrieval and ingestion are tracked separately and structurally (never as
+    // free text), because a package that was received but not stored is not a
+    // completed exchange.
+
+    public PayerToPayerIngestionStatus IngestionStatus { get; set; } = PayerToPayerIngestionStatus.NotStarted;
+    public PayerToPayerIngestionFailure IngestionFailure { get; set; } = PayerToPayerIngestionFailure.None;
+
+    /// <summary>Member-history resources written to CHO's imported record.</summary>
+    public int PersistedResourceCount { get; set; }
+
+    /// <summary>Administrative resources stored as reference-only context.</summary>
+    public int AdministrativeResourceCount { get; set; }
+
+    /// <summary>Resources already held from this payer with identical content (a replay).</summary>
+    public int DuplicateResourceCount { get; set; }
+
+    /// <summary>Resources whose type CHO's FHIR surface does not serve.</summary>
+    public int UnsupportedResourceCount { get; set; }
+
+    /// <summary>The distinct unsupported resource types, named rather than merely counted.</summary>
+    public IReadOnlyList<string> UnsupportedResourceTypes { get; set; } = Array.Empty<string>();
+
+    public DateTime? IngestionStartedAtUtc { get; set; }
+    public DateTime? IngestionCompletedAtUtc { get; set; }
 
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
@@ -253,6 +299,15 @@ public sealed class PayerToPayerOutboundAuditEntry
     public string? InitiatedBy { get; init; }
     public string Outcome { get; init; } = string.Empty;
     public string FailureCategory { get; init; } = PayerToPayerOutboundFailure.None.ToString();
+
+    /// <summary>Resources received from the peer.</summary>
     public int ResourceCount { get; init; }
+
+    /// <summary>What the durable ingestion did with them — status and counts only, never content.</summary>
+    public string IngestionStatus { get; init; } = PayerToPayerIngestionStatus.NotStarted.ToString();
+    public int PersistedResourceCount { get; init; }
+    public int DuplicateResourceCount { get; init; }
+    public int UnsupportedResourceCount { get; init; }
+
     public DateTime OccurredAtUtc { get; init; } = DateTime.UtcNow;
 }

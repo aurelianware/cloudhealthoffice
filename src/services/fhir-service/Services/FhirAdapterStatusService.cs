@@ -59,14 +59,18 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         ("BulkExport", FhirAdapterModes.Demo, "BulkExportService scaffold"),
         ("Consent", FhirAdapterModes.Demo, "consent-service building block"),
         // Payer-to-Payer over CHO-owned data: inbound respond (P2P-01),
-        // member-match (P2P-04), and outbound initiation (P2P-02). This is NOT a
-        // complete Payer-to-Payer capability: dedicated P2P consent semantics
-        // (P2P-03) remain partial, outbound transport to a specific payer depends
-        // on that payer's onboarding (credentials/endpoint configuration), and no
+        // member-match (P2P-04), outbound initiation (P2P-02), and durable
+        // ingestion of what comes back. This is NOT a complete Payer-to-Payer
+        // capability: dedicated P2P consent semantics (P2P-03) remain partial,
+        // ingestion covers only the resource types this FHIR surface serves
+        // (others are archived, not ingested), imported data is not yet projected
+        // into the read APIs, outbound transport to a specific payer depends on
+        // that payer's onboarding (credentials/endpoint configuration), and no
         // external-core (QNXT/Facets/HealthEdge) P2P integration exists.
         ("PayerToPayer", FhirAdapterModes.Demo,
             "PayerToPayerExchangeService (inbound respond) + PayerToPayerMemberMatchService ($member-match) "
-            + "+ PayerToPayerOutboundService (outbound initiation; remote payer endpoints per configuration)"),
+            + "+ PayerToPayerOutboundService (outbound initiation; remote payer endpoints per configuration) "
+            + "+ PayerToPayerPackageIngestionService (durable import of supported resource types)"),
     ];
 
     private readonly FhirAdapterOptions _options;
