@@ -38,10 +38,15 @@ public static class DrugServiceCodeNormalizer
             || exclusionSystem == requestedSystem;
         if (!systemsCompatible) return false;
 
-        // Normalize each side under its own system so an NDC exclusion and an
-        // NDC request are compared with the same rules.
-        var left = Normalize(exclusionSystem, exclusionCode);
-        var right = Normalize(requestedSystem, requestedCode);
+        // Normalize BOTH sides under the more specific system so system-specific
+        // formatting (e.g. NDC hyphen stripping) still applies when one side
+        // leaves its system unspecified — otherwise an unhyphenated NDC exclusion
+        // would miss a hyphenated request that omitted its system hint.
+        var effectiveSystem = exclusionSystem != DrugServiceCodeSystem.Unspecified
+            ? exclusionSystem
+            : requestedSystem;
+        var left = Normalize(effectiveSystem, exclusionCode);
+        var right = Normalize(effectiveSystem, requestedCode);
         return left.Length > 0 && string.Equals(left, right, StringComparison.Ordinal);
     }
 }

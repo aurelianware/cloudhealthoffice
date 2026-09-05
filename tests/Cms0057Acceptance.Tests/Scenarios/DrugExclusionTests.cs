@@ -189,6 +189,44 @@ public class DrugExclusionTests
     [Fact]
     [Trait("Scenario", "PAS-08")]
     [Trait("Backend", "Replace")]
+    public async Task PAS08_Replace_ExcludedNdc_MatchesHyphenatedRequestEvenWithNoSystemHint()
+    {
+        // The request omits its code-system hint (ProductOrServiceSystem null) and
+        // is hyphenated; the NDC exclusion is unhyphenated. Matching must still
+        // normalize under the exclusion's system so the same drug is caught.
+        var backend = BackendWith(DemoPlanExcluding(new BenefitExclusion
+        {
+            CodeSystem = DrugServiceCodeSystem.Ndc,
+            Code = "12345678901",
+            ReasonCode = ExclusionReasonCode.NonCoveredBenefit,
+        }));
+
+        await backend.CreateAsync(DrugRequest("PAS-08-NOSYS", "12345-6789-01", system: null));
+
+        (await backend.GetByNumberAsync("PAS-08-NOSYS"))!.Status
+            .Should().Be(AuthorizationStatus.Denied);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-08")]
+    [Trait("Backend", "Replace")]
+    public async Task PAS08_Replace_ElevenDigitHyphenatedNdc_IsAcceptedByModelValidation()
+    {
+        // An 11-digit hyphenated NDC exceeds the legacy 10-char procedure-code
+        // limit; the model must accept it so a real drug submission is not
+        // rejected before exclusion evaluation.
+        var request = DrugRequest("PAS-08-LEN", "12345-6789-01");
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        var ctx = new System.ComponentModel.DataAnnotations.ValidationContext(
+            request.RequestedServices[0]);
+        System.ComponentModel.DataAnnotations.Validator
+            .TryValidateObject(request.RequestedServices[0], ctx, results, validateAllProperties: true)
+            .Should().BeTrue(string.Join("; ", results.Select(r => r.ErrorMessage)));
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-08")]
+    [Trait("Backend", "Replace")]
     public async Task PAS08_Replace_UnknownCode_IsNotExcluded()
     {
         var backend = BackendWith(DemoPlanExcluding(NdcExclusion(ExcludedNdc)));
