@@ -61,7 +61,7 @@
       "id": "PAS-08",
       "name": "Drug exclusion from medical PA scope",
       "capability": "PriorAuthorization",
-      "replace": { "status": "GAP", "rationale": "Drug/pharmacy exclusion is not enforced in the PAS medical path yet." },
+      "replace": { "status": "PASSABLE", "rationale": "The CHO Replace-mode authorization workflow enforces benefit drug/service exclusions: a request for a plan-excluded drug (or the pharmacy service type, out of the CMS-0057-F medical scope) is recorded as a coded denial and persisted with audit history, rather than following the ordinary approvable path." },
       "augment": { "qnxt": { "status": "N/A" } }
     },
     {

@@ -132,43 +132,11 @@ public class PasDecisionAndScopeTests
     }
 
     // ── PAS-08 drug exclusion ───────────────────────────────────────────────────
-
-    [Fact]
-    [Trait("Scenario", "PAS-08")]
-    [Trait("Kind", "GAP")]
-    public void PAS08_Gap_DrugExclusionNotEnforcedInPasMedicalPath()
-    {
-        // CMS-0057-F prior-authorization scope EXCLUDES drugs. Today the PAS
-        // compliance path does not distinguish a pharmacy claim from a medical
-        // one — a pharmacy-type Claim validates identically. This test pins that
-        // current behavior and marks the missing drug-exclusion filter as a GAP:
-        // enforcing "pharmacy PA is out of 0057 medical scope" is product/
-        // engagement follow-up.
-        var checker = new Cms0057ComplianceChecker();
-        var pharmacyClaim = new Claim
-        {
-            Status = FinancialResourceStatusCodes.Active,
-            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "pharmacy"),
-            Use = ClaimUseCode.Preauthorization,
-            Patient = new ResourceReference("Patient/pat-001"),
-            Provider = new ResourceReference("Practitioner/npi-1234567890"),
-            Insurance = new List<Claim.InsuranceComponent>
-            {
-                new() { Sequence = 1, Focal = true, Coverage = new ResourceReference("Coverage/cov-001") },
-            },
-            Item = new List<Claim.ItemComponent>
-            {
-                new() { Sequence = 1, ProductOrService = new CodeableConcept("http://hl7.org/fhir/sid/ndc", "00071015523") },
-            },
-        };
-
-        var result = checker.ValidateCompliance(pharmacyClaim);
-
-        // No exclusion filter exists → a pharmacy claim passes the same gate as
-        // medical. When drug-exclusion enforcement lands, this test must change.
-        result.Compliant.Should().BeTrue(
-            "PAS compliance does not yet special-case pharmacy/drug claims (documented GAP)");
-    }
+    // Behavioral enforcement now lives in the CHO Replace-mode authorization
+    // workflow and is proven in DrugExclusionTests (real ChoAuthorizationBackend +
+    // benefit-exclusion catalog/evaluator). The former GAP marker here — which
+    // pinned that the FHIR compliance checker did not special-case pharmacy — has
+    // been removed now that the capability is implemented and covered.
 
     // ── PAS-04 inquiry / status ─────────────────────────────────────────────────
 
