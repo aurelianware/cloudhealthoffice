@@ -270,7 +270,7 @@ external-core dependency (no vendor adapter involved).
 | PAS-05 specific denial | **PASSABLE** | **GAP** | `PasResponseBuilder` coded error; `ChoAuthorizationBackend` persists coded denial reason |
 | PAS-06 decision timeframe | **PASSABLE** | n/a | `Cms0057ComplianceChecker.CheckPriorAuthTimeline` (72h/7d); persisted status/decision history |
 | PAS-07 CDex additional-info | **PARTIAL** | n/a | pended X12 A4 via `PasResponseBuilder`; CDex round-trip **GAP** |
-| PAS-08 drug exclusion | **GAP** | n/a | no drug-exclusion filter in the PAS path |
+| PAS-08 drug exclusion | **PASSABLE** | n/a | `ChoAuthorizationBackend.CreateAsync` enforces benefit exclusions (`BenefitExclusion` catalog + `DrugExclusionEvaluator`): a plan-excluded drug / pharmacy service type is persisted as a coded denial (A3) with audit history, not approvable |
 | PROV-01 attributed pull | **PASSABLE** | **GAP** | `MockPatientAccessDataProvider` + `PatientAccessMapper`; QNXT provider adapter stub |
 | PROV-02 attribution enforce | **PASSABLE** | n/a | data layer returns no data for non-attributed member; 403-class via middleware (SEC-01) |
 | PROV-03 opt-out honored | **PASSABLE** | n/a | `ConsentStateMachine` Active→Revoked |

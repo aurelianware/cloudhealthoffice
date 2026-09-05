@@ -144,6 +144,20 @@ else
 // (QnxtAuthorizationBackend stub) — never a silent fallback to CHO.
 builder.Services.Configure<AuthorizationService.Backends.AuthorizationBackendOptions>(
     builder.Configuration.GetSection(AuthorizationService.Backends.AuthorizationBackendOptions.SectionName));
+
+// Benefit drug/service exclusion (CMS-0057-F PAS-08) — enforced by the CHO
+// Replace-mode backend. The exclusion catalog is configuration-driven and
+// tenant-scoped (no hard-coded codes); an empty catalog excludes nothing.
+builder.Services.Configure<AuthorizationService.Services.BenefitExclusion.BenefitExclusionOptions>(
+    builder.Configuration.GetSection(
+        AuthorizationService.Services.BenefitExclusion.BenefitExclusionOptions.SectionName));
+builder.Services.AddScoped<AuthorizationService.Services.BenefitExclusion.IBenefitExclusionCatalog,
+    AuthorizationService.Services.BenefitExclusion.ConfiguredBenefitExclusionCatalog>();
+builder.Services.AddScoped<AuthorizationService.Services.BenefitExclusion.IDrugExclusionEvaluator,
+    AuthorizationService.Services.BenefitExclusion.DrugExclusionEvaluator>();
+builder.Services.AddScoped<AuthorizationService.Services.BenefitExclusion.IAuthorizationExclusionService,
+    AuthorizationService.Services.BenefitExclusion.AuthorizationExclusionService>();
+
 builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,
     AuthorizationService.Backends.ChoAuthorizationBackend>();
 builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,

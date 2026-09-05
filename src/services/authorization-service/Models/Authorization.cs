@@ -421,6 +421,15 @@ public class RequestedService
     public string ProcedureCode { get; set; } = string.Empty;
 
     /// <summary>
+    /// Coding system of <see cref="ProcedureCode"/> when it is not a plain
+    /// CPT/HCPCS procedure — e.g. "NDC" or "RxNorm" for an administered drug, or
+    /// a FHIR system URI. Optional; absent means a plain procedure code. Used by
+    /// benefit drug-exclusion evaluation to normalize the drug/service identity.
+    /// </summary>
+    [StringLength(64)]
+    public string? ProductOrServiceSystem { get; set; }
+
+    /// <summary>
     /// Procedure description
     /// </summary>
     [StringLength(500)]
