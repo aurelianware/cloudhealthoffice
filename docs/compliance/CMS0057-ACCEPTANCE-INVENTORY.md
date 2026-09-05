@@ -142,7 +142,7 @@ Mode column: current operating mode of that surface in the default build.
 | `Services/IPatientAccessDataProvider.cs` | `MockPatientAccessDataProvider` (synthetic pat-001..003) | Demo | PROV-01/02, PAT-01 |
 | `Controllers/SmartConfigurationController.cs` | `.well-known/smart-configuration` | Demo (issuer configurable) | SEC-01 |
 | `Controllers/MetadataController.cs` | R4 CapabilityStatement, SMART-on-FHIR security | Demo | SEC-01 (IG pins) |
-| `Services/FhirAdapterStatusService.cs` | `/adapter-status`; PayerToPayer = **Demo** (inbound respond + `$member-match` + outbound initiation) | Demo | P2P-01, P2P-02, P2P-04, mode evidence |
+| `Services/FhirAdapterStatusService.cs` | `/adapter-status`; PayerToPayer = **Demo** (inbound respond + `$member-match` + outbound initiation + durable ingestion) | Demo | P2P-01, P2P-02, P2P-04, mode evidence |
 | `Services/PayerToPayer/PayerToPayerExchangeService.cs` | inbound respond: tenant-scoped resolution, opt-in gate, CHO-data export | Demo | P2P-01 |
 | `Services/PayerToPayer/PayerToPayerMemberMatchService.cs` | `Patient/$member-match`: deterministic identity + coverage selection | Demo | P2P-04 |
 | `Services/PayerToPayer/Outbound/PayerToPayerOutboundService.cs` | outbound initiation: member/coverage context → directory → opt-in gate → remote `$member-match` → export → validation → exchange state + audit | Demo | P2P-02 |
@@ -151,6 +151,11 @@ Mode column: current operating mode of that surface in the default build.
 | `Services/PayerToPayer/Outbound/HttpPayerToPayerRemoteClient.cs` | named `HttpClient` (`AllowAutoRedirect=false`, response cap, no payload/credential logging) | Demo (no payer onboarded by default) | P2P-02 |
 | `Services/PayerToPayer/Outbound/PayerToPayerResponseReader.cs` | peer-response parsing + member-consistency validation + source `Provenance` stamp | Demo | P2P-02 |
 | `Services/PayerToPayer/Outbound/PayerToPayerOutboundExchangeStore.cs` | exchange state + idempotency key; **in-process store** (durable persistence is follow-up) | Demo (in-memory) | P2P-02 |
+| `Services/PayerToPayer/Ingestion/PayerToPayerPackageIngestionService.cs` | durable ingestion of a validated package: classify → normalize references → stage → commit; exchange completes only after the commit | Demo | P2P-02 |
+| `Services/PayerToPayer/Ingestion/PayerToPayerImportPolicy.cs` | supported-type inventory (member history / administrative reference / unsupported) + deterministic import key | Demo | P2P-02 |
+| `Services/PayerToPayer/Ingestion/PayerToPayerReferenceNormalizer.cs` | intra-package reference rewriting (relative + absolute); unresolvable and contained references left verbatim | Demo | P2P-02 |
+| `Services/PayerToPayer/Ingestion/PayerToPayerImportRepository.cs` | import store **separate from CHO-authoritative data**; staged-then-committed, tenant + member scoped | Demo (in-memory) | P2P-02 |
+| `Services/PayerToPayer/Ingestion/MongoPayerToPayerImportRepository.cs` | durable MongoDB store; unique index on (tenantId, importKey), single-document ledger commit | live when `MongoDb:ConnectionString` set | P2P-02 |
 | `Controllers/PayerToPayerOutboundController.cs` | `POST fhir/r4/PayerToPayer/$initiate` (payer id only — never a URL); thin routing | Demo | P2P-02 |
 | `Controllers/CommunicationController.cs` | Appeal-note → FHIR Communication (**not** CDex additional-info) | Demo | PAS-07 (GAP note) |
 
@@ -284,7 +289,7 @@ external-core dependency (no vendor adapter involved).
 | PROV-02 attribution enforce | **PASSABLE** | n/a | data layer returns no data for non-attributed member; 403-class via middleware (SEC-01) |
 | PROV-03 opt-out honored | **PASSABLE** | n/a | `ConsentStateMachine` Active→Revoked |
 | P2P-01 inbound respond | **PASSABLE** | **GAP** | `PayerToPayerExchangeService` — tenant-scoped member resolution + opt-in gate + CHO-data FHIR export (Patient + Coverage + CARIN EOBs, 5-year lookback, audit); QNXT P2P integration absent |
-| P2P-02 outbound initiate | **PASSABLE** | **GAP** | `PayerToPayerOutboundService` — CHO, as the member's new payer, resolves the member + prior-payer coverage context from CHO-owned data, resolves the target payer through a trusted tenant-scoped HTTPS-only directory (payer id in, never a caller URL), enforces the opt-in server-side **before anything leaves CHO**, calls the remote `$member-match` through a transport seam, requests the export only after a single member resolves, validates the returned Bundle for member consistency, and stamps source `Provenance`; structured outcomes + idempotent exchange record + audit without demographics/payloads/URLs. Received packages are retrieved and validated, **not ingested** into the member record; live payer onboarding (SMART Backend Services / UDAP / mTLS) is deployment integration; exchange state is in-process. QNXT-backed outbound initiation absent |
+| P2P-02 outbound initiate | **PASSABLE** | **GAP** | `PayerToPayerOutboundService` — CHO, as the member's new payer, resolves the member + prior-payer coverage context from CHO-owned data, resolves the target payer through a trusted tenant-scoped HTTPS-only directory (payer id in, never a caller URL), enforces the opt-in server-side **before anything leaves CHO**, calls the remote `$member-match` through a transport seam, requests the export only after a single member resolves, validates the returned Bundle for member consistency, and stamps source `Provenance`; structured outcomes + idempotent exchange record + audit without demographics/payloads/URLs. A validated package is **durably ingested** (`PayerToPayerPackageIngestionService`) into an import store kept separate from CHO-authoritative data: deterministic import keys (tenant + member + source payer + type + source id) make replay non-duplicating and never merge two payers' records, references are normalized, and a staged-then-committed ledger means a failed ingestion leaves the member record untouched. Ingestion covers the types CHO's FHIR surface serves (EOB, Claim, ClaimResponse, Encounter, DocumentReference; Patient/Coverage/Organization/Practitioner/PractitionerRole/Provenance as reference-only); **USCDI clinical types are archived, not ingested** (the PAT-02 gap), imported data is **not yet projected into the read APIs**, live payer onboarding (SMART Backend Services / UDAP / mTLS) is deployment integration, and exchange state is in-process. QNXT-backed outbound initiation absent |
 | P2P-03 opt-in enforcement | **PARTIAL** | **GAP** | opt-in modeled as Active consent; no dedicated P2P `ConsentType` |
 | P2P-04 member-match/concurrent | **PASSABLE** | **GAP** | `PayerToPayerMemberMatchService` — FHIR `Patient/$member-match`; deterministic strong-vs-supporting identity policy (member/subscriber id or SSN, or family + DOB; any contradiction fails closed), tenant-scoped, anti-enumeration sufficiency gate; concurrent/overlapping coverage selected by requested payer/subscriber + effective date (overlaps without a discriminator refuse); resolved context feeds the P2P-01 export; QNXT P2P integration absent |
 | PAT-01 member claims / CARIN EOB | **PASSABLE** | **GAP** | `MockPatientAccessDataProvider` payments → `PatientAccessMapper` EOB; QNXT claim adapter stub |
@@ -299,6 +304,15 @@ scored on the CHO-native authorization backend (Replace) rather than a flat GAP.
 PAS-03 product capability moved GAP → **PASSABLE**; METRICS-01 product moved
 PARTIAL → **PASSABLE** (derives from the persisted record, not a test-only
 object). The QNXT column stays GAP: that integration is engagement work.
+
+**What changed in the P2P ingestion PR:** a validated Payer-to-Payer package is
+now durably ingested into a CHO import store rather than validated and dropped,
+and an exchange reaches `Completed` only after that commit lands. **No scenario
+status changed**: P2P-02 was already PASSABLE (its rationale is updated), and
+P2P-03, PAT-02, and PAT-03 stay **PARTIAL** — ingestion adds no dedicated
+Payer-to-Payer `ConsentType`, does not make CHO serve USCDI clinical resources
+(they are archived, not ingested, and not exposed through the read APIs), and
+adds no PA-data retention job.
 
 **What changed in the P2P-02 PR:** outbound Payer-to-Payer initiation is
 implemented as CHO Replace-mode capability, so P2P-02 product capability moved

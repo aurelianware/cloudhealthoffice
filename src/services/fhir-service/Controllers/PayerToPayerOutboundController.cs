@@ -96,10 +96,36 @@ public sealed class PayerToPayerOutboundController : FhirControllerBase
         PayerToPayerOutboundFailure.InvalidRemoteResponse => FhirBadGateway(
             "The prior payer returned a response that could not be validated for this member."),
 
+        // The exchange itself succeeded; storing the result did not. That is
+        // CHO's own failure, not the peer's and not a missing member, so it must
+        // not masquerade as either. The exchange is retryable and the member's
+        // record is unchanged.
+        PayerToPayerOutboundFailure.IngestionFailed => ServerError(
+            "The member's data was retrieved but could not be stored; the exchange was not completed "
+            + "and can be retried."),
+
         // MemberNotFound and TenantMismatch both surface as 404 so cross-tenant
         // existence is never revealed.
         _ => FhirNotFound("Member", "unknown"),
     };
+
+    /// <summary>
+    /// 500 with a FHIR <c>OperationOutcome</c> for a failure inside CHO. The
+    /// diagnostics are operator-facing only — no store detail, no payload.
+    /// </summary>
+    private IActionResult ServerError(string diagnostics)
+        => StatusCode(500, new OperationOutcome
+        {
+            Issue =
+            [
+                new OperationOutcome.IssueComponent
+                {
+                    Severity = OperationOutcome.IssueSeverity.Error,
+                    Code = OperationOutcome.IssueType.Transient,
+                    Diagnostics = diagnostics,
+                },
+            ],
+        });
 
     /// <summary>
     /// The exchange receipt: what was initiated, how it ended, and — when a

@@ -191,6 +191,30 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPa
     FhirService.Services.PayerToPayer.Outbound.HttpPayerToPayerRemoteClient>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPayerOutboundService,
     FhirService.Services.PayerToPayer.Outbound.PayerToPayerOutboundService>();
+// Durable ingestion of a validated Payer-to-Payer package into CHO's imported
+// member record. The import store is deliberately separate from CHO's
+// authoritative member/enrollment/claim stores, so a prior payer's data can
+// never become CHO-owned. MongoDB when configured (the same switch the rest of
+// the service uses); in-process otherwise, matching DtrService's Demo-mode
+// fallback.
+if (useMongo)
+{
+    // Singleton: the repository ensures its indexes at construction, so a
+    // per-request instance would re-issue createIndex on every call. It holds
+    // only collection handles and is safe to share.
+    builder.Services.AddSingleton<
+        FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
+        FhirService.Services.PayerToPayer.Ingestion.MongoPayerToPayerImportRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<
+        FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
+        FhirService.Services.PayerToPayer.Ingestion.InMemoryPayerToPayerImportRepository>();
+}
+builder.Services.AddScoped<
+    FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerPackageIngestionService,
+    FhirService.Services.PayerToPayer.Ingestion.PayerToPayerPackageIngestionService>();
 // Redirects are NOT followed: a peer must not be able to bounce an outbound
 // Payer-to-Payer call onto another host. TLS validation is left at the platform
 // default — it is never relaxed.

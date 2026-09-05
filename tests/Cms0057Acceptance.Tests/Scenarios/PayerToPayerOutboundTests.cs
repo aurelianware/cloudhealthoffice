@@ -5,6 +5,7 @@ using FhirService.Models;
 using FhirService.Models.PayerToPayer;
 using FhirService.Services;
 using FhirService.Services.PayerToPayer;
+using FhirService.Services.PayerToPayer.Ingestion;
 using FhirService.Services.PayerToPayer.Outbound;
 using FluentAssertions;
 using Hl7.Fhir.Model;
@@ -54,7 +55,8 @@ public class PayerToPayerOutboundTests
     private sealed record Harness(
         PayerToPayerOutboundService Service,
         ScriptedPriorPayer Peer,
-        InMemoryPayerToPayerOutboundExchangeStore Store);
+        InMemoryPayerToPayerOutboundExchangeStore Store,
+        IPayerToPayerImportRepository Imports);
 
     private static Harness Build(
         ScriptedPriorPayer peer,
@@ -63,7 +65,8 @@ public class PayerToPayerOutboundTests
         bool allowInsecureTransport = false,
         string directoryTenant = AcceptanceContext.TenantId,
         IPayerToPayerMemberMatchSource? coverageSource = null,
-        bool requiresMemberMatch = true)
+        bool requiresMemberMatch = true,
+        IPayerToPayerImportRepository? importRepository = null)
     {
         var provider = new MockPatientAccessDataProvider();
         var adapterOptions = Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId });
@@ -99,6 +102,10 @@ public class PayerToPayerOutboundTests
         });
 
         var store = new InMemoryPayerToPayerOutboundExchangeStore();
+        // The exchange only completes once the package is durably ingested, so
+        // the workflow always runs with a real ingestion service over a real
+        // import repository (in-process here, MongoDB in a configured deployment).
+        var imports = importRepository ?? new InMemoryPayerToPayerImportRepository();
         var service = new PayerToPayerOutboundService(
             memberSource,
             coverageSource,
@@ -107,10 +114,12 @@ public class PayerToPayerOutboundTests
                 directory, AcceptanceContext.Logger<ConfiguredPayerToPayerEndpointResolver>()),
             peer,
             store,
+            new PayerToPayerPackageIngestionService(
+                imports, AcceptanceContext.Logger<PayerToPayerPackageIngestionService>()),
             directory,
             AcceptanceContext.Logger<PayerToPayerOutboundService>());
 
-        return new Harness(service, peer, store);
+        return new Harness(service, peer, store, imports);
     }
 
     private static PayerToPayerOutboundRequest Request(
