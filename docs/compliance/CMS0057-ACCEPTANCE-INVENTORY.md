@@ -142,7 +142,7 @@ Mode column: current operating mode of that surface in the default build.
 | `Services/IPatientAccessDataProvider.cs` | `MockPatientAccessDataProvider` (synthetic pat-001..003) | Demo | PROV-01/02, PAT-01 |
 | `Controllers/SmartConfigurationController.cs` | `.well-known/smart-configuration` | Demo (issuer configurable) | SEC-01 |
 | `Controllers/MetadataController.cs` | R4 CapabilityStatement, SMART-on-FHIR security | Demo | SEC-01 (IG pins) |
-| `Services/FhirAdapterStatusService.cs` | `/adapter-status`; PayerToPayer = **OutOfScope** | Demo | P2P-01, mode evidence |
+| `Services/FhirAdapterStatusService.cs` | `/adapter-status`; PayerToPayer = **Demo** (inbound respond) | Demo | P2P-01, mode evidence |
 | `Controllers/CommunicationController.cs` | Appeal-note → FHIR Communication (**not** CDex additional-info) | Demo | PAS-07 (GAP note) |
 
 ### QNXT / operating-mode adapters (mostly stubs)
@@ -274,7 +274,7 @@ external-core dependency (no vendor adapter involved).
 | PROV-01 attributed pull | **PASSABLE** | **GAP** | `MockPatientAccessDataProvider` + `PatientAccessMapper`; QNXT provider adapter stub |
 | PROV-02 attribution enforce | **PASSABLE** | n/a | data layer returns no data for non-attributed member; 403-class via middleware (SEC-01) |
 | PROV-03 opt-out honored | **PASSABLE** | n/a | `ConsentStateMachine` Active→Revoked |
-| P2P-01 inbound respond | **GAP** | **GAP** | `FhirAdapterStatusService` → PayerToPayer OutOfScope |
+| P2P-01 inbound respond | **PASSABLE** | **GAP** | `PayerToPayerExchangeService` — tenant-scoped member resolution + opt-in gate + CHO-data FHIR export (Patient + Coverage + CARIN EOBs, 5-year lookback, audit); QNXT P2P integration absent |
 | P2P-02 outbound initiate | **GAP** | **GAP** | no enrollment/opt-in initiation hook |
 | P2P-03 opt-in enforcement | **PARTIAL** | **GAP** | opt-in modeled as Active consent; no dedicated P2P `ConsentType` |
 | P2P-04 member-match/concurrent | **GAP** | **GAP** | no `$member-match`/concurrent-coverage surface |

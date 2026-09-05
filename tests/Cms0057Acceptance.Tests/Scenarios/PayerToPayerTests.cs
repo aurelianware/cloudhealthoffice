@@ -6,10 +6,11 @@ using Microsoft.Extensions.Options;
 namespace Cms0057Acceptance.Tests.Scenarios;
 
 /// <summary>
-/// P2P-01..04 — Payer-to-Payer exchange. In the current code Payer-to-Payer is
-/// explicitly OUT OF SCOPE at the FHIR adapter layer (bulk FHIR + consent only),
-/// so these scenarios are largely GAP/PARTIAL and are asserted honestly against
-/// the REAL FhirAdapterStatusService and the consent registry.
+/// P2P-02..04 — Payer-to-Payer exchange. Inbound respond (P2P-01) is now
+/// implemented (see PayerToPayerExportTests); outbound initiation (P2P-02),
+/// dedicated P2P consent (P2P-03, PARTIAL), and $member-match / concurrent
+/// coverage (P2P-04) remain GAP/PARTIAL and are asserted honestly against the
+/// REAL loaded product types and the consent registry.
 ///
 /// Locked rule facts (documented, enforced by engagement work, not code yet):
 ///   5-year date-of-service lookback; exclude remittances and enrollee
@@ -28,17 +29,12 @@ public class PayerToPayerTests
         return new FhirAdapterStatusService(options, AcceptanceContext.EmptyConfig()).GetStatus();
     }
 
-    [Fact]
-    [Trait("Scenario", "P2P-01")]
-    [Trait("Kind", "GAP")]
-    public void P2P01_Inbound_PayerToPayerIsOutOfScope()
-    {
-        // GAP: no inbound P2P respond surface. When built it must enforce the
-        // 5-year lookback and exclude remittances / enrollee cost-sharing / drugs.
-        var p2p = Status().Resources.Should()
-            .ContainSingle(r => r.Resource == "PayerToPayer").Subject;
-        p2p.Mode.Should().Be(FhirAdapterModes.OutOfScope);
-    }
+    // P2P-01 (inbound respond) is now implemented as real CHO Replace-mode
+    // capability and proven behaviorally in PayerToPayerExportTests (member
+    // resolution + consent gate + CHO-data FHIR export). The former GAP marker
+    // here — which pinned the adapter layer as OutOfScope — has been removed now
+    // that the respond path exists (the adapter-status report reflects it in Demo
+    // mode). P2P-02 and P2P-04 remain GAP below.
 
     [Fact]
     [Trait("Scenario", "P2P-02")]
