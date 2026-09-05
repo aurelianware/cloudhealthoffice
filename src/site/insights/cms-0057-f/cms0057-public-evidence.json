@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "evidenceStatus": "validated",
+  "generatedAtUtc": "2026-09-04T21:27:52Z",
+  "commitSha": "78220178a4c34455e44c45fa4eeb036a5539bb51",
+  "commitShaShort": "78220178a4c3",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/78220178a4c34455e44c45fa4eeb036a5539bb51",
+  "testDataClassification": "synthetic",
+  "framework": ".NET 8 / xUnit",
+  "fhirVersion": "R4",
+  "scenarioCount": 21,
+  "testSummary": {
+    "passed": 63,
+    "failed": 0,
+    "skipped": 0
+  },
+  "replaceSummary": {
+    "passable": 10,
+    "partial": 7,
+    "gap": 4,
+    "na": 0
+  },
+  "integrations": {
+    "qnxt": {
+      "passable": 0,
+      "partial": 0,
+      "gap": 11,
+      "na": 10
+    }
+  },
+  "scenarios": [
+    {
+      "id": "CONSENT-01",
+      "name": "Single consent registry",
+      "capability": "Consent",
+      "replace": "PARTIAL",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "METRICS-01",
+      "name": "Prior-authorization public metric set",
+      "capability": "Metrics",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "P2P-01",
+      "name": "Payer-to-Payer inbound respond",
+      "capability": "PayerToPayer",
+      "replace": "GAP",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "P2P-02",
+      "name": "Payer-to-Payer outbound initiate",
+      "capability": "PayerToPayer",
+      "replace": "GAP",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "P2P-03",
+      "name": "Payer-to-Payer opt-in enforcement",
+      "capability": "PayerToPayer",
+      "replace": "PARTIAL",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "P2P-04",
+      "name": "Payer-to-Payer member-match / concurrent coverage",
+      "capability": "PayerToPayer",
+      "replace": "GAP",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "PAS-01",
+      "name": "CRD — is prior authorization required?",
+      "capability": "PriorAuthorization",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "PAS-02",
+      "name": "DTR — correct documentation questionnaire",
+      "capability": "PriorAuthorization",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "PAS-03",
+      "name": "PAS submit — create prior authorization",
+      "capability": "PriorAuthorization",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "PAS-04",
+      "name": "PAS inquiry / status",
+      "capability": "PriorAuthorization",
+      "replace": "PARTIAL",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "PAS-05",
+      "name": "PAS specific denial reason",
+      "capability": "PriorAuthorization",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "PAS-06",
+      "name": "PAS decision timeframe (72h / 7 calendar days)",
+      "capability": "PriorAuthorization",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "PAS-07",
+      "name": "CDex additional-information exchange",
+      "capability": "PriorAuthorization",
+      "replace": "PARTIAL",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "PAS-08",
+      "name": "Drug exclusion from medical PA scope",
+      "capability": "PriorAuthorization",
+      "replace": "GAP",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "PAT-01",
+      "name": "Patient Access — member claims / CARIN EOB",
+      "capability": "PatientAccess",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "PAT-02",
+      "name": "Patient Access — US Core clinical",
+      "capability": "PatientAccess",
+      "replace": "PARTIAL",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "PAT-03",
+      "name": "Patient Access — PA data (drugs excluded)",
+      "capability": "PatientAccess",
+      "replace": "PARTIAL",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "PROV-01",
+      "name": "Provider Access — attributed member data pull",
+      "capability": "ProviderAccess",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "GAP"
+      }
+    },
+    {
+      "id": "PROV-02",
+      "name": "Provider Access — attribution enforcement",
+      "capability": "ProviderAccess",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "PROV-03",
+      "name": "Provider Access — patient opt-out honored",
+      "capability": "ProviderAccess",
+      "replace": "PASSABLE",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    },
+    {
+      "id": "SEC-01",
+      "name": "SMART on FHIR / OAuth",
+      "capability": "Security",
+      "replace": "PARTIAL",
+      "integrations": {
+        "qnxt": "N/A"
+      }
+    }
+  ],
+  "disclaimers": [
+    "PASSABLE means the tested Cloud Health Office acceptance scenario is supported by the referenced implementation and source revision. It is not CMS certification and does not establish production readiness for a specific payer deployment.",
+    "External-core integration status is reported separately from Cloud Health Office product capability.",
+    "Evidence is generated from the acceptance suite on synthetic data at the referenced source revision."
+  ]
+}

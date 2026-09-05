@@ -6,6 +6,13 @@ name: CMS-0057-F Acceptance Evidence
 # integration capability (Augment), derived from the scenario manifest
 # (tests/Cms0057Acceptance.Tests/scenarios.json) — the machine-readable source
 # of truth — not from prose or test names.
+#
+# On main, after a fully passing, reconciled run, a SANITIZED public-safe
+# snapshot (tools/Cms0057Evidence --public-output) is committed into the site
+# tree (src/site/insights/cms-0057-f/cms0057-public-evidence.json). That commit
+# touches only src/site/**, so it triggers the Pages deploy but NOT this workflow
+# (whose paths never include src/site/**) — no loop, and no [skip ci] that would
+# suppress the deploy.
 
 permissions:
   contents: read
@@ -14,23 +21,61 @@ on:
   push:
     branches: ["main"]
     paths:
+      # Scenario manifest, acceptance suite, and evidence tooling.
       - 'tests/Cms0057Acceptance.Tests/**'
       - 'tools/Cms0057Evidence/**'
       - 'tools/Cms0057Evidence.Tests/**'
+      - 'docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md'
       - '.github/workflows/cms0057-acceptance-evidence.yml'
+      # Runtime/domain code that can change CMS-0057-F behavior without touching
+      # the acceptance project. Kept to services/engines that materially serve a
+      # scenario dimension (CRD/DTR/PAS, Patient/Provider Access, consent/P2P,
+      # authorization metrics, SMART security, and the Replace/Augment engine).
+      - 'src/services/fhir-service/**'            # PAS + Patient/Provider Access FHIR surface
+      - 'src/services/authorization-service/**'   # prior-auth backend + metrics
+      - 'src/services/member-service/**'          # Patient Access member data
+      - 'src/services/provider-service/**'        # Provider Access attribution
+      - 'src/services/claims-service/**'          # Patient Access CARIN EOB
+      - 'src/services/benefit-plan-service/**'    # CRD "is auth required" rules
+      - 'src/services/consent-service/**'         # consent / opt-in / opt-out (P2P + access)
+      - 'src/services/smart-auth-service/**'      # SEC-01 SMART on FHIR / OAuth
+      - 'src/engines/CloudHealthOffice.OperatingMode/**'    # Replace vs Augment selection
+      - 'src/engines/CloudHealthOffice.PriorAuthRuleEngine/**'  # PAS decision rules
   pull_request:
     branches: ["main"]
     paths:
       - 'tests/Cms0057Acceptance.Tests/**'
       - 'tools/Cms0057Evidence/**'
       - 'tools/Cms0057Evidence.Tests/**'
+      - 'docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md'
       - '.github/workflows/cms0057-acceptance-evidence.yml'
+      - 'src/services/fhir-service/**'
+      - 'src/services/authorization-service/**'
+      - 'src/services/member-service/**'
+      - 'src/services/provider-service/**'
+      - 'src/services/claims-service/**'
+      - 'src/services/benefit-plan-service/**'
+      - 'src/services/consent-service/**'
+      - 'src/services/smart-auth-service/**'
+      - 'src/engines/CloudHealthOffice.OperatingMode/**'
+      - 'src/engines/CloudHealthOffice.PriorAuthRuleEngine/**'
   workflow_dispatch:
 
+concurrency:
+  group: cms0057-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  acceptance-evidence:
+  # ── Validate + generate evidence (raw + sanitized public snapshot) ──────────
+  # Runs on both PRs and main. Never writes back to the repo: it only uploads
+  # artifacts. The public snapshot is produced only from a fully passing run
+  # (the generator refuses to emit it otherwise).
+  evidence:
     name: CMS-0057-F Acceptance Evidence
     runs-on: ubuntu-latest
+    outputs:
+      rc_acceptance: ${{ steps.acceptance.outputs.rc }}
+      rc_evidence: ${{ steps.evidence.outputs.rc }}
 
     steps:
       - uses: actions/checkout@v7
@@ -58,21 +103,22 @@ jobs:
             --results-directory artifacts/trx
           echo "rc=$?" >> "$GITHUB_OUTPUT"
 
-      - name: Generate evidence
+      - name: Generate evidence (raw + sanitized public snapshot)
         id: evidence
         run: |
           set +e
           TRX=$(find artifacts/trx -name 'cms0057-acceptance.trx' | head -1)
           ASM=tests/Cms0057Acceptance.Tests/bin/Debug/net8.0/Cms0057Acceptance.Tests.dll
-          mkdir -p artifacts/cms0057-evidence
+          mkdir -p artifacts/cms0057-evidence artifacts/public
           dotnet run --project tools/Cms0057Evidence -c Debug --no-build -- \
             --manifest tests/Cms0057Acceptance.Tests/scenarios.json \
             --results "$TRX" \
             --test-assembly "$ASM" \
             --output artifacts/cms0057-evidence \
+            --public-output artifacts/public/cms0057-public-evidence.json \
             --environment CI
           echo "rc=$?" >> "$GITHUB_OUTPUT"
-          # Include the raw TRX in the evidence package.
+          # Include the raw TRX in the (private) evidence package.
           cp "$TRX" artifacts/cms0057-evidence/ 2>/dev/null || true
 
       - name: Job summary
@@ -105,10 +151,11 @@ jobs:
               if aug.get(k): print(f"  {k}: {aug[k]}")
           sha = (d.get('identity') or {}).get('commitSha') or ''
           print(f"\nCommit: `{sha}`")
-          print(f"\nEvidence artifact: cms0057-acceptance-evidence-{sha[:12]}")
+          pub = 'artifacts/public/cms0057-public-evidence.json'
+          print(f"\nSanitized public snapshot generated: {'yes' if os.path.exists(pub) else 'no'}")
           PY
 
-      - name: Upload evidence package
+      - name: Upload evidence package (raw, private to CI)
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -118,6 +165,14 @@ jobs:
             artifacts/cms0057-evidence/cms0057-evidence.md
             artifacts/cms0057-evidence/cms0057-evidence.html
             artifacts/cms0057-evidence/cms0057-acceptance.trx
+          if-no-files-found: warn
+
+      - name: Upload sanitized public snapshot
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cms0057-public-evidence
+          path: artifacts/public/cms0057-public-evidence.json
           if-no-files-found: warn
 
       - name: Fail if acceptance tests or evidence generation failed
@@ -133,3 +188,44 @@ jobs:
             echo "::error::CMS-0057-F evidence generation or scenario reconciliation failed."
             exit 1
           fi
+
+  # ── Publish the latest validated public snapshot (main only) ────────────────
+  # Depends on `evidence` succeeding, so a failed run can never publish. Commits
+  # the sanitized snapshot into the site tree; that push deploys via Pages.
+  publish:
+    name: Publish latest validated evidence
+    runs-on: ubuntu-latest
+    needs: evidence
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Download sanitized public snapshot
+        uses: actions/download-artifact@v8
+        with:
+          name: cms0057-public-evidence
+          path: incoming
+
+      - name: Update committed snapshot if changed
+        run: |
+          set -euo pipefail
+          DEST=src/site/insights/cms-0057-f/cms0057-public-evidence.json
+          mkdir -p "$(dirname "$DEST")"
+          cp incoming/cms0057-public-evidence.json "$DEST"
+          if git diff --quiet -- "$DEST"; then
+            echo "Public evidence snapshot unchanged; nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$DEST"
+          # No [skip ci]: this commit touches only src/site/**, which must trigger
+          # the Pages deploy. It does not match this workflow's paths, so it does
+          # not re-trigger evidence generation.
+          git commit -m "chore: publish latest validated CMS-0057-F acceptance evidence"
+          git push origin HEAD:main
