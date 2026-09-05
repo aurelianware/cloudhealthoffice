@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Durably ingest inbound Payer-to-Payer data into the member record
+
+The outbound Payer-to-Payer exchange previously stopped at a validated Bundle:
+CHO retrieved another payer's member-scoped package, checked it, stamped
+provenance, audited it — and kept nothing. A successful exchange now produces a
+durable, tenant-safe, member-scoped, provenance-preserving CHO record.
+
+New fhir-service code: `PayerToPayerPackageIngestionService` (application
+service) receives an ALREADY VALIDATED package from `PayerToPayerOutboundService`
+and never contacts a payer itself — the orchestration and transport added for
+P2P-02 are unchanged, and no second Payer-to-Payer wire format exists. It
+classifies each resource, normalizes intra-package references, stages every row
+under a deterministic import key, and commits.
+
+**Imported data is kept apart from CHO-authoritative data.**
+`IPayerToPayerImportRepository` (MongoDB when `MongoDb:ConnectionString` is set,
+in-process otherwise — the same fallback `DtrService` uses) is a separate store
+from CHO's member, enrollment, claim, and provider records. Source ownership is
+structural rather than conventional: an imported row cannot be read as a CHO-owned
+record, so a remote `Patient` never replaces CHO's member identity and a prior
+payer's `Coverage` never touches current enrollment. Both are stored as
+reference-only administrative context, keeping the peer's resource id while filed
+under CHO's own member.
+
+**Supported types are the ones CHO actually serves**, not the CMS wish list:
+`ExplanationOfBenefit`, `Claim`, `ClaimResponse`, `Encounter`, and
+`DocumentReference` are ingested as member history; `Patient`, `Coverage`,
+`Organization`, `Practitioner`, `PractitionerRole`, and `Provenance` are stored as
+reference-only. Everything else — `Condition`, `Observation`, and the rest of the
+USCDI clinical set — is **named and counted on the exchange and preserved in an
+archived copy of the package**, never silently dropped and never claimed as
+ingested.
+
+**Replay-safe by construction.** The import key is a hash of
+tenant + local member + source payer + resource type + source resource id, joined
+with a separator that cannot occur in an identifier. Replaying a package lands on
+the same rows instead of doubling a member's history; the same source id from a
+*different* payer is a different key, so two payers' records are never merged; a
+content hash tells "same again" from "changed"; and each exchange's own
+`Provenance` stamp stays its own record so it remains clear which exchange
+delivered what.
+
+**Atomic enough to be safe.** Resources are staged, then a single-document ledger
+write commits them, and reads return only committed resources — so an ingestion
+that fails part-way leaves the member's imported history untouched rather than
+half-written. A retry re-stages the same deterministic keys and commits. The
+exchange gained `DataReceived` and `Ingesting` states plus structured ingestion
+fields (status, failure category, persisted / duplicate / administrative /
+unsupported counts with the unsupported types named, and start/finish timestamps);
+`Completed` is now reachable **only** after the commit lands, so a package that
+was retrieved but not stored is never reported as success.
+
+**References** are rewritten only when they resolve to another resource in the
+same package — relative, absolute, and versioned forms all resolve to CHO's
+imported identity, while references to resources the peer did not send, contained
+(`#…`) references, and `urn:uuid` forms are left exactly as they arrived. CHO does
+not invent links the source payer never asserted, and an absolute URL does not
+survive as a live pointer at the peer.
+
+Tenant, member, and source payer on every stored row come from the validated
+exchange context, never from the peer's Bundle: a package whose resources name
+another tenant or member changes nothing about where its data is filed. Logs and
+audit carry ids, categories, and counts only — no Bundle bodies, demographics,
+clinical payloads, or endpoint URLs. Real tests
+(`PayerToPayerIngestionTests`, `[Trait("Backend","Replace")]`, 15 scenarios, plus
+`PayerToPayerImportPolicyTests` / `PayerToPayerReferenceNormalizerTests`, 36
+cases) drive the production path: durable persistence with correct binding,
+provenance retention, administrative ownership, unsupported-type handling,
+replay and cross-payer non-merging, staging and commit failure, retry, tenant and
+member safety, and reference resolution.
+
+**No acceptance scenario status changed.** P2P-02 was already PASSABLE and its
+rationale is updated; **P2P-03 stays PARTIAL** (no dedicated Payer-to-Payer
+`ConsentType`), **PAT-02 stays PARTIAL** (USCDI clinical types are archived, not
+served), and **PAT-03 stays PARTIAL** (no retention job). CHO Replace remains
+14 PASSABLE / 7 PARTIAL / 0 GAP, which is not full CMS-0057-F compliance,
+completeness, or certification. Imported data is durable but **not yet projected
+into CHO's FHIR read APIs**; payer onboarding (SMART Backend Services / UDAP,
+mTLS) remains deployment integration; and QNXT/external-core Payer-to-Payer
+integration remains **GAP**. New architecture documentation:
+`docs/architecture/payer-to-payer.md`.
+
+
 ### Implement CHO-native outbound Payer-to-Payer exchange (P2P-02)
 
 Closed CMS-0057-F acceptance gap **P2P-02** (Payer-to-Payer outbound initiation)

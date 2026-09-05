@@ -1,5 +1,6 @@
 using FhirService.Models;
 using FhirService.Models.PayerToPayer;
+using FhirService.Services.PayerToPayer.Ingestion;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -35,10 +36,11 @@ namespace FhirService.Services.PayerToPayer.Outbound;
 /// (<see cref="IPayerToPayerRemoteClient"/>) is a seam, so no HTTP detail
 /// reaches the workflow.
 ///
-/// SCOPE: a validated package is received, provenance-stamped, audited, and
-/// returned to the caller. It is NOT written into CHO's member record —
-/// durable ingestion of another payer's data is separate follow-up work, and
-/// this service does not claim it.
+///   9. durable ingestion — the validated package is written to CHO's imported
+///      member record by <see cref="IPayerToPayerPackageIngestionService"/>, and
+///      the exchange reaches Completed ONLY once that commit lands. A package
+///      that was retrieved but not stored leaves the exchange retryable, never
+///      reported as success.
 /// </summary>
 public interface IPayerToPayerOutboundService
 {
@@ -54,6 +56,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
     private readonly IPayerToPayerEndpointResolver _endpoints;
     private readonly IPayerToPayerRemoteClient _remote;
     private readonly IPayerToPayerOutboundExchangeStore _store;
+    private readonly IPayerToPayerPackageIngestionService _ingestion;
     private readonly IOptions<PayerToPayerDirectoryOptions> _directory;
     private readonly ILogger<PayerToPayerOutboundService> _logger;
 
@@ -64,6 +67,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         IPayerToPayerEndpointResolver endpoints,
         IPayerToPayerRemoteClient remote,
         IPayerToPayerOutboundExchangeStore store,
+        IPayerToPayerPackageIngestionService ingestion,
         IOptions<PayerToPayerDirectoryOptions> directory,
         ILogger<PayerToPayerOutboundService> logger)
     {
@@ -73,6 +77,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         _endpoints = endpoints;
         _remote = remote;
         _store = store;
+        _ingestion = ingestion;
         _directory = directory;
         _logger = logger;
     }
@@ -205,17 +210,55 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
             Provenance = provenance,
         };
 
+        // The package is in hand but not yet durable. Recording DataReceived
+        // before ingesting means a crash here reads as "retrieved, not stored" —
+        // which is the truth — instead of a silent success.
+        exchange.ReceivedResourceCount = validation.ResourceCount;
+        exchange.Status = PayerToPayerOutboundStatus.DataReceived;
+        await _store.SaveAsync(exchange, ct);
+
+        // 9. Durable ingestion. The exchange completes only if this commits.
+        exchange.Status = PayerToPayerOutboundStatus.Ingesting;
+        exchange.IngestionStatus = PayerToPayerIngestionStatus.Staging;
+        exchange.IngestionStartedAtUtc = DateTime.UtcNow;
+        await _store.SaveAsync(exchange, ct);
+
+        var ingestion = await _ingestion.IngestAsync(new PayerToPayerIngestionContext
+        {
+            // Every binding comes from the exchange CHO drove — never from the
+            // peer's Bundle.
+            TenantId = exchange.TenantId,
+            MemberId = exchange.MemberId,
+            SourcePayerId = endpoint.PayerId,
+            SourceEndpointKey = endpoint.EndpointKey,
+            ExchangeId = exchange.ExchangeId,
+            RemoteMemberId = matched.RemoteMemberId!,
+            ReceivedAtUtc = provenance.ReceivedAtUtc,
+        }, package, ct);
+
+        ApplyIngestion(exchange, ingestion);
+
+        if (!ingestion.Succeeded)
+        {
+            // The member's record is unchanged: nothing staged under an
+            // uncommitted ledger entry is visible. Retrying the initiation
+            // resumes this same exchange.
+            return await FailAsync(request, exchange, PayerToPayerOutboundStatus.Failed,
+                PayerToPayerOutboundFailure.IngestionFailed, ct);
+        }
+
         exchange.Status = PayerToPayerOutboundStatus.Completed;
         exchange.Failure = PayerToPayerOutboundFailure.None;
-        exchange.ReceivedResourceCount = validation.ResourceCount;
         await _store.SaveAsync(exchange, ct);
 
         var audit = Audit(request, exchange);
         _logger.LogInformation(
             "P2P outbound completed: tenant={Tenant} member={Member} targetPayer={Payer} peer={EndpointKey} "
-            + "exchange={Exchange} resources={Count}",
+            + "exchange={Exchange} resources={Count} persisted={Persisted} duplicate={Duplicate} "
+            + "unsupported={Unsupported}",
             Clean(audit.TenantId), Clean(audit.MemberId), Clean(audit.TargetPayerId),
-            Clean(audit.TargetEndpointKey), Clean(audit.ExchangeId), audit.ResourceCount);
+            Clean(audit.TargetEndpointKey), Clean(audit.ExchangeId), audit.ResourceCount,
+            audit.PersistedResourceCount, audit.DuplicateResourceCount, audit.UnsupportedResourceCount);
 
         return new PayerToPayerOutboundResult { Exchange = exchange, Package = package, Audit = audit };
     }
@@ -400,6 +443,33 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         exchange.ExportOutcome = null;
         exchange.RemoteMemberId = null;
         exchange.ReceivedResourceCount = 0;
+
+        // Ingestion counters describe one attempt; a retry re-derives them. The
+        // import keys the previous attempt staged are deterministic, so the retry
+        // lands on the same rows rather than duplicating the member's history.
+        exchange.IngestionStatus = PayerToPayerIngestionStatus.NotStarted;
+        exchange.IngestionFailure = PayerToPayerIngestionFailure.None;
+        exchange.PersistedResourceCount = 0;
+        exchange.AdministrativeResourceCount = 0;
+        exchange.DuplicateResourceCount = 0;
+        exchange.UnsupportedResourceCount = 0;
+        exchange.UnsupportedResourceTypes = Array.Empty<string>();
+        exchange.IngestionStartedAtUtc = null;
+        exchange.IngestionCompletedAtUtc = null;
+    }
+
+    /// <summary>Copies the ingestion outcome onto the exchange as structured state, not prose.</summary>
+    private static void ApplyIngestion(
+        PayerToPayerOutboundExchange exchange, PayerToPayerIngestionResult ingestion)
+    {
+        exchange.IngestionStatus = ingestion.Status;
+        exchange.IngestionFailure = ingestion.Failure;
+        exchange.PersistedResourceCount = ingestion.Counts.Persisted;
+        exchange.AdministrativeResourceCount = ingestion.Counts.AdministrativeReference;
+        exchange.DuplicateResourceCount = ingestion.Counts.Duplicate;
+        exchange.UnsupportedResourceCount = ingestion.Counts.Unsupported;
+        exchange.UnsupportedResourceTypes = ingestion.Counts.UnsupportedTypes;
+        exchange.IngestionCompletedAtUtc = ingestion.CompletedAtUtc;
     }
 
     private static string IdempotencyKey(
@@ -419,6 +489,10 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         Outcome = exchange.Status.ToString(),
         FailureCategory = exchange.Failure.ToString(),
         ResourceCount = exchange.ReceivedResourceCount,
+        IngestionStatus = exchange.IngestionStatus.ToString(),
+        PersistedResourceCount = exchange.PersistedResourceCount,
+        DuplicateResourceCount = exchange.DuplicateResourceCount,
+        UnsupportedResourceCount = exchange.UnsupportedResourceCount,
     };
 
     /// <summary>
