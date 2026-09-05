@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-05T02:25:53Z",
-  "commitSha": "e4aae3c04a640629cc8af7b06b6b2e92edd710ef",
-  "commitShaShort": "e4aae3c04a64",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/e4aae3c04a640629cc8af7b06b6b2e92edd710ef",
+  "generatedAtUtc": "2026-09-05T17:34:30Z",
+  "commitSha": "253eedeee96830af8602c62aa3f64c778f3f0292",
+  "commitShaShort": "253eedeee968",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/253eedeee96830af8602c62aa3f64c778f3f0292",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 81,
+    "passed": 102,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 12,
+    "passable": 13,
     "partial": 7,
-    "gap": 2,
+    "gap": 1,
     "na": 0
   },
   "integrations": {
@@ -78,7 +78,7 @@
       "id": "P2P-04",
       "name": "Payer-to-Payer member-match / concurrent coverage",
       "capability": "PayerToPayer",
-      "replace": "GAP",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "GAP"
       }
