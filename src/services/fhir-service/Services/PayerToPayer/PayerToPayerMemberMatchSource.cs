@@ -54,6 +54,9 @@ public sealed class PatientAccessPayerToPayerMemberMatchSource : IPayerToPayerMe
             ? await _directory.GetCoveragesByMemberIdAsync(memberId, ct)
             : Array.Empty<ChoCoverage>();
 
-    private bool ServesTenant(string tenantId) =>
-        string.Equals(tenantId, ServedTenantId, StringComparison.Ordinal);
+    // Trim the incoming tenant id: it can arrive from headers/claims without being
+    // trimmed upstream, and ServedTenantId is already trimmed, so comparing raw
+    // would turn a stray space into a false miss. Trimming never widens scope.
+    private bool ServesTenant(string? tenantId) =>
+        string.Equals(tenantId?.Trim(), ServedTenantId, StringComparison.Ordinal);
 }

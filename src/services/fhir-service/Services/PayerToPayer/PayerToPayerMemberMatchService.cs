@@ -44,14 +44,19 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
 
     public async Task<MemberMatchResult> MatchAsync(MemberMatchRequest request, CancellationToken ct = default)
     {
-        if (!string.Equals(request.TenantId, _source.ServedTenantId, StringComparison.Ordinal))
+        // The tenant comes from the authenticated context (headers/claims) and may
+        // not be trimmed upstream; normalize it here so a stray space cannot cause
+        // a false TenantMismatch. It never widens scope — it only matches the
+        // already-trimmed configured tenant.
+        var tenantId = request.TenantId?.Trim() ?? string.Empty;
+        if (!string.Equals(tenantId, _source.ServedTenantId, StringComparison.Ordinal))
             return Failed(request, MemberMatchOutcome.TenantMismatch);
 
         var criteria = MemberMatchCriteria.From(request);
         if (!criteria.IsSufficient)
             return Failed(request, MemberMatchOutcome.InsufficientCriteria);
 
-        var members = await _source.GetMembersAsync(request.TenantId, ct);
+        var members = await _source.GetMembersAsync(tenantId, ct);
 
         // A supplied member/subscriber id is the only criterion that needs a
         // candidate's coverages to decide match strength (subscriber ids live on
@@ -64,10 +69,14 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         foreach (var member in members)
         {
             var coverages = needsCoveragesForMatch
-                ? await _source.GetCoveragesAsync(request.TenantId, member.MemberId, ct)
+                ? await _source.GetCoveragesAsync(tenantId, member.MemberId, ct)
                 : Array.Empty<ChoCoverage>();
             if (MemberMatchPolicy.Evaluate(criteria, member, coverages) == MemberMatchStrength.Strong)
                 strong.Add((member, coverages));
+
+            // Two strong candidates already means the outcome is AmbiguousMatch;
+            // stop scanning (and stop fetching coverages) rather than evaluate the rest.
+            if (strong.Count > 1) break;
         }
 
         if (strong.Count == 0) return Failed(request, MemberMatchOutcome.NoMatch);
@@ -77,7 +86,7 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         // Coverage selection always needs the matched member's coverages; fetch
         // them now if the match path above did not already.
         if (!needsCoveragesForMatch)
-            matchedCoverages = await _source.GetCoveragesAsync(request.TenantId, matched.MemberId, ct);
+            matchedCoverages = await _source.GetCoveragesAsync(tenantId, matched.MemberId, ct);
 
         var selection = PayerToPayerCoverageSelector.Select(matchedCoverages, criteria);
         if (selection.Outcome == CoverageSelectionOutcome.Ambiguous)

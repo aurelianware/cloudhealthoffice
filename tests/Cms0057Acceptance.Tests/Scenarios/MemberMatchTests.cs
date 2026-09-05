@@ -203,6 +203,19 @@ public class MemberMatchTests
         result.Member.Should().BeNull();
     }
 
+    [Fact]
+    [Trait("Scenario", "P2P-04")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P04_Replace_TenantWithSurroundingWhitespace_StillMatchesItsOwnTenant()
+    {
+        // The tenant can arrive from headers/claims untrimmed; a stray space must
+        // not turn the served tenant into a false TenantMismatch.
+        var result = await Service().MatchAsync(Req(tenant: "  demo-tenant  ", memberId: "pat-001"));
+
+        result.Outcome.Should().Be(MemberMatchOutcome.Matched);
+        result.MatchedMemberId.Should().Be("pat-001");
+    }
+
     // ── Insufficient criteria fail safely (anti-enumeration) ────────────────────
 
     [Fact]
