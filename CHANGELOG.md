@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Implement CHO-native outbound Payer-to-Payer exchange (P2P-02)
+
+Closed CMS-0057-F acceptance gap **P2P-02** (Payer-to-Payer outbound initiation)
+as real Cloud Health Office Replace-mode capability: on an authorized coverage
+transition, CHO — the member's new payer — initiates the exchange against the
+member's prior payer, rather than only answering other payers' requests. It
+orchestrates the existing P2P primitives instead of duplicating them (P2P-01
+respond semantics for the data request, P2P-04 coverage selection for the local
+prior-coverage context) and adds no second wire format.
+
+New fhir-service code: `PayerToPayerOutboundService` (application service) drives
+the workflow fail-closed and in order — tenant scope, member + prior-payer
+coverage context from CHO-owned data, target-payer endpoint resolution,
+server-side opt-in, remote `Patient/$member-match`, member-data export, response
+validation, provenance, audit, exchange state. A thin
+`PayerToPayerOutboundController` (`POST fhir/r4/PayerToPayer/$initiate`, under
+the SMART-enforced surface, tenant from the authenticated context) only routes;
+no outbound logic lives in it.
+
+**Endpoint resolution is the SSRF boundary.** `IPayerToPayerEndpointResolver`
+resolves a *payer id* — never a caller-supplied URL — against a tenant-scoped
+configuration directory (`Cms0057:PayerToPayerOutbound`), and fails closed: an
+unknown payer, a duplicate entry, a non-absolute or non-HTTPS base URL (plain
+HTTP only under an explicit development flag, with a warning), or a URL carrying
+user info, a query, or a fragment resolves to nothing. The outbound request and
+its DTO carry no URL/endpoint field at all. `HttpPayerToPayerRemoteClient` uses a
+named `HttpClient` with redirects disabled (a peer cannot bounce CHO onto another
+host), a response-size cap, unchanged TLS validation, and no logging of payloads,
+demographics, credentials, or endpoint URLs — log lines identify a peer by its
+opaque directory key.
+
+**Authorization is server-side and enforced before anything leaves CHO.** The
+existing `IPayerToPayerConsentGate` decides the member's opt-in; there is no
+caller-supplied consent field, and an unauthorized member's identity is never
+disclosed to a remote payer (not even in a member-match). The remote match sends
+only what the operation needs — the member's identifier with that payer (from
+CHO's own coverage record) plus family name and birth date; no SSN, address,
+phone, or email. Export is requested **only** after the peer resolves exactly one
+member, and the returned FHIR Bundle is parsed and checked for member consistency
+(single matched Patient, no foreign `Patient/…` reference) before acceptance;
+anything unparseable, empty, or inconsistent is rejected whole. Accepted packages
+are stamped with a `Provenance` naming the source payer, so another payer's data
+is never mistaken for CHO-originated.
+
+Outcomes are structured, not free text (`TargetPayerNotConfigured`,
+`NotAuthorized`, `LocalCoverageAmbiguous`, `MemberNoMatch`, `MemberAmbiguous`,
+`RemoteUnauthorized`, `RemoteUnavailable`, `InvalidRemoteResponse`) and are
+recorded on a `PayerToPayerOutboundExchange` with an idempotency key
+(tenant | member | target payer | transition), so a repeated initiation replays
+one exchange and a retry after a failure resumes it. Audit carries tenant,
+member, target payer, endpoint key, exchange id, outcome, and resource count —
+no demographics, payload, URL, or credential. Real acceptance tests
+(`PayerToPayerOutboundTests`, `[Trait("Backend","Replace")]`, 23 scenarios) drive
+the production orchestration with only the far side of the wire faked, asserting
+call ordering and request content, missing consent, unconfigured/non-HTTPS payer,
+no-match, ambiguous match, remote auth/transport failure, malformed and
+cross-member packages, cross-tenant refusal, overlapping local coverage, and
+idempotent retry.
+
+**Scope, stated plainly.** P2P-02 CHO Replace moves GAP → **PASSABLE** and CHO
+Replace now declares 14 PASSABLE / 7 PARTIAL / 0 GAP — which is not full
+CMS-0057-F compliance, completeness, or certification. **P2P-03 remains
+PARTIAL**: opt-in is still a generic Active consent with no dedicated
+Payer-to-Payer `ConsentType`. Received packages are retrieved, validated, and
+audited but **not ingested** into the CHO member record; exchange state lives in
+an in-process store; and connecting to any named payer needs that payer's
+onboarding — a directory entry plus transport credentials (SMART Backend
+Services / UDAP client registration, mTLS) behind
+`IPayerToPayerCredentialProvider`, which supplies none by default rather than
+fabricating one. QNXT/external-core P2P integration (including outbound
+initiation from a QNXT-backed deployment) remains **GAP**.
+
+
 ### Implement Cloud Health Office-native Payer-to-Payer member match (P2P-04)
 
 Closed CMS-0057-F acceptance gap **P2P-04** (Payer-to-Payer member-match /

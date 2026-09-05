@@ -23,7 +23,8 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// directory (<see cref="MockPatientAccessDataProvider"/>). Synthetic data only;
 /// no PHI.
 ///
-/// P2P-02 (outbound initiation) remains GAP and P2P-03 (dedicated P2P consent)
+/// P2P-02 (outbound initiation) is implemented separately (see
+/// PayerToPayerOutboundTests); P2P-03 (dedicated P2P consent)
 /// remains PARTIAL — member-match is identity resolution only and does not gate
 /// on or introduce consent.
 ///
