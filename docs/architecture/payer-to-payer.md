@@ -109,8 +109,8 @@ Import key = SHA-256 of
 `tenant + local member + source payer + resource type + source resource id`
 (joined with a unit separator, so no two tuples collide by concatenation).
 
-* replaying a package resolves to the same keys — history updates in place, it
-  does not double;
+* replaying a package resolves to the same keys — the read collapses them to one
+  version per key, so history does not double;
 * **the same source id from a different payer is a different key** — two payers'
   records are never merged;
 * a content hash distinguishes "same again" from "changed";
@@ -119,14 +119,36 @@ Import key = SHA-256 of
 
 ### Atomicity
 
-Resources are **staged**, then a single-document ledger write **commits** them.
-Reads return only resources whose ledger entry is committed, so an ingestion that
-fails part-way leaves the member's imported history untouched rather than
-half-written — the guarantee available without requiring a multi-document
-transaction from the store. A retry re-stages the same deterministic keys and
+Rows are **versioned by exchange**: a row is identified by
+(tenant, exchange, import key), and reads return, for each import key, the
+version from the **most recently committed** exchange.
+
+Staging writes only that exchange's own rows; committing is a single-document
+ledger write. Both halves of the guarantee follow, without needing a
+multi-document transaction:
+
+* a failed ingestion **adds nothing visible** — its rows belong to an uncommitted
+  exchange;
+* a failed ingestion **takes nothing away** — it cannot overwrite or hide the
+  version an earlier exchange committed, so the member keeps the history they
+  had. An updated resource supersedes the older version only once the exchange
+  carrying it commits.
+
+A retry re-stages the same deterministic keys under the same exchange and
 commits.
 
+### Retry and stuck exchanges
+
+A previously failed exchange is retried under its own id. An exchange abandoned
+in a non-terminal state (a process that died after recording `Ingesting`, say) is
+taken over once it is stale — otherwise every later initiation would replay a
+record that can no longer advance itself. An exchange that is genuinely still
+running is replayed rather than re-run, so the peer is not called twice.
+
 ### Provenance
+
+The package is archived **as received** — before CHO rewrites any reference — so
+the archive answers "what did the payer actually send?".
 
 Per imported resource CHO retains: originating payer, endpoint directory key,
 exchange id, received timestamp, the resource's identity at the source, the local

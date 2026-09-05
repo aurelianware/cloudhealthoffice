@@ -13,15 +13,20 @@ namespace FhirService.Services.PayerToPayer.Ingestion;
 /// question "did CHO originate this?" is answered by which store it lives in.
 ///
 /// Writes are staged and then committed:
-///   1. <see cref="StageAsync"/> upserts resources by their deterministic import
-///      key (so a replay updates in place instead of duplicating history), all
-///      tied to the exchange;
+///   1. <see cref="StageAsync"/> writes each resource as THAT EXCHANGE's version
+///      of it — rows are identified by (tenant, exchange, import key), so
+///      staging never touches a version an earlier exchange already committed;
 ///   2. <see cref="CommitAsync"/> flips that exchange's single ledger entry to
 ///      Completed.
-/// Reads only ever return resources whose ledger entry is committed, so an
-/// ingestion that dies part-way leaves the member's imported history untouched
-/// rather than half-written. That is the atomicity guarantee available without
-/// requiring a multi-document transaction from the underlying store.
+///
+/// Reads return, for each import key, the version from the most recently
+/// COMMITTED exchange. That gives both halves of the atomicity guarantee without
+/// needing a multi-document transaction from the underlying store:
+///   * an ingestion that dies part-way adds nothing visible, and
+///   * it takes nothing away either — the member keeps the history a previous
+///     exchange committed, and an updated resource supersedes the older version
+///     only once the exchange carrying it commits.
+/// Versioning per exchange also keeps "which exchange delivered what" answerable.
 /// </summary>
 public interface IPayerToPayerImportRepository
 {
@@ -37,8 +42,9 @@ public interface IPayerToPayerImportRepository
         PayerToPayerImportLedgerEntry entry, CancellationToken ct = default);
 
     /// <summary>
-    /// Upserts staged resources by import key. Returns how many were new versus
-    /// already held with identical content (a replay).
+    /// Writes this exchange's version of each resource. Returns how many differ
+    /// from the version currently committed for that import key versus how many
+    /// are byte-identical to it (a replay).
     /// </summary>
     Task<StageOutcome> StageAsync(
         IReadOnlyList<ImportedFhirResource> resources, CancellationToken ct = default);
@@ -51,8 +57,10 @@ public interface IPayerToPayerImportRepository
         PayerToPayerImportLedgerEntry entry, PayerToPayerIngestionFailure failure, CancellationToken ct = default);
 
     /// <summary>
-    /// The member's committed imported history within a tenant. Resources staged
-    /// by an exchange that never committed are not returned.
+    /// The member's imported history within a tenant: one row per import key,
+    /// taken from the most recently committed exchange. A version staged by an
+    /// exchange that never committed is never returned, and never displaces a
+    /// committed one.
     /// </summary>
     Task<IReadOnlyList<ImportedFhirResource>> GetImportedResourcesAsync(
         string tenantId, string memberId, CancellationToken ct = default);
@@ -99,21 +107,18 @@ public sealed class InMemoryPayerToPayerImportRepository : IPayerToPayerImportRe
 
         foreach (var resource in resources)
         {
-            var key = ResourceKey(resource.TenantId, resource.ImportKey);
-            if (_resources.TryGetValue(key, out var existing)
-                && string.Equals(existing.ContentHash, resource.ContentHash, StringComparison.Ordinal))
-            {
-                // Same resource, same content, from the same payer: a replay. The
-                // row is still re-pointed at the latest exchange so the newest
-                // receipt is traceable, but it is not counted as newly imported.
+            // Compare against what is COMMITTED for this import key, not against
+            // whatever another in-flight exchange happens to have staged.
+            var committed = LatestCommitted(resource.TenantId, resource.MemberId, resource.ImportKey);
+            if (committed is not null
+                && string.Equals(committed.ContentHash, resource.ContentHash, StringComparison.Ordinal))
                 unchanged++;
-            }
             else
-            {
                 written++;
-            }
 
-            _resources[key] = resource;
+            // This exchange's own version. Re-staging the same exchange (a retry)
+            // overwrites its own row and nothing else.
+            _resources[ResourceKey(resource.TenantId, resource.ExchangeId, resource.ImportKey)] = resource;
         }
 
         return Task.FromResult(new StageOutcome(written, unchanged));
@@ -140,18 +145,7 @@ public sealed class InMemoryPayerToPayerImportRepository : IPayerToPayerImportRe
     public Task<IReadOnlyList<ImportedFhirResource>> GetImportedResourcesAsync(
         string tenantId, string memberId, CancellationToken ct = default)
     {
-        // Committed exchanges only: a staged-but-uncommitted (or failed) import is
-        // invisible, which is what makes a partial ingestion harmless.
-        var committed = _ledger.Values
-            .Where(e => string.Equals(e.TenantId, tenantId, StringComparison.Ordinal)
-                     && e.Status == PayerToPayerIngestionStatus.Completed)
-            .Select(e => e.ExchangeId)
-            .ToHashSet(StringComparer.Ordinal);
-
-        var resources = _resources.Values
-            .Where(r => string.Equals(r.TenantId, tenantId, StringComparison.Ordinal)
-                     && string.Equals(r.MemberId, memberId, StringComparison.Ordinal)
-                     && committed.Contains(r.ExchangeId))
+        var resources = CommittedVersions(tenantId, memberId)
             .OrderBy(r => r.ResourceType, StringComparer.Ordinal)
             .ThenBy(r => r.SourceResourceId, StringComparer.Ordinal)
             .ToList();
@@ -159,8 +153,40 @@ public sealed class InMemoryPayerToPayerImportRepository : IPayerToPayerImportRe
         return Task.FromResult<IReadOnlyList<ImportedFhirResource>>(resources);
     }
 
+    /// <summary>
+    /// One row per import key for the member: the version from the most recently
+    /// committed exchange. Uncommitted versions are invisible and never displace
+    /// a committed one.
+    /// </summary>
+    private IEnumerable<ImportedFhirResource> CommittedVersions(string tenantId, string memberId)
+    {
+        var committedAt = _ledger.Values
+            .Where(e => string.Equals(e.TenantId, tenantId, StringComparison.Ordinal)
+                     && e.Status == PayerToPayerIngestionStatus.Completed)
+            .ToDictionary(e => e.ExchangeId, e => e.CompletedAtUtc ?? e.StartedAtUtc, StringComparer.Ordinal);
+
+        return _resources.Values
+            .Where(r => string.Equals(r.TenantId, tenantId, StringComparison.Ordinal)
+                     && string.Equals(r.MemberId, memberId, StringComparison.Ordinal)
+                     && committedAt.ContainsKey(r.ExchangeId))
+            .GroupBy(r => r.ImportKey, StringComparer.Ordinal)
+            // Deterministic winner: latest commit, then latest ingest, then id.
+            .Select(g => g
+                .OrderByDescending(r => committedAt[r.ExchangeId])
+                .ThenByDescending(r => r.IngestedAtUtc)
+                .ThenBy(r => r.ExchangeId, StringComparer.Ordinal)
+                .First());
+    }
+
+    private ImportedFhirResource? LatestCommitted(string tenantId, string memberId, string importKey)
+        => CommittedVersions(tenantId, memberId)
+            .FirstOrDefault(r => string.Equals(r.ImportKey, importKey, StringComparison.Ordinal));
+
     // Every key is tenant-prefixed, so one tenant's import can never be read or
     // overwritten through another tenant's context.
     private static string LedgerKey(string tenantId, string exchangeId) => $"{tenantId}|{exchangeId}";
-    private static string ResourceKey(string tenantId, string importKey) => $"{tenantId}|{importKey}";
+
+    // A row is ONE EXCHANGE's version of one imported resource.
+    private static string ResourceKey(string tenantId, string exchangeId, string importKey)
+        => $"{tenantId}|{exchangeId}|{importKey}";
 }

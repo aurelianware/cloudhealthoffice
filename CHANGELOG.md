@@ -49,10 +49,16 @@ content hash tells "same again" from "changed"; and each exchange's own
 `Provenance` stamp stays its own record so it remains clear which exchange
 delivered what.
 
-**Atomic enough to be safe.** Resources are staged, then a single-document ledger
-write commits them, and reads return only committed resources — so an ingestion
-that fails part-way leaves the member's imported history untouched rather than
-half-written. A retry re-stages the same deterministic keys and commits. The
+**Atomic enough to be safe.** Rows are versioned by exchange — identified by
+(tenant, exchange, import key) — and reads return the version from the most
+recently committed exchange. Staging writes only that exchange's own rows and
+committing is a single-document ledger write, so a failed ingestion both adds
+nothing visible AND takes nothing away: it cannot overwrite or hide the version an
+earlier exchange committed, and an updated resource supersedes the older one only
+once the exchange carrying it commits. A retry re-stages the same deterministic
+keys and commits; an exchange abandoned in a non-terminal state is taken over
+once stale, so a process that dies mid-ingestion cannot strand a coverage
+transition. The
 exchange gained `DataReceived` and `Ingesting` states plus structured ingestion
 fields (status, failure category, persisted / duplicate / administrative /
 unsupported counts with the unsupported types named, and start/finish timestamps);
@@ -73,10 +79,12 @@ audit carry ids, categories, and counts only — no Bundle bodies, demographics,
 clinical payloads, or endpoint URLs. Real tests
 (`PayerToPayerIngestionTests`, `[Trait("Backend","Replace")]`, 15 scenarios, plus
 `PayerToPayerImportPolicyTests` / `PayerToPayerReferenceNormalizerTests`, 36
-cases) drive the production path: durable persistence with correct binding,
-provenance retention, administrative ownership, unsupported-type handling,
-replay and cross-payer non-merging, staging and commit failure, retry, tenant and
-member safety, and reference resolution.
+cases, plus `PayerToPayerOutboundControllerTests`) drive the production path:
+durable persistence with correct binding, provenance retention, administrative
+ownership, unsupported-type handling, replay and cross-payer non-merging, staging
+and commit failure, a failed later exchange not hiding committed history, retry
+and stale-exchange takeover, tenant and member safety, reference resolution, and
+per-failure HTTP mapping.
 
 **No acceptance scenario status changed.** P2P-02 was already PASSABLE and its
 rationale is updated; **P2P-03 stays PARTIAL** (no dedicated Payer-to-Payer

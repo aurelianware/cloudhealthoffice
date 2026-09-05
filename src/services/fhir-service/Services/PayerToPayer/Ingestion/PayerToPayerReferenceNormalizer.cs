@@ -23,8 +23,15 @@ public static class PayerToPayerReferenceNormalizer
     /// <summary>Prefix marking a reference as pointing at CHO's imported copy of a peer resource.</summary>
     public const string ImportedPrefix = "PayerToPayerImport";
 
-    /// <summary>How a single package's references were rewritten.</summary>
-    public sealed record NormalizationOutcome(int Rewritten, IReadOnlyDictionary<string, string> Map);
+    /// <summary>
+    /// How a package's references were rewritten: the total, the source-to-local
+    /// map, and which resources were actually touched (keyed <c>Type/id</c>) so a
+    /// per-resource flag can be recorded truthfully.
+    /// </summary>
+    public sealed record NormalizationOutcome(
+        int Rewritten,
+        IReadOnlyDictionary<string, string> Map,
+        IReadOnlySet<string> RewrittenResources);
 
     /// <summary>
     /// Rewrites in place every intra-package reference of <paramref name="bundle"/>
@@ -45,6 +52,7 @@ public static class PayerToPayerReferenceNormalizer
         }
 
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var rewrittenResources = new HashSet<string>(StringComparer.Ordinal);
         var rewritten = 0;
 
         foreach (var resource in bundle.Entry?.Select(e => e.Resource).OfType<Resource>() ?? [])
@@ -64,11 +72,12 @@ public static class PayerToPayerReferenceNormalizer
                 var local = $"{ImportedPrefix}/{importKeyFor(target.Type, target.Id)}";
                 reference.Reference = local;
                 map[original] = local;
+                rewrittenResources.Add($"{resource.TypeName}/{resource.Id}");
                 rewritten++;
             }
         }
 
-        return new NormalizationOutcome(rewritten, map);
+        return new NormalizationOutcome(rewritten, map, rewrittenResources);
     }
 
     /// <summary>

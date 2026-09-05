@@ -428,12 +428,34 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         return new PayerToPayerOutboundResult { Exchange = exchange, Audit = audit, IsReplay = true };
     }
 
-    /// <summary>A previously failed exchange may be retried under its own id.</summary>
-    private static bool IsRetryable(PayerToPayerOutboundExchange exchange) =>
-        exchange.Status is PayerToPayerOutboundStatus.Failed
+    /// <summary>
+    /// How long an exchange may sit in a non-terminal state before a new
+    /// initiation is allowed to take it over. Without this, a process that dies
+    /// mid-exchange (after Matching, RequestingData, or Ingesting was recorded)
+    /// would leave the transition stuck: every later initiation would replay a
+    /// record that can no longer advance itself.
+    /// </summary>
+    public static readonly TimeSpan StaleInFlightAfter = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// A previously failed exchange may be retried under its own id, and so may
+    /// one abandoned in a non-terminal state. A COMPLETED exchange is never
+    /// retried — it is replayed.
+    /// </summary>
+    private static bool IsRetryable(PayerToPayerOutboundExchange exchange)
+    {
+        if (exchange.Status is PayerToPayerOutboundStatus.Failed
             or PayerToPayerOutboundStatus.NotAuthorized
             or PayerToPayerOutboundStatus.NoMatch
-            or PayerToPayerOutboundStatus.Ambiguous;
+            or PayerToPayerOutboundStatus.Ambiguous)
+            return true;
+
+        // In flight: only once it has clearly been abandoned. A concurrent,
+        // genuinely running initiation still replays rather than double-calling
+        // the peer.
+        return !exchange.IsTerminal
+            && DateTime.UtcNow - exchange.UpdatedAtUtc >= StaleInFlightAfter;
+    }
 
     private static void ResetForRetry(PayerToPayerOutboundExchange exchange)
     {

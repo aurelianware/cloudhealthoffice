@@ -92,18 +92,11 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
                 StartedAtUtc = startedAt,
             }, ct);
 
-        // 2 + 4. Normalize references BEFORE serializing, so what is archived and
-        //        what is stored agree, then archive the package verbatim.
-        var normalization = PayerToPayerReferenceNormalizer.Normalize(
-            package.Bundle,
-            (type, id) => PayerToPayerImportPolicy.ImportKey(
-                context.TenantId, context.MemberId, context.SourcePayerId, type, id));
-
-        var counts = new PayerToPayerIngestionCounts
-        {
-            Received = resources.Count,
-            ReferencesNormalized = normalization.Rewritten,
-        };
+        // 2. Archive the package AS RECEIVED — before CHO rewrites anything — so
+        //    the archive answers "what did the payer actually send us?". (It
+        //    includes the Provenance stamp the exchange added, which is CHO's own
+        //    receipt, not a change to the payer's data.)
+        var counts = new PayerToPayerIngestionCounts { Received = resources.Count };
 
         try
         {
@@ -117,6 +110,14 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
             return PayerToPayerIngestionResult.Failed(
                 PayerToPayerIngestionFailure.UnreadableResource, startedAt, counts);
         }
+
+        // 4. Normalize intra-package references, now that the as-received copy is
+        //    safely archived.
+        var normalization = PayerToPayerReferenceNormalizer.Normalize(
+            package.Bundle,
+            (type, id) => PayerToPayerImportPolicy.ImportKey(
+                context.TenantId, context.MemberId, context.SourcePayerId, type, id));
+        counts.ReferencesNormalized = normalization.Rewritten;
 
         // 3 + 5. Classify and stage. The persisted/administrative counters stay
         //        LOCAL until the commit lands: a count called "persisted" must
@@ -170,7 +171,10 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
                 Classification = classification,
                 ResourceJson = json,
                 ContentHash = PayerToPayerImportPolicy.ContentHash(json),
-                ReferencesNormalized = normalization.Rewritten > 0,
+                // Per resource, not per package: a Patient nobody referenced
+                // must not claim its references were rewritten.
+                ReferencesNormalized = normalization.RewrittenResources.Contains(
+                    $"{resource.TypeName}/{resource.Id}"),
                 ReceivedAtUtc = context.ReceivedAtUtc,
             });
 

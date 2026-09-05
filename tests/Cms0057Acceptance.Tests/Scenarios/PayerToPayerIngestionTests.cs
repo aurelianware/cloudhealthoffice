@@ -398,6 +398,149 @@ public class PayerToPayerIngestionTests
         imported.Should().OnlyContain(r => r.ExchangeId == failed.Exchange.ExchangeId);
     }
 
+    [Fact]
+    [Trait("Scenario", "P2P-02")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P02_Replace_AFailedLaterExchange_CannotHidePreviouslyCommittedHistory()
+    {
+        // A committed import is the member's record. A LATER exchange that stages
+        // the same resources and then fails to commit must not take that record
+        // away — the failure has to be invisible in both directions.
+        var imports = new FailingImportRepository();
+        var first = Build(new StaticPriorPayer(PriorPayerPackages.Full()), imports);
+        var committed = await first.Service.InitiateAsync(Request(transitionKey: "transition-A"));
+        committed.Succeeded.Should().BeTrue();
+
+        var beforeSecondExchange = await ImportedAsync(first);
+        beforeSecondExchange.Should().NotBeEmpty();
+
+        imports.FailCommits();
+        var second = Build(new StaticPriorPayer(PriorPayerPackages.Full()), imports);
+        var failed = await second.Service.InitiateAsync(Request(transitionKey: "transition-B"));
+        failed.Succeeded.Should().BeFalse();
+
+        var afterFailedExchange = await ImportedAsync(second);
+        afterFailedExchange.Select(r => r.ImportKey).Should().BeEquivalentTo(
+            beforeSecondExchange.Select(r => r.ImportKey),
+            "the member keeps the history the first exchange committed");
+        afterFailedExchange.Should().OnlyContain(r => r.ExchangeId == committed.Exchange.ExchangeId,
+            "the visible rows are still the ones the committed exchange delivered");
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-02")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P02_Replace_AnUpdatedResource_ReplacesTheOlderVersionOnlyOnceCommitted()
+    {
+        // The peer re-sends a resource with changed content. Until the new
+        // exchange commits, the member keeps the version already committed.
+        var imports = new FailingImportRepository();
+        var first = Build(new StaticPriorPayer(PriorPayerPackages.Full()), imports);
+        await first.Service.InitiateAsync(Request(transitionKey: "transition-A"));
+
+        imports.FailCommits();
+        var changed = Build(new StaticPriorPayer(PriorPayerPackages.FullWithChangedEncounter()), imports);
+        await changed.Service.InitiateAsync(Request(transitionKey: "transition-B"));
+
+        var whileUncommitted = await ImportedAsync(changed);
+        whileUncommitted.Single(r => r.ResourceType == "Encounter").ResourceJson
+            .Should().NotContain("planned", "an uncommitted update must not be visible");
+
+        // Once a later exchange does commit, the newer version is the one served.
+        imports.Recover();
+        var recommitted = Build(new StaticPriorPayer(PriorPayerPackages.FullWithChangedEncounter()), imports);
+        await recommitted.Service.InitiateAsync(Request(transitionKey: "transition-C"));
+
+        var afterCommit = await ImportedAsync(recommitted);
+        afterCommit.Where(r => r.ResourceType == "Encounter").Should().ContainSingle()
+            .Which.ResourceJson.Should().Contain("planned", "the committed update supersedes the older version");
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-02")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P02_Replace_AnExchangeAbandonedMidIngestion_CanBeTakenOverLater()
+    {
+        // A process that dies after recording Ingesting must not strand the
+        // coverage transition: every later initiation would otherwise replay a
+        // record that can no longer advance itself.
+        var harness = Build(new StaticPriorPayer(PriorPayerPackages.Full()));
+
+        var stuck = await harness.Service.InitiateAsync(Request());
+        var exchange = await harness.Exchanges.GetAsync(AcceptanceContext.TenantId, stuck.Exchange.ExchangeId);
+        exchange!.Status = PayerToPayerOutboundStatus.Ingesting;   // as if the process died here
+        exchange.UpdatedAtUtc = DateTime.UtcNow - PayerToPayerOutboundService.StaleInFlightAfter
+                                - TimeSpan.FromMinutes(1);
+
+        var takenOver = await harness.Service.InitiateAsync(Request());
+
+        takenOver.IsReplay.Should().BeFalse("an abandoned in-flight exchange is retried, not replayed forever");
+        takenOver.Succeeded.Should().BeTrue();
+        takenOver.Exchange.ExchangeId.Should().Be(stuck.Exchange.ExchangeId);
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-02")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P02_Replace_AnInFlightExchange_IsStillReplayedNotDoubleRun()
+    {
+        // The takeover above must not fire for an exchange that is simply still
+        // running: a concurrent initiation must not call the peer twice.
+        var harness = Build(new StaticPriorPayer(PriorPayerPackages.Full()));
+
+        var first = await harness.Service.InitiateAsync(Request());
+        var exchange = await harness.Exchanges.GetAsync(AcceptanceContext.TenantId, first.Exchange.ExchangeId);
+        exchange!.Status = PayerToPayerOutboundStatus.Ingesting;
+        exchange.UpdatedAtUtc = DateTime.UtcNow;    // freshly updated: still in flight
+
+        var concurrent = await harness.Service.InitiateAsync(Request());
+
+        concurrent.IsReplay.Should().BeTrue();
+        concurrent.Exchange.ExchangeId.Should().Be(first.Exchange.ExchangeId);
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-02")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P02_Replace_TheArchivedPackageIsWhatThePayerSent()
+    {
+        // The archive answers "what did the payer actually send?", so it must
+        // predate CHO's own reference rewriting.
+        var harness = Build(new StaticPriorPayer(PriorPayerPackages.Full()));
+
+        var result = await harness.Service.InitiateAsync(Request());
+        var ledger = await harness.Imports.GetLedgerAsync(AcceptanceContext.TenantId, result.Exchange.ExchangeId);
+
+        ledger!.ArchivedPackageJson.Should().NotBeNull();
+        ledger.ArchivedPackageJson.Should().Contain("Encounter/PRIOR-ENC-1",
+            "the archive keeps the payer's own references");
+        ledger.ArchivedPackageJson.Should().NotContain(PayerToPayerReferenceNormalizer.ImportedPrefix,
+            "CHO's rewrites belong to the stored resources, not to the record of what arrived");
+
+        // The stored resources, by contrast, are normalized.
+        var imported = await ImportedAsync(harness);
+        imported.Single(r => r.SourceResourceId == "PRIOR-EOB-1").ResourceJson
+            .Should().Contain(PayerToPayerReferenceNormalizer.ImportedPrefix);
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-02")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P02_Replace_TheNormalizedFlagIsPerResourceNotPerPackage()
+    {
+        // A resource nobody referenced must not claim its references were
+        // rewritten — the flag is evidence about that row.
+        var harness = Build(new StaticPriorPayer(PriorPayerPackages.Full()));
+
+        await harness.Service.InitiateAsync(Request());
+        var imported = await ImportedAsync(harness);
+
+        imported.Single(r => r.SourceResourceId == "PRIOR-EOB-1").ReferencesNormalized.Should().BeTrue(
+            "this EOB's reference to the Encounter was rewritten");
+        imported.Single(r => r.ResourceType == "Patient").ReferencesNormalized.Should().BeFalse(
+            "the Patient carries no reference into the package");
+    }
+
     // ── Tenant / member safety ──────────────────────────────────────────────────
 
     [Fact]
@@ -534,6 +677,9 @@ public class PayerToPayerIngestionTests
             _failOnCommit = failOnCommit;
         }
 
+        /// <summary>The store starts failing commits partway through a test.</summary>
+        public void FailCommits() => _failOnCommit = true;
+
         /// <summary>The store starts working again (retry scenarios).</summary>
         public void Recover()
         {
@@ -610,6 +756,22 @@ public class PayerToPayerIngestionTests
                 }),
                 Entry(Eob("PRIOR-EOB-1", "Encounter/PRIOR-ENC-1")),
                 Entry(Eob("PRIOR-EOB-2", "https://prior-payer.example/fhir/r4/Encounter/PRIOR-ENC-1")),
+            ],
+        });
+
+        /// <summary>The same package with the Encounter in a different state.</summary>
+        public static string FullWithChangedEncounter() => Serialize(new Bundle
+        {
+            Type = Bundle.BundleType.Collection,
+            Entry =
+            [
+                Entry(new Patient { Id = RemoteMemberId, BirthDate = "1955-07-14" }),
+                Entry(new Encounter
+                {
+                    Id = "PRIOR-ENC-1",
+                    Status = Encounter.EncounterStatus.Planned,
+                    Subject = new ResourceReference($"Patient/{RemoteMemberId}"),
+                }),
             ],
         });
 

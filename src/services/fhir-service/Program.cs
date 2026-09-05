@@ -199,7 +199,10 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPa
 // fallback.
 if (useMongo)
 {
-    builder.Services.AddScoped<
+    // Singleton: the repository ensures its indexes at construction, so a
+    // per-request instance would re-issue createIndex on every call. It holds
+    // only collection handles and is safe to share.
+    builder.Services.AddSingleton<
         FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
         FhirService.Services.PayerToPayer.Ingestion.MongoPayerToPayerImportRepository>();
 }

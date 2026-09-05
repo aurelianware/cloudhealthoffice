@@ -1,4 +1,5 @@
 using FhirService.Models.PayerToPayer;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -9,18 +10,21 @@ namespace FhirService.Services.PayerToPayer.Ingestion;
 /// MongoDB-backed <see cref="IPayerToPayerImportRepository"/> — the durable store
 /// a deployment gets when <c>MongoDb:ConnectionString</c> is configured. It
 /// mirrors the persistence idiom fhir-service already uses (see
-/// <c>DtrService</c>): BSON documents, tenant-scoped indexes, and a unique index
-/// enforcing identity.
+/// <c>DtrService</c>): it opens its own database handle from configuration, uses
+/// BSON documents, and ensures its indexes once at construction. It is
+/// registered as a SINGLETON for exactly that reason — a per-request instance
+/// would re-issue createIndex on every call.
 ///
 /// Two collections:
-///   * <c>p2p_imported_resources</c> — one document per imported resource, keyed
-///     uniquely on (tenantId, importKey). The unique index is what makes a replay
-///     idempotent at the STORE level, not merely in application logic: a second
-///     ingestion of the same package updates the same documents.
+///   * <c>p2p_imported_resources</c> — one document per (exchange, imported
+///     resource), keyed uniquely on (tenantId, exchangeId, importKey). Rows are
+///     versioned by exchange, so staging a new exchange never overwrites or
+///     hides the version an earlier exchange committed; reads take the version
+///     from the most recently committed exchange for each import key.
 ///   * <c>p2p_import_ledger</c> — one document per exchange, keyed uniquely on
 ///     (tenantId, exchangeId). Committing an import is a single-document update
 ///     of this ledger, so a crash mid-staging leaves the member's imported
-///     history unchanged (the staged rows stay invisible).
+///     history exactly as the last committed exchange left it.
 /// </summary>
 public sealed class MongoPayerToPayerImportRepository : IPayerToPayerImportRepository
 {
@@ -32,8 +36,9 @@ public sealed class MongoPayerToPayerImportRepository : IPayerToPayerImportRepos
     private readonly ILogger<MongoPayerToPayerImportRepository> _logger;
 
     public MongoPayerToPayerImportRepository(
-        IMongoDatabase database, ILogger<MongoPayerToPayerImportRepository> logger)
+        IMongoClient client, IConfiguration configuration, ILogger<MongoPayerToPayerImportRepository> logger)
     {
+        var database = client.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "cloudhealthoffice");
         _resources = database.GetCollection<BsonDocument>(ResourceCollectionName);
         _ledger = database.GetCollection<BsonDocument>(LedgerCollectionName);
         _logger = logger;
@@ -42,15 +47,17 @@ public sealed class MongoPayerToPayerImportRepository : IPayerToPayerImportRepos
 
     private void EnsureIndexes()
     {
-        // Identity of an imported resource. Unique, so the store itself refuses a
-        // duplicate rather than trusting callers to deduplicate.
+        // Identity of one exchange's version of an imported resource. Unique, so
+        // re-staging the same exchange (a retry) rewrites its own rows and the
+        // store itself refuses to write a second copy.
         _resources.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
-            Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("importKey"),
+            Builders<BsonDocument>.IndexKeys
+                .Ascending("tenantId").Ascending("exchangeId").Ascending("importKey"),
             new CreateIndexOptions { Unique = true }));
 
         // The read path: a member's imported history within a tenant.
         _resources.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
-            Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("memberId").Ascending("exchangeId")));
+            Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("memberId").Ascending("importKey")));
 
         _ledger.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
             Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("exchangeId"),
@@ -83,21 +90,14 @@ public sealed class MongoPayerToPayerImportRepository : IPayerToPayerImportRepos
     {
         if (resources.Count == 0) return new StageOutcome(0, 0);
 
-        // Read the content hashes already held so a replay can be counted as such
-        // rather than reported as newly imported data.
+        // What is COMMITTED today for these import keys — the baseline a replay is
+        // measured against. Versions staged by another in-flight exchange do not
+        // count, and are not touched.
         var tenantId = resources[0].TenantId;
-        var keys = resources.Select(r => r.ImportKey).ToList();
-        var existing = await _resources
-            .Find(Builders<BsonDocument>.Filter.And(
-                Builders<BsonDocument>.Filter.Eq("tenantId", tenantId),
-                Builders<BsonDocument>.Filter.In("importKey", keys)))
-            .Project(Builders<BsonDocument>.Projection.Include("importKey").Include("contentHash"))
-            .ToListAsync(ct);
-
-        var heldHashes = existing.ToDictionary(
-            d => d["importKey"].AsString,
-            d => d.GetValue("contentHash", BsonNull.Value).IsString ? d["contentHash"].AsString : string.Empty,
-            StringComparer.Ordinal);
+        var memberId = resources[0].MemberId;
+        var committed = await CommittedVersionsAsync(tenantId, memberId, ct);
+        var committedHashes = committed.ToDictionary(
+            r => r.ImportKey, r => r.ContentHash, StringComparer.Ordinal);
 
         var written = 0;
         var unchanged = 0;
@@ -105,14 +105,16 @@ public sealed class MongoPayerToPayerImportRepository : IPayerToPayerImportRepos
 
         foreach (var resource in resources)
         {
-            if (heldHashes.TryGetValue(resource.ImportKey, out var hash)
+            if (committedHashes.TryGetValue(resource.ImportKey, out var hash)
                 && string.Equals(hash, resource.ContentHash, StringComparison.Ordinal))
                 unchanged++;
             else
                 written++;
 
+            // This exchange's own version of the resource.
             writes.Add(new ReplaceOneModel<BsonDocument>(
-                ResourceFilter(resource.TenantId, resource.ImportKey), ToDocument(resource)) { IsUpsert = true });
+                ResourceFilter(resource.TenantId, resource.ExchangeId, resource.ImportKey),
+                ToDocument(resource)) { IsUpsert = true });
         }
 
         await _resources.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false }, ct);
@@ -149,32 +151,63 @@ public sealed class MongoPayerToPayerImportRepository : IPayerToPayerImportRepos
     public async Task<IReadOnlyList<ImportedFhirResource>> GetImportedResourcesAsync(
         string tenantId, string memberId, CancellationToken ct = default)
     {
-        var committed = await _ledger
+        var versions = await CommittedVersionsAsync(tenantId, memberId, ct);
+        return versions
+            .OrderBy(r => r.ResourceType, StringComparer.Ordinal)
+            .ThenBy(r => r.SourceResourceId, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// One row per import key: the version from the most recently committed
+    /// exchange. Rows belonging to an uncommitted or failed exchange are never
+    /// returned and never displace a committed version.
+    /// </summary>
+    private async Task<IReadOnlyList<ImportedFhirResource>> CommittedVersionsAsync(
+        string tenantId, string memberId, CancellationToken ct)
+    {
+        var ledgerDocuments = await _ledger
             .Find(Builders<BsonDocument>.Filter.And(
                 Builders<BsonDocument>.Filter.Eq("tenantId", tenantId),
                 Builders<BsonDocument>.Filter.Eq("status", PayerToPayerIngestionStatus.Completed.ToString())))
-            .Project(Builders<BsonDocument>.Projection.Include("exchangeId"))
+            .Project(Builders<BsonDocument>.Projection.Include("exchangeId").Include("completedAtUtc"))
             .ToListAsync(ct);
 
-        var exchangeIds = committed.Select(d => d["exchangeId"].AsString).ToList();
-        if (exchangeIds.Count == 0) return Array.Empty<ImportedFhirResource>();
+        if (ledgerDocuments.Count == 0) return Array.Empty<ImportedFhirResource>();
+
+        var committedAt = ledgerDocuments.ToDictionary(
+            d => d["exchangeId"].AsString,
+            d => d.GetValue("completedAtUtc", BsonNull.Value).IsValidDateTime
+                ? d["completedAtUtc"].ToUniversalTime()
+                : DateTime.MinValue,
+            StringComparer.Ordinal);
 
         var documents = await _resources
             .Find(Builders<BsonDocument>.Filter.And(
                 Builders<BsonDocument>.Filter.Eq("tenantId", tenantId),
                 Builders<BsonDocument>.Filter.Eq("memberId", memberId),
-                Builders<BsonDocument>.Filter.In("exchangeId", exchangeIds)))
-            .SortBy(d => d["resourceType"]).ThenBy(d => d["sourceResourceId"])
+                Builders<BsonDocument>.Filter.In("exchangeId", committedAt.Keys)))
             .ToListAsync(ct);
 
-        return documents.Select(ToImportedResource).ToList();
+        return documents
+            .Select(ToImportedResource)
+            .GroupBy(r => r.ImportKey, StringComparer.Ordinal)
+            // Deterministic winner: latest commit, then latest ingest, then id.
+            .Select(g => g
+                .OrderByDescending(r => committedAt[r.ExchangeId])
+                .ThenByDescending(r => r.IngestedAtUtc)
+                .ThenBy(r => r.ExchangeId, StringComparer.Ordinal)
+                .First())
+            .ToList();
     }
 
     // ── BSON mapping ────────────────────────────────────────────────────────────
 
-    private static FilterDefinition<BsonDocument> ResourceFilter(string tenantId, string importKey)
+    private static FilterDefinition<BsonDocument> ResourceFilter(
+        string tenantId, string exchangeId, string importKey)
         => Builders<BsonDocument>.Filter.And(
             Builders<BsonDocument>.Filter.Eq("tenantId", tenantId),
+            Builders<BsonDocument>.Filter.Eq("exchangeId", exchangeId),
             Builders<BsonDocument>.Filter.Eq("importKey", importKey));
 
     private static FilterDefinition<BsonDocument> LedgerFilter(string tenantId, string exchangeId)
