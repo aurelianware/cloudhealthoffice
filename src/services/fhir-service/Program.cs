@@ -139,6 +139,11 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMember
     FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberSource>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberResolver,
     FhirService.Services.PayerToPayer.PayerToPayerMemberResolver>();
+builder.Services.Configure<FhirService.Services.PayerToPayer.PayerToPayerConsentOptions>(
+    builder.Configuration.GetSection(
+        FhirService.Services.PayerToPayer.PayerToPayerConsentOptions.SectionName));
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentGate,
+    FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentGate>();
 builder.Services.AddSingleton<FhirService.Services.PayerToPayer.IPayerToPayerExportBuilder,
     FhirService.Services.PayerToPayer.PayerToPayerExportBuilder>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerExchangeService,

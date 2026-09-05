@@ -31,7 +31,7 @@ public sealed class PayerToPayerController : FhirControllerBase
 
     [HttpPost("PayerToPayer/$member-data-export")]
     public async Task<IActionResult> Export(
-        [FromBody] PayerToPayerExportRequestDto body, CancellationToken ct)
+        [FromBody] PayerToPayerExportRequestDto? body, CancellationToken ct)
     {
         if (body is null)
             return FhirBadRequest("A Payer-to-Payer export request body is required.");
@@ -45,7 +45,6 @@ public sealed class PayerToPayerController : FhirControllerBase
             LastName = body.LastName,
             Dob = body.Dob,
             Gender = body.Gender,
-            MemberOptedIn = body.MemberOptedIn,
         };
 
         var result = await _exchange.RespondAsync(request, ct);
@@ -79,7 +78,11 @@ public sealed class PayerToPayerController : FhirControllerBase
         });
 }
 
-/// <summary>Request body for <c>PayerToPayer/$member-data-export</c>.</summary>
+/// <summary>
+/// Request body for <c>PayerToPayer/$member-data-export</c>. It carries only the
+/// member identifiers and receiving-payer context — the member's opt-in is
+/// decided server-side, never accepted from the request.
+/// </summary>
 public sealed class PayerToPayerExportRequestDto
 {
     public string? ReceivingPayerId { get; set; }
@@ -87,5 +90,4 @@ public sealed class PayerToPayerExportRequestDto
     public string? LastName { get; set; }
     public string? Dob { get; set; }
     public string? Gender { get; set; }
-    public bool MemberOptedIn { get; set; }
 }

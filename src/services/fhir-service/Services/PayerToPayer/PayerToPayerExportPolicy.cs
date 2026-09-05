@@ -5,16 +5,19 @@ namespace FhirService.Services.PayerToPayer;
 
 /// <summary>
 /// The locked CMS-0057-F Payer-to-Payer data rules applied to an export:
-///  * a date-of-service lookback window (5 years by default), and
+///  * a lookback window (5 years by default), and
 ///  * exclusion of remittances, enrollee cost-sharing, and drugs.
 ///
-/// The lookback is enforced here against the payment's date of service. The
-/// remittance / cost-sharing / drug exclusions are represented as explicit
-/// predicates so the policy is complete and extensible, but the current
-/// CHO payment model (<see cref="ChoPaymentDocument"/>) carries no marker that
-/// classifies a record as any of those, so nothing is excluded on that basis
-/// yet. When those markers are added, the predicate is the single place to
-/// enforce them — this is not a silent omission.
+/// The lookback is enforced against the payment's date
+/// (<see cref="ChoPaymentDocument.PaymentDate"/>) — the date the current CHO
+/// payment model carries. The CMS rule anchors the window on the date of
+/// service; where a distinct service-date field is added to the model, that is
+/// the value this policy should read. The remittance / cost-sharing / drug
+/// exclusions are represented as explicit predicates so the policy is complete
+/// and extensible, but the payment model carries no marker classifying a record
+/// as any of those, so nothing is excluded on that basis yet. When those markers
+/// are added, the predicate is the single place to enforce them — not a silent
+/// omission.
 /// </summary>
 public static class PayerToPayerExportPolicy
 {
@@ -24,14 +27,14 @@ public static class PayerToPayerExportPolicy
 
     private static bool WithinLookback(ChoPaymentDocument payment, DateTime exchangeDateUtc, int lookbackYears)
     {
-        // A payment with no parseable date of service is conservatively excluded
-        // from the export rather than assumed to be in-window.
+        // A payment with no parseable date is conservatively excluded from the
+        // export rather than assumed to be in-window.
         if (!DateTime.TryParse(payment.PaymentDate, CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var serviced))
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var paymentDate))
             return false;
 
         var cutoff = exchangeDateUtc.AddYears(-Math.Abs(lookbackYears));
-        return serviced.Date >= cutoff.Date;
+        return paymentDate.Date >= cutoff.Date;
     }
 
     /// <summary>

@@ -35,29 +35,37 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// </summary>
 public class PayerToPayerExportTests
 {
-    private static PayerToPayerExchangeService ServiceOverCho()
+    // Members with a server-side opt-in on record for the demo tenant. Consent is
+    // decided here, never from the request — a caller cannot self-attest it.
+    private static IPayerToPayerConsentGate Gate(params string[] optedInMembers) =>
+        new ConfiguredPayerToPayerConsentGate(Options.Create(new PayerToPayerConsentOptions
+        {
+            OptedInMembersByTenant = new() { [AcceptanceContext.TenantId] = optedInMembers.ToList() },
+        }));
+
+    private static PayerToPayerExchangeService ServiceOverCho(params string[] optedInMembers)
     {
         var provider = new MockPatientAccessDataProvider();
         var source = new PatientAccessPayerToPayerMemberSource(
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
         return new PayerToPayerExchangeService(
-            new PayerToPayerMemberResolver(source), source, new PayerToPayerExportBuilder(),
-            AcceptanceContext.Logger<PayerToPayerExchangeService>());
+            new PayerToPayerMemberResolver(source), source, Gate(optedInMembers),
+            new PayerToPayerExportBuilder(), AcceptanceContext.Logger<PayerToPayerExchangeService>());
     }
 
-    private static PayerToPayerExchangeService ServiceOverSource(IPayerToPayerMemberSource source) =>
-        new(new PayerToPayerMemberResolver(source), source, new PayerToPayerExportBuilder(),
-            AcceptanceContext.Logger<PayerToPayerExchangeService>());
+    private static PayerToPayerExchangeService ServiceOverSource(
+        IPayerToPayerMemberSource source, params string[] optedInMembers) =>
+        new(new PayerToPayerMemberResolver(source), source, Gate(optedInMembers),
+            new PayerToPayerExportBuilder(), AcceptanceContext.Logger<PayerToPayerExchangeService>());
 
     private static PayerToPayerExchangeRequest Request(
-        string? memberId, bool optedIn = true, string tenant = AcceptanceContext.TenantId,
+        string? memberId, string tenant = AcceptanceContext.TenantId,
         string? dob = null, DateTime? exchangeDate = null) => new()
     {
         TenantId = tenant,
         ReceivingPayerId = "receiving-payer-001",
         MemberId = memberId,
         Dob = dob,
-        MemberOptedIn = optedIn,
         ExchangeDateUtc = exchangeDate ?? new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc),
     };
 
@@ -71,7 +79,7 @@ public class PayerToPayerExportTests
     [Trait("Backend", "Replace")]
     public async Task P2P01_Replace_MatchedAuthorizedMember_ProducesMemberScopedExport()
     {
-        var result = await ServiceOverCho().RespondAsync(Request("pat-001", dob: "1955-07-14"));
+        var result = await ServiceOverCho("pat-001").RespondAsync(Request("pat-001", dob: "1955-07-14"));
 
         result.Succeeded.Should().BeTrue();
         result.Outcome.Should().Be(PayerToPayerOutcome.Exported);
@@ -177,7 +185,7 @@ public class PayerToPayerExportTests
         // Consent is enforced, not bypassed: a matched member with no active
         // opt-in yields NotAuthorized and no data. (This does not introduce a
         // dedicated Payer-to-Payer ConsentType — P2P-03 stays PARTIAL.)
-        var result = await ServiceOverCho().RespondAsync(Request("pat-001", optedIn: false));
+        var result = await ServiceOverCho(/* pat-001 NOT opted in */).RespondAsync(Request("pat-001"));
 
         result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
         result.Bundle.Should().BeNull();
@@ -193,7 +201,7 @@ public class PayerToPayerExportTests
     {
         // pat-003 exists but has no payments — a valid export with the member's
         // Patient + Coverage and zero EOBs.
-        var result = await ServiceOverCho().RespondAsync(Request("pat-003"));
+        var result = await ServiceOverCho("pat-003").RespondAsync(Request("pat-003"));
 
         result.Outcome.Should().Be(PayerToPayerOutcome.Exported);
         var bundle = result.Bundle!;
@@ -212,7 +220,7 @@ public class PayerToPayerExportTests
     {
         // Exchange dated far enough forward that pat-001's 2025 payments fall
         // outside the 5-year window: the export still succeeds, with no EOBs.
-        var result = await ServiceOverCho().RespondAsync(
+        var result = await ServiceOverCho("pat-001").RespondAsync(
             Request("pat-001", exchangeDate: new DateTime(2035, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
 
         result.Outcome.Should().Be(PayerToPayerOutcome.Exported);

@@ -28,17 +28,20 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
 {
     private readonly IPayerToPayerMemberResolver _resolver;
     private readonly IPayerToPayerMemberSource _source;
+    private readonly IPayerToPayerConsentGate _consentGate;
     private readonly IPayerToPayerExportBuilder _builder;
     private readonly ILogger<PayerToPayerExchangeService> _logger;
 
     public PayerToPayerExchangeService(
         IPayerToPayerMemberResolver resolver,
         IPayerToPayerMemberSource source,
+        IPayerToPayerConsentGate consentGate,
         IPayerToPayerExportBuilder builder,
         ILogger<PayerToPayerExchangeService> logger)
     {
         _resolver = resolver;
         _source = source;
+        _consentGate = consentGate;
         _builder = builder;
         _logger = logger;
     }
@@ -52,10 +55,12 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
 
         var member = resolution.Member;
 
-        // Consent / authorization gate — the member must have opted in. Enforced,
-        // never bypassed. This uses the generic active opt-in signal; it does not
-        // introduce a dedicated Payer-to-Payer ConsentType (P2P-03 stays PARTIAL).
-        if (!request.MemberOptedIn)
+        // Consent / authorization gate — the member must have an active opt-in on
+        // record. Decided server-side from the plan's own consent state (never a
+        // value supplied on the request), so consent cannot be self-attested by the
+        // caller. Uses the generic active opt-in signal; no dedicated
+        // Payer-to-Payer ConsentType (P2P-03 stays PARTIAL).
+        if (!await _consentGate.HasActiveOptInAsync(request.TenantId, member.MemberId, ct))
             return Failed(request, PayerToPayerOutcome.NotAuthorized, member.MemberId);
 
         var payments = await _source.GetPaymentsAsync(request.TenantId, member.MemberId, ct);

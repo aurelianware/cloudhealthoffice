@@ -4,11 +4,13 @@ namespace FhirService.Models.PayerToPayer;
 /// An inbound Payer-to-Payer exchange request (CMS-0057-F P2P-01): a receiving
 /// (new) payer asks Cloud Health Office — the prior payer — to respond with the
 /// transitioning member's data. Carries the member identifiers the receiving
-/// payer holds, the exchange context, and the member's opt-in authorization.
+/// payer holds and the exchange context.
 ///
-/// Note: <see cref="MemberOptedIn"/> is the member's active opt-in consent for
-/// data sharing (an Active consent in the registry). This PR does NOT introduce
-/// a dedicated Payer-to-Payer ConsentType — P2P-03 stays PARTIAL and independent.
+/// The member's opt-in authorization is deliberately NOT carried here: it is
+/// decided server-side by <c>IPayerToPayerConsentGate</c> from the plan's own
+/// consent state, so a receiving payer cannot self-attest consent. That gate
+/// uses the generic active opt-in signal and does not introduce a dedicated
+/// Payer-to-Payer ConsentType — P2P-03 stays PARTIAL and independent.
 /// </summary>
 public sealed class PayerToPayerExchangeRequest
 {
@@ -28,13 +30,10 @@ public sealed class PayerToPayerExchangeRequest
     public string? Dob { get; init; }     // yyyy-MM-dd
     public string? Gender { get; init; }
 
-    /// <summary>Member's active opt-in consent for this exchange.</summary>
-    public bool MemberOptedIn { get; init; }
-
     /// <summary>Exchange date; anchors the lookback window.</summary>
     public DateTime ExchangeDateUtc { get; init; } = DateTime.UtcNow;
 
-    /// <summary>Date-of-service lookback for included data (locked P2P rule: 5 years).</summary>
+    /// <summary>Claims lookback for included data (locked P2P rule: 5 years).</summary>
     public int LookbackYears { get; init; } = 5;
 }
 
