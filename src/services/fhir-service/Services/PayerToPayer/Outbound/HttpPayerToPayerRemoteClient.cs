@@ -166,17 +166,26 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
     /// <see cref="RemoteCallOutcome.NoMatch"/>: CHO cannot tell the two apart
     /// from the wire, and both stop the exchange before any data is requested.
     /// A peer that does distinguish them can say so with 409.
+    ///
+    /// 404 is deliberately NOT read as a no-match. On a POST to an operation
+    /// endpoint it far more often means the operation or the configured base URL
+    /// does not exist — a directory misconfiguration — and reporting that as
+    /// "the member was not found at the prior payer" would hide a broken route
+    /// behind a plausible clinical answer. It surfaces as
+    /// <see cref="RemoteCallOutcome.InvalidResponse"/> so the exchange's failure
+    /// category points at the configuration instead.
     /// </summary>
     private static RemoteCallOutcome MapStatus(HttpStatusCode status) => status switch
     {
         HttpStatusCode.OK or HttpStatusCode.Created or HttpStatusCode.Accepted => RemoteCallOutcome.Success,
         HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => RemoteCallOutcome.Unauthorized,
         HttpStatusCode.Conflict => RemoteCallOutcome.Ambiguous,
-        HttpStatusCode.NotFound or HttpStatusCode.UnprocessableEntity => RemoteCallOutcome.NoMatch,
+        HttpStatusCode.UnprocessableEntity => RemoteCallOutcome.NoMatch,
+        HttpStatusCode.NotFound => RemoteCallOutcome.InvalidResponse,
         HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests => RemoteCallOutcome.Unavailable,
         >= HttpStatusCode.InternalServerError => RemoteCallOutcome.Unavailable,
-        // Anything else (including a redirect, which this client does not follow)
-        // is a response CHO will not act on.
+        // Anything else (including a redirect, which this client does not follow,
+        // and a 404 handled above) is a response CHO will not act on.
         _ => RemoteCallOutcome.InvalidResponse,
     };
 

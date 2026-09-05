@@ -153,8 +153,10 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         if (matched.Failure is { } matchFailure)
             return await FailAsync(request, exchange, matchFailure.Status, matchFailure.Failure, ct);
 
+        // MemberMatchOutcome is owned by MatchWithRemoteAsync — it records the
+        // peer's own outcome, or "Skipped" when the match step was not needed.
+        // Restating it here would report a match that never happened.
         exchange.RemoteMemberId = matched.RemoteMemberId;
-        exchange.MemberMatchOutcome = RemoteCallOutcome.Success.ToString();
         exchange.Status = PayerToPayerOutboundStatus.Matched;
         await _store.SaveAsync(exchange, ct);
 

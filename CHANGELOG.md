@@ -59,12 +59,16 @@ recorded on a `PayerToPayerOutboundExchange` with an idempotency key
 one exchange and a retry after a failure resumes it. Audit carries tenant,
 member, target payer, endpoint key, exchange id, outcome, and resource count —
 no demographics, payload, URL, or credential. Real acceptance tests
-(`PayerToPayerOutboundTests`, `[Trait("Backend","Replace")]`, 23 scenarios) drive
+(`PayerToPayerOutboundTests`, `[Trait("Backend","Replace")]`, 24 scenarios) drive
 the production orchestration with only the far side of the wire faked, asserting
 call ordering and request content, missing consent, unconfigured/non-HTTPS payer,
 no-match, ambiguous match, remote auth/transport failure, malformed and
 cross-member packages, cross-tenant refusal, overlapping local coverage, and
-idempotent retry.
+idempotent retry. `HttpPayerToPayerRemoteClientTests` pins the transport seam's
+own contract: peer status → structured outcome (422 is the anti-enumeration
+no-match signal; a 404 is a route/configuration error, not a member no-match),
+calls only to the resolved endpoint URIs, no fabricated Authorization header, and
+an oversized or empty body refused rather than buffered.
 
 **Scope, stated plainly.** P2P-02 CHO Replace moves GAP → **PASSABLE** and CHO
 Replace now declares 14 PASSABLE / 7 PARTIAL / 0 GAP — which is not full

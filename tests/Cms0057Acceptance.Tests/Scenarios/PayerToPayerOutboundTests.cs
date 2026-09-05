@@ -62,7 +62,8 @@ public class PayerToPayerOutboundTests
         string baseUrl = "https://prior-payer.example/fhir/r4",
         bool allowInsecureTransport = false,
         string directoryTenant = AcceptanceContext.TenantId,
-        IPayerToPayerMemberMatchSource? coverageSource = null)
+        IPayerToPayerMemberMatchSource? coverageSource = null,
+        bool requiresMemberMatch = true)
     {
         var provider = new MockPatientAccessDataProvider();
         var adapterOptions = Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId });
@@ -91,6 +92,7 @@ public class PayerToPayerOutboundTests
                         PayerId = TargetPayer,
                         EndpointKey = "prior-plan-fhir",
                         BaseUrl = baseUrl,
+                        RequiresMemberMatch = requiresMemberMatch,
                     },
                 ],
             },
@@ -506,6 +508,30 @@ public class PayerToPayerOutboundTests
         match.MemberId.Should().BeNull();
         match.FamilyName.Should().Be("Williams");
         match.BirthDate.Should().Be("1948-11-30");
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-02")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P02_Replace_PayerNotRequiringMemberMatch_SkipsItAndRecordsThatHonestly()
+    {
+        // A payer that does not require $member-match can be called with the
+        // identifier CHO already holds for the member with it. The exchange must
+        // record that the match was SKIPPED — never report a match that never
+        // ran — and must not call the operation.
+        var harness = Build(
+            ScriptedPriorPayer.WithPayloads(
+                matchPayload: null,
+                exportPayload: PriorPayerPayloads.ExportBundle(PriorSubscriberId)),
+            optedInMembers: ["pat-001"], requiresMemberMatch: false);
+
+        var result = await harness.Service.InitiateAsync(Request());
+
+        result.Succeeded.Should().BeTrue();
+        result.Exchange.MemberMatchOutcome.Should().Be("Skipped");
+        result.Exchange.RemoteMemberId.Should().Be(PriorSubscriberId);
+        harness.Peer.MatchRequests.Should().BeEmpty();
+        harness.Peer.Calls.Select(c => c.Operation).Should().Equal("member-data-export");
     }
 
     // ── Idempotency / retry ─────────────────────────────────────────────────────
