@@ -64,7 +64,7 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
         var audit = Audit(request, PayerToPayerOutcome.Exported, member.MemberId, bundle.Total);
         _logger.LogInformation(
             "P2P respond: tenant={Tenant} receivingPayer={Payer} member={Member} resources={Count}",
-            audit.TenantId, audit.ReceivingPayerId, audit.MatchedMemberId, audit.ResourceCount);
+            Clean(audit.TenantId), Clean(audit.ReceivingPayerId), Clean(audit.MatchedMemberId), audit.ResourceCount);
 
         return new PayerToPayerExportResult
         {
@@ -81,9 +81,19 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
         var audit = Audit(request, outcome, matchedMemberId, resourceCount: 0);
         _logger.LogInformation(
             "P2P respond declined: tenant={Tenant} receivingPayer={Payer} outcome={Outcome}",
-            audit.TenantId, audit.ReceivingPayerId, audit.Outcome);
+            Clean(audit.TenantId), Clean(audit.ReceivingPayerId), audit.Outcome);
         return new PayerToPayerExportResult { Outcome = outcome, MatchedMemberId = matchedMemberId, Audit = audit };
     }
+
+    /// <summary>
+    /// Strips CR/LF from caller-supplied values before they reach a log entry,
+    /// preventing log-forging / injection (CWE-117) from the exchange request.
+    /// </summary>
+    private static string Clean(string? value)
+        => string.IsNullOrEmpty(value)
+            ? string.Empty
+            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
+                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 
     private static PayerToPayerAuditEntry Audit(
         PayerToPayerExchangeRequest request, PayerToPayerOutcome outcome, string? matchedMemberId, int resourceCount) =>
