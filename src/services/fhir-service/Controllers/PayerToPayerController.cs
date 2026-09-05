@@ -18,9 +18,10 @@ namespace FhirService.Controllers;
 /// from the authenticated request context, never from the body, so a caller
 /// cannot request another tenant's data.
 ///
-/// This is the P2P-01 "respond" path only. Outbound initiation (P2P-02) and the
-/// FHIR <c>$member-match</c> / concurrent-coverage operation (P2P-04) are not
-/// implemented here.
+/// This is the P2P-01 "respond" path only. Outbound initiation (P2P-02, see
+/// <see cref="PayerToPayerOutboundController"/>) and the FHIR
+/// <c>$member-match</c> / concurrent-coverage operation (P2P-04, see
+/// <see cref="PayerToPayerMemberMatchController"/>) are separate surfaces.
 /// </summary>
 [Route("fhir/r4")]
 public sealed class PayerToPayerController : FhirControllerBase
