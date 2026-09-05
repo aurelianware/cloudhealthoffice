@@ -58,7 +58,9 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         ("DTR", FhirAdapterModes.Demo, "DtrService"),
         ("BulkExport", FhirAdapterModes.Demo, "BulkExportService scaffold"),
         ("Consent", FhirAdapterModes.Demo, "consent-service building block"),
-        ("PayerToPayer", FhirAdapterModes.OutOfScope, "Bulk FHIR + consent only"),
+        // Inbound Payer-to-Payer respond (P2P-01) is implemented over CHO-owned
+        // data; outbound initiation (P2P-02) and $member-match (P2P-04) are not.
+        ("PayerToPayer", FhirAdapterModes.Demo, "PayerToPayerExchangeService (inbound member-data export)"),
     ];
 
     private readonly FhirAdapterOptions _options;
