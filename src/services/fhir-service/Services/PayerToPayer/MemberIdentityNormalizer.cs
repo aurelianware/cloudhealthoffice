@@ -35,7 +35,13 @@ public static class MemberIdentityNormalizer
             : null;
     }
 
-    /// <summary>Map to MALE / FEMALE / OTHER / UNKNOWN.</summary>
+    /// <summary>
+    /// Map a recognized value to MALE / FEMALE / OTHER. An unknown, empty, or
+    /// unparseable value returns <c>null</c> — "not supplied" — so it is never
+    /// compared as a contradicting attribute (an invalid gender must not force a
+    /// false non-match against a member whose sex is known and whose strong
+    /// identifiers agree).
+    /// </summary>
     public static string? Gender(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
@@ -44,7 +50,7 @@ public static class MemberIdentityNormalizer
             "M" or "MALE" => "MALE",
             "F" or "FEMALE" => "FEMALE",
             "O" or "OTHER" => "OTHER",
-            _ => "UNKNOWN",
+            _ => null,
         };
     }
 

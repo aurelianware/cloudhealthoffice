@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Implement CHO-native Payer-to-Payer member match (P2P-04)
+### Implement Cloud Health Office-native Payer-to-Payer member match (P2P-04)
 
 Closed CMS-0057-F acceptance gap **P2P-04** (Payer-to-Payer member-match /
 concurrent coverage) with the FHIR `Patient/$member-match` operation as real

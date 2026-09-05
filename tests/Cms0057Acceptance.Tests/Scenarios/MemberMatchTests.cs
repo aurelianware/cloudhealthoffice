@@ -254,6 +254,19 @@ public class MemberMatchTests
         result.MatchedMemberId.Should().Be("pat-001");
     }
 
+    [Fact]
+    [Trait("Scenario", "P2P-04")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P04_Replace_UnrecognizedGender_IsTreatedAsNotSupplied_NotAConflict()
+    {
+        // An unknown/invalid gender must be ignored (treated as "not supplied"),
+        // not compared as a contradiction — a strong id that agrees still matches.
+        var result = await Service().MatchAsync(Req(memberId: "pat-001", gender: "X"));
+
+        result.Outcome.Should().Be(MemberMatchOutcome.Matched);
+        result.MatchedMemberId.Should().Be("pat-001");
+    }
+
     // ── Concurrent / overlapping coverage selection ─────────────────────────────
 
     [Fact]

@@ -53,11 +53,19 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
 
         var members = await _source.GetMembersAsync(request.TenantId, ct);
 
-        // Evaluate every candidate; keep only the strong (unambiguous) matches.
+        // A supplied member/subscriber id is the only criterion that needs a
+        // candidate's coverages to decide match strength (subscriber ids live on
+        // coverages). For demographic-only or SSN requests the policy decides from
+        // the member alone, so coverage retrieval is deferred until a single match
+        // is found — no per-candidate N+1 fetch.
+        var needsCoveragesForMatch = criteria.MemberId is not null;
+
         var strong = new List<(ChoMember Member, IReadOnlyList<ChoCoverage> Coverages)>();
         foreach (var member in members)
         {
-            var coverages = await _source.GetCoveragesAsync(request.TenantId, member.MemberId, ct);
+            var coverages = needsCoveragesForMatch
+                ? await _source.GetCoveragesAsync(request.TenantId, member.MemberId, ct)
+                : Array.Empty<ChoCoverage>();
             if (MemberMatchPolicy.Evaluate(criteria, member, coverages) == MemberMatchStrength.Strong)
                 strong.Add((member, coverages));
         }
@@ -66,6 +74,11 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         if (strong.Count > 1) return Failed(request, MemberMatchOutcome.AmbiguousMatch);
 
         var (matched, matchedCoverages) = strong[0];
+        // Coverage selection always needs the matched member's coverages; fetch
+        // them now if the match path above did not already.
+        if (!needsCoveragesForMatch)
+            matchedCoverages = await _source.GetCoveragesAsync(request.TenantId, matched.MemberId, ct);
+
         var selection = PayerToPayerCoverageSelector.Select(matchedCoverages, criteria);
         if (selection.Outcome == CoverageSelectionOutcome.Ambiguous)
             return Failed(request, MemberMatchOutcome.AmbiguousCoverage, matched.MemberId);
