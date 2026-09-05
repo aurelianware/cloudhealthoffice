@@ -20,6 +20,9 @@ public static class EvidenceWriters
 
     public static string ToJson(EvidenceReport report) => JsonSerializer.Serialize(report, JsonOptions);
 
+    /// <summary>Serializes the sanitized public projection (see <see cref="PublicEvidenceProjector"/>).</summary>
+    public static string ToPublicJson(PublicEvidence evidence) => JsonSerializer.Serialize(evidence, JsonOptions);
+
     // ── Markdown ───────────────────────────────────────────────────────────────
 
     public static string ToMarkdown(EvidenceReport r)

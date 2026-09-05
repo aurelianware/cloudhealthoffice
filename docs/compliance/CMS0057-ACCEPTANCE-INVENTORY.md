@@ -205,6 +205,55 @@ presented as a Cloud Health Office product gap:
 tested implementation. It is not a CMS certification and does not by itself
 establish production readiness for a specific payer deployment.
 
+### When the evidence regenerates
+
+The `CMS-0057-F Acceptance Evidence` workflow runs not only when the acceptance
+suite, the manifest, this inventory, or the evidence tooling change, but also when
+runtime/domain code that can change CMS-0057-F behavior changes — the FHIR,
+authorization, member, provider, claims, benefit-plan, consent, and smart-auth
+services, plus the operating-mode and prior-auth-rule engines. So a behavior change
+that never touches the acceptance project still refreshes the evidence. The path
+list lives in the workflow file; keep it aligned as the surface grows.
+
+### Raw CI evidence vs. sanitized public evidence
+
+There are two distinct artifacts, and they are not interchangeable:
+
+- **Raw CI evidence** (`cms0057-evidence.json` / `.md` / `.html` + the TRX) is the
+  full internal record — supporting test names, rationales, workflow run identity,
+  execution status per backend. It stays a CI build artifact; it is **not** served
+  from the website.
+- **Sanitized public evidence** (`cms0057-public-evidence.json`) is a small
+  allow-list projection built by `tools/Cms0057Evidence --public-output`. It is
+  constructed field by field — the raw report is never serialized and stripped —
+  so it can only ever contain: schema version, evidence status, commit SHA (+ short
+  + a durable commit URL), generated timestamp, test-data classification, framework,
+  FHIR version, scenario count, a test-execution summary (passed/failed/skipped),
+  independent **Replace** (product) and per-backend **Augment** (integration)
+  declared-status counts, a per-scenario declared-status matrix, and the
+  disclaimers. It carries **no** PHI, member identifiers, test fixtures, tenant
+  identifiers, secrets, connection strings, customer names, vendor credentials,
+  stack traces, file paths, internal hostnames, or QNXT field mappings. A run with
+  any failed acceptance test cannot produce it (the projector refuses).
+
+### Latest published evidence
+
+On `main`, after a fully passing, reconciled run, the workflow's `publish` job
+commits the sanitized snapshot to
+`src/site/insights/cms-0057-f/cms0057-public-evidence.json` (narrow `contents:
+write`; that commit touches only `src/site/**`, so it deploys via Pages without
+re-triggering evidence generation). The acceptance-scenarios page renders it under
+**Latest published evidence**, showing the source revision and the generation date.
+It is deliberately labelled *latest published* — not *current* — because the
+published snapshot and the deployed site revision can diverge; the source SHA on the
+page is the authority for what was actually tested. Pull-request runs validate and
+upload evidence but never update the published snapshot.
+
+**Follow-up (not in this change):** an immutable per-SHA evidence release (a
+`cms0057-evidence/<sha>/…` tree or a tagged release) could make each snapshot
+permanently addressable. It is intentionally deferred to avoid tag/commit spam
+until there is a clear need; the sanitized snapshot already carries the tested SHA.
+
 ## Traceability table
 
 Two dimensions per scenario: **CHO Replace** = Cloud Health Office as the

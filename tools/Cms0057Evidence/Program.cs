@@ -23,6 +23,18 @@ try
     Console.WriteLine($"  scenarios: {report.Scenarios.Count}  tests: {report.TestSummary.Passed} passed / "
                       + $"{report.TestSummary.Failed} failed / {report.TestSummary.Skipped} skipped");
 
+    // Sanitized public snapshot — only ever from a fully passing run. When tests
+    // failed we deliberately do NOT write it (fail-safe); the raw evidence above is
+    // still written and the process exits non-zero below.
+    if (opts.PublicOutputPath is not null && !report.HasTestFailures)
+    {
+        var publicEvidence = PublicEvidenceProjector.Project(report);
+        var publicDir = Path.GetDirectoryName(Path.GetFullPath(opts.PublicOutputPath));
+        if (!string.IsNullOrEmpty(publicDir)) Directory.CreateDirectory(publicDir);
+        WriteFile(opts.PublicOutputPath, EvidenceWriters.ToPublicJson(publicEvidence));
+        Console.WriteLine($"  public snapshot: {opts.PublicOutputPath}");
+    }
+
     if (report.HasTestFailures)
     {
         Console.Error.WriteLine($"::error::{report.TestSummary.Failed} acceptance test(s) failed — evidence written but marking failure.");
@@ -71,15 +83,17 @@ internal sealed class CliOptions
     public string ResultsPath { get; private init; } = "";
     public string OutputDir { get; private init; } = "";
     public string? TestAssemblyPath { get; private init; }
+    public string? PublicOutputPath { get; private init; }
     public string Environment { get; private init; } = "local";
 
     public const string Usage =
         "Usage: Cms0057Evidence --manifest <scenarios.json> --results <results.trx> " +
-        "--output <dir> [--test-assembly <Cms0057Acceptance.Tests.dll>] [--environment <name>]";
+        "--output <dir> [--test-assembly <Cms0057Acceptance.Tests.dll>] " +
+        "[--public-output <public-evidence.json>] [--environment <name>]";
 
     public static CliOptions Parse(string[] args)
     {
-        string? manifest = null, results = null, output = null, testAssembly = null, env = null;
+        string? manifest = null, results = null, output = null, testAssembly = null, publicOutput = null, env = null;
         for (var i = 0; i < args.Length; i++)
         {
             string Next(string flag) => i + 1 < args.Length
@@ -91,6 +105,7 @@ internal sealed class CliOptions
                 case "--results": results = Next("--results"); break;
                 case "--output": output = Next("--output"); break;
                 case "--test-assembly": testAssembly = Next("--test-assembly"); break;
+                case "--public-output": publicOutput = Next("--public-output"); break;
                 case "--environment": env = Next("--environment"); break;
                 default: throw new CliException($"Unknown argument: {args[i]}");
             }
@@ -105,6 +120,7 @@ internal sealed class CliOptions
             ResultsPath = results,
             OutputDir = output,
             TestAssemblyPath = testAssembly,
+            PublicOutputPath = publicOutput,
             Environment = env ?? "local",
         };
     }
