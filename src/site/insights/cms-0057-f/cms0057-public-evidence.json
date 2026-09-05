@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-05T01:14:00Z",
-  "commitSha": "2deb49a0df5656cf2b7e4f0fc585bbd51366b515",
-  "commitShaShort": "2deb49a0df56",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/2deb49a0df5656cf2b7e4f0fc585bbd51366b515",
+  "generatedAtUtc": "2026-09-05T01:41:31Z",
+  "commitSha": "0706a9a84a677e1baa5de8ade677703e9d47e37b",
+  "commitShaShort": "0706a9a84a67",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/0706a9a84a677e1baa5de8ade677703e9d47e37b",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 63,
+    "passed": 73,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 10,
+    "passable": 11,
     "partial": 7,
-    "gap": 4,
+    "gap": 3,
     "na": 0
   },
   "integrations": {
@@ -150,7 +150,7 @@
       "id": "PAS-08",
       "name": "Drug exclusion from medical PA scope",
       "capability": "PriorAuthorization",
-      "replace": "GAP",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "N/A"
       }
