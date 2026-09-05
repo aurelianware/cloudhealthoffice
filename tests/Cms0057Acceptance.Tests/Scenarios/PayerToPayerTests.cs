@@ -6,19 +6,18 @@ using Microsoft.Extensions.Options;
 namespace Cms0057Acceptance.Tests.Scenarios;
 
 /// <summary>
-/// P2P-02..04 — Payer-to-Payer exchange. Inbound respond (P2P-01) is now
-/// implemented (see PayerToPayerExportTests); outbound initiation (P2P-02),
-/// dedicated P2P consent (P2P-03, PARTIAL), and $member-match / concurrent
-/// coverage (P2P-04) remain GAP/PARTIAL and are asserted honestly against the
-/// REAL loaded product types and the consent registry.
+/// P2P-02..03 — Payer-to-Payer exchange. Inbound respond (P2P-01) is implemented
+/// (see PayerToPayerExportTests) and member-match / concurrent coverage (P2P-04)
+/// is implemented (see MemberMatchTests); outbound initiation (P2P-02) and
+/// dedicated P2P consent (P2P-03, PARTIAL) remain GAP/PARTIAL and are asserted
+/// honestly against the REAL loaded product types and the consent registry.
 ///
 /// Locked rule facts (documented, enforced by engagement work, not code yet):
 ///   5-year date-of-service lookback; exclude remittances and enrollee
-///   cost-sharing; exclude drugs from the PA slice; opt-in required; a
-///   concurrent-coverage exchange exists in the rule.
+///   cost-sharing; exclude drugs from the PA slice; opt-in required.
 ///
 /// Traceability:
-///   status   src/services/fhir-service/Services/FhirAdapterStatusService.cs (PayerToPayer = OutOfScope)
+///   status   src/services/fhir-service/Services/FhirAdapterStatusService.cs (PayerToPayer = Demo)
 ///   consent  src/services/consent-service/Models/Consent.cs (opt-in modeling)
 /// </summary>
 public class PayerToPayerTests
@@ -29,12 +28,13 @@ public class PayerToPayerTests
         return new FhirAdapterStatusService(options, AcceptanceContext.EmptyConfig()).GetStatus();
     }
 
-    // P2P-01 (inbound respond) is now implemented as real CHO Replace-mode
-    // capability and proven behaviorally in PayerToPayerExportTests (member
-    // resolution + consent gate + CHO-data FHIR export). The former GAP marker
-    // here — which pinned the adapter layer as OutOfScope — has been removed now
-    // that the respond path exists (the adapter-status report reflects it in Demo
-    // mode). P2P-02 and P2P-04 remain GAP below.
+    // P2P-01 (inbound respond) and P2P-04 ($member-match / concurrent coverage)
+    // are now implemented as real CHO Replace-mode capability and proven
+    // behaviorally in PayerToPayerExportTests and MemberMatchTests. The former GAP
+    // markers here — which pinned the adapter layer as OutOfScope and asserted no
+    // member-match surface — have been removed now that both paths exist (the
+    // adapter-status report reflects them in Demo mode). P2P-02 remains GAP below;
+    // P2P-03 remains PARTIAL.
 
     [Fact]
     [Trait("Scenario", "P2P-02")]
@@ -62,19 +62,5 @@ public class PayerToPayerTests
         var consentTypeNames = Enum.GetNames(typeof(global::ConsentService.Models.ConsentType));
         consentTypeNames.Should().NotContain(n =>
             n.Contains("PayerToPayer", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    [Trait("Scenario", "P2P-04")]
-    [Trait("Kind", "GAP")]
-    public void P2P04_NoMemberMatchOrConcurrentCoverageSurface()
-    {
-        // GAP: no P2P $member-match / concurrent-coverage exchange exists in CHO
-        // product code. (A framework/NuGet type may share the name; scope the
-        // scan to product assemblies only.)
-        var memberMatchExists = AcceptanceContext.ProductTypes()
-            .Any(t => t.Name.Contains("MemberMatch", StringComparison.OrdinalIgnoreCase)
-                   || t.Name.Contains("ConcurrentCoverage", StringComparison.OrdinalIgnoreCase));
-        memberMatchExists.Should().BeFalse();
     }
 }

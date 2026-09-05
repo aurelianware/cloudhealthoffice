@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Implement CHO-native Payer-to-Payer member match (P2P-04)
+
+Closed CMS-0057-F acceptance gap **P2P-04** (Payer-to-Payer member-match /
+concurrent coverage) with the FHIR `Patient/$member-match` operation as real
+Cloud Health Office Replace-mode capability — cross-payer identity resolution
+over CHO-owned data, distinct from the P2P-01 known-member respond. New
+fhir-service code: `PayerToPayerMemberMatchService` (application service) resolves
+the transitioning member within the tenant from normalized identity attributes
+and returns the relevant **member + coverage context**; a thin
+`PayerToPayerMemberMatchController` (`POST fhir/r4/Patient/$member-match`, under
+the SMART-enforced surface, tenant from the authenticated context) only routes.
+Matching is **deterministic and fail-safe** (`MemberMatchPolicy`): a positive
+assertion needs a strong identifier (member/subscriber id or SSN) or the
+family-name + birth-date pair, and any contradicting attribute — wrong DOB, wrong
+member id, different sex — fails the candidate closed. Zero candidates → no match,
+more than one → ambiguous, cross-tenant → never visible, and a weak single
+attribute is refused before any search (anti-enumeration). `MemberIdentityNormalizer`
+makes equivalent formatting (casing, whitespace, accents, phone/ZIP punctuation,
+identifier hyphens) compare equal without merging distinct people.
+`PayerToPayerCoverageSelector` picks the relevant **concurrent/prior/current**
+coverage by requested payer/subscriber context and effective date; genuinely
+overlapping coverages without a discriminator return an ambiguity rather than a
+guess. The match reuses the same CHO member/coverage store via a new
+`IChoMemberDirectory` on `MockPatientAccessDataProvider` (no duplicate store; the
+Patient Access contract is unchanged), and its resolved member id feeds the P2P-01
+export path directly (proven by an acceptance test). Member-match is identity only
+and does **not** gate on or introduce consent. Real acceptance tests
+(`MemberMatchTests`, `[Trait("Backend","Replace")]`) exercise the production
+service/policy/selector/normalizer/source: exact strong-id and demographic
+matches, prior-payer subscriber id, no-match, ambiguous identity narrowed by given
+name/gender, conflicting id/DOB/given name, cross-tenant, insufficient criteria,
+normalization, concurrent-coverage selection (prior/current/overlapping), and the
+P2P-01 hand-off. The prior P2P-04 GAP-assertion test is replaced by this behavioral
+coverage; the adapter-status report's PayerToPayer source now names `$member-match`
+(mode stays Demo). The scenario manifest moves P2P-04 `replace` `GAP → PASSABLE`.
+**P2P-02** (outbound initiation, stays GAP), **P2P-03** (dedicated P2P ConsentType,
+stays PARTIAL), and **QNXT Augment** are unchanged and independently truthful. The
+CI evidence pipeline derives the new result automatically — CHO Replace counts move
+`PASSABLE 12 / PARTIAL 7 / GAP 2` → `PASSABLE 13 / PARTIAL 7 / GAP 1` with no
+evidence-tooling change and no manual edit of generated evidence. Synthetic data
+only; no PHI or payer configuration. Probabilistic matching, member enumeration,
+and production P2P transport security (mTLS/UDAP) remain engagement work.
+
 ### Implement CHO-native Payer-to-Payer member data export (P2P-01)
 
 Closed CMS-0057-F acceptance gap **P2P-01** (Payer-to-Payer inbound respond) with

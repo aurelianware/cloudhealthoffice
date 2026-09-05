@@ -127,14 +127,19 @@ builder.Services.Configure<FhirAdapterOptions>(
 builder.Services.AddSingleton<IFhirAdapterStatusService, FhirAdapterStatusService>();
 builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
-builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
+builder.Services.AddSingleton<MockPatientAccessDataProvider>();
+builder.Services.AddSingleton<IPatientAccessDataProvider>(sp =>
+    sp.GetRequiredService<MockPatientAccessDataProvider>());
+// Same authoritative store also serves the CHO member directory (P2P-04 member-match).
+builder.Services.AddSingleton<FhirService.Services.IChoMemberDirectory>(sp =>
+    sp.GetRequiredService<MockPatientAccessDataProvider>());
 builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecker>();
 
 // ── Payer-to-Payer inbound respond (CMS-0057-F P2P-01) ────────────────────────
 // CHO-native member-data export over CHO-owned data (reuses the Patient Access
 // data provider + mapper). Tenant-scoped, deterministic member resolution with a
-// consent/authorization gate. Outbound initiation (P2P-02) and $member-match
-// (P2P-04) are intentionally not wired here.
+// consent/authorization gate. Outbound initiation (P2P-02) is intentionally not
+// wired here.
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberSource,
     FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberSource>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberResolver,
@@ -148,6 +153,15 @@ builder.Services.AddSingleton<FhirService.Services.PayerToPayer.IPayerToPayerExp
     FhirService.Services.PayerToPayer.PayerToPayerExportBuilder>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerExchangeService,
     FhirService.Services.PayerToPayer.PayerToPayerExchangeService>();
+
+// ── Payer-to-Payer member match (CMS-0057-F P2P-04) ───────────────────────────
+// Deterministic, fail-safe cross-payer identity resolution + coverage selection
+// over the same CHO-owned member/coverage directory. Identity only; the P2P-01
+// respond path enforces consent when data is actually returned.
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberMatchSource,
+    FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberMatchSource>();
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberMatchService,
+    FhirService.Services.PayerToPayer.PayerToPayerMemberMatchService>();
 builder.Services.AddSingleton<IChoFhirArtifactRegistry, ChoFhirArtifactRegistry>();
 
 // ── Appeals FHIR adapter (PR 3) ───────────────────────────────────────────────
