@@ -36,11 +36,17 @@ public sealed class PayerToPayerController : FhirControllerBase
         if (body is null)
             return FhirBadRequest("A Payer-to-Payer export request body is required.");
 
+        // The receiving payer must identify itself so the exchange is auditable
+        // ("which receiving payer"); normalize it so audit/log values are stable.
+        var receivingPayerId = body.ReceivingPayerId?.Trim();
+        if (string.IsNullOrEmpty(receivingPayerId))
+            return FhirBadRequest("receivingPayerId is required to identify the requesting payer for audit.");
+
         var request = new PayerToPayerExchangeRequest
         {
             TenantId = TenantId,                 // from the authenticated context, not the body
-            ReceivingPayerId = body.ReceivingPayerId ?? string.Empty,
-            InitiatedBy = SmartPatientId is null ? body.ReceivingPayerId : $"patient:{SmartPatientId}",
+            ReceivingPayerId = receivingPayerId,
+            InitiatedBy = SmartPatientId is null ? receivingPayerId : $"patient:{SmartPatientId}",
             MemberId = body.MemberId,
             LastName = body.LastName,
             Dob = body.Dob,
