@@ -333,6 +333,21 @@ public class MemberMatchTests
         result.Coverage!.CoverageId.Should().Be("COV-001-PRIOR");
     }
 
+    [Fact]
+    [Trait("Scenario", "P2P-04")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P04_Replace_RequestedPayerContextMatchingNoCoverage_RefusesRatherThanFallBack()
+    {
+        // The caller pins a payer context the member does not hold. The selector
+        // must refuse (fail-safe) rather than fall back to a different coverage the
+        // caller never asked for.
+        var result = await Service().MatchAsync(
+            Req(memberId: "pat-001", requestedPayerId: "PLAN-THAT-DOES-NOT-EXIST"));
+
+        result.Outcome.Should().Be(MemberMatchOutcome.AmbiguousCoverage);
+        result.Coverage.Should().BeNull();
+    }
+
     // ── Hand-off to the P2P-01 export path ──────────────────────────────────────
 
     [Fact]

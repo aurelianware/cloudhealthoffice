@@ -43,7 +43,9 @@ public static class PayerToPayerMemberMatchResponseBuilder
             Total = entries.Count,
             Link = new[]
             {
-                new FhirBundleLink { Relation = "self", Url = $"Patient/$member-match/{member.MemberId}" },
+                // The operation is POST Patient/$member-match with no id path segment;
+                // the self link names that interaction, not a fabricated per-member URL.
+                new FhirBundleLink { Relation = "self", Url = "Patient/$member-match" },
             },
             Entry = entries,
         };

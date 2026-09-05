@@ -114,7 +114,9 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         MemberMatchRequest request, MemberMatchOutcome outcome, string? matchedMemberId, string? selectedCoverageId) =>
         new()
         {
-            TenantId = request.TenantId,
+            // Record the trimmed tenant — the same value scoping treats as
+            // authoritative — so audit/log entries are stable and correlatable.
+            TenantId = request.TenantId?.Trim() ?? string.Empty,
             ReceivingPayerId = request.ReceivingPayerId,
             InitiatedBy = request.InitiatedBy,
             MatchedMemberId = matchedMemberId,

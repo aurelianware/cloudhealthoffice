@@ -53,9 +53,12 @@ public static class PayerToPayerCoverageSelector
                     || string.Equals(MemberIdentityNormalizer.Identifier(c.SubscriberId), criteria.RequestedSubscriberId, StringComparison.Ordinal)))
                 .ToList();
 
+            // A pinned payer/subscriber context that resolves to no coverage must
+            // refuse rather than fall back to a different relationship the caller
+            // never asked for (fail-safe, "refuse rather than guess").
+            if (matched.Count == 0) return CoverageSelection.Ambiguous;
             if (matched.Count == 1) return CoverageSelection.Select(matched[0]);
-            // >1 → narrow further by date; 0 → the discriminator did not resolve, fall back to all.
-            if (matched.Count > 1) candidates = matched;
+            candidates = matched; // >1 → narrow further by date below
         }
 
         // 2. Coverage in force as of the requested date (or now).
