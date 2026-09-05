@@ -23,8 +23,8 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// the existing CARIN/US Core <see cref="FhirService.Mappers.PatientAccessMapper"/>).
 /// Synthetic data only; no PHI.
 ///
-/// P2P-02 (outbound initiation) and P2P-04 ($member-match / concurrent coverage)
-/// are NOT implemented here and remain GAP.
+/// P2P-04 ($member-match / concurrent coverage) and P2P-02 (outbound initiation)
+/// are separate paths, covered by MemberMatchTests and PayerToPayerOutboundTests.
 ///
 /// Traceability:
 ///   service   src/services/fhir-service/Services/PayerToPayer/PayerToPayerExchangeService.cs

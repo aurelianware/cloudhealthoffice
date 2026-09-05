@@ -138,8 +138,8 @@ builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecke
 // ── Payer-to-Payer inbound respond (CMS-0057-F P2P-01) ────────────────────────
 // CHO-native member-data export over CHO-owned data (reuses the Patient Access
 // data provider + mapper). Tenant-scoped, deterministic member resolution with a
-// consent/authorization gate. Outbound initiation (P2P-02) is intentionally not
-// wired here.
+// consent/authorization gate. Outbound initiation (P2P-02) is wired separately
+// below.
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberSource,
     FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberSource>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberResolver,
@@ -162,6 +162,47 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMember
     FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberMatchSource>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberMatchService,
     FhirService.Services.PayerToPayer.PayerToPayerMemberMatchService>();
+
+// ── Payer-to-Payer outbound initiation (CMS-0057-F P2P-02) ────────────────────
+// CHO, as the member's new/current payer, initiates the exchange against a
+// prior payer: trusted-directory endpoint resolution, server-side opt-in gate,
+// remote $member-match, then member-data export, response validation, and a
+// durable exchange record. The remote side sits behind IPayerToPayerRemoteClient
+// so the workflow carries no HTTP detail, and target payers come only from
+// configuration — a caller names a payer id, never a URL (SSRF).
+builder.Services.Configure<FhirService.Services.PayerToPayer.Outbound.PayerToPayerDirectoryOptions>(
+    builder.Configuration.GetSection(
+        FhirService.Services.PayerToPayer.Outbound.PayerToPayerDirectoryOptions.SectionName));
+builder.Services.Configure<FhirService.Services.PayerToPayer.Outbound.PayerToPayerTransportOptions>(
+    builder.Configuration.GetSection(
+        FhirService.Services.PayerToPayer.Outbound.PayerToPayerTransportOptions.SectionName));
+builder.Services.AddSingleton<FhirService.Services.PayerToPayer.Outbound.IPayerToPayerEndpointResolver,
+    FhirService.Services.PayerToPayer.Outbound.ConfiguredPayerToPayerEndpointResolver>();
+// Payer-to-Payer transport credentials (SMART Backend Services / UDAP client
+// registration, mTLS) are negotiated per trading partner and are deployment
+// integration work; the default provider supplies none rather than fabricating
+// one, so an unonboarded peer answers Unauthorized.
+builder.Services.AddSingleton<FhirService.Services.PayerToPayer.Outbound.IPayerToPayerCredentialProvider,
+    FhirService.Services.PayerToPayer.Outbound.UnconfiguredPayerToPayerCredentialProvider>();
+builder.Services.AddSingleton<
+    FhirService.Services.PayerToPayer.Outbound.IPayerToPayerOutboundExchangeStore,
+    FhirService.Services.PayerToPayer.Outbound.InMemoryPayerToPayerOutboundExchangeStore>();
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPayerRemoteClient,
+    FhirService.Services.PayerToPayer.Outbound.HttpPayerToPayerRemoteClient>();
+builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPayerOutboundService,
+    FhirService.Services.PayerToPayer.Outbound.PayerToPayerOutboundService>();
+// Redirects are NOT followed: a peer must not be able to bounce an outbound
+// Payer-to-Payer call onto another host. TLS validation is left at the platform
+// default — it is never relaxed.
+builder.Services.AddHttpClient(
+        FhirService.Services.PayerToPayer.Outbound.HttpPayerToPayerRemoteClient.HttpClientName,
+        (sp, client) =>
+        {
+            var transport = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<
+                FhirService.Services.PayerToPayer.Outbound.PayerToPayerTransportOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(transport.TimeoutSeconds, 1, 300));
+        })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<IChoFhirArtifactRegistry, ChoFhirArtifactRegistry>();
 
 // ── Appeals FHIR adapter (PR 3) ───────────────────────────────────────────────

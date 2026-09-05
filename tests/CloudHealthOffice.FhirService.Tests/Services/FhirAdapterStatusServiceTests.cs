@@ -21,10 +21,10 @@ public class FhirAdapterStatusServiceTests
         report.AttestationNote.Should().Contain("not legal attestation");
         report.Resources.Should().Contain(r =>
             r.Resource == "Patient" && r.Mode == FhirAdapterModes.Demo);
-        // Inbound Payer-to-Payer respond (P2P-01) and member-match (P2P-04) are
-        // implemented over CHO-owned data, so PayerToPayer reports Demo (was
-        // OutOfScope). Outbound initiation (P2P-02) remains unimplemented and
-        // dedicated P2P consent (P2P-03) is partial.
+        // Inbound Payer-to-Payer respond (P2P-01), member-match (P2P-04), and
+        // outbound initiation (P2P-02) are implemented over CHO-owned data, so
+        // PayerToPayer reports Demo (was OutOfScope). Dedicated P2P consent
+        // (P2P-03) is still partial, and no external-core P2P integration exists.
         report.Resources.Should().Contain(r =>
             r.Resource == "PayerToPayer" && r.Mode == FhirAdapterModes.Demo);
         report.Resources.Should().NotContain(r => r.Mode == FhirAdapterModes.Live);
