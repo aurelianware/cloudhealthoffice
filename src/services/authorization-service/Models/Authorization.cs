@@ -413,12 +413,25 @@ public class DiagnosisCode
 public class RequestedService
 {
     /// <summary>
-    /// Procedure code (CPT/HCPCS)
-    /// 278: SV101 (2000F)
+    /// Requested code — a CPT/HCPCS procedure (278 SV101, 2000F) or, when
+    /// <see cref="ProductOrServiceSystem"/> is set, a drug identity such as an
+    /// 11-digit (often hyphenated) NDC or an RxNorm code. Length allows those
+    /// drug systems, not just 5-character procedure codes, so a valid drug
+    /// submission is not rejected by model validation before benefit
+    /// drug-exclusion evaluation runs.
     /// </summary>
     [Required]
-    [StringLength(10)]
+    [StringLength(64)]
     public string ProcedureCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Coding system of <see cref="ProcedureCode"/> when it is not a plain
+    /// CPT/HCPCS procedure — e.g. "NDC" or "RxNorm" for an administered drug, or
+    /// a FHIR system URI. Optional; absent means a plain procedure code. Used by
+    /// benefit drug-exclusion evaluation to normalize the drug/service identity.
+    /// </summary>
+    [StringLength(64)]
+    public string? ProductOrServiceSystem { get; set; }
 
     /// <summary>
     /// Procedure description

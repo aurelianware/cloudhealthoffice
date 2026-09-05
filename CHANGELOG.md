@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Enforce drug exclusions in the CMS-0057-F prior-auth workflow
+
+Closed CMS-0057-F acceptance gap **PAS-08** by implementing benefit drug/service
+exclusion as real Cloud Health Office **Replace-mode** product capability, in the
+authorization/benefit decision path (not a FHIR-controller or test-only check). New
+`authorization-service` benefit-exclusion domain — `BenefitExclusion` model, a
+configuration-driven, tenant-scoped `IBenefitExclusionCatalog` (no hard-coded
+codes), a `DrugServiceCodeNormalizer` (NDC/RxNorm/HCPCS/CPT/service-type),
+a pure `DrugExclusionEvaluator`, and an `AuthorizationExclusionService`.
+`ChoAuthorizationBackend.CreateAsync` now consults it before the ordinary path: a
+request for a drug/service the member's applicable plan excludes (or the pharmacy
+service type, out of the CMS-0057-F medical scope) is recorded as a coded denial
+(278 A3, structured `DenialReasonCode`) and persisted in the authoritative CHO
+record with an auditable status history — never auto-approved by a generic rule.
+A non-excluded request is unaffected. `RequestedService` gained an optional
+`ProductOrServiceSystem` so a drug identity can be normalized. Real acceptance
+tests (`DrugExclusionTests`, `[Trait("Backend","Replace")]`) exercise the
+production backend + catalog + evaluator over a repository fixture — excluded drug,
+non-excluded comparator, no-catalog, coverage scoping, code normalization, unknown
+code, multiple exclusions, pharmacy service type, and PAS denied-response mapping
+via `PasResponseBuilder.BuildDeniedResponse`. The prior PAS-08 GAP-assertion test is
+replaced by this behavioral coverage. The scenario manifest moves PAS-08 `replace`
+`GAP → PASSABLE` (rationale updated); QNXT Augment stays `N/A` (no external-core
+drug-exclusion integration is claimed). The CI evidence pipeline derives the new
+result automatically — CHO Replace counts move `PASSABLE 10 / GAP 4` →
+`PASSABLE 11 / GAP 3` with no change to the evidence tooling and no manual edit of
+generated evidence. Synthetic data only; no PHI, formulary, or payer configuration.
+
 ### Harden and publish CMS-0057-F acceptance evidence
 
 Made the CMS-0057-F evidence pipeline fresh, traceable, and externally
