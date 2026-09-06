@@ -298,7 +298,7 @@ external-core dependency (no vendor adapter involved).
 | P2P-04 member-match/concurrent | **PASSABLE** | **GAP** | `PayerToPayerMemberMatchService` — FHIR `Patient/$member-match`; deterministic strong-vs-supporting identity policy (member/subscriber id or SSN, or family + DOB; any contradiction fails closed), tenant-scoped, anti-enumeration sufficiency gate; concurrent/overlapping coverage selected by requested payer/subscriber + effective date (overlaps without a discriminator refuse); resolved context feeds the P2P-01 export; QNXT P2P integration absent |
 | PAT-01 member claims / CARIN EOB | **PASSABLE** | **GAP** | `MockPatientAccessDataProvider` payments → `PatientAccessMapper` EOB; QNXT claim adapter stub |
 | PAT-02 US Core clinical | **PARTIAL** | n/a | demographics validate; USCDI clinical is an external store |
-| PAT-03 PA data except drugs | **PARTIAL** | n/a | `ClaimResponse` is a supported PA-data type; retention job absent |
+| PAT-03 PA data except drugs | **PASSABLE** | n/a | `ClaimResponse` is a supported PA-data type, and both halves of the scenario are now satisfied. **Retention**: `IPriorAuthorizationRetentionPolicy` is a pure rule — `RetentionUntil = last status change + period` — with the CMS-0057-F one-year minimum enforced as a floor configuration cannot go under and a six-year default matching the HIPAA posture used for member documents. The anchor is `StatusHistory.ChangedAt` (then `ReviewedDate`, then `SubmittedDate`), never `LastUpdatedDate` and never a read, so an inquiry cannot extend retention. Purgeable requires terminal **and** past-boundary; Submitted/InReview/Pended are never purged however old. `PriorAuthorizationRetentionWorker` applies it on the `IntegrityProjectionWorker` pattern: scope per tenant, explicit tenant on every repository call, bounded batches, cancellation-aware, disabled by default, dry-run supported. Purge is a **conditional delete** (Mongo: one filtered `DeleteOne`; Cosmos: ETag `IfMatchEtag` from a re-read), so a record reopening mid-sweep survives; repeat runs are no-ops. Hard delete — the document embeds diagnoses, service lines and attachment metadata, and nothing hides behind a soft-delete flag. Audit is aggregate counts plus PHI-free per-record lines and a `cho.authorization.retention.outcomes.total` counter. **Freshness**: the 1-business-day rule bounds staleness of a *copy*; CHO keeps none — PA state is projected from the authoritative record at read time (PAS-04 `$inquire`), the read seam exposes no write, and no replicated PA projection exists to drift, so no sync job is needed. Limitations: blobs behind `ClinicalAttachment.FileUrl` and `rfai-service` `RfaiCase` records are named as out of scope rather than half-purged; no legal-hold flag |
 | SEC-01 SMART/OAuth | **PARTIAL** | n/a | `SmartConfigurationController` (endpoints, scopes, S256); IdP per engagement |
 | CONSENT-01 single registry | **PASSABLE** | n/a | One registry, one aggregate, one lifecycle, one purpose axis — and **both** purposes now enforced server-side through it. Payer-to-Payer (P2P-03) and Provider Access reach their answers via the same `IConsentEvaluator` over the same pure `ConsentAuthorizationPolicy`, differing only in the purpose asked for, so neither can drift more permissive and a consent for one satisfies nothing for the other. Provider Access authorization is composed by `ProviderAccessAuthorizationService` and enforced by a **global** MVC filter covering every member-scoped resource the SMART layer serves (a structural test pins the two inventories together, so a new controller cannot bypass it), placed after tenant resolution and before any action body so PHI is never assembled for an unauthorized request; FHIR operations are excluded because Payer-to-Payer authorizes those itself. Four independent, mandatory controls — authentication and SMART scope (upstream middleware, not re-implemented), provider/member attribution, active `ProviderAccess`-purpose consent — each able to refuse alone, composed fail-closed. Tenant and member must both match the consent; tenant comes from the authenticated context. Registry faults, an empty catalog, a missing member context and an unidentified caller all deny rather than degrading to SMART-plus-attribution. Denials are externally uniform (one 403 `OperationOutcome`, byte-identical bodies) so "not attributed" / "no consent" / "no such member" cannot be told apart and used to enumerate; the structured category stays in the PHI-free audit record. **Attribution is served from a configured panel catalog** — real, fail-closed enforcement, but no live roster feed from a payer source system is wired up (engagement integration behind `IProviderAttributionSource`) |
 | METRICS-01 public metric set | **PASSABLE** | **GAP** | metrics derive from the persisted CHO authorization (`ChoAuthorizationBackend` + `AuthorizationsSummaryCalculator`); QNXT auth data stub. Full public-metrics *extract job* is still engagement work. |
@@ -308,6 +308,33 @@ scored on the CHO-native authorization backend (Replace) rather than a flat GAP.
 PAS-03 product capability moved GAP → **PASSABLE**; METRICS-01 product moved
 PARTIAL → **PASSABLE** (derives from the persisted record, not a test-only
 object). The QNXT column stays GAP: that integration is engagement work.
+
+**What changed in the PAT-03 PR:** prior-authorization data gained an explicit
+retention lifecycle — a pure policy plus a hosted, tenant-safe, conditional-delete
+sweeper — and the freshness half of the scenario was settled as structural rather
+than missing. PAT-03 moved PARTIAL → **PASSABLE**, so CHO Replace declares
+**18 PASSABLE / 3 PARTIAL / 0 GAP** (generator-computed — nothing here is
+hard-coded). Remaining PARTIAL: PAS-07, PAT-02, SEC-01.
+
+**On scoping PAT-03 honestly:** the scenario's rationale named *two* obligations —
+">= 1-year retention" and "1-business-day freshness". Implementing retention alone
+would not have earned PASSABLE. The freshness obligation bounds how stale a
+Patient Access **copy** may be, and Cloud Health Office keeps no copy: PA state is
+projected from the authoritative authorization record at read time, so the
+interval between a status change and its visibility is zero. That is structural
+because the read seam exposes a single lookup and no write — no cached or
+replicated PA projection can exist behind it to drift — and it is asserted by
+test rather than argued in prose. The absence of a freshness job is the design.
+
+**Two pre-existing defects surfaced but deliberately not fixed here:**
+`SlaWatchdogService` captures a scoped `IAuthorizationRepository` for the process
+lifetime and calls the tenant-less `GetOpenAuthorizationsAsync()` from a
+background thread, which throws on every tick. The retention worker is modelled on
+provider-service's `IntegrityProjectionWorker` instead, so the defect is not
+propagated; repairing the watchdog is separate work.
+
+**Zero GAPs still does not mean complete CMS-0057-F compliance.** This inventory
+is implementation evidence, not certification or attestation.
 
 **What changed in the PAS-04 PR:** the Da Vinci PAS `Claim/$inquire` operation
 is now served, projecting the existing authorization record onto a standards-

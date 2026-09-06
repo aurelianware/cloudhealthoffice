@@ -127,26 +127,62 @@ public class ProviderAndPatientAccessTests
     public void PAT03_PriorAuthData_IsSupportedResourceType()
     {
         // Prior-authorization data (ClaimResponse) is a recognized PA-data
-        // resource for Patient Access. Drug exclusion is handled with PAS-08
-        // (documented GAP); the >= 1-year retention-after-last-status-change
-        // rule is documented in the inventory — no retention job exists yet
-        // (GAP).
+        // resource for Patient Access. Drug exclusion is handled with PAS-08.
+        // Retention and freshness are covered by PriorAuthorizationRetentionTests.
         var checker = new Cms0057ComplianceChecker();
         checker.SupportedResourceTypes.Should().Contain("ClaimResponse");
     }
 
     [Fact]
     [Trait("Scenario", "PAT-03")]
-    [Trait("Kind", "GAP")]
-    public void PAT03_Gap_NoRetentionJobForPaData()
+    public void PAT03_RetentionLifecycleExists()
     {
-        // GAP: the "retain PA data >= 1 year after last status change" and
-        // "update within 1 business day" obligations have no scheduled retention/
-        // freshness job in the current code. Documented in the acceptance
-        // inventory as engagement/product follow-up.
-        var retentionJobExists = AcceptanceContext.ProductTypes()
-            .Any(t => t.Name.Contains("PaDataRetention", StringComparison.OrdinalIgnoreCase)
-                   || t.Name.Contains("PatientAccessRetention", StringComparison.OrdinalIgnoreCase));
-        retentionJobExists.Should().BeFalse();
+        // Replaces the GAP test that asserted no retention job existed. The
+        // lifecycle is now a pure policy plus a hosted sweeper; the behaviour is
+        // proven in PriorAuthorizationRetentionTests rather than by this
+        // presence check.
+        // A concrete policy implements the rule...
+        typeof(AuthorizationService.Services.Retention.PriorAuthorizationRetentionPolicy)
+            .Should().Implement<AuthorizationService.Services.Retention.IPriorAuthorizationRetentionPolicy>();
+
+        // ...and a hosted worker applies it.
+        typeof(AuthorizationService.Services.Retention.PriorAuthorizationRetentionWorker)
+            .Should().BeAssignableTo<Microsoft.Extensions.Hosting.BackgroundService>();
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAT-03")]
+    public void PAT03_PaDataFreshnessNeedsNoSyncJobBecauseNothingIsReplicated()
+    {
+        // The OTHER half of PAT-03: "update PA data within 1 business day".
+        //
+        // That obligation bounds how stale a Patient Access copy may be. Cloud
+        // Health Office keeps no copy: prior-auth state is projected from the
+        // authoritative authorization record at READ time, so the interval
+        // between a status change and its visibility is zero and there is
+        // nothing for a freshness job to synchronise. The absence of such a job
+        // is the design, not a gap.
+        //
+        // What makes that true is that the read seam cannot hold state: it
+        // exposes a single lookup and no write, so no cached or replicated
+        // projection can exist behind it to drift.
+        var storeMethods = typeof(FhirService.Services.IPriorAuthorizationStore)
+            .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Select(m => m.Name)
+            .ToList();
+
+        storeMethods.Should().ContainSingle()
+            .Which.Should().Be(nameof(FhirService.Services.IPriorAuthorizationStore.GetByAuthorizationNumberAsync));
+
+        // And there is no second prior-authorization store to fall out of date.
+        var paStores = AcceptanceContext.ProductTypes()
+            .Where(t => t.Name.Contains("PriorAuthorization", StringComparison.OrdinalIgnoreCase)
+                     && (t.Name.Contains("Cache", StringComparison.OrdinalIgnoreCase)
+                      || t.Name.Contains("Snapshot", StringComparison.OrdinalIgnoreCase)
+                      || t.Name.Contains("Projection", StringComparison.OrdinalIgnoreCase)
+                      || t.Name.Contains("Replica", StringComparison.OrdinalIgnoreCase)));
+
+        paStores.Should().BeEmpty(
+            "a replicated PA projection is exactly what a 1-business-day freshness job would exist to update");
     }
 }

@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Durable prior-authorization data retention (PAT-03)
+
+Prior-authorization state was persisted and queryable but had no retention
+lifecycle: nothing said how long a record must be kept, nothing expired one, and
+nothing could prove a record had not been deleted early. That is now an explicit,
+testable rule with a production sweeper applying it.
+
+**The rule, in one place.** `IPriorAuthorizationRetentionPolicy` is pure and
+deterministic — it reads an authorization and a clock and answers three
+questions. `RetentionUntil = last status change + retention period`, and a record
+is purgeable only when it is **both** operationally terminal **and** past that
+boundary.
+
+**The period is floored, not merely configured.** CMS-0057-F states a *minimum* —
+retain for at least one year after the last status change — not a maximum. One
+year is enforced as a floor configuration cannot go under, and the default is six
+years, matching the HIPAA posture already used for member documents. Defaulting a
+destructive job to the bare regulatory minimum would quietly make prior-auth the
+shortest-retained regulated data in the platform.
+
+**The anchor is a lifecycle fact, never a read.** `StatusHistory.ChangedAt`
+(max), falling back to `ReviewedDate` then `SubmittedDate` — deliberately not
+`LastUpdatedDate`, which every write touches, so an unrelated edit cannot move
+the boundary. **An inquiry cannot extend a record's regulatory retention**, and a
+test drives five reads then asserts the purge still happens exactly when
+originally due. A record with no establishable anchor is kept, not purged.
+
+**Open authorizations are never purged**, however old their timestamps: a pended
+decision may still be waiting on information no matter how long it has waited.
+The open/terminal split was previously spelled out separately in the SLA watchdog,
+the RFAI consumer and both repositories; it is now defined once as
+`AuthorizationStatus.IsOpen()`/`IsTerminal()` and is total over the enum.
+
+**The sweeper is modelled on `IntegrityProjectionWorker`, deliberately not on
+this service's `SlaWatchdogService`** — which captures a scoped repository for
+the process lifetime and calls a tenant-less repository method from a background
+thread, so it throws on every tick. `PriorAuthorizationRetentionWorker` takes a
+scope per tenant from `IServiceScopeFactory`, passes the tenant explicitly to
+every repository call (no ambient `HttpContext`), bounds work per tenant per
+sweep, observes cancellation between every record, is disabled by default, and
+supports a dry run.
+
+**Purge is a conditional delete**, so the check and the delete are one operation:
+Mongo filters on id + tenant + expected status in a single `DeleteOne`; Cosmos
+re-reads inside the purge and carries that read's ETag into `DeleteItemAsync` as
+`IfMatchEtag`. A record that reopens between being listed and being purged
+survives — the predicate no longer matches. Repeated sweeps are no-ops, an
+already-purged record is not an error, and a failed batch simply retries.
+
+**Deletion is hard, and coherent.** The `Authorization` document embeds its
+diagnoses, requested service lines, attachment metadata and status history, so
+removing it removes them; the PAS `ClaimResponse` is projected on read rather
+than stored, so no FHIR artifact survives. Nothing is kept behind a soft-delete
+flag while claiming to be purged. Two dependencies are named as out of scope
+rather than half-handled: blobs behind `ClinicalAttachment.FileUrl`, and
+`rfai-service` `RfaiCase` records, whose repository has no delete path at all.
+
+**Tenant-safe throughout.** New repository methods (`ListTenantIdsAsync`,
+`FindRetentionCandidatesAsync`, `PurgeIfStillEligibleAsync`) take the tenant as
+an argument and a `CancellationToken` — the first on this interface to do either.
+A purge naming the wrong tenant refuses outright.
+
+**Audit is aggregate.** Sweeps report counts; per-record purge lines carry
+tenant, opaque authorization id, policy version, retention boundary and status —
+never a member, payload, narrative or credential, with CR/LF stripped (CWE-117).
+`cho.authorization.retention.outcomes.total` is dimensioned by outcome, dry-run
+and tenant.
+
+**The freshness half of PAT-03 needed no job.** *"Update PA data within 1 business
+day"* bounds how stale a copy may be; CHO keeps no copy. PA state is projected
+from the authoritative record at read time, so the interval between a status
+change and its visibility is zero. That is structural rather than incidental
+because the read seam exposes a single lookup and no write, so no cached or
+replicated projection can exist behind it to drift — asserted by test. The
+absence of a freshness job is the design, not a gap.
+
+Acceptance: **PAT-03 moves PARTIAL → PASSABLE**, so CHO Replace declares
+18 PASSABLE / 3 PARTIAL / 0 GAP — computed by the evidence generator, not
+hard-coded. Remaining PARTIAL: PAS-07, PAT-02, SEC-01. PAT-02 and PAS-07 are
+untouched by this work. Zero GAPs is still not complete CMS-0057-F compliance.
+
+Documentation: a Data retention section in
+`docs/architecture/prior-authorization.md`; updated
+`docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md`.
+
 ### Da Vinci PAS `Claim/$inquire` — prior-authorization status through the FHIR surface
 
 Prior-authorization state was persisted and retrievable, but only through
