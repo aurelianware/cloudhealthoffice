@@ -247,12 +247,32 @@ public sealed class InteropEvidenceWriter
         return builder.ToString();
     }
 
-    private static string Truncate(string body) =>
-        body.Length <= MaxCapturedBodyBytes
-            ? body
-            : body[..MaxCapturedBodyBytes] +
-              $"{System.Environment.NewLine}… truncated at {MaxCapturedBodyBytes} characters " +
-              $"(original length {body.Length}).";
+    /// <summary>
+    /// Caps a captured body at <see cref="MaxCapturedBodyBytes"/> bytes as actually
+    /// encoded on disk, not characters: a FHIR body carrying non-ASCII text (a
+    /// patient name, an OperationOutcome diagnostic in another language) encodes to
+    /// more bytes than it has characters, and a character-based cap would let the
+    /// file exceed the limit it claims to enforce.
+    ///
+    /// The encoder reports how many characters fit, so the cut never lands inside a
+    /// multi-byte sequence or splits a surrogate pair.
+    /// </summary>
+    private static string Truncate(string body)
+    {
+        var byteCount = Utf8NoBom.GetByteCount(body);
+        if (byteCount <= MaxCapturedBodyBytes)
+        {
+            return body;
+        }
+
+        var buffer = new byte[MaxCapturedBodyBytes];
+        Utf8NoBom.GetEncoder().Convert(
+            body.AsSpan(), buffer, flush: false, out var charsUsed, out _, out _);
+
+        return body[..charsUsed] +
+               $"{System.Environment.NewLine}… truncated at {MaxCapturedBodyBytes} bytes " +
+               $"(original body was {byteCount} bytes / {body.Length} characters).";
+    }
 
     private static string SanitizeFileName(string value) =>
         string.Concat(value.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));

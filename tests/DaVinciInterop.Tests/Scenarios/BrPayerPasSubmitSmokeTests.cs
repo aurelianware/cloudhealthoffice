@@ -77,20 +77,34 @@ public sealed class BrPayerPasSubmitSmokeTests
         var target = versions.Target(TargetKey);
         var run = new InteropScenarioRun(scenario, target);
 
-        using var cancellation = new CancellationTokenSource(InteropSettings.Timeouts.Scenario);
         await using var environment = InteropEnvironment.For(TargetKey);
         using var client = new InteropHttpClient(target.Name, InteropSettings.Timeouts.ProtocolCall);
         var writer = new InteropEvidenceWriter();
 
         InteropResult result;
+        CancellationTokenSource? cancellation = null;
         try
         {
             // ── Start the pinned external implementation and wait for it, in
             //    stages, to actually be able to serve FHIR. No fixed sleeps.
+            //
+            //    Startup runs under its own bounds (Timeouts.ImagePull,
+            //    ContainerStart, Readiness), deliberately not the scenario budget:
+            //    pulling several hundred megabytes and waiting out a HAPI server's
+            //    IG-package install is not part of the exchange being measured, and
+            //    charging it to the scenario clock would make the scenario timeout
+            //    mean "the image was slow to download" rather than "the exchange
+            //    hung". Each of those bounds still fails with a diagnostic, so
+            //    nothing here can hang unbounded.
             await environment.StartAsync(
                 ReadinessStage.FhirMetadataAvailable,
                 buildImages: false,
                 CancellationToken.None);
+
+            // The scenario budget starts once the external implementation is ready,
+            // so it bounds the protocol exchange itself rather than being consumed
+            // by startup before the first request is sent.
+            cancellation = new CancellationTokenSource(InteropSettings.Timeouts.Scenario);
 
             var fhirBase = target.Endpoints.FhirBaseUrl
                 ?? throw new InteropEnvironmentException($"'{TargetKey}' declares no fhirBaseUrl.");
@@ -98,7 +112,7 @@ public sealed class BrPayerPasSubmitSmokeTests
             // ── 1. Read the external CapabilityStatement. Not the proof on its
             //    own — it is how the harness learns what the RI advertises so the
             //    functional exchange below can be checked against it.
-            var metadata = await client.GetFhirAsync($"{fhirBase}/metadata", cancellation.Token);
+            var metadata = await client.GetFhirAsync($"{fhirBase}/metadata", cancellation!.Token);
             metadata.StatusCode.Should().Be(HttpStatusCode.OK,
                 "the pinned br-payer image must serve its CapabilityStatement before any operation is attempted");
 
@@ -127,7 +141,7 @@ public sealed class BrPayerPasSubmitSmokeTests
             var requestBundle = SyntheticInteropData.PasRequestBundle(DateTimeOffset.UtcNow);
             var parameters = SyntheticInteropData.AsSubmitParameters(requestBundle);
 
-            var submit = await client.PostFhirAsync($"{fhirBase}/Claim/$submit", parameters, cancellation.Token);
+            var submit = await client.PostFhirAsync($"{fhirBase}/Claim/$submit", parameters, cancellation!.Token);
 
             submit.StatusCode.Should().Be(HttpStatusCode.OK,
                 "the payer RI accepted the request bundle or reported why it did not: {0}",
@@ -205,6 +219,11 @@ public sealed class BrPayerPasSubmitSmokeTests
             result = run.Complete(InteropStatus.Failed, client.Interactions, $"{ex.GetType().Name}: {ex.Message}");
             WriteEvidence(writer, versions, inventory, result, client, environment);
             throw;
+        }
+
+        finally
+        {
+            cancellation?.Dispose();
         }
 
         WriteEvidence(writer, versions, inventory, result, client, environment);

@@ -137,6 +137,62 @@ public sealed class InteropEvidenceWriterTests : IDisposable
         junit.Should().Contain("HTTP 400");
     }
 
+    [Fact]
+    public void A_captured_body_is_capped_by_encoded_bytes_not_characters()
+    {
+        var writer = new InteropEvidenceWriter(_tempRoot);
+        var run = InteropEvidenceWriter.BuildRun(Versions, Inventory, [PassedResult("BR-PAS-SUBMIT-001")]);
+
+        // Three bytes per character in UTF-8. A character-based cap would let the
+        // file reach roughly three times the limit it claims to enforce.
+        var oversized = new string('\u4e2d', 1_500_000);
+
+        writer.Write(run, capturedBodies: new Dictionary<string, string>
+        {
+            ["responses/001-200.json"] = oversized,
+        });
+
+        var written = new FileInfo(Path.Combine(_tempRoot, "responses", "001-200.json"));
+        written.Length.Should().BeLessThan(3 * 1024 * 1024,
+            "the cap is on bytes on disk, so a multi-byte body must not blow past it");
+        File.ReadAllText(written.FullName).Should().Contain("truncated at");
+    }
+
+    [Fact]
+    public void Truncation_never_splits_a_character()
+    {
+        var writer = new InteropEvidenceWriter(_tempRoot);
+        var run = InteropEvidenceWriter.BuildRun(Versions, Inventory, [PassedResult("BR-PAS-SUBMIT-001")]);
+
+        // An emoji is a surrogate pair in UTF-16 and four bytes in UTF-8: cutting
+        // mid-character would leave a replacement character in the artifact.
+        var oversized = string.Concat(Enumerable.Repeat("\U0001F9EA", 700_000));
+
+        writer.Write(run, capturedBodies: new Dictionary<string, string>
+        {
+            ["responses/001-200.json"] = oversized,
+        });
+
+        var written = File.ReadAllText(Path.Combine(_tempRoot, "responses", "001-200.json"));
+        written.Should().NotContain("\uFFFD", "no character may be cut in half by the cap");
+    }
+
+    [Fact]
+    public void A_body_within_the_cap_is_written_untouched()
+    {
+        var writer = new InteropEvidenceWriter(_tempRoot);
+        var run = InteropEvidenceWriter.BuildRun(Versions, Inventory, [PassedResult("BR-PAS-SUBMIT-001")]);
+        const string body = """{"resourceType":"Bundle","type":"collection"}""";
+
+        writer.Write(run, capturedBodies: new Dictionary<string, string>
+        {
+            ["responses/001-200.json"] = body,
+        });
+
+        File.ReadAllText(Path.Combine(_tempRoot, "responses", "001-200.json"))
+            .Should().Be(body, "an ordinary response must reach the artifact verbatim");
+    }
+
     private static InteropResult PassedResult(string scenarioId)
     {
         var scenario = Inventory.Scenario(scenarioId);
